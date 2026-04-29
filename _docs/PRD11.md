@@ -1,0 +1,3185 @@
+**JOSHING --- PRODUCT REQUIREMENTS DOCUMENT**
+
+**Version 11.0** **April 2026**
+
+*The trivia you wish you were asked.*
+
+**1. Executive Summary**
+
+Joshing is a daily trivia practice built on the things you actually know
+--- and the people who know you.
+
+Every day, you get five questions calibrated to your intellectual world.
+The questions are factual. They have correct answers. What makes them
+*Joshing* questions is that they are drawn from the specific cultural
+and intellectual territory you live in: the music you\'ve spent time
+with, the books you\'ve read, the history you studied, the films and
+ideas that shaped how you see things. \"Who wrote Wozzeck?\" is generic
+trivia to most people. To you, it\'s the question you always wished you
+had been asked.
+
+The daily five is yours alone --- generated for you, calibrated to a
+Knowledge base that grows with you over time. You start by choosing five
+areas of focus. Everything beyond those five is unlocked by the people
+in your life: every friend who sends you a question, thumbs up a
+question they think you\'d love, or writes one with you in mind expands
+the world your daily five can be drawn from. Your declared interests are
+who you say you are. Your Knowledge base is who you\'ve become ---
+shaped by the friends you let in.
+
+Alongside the daily five sits a Feed of questions your friends have
+endorsed --- questions they\'ve written, questions they\'ve thumbed up,
+questions they\'ve sent directly to you. The Feed is where the social
+life of Joshing lives. It is not a game and it is not a competition. It
+is a quiet stream of \"I thought of you when I saw this\" --- the trivia
+equivalent of sending someone a song.
+
+Joshing is invitation-only. Every player was brought here by someone who
+wanted them here. When you invite a friend, you can pre-seed a few
+interests for them --- a small act of curation that says *I know you, I
+think you\'d like this*. The invitation itself is a gift.
+
+Every two weeks, Joshing surfaces a reflection: what you\'ve mastered,
+what new territory you\'ve discovered, which friends most shaped your
+map, who you\'re most aligned with. It is the only moment Joshing speaks
+back to you about who you are becoming. The rest is daily, quiet,
+personal.
+
+Joshing is a web-based product. There is nothing to download. The
+invitation arrives as a message from a friend, not from a product. It
+works on any phone, any browser, any device. US-only at launch.
+
+**2. Problem Statement & Opportunity**
+
+**2.1 The problem**
+
+General-knowledge trivia rewards breadth at the expense of depth. The
+questions are written for the average player, which means they are
+written for no one in particular. People who have spent ten years inside
+Mahler symphonies or twenty years inside Civil War history are asked the
+same Marvel-and-state-capitals questions as everyone else. The depth
+they actually have is invisible to the format.
+
+The result: trivia, as a category, is a thin entertainment. It tests
+recall of widely-shared facts. It does not engage what people actually
+know.
+
+There is a second problem. The trivia experiences that *do* try to be
+more personal --- house games, friend-group quizzes, party questions ---
+require someone to do the work of writing questions. In testing of an
+earlier version of Joshing (v10.25), this was the single most-rejected
+mechanic. People liked answering hyper-specific questions. They liked
+seeing the connections between what they knew and what their friends
+knew. But almost no one wanted to write questions for others. The
+work-to-payoff ratio was wrong.
+
+**2.2 The opportunity**
+
+Two changes make a different product possible:
+
+1.  **LLM-generated questions, calibrated to a personal Knowledge
+    base.** A model can now produce a hyper-specific, factually-grounded
+    question about Late Tchaikovsky or Italian Renaissance painting that
+    would have required a human author in 2022. The depth that was
+    previously invisible can now be reached by an algorithm --- *if* the
+    algorithm knows what to aim at.
+
+2.  **A social layer built on curation, not authorship.** The gesture
+    that scales is not \"write a question for your friend\" --- it is
+    \"thumb up a question you loved\" and \"send this one to Maya.\"
+    These are low-friction, take-no-time gestures that people actually
+    do. They produce a stream of human-curated content without asking
+    humans to do the work of writing it.
+
+Joshing v11.0 is built around these two changes. The daily ritual is
+solo and machine-generated. The social layer is ambient and
+curation-based. They live side-by-side, do different jobs, and reinforce
+each other.
+
+**2.3 Comps**
+
+  ------------------------------------------------------------------------
+  **Product**   **What we share**                  **What we don\'t**
+  ------------- ---------------------------------- -----------------------
+  Wordle /      Daily ritual, bounded session, no  Generic puzzle vs.
+  Connections   infinite scroll, shareable result  personal trivia
+
+  Instagram     \"Thought of you when I saw this\" Visual content vs.
+  (DMs)         gesture, ambient feed of           trivia; broad vs.
+                friend-curated content             invitation-only
+
+  Letterboxd /  Persistent intellectual portrait,  Tracks consumption vs.
+  Goodreads     friend overlap, taste as identity  tests knowledge
+
+  BeReal        Invitation-only social graph,      Performative photo vs.
+                daily prompt, intimacy through     quiet practice
+                small group                        
+
+  Marco Polo    SMS-based invite, bounded social   Voice/video vs. text
+                network, asynchronous              trivia
+  ------------------------------------------------------------------------
+
+What\'s distinctive about Joshing: it is the only product where your
+**intellectual** life is the surface area of social connection, and
+where the daily ritual is **calibrated** to who you specifically are.
+
+**3. Product Vision**
+
+**3.1 Short-term (v11.0 launch)**
+
+A working solo daily ritual + a friend-curated Feed + a clean
+send-to-friend gesture, on an invitation-only graph. Two surfaces, both
+quiet, both useful. A product that \~50 invitation-graph-connected
+players use daily without prompting.
+
+**3.2 Medium-term (6--12 months)**
+
+The friend graph becomes the primary engine of intellectual expansion.
+Players\' Knowledge bases visibly grow through their relationships.
+Biweekly ceremonies become a moment people screenshot and share.
+Friend-of-friend introductions become the dominant growth mechanic. The
+product begins to feel like a personal map of intellectual life shaped
+by the people in it.
+
+**3.3 Long-term (1--3 years)**
+
+Joshing becomes the canonical place for intellectual identity online ---
+a quiet alternative to taste-displaying social products. The Knowledge
+Portrait is something people cite about themselves: \"Here\'s mine.\"
+Friend graphs span the social experiences in someone\'s life --- book
+club friends, college friends, music-nerd friends --- each producing
+different kinds of growth in different parts of the Knowledge base. The
+product is thin, daily, and persistent across years.
+
+**3.4 What Joshing will not become**
+
+- A leaderboard product
+
+- A streak-driven engagement product
+
+- An algorithmic feed of strangers\' content
+
+- A general-knowledge trivia product
+
+- A social product where intellectual depth is performed rather than
+  practiced
+
+These are explicit non-goals. Decisions in v11.0 should be checked
+against them.
+
+**4. Target Audience**
+
+**4.1 Primary**
+
+**Intellectually-engaged adults (25--55) with at least one area of deep
+knowledge.** The kind of person who has read all of Joyce, or who can
+name every Tchaikovsky symphony, or who has opinions about the Hungarian
+uprising of 1956. Often (but not always) college-educated, often (but
+not always) in knowledge-work professions. The defining trait is not
+credentials --- it is that they have *territory* they care about and
+have spent time in.
+
+**4.2 Secondary**
+
+**The intellectually-curious-but-broad.** People without a single deep
+specialty but with a wide range of moderate interests. They get value
+from the Daily Five but their growth happens primarily through the Feed
+--- they find new territory through what their deeper-specialist friends
+share with them.
+
+**4.3 Use cases**
+
+- The morning ritual (with coffee, before email)
+
+- The transit moment (on a commute, in a waiting room)
+
+- The bedtime wind-down
+
+- The \"thought of you\" beat (mid-day, sending a question to a specific
+  friend)
+
+- The biweekly reflection (when the ceremony arrives)
+
+**4.4 Not the audience**
+
+- Pub-trivia teams looking for general-knowledge content
+
+- Casual mobile gamers looking for time-killer mechanics
+
+- People who want to compete on speed or score
+
+- People who want to perform intellectual identity for strangers
+
+**5. MVP Scope and Phasing**
+
+**5.1 v11.0 Launch Scope**
+
+**Account & Social**
+
+- SMS authentication (US phone numbers only)
+
+- Invitation-only signup (invite via SMS, accept via link)
+
+- In-app friend requests by phone number (mutual accept)
+
+- Unilateral unfriend (silent, no notification)
+
+- Friend profiles (/users/\[slug\]) with Knowledge Portrait + declared
+  interests + authored questions
+
+**Daily Five**
+
+- LLM-generated, calibrated to player\'s Knowledge base
+
+- 5 questions/day, noon EST delivery via SMS link
+
+- 24-hour session window, 7-day catch-up grace
+
+- No in-session timer
+
+- Configurable: Difficulty
+  (Normal/Moderate/Challenging/Ridiculous/Adaptive --- Adaptive default
+  starts at Normal), Domains (Random/Custom)
+
+- Chat thread interface for answering
+
+**Feed**
+
+- Bounded reverse-chronological stream (recommended cap: 25 items)
+
+- Three sources: direct-sent (pinned), friend authored+shared, friend
+  thumbed-up
+
+- Three actions per item: Answer, Skip, Dismiss
+
+- Once-correctly-answered items do not reappear
+
+**Send-to-Friend**
+
+- Floating \"Write a question\" button on home (writes to bank by
+  default; optional toggles for Feed share and direct send)
+
+- Send-to-friend action available from any question surface
+
+- Maximum 5 sends per recipient per day
+
+**Knowledge Base**
+
+- Up to 5 declared interests (hard cap, swappable anytime, no cooldown)
+
+- Hybrid onboarding (warm-up Qs → LLM proposes → player picks 5)
+
+- Pre-seeded interests in invitations (optional, 1--3)
+
+- Knowledge base expansion via friend-mediated correct answers
+  (1-question floor)
+
+- Knowledge page: implemented circles-by-category model (per current
+  design)
+
+- Domain merge/split runs at end of biweekly ceremony cycle
+
+**Biweekly Ceremony**
+
+- Per-player rolling 14-day cadence, anchored to signup date
+
+- 5-beat cinematic flow (Mastered, Discovered, Shaped Your Map, Closest
+  Alignment, What You Gave)
+
+- Closes with shareable card (mastery momentum format)
+
+- 7-day in-app availability post-fire, then archived
+
+**Mastery & Points**
+
+- Tier system (Establishing → Familiar → Solid → Mastery) preserved from
+  v10.25 §8.32
+
+- Points earned from answering Daily Five and Feed questions (full
+  weight) and catch-up (0.25x)
+
+- Creator points earned when friends correctly answer questions you
+  wrote
+
+- Mastery tier requires 20% creator points (v10.25 rule preserved)
+
+**Reactions**
+
+- Thumbs-up only (stars killed)
+
+- Reactions on Feed and friend-sent questions per v10.25 §8.10b
+
+- Thumbs-up is the Feed-curation gesture --- endorsing a question makes
+  it eligible for the Feeds of your friends
+
+**5.2 Out of v11.0 Scope (deferred or killed)**
+
+**Killed entirely** (not coming back):
+
+- Group games and the three setups (know_me, know_me_plus, open)
+
+- Group seasons, group joining flows, group archives
+
+- Game ending two-act ceremony, Game Summary, Creator\'s Summary
+
+- Public Daily Game, Public Infinite Run
+
+- Post-game similarity sharing
+
+- Star voting and the daily star budget
+
+- Expert challenges (was already deferred in v10.25)
+
+- AI Practice Mode (the Daily Five is now AI practice)
+
+- Public question pool
+
+**Deferred to post-launch:**
+
+- Friend-of-friend introductions (Path 3 of friendship formation)
+
+- Joshing Plus feature set (TBD)
+
+- iOS/Android native apps (web-only at launch)
+
+- International expansion beyond US
+
+**5.3 Phasing within v11.0**
+
+There are no internal phases within v11.0. The product launches as a
+single coherent experience. Subsequent versions (v11.1, v11.2...) may
+layer in deferred items, but launch is launch.
+
+**6. User Stories**
+
+**6.1 New player onboarding**
+
+**Maya** receives an SMS from her friend Greg: *\"I think you\'d like
+this --- try it tonight.\"* She taps the link. Joshing asks for her
+phone, sends an OTP, she\'s in. Greg has pre-seeded three interests for
+her: Sondheim Musicals, Modernist Poetry, Italian Cinema. She accepts
+two, edits one, and is asked to answer five warm-up questions. Joshing
+proposes nine candidate interests. She picks two more --- Late-Period
+Bowie and 19th-Century English Novels --- locking her five. She receives
+a confirmation: *\"Tomorrow at noon, your first five questions
+arrive.\"*
+
+**6.2 The daily ritual**
+
+**Greg** gets an SMS at 12:00 EST: *\"Your five for today.\"* He taps in
+during a quiet moment after lunch. Five questions appear in a
+chat-thread interface. He answers four, gets three right, skips the
+fifth. The session closes with a quiet summary: *\"3 of 4. You moved
+closer to Familiar in Late Tchaikovsky.\"* He exits. Total time: 4
+minutes.
+
+**6.3 The Feed moment**
+
+**Maya**, later that evening, opens Joshing again and taps the Feed.
+There are 8 items. The top is pinned: *\"Greg sent this to you --- about
+Sondheim.\"* She answers it --- gets it right. Below, *\"Greg + 1 other
+thumbed up\"* a question about Auden. She skips. She answers two more,
+dismisses one, leaves the rest for tomorrow. She thumbs up the Sondheim
+question on the way out. It will now be eligible to appear in the Feeds
+of her other friends.
+
+**6.4 The send-to-friend gesture**
+
+**Greg** is reading something online about Stephen Sondheim\'s working
+method. He thinks of Maya. He opens Joshing, taps the floating \"Write a
+question\" button, writes a question about Sondheim\'s notebooks, taps
+\"Send to Maya.\" Joshing confirms: *\"Sent. Maya will see it in her
+Feed.\"* Total time: 90 seconds. Maya gets an SMS: *\"Greg sent you a
+question.\"*
+
+**6.5 Knowledge base growth via Feed**
+
+Over three weeks, **Maya** answers 11 questions in the Feed across
+domains she didn\'t declare: Auden, Coltrane, Italian Renaissance
+Painting. Each correctly-answered domain is silently added to her
+Knowledge base. Her next Daily Five (when set to Random) starts drawing
+from these new domains. Her intellectual world has widened --- through
+the people in her life --- without her ever being asked to declare
+anything new.
+
+**6.6 The biweekly ceremony**
+
+Two weeks into using Joshing, **Greg** gets an SMS Sunday morning:
+*\"Two weeks of Joshing. Here\'s what you\'ve been up to.\"* He taps in.
+Five cinematic beats, \~45 seconds total: *You moved from Familiar to
+Solid in James Joyce\'s Ulysses. You discovered new ground in
+Late-Period Bowie and Italian Renaissance Painting. Maya\'s Feed gave
+you 7 questions you got right --- she\'s been part of your last two
+weeks. You and Maya are most aligned in Modernist Literature. 4 of your
+questions were answered by friends.* The ceremony ends with a shareable
+card. He saves it.
+
+**6.7 The friend profile visit**
+
+**Greg** taps Maya\'s name in his Feed. Her profile loads. He sees her
+five declared interests, her Knowledge Portrait (the circles-by-category
+map), with shared territory highlighted. He sees she\'s been deep in
+Sondheim recently. He taps \"Send a question\" and writes one. The full
+loop, in under two minutes.
+
+**6.8 The unilateral unfriend**
+
+**Maya** decides she doesn\'t want **Charles** in her Joshing world
+anymore. From his profile, she taps \"Remove friend.\" Charles
+disappears from her Feed and friend list immediately. Charles receives
+no notification. From Charles\' side, Maya simply no longer appears in
+his Feed sources or in his friend list. The disconnect is silent on both
+sides.
+
+**7. Authentication & Onboarding**
+
+**7.1 SMS Authentication**
+
+Authentication is via US mobile phone number + SMS one-time code. There
+are no passwords, no email, no third-party sign-on. Phone number is the
+unique account identifier.
+
+**Flow:**
+
+1.  User arrives via invitation link (or, post-launch, a public landing
+    page that requires an invite code)
+
+2.  Enters phone number
+
+3.  Receives 6-digit OTP via SMS, enters to verify
+
+4.  Account created or signed in
+
+**Constraints:**
+
+- US numbers only at launch (+1 prefix enforced)
+
+- One account per phone number
+
+- OTP expires after 10 minutes
+
+- Rate-limited OTP requests (max 3 per phone per hour)
+
+**7.2 Invitation Flow**
+
+Joshing is invitation-only. There are two paths to a new account:
+
+**Path 1 --- Direct invitation from a friend.**
+
+1.  Existing player taps \"Invite a friend\" from their home screen
+
+2.  Enters recipient phone number + display name
+
+3.  *(Optional)* Pre-seeds 1--3 interest suggestions for the recipient
+
+4.  Composes (or accepts default) personal SMS message
+
+5.  Joshing sends SMS from the inviter\'s phone (via system handoff to
+    the user\'s native messaging) --- not from a Joshing number. The
+    invitation arrives looking like a personal text from a friend, not
+    from a product.
+
+6.  Recipient taps the link, lands on signup, completes auth, optionally
+    accepts pre-seeded interests, then proceeds to onboarding (§7.3)
+
+7.  On signup completion, inviter and recipient are automatically
+    friends
+
+**Path 2 --- In-app friend request (both already on Joshing).**
+
+1.  Existing player taps \"Add a friend\" from home
+
+2.  Enters target\'s phone number
+
+3.  If the number matches an existing account, an in-app friend request
+    is sent
+
+4.  Recipient sees the request in their notifications/Feed top
+
+5.  Recipient accepts or ignores; on accept, both are friends
+
+**7.3 Onboarding (Hybrid Interest Declaration)**
+
+After authentication, a new player goes through a three-step interest
+declaration flow before reaching the home screen.
+
+**Step 1 --- Pre-seeded interests (if applicable).** If the inviter
+pre-seeded 1--3 interests, these are shown first:
+
+*Greg invited you to Joshing. He thought you\'d like questions about:*
+
+- Late Tchaikovsky
+
+- Weimar Cinema
+
+- Sondheim Musicals
+
+*\[Accept all\] \[Pick which to keep\] \[Skip and start fresh\]*
+
+Accepted pre-seeded interests count toward the 5-interest cap.
+
+**Step 2 --- Warm-up questions.** The player answers 4--6 short
+free-text questions:
+
+- *What\'s a book you\'ve read more than once?*
+
+- *Who\'s a musician or composer you keep coming back to?*
+
+- *A topic you could talk about for an hour without preparation?*
+
+- *Something you studied formally --- even briefly?*
+
+- *A film, TV show, or director that means something to you?*
+
+- *(Optional)* *Anything else you\'d want us to know?*
+
+These answers are passed to the LLM, which generates 8--12 candidate
+interests at hyper-specific granularity.
+
+**Step 3 --- Pick five.** The candidates are presented:
+
+*Here are some areas that might fit. Pick up to 5.*
+
+\[Late-Period Bowie\] \[19th-Century English Novels\] \[Italian
+Renaissance Painting\] \[Hungarian Uprising of 1956\] \[Sondheim\'s Late
+Period\] \[Robert Hayden\'s Poetry\] \[Werner Herzog Documentaries\]
+\[The Wire\] \[The Federalist Papers\]
+
+Player can:
+
+- Tap to select up to (5 minus pre-seeded already-accepted)
+
+- Edit any candidate in free text before locking
+
+- Reject all candidates and write up to 5 of their own
+
+- Mix freely
+
+**Lock and confirm.** Player taps \"Lock my five.\" Joshing confirms:
+*\"Tomorrow at noon, your first Daily Five arrives. You\'ll receive an
+SMS.\"*
+
+**7.4 First Daily Five Messaging**
+
+The first Daily Five session includes a one-time orientation panel
+before the questions begin:
+
+*Your difficulty is set to Adaptive. It starts at Normal and learns from
+you --- right answers will make tomorrow harder, wrong answers will ease
+it back. You can change it anytime from settings.*
+
+This appears once, dismissible, and explains the calibration model so
+the player understands why difficulty shifts over time.
+
+**7.5 Returning Player Authentication**
+
+Subsequent sign-ins use the same phone-number-plus-OTP flow. Sessions
+persist via secure cookies; OTP is required only on new devices or after
+30 days of inactivity.
+
+**7.6 Account Deletion**
+
+A player can delete their account from Account → Delete. On delete:
+
+- The player\'s profile becomes inaccessible to all friends
+
+- Questions they wrote remain attributed to \"\[Deleted\]\" in friends\'
+  archives
+
+- Their thumbs-up and sent-questions records are retained (as data) but
+  their identity is anonymized
+
+- All declared interests, Knowledge base data, and personal performance
+  data are permanently deleted within 30 days
+
+- Friends are not notified
+
+**End of Chunk 1.**
+
+React to anything in Sections 1--7 before I move to Chunk 2 (Section 8
+--- the bulk of the spec). Things worth checking specifically:
+
+- **§1 Executive Summary** --- does this read like the product you\'re
+  building?
+
+- **§2.2** --- the \"two changes\" framing (LLM + curation-based social)
+  --- does that capture the why?
+
+- **§4.4** Not the audience --- anything to add or remove?
+
+- **§5.1** Launch scope --- anything missing or anything that snuck in
+  that shouldn\'t be there?
+
+- **§6** User stories --- these are doing real work setting expectations
+  for engineering. Push back if any feel off.
+
+- **§7.3** Onboarding warm-up questions --- these specific 4--6
+  questions are placeholder-quality. We can tune them, but the structure
+  is what matters.
+
+- **§7.6** Account deletion --- invented this on the fly, may need
+  legal/privacy review.
+
+Producing **Chunk 2 of 3**: Section 8 --- the feature specifications.
+This is the bulk of the document.
+
+**8. Feature Specifications**
+
+**8.1 The Daily Five**
+
+**8.1.1 Concept**
+
+The Daily Five is the core ritual of Joshing. Every day at noon EST,
+each player receives a daily SMS with a link to that day\'s five
+questions. The questions are LLM-generated, calibrated to the player\'s
+Knowledge base and chosen difficulty. The session has a 24-hour window;
+unanswered questions catch up for 7 days, then archive.
+
+There is no in-session timer. The player can answer all five in one
+sitting or spread them across the 24-hour window. Each question, once
+opened, must be answered before the next can be revealed (sequential
+reveal).
+
+**8.1.2 Source --- LLM Only**
+
+Daily Five questions are LLM-generated. They are calibrated to the
+player\'s Knowledge base, chosen difficulty, and selected domains. **No
+friend-written, friend-thumbed, or community questions appear in the
+Daily Five.** Friend-curated content lives exclusively in the Feed
+(§8.2).
+
+This separation is intentional. The Daily Five is **practice** --- a
+private, calibrated daily ritual. The Feed is **discovery** --- a
+social, ambient stream. Each surface does one job.
+
+**8.1.3 Configuration Controls**
+
+The Daily Five is configurable from the Daily Five page. Three controls:
+
+  -----------------------------------------------------------------------
+  **Control**           **Options**                       **Default**
+  --------------------- --------------------------------- ---------------
+  **Difficulty**        Normal / Moderate / Challenging / Adaptive
+                        Ridiculous / Adaptive             (starts at
+                                                          Normal)
+
+  **Domains**           Random (across full Knowledge     Random
+                        base) / Custom (pick specific)    
+
+  **Domain view**       By Category / By Mastery          By Category
+  *(when Custom                                           
+  selected)*                                              
+  -----------------------------------------------------------------------
+
+When **Custom** is selected, the player picks any subset of domains from
+their Knowledge base. The \"By Mastery\" view sorts domains by tier
+proximity, surfacing domains where a tier crossing is near.
+
+Configuration changes take effect for the next Daily Five generation
+(typically the next noon EST).
+
+**8.1.4 Knowledge Base Calibration**
+
+The LLM generates questions by drawing from the player\'s Knowledge base
+--- the union of:
+
+1.  **Declared interests** (up to 5, set by the player; eligible
+    immediately upon declaration)
+
+2.  **Demonstrated domains** (accrued via friend-mediated questions;
+    eligible after 1 correct answer)
+
+A new player\'s Knowledge base contains only their declared 5. As they
+engage with the Feed and friend-sent questions, their Knowledge base
+grows, and the Daily Five draws from a wider set of domains over time.
+
+The LLM does not invent domains. If the player has 5 declared interests
+and no demonstrated domains, the Daily Five draws only from those 5.
+**Knowledge base expansion is exclusively friend-mediated** (§8.4) ---
+never algorithmic, never spontaneous.
+
+**8.1.5 Difficulty Calibration**
+
+Difficulty is calibrated by empirical correct rate per domain. The LLM
+prompt for Daily Five generation includes:
+
+- The player\'s recent correct rate in the chosen domain(s)
+
+- The player\'s chosen difficulty setting
+
+- Target correct rate per difficulty:
+
+  -----------------------------------
+  **Difficulty**   **Target Correct
+                   Rate**
+  ---------------- ------------------
+  Normal           \~70%
+
+  Moderate         \~50%
+
+  Challenging      \~30%
+
+  Ridiculous       \~15%
+
+  Adaptive         Self-calibrating
+                   to \~60%
+  -----------------------------------
+
+**Player feedback from v10.25 testing indicated questions felt \"really
+REALLY hard\" even on Normal.** The v11.0 implementation must address
+this in the generation prompt. Specifically:
+
+- Normal-tier questions should test material that a
+  *moderately-engaged-with-the-domain* player would know --- not the
+  deep cuts
+
+- The LLM prompt must include explicit instruction to avoid
+  trivia-of-trivia (e.g., \"what year was X recorded\" when \"what was
+  X\" is more meaningful)
+
+- After each Daily Five, a quiet *\"Was today\'s difficulty about
+  right?\"* prompt collects calibration data (optional, dismissible)
+
+**Adaptive** is the recommended default for new players. It begins at
+Normal and adjusts after each session based on the player\'s correct
+rate, targeting \~60% correctness.
+
+**8.1.6 When the LLM Cannot Generate**
+
+If the LLM fails to generate a question for a chosen domain
+(insufficient territory, too-narrow scope, repeat-collision with recent
+questions), the player is notified at configuration time:
+
+*We couldn\'t generate questions for \[Domain\] today. Pick another or
+use Random.*
+
+The Daily Five is never silently degraded. If Random is selected and the
+LLM fails on a domain, it falls through to the next domain in the
+player\'s Knowledge base. If all domains fail, the player is notified at
+noon: *\"Today\'s Daily Five is taking longer than usual. We\'ll try
+again shortly.\"* --- and the engine retries.
+
+**8.1.7 Session Mechanics**
+
+**SMS notification at 12:00 EST:**
+
+*Your five for today.* \[link\]
+
+**Session structure:**
+
+- Sequential reveal: question N+1 only appears after question N is
+  answered
+
+- Each question opens the chat-thread interface (§8.1.8)
+
+- After all 5 are answered, the session-end summary appears (§8.1.10)
+
+- A player can pause and return; their place is preserved
+
+- The 24-hour window closes at 11:59 EST the following day
+
+**Catch-up:**
+
+- Unanswered questions remain accessible for 7 days post-session
+
+- Catch-up answers count toward mastery at 0.25x weight
+
+- After 7 days, unanswered questions move to archive (un-answerable)
+
+**8.1.8 The Chat-Thread Interface**
+
+Each question is presented in a chat-thread interface (per v10.25 §8.8):
+
+- The question appears as a message bubble
+
+- Player types their answer in a text input
+
+- LLM grades the answer (correct / partial / incorrect) per §9
+
+- Result message appears with brief explainer
+
+- Player can tap \"Next question →\" to proceed
+
+For Daily Five questions, the question attribution shows: *\"From
+Joshing\"* (no specific author). For Feed questions answered through
+this interface, the attribution shows the friend\'s name (per §8.2).
+
+The chat-thread interface preserves all v10.25 mechanics including:
+
+- Inline reactions on the answer screen (per §8.1.11)
+
+- Copy-to-share affordances on the result
+
+- The breadcrumb system for partial answers (per v10.25 §8.8a,
+  simplified --- no \"you both know this\" copy)
+
+**8.1.9 Answer Grading**
+
+Grading is performed by the LLM with a deterministic answer key check
+first. The flow:
+
+1.  Player submits answer
+
+2.  System checks against the question\'s correct_answer field with
+    normalization (case, punctuation, common variants)
+
+3.  If exact or normalized match: graded **correct**
+
+4.  If no match: LLM evaluates the answer for semantic correctness
+
+5.  LLM may grade as **correct**, **partially correct** (50% credit), or
+    **incorrect**
+
+6.  Result appears with a brief explainer (1--2 sentences)
+
+Partial credit is conservative. The bar for \"correct\" is correctness,
+not generosity.
+
+**8.1.10 End-of-Session Summary**
+
+After all 5 questions are answered, a summary screen appears:
+
+*3 of 5.*
+
+*You moved closer to Familiar in / Late Tchaikovsky.* *You held steady
+in / James Joyce\'s Ulysses.* *\[Optional close line, adaptive per
+§8.1.13\]*
+
+\[Share today\] \[Back to home\]
+
+The summary is short, interpretive, and quiet. It avoids:
+
+- Streak callouts
+
+- Comparison to other players
+
+- Score totals beyond \"X of 5\"
+
+- Urgency or call-to-action language
+
+**8.1.11 Reactions on Daily Five Questions**
+
+After answering a Daily Five question, the player can apply a single
+thumbs-up gesture. Thumbs-up on a Daily Five question:
+
+1.  Marks the question as endorsed by this player
+
+2.  Makes the question eligible to appear in the Feeds of this player\'s
+    friends (per §8.2.3)
+
+There is no daily limit on thumbs-up. The gesture is the Feed-curation
+mechanism.
+
+**8.1.12 Mastery & Points**
+
+Daily Five answers count at full weight (1.0x) toward mastery, per
+§8.10. Catch-up answers count at 0.25x weight (per §8.1.7).
+
+Daily Five answers cannot earn creator points (the player is not the
+author). Creator points come exclusively from friends correctly
+answering questions the player wrote (per §8.10.4).
+
+**8.1.13 Session Close Messaging**
+
+Per v10.25 §8.38, the session-close copy is adaptive based on
+performance:
+
+  -------------------------------------
+  **Performance**   **Close copy**
+  ----------------- -------------------
+  5/5               *Untouched.*
+
+  4/5               *Strong.*
+
+  3/5               *Solid.*
+
+  2/5               *Working ground.*
+
+  1/5               *Tomorrow\'s
+                    another five.*
+
+  0/5               *Tomorrow\'s
+                    another five.*
+  -------------------------------------
+
+Plus interpretive line referencing the most-significant-mastery-event of
+the session (tier crossing, point gain in a key domain, or first answer
+in a new demonstrated domain).
+
+**8.2 The Feed**
+
+**8.2.1 Concept**
+
+The Feed is a bounded, reverse-chronological stream of questions friends
+have endorsed. It is where the social life of Joshing lives. The Feed is
+**not** a game and is **not** required --- players who never open it can
+still get full value from the Daily Five. But for players who engage,
+the Feed is the mechanism by which their Knowledge base expands and
+their relationships with friends become legible.
+
+**8.2.2 Where It Lives**
+
+The Feed is a top-level nav destination: **Home → Feed → Knowledge →
+Account.**
+
+The Home screen surfaces a small Feed indicator: *\"3 new in your
+Feed.\"* No badges, no red dots, no urgency. Just a quiet count.
+
+**8.2.3 Feed Item Sources**
+
+A question enters a player\'s Feed when one of the following happens:
+
+  -----------------------------------------------------------------------
+  **Source**       **Trigger**                             **Priority**
+  ---------------- --------------------------------------- --------------
+  **Direct send**  A friend uses Send-to-Friend (§8.3)     **Pinned**
+                   targeting this player                   above all
+                                                           others
+
+  **Friend         A friend wrote a question and toggled   Medium
+  authored +       \"Share to friends\" on save            
+  shared**                                                 
+
+  **Friend         A friend thumbed up any question they   Lower
+  thumbs-up**      answered (Daily Five or Feed)           
+  -----------------------------------------------------------------------
+
+Within direct-sent items: reverse-chronological. Within authored-shared
+and thumbed-up: also reverse-chronological, with multi-friend
+endorsement collapsing into a single item (*\"Greg + 2 others thumbed
+up\"*).
+
+**8.2.4 Feed Mechanics**
+
+- **Bounded.** The Feed displays a maximum of **25 items**. Older items
+  roll off (they remain in the Feed item table but are no longer
+  surfaced).
+
+- **Reverse-chronological** by triggering event (sent, shared, or
+  thumbs-upped), with direct-sent pinned above the rest.
+
+- **Three actions per item:** Answer, Skip, Dismiss
+
+  - **Answer** --- opens the chat-thread interface; question grades and
+    stores like any other answer
+
+  - **Skip** --- moves item to back of Feed; can resurface if more
+    friends endorse
+
+  - **Dismiss** --- removes from Feed permanently (one-way)
+
+- **Once correctly answered → gone.** A question the player has
+  correctly answered does not reappear in their Feed, even if more
+  friends thumb it up later. Wrong-answered, expired, or skipped
+  questions can resurface if additional friends endorse.
+
+- **No infinite scroll.** The cap is the cap. When the player reaches
+  the end, the empty state is *\"You\'re caught up.\"*
+
+**8.2.5 Feed Item Display**
+
+Each Feed item shows:
+
+- Question text (truncated if long, with \"more\" expansion)
+
+- Source attribution: *\"Greg sent this to you\"* / *\"Greg + 2 others
+  thumbed up\"* / *\"Greg wrote this\"*
+
+- Domain pill (e.g., \"Late Tchaikovsky\")
+
+- The three action buttons
+
+Tap on the friend\'s name → friend\'s profile (§8.6).
+
+**8.2.6 Mastery Credit**
+
+Feed answers count at full weight (1.0x) toward mastery --- they are as
+real as Daily Five answers.
+
+The Feed is also the **only mechanism** by which a player\'s Knowledge
+base grows beyond their declared 5 (§8.4). A correct answer to a Feed
+question in a new domain silently adds that domain to the Knowledge
+page.
+
+**8.2.7 Reactions on Feed Questions**
+
+After answering a Feed question, the player can:
+
+1.  **Send a reaction** to the friend who sent or endorsed the question
+    (per v10.25 §8.10b --- emoji + optional short text, private to the
+    pair)
+
+2.  **Thumbs-up the question** --- propagating it to *this* player\'s
+    friends\' Feeds in turn
+
+**8.2.8 Empty Feed States**
+
+**No friends yet:**
+
+*When friends thumb up questions or send you ones they think you\'d
+love, they\'ll show up here.* \[Invite a friend\]
+
+**Friends but no Feed activity:**
+
+*Quiet today. When your friends play, their Feed will fill up.*
+
+**Caught up:**
+
+*You\'re caught up. Check back later.*
+
+**8.3 Send-to-Friend**
+
+**8.3.1 The Gesture**
+
+A player can send any question to any specific friend. The gesture is
+the Joshing equivalent of sending someone a song you thought of when you
+saw them. It is the highest-intent social gesture in the product.
+
+**8.3.2 Two Entry Points**
+
+**Standalone (write-and-send):**
+
+- A floating \"Write a question\" button on the Home screen opens the
+  question creation flow (§8.5)
+
+- At save, the player chooses one or more destinations: Bank (default
+  on), Share to friends\' Feeds (default off), Send to a specific friend
+  (opens picker)
+
+**In-context:**
+
+- From any question surface (Daily Five answered, Feed answered,
+  archive, friend\'s bank, the player\'s own bank), a \"Send to a friend
+  →\" action surfaces the friend picker
+
+- Picker shows all friends, searchable, with most-recent-interaction
+  sorted to top
+
+**8.3.3 Recipient Experience**
+
+A direct-sent question arrives in the recipient\'s Feed, **pinned
+above** all other Feed items, with attribution: *\"Greg sent this to
+you.\"*
+
+If the recipient has SMS notifications enabled for friend activity
+(default on, opt-out from settings), they receive:
+
+*Greg sent you a question.*
+
+Recipients can answer, skip, or dismiss like any Feed item. Reactions
+can be sent back to the sender (per §8.2.7).
+
+**8.3.4 Creator Points**
+
+The sender earns creator points (per §8.10) when the recipient answers
+their question correctly --- regardless of whether the question was
+originally written by the sender or by someone else. Provenance is
+preserved (see §8.5.4 Add to Bank).
+
+For questions the sender wrote themselves, the creator points are 1.0x.
+For questions added to bank from another source and forwarded, the
+creator points are reduced (suggested: 0.5x) --- the sender gets credit
+for curation, the original author already received credit for
+authorship.
+
+**8.3.5 Limits**
+
+To prevent spam, a player can send at most **5 questions per day per
+recipient**. If exceeded, the send action is disabled with copy:
+
+*You\'ve sent Greg 5 questions today --- give them a beat.*
+
+There is no daily cap on total sends across all recipients (a power-user
+sending 1 question to each of 20 friends is fine; sending 20 to one
+friend is not).
+
+**8.3.6 Send Confirmation**
+
+After sending, a confirmation toast appears: *\"Sent. Maya will see it
+in her Feed.\"*
+
+The sent question appears in the sender\'s archive under a \"Sent\"
+filter (per §8.7).
+
+**8.4 Knowledge Base**
+
+**8.4.1 Definition**
+
+The **Knowledge base** is the union of:
+
+1.  **Declared interests** (player chooses, max 5, eligible for Daily
+    Five immediately)
+
+2.  **Demonstrated domains** (accrued via friend-mediated correct
+    answers, no cap, eligible for Daily Five after 1 correct answer)
+
+The Knowledge base is the surface that drives Daily Five generation.
+Domains in the Knowledge base are the candidates the LLM draws from when
+generating questions.
+
+**8.4.2 Declared Interests**
+
+**Hard cap: 5.** A player can swap an interest at any time, but never
+has more than 5 declared. There is no cooldown on swaps in v11.0
+(revisit if abused).
+
+Declared interests are eligible for Daily Five generation **immediately
+upon declaration** --- no question-floor required. They are the
+player\'s stated focus and the LLM should be able to generate against
+them from day one.
+
+When an interest is swapped out:
+
+- Accumulated mastery in that domain is preserved on the Knowledge page
+
+- The domain moves from \"declared\" to \"demonstrated\"
+
+- It remains eligible for Daily Five generation (since it has
+  accumulated correct answers, it meets the demonstrated-domain floor of
+  1)
+
+**8.4.3 Demonstrated Domains (Friend-Mediated Expansion)**
+
+A demonstrated domain is added to the Knowledge base when the player
+**correctly answers** a question in that domain that came from one of
+these sources:
+
+- The Feed (friend thumbed-up, friend authored+shared)
+
+- A direct send-to-friend message
+
+- A question imported from a friend\'s bank
+
+**LLM-generated Daily Five questions cannot add new domains to the
+Knowledge base.** They can only deepen mastery in existing Knowledge
+base domains.
+
+This rule is structurally important: friends are the mechanism of
+intellectual expansion. Every friend a player adds literally widens the
+universe their daily ritual can be drawn from.
+
+**8.4.4 The 1-Question Floor**
+
+A demonstrated domain becomes eligible for Daily Five generation after
+**1 correct answer** in that domain. The single correct answer:
+
+- Adds the domain to the Knowledge page (silently, per §8.4.5)
+
+- Makes the domain eligible for Daily Five Random selection
+
+- Counts toward initial mastery in that domain
+
+**8.4.5 Quiet Accrual**
+
+When a friend-mediated question in a new domain is correctly answered,
+the domain is added to the Knowledge page **silently**. No notification,
+no celebration, no ceremony beat for the discovery itself (the biweekly
+ceremony surfaces aggregate discovery --- §8.8 --- but the in-the-moment
+accrual is invisible).
+
+The Knowledge page reveals what you didn\'t know you knew.
+
+**8.4.6 Hyper-Specific Categorization**
+
+Domains in the Knowledge base are hyper-specific (per v10.25 §3, §9.1
+categorization rules). Examples:
+
+- ✅ \"Late Tchaikovsky\" / \"James Joyce\'s Ulysses\" / \"Sondheim\'s
+  Late Period\"
+
+- ❌ \"Music\" / \"Literature\" / \"Theater\"
+
+The LLM-driven categorization (§9) determines the canonical domain when
+a question is created. Hyper-specificity is enforced at categorization
+time.
+
+**8.4.7 Domain Merge & Split**
+
+To prevent fragmentation (e.g., \"Bach WTC Book 1\" + \"Fugal
+Arrangements in WTC\" + \"WTC 2\" all separate when they should be one
+\"Bach\'s Well-Tempered Clavier\"), domain merge/split runs at the **end
+of each biweekly ceremony cycle**.
+
+The merge process:
+
+1.  LLM evaluates the player\'s full domain list for fragmentation
+
+2.  Proposed merges are computed (e.g., \"These three should be one\")
+
+3.  Proposed splits are computed (e.g., \"This domain has accumulated
+    questions across two distinct sub-areas\")
+
+4.  Changes are applied silently before the ceremony surface displays
+
+5.  The biweekly ceremony\'s Beat 1 (\"What You Mastered\") reflects the
+    post-merge state
+
+If a merge changes a player\'s tier in a domain (e.g., three
+Familiar-tier domains merge into one Solid-tier domain), this surfaces
+in Beat 1 as a tier-crossing event.
+
+Splits are conservative --- only triggered when a single domain has
+clearly accumulated divergent content.
+
+**8.4.8 Knowledge Page Display**
+
+The Knowledge page uses the **circles-by-category** display (already
+implemented per current design). Domains are organized as labeled
+category clusters (Classical Music, World History, Literature, Film &
+Television, Religion & Mythology, etc.). Each domain is shown as a
+circle:
+
+- **Color intensity** represents mastery tier (deeper color = higher
+  tier)
+
+- **Size** represents accumulated points within the current tier
+
+- **Position** within the cluster is determined by the existing
+  implementation
+
+Tap on a domain → domain detail (recent questions, accumulated
+correct/total, current tier, distance to next tier, optional \"Personal
+round\" deep-dive trigger per §8.4.9).
+
+**8.4.9 Personal Rounds**
+
+From the Knowledge page, a player can tap any domain to launch a
+**Personal Round** --- a focused 5-question session in that single
+domain. Personal rounds:
+
+- Use the same LLM generation as the Daily Five, scoped to one domain
+
+- Do not consume the player\'s Daily Five for the day
+
+- Count at full weight (1.0x) toward mastery in that domain
+
+- Have no SMS trigger (player-initiated only)
+
+- Have no cap on frequency
+
+Personal rounds exist for the player who wants to deliberately go deep
+in a single area. They are an opt-in power-user surface.
+
+**8.5 Question Creation**
+
+**8.5.1 The Write Flow**
+
+A player writes a question via:
+
+- The floating \"Write a question\" button on Home
+
+- Or \"Write a question\" from any context (e.g., a friend\'s profile)
+
+The write flow:
+
+1.  Player enters the question text
+
+2.  Player enters the correct answer
+
+3.  *(Optional)* Player adds acceptable answer variants (e.g.,
+    \"Mahler\" / \"Gustav Mahler\")
+
+4.  *(Optional)* Player adds a creator note (per v10.25 §8.22) --- short
+    context shown if the recipient gets it wrong
+
+5.  LLM auto-categorizes the question into a domain (player can
+    override)
+
+6.  LLM suggests an answer if the player wants help with #2 (per v10.25
+    §8.2)
+
+7.  Player chooses destinations (§8.5.2)
+
+8.  Save
+
+**8.5.2 Destinations**
+
+At save, the player chooses one or more destinations:
+
+  -------------------------------------------------------------------------
+  **Destination**   **Default**       **Effect**
+  ----------------- ----------------- -------------------------------------
+  **Bank**          ON                Question is saved to the player\'s
+                                      question bank
+
+  **Share to        OFF               Question becomes eligible to appear
+  friends\' Feeds**                   in any friend\'s Feed (per §8.2.3)
+
+  **Send to a       OFF (opens picker Question is sent directly to a chosen
+  friend**          if toggled on)    friend (pinned in their Feed, per
+                                      §8.3)
+  -------------------------------------------------------------------------
+
+Multiple destinations can be chosen simultaneously. A question can be
+banked + shared + sent in a single save.
+
+**8.5.3 The Bank**
+
+The player\'s bank is a private collection of questions they\'ve
+authored or imported. From the bank, the player can:
+
+- Send any banked question to a friend
+
+- Share any banked question to friends\' Feeds
+
+- Edit (text, answer, creator note)
+
+- Delete
+
+Bank size is capped per tier (free vs. Plus --- TBD pending §11 Plus
+tier definition).
+
+**8.5.4 Add to Bank (Question Importing)**
+
+From any question surface (Daily Five answered, Feed item, archive), a
+player can tap \"Add to bank.\" This imports the question into their
+bank with full provenance preserved:
+
+- Original author retained as original_author_id
+
+- Importer recorded as imported_by_user_id
+
+- Send-to-friend or share-to-feed of an imported question credits the
+  original author\'s creator points at full weight, and the importer\'s
+  creator points at 0.5x (per §8.3.4)
+
+This preserves attribution while enabling curation as a meaningful
+gesture.
+
+**8.5.5 LLM Answer Suggestion (preserved from v10.25 §8.2)**
+
+When writing a question, the player can tap \"Suggest answer\" --- the
+LLM proposes an answer based on the question text. The player can
+accept, edit, or reject. The flow is identical to v10.25; copy and
+behavior preserved.
+
+**8.6 Friend Profiles**
+
+**8.6.1 Profile Surface**
+
+Every Joshing player has a profile at /users/\[slug\]. Profiles are
+visible **only to confirmed friends** --- never to strangers, never
+publicly indexed.
+
+**8.6.2 Profile Contents**
+
+  -----------------------------------------------------------------------
+  **Element**     **Display**
+  --------------- -------------------------------------------------------
+  Display name    Top of profile
+
+  Declared        Prominent list
+  interests (5)   
+
+  Knowledge       Circles-by-category display (per §8.4.8), with overlap
+  Portrait        markers highlighting domains the visitor also has
+                  demonstrated activity in
+
+  Questions       Limited list (most recent or most-thumbed), with
+  written         one-tap \"Add to bank\"
+
+  Aggregate       Total questions written, total thumbs received, total
+  signal          questions sent --- small text, no ranking
+
+  **Send a        Primary CTA --- opens send picker scoped to questions
+  question to     in visitor\'s bank, or write-new
+  \[Name\]**      
+  -----------------------------------------------------------------------
+
+**8.6.3 What Profiles Never Show**
+
+- Correct rates or session scores
+
+- Streak length
+
+- Point totals or rankings
+
+- Comparison to other friends
+
+- Any data the friend has not implicitly opted into by playing
+
+The profile is an **intellectual portrait**, not a scoreboard. This is a
+load-bearing design principle --- violation breaks the product\'s
+emotional register.
+
+**8.6.4 Removing a Friend**
+
+From a friend\'s profile, a \"Remove friend\" action is available.
+Tapping it:
+
+1.  Confirms (one tap to confirm: *\"Remove \[Name\] from your
+    friends?\"*)
+
+2.  On confirm: the friendship is severed immediately
+
+3.  The removed friend disappears from this player\'s Feed sources,
+    friend list, and profile views
+
+4.  The removed friend receives **no notification**
+
+5.  From the other side: this player simply no longer appears in their
+    Feed sources or friend list
+
+Symmetric, silent, no friction beyond the confirm tap.
+
+**8.7 Archive**
+
+The Archive is a personal record of every question the player has
+interacted with. It is organized by source:
+
+  -------------------------------------------------------------------------
+  **Filter**   **Contents**
+  ------------ ------------------------------------------------------------
+  All          Everything below, reverse-chronological
+
+  Daily Five   LLM-generated questions answered in Daily Five sessions
+
+  Feed         Questions answered from the Feed
+
+  Sent to me   Direct-sent questions answered
+
+  Sent by me   Questions this player sent to others (with recipient +
+               answer status)
+
+  Written by   Questions this player authored (with full performance: who
+  me           answered, who got it right, who reacted)
+
+  Catch-up     Questions answered after the original session window
+  -------------------------------------------------------------------------
+
+Each archived question shows: question text, correct answer, the
+player\'s submitted answer, correctness, domain, source attribution,
+date, and any reactions.
+
+The archive is searchable by domain and by free-text query.
+
+**8.8 Biweekly Ceremony**
+
+**8.8.1 Concept**
+
+The biweekly ceremony is the only moment Joshing speaks back to the
+player about who they are becoming. It is the product\'s **emotional
+heartbeat**. Every other surface is daily, quiet, and personal --- the
+ceremony is cinematic, narrative, and reflective.
+
+It fires every 14 days on a per-player rolling cadence, anchored to the
+player\'s account creation date.
+
+**8.8.2 Trigger**
+
+- SMS sent the morning of the ceremony day: *\"Two weeks of Joshing.
+  Here\'s what you\'ve been up to.\"* \[link\]
+
+- Ceremony available in-app for 7 days after fire
+
+- After 7 days, archived to Account → Past Reflections (browsable
+  indefinitely)
+
+The biweekly ceremony cycle is also the **trigger for domain
+merge/split** (§8.4.7), which runs before the ceremony surface displays.
+
+**8.8.3 Cinematic Register**
+
+Inherits the visual language from v10.25 §8.29:
+
+- Full-screen beats
+
+- Ink-on-cream typography
+
+- \~3-second auto-advance with tap-to-skip-forward
+
+- Fade transitions between beats
+
+- Background subtle motion (per existing design system)
+
+The cinematic quality matters --- this is the moment that earns
+retention. Treat it as a hero feature, not a recap screen.
+
+**8.8.4 Beat Structure**
+
+Five beats, in order. Beats with no content are silently omitted.
+
+**Beat 1 --- What You Mastered**
+
+Surfaces tier crossings in the past 14 days.
+
+- Copy: *\"You moved from Establishing to Familiar in / Late
+  Tchaikovsky.\"*
+
+- Multiple tier crossings: stacked, one per beat-extension
+
+- Mastery-tier crossings get distinct typographic emphasis
+
+- If no tier crossings: *\"You\'re building. \[Top-by-points-earned
+  domain\] is closest to its next tier.\"*
+
+**Beat 2 --- What You Discovered**
+
+Surfaces new domains added to the Knowledge base in the past 14 days
+(via friend-mediated activity).
+
+- Copy: *\"You found new ground in / \[Domain 1\] · \[Domain 2\] ·
+  \[Domain 3\]\"*
+
+- For each: surfaces the friend who introduced the domain --- *\"From a
+  question Greg sent you.\"*
+
+- If no new domains: beat omitted
+
+**Beat 3 --- Who Shaped Your Map**
+
+Surfaces top 3 friends ranked by contribution to the player\'s Knowledge
+base growth + mastery progress in the past 14 days.
+
+- Copy: *\"Greg sent you 4 questions you got right. Maya\'s Feed gave
+  you 7. They\'ve been part of your last two weeks.\"*
+
+- Frames the social graph as a force that materially shapes intellectual
+  life
+
+- If fewer than 3 friends contributed: shows however many did
+
+- If zero friends contributed: beat omitted
+
+**Beat 4 --- Your Closest Alignment**
+
+Surfaces the friend with the highest current intellectual alignment
+score.
+
+- Copy: *\"You and Maya are most aligned in / Modernist Literature ·
+  Sondheim Musicals.\"*
+
+- Tap → friend\'s profile
+
+- Alignment computed per v10.25 §8.14 mechanics, scoped to the friend
+  graph rather than groups
+
+- If player has no friends: beat omitted
+
+**Beat 5 --- What You Gave**
+
+Surfaces creator points earned in the past 14 days.
+
+- Copy: *\"4 of your questions were answered by friends. \[Top question
+  text\] was your most-played.\"*
+
+- Critical for keeping the creator loop emotionally alive
+
+- If creator_points_earned = 0 over the cycle: beat omitted
+
+**8.8.5 Closing --- Shareable Card**
+
+The ceremony ends with a shareable card:
+
+- Composed in the mastery momentum format (per v10.25 §8.36, preserved
+  unchanged)
+
+- One-tap copy / share via native share sheet
+
+- Card design: ink-on-cream, biweekly cycle dates, top mastery event of
+  the cycle, no leaderboard data
+
+**8.8.6 Cadence Anchor**
+
+A player\'s biweekly cycle is anchored to their account creation date
+(day-of-week + time-of-day). Examples:
+
+- Player joined Tuesday 4pm → ceremonies fire every other Tuesday
+  morning
+
+- Player joined Friday 9am → ceremonies fire every other Friday morning
+
+This avoids global sync (which creates SMS volume spikes and removes
+personalization) and keeps the moment private to the player\'s own
+rhythm.
+
+If a player misses the in-app ceremony window (7 days), the next
+ceremony still fires on schedule. Missed ceremonies are accessible from
+Account → Past Reflections.
+
+**8.9 Intellectual Alignment**
+
+**8.9.1 Concept**
+
+Intellectual alignment is a per-pair score between the player and each
+friend, representing the degree of shared intellectual territory. It
+surfaces in:
+
+- Friend profiles (overlap markers on the Knowledge Portrait)
+
+- Biweekly ceremony Beat 4 (\"Your Closest Alignment\")
+
+**8.9.2 Calculation**
+
+Alignment between Player A and Player B is computed across all questions
+exchanged or co-experienced:
+
+- Questions A wrote that B answered correctly (and vice versa)
+
+- Questions A thumbed up that B also thumbed up
+
+- Domains both A and B have demonstrated activity in (per Knowledge
+  base)
+
+- Weighted by the depth of demonstrated activity (Solid \> Familiar \>
+  Establishing)
+
+The calculation produces a normalized 0--100 score. Mechanics derived
+from v10.25 §8.14, adapted to the friend graph.
+
+**8.9.3 Display**
+
+Alignment scores are **never** displayed as raw numbers in the UI. They
+surface only as:
+
+- Ranked friend lists (\"most aligned with\") in the biweekly ceremony
+
+- Highlighted overlap markers on the Knowledge Portrait
+
+- Optional \"X domains in common\" text on friend profiles
+
+The score is internal infrastructure for ranking; it is not a
+player-facing metric. This is intentional --- exposing alignment as a
+score would convert intellectual identity into a comparison metric,
+which violates §3.4.
+
+**8.10 Points & Mastery**
+
+**8.10.1 Tier System (preserved from v10.25 §8.32)**
+
+  --------------------------------------
+  **Tier**       **Threshold**
+  -------------- -----------------------
+  Establishing   0 points
+
+  Familiar       50 points
+
+  Solid          200 points
+
+  Mastery        500 points + 20%
+                 creator points
+  --------------------------------------
+
+Mastery tier requires the 20% creator points rule: at least 20% of the
+player\'s points in that domain must be creator points (earned by
+friends correctly answering questions the player wrote in that domain).
+
+This rule preserves the v10.25 principle that Mastery is not a thing you
+can reach by consumption alone --- you must contribute to a domain to
+truly master it.
+
+**8.10.2 Point Sources**
+
+  ------------------------------------------------------------------------
+  **Source**          **Points per correct answer**        **Notes**
+  ------------------- ------------------------------------ ---------------
+  Daily Five          1.0 × difficulty multiplier          
+
+  Feed answer         1.0 × difficulty multiplier          
+
+  Direct-sent answer  1.0 × difficulty multiplier          
+
+  Personal Round      1.0 × difficulty multiplier          
+
+  Catch-up (any       0.25 × difficulty multiplier         
+  source)                                                  
+
+  Creator points      0.5 per friend correct answer to     
+                      your authored question               
+
+  Imported-question   0.25 per friend correct answer to    Original author
+  creator credit      your imported-and-forwarded question still gets 0.5
+  ------------------------------------------------------------------------
+
+Difficulty multipliers (Normal 1.0x, Moderate 1.25x, Challenging 1.5x,
+Ridiculous 2.0x, Adaptive based on actual served difficulty).
+
+**8.10.3 Tier Display**
+
+Tiers are surfaced:
+
+- On the Knowledge page (color intensity of domain circles)
+
+- In the Daily Five end-of-session summary (when a tier crossing occurs)
+
+- In the biweekly ceremony Beat 1
+
+- On friend profiles (overlap markers)
+
+Tiers are **never** surfaced as a leaderboard or ranked list across
+players.
+
+**8.10.4 Creator Points**
+
+Creator points are earned when a friend correctly answers a question the
+player wrote. Mechanics:
+
+- Question written by Player A and answered by Player B → if B correct,
+  A receives 0.5 creator points in the question\'s domain
+
+- Question imported from Player A by Player B and forwarded to Player C
+  → if C correct, A receives 0.5 (original author) and B receives 0.25
+  (curator)
+
+- Creator points contribute to the 20% Mastery threshold
+
+Creator points are tracked separately from regular points but accumulate
+into the same tier total.
+
+**8.11 SMS Notifications**
+
+  ----------------------------------------------------------------------------
+  **Trigger**             **SMS Copy**                           **Default**
+  ----------------------- -------------------------------------- -------------
+  OTP for auth            *Your Joshing code: NNNNNN*            Always
+
+  Daily Five ready        *Your five for today.* \[link\]        ON, opt-out
+
+  Friend sent you a       *Greg sent you a question.* \[link\]   ON, opt-out
+  question                                                       
+
+  Friend thumbs-upped     *Maya thumbed up your Sondheim         OFF, opt-in
+  your question           question.*                             
+
+  Friend reaction to your *Greg reacted to your question.*       OFF, opt-in
+  question                                                       
+
+  Friend invitation       *Maya joined Joshing --- you\'re now   ON, opt-out
+  accepted                friends.*                              
+
+  Friend request received *Greg wants to be friends on Joshing.* ON, opt-out
+                          \[link\]                               
+
+  Biweekly ceremony ready *Two weeks of Joshing. Here\'s what    ON, opt-out
+                          you\'ve been up to.* \[link\]          
+  ----------------------------------------------------------------------------
+
+All notifications respect a quiet-hours window (default 9pm--8am
+player-local). OTP and friend-sent-question notifications can override
+quiet hours (toggle in settings).
+
+**8.12 Home & Navigation**
+
+**8.12.1 Home Hub**
+
+The Home screen surfaces:
+
+- **Today\'s Daily Five status** --- large card showing: *\"Your five
+  today: \[3 of 5 done\]\"* (or *\"Ready when you are\"* if untouched)
+
+- **Feed indicator** --- small text: *\"3 new in your Feed\"*
+  (suppressed if 0)
+
+- **Floating \"Write a question\" button** --- bottom-right, persistent
+
+Below the fold:
+
+- **Biweekly ceremony preview** --- appears in the 24h before ceremony
+  fires: *\"Your two-week reflection arrives tomorrow.\"*
+
+- **Friend activity summary** --- quiet line: *\"Maya and Greg played
+  today.\"* (no detail, just presence)
+
+**8.12.2 Navigation**
+
+Bottom nav (mobile) / left rail (desktop), 4 items:
+
+  -----------------------------------------------------------
+  **Icon**   **Label**   **Destination**
+  ---------- ----------- ------------------------------------
+  Home       Home        §8.12.1
+
+  Stream     Feed        §8.2
+
+  Map        Knowledge   §8.4.8
+
+  Person     Account     Settings, profile, friends, archive,
+                         past reflections
+  -----------------------------------------------------------
+
+The \"Account\" tab contains:
+
+- Edit profile (display name, declared interests)
+
+- Friends (list, add, remove)
+
+- Archive (§8.7)
+
+- Past reflections (archived biweekly ceremonies)
+
+- Settings (notifications, difficulty default, quiet hours)
+
+- Plus tier (TBD per §11)
+
+- Sign out / Delete account
+
+**8.13 Design Principles (carried from v10.25 §16, modified)**
+
+1.  **Quiet over loud.** No urgency, no streaks, no badges, no
+    leaderboards. The product is intelligent and calm.
+
+2.  **Specific over general.** Hyper-specificity in domains, in
+    questions, in copy. \"Late Tchaikovsky\" not \"Music.\"
+
+3.  **Practice over performance.** The Daily Five is private. Friend
+    profiles are intellectual portraits, not scoreboards.
+
+4.  **Curation over authorship.** The social layer is built on thumbs-up
+    and send-to-friend, not on writing-for-others.
+
+5.  **Friends as expansion.** The Knowledge base grows through people.
+    The mechanic encodes a true thing about how intellectual life
+    expands.
+
+6.  **One ritual, one ceremony.** The Daily Five is the ritual. The
+    biweekly is the ceremony. Don\'t add more moments.
+
+7.  **Editorial register.** Ink-on-cream, considered typography, no
+    animation gratuitousness. The product reads like a quiet
+    publication.
+
+8.  **Web-first, SMS-anchored.** No native apps. The invitation arrives
+    as a text from a friend.
+
+9.  **Invitation as gift.** Every player was brought here by someone.
+    The invitation flow is dignified, never viral-mechanic.
+
+10. **The only moment Joshing speaks loudly is the biweekly ceremony.**
+    Everything else is whispered.
+
+**End of Chunk 2.**
+
+React to anything before I move to Chunk 3 (Sections 9--20: LLM, Data
+Model, SMS, Performance, Monetization, Architecture, Out of Scope,
+Metrics, Open Questions, Sample Questions). Things worth checking
+specifically:
+
+- **§8.1.5 Difficulty calibration** --- the explicit \"Normal questions
+  should test moderately-engaged-with-the-domain knowledge\" instruction
+  --- does that capture the recalibration ask?
+
+- **§8.3.4 Creator points for forwarded questions** --- I made up the
+  0.5x curator rate; want to check that.
+
+- **§8.4.7 Domain merge** --- is end-of-biweekly-cycle the right
+  cadence? Should there also be a manual \"consolidate\" trigger from
+  the Knowledge page?
+
+- **§8.8.4 Beat 5** --- the most-played question copy assumes we have
+  play counts per question; that\'s a data requirement worth confirming.
+
+- **§8.10.2 Point sources** --- the imported-question split (original
+  author 0.5, curator 0.25) --- does that economy feel right?
+
+- **§8.12.1 Home** --- the \"Friend activity summary\" line (\"Maya and
+  Greg played today\") --- does that tip into surveillance, or is it a
+  nice ambient signal? Worth a sanity check.
+
+- **§8.13 Principles** --- anything missing or anything that\'s there
+  that shouldn\'t be?
+
+Producing **Chunk 3 of 3**: Sections 9--20. This completes the v11.0
+PRD.
+
+**9. LLM Integration**
+
+**9.1 Overview**
+
+LLM is used in five places in Joshing v11.0:
+
+1.  **Daily Five question generation** --- calibrated to the player\'s
+    Knowledge base, difficulty, and selected domains
+
+2.  **Domain auto-categorization** --- when a question is created (by
+    player or for Daily Five), the LLM assigns a hyper-specific domain
+
+3.  **Onboarding interest proposals** --- the LLM proposes 8--12
+    candidate interests from warm-up answers
+
+4.  **Answer grading** --- semantic evaluation when the deterministic
+    answer-key check fails
+
+5.  **Domain merge/split** --- at end of biweekly cycle, evaluates the
+    player\'s domain list for consolidation
+
+6.  **Answer suggestion** --- when a player writes a question and taps
+    \"Suggest answer\"
+
+Each is a distinct prompt, with distinct constraints and outputs.
+
+**9.2 Daily Five Question Generation**
+
+**9.2.1 Inputs to the prompt**
+
+- Player\'s Knowledge base (declared interests + demonstrated domains)
+
+- Player\'s recent correct rate per domain (rolling 30-day window)
+
+- Selected domains for today (Random or Custom subset)
+
+- Player\'s chosen difficulty (Normal / Moderate / Challenging /
+  Ridiculous / Adaptive)
+
+- For Adaptive: current adaptive level (initialized at Normal, updated
+  per session)
+
+- Player\'s recent question history (to avoid repetition --- last 60
+  questions)
+
+- Target correct rate per difficulty (per §8.1.5)
+
+**9.2.2 Prompt constraints**
+
+The generation prompt explicitly instructs:
+
+- Questions must have a single correct answer (with optional acceptable
+  variants)
+
+- Questions must be factual, not opinion-based
+
+- Hyper-specific domain --- no general-knowledge fallback
+
+- **Normal-tier difficulty must test material a moderately-engaged
+  player would know**, not deep cuts or trivia-of-trivia
+
+- Avoid \"what year was X recorded\" when \"what was X\" is more
+  meaningful
+
+- Avoid questions that depend on having read a specific recent source
+
+- One question per call, with structured output: {question,
+  correct_answer, acceptable_variants\[\], domain, difficulty,
+  brief_explainer}
+
+**9.2.3 Output validation**
+
+Each generated question is checked before serving:
+
+- Domain matches a domain in the player\'s Knowledge base (otherwise
+  discard)
+
+- Question text is non-empty and \< 500 chars
+
+- Correct answer is non-empty
+
+- Brief explainer is \< 280 chars
+
+- Question is not a near-duplicate of one in the player\'s recent
+  history (similarity check via embedding)
+
+Failed validations trigger regeneration (max 3 retries before falling
+through to next domain).
+
+**9.2.4 Adaptive difficulty algorithm**
+
+After each Daily Five session where the player has Adaptive set:
+
+- Compute session correct rate (X correct of Y answered)
+
+- If correct rate \> 75%: bump adaptive level up by 0.5 sub-tier
+
+- If correct rate \< 45%: bump adaptive level down by 0.5 sub-tier
+
+- Otherwise: hold steady
+
+- Adaptive level ranges from Normal to Ridiculous, in 0.5 increments
+
+- The next Daily Five generates at the new level
+
+**9.3 Domain Auto-Categorization (preserved from v10.25 §9.1, refined)**
+
+When any question is created (player-authored or LLM-generated), the LLM
+assigns:
+
+- A **hyper-specific canonical domain** (e.g., \"Late Tchaikovsky\")
+
+- A **broad category** (e.g., \"Classical Music\") --- used for the
+  Knowledge page circles-by-category clustering
+
+Constraints:
+
+- Hyper-specificity is enforced at categorization (no \"Music\" /
+  \"Literature\" / \"History\")
+
+- The LLM is given the player\'s existing domain list to encourage
+  canonical reuse
+
+- If a question doesn\'t fit any existing domain, a new domain is
+  created with the LLM\'s proposed name
+
+- Player can override the LLM\'s domain assignment when creating their
+  own questions
+
+**9.4 Onboarding Interest Proposals**
+
+Inputs: 4--6 free-text warm-up answers.
+
+The LLM generates 8--12 candidate interests at hyper-specific
+granularity. Each candidate includes:
+
+- A short label (e.g., \"Late-Period Bowie\")
+
+- A brief description (1 sentence) shown on hover/tap
+
+The player selects up to (5 minus already-accepted-pre-seeded) and can
+edit any candidate inline before locking.
+
+**9.5 Answer Grading**
+
+Two-stage:
+
+1.  **Deterministic check** against correct_answer +
+    acceptable_variants\[\] with normalization (case, punctuation,
+    whitespace, common abbreviations)
+
+2.  **LLM semantic evaluation** if step 1 fails --- returns correct /
+    partial / incorrect with confidence
+
+Partial credit (50% weight) is conservative. The LLM is prompted to
+favor incorrect over partial when uncertain.
+
+**9.6 Domain Merge & Split (biweekly)**
+
+At end of each player\'s biweekly cycle, the LLM is given the player\'s
+full domain list (with question counts) and asked to propose:
+
+- **Merges**: domain groups that should be consolidated (e.g., three
+  Bach WTC variants → one)
+
+- **Splits**: single domains that have accumulated divergent content
+
+Proposed changes are applied silently before the biweekly ceremony
+surface displays. Tier recalculations happen automatically.
+
+The LLM is instructed to be **aggressive on merges** (fragmentation is
+the larger risk) and **conservative on splits** (only split when content
+has clearly diverged).
+
+**9.7 Answer Suggestion (preserved from v10.25 §8.2)**
+
+When a player writes a question and taps \"Suggest answer,\" the LLM
+proposes an answer from the question text. Player can accept, edit, or
+reject. Behavior identical to v10.25.
+
+**9.8 Model Selection & Cost**
+
+- Daily Five generation: high-quality model (e.g., Claude Sonnet, GPT-4o
+  equivalent) --- quality matters
+
+- Categorization, grading, suggestion: smaller / faster model (e.g.,
+  Haiku, GPT-4o-mini) --- latency matters
+
+- Domain merge/split: high-quality model --- runs infrequently, accuracy
+  matters
+
+Estimated cost per active player per month: TBD pending pilot data.
+Budget assumption: \< \$2/MAU.
+
+**10. Data Model**
+
+**10.1 Schema Overview**
+
+The v11.0 data model is a substantial simplification of v10.25.
+Group-related tables are dropped; new tables added for the friend graph
+and Feed.
+
+**10.2 Core Tables**
+
+**USERS**
+
+  ---------------------------------------------------------------------------
+  **Field**            **Type**      **Notes**
+  -------------------- ------------- ----------------------------------------
+  user_id              UUID PK       
+
+  phone_number         string,       E.164 format, US only
+                       unique        
+
+  display_name         string        
+
+  slug                 string,       For /users/\[slug\] URLs
+                       unique        
+
+  created_at           timestamp     Anchor for biweekly ceremony cadence
+
+  tier                 enum          Free / Plus
+
+  notification_prefs   json          Per-trigger opt-in/out
+
+  quiet_hours_start    time          Default 21:00 local
+
+  quiet_hours_end      time          Default 08:00 local
+
+  adaptive_level       float         Current adaptive difficulty (Normal=1.0,
+                                     Ridiculous=4.0)
+
+  deleted_at           timestamp     Soft delete
+                       nullable      
+  ---------------------------------------------------------------------------
+
+**DECLARED_INTERESTS**
+
+  -----------------------------------------
+  **Field**     **Type**    **Notes**
+  ------------- ----------- ---------------
+  interest_id   UUID PK     
+
+  user_id       FK USERS    
+
+  domain_id     FK DOMAINS  
+
+  declared_at   timestamp   
+
+  is_active     boolean     False if
+                            swapped out
+  -----------------------------------------
+
+Constraint: max 5 is_active = true rows per user.
+
+**DOMAINS**
+
+  --------------------------------------------------------------------
+  **Field**            **Type**        **Notes**
+  -------------------- --------------- -------------------------------
+  domain_id            UUID PK         
+
+  canonical_name       string          Hyper-specific (e.g., \"Late
+                                       Tchaikovsky\")
+
+  broad_category       string          E.g., \"Classical Music\"
+
+  created_at           timestamp       
+
+  created_by_user_id   FK USERS        First user to encounter
+                       nullable        
+  --------------------------------------------------------------------
+
+Domains are global (shared across users). When a user demonstrates
+activity in a domain, it appears in their Knowledge base view (derived
+from QUESTION_RESPONSES).
+
+**QUESTIONS**
+
+  -------------------------------------------------------------------------
+  **Field**              **Type**        **Notes**
+  ---------------------- --------------- ----------------------------------
+  question_id            UUID PK         
+
+  text                   text            
+
+  correct_answer         string          
+
+  acceptable_variants    json array      
+
+  domain_id              FK DOMAINS      
+
+  difficulty             enum            Normal / Moderate / Challenging /
+                                         Ridiculous
+
+  creator_note           text nullable   Per §8.5
+
+  original_author_id     FK USERS        NULL for LLM-generated
+                         nullable        
+
+  is_llm_generated       boolean         
+
+  is_shared_to_friends   boolean         If true, eligible for friend Feeds
+
+  brief_explainer        text            Shown after grading
+
+  created_at             timestamp       
+  -------------------------------------------------------------------------
+
+**QUESTION_RESPONSES**
+
+  --------------------------------------------------------------------------
+  **Field**          **Type**       **Notes**
+  ------------------ -------------- ----------------------------------------
+  response_id        UUID PK        
+
+  question_id        FK QUESTIONS   
+
+  user_id            FK USERS       
+
+  submitted_answer   string         
+
+  is_correct         boolean        
+
+  is_partial         boolean        
+
+  points_awarded     float          After all multipliers
+
+  source             enum           daily_five / feed / direct_sent /
+                                    personal_round / catch_up
+
+  source_friend_id   FK USERS       Who sent or endorsed (for
+                     nullable       feed/direct_sent)
+
+  answered_at        timestamp      
+
+  thumbs_upped       boolean        
+
+  reaction_text      text nullable  If reaction sent
+  --------------------------------------------------------------------------
+
+This is the master record of all play. Everything else (mastery, points,
+stats) is derivable from this.
+
+**FRIENDSHIPS**
+
+  --------------------------------------------------------------
+  **Field**            **Type**        **Notes**
+  -------------------- --------------- -------------------------
+  friendship_id        UUID PK         
+
+  user_a_id            FK USERS        Lower UUID
+
+  user_b_id            FK USERS        Higher UUID
+
+  formed_via           enum            invitation /
+                                       in_app_request
+
+  formed_at            timestamp       
+
+  removed_at           timestamp       Soft delete; removal is
+                       nullable        symmetric
+
+  removed_by_user_id   FK USERS        
+                       nullable        
+  --------------------------------------------------------------
+
+Constraint: unique on (user_a_id, user_b_id).
+
+**INVITATIONS**
+
+  -----------------------------------------------------------
+  **Field**              **Type**        **Notes**
+  ---------------------- --------------- --------------------
+  invitation_id          UUID PK         
+
+  inviter_user_id        FK USERS        
+
+  invitee_phone          string          E.164
+
+  invitee_user_id        FK USERS        Set on acceptance
+                         nullable        
+
+  pre_seeded_interests   json array      Up to 3 domain
+                                         suggestions
+
+  personal_message       text nullable   
+
+  sent_at                timestamp       
+
+  accepted_at            timestamp       
+                         nullable        
+  -----------------------------------------------------------
+
+**FEED_ITEMS**
+
+  -----------------------------------------------------------------------
+  **Field**           **Type**      **Notes**
+  ------------------- ------------- -------------------------------------
+  feed_item_id        UUID PK       
+
+  recipient_user_id   FK USERS      Whose feed this appears in
+
+  question_id         FK QUESTIONS  
+
+  source_type         enum          direct_sent / authored_shared /
+                                    thumbs_upped
+
+  source_user_id      FK USERS      The friend who triggered the item
+
+  source_event_at     timestamp     When the trigger happened (for
+                                    ordering)
+
+  state               enum          active / answered / skipped /
+                                    dismissed / rolled_off
+
+  created_at          timestamp     
+  -----------------------------------------------------------------------
+
+Multi-friend endorsement (e.g., \"Greg + 2 others thumbed up\") is a
+query-time aggregation, not separate rows. The display layer collapses
+items where recipient_user_id + question_id + source_type = thumbs_upped
+are identical.
+
+**SENT_QUESTIONS**
+
+  ---------------------------------------------
+  **Field**           **Type**      **Notes**
+  ------------------- ------------- -----------
+  sent_id             UUID PK       
+
+  sender_user_id      FK USERS      
+
+  recipient_user_id   FK USERS      
+
+  question_id         FK QUESTIONS  
+
+  sent_at             timestamp     
+  ---------------------------------------------
+
+Used for: rate-limit enforcement (5/day/recipient), creator point
+attribution, archive \"Sent by me\" filter.
+
+**USER_QUESTION_BANK**
+
+  -------------------------------------------------------------------
+  **Field**               **Type**        **Notes**
+  ----------------------- --------------- ---------------------------
+  bank_entry_id           UUID PK         
+
+  user_id                 FK USERS        
+
+  question_id             FK QUESTIONS    
+
+  imported_from_user_id   FK USERS        If added-to-bank from
+                          nullable        another source
+
+  added_at                timestamp       
+  -------------------------------------------------------------------
+
+**DAILY_FIVE_SESSIONS**
+
+  ------------------------------------------------------------------
+  **Field**               **Type**       **Notes**
+  ----------------------- -------------- ---------------------------
+  session_id              UUID PK        
+
+  user_id                 FK USERS       
+
+  session_date            date           
+
+  difficulty_setting      enum           Player\'s setting at time
+                                         of generation
+
+  difficulty_served       float          Actual served level (for
+                                         Adaptive)
+
+  domain_selection_mode   enum           random / custom
+
+  selected_domain_ids     json array     If custom
+
+  question_ids            json array     The 5 questions
+
+  generated_at            timestamp      
+
+  completed_at            timestamp      
+                          nullable       
+  ------------------------------------------------------------------
+
+**CEREMONIES**
+
+  ---------------------------------------------------------------------
+  **Field**       **Type**       **Notes**
+  --------------- -------------- --------------------------------------
+  ceremony_id     UUID PK        
+
+  user_id         FK USERS       
+
+  cycle_start     date           
+
+  cycle_end       date           
+
+  fired_at        timestamp      
+
+  viewed_at       timestamp      
+                  nullable       
+
+  beats_payload   json           The 5 beats\' computed content,
+                                 snapshot at fire time
+
+  share_card_id   UUID nullable  If user generated a share card
+  ---------------------------------------------------------------------
+
+**10.3 Derived Views**
+
+**KNOWLEDGE_BASE_VIEW** (per user)
+
+Computed: union of (active declared interests) + (domains where user has
+≥ 1 correct response from friend-mediated source).
+
+Used by Daily Five generation and Knowledge page rendering.
+
+**MASTERY_VIEW** (per user, per domain)
+
+Computed: aggregate points per domain from QUESTION_RESPONSES, with
+creator points joined in. Determines tier per §8.10.1.
+
+**ALIGNMENT_VIEW** (per user-pair)
+
+Computed per §8.9.2. Cached, recomputed on:
+
+- New QUESTION_RESPONSES involving either user
+
+- Friendship formation/removal
+
+- Biweekly cycle (full recompute)
+
+**10.4 Tables Dropped from v10.25**
+
+- GROUPS, GROUP_MEMBERS
+
+- GAMES, GAME_QUESTIONS, GAME_DAILY_ASSIGNMENTS
+
+- SETUPS (game setup configurations)
+
+- SIMILARITY_SHARES
+
+- USER_INTEREST_PROFILES (replaced by DECLARED_INTERESTS +
+  KNOWLEDGE_BASE_VIEW)
+
+- PUBLIC_RUNS, PUBLIC_POOL_QUESTIONS
+
+- STAR_VOTES (stars killed, thumbs-upped is now a flag on
+  QUESTION_RESPONSES)
+
+- EXPERT_INVITATIONS
+
+**11. Monetization (Plus Tier)**
+
+**11.1 Status: TBD**
+
+Joshing Plus exists as a tier in the data model (USERS.tier) but its
+feature set for v11.0 is **explicitly unresolved** and flagged in §19
+Open Questions.
+
+**11.2 Candidate Plus Features (for resolution)**
+
+Options being considered:
+
+  ---------------------------------------------------------------------------
+  **Feature**            **Free**          **Plus**
+  ---------------------- ----------------- ----------------------------------
+  Declared interests     5                 5 (cap stays --- see note below)
+
+  Question bank size     50                Unlimited
+
+  Personal Rounds        3/day             Unlimited
+
+  Send-to-friend daily   5                 10
+  limit per recipient                      
+
+  Past biweekly          Last 6            All
+  ceremonies retention                     
+
+  Knowledge page domain  Basic             Detailed (per-domain trend graphs,
+  analytics                                predicted next tier date, etc.)
+
+  Custom domains in      LLM-categorized   Free-text override always allowed
+  declared interests     only              
+  ---------------------------------------------------------------------------
+
+**Note on declared interests cap:** I do not recommend allowing Plus to
+break the 5-interest cap. The hard cap at 5 is a *design* decision, not
+a *limitation*. Selling more interest slots would be selling away the
+principle that grounds the rest of the model.
+
+**11.3 Pricing**
+
+TBD. Recommendation: 5/month or 40/year, paid via web (Stripe). No
+in-app purchase complications since web-only.
+
+**12. Technical Architecture**
+
+**12.1 Stack**
+
+Inherited from v10.25 with no major changes:
+
+- **Frontend:** Next.js (web), responsive, mobile-optimized
+
+- **Backend:** Node.js API server
+
+- **Database:** Postgres
+
+- **LLM:** External provider (Anthropic / OpenAI), abstracted behind an
+  internal LLM service
+
+- **SMS:** Twilio
+
+- **Auth:** SMS OTP, JWT cookies for session
+
+- **Hosting:** Cloud (existing infra)
+
+- **Payments (Plus tier):** Stripe
+
+**12.2 Daily Five Generation Architecture**
+
+A daily job runs at \~11:50 EST to pre-generate Daily Fives for all
+active users:
+
+1.  For each active user, retrieve Knowledge base view + difficulty
+    setting + most recent N questions
+
+2.  Determine which domains to draw from (Random vs. Custom)
+
+3.  Call LLM generation endpoint per question (5 calls per user,
+    parallelizable)
+
+4.  Validate each output per §9.2.3
+
+5.  Persist as DAILY_FIVE_SESSIONS row + linked QUESTIONS rows
+
+6.  At 12:00 EST, fire SMS to all users with successfully-generated
+    sessions
+
+Failure handling:
+
+- Per-question failures: retry up to 3x, fall through to next domain
+
+- Per-user failures (all domains failed): defer SMS, retry generation at
+  12:30, then 1:00; if still failing, send a \"Today\'s Daily Five is
+  delayed\" SMS
+
+LLM call budget: 5 calls × N users = manageable. With expected MAU \<
+10k at launch, this is cheap and parallelizable.
+
+**12.3 Feed Architecture**
+
+Feed items are written when triggers fire:
+
+- Question shared to friends → for each friend, insert FEED_ITEMS row
+
+- Question thumbs-upped → for each friend of the thumbs-upper, insert
+  FEED_ITEMS row (or update existing for collapse)
+
+- Question direct-sent → insert FEED_ITEMS row for recipient (state =
+  active, source_type = direct_sent)
+
+Feed retrieval:
+
+- Query FEED_ITEMS WHERE recipient_user_id = X AND state = \'active\'
+  ORDER BY (source_type = \'direct_sent\' DESC, source_event_at DESC)
+  LIMIT 25
+
+- Hydrate with question text, source friend display name, etc.
+
+- Collapse thumbs_upped items with same question_id for display
+  (\"Greg + 2 others\")
+
+**Feed roll-off**
+
+Items beyond the 25-item visible cap have state set to rolled_off by a
+periodic job. They remain in the table for archive/audit purposes but
+are not surfaced.
+
+**12.4 Biweekly Ceremony Architecture**
+
+A daily job runs at \~7:00 EST to identify users whose biweekly cycle
+ends today:
+
+1.  For each such user, compute the 5 beats\' content from
+    QUESTION_RESPONSES, FRIENDSHIPS, ALIGNMENT_VIEW, etc.
+
+2.  Run domain merge/split (§9.6) --- apply changes
+
+3.  Snapshot beats payload into CEREMONIES.beats_payload
+
+4.  Fire SMS
+
+Beats payload is snapshotted (not computed live on view) so that the
+ceremony tells a stable story even if the underlying data shifts over
+the 7-day viewing window.
+
+**12.5 SMS Architecture**
+
+All SMS sent via Twilio. Categories:
+
+- **Transactional** (OTP, daily five, friend-sent, ceremony) --- high
+  deliverability, no rate constraints beyond Twilio\'s
+
+- **Invitations** --- sent from the inviter\'s own phone via OS handoff
+  (not from a Joshing number) --- see §7.2
+
+Quiet hours enforcement: a queue defers non-OTP SMS to outside
+quiet-hours-window per recipient.
+
+**12.6 Performance Targets**
+
+  -----------------------------------------------------
+  **Surface**                     **Target**
+  ------------------------------- ---------------------
+  Home screen load                \< 1.5s
+
+  Daily Five question reveal      \< 800ms
+
+  Answer grading (deterministic)  \< 200ms
+
+  Answer grading (LLM)            \< 2s
+
+  Feed load                       \< 1s
+
+  Knowledge page load             \< 1.5s
+
+  Biweekly ceremony beat-to-beat  Smooth, no
+  transition                      perceptible jank
+  -----------------------------------------------------
+
+**12.7 Migration from v10.25**
+
+Two existing users (per §11 of the conversation). Migration is
+effectively a clean slate:
+
+- Preserve QUESTION_RESPONSES → mastery data is preserved
+
+- Drop GROUPS, GAMES, all group-scoped tables
+
+- Re-bootstrap each user through onboarding to declare 5 interests
+
+- Migrate banked questions to USER_QUESTION_BANK
+
+- Mastery tier and points carry forward
+
+Estimated migration effort: trivial (2 users).
+
+**13. Personal Performance Page (preserved from v10.25 §13)**
+
+The personal performance page is the player\'s private analytics
+surface. Visible only to the player themselves.
+
+Contents:
+
+- Daily Five completion rate (rolling 30 days)
+
+- Average correct rate by difficulty
+
+- Mastery progression chart (tier transitions over time)
+
+- Top domains by points
+
+- Catch-up activity
+
+- Creator activity (questions written, answered by friends, creator
+  points earned)
+
+This page is **never** shared, exported, or shown to friends. It is the
+player\'s own ledger.
+
+**14. Out of Scope (v11.0)**
+
+**14.1 Explicitly killed (will not return)**
+
+- Group games, group seasons, group archives
+
+- The three game setups (know_me, know_me_plus, open)
+
+- Public Daily Game, Public Infinite Run
+
+- Public question pool
+
+- Game ending two-act ceremony, Game Summary, Creator\'s Summary
+
+- Star voting, daily star budget
+
+- Post-game similarity sharing
+
+- Expert challenges
+
+- AI Practice Mode
+
+- \"Whose Questions\" picker on the Daily Five
+
+**14.2 Deferred to future versions**
+
+- Friend-of-friend introductions (Path 3 of friendship formation)
+
+- Native iOS / Android apps
+
+- International expansion beyond US (non-US phone numbers)
+
+- Joshing Plus full feature definition (TBD per §11)
+
+- Manual \"consolidate domain\" trigger from Knowledge page
+
+- Per-friend Knowledge page filtering (\"show me what I know that Maya
+  knows too\")
+
+- Friend group constructs (e.g., \"music nerds\" sub-graph) ---
+  explicitly NOT a return of groups; would be a tagging layer on the
+  existing graph if revisited
+
+- Push notifications (web push) --- SMS-only at launch
+
+**14.3 Not products of this product**
+
+- Real-time multiplayer
+
+- Live trivia events
+
+- Voice / video
+
+- AR/VR
+
+- AI chatbot companion
+
+- Educational content / lesson plans
+
+- Quiz authoring for institutions (schools, companies)
+
+**15. Success Metrics**
+
+**15.1 North Star**
+
+**Daily Five completion rate among invited-and-onboarded users**,
+measured as: % of users who completed at least one Daily Five session in
+the past 7 days.
+
+Target at 90 days post-launch: **\>50%.**
+
+This metric captures the core question: do people return to the daily
+ritual without prompting?
+
+**15.2 Supporting Metrics**
+
+**Ritual health**
+
+- 7-day Daily Five completion rate (north star)
+
+- 30-day Daily Five completion rate
+
+- Average questions answered per session (target: \>4 of 5)
+
+- Catch-up rate (% of missed questions answered within 7-day window)
+
+**Social health**
+
+- Feed engagement rate (% of users who tapped the Feed in past 7 days)
+
+- Average Feed actions per user per week (Answer + Skip + Dismiss +
+  Thumbs-up)
+
+- Send-to-friend rate (sends per user per week, target: \>1)
+
+- Friend invitation rate (invitations sent per user per month)
+
+- Invitation acceptance rate (% of invitations accepted within 7 days,
+  target: \>40%)
+
+**Knowledge growth**
+
+- Knowledge base growth velocity (new demonstrated domains per user per
+  month)
+
+- \% of users with \> 5 demonstrated domains at 30 days post-onboarding
+  (indicator that friend-mediated expansion is working)
+
+- Average domain count per active user at 90 days
+
+**Ceremony engagement**
+
+- Biweekly ceremony view rate (% of fired ceremonies viewed within 7
+  days, target: \>60%)
+
+- Ceremony share card creation rate (% of viewed ceremonies that
+  resulted in a share card)
+
+**Quality signals**
+
+- Daily Five difficulty satisfaction (% of post-session \"about right\"
+  responses, target: \>70%)
+
+- LLM question rejection rate (% of generated questions that failed
+  validation, target: \<5%)
+
+- Average answer correctness rate per difficulty tier (validates
+  calibration vs. §8.1.5 targets)
+
+**15.3 Anti-Metrics**
+
+We will **not** optimize for, surface, or report:
+
+- Daily active users as a vanity number
+
+- Time spent in app
+
+- Notifications opened (treat as cost, not value)
+
+- Streak length
+
+- Total questions answered all-time
+
+- Player rankings or leaderboards of any kind
+
+**16. Open Questions**
+
+The questions remaining for resolution before or shortly after launch:
+
+**16.1 Plus tier feature set**
+
+**Status:** explicitly TBD (§11). Need a coherent answer before charging
+anyone money. Recommended timing: defer until 30 days post-launch when
+we have signal on what power users actually want.
+
+**16.2 Send-to-friend rate limit calibration**
+
+**Status:** set to 5/day/recipient as starting value. Watch for spam
+patterns or under-use; adjust empirically.
+
+**16.3 Feed cap calibration**
+
+**Status:** set to 25 items. Watch for \"always full\" or \"always
+empty\" patterns; adjust empirically.
+
+**16.4 Adaptive difficulty thresholds**
+
+**Status:** set to 75% / 45% bumps with 0.5 sub-tier increments
+(§9.2.4). Want to validate against actual session data; expect to tune.
+
+**16.5 LLM question generation quality**
+
+**Status:** the v10.25 difficulty problem is now a prompt-engineering
+problem. Specific instructions are in §9.2.2, but real-world question
+quality must be evaluated against player feedback in the first 30 days.
+
+**16.6 Friend-of-friend introduction mechanic**
+
+**Status:** deferred from v11.0. Worth revisiting at 90 days based on
+graph density observations.
+
+**16.7 SMS deliverability and cost at scale**
+
+**Status:** Twilio pricing scales linearly. Need to monitor cost per
+active user and consider batching strategies if SMS spend exceeds
+budget.
+
+**16.8 Domain merge aggressiveness**
+
+**Status:** §9.6 says \"be aggressive on merges, conservative on
+splits.\" The actual aggressiveness threshold needs tuning post-launch
+based on player feedback (do consolidations feel right, or do players
+complain that distinct domains were collapsed?).
+
+**16.9 The \"Friend activity summary\" line on Home**
+
+**Status:** included in §8.12.1 as *\"Maya and Greg played today.\"*
+Worth a sanity check --- does it tip into surveillance, or is it a nice
+ambient signal? Recommend launching with it, removing if it feels off.
+
+**16.10 Ceremony beat omission rules**
+
+**Status:** beats with no content are omitted (§8.8.4). For new players
+whose first ceremony has many empty beats (e.g., no friends yet, no
+discoveries, no creator activity), the ceremony may feel hollow.
+Consider a \"first ceremony\" variant that explains the system rather
+than recapping activity.
+
+**17. Sample Questions (preserved from v10.25 §20)**
+
+The 34 founding questions from v10.25 illustrate the tone, difficulty
+register, and hyper-specificity that v11.0 should preserve in
+LLM-generated content. They are kept in the spec as reference material
+for prompt engineering.
+
+\[Reference: v10.25 §20, full list preserved unchanged.\] The 34
+founding questions below illustrate the tone, difficulty register, and
+hyper-specificity that v11.0 LLM-generated content should aim for. They
+are the canonical reference for prompt engineering on Daily Five
+generation (§9.2) and for editorial calibration of question quality.
+
+These questions share several traits worth naming explicitly:
+
+- They are **factual**, with single correct answers (or tightly-bounded
+  variants)
+
+- They are **specific** --- they could not be mistaken for
+  general-knowledge trivia
+
+- They reward **having been there** --- having read the book, listened
+  to the music, studied the period --- rather than rewarding recall of
+  widely-shared facts
+
+- The answers are **short and confirmable**, not essay-length
+
+- Many include a **brief explainer** that adds texture without becoming
+  pedantic
+
+**Classical Music**
+
+**1.** Who composed *Wozzeck*? *Alban Berg.*
+
+Premiered in Berlin, 1925. Based on Georg Büchner\'s unfinished play.
+
+**2.** In what year did Tchaikovsky complete his Sixth Symphony? *1893.*
+
+The \"Pathétique.\" He conducted its premiere nine days before his
+death.
+
+**3.** What is the relationship between the prelude and fugue in Bach\'s
+*Well-Tempered Clavier*? *Each prelude is paired with a fugue in the
+same key; the collection cycles through all 24 major and minor keys,
+twice (Books I and II).*
+
+**4.** Who were the three composers of the Second Viennese School?
+*Arnold Schoenberg, Alban Berg, and Anton Webern.*
+
+**5.** What technique is Arvo Pärt most associated with developing?
+*Tintinnabuli.*
+
+A compositional method built around triadic voices and stepwise melodic
+motion, introduced in 1976.
+
+**6.** Which Mozart opera ends with the protagonist being dragged to
+hell? *Don Giovanni.*
+
+**7.** What is the subject construction in a fugue? *The principal
+melodic theme (the \"subject\") is introduced by one voice, then
+imitated by successive voices in different registers, often at the fifth
+or octave.*
+
+**Literature**
+
+**8.** What is the central narrative innovation of *Ulysses*? *Each
+episode parallels a book of the* Odyssey *while employing a distinct
+narrative technique or \"style\" --- stream of consciousness, catechism,
+parody, etc.*
+
+**9.** In *The Waste Land*, who is Tiresias? *A blind prophet from Greek
+mythology; in the poem, he is the unifying consciousness --- Eliot\'s
+notes call him \"the most important personage.\"*
+
+**10.** Who narrates *The Sound and the Fury*? *Four narrators across
+four sections: Benjy, Quentin, Jason, and a third-person narrator
+focused on Dilsey.*
+
+**11.** What is the form of *In Memoriam A.H.H.*? *A long sequence of
+lyrics in iambic tetrameter, written in ABBA quatrains --- the form is
+now known as the \"In Memoriam stanza.\"*
+
+**12.** Who is the dedicatee of Eliot\'s *The Waste Land*? *Ezra Pound
+--- \"il miglior fabbro\" (\"the better craftsman\").*
+
+**13.** What is the first line of *Middlemarch*? *\"Miss Brooke had that
+kind of beauty which seems to be thrown into relief by poor dress.\"*
+
+**Theater & Musicals**
+
+**14.** Who wrote the libretto for *Sweeney Todd*? *Hugh Wheeler (book),
+with lyrics by Stephen Sondheim.*
+
+**15.** What is the source material for *Sunday in the Park with
+George*? *Georges Seurat\'s painting* A Sunday Afternoon on the Island
+of La Grande Jatte *(1884--86).*
+
+**16.** In *Gilbert & Sullivan*\'s *The Mikado*, what is the location of
+the action? *The fictional Japanese town of Titipu.*
+
+**17.** What is the name of the Witch\'s daughter in *Into the Woods*?
+*Rapunzel.*
+
+**Film & Television**
+
+**18.** Who directed *Aguirre, the Wrath of God*? *Werner Herzog.*
+
+1972\. Filmed on location in the Peruvian Amazon with Klaus Kinski in
+the title role.
+
+**19.** What is the name of the starship in *Star Trek: The Next
+Generation*? *USS Enterprise (NCC-1701-D).*
+
+**20.** Which Weimar-era film established many conventions of German
+Expressionist cinema? *The Cabinet of Dr. Caligari (1920), directed by
+Robert Wiene.*
+
+**21.** Who composed the score for *Vertigo*? *Bernard Herrmann.*
+
+**History**
+
+**22.** Who were Alexander the Great\'s three principal Successor
+generals? *Ptolemy, Seleucus, and Antigonus.*
+
+The Wars of the Diadochi (323--281 BCE) divided his empire among them
+and their descendants.
+
+**23.** In what year did the Hungarian Uprising begin and end? *Began
+October 23, 1956; suppressed by Soviet forces by November 10, 1956.*
+
+**24.** Who was the first U.S. President to be impeached? *Andrew
+Johnson (1868).*
+
+**25.** What was the official name of the agreement that ended the
+Mexican-American War? *The Treaty of Guadalupe Hidalgo (1848).*
+
+**26.** Which U.S. state was the last to be admitted to the Union?
+*Hawaii (August 21, 1959).*
+
+**27.** What was Operation Anthropoid? *The 1942 Czechoslovak resistance
+operation to assassinate Reinhard Heydrich, the Nazi Reich Protector of
+Bohemia and Moravia.*
+
+**Visual Art**
+
+**28.** Who painted *The Birth of Venus*? *Sandro Botticelli (c.
+1484--1486).*
+
+**29.** What is sfumato? *A painting technique developed by Leonardo da
+Vinci involving the subtle blending of tones and colors without harsh
+outlines, producing a smoky, atmospheric effect.*
+
+Most famous in the Mona Lisa\'s facial modeling.
+
+**30.** Who designed the dome of the Florence Cathedral? *Filippo
+Brunelleschi (constructed 1420--1436).*
+
+**Religion & Mythology**
+
+**31.** What are the four canonical Gospels of the New Testament?
+*Matthew, Mark, Luke, and John.*
+
+**32.** Who is the Norse god of poetry? *Bragi.*
+
+**33.** What is the central event of the festival of Passover? *The
+Exodus --- the Israelites\' liberation from slavery in Egypt under
+Moses.*
+
+**Philosophy**
+
+**34.** What is Kant\'s categorical imperative? *Roughly: \"Act only
+according to that maxim by which you can at the same time will that it
+should become a universal law.\" It is Kant\'s foundational principle of
+moral duty, formulated in the* Groundwork of the Metaphysic of Morals
+*(1785).*
+
+**Notes for Prompt Engineering**
+
+When generating Daily Five questions, the LLM should aim for:
+
+1.  **Domain specificity** equivalent to the questions above --- not
+    \"Music\" but \"Late Tchaikovsky,\" not \"Literature\" but \"James
+    Joyce\'s Ulysses\"
+
+2.  **Answer brevity** --- most answers are 1--10 words; brief
+    explainers are 1--2 sentences
+
+3.  **Factual grounding** --- every question must have an unambiguously
+    correct answer
+
+4.  **Calibration to engagement, not specialism** --- Normal-tier
+    questions should test what a moderately-engaged player in the domain
+    would know (e.g., \"Who composed Wozzeck?\" is Normal for someone in
+    Classical Music; \"In what year did Berg orchestrate the Three
+    Pieces, Op. 6?\" is Ridiculous)
+
+5.  **Tone** --- direct, declarative, no padding, no quiz-show
+    flourishes (\"Now here\'s a tough one!\"). The questions read like a
+    thoughtful editor wrote them.
+
+These 34 questions are the editorial north star. When in doubt about
+whether an LLM-generated question fits Joshing, compare it to this set.
+
+**18. Glossary**
+
+  --------------------------------------------------------------------------
+  **Term**             **Definition**
+  -------------------- -----------------------------------------------------
+  **Daily Five**       The 5 LLM-generated questions delivered each day at
+                       noon EST
+
+  **Feed**             The bounded reverse-chronological stream of
+                       friend-curated questions
+
+  **Knowledge base**   Union of declared interests + demonstrated domains;
+                       drives Daily Five generation
+
+  **Declared           Up to 5 hyper-specific domains the player chooses
+  interests**          
+
+  **Demonstrated       A domain added to Knowledge base via friend-mediated
+  domain**             correct answer
+
+  **Knowledge          The visual representation of a player\'s domain
+  Portrait**           mastery (circles-by-category)
+
+  **Send-to-friend**   The direct-send gesture; question pinned in
+                       recipient\'s Feed
+
+  **Biweekly           The 14-day cinematic reflection moment
+  ceremony**           
+
+  **Creator points**   Points earned when a friend correctly answers a
+                       question you wrote
+
+  **Mastery tiers**    Establishing → Familiar → Solid → Mastery
+
+  **Personal Round**   Player-initiated 5-question deep-dive on a single
+                       domain
+
+  **Adaptive           Self-calibrating difficulty mode, targets \~60%
+  difficulty**         correct rate
+  --------------------------------------------------------------------------
+
+**19. Document Status**
+
+**Version 11.0** **Date:** April 2026 **Replaces:** v10.25 (April 2026)
+
+**Status:** Draft for review. Pending resolutions on open questions in
+§16, particularly Plus tier feature set (§11, §16.1).
+
+**Next planned revision:** v11.1, post-launch, incorporating empirical
+findings on Adaptive thresholds, Feed cap, Send-to-friend rate limits,
+ceremony engagement, and any structural learnings from the first 30
+days.
+
+**End of Chunk 3. End of Joshing PRD v11.0.**
+
+**Quick recap of what just happened**
+
+The full v11.0 PRD is now drafted across the three chunks:
+
+- **Chunk 1 (§1--7):** Executive Summary, Problem, Vision, Audience,
+  Scope, User Stories, Auth & Onboarding
+
+- **Chunk 2 (§8):** Feature specifications --- Daily Five, Feed,
+  Send-to-Friend, Knowledge Base, Question Creation, Friend Profiles,
+  Archive, Biweekly Ceremony, Alignment, Points & Mastery, SMS,
+  Home/Nav, Design Principles
+
+- **Chunk 3 (§9--19):** LLM Integration, Data Model, Monetization,
+  Technical Architecture, Personal Performance, Out of Scope, Success
+  Metrics, Open Questions, Sample Questions, Glossary, Doc Status
+
+**A few things worth flagging on Chunk 3 specifically**
+
+- **§10.2 Data model** --- I made specific schema choices (UUID PKs,
+  soft deletes, JSON fields for variable-length data). Anything that
+  doesn\'t match your engineering preferences, flag and I\'ll adjust.
+
+- **§11 Plus tier** --- left as TBD with candidate features. The \"do
+  not break the 5-interest cap\" recommendation is strong from me; want
+  to confirm.
+
+- **§12.2 Daily Five generation architecture** --- pre-generation at
+  11:50 EST is one approach. Alternative: lazy generation on session
+  open. Pre-gen is more reliable; lazy is cheaper if many users skip
+  days. Worth deciding.
+
+- **§15.3 Anti-metrics** --- explicit list of what we *won\'t* track.
+  Worth reviewing --- is there anything missing that you want explicitly
+  disowned?
+
+- **§16.10 First-ceremony hollowness** --- flagged a real risk. New
+  players\' first ceremony may have many omitted beats. Worth a
+  follow-up design moment.
+
+**What I\'d recommend as next steps**
+
+1.  **You read all three chunks end-to-end as a single document.** The
+    chunked drafting was for reactivity; the document is meant to be
+    read as one coherent thing.
+
+2.  **Mark anything that needs a substantive change.** I\'ll do a
+    v11.0.1 pass to incorporate.
+
+3.  **Resolve §11 (Plus tier) before any monetization work begins.** Not
+    blocking for engineering on the core product.
+
+4.  **Lock §16.9 (Friend activity line) and §16.10 (first ceremony)
+    before design starts on Home and Ceremony.**
+
+5.  **The 34 founding questions should be properly inlined in §17**
+    rather than referenced --- I left them as a pointer to v10.25, but
+    they should live in this document so it\'s self-contained. Want me
+    to inline them in a follow-up?
+
+What do you want to do first?
