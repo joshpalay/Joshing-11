@@ -1847,6 +1847,616 @@ The \"Account\" tab contains:
 10. **The only moment Joshing speaks loudly is the biweekly ceremony.**
     Everything else is whispered.
 
+
+## §8.14 — Joshing Game
+
+### 8.14.1 Concept
+
+A Joshing Game is a curated 5-question set that one player creates and sends
+to one or more friends. It is the highest-intent social gesture in the product —
+more deliberate than thumbs-upping a question in the Feed, more personal than
+a direct send. The sender gives it a title, picks the questions, and chooses
+who receives it. Every recipient plays the same five questions.
+
+The Joshing Game is not a group game. There are no rounds, no seasons, no daily
+cadence. It is finite, titled, and authored — closer to a playlist than a game
+in the v10.25 sense.
+
+### 8.14.2 Creation Flow
+
+Three steps, in order:
+
+**Step 1 — Title**
+A single text field. Required. Prompt copy:
+*"What's this one called?"*
+Examples: "Summer Road Trip Music", "Are You Sure You Read That?", "For Maya Only"
+Max 60 characters.
+
+**Step 2 — Recipients**
+Friend picker. Multiple selection allowed. Minimum 1. No cap in v11.0
+(revisit if spam patterns emerge). Shows all confirmed friends, most recent
+interaction at top. The same game — identical questions — is sent to all
+selected recipients.
+
+**Step 3 — Questions**
+Player selects or writes up to 5 questions. Maximum is 5. Minimum is 1
+(a single-question Joshing Game is valid).
+
+Two entry points within Step 3:
+
+- **From bank:** `QuestionBankPicker` component (already exists at
+  `app/src/components/QuestionBankPicker.tsx`) surfaces the player's existing
+  question bank. Questions already used in a prior Joshing Game are flagged
+  but not blocked. One-tap to add.
+
+- **Write new:** `QuestionForm` component (already exists at
+  `app/src/components/QuestionForm.tsx`) with LLM answer suggestion. Newly
+  written questions are automatically saved to the player's bank and added
+  to the game simultaneously.
+
+Questions are ordered by the sender (drag to reorder). Position is preserved
+for all recipients.
+
+**Confirmation screen:**
+Shows title, recipient count, question count, and a send button.
+Copy: *"Send [Title] to [N] friend[s]."*
+On send: game is created, feed items are written for all recipients, SMS
+notifications fire.
+
+### 8.14.3 Entry Points
+
+- Floating "Write a question" button on Home (existing pattern) — add a
+  "Make a Joshing Game" option alongside the standalone write flow
+- From a friend's profile: "Send a Joshing Game" CTA
+- From the question bank: select multiple questions → "Make a Joshing Game"
+
+### 8.14.4 Recipient Experience
+
+A Joshing Game appears in the recipient's Feed as a **game card** — visually
+distinct from a single-question feed item. The card shows:
+
+- Game title (prominent)
+- Sender attribution: *"From [Name]"*
+- Question count: *"5 questions"*
+- Completion status of all recipients (see §8.14.6)
+- CTA: *"Play"* (if unanswered) / *"See results"* (if answered)
+
+Tapping "Play" opens the chat thread interface — the same `GameplayChat`
+component at `app/src/components/play/GameplayChat.tsx` — scoped to the
+Joshing Game's 5 questions. Sequential reveal, same mechanic as the Daily Five.
+No timer. No expiry.
+
+The game card persists in the Feed indefinitely. It does not roll off at the
+25-item cap — Joshing Game cards are pinned and exempt from the cap.
+
+### 8.14.5 The Game Card in the Feed
+┌─────────────────────────────────────────────────┐ │ 🎯 Are You Sure You Read That? │ │ From Greg │ │ │ │ Maya ✅ 4/5 │ │ Sam ⏳ Playing... │ │ You — Not started │ │ │ │ [Play] 5 questions │ └─────────────────────────────────────────────────┘
+
+
+
+Results are visible to all recipients once they have played. A recipient
+who has not yet played sees other players' result counts but not their
+individual answers. Once the viewing recipient plays, all answers unlock.
+
+### 8.14.6 Results Visibility Rules
+
+| Viewer status | What they see |
+|---|---|
+| Has not played | Other players' scores (X/5) but not their per-question answers |
+| Has played | Full results for all players — per question, per player |
+| Sender | Full results for all players at all times |
+
+This mirrors the current v10.25 game behavior, adapted for the smaller scale.
+
+### 8.14.7 Mastery and Points
+
+Answers in a Joshing Game count at full weight (1.0x) toward mastery —
+identical to Feed answers and Daily Five answers. The same `answer_state`
+rules apply (`first_correct`, `first_correct_after_wrong`, `repeat_correct`,
+`incorrect`).
+
+Creator points: the sender earns creator points (per §8.10.4) when any
+recipient correctly answers a question the sender wrote. For questions pulled
+from the sender's bank (originally written by someone else), the original
+author still receives creator points. The sender receives curator credit
+(0.5x) for forwarded questions, per the existing bank-add provenance rules.
+
+### 8.14.8 Game Summary
+
+The Joshing Game has a full game summary page. No ceremony. The summary page
+is adapted from the existing game summary pattern in v10.25 — the route,
+component structure, and data shape are reused with modifications.
+
+**Route:** `/games/[joshingGameId]/summary`
+
+**Reused from v10.25:**
+- `app/src/app/components/games/game-details-mode-sections.tsx` — section
+  structure (adapted)
+- `app/src/app/components/games/interpretive-sections.tsx` — interpretive copy
+  (adapted)
+- `app/src/lib/games/summary.ts` — summary data assembly (adapted)
+- `app/src/lib/games/details-transformers.ts` — data shaping (adapted)
+
+**Summary sections (in order):**
+
+**1. The Story** — what happened in this game collectively
+- Title and sender
+- Total recipients, total answers submitted
+- Hardest question (lowest correct rate across recipients)
+- Everyone knew this (highest correct rate)
+- Most loved (highest thumbs-up count among recipients)
+
+**2. Your Game** — the viewing player's personal result
+- Questions answered and correct count
+- Category-level strengths surfaced from correct answers
+- "Only you got this" moment if applicable
+
+**3. What You Discovered** — missed questions
+- All questions the player got wrong or skipped
+- Full correct answer + educational explainer
+- Creator note if present
+- Replay link
+
+**4. How Everyone Did** — the group result view
+- Per-recipient result card: name, score (X/5), strongest category
+- Per-question breakdown: who got it right across all recipients
+
+The summary persists indefinitely. It is accessible from:
+- The game card in the Feed ("See results")
+- The sender's Activities tab
+- The recipient's Activities tab
+
+### 8.14.9 Data Model
+
+See §20 (Schema) for full table definitions. Core tables:
+
+- `JoshingGame` — title, creatorId, createdAt
+- `JoshingGameRecipient` — gameId, userId, sentAt
+- `JoshingGameQuestion` — gameId, questionId, position
+- `JoshingGameResponse` — gameId, questionId, userId, submittedAnswer,
+  isCorrect, isPartial, pointsAwarded, answeredAt
+
+### 8.14.10 SMS Notifications
+
+| Trigger | Copy | Default |
+|---|---|---|
+| Game received | *"[Name] sent you a Joshing Game: [Title]. [link]"* | ON, opt-out |
+| Recipient completes game | *"[Name] played [Title]. [link]"* | ON, opt-out |
+| All recipients complete | *"Everyone played [Title]. See the results. [link]"* | ON, opt-out |
+
+### 8.14.11 Activities Surface
+
+Joshing Games surface in the Activities tab (§8.15) as:
+- Games sent (with completion status)
+- Games received (with play status)
+- Results when all recipients have played
+
+---
+
+## §8.15 — Activities Tab
+
+### 8.15.1 Concept
+
+Activities is the fifth nav item. It is the notification and history layer
+for everything social in Joshing — friend activity, incoming games, mastery
+moments from friends, and the biweekly ceremony signal.
+
+Activities is not a feed of content to consume. It is a record of things
+that happened, organized by recency.
+
+### 8.15.2 Navigation
+
+Activities is added as the fifth item in the primary nav:
+
+Home | Feed | Knowledge | Activities | Account
+
+
+
+The Activities icon shows a quiet unread count badge (number, not a red dot)
+when there are unread items. Badge suppresses at 0.
+
+### 8.15.3 Item Types
+
+All items are reverse-chronological. Unread items are visually distinct
+(subtle left border or background tint — not a badge per item).
+
+**1. Received Joshing Game**
+*"[Name] sent you a Joshing Game: [Title]"*
+CTA: Play → opens game in chat thread interface
+Sub-state when played: *"[Name] sent you [Title] · You got 4/5"* → See results
+
+**2. Joshing Game Results**
+Fires when all recipients of a game you sent have played.
+*"Everyone played [Title]"*
+CTA: See results → summary page
+
+**3. Friend Mastery Crossing**
+Fires when any friend crosses any tier threshold (Establishing→Familiar,
+Familiar→Solid, Solid→Mastery).
+*"[Name] reached [Tier] in [Domain]"*
+No CTA required. Tap → friend's profile.
+
+**4. Biweekly Ceremony Ready**
+*"Your two-week reflection is ready"*
+This item appears in Activities AND as a banner at the top of the Feed
+(the banner auto-dismisses once the ceremony is viewed).
+CTA: See it now → ceremony
+
+**5. Friend Request Received**
+*"[Name] wants to be friends on Joshing"*
+Inline CTA: Accept / Ignore (no navigation required)
+On accept: friendship formed, item updates to *"You and [Name] are now friends"*
+
+**6. Joshing Game Progress**
+Fires when a recipient plays a game you sent (not yet all done).
+*"[Name] played [Title] · [N] of [Total] have played"*
+CTA: See so far → summary page
+
+### 8.15.4 What Activities Does Not Show
+
+- Daily Five results (private, not social)
+- Feed thumbs-up activity from friends (that surfaces in the Feed itself)
+- Mastery events from the player's own play (those are on the Knowledge page)
+- Any competitive ranking information
+
+### 8.15.5 Ceremony Banner in Feed
+
+When the biweekly ceremony is ready, a non-intrusive banner appears at the
+top of the Feed (above the first feed item):
+
+┌─────────────────────────────────────────────────┐ │ ✦ Your two-week reflection is ready │ │ See what you've been up to → │ └─────────────────────────────────────────────────┘
+
+
+
+The banner dismisses when the ceremony is opened. It does not reappear
+for the same ceremony. It does not count as an Activities unread item —
+the Activities item for the ceremony remains until the ceremony is viewed.
+
+### 8.15.6 Data Model
+
+`ActivityItem` table — see §20 (Schema) for full definition.
+
+Key fields: userId (recipient), type (enum), actorUserId, referenceId,
+referenceType, read (boolean), createdAt.
+
+Activity items are written server-side when the triggering event occurs.
+They are never generated client-side.
+
+**Retention:** Activity items older than 90 days are soft-deleted from
+the surface (remain in DB for audit). Exception: Joshing Game items
+persist as long as the game exists.
+
+### 8.15.7 Unread Count
+
+Unread count = count of ActivityItem rows where userId = current user
+AND read = false AND createdAt > 90 days ago.
+
+Marked as read: when the player opens the Activities tab, all visible
+items are marked read in a single batch write. Not read-on-view for
+individual items — the whole tab clears on open.
+
+---
+
+## Amendment to §8.12 — Home & Navigation
+
+### 8.12.2 Navigation (updated)
+
+Bottom nav (mobile) / left rail (desktop), **5 items**:
+
+| Icon | Label | Destination |
+|---|---|---|
+| Home | Home | §8.12.1 |
+| Stream | Feed | §8.2 |
+| Map | Knowledge | §8.4.8 |
+| Bell | Activities | §8.15 |
+| Person | Account | Settings, profile, friends, archive, past reflections |
+
+The "Account" tab contains all items listed in the original §8.12.2,
+unchanged.
+
+---
+
+## §20 — Schema (SQL)
+
+Complete schema for v11.0. Written as raw SQL for use with Drizzle Kit
+migrations.
+
+### Tables Dropped from v10.25
+
+The following tables are explicitly dropped. Do not carry them forward.
+
+```sql
+-- DROP in this order to respect foreign keys:
+DROP TABLE IF EXISTS "ChallengeAnswer";
+DROP TABLE IF EXISTS "ChallengeQuestion";
+DROP TABLE IF EXISTS "ChallengeSession";
+DROP TABLE IF EXISTS "Challenge";
+DROP TABLE IF EXISTS "GroupKnowledgeMap";
+DROP TABLE IF EXISTS "CompatibilityScore";
+DROP TABLE IF EXISTS "DailyAssignment";
+DROP TABLE IF EXISTS "DailySession";
+DROP TABLE IF EXISTS "GameQuestion";
+DROP TABLE IF EXISTS "Game";
+DROP TABLE IF EXISTS "GroupMember";
+DROP TABLE IF EXISTS "Group";
+DROP TABLE IF EXISTS "PublicRun";
+DROP TABLE IF EXISTS "StarVote"; -- replaced by thumbs_upped flag on responses
+DROP TABLE IF EXISTS "FlagReport";
+DROP TABLE IF EXISTS "InviteLink"; -- replaced by Friendship + Invitation
+DROP TABLE IF EXISTS "AppNotification"; -- replaced by ActivityItem
+DROP TABLE IF EXISTS "CeremonyProgress"; -- replaced by BiweeklyCeremony
+Tables Kept Unchanged
+The following tables carry forward with no structural changes:
+
+Sql
+
+-- Keep as-is:
+-- User (modified below)
+-- UserSession
+-- OtpCode
+-- Question (modified below)
+-- QuestionAudienceTag
+-- UserQuestionBank
+-- PlayerMastery
+-- MasteryEvent
+-- QuestionReaction
+-- GradeDispute
+-- SmsLog
+-- PlayerSubscription
+-- GeneratedQuestion
+-- QuestionFeedback
+-- DailyQueue (renamed — see below)
+-- DailyPreference
+-- SkippedDailyQuestion
+-- UserDomainDifficulty
+-- UserDomainExclusion
+-- ProfileDomainVisibility
+-- UserQuestionHistory
+Tables Modified from v10.25
+Sql
+
+-- USERS: add v11.0 fields, drop group-specific fields
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "slug" TEXT UNIQUE,
+  ADD COLUMN IF NOT EXISTS "authorProfilePublic" BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS "onboardingComplete" BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS "adaptiveLevel" FLOAT NOT NULL DEFAULT 1.0;
+  -- adaptiveLevel: 1.0 = Normal, 2.0 = Moderate, 3.0 = Challenging, 4.0 = Ridiculous
+
+-- QUESTIONS: no structural drops needed; group-scoped fields are nullable
+-- and harmless. Add v11.0 sharing flag if not present:
+ALTER TABLE "Question"
+  ADD COLUMN IF NOT EXISTS "sharedToFriendsFeed" BOOLEAN NOT NULL DEFAULT FALSE;
+  -- sharedToFriendsFeed: true = eligible to appear in friends' Feeds via thumbs-up
+
+-- DailyQueue: rename to reflect v11.0 role as the Daily Five queue
+-- (keep same structure; the existing columns map cleanly)
+-- No ALTER needed — name is internal. Document that DailyQueue = Daily Five queue.
+New Tables
+Sql
+
+-- ─────────────────────────────────────────────
+-- DECLARED INTERESTS
+-- ─────────────────────────────────────────────
+
+CREATE TABLE "DeclaredInterest" (
+  "id"            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId"        TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "domain"        TEXT        NOT NULL,
+  -- Hyper-specific: "Late Tchaikovsky", not "Music"
+  "broadCategory" TEXT,
+  -- E.g. "Classical Music" — used for Knowledge page clustering
+  "declaredAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "isActive"      BOOLEAN     NOT NULL DEFAULT TRUE,
+  -- Hard cap of 5 isActive=true per user enforced at application layer
+  -- (CHECK constraint intentionally omitted — app enforces, not DB)
+  UNIQUE ("userId", "domain")
+);
+
+CREATE INDEX "DeclaredInterest_userId_isActive_idx"
+  ON "DeclaredInterest"("userId", "isActive");
+
+
+-- ─────────────────────────────────────────────
+-- FRIENDSHIPS
+-- ─────────────────────────────────────────────
+
+CREATE TABLE "Friendship" (
+  "id"                TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userAId"           TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "userBId"           TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  -- Convention: userAId < userBId (alphabetically) to prevent duplicate pairs
+  "status"            TEXT        NOT NULL DEFAULT 'pending',
+  -- 'pending' | 'active' | 'removed'
+  "requestedByUserId" TEXT        NOT NULL REFERENCES "User"("id"),
+  "formedVia"         TEXT        NOT NULL,
+  -- 'invitation' | 'in_app_request'
+  "formedAt"          TIMESTAMPTZ,
+  -- Set when status transitions to 'active'
+  "removedAt"         TIMESTAMPTZ,
+  "removedByUserId"   TEXT        REFERENCES "User"("id"),
+  "createdAt"         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE ("userAId", "userBId")
+);
+
+CREATE INDEX "Friendship_userAId_status_idx" ON "Friendship"("userAId", "status");
+CREATE INDEX "Friendship_userBId_status_idx" ON "Friendship"("userBId", "status");
+
+
+-- ─────────────────────────────────────────────
+-- FEED ITEMS
+-- ─────────────────────────────────────────────
+
+CREATE TABLE "FeedItem" (
+  "id"              TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "recipientUserId" TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "questionId"      TEXT        REFERENCES "Question"("id"),
+  -- Null when sourceType = 'joshing_game'
+  "joshingGameId"   TEXT,
+  -- FK added after JoshingGame table created (below)
+  "sourceType"      TEXT        NOT NULL,
+  -- 'direct_sent' | 'authored_shared' | 'thumbs_upped' | 'joshing_game'
+  "sourceUserId"    TEXT        NOT NULL REFERENCES "User"("id"),
+  "sourceEventAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "state"           TEXT        NOT NULL DEFAULT 'active',
+  -- 'active' | 'answered' | 'skipped' | 'dismissed' | 'rolled_off'
+  -- Note: joshing_game cards use 'active' | 'played' | 'dismissed' only
+  "isPinned"        BOOLEAN     NOT NULL DEFAULT FALSE,
+  -- TRUE for joshing_game cards and direct_sent — exempt from 25-item cap
+  "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX "FeedItem_recipientUserId_state_idx"
+  ON "FeedItem"("recipientUserId", "state", "sourceEventAt" DESC);
+CREATE INDEX "FeedItem_recipientUserId_pinned_idx"
+  ON "FeedItem"("recipientUserId", "isPinned")
+  WHERE "isPinned" = TRUE;
+
+
+-- ─────────────────────────────────────────────
+-- JOSHING GAME
+-- ─────────────────────────────────────────────
+
+CREATE TABLE "JoshingGame" (
+  "id"        TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "title"     TEXT        NOT NULL,
+  "creatorId" TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX "JoshingGame_creatorId_idx" ON "JoshingGame"("creatorId");
+
+-- Add FK from FeedItem now that JoshingGame exists
+ALTER TABLE "FeedItem"
+  ADD CONSTRAINT "FeedItem_joshingGameId_fkey"
+  FOREIGN KEY ("joshingGameId") REFERENCES "JoshingGame"("id") ON DELETE SET NULL;
+
+
+CREATE TABLE "JoshingGameRecipient" (
+  "id"       TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "gameId"   TEXT        NOT NULL REFERENCES "JoshingGame"("id") ON DELETE CASCADE,
+  "userId"   TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "sentAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE ("gameId", "userId")
+);
+
+CREATE INDEX "JoshingGameRecipient_userId_idx"
+  ON "JoshingGameRecipient"("userId");
+CREATE INDEX "JoshingGameRecipient_gameId_idx"
+  ON "JoshingGameRecipient"("gameId");
+
+
+CREATE TABLE "JoshingGameQuestion" (
+  "id"         TEXT    PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "gameId"     TEXT    NOT NULL REFERENCES "JoshingGame"("id") ON DELETE CASCADE,
+  "questionId" TEXT    NOT NULL REFERENCES "Question"("id"),
+  "position"   INTEGER NOT NULL,
+  -- 1-based, 1 through 5
+  UNIQUE ("gameId", "position"),
+  UNIQUE ("gameId", "questionId")
+);
+
+
+CREATE TABLE "JoshingGameResponse" (
+  "id"              TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "gameId"          TEXT        NOT NULL REFERENCES "JoshingGame"("id") ON DELETE CASCADE,
+  "questionId"      TEXT        NOT NULL REFERENCES "Question"("id"),
+  "userId"          TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "submittedAnswer" TEXT,
+  -- Null if skipped without answering
+  "isCorrect"       BOOLEAN,
+  "isPartial"       BOOLEAN     NOT NULL DEFAULT FALSE,
+  "answerState"     TEXT,
+  -- 'first_correct' | 'first_correct_after_wrong' | 'repeat_correct' | 'incorrect'
+  -- Mirrors the existing answer_state enum pattern from v10.25
+  "pointsAwarded"   FLOAT,
+  "answeredAt"      TIMESTAMPTZ,
+  "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE ("gameId", "questionId", "userId")
+);
+
+CREATE INDEX "JoshingGameResponse_gameId_userId_idx"
+  ON "JoshingGameResponse"("gameId", "userId");
+CREATE INDEX "JoshingGameResponse_userId_idx"
+  ON "JoshingGameResponse"("userId");
+
+
+-- ─────────────────────────────────────────────
+-- BIWEEKLY CEREMONY
+-- ─────────────────────────────────────────────
+
+CREATE TABLE "BiweeklyCeremony" (
+  "id"            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId"        TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "cycleStart"    DATE        NOT NULL,
+  "cycleEnd"      DATE        NOT NULL,
+  "firedAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "viewedAt"      TIMESTAMPTZ,
+  "beatsPayload"  JSONB       NOT NULL,
+  -- Snapshot of all 5 beats at fire time — never recomputed after fire
+  "shareCardToken" TEXT       UNIQUE
+);
+
+CREATE INDEX "BiweeklyCeremony_userId_firedAt_idx"
+  ON "BiweeklyCeremony"("userId", "firedAt" DESC);
+
+
+-- ─────────────────────────────────────────────
+-- ACTIVITY ITEMS
+-- ─────────────────────────────────────────────
+
+CREATE TABLE "ActivityItem" (
+  "id"              TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId"          TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  -- The player who receives this activity notification
+  "type"            TEXT        NOT NULL,
+  -- 'received_joshing_game' | 'joshing_game_result' | 'joshing_game_progress'
+  -- | 'friend_mastery' | 'ceremony_ready' | 'friend_request' | 'friend_request_accepted'
+  "actorUserId"     TEXT        REFERENCES "User"("id") ON DELETE SET NULL,
+  "referenceId"     TEXT,
+  -- The id of the related entity
+  "referenceType"   TEXT,
+  -- 'joshing_game' | 'ceremony' | 'friendship' | 'mastery_event'
+  "read"            BOOLEAN     NOT NULL DEFAULT FALSE,
+  "deletedAt"       TIMESTAMPTZ,
+  -- Soft delete after 90 days (except joshing_game types)
+  "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX "ActivityItem_userId_read_idx"
+  ON "ActivityItem"("userId", "read", "createdAt" DESC);
+CREATE INDEX "ActivityItem_userId_createdAt_idx"
+  ON "ActivityItem"("userId", "createdAt" DESC);
+
+
+-- ─────────────────────────────────────────────
+-- FRIENDSHIP INVITATION
+-- Replaces InviteLink for the v11.0 friendship formation flow
+-- ─────────────────────────────────────────────
+
+CREATE TABLE "FriendInvitation" (
+  "id"                  TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "inviterUserId"       TEXT        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "inviteePhone"        TEXT        NOT NULL,
+  -- E.164 format; cleared after invitee authenticates
+  "inviteeUserId"       TEXT        REFERENCES "User"("id"),
+  -- Set when invitee signs up and accepts
+  "preSeededInterests"  JSONB,
+  -- Array of {domain, broadCategory} — up to 3
+  "personalMessage"     TEXT,
+  "token"               TEXT        NOT NULL UNIQUE,
+  -- In the invitation link URL
+  "sentAt"              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "acceptedAt"          TIMESTAMPTZ,
+  "expiresAt"           TIMESTAMPTZ NOT NULL
+  -- 7 days after sentAt
+);
+
+CREATE INDEX "FriendInvitation_token_idx" ON "FriendInvitation"("token");
+CREATE INDEX "FriendInvitation_inviterUserId_idx"
+  ON "FriendInvitation"("inviterUserId");
+
 **End of Chunk 2.**
 
 React to anything before I move to Chunk 3 (Sections 9--20: LLM, Data
@@ -3182,4 +3792,51 @@ The full v11.0 PRD is now drafted across the three chunks:
     they should live in this document so it\'s self-contained. Want me
     to inline them in a follow-up?
 
-What do you want to do first?
+
+§21 — Migration Strategy
+21.1 Overview
+The v10.25 codebase is a working Next.js + Prisma + Postgres application. v11.0 is a new Next.js + Drizzle + Postgres application scaffolded separately. The migration is a selective extraction, not a refactor in place.
+
+Do not attempt to modify the v10.25 codebase into v11.0. The group/game/season machinery is too deeply embedded. Instead: extract what works, rebuild the rest.
+
+Salvage directory: /app in the v10.25 repo is the source. The new project is the destination. Nothing moves automatically.
+
+21.2 What to Salvage
+Carry forward with direct copy (then adapt):
+
+v10.25 source    v11.0 destination    Notes
+app/src/lib/auth/    src/server/auth/    OTP logic, session cookies — near-identical
+app/src/lib/sms.ts    src/server/sms.ts    Twilio fetch pattern — copy directly
+app/src/lib/llm.ts    src/server/llm/    Extract: grading, categorization, answer suggestion, factual explanation
+app/src/components/play/GameplayChat.tsx    src/components/play/GameplayChat.tsx    Core chat interface — carry forward, strip group refs
+app/src/components/play/SessionCloseMessage.tsx    src/components/play/SessionCloseMessage.tsx    Carry forward unchanged
+app/src/components/play/GeometricProgress.tsx    src/components/play/GeometricProgress.tsx    Carry forward unchanged
+app/src/components/knowledge/ (all)    src/components/knowledge/    All knowledge display components
+app/src/components/QuestionForm.tsx    src/components/QuestionForm.tsx    LLM suggestion intact
+app/src/components/QuestionBankPicker.tsx    src/components/QuestionBankPicker.tsx    Carry forward
+app/src/components/QuickAddQuestionModal.tsx    src/components/QuickAddQuestionModal.tsx    Carry forward
+app/src/components/share/SeasonCardV2.tsx    src/components/share/ShareCard.tsx    Rename, adapt for v11.0
+app/src/lib/mastery/ (all)    src/server/mastery/    Tiers, awards, ceremony — carry forward
+app/src/lib/games/grading.ts    src/server/grading.ts    Answer grading logic
+app/src/lib/games/answer-state.ts    src/server/answer-state.ts    answer_state enum logic
+app/src/lib/games/adaptive-difficulty.ts    src/server/adaptive-difficulty.ts    Adaptive level logic
+app/src/lib/play/catch-up-copy.ts    src/server/play/catch-up-copy.ts    Carry forward
+app/src/lib/profile/ (all)    src/server/profile/    Knowledge graph, portrait — carry forward
+app/src/components/ceremony/PersonalRecordBeat.tsx    src/components/ceremony/    Adapt for biweekly
+app/src/components/ceremony/ShareBeat.tsx    src/components/ceremony/    Carry forward
+app/src/lib/daily/generate-questions.ts    src/server/daily/generate-questions.ts    Core LLM generation — carry forward
+app/src/lib/daily/mastery.ts    src/server/daily/mastery.ts    Carry forward
+app/src/app/components/games/game-details-mode-sections.tsx    src/components/games/game-details-mode-sections.tsx    Adapt for Joshing Game summary
+app/src/app/components/games/interpretive-sections.tsx    src/components/games/interpretive-sections.tsx    Adapt for Joshing Game summary
+Do not carry forward:
+
+app/src/lib/games/ (all group/season machinery)
+app/src/app/groups/ (all group pages)
+app/src/app/api/groups/ (all group API routes)
+app/src/lib/games/summary.ts (rewrite for Joshing Game)
+app/src/components/ceremony/ (rewrite for biweekly per-player)
+app/src/lib/ceremony/ (rewrite for biweekly per-player)
+app/src/app/api/games/ (group-scoped — drop)
+All challenge routes and components
+21.3 Build Phases and Prompts
+Run these prompts in order in Claude Code (Composer mode). Each prompt assumes the previous phase is complete and committed.
