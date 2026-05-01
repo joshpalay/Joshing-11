@@ -24,6 +24,11 @@ type FeedResponse = {
   items: FeedApiItem[];
 };
 
+type CeremonyBanner = {
+  id: string;
+  firedAt: string;
+};
+
 type AnswerResponse = {
   correct?: boolean;
   isCorrect?: boolean;
@@ -127,6 +132,7 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null);
 
   const loadFeed = useCallback(async () => {
     setLoading(true);
@@ -139,6 +145,9 @@ export default function FeedPage() {
       }
       setViewerId(body.viewer_user_id);
       setItems(body.items);
+      const bannerResponse = await fetch('/api/ceremony/banner', { cache: 'no-store', credentials: 'include' });
+      const bannerBody = await bannerResponse.json().catch(() => null) as { ceremony?: CeremonyBanner | null } | null;
+      setCeremonyBanner(bannerResponse.ok ? bannerBody?.ceremony ?? null : null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load your Feed.');
     } finally {
@@ -239,6 +248,21 @@ export default function FeedPage() {
         </div>
         <span className="text-sm text-muted-foreground">{items.length} waiting</span>
       </header>
+
+      {ceremonyBanner ? (
+        <Link
+          href={`/ceremony/${ceremonyBanner.id}`}
+          className="mb-4 block rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-stone-950 shadow-sm"
+        >
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 text-lg" aria-hidden>✦</span>
+            <div>
+              <p className="font-medium">Your two-week reflection is ready</p>
+              <p className="mt-1 text-sm text-stone-700">See what you've been up to {'->'}</p>
+            </div>
+          </div>
+        </Link>
+      ) : null}
 
       {items.length === 0 ? (
         <section className="flex flex-1 items-center justify-center py-16 text-center">

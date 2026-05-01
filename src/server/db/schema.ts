@@ -91,6 +91,7 @@ export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'incognito_round_invitation',
   'anniversary_milestone',
   'creator_note_prompt',
+  'ceremony_ready',
 ]);
 export const answerStateEnum = pgEnum('AnswerState', [
   'first_correct',
