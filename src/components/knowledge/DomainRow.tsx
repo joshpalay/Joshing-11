@@ -14,6 +14,8 @@ type DomainRowProps = {
   elementId?: string;
   tierOverride?: MasteryTier;
   progressOverride?: number;
+  pointsLabel?: string;
+  declared?: boolean;
   /** Optional control rendered on the right side of the row. When provided, the chevron is hidden. */
   trailingControl?: ReactNode;
 };
@@ -29,6 +31,8 @@ export function DomainRow({
   elementId,
   tierOverride,
   progressOverride,
+  pointsLabel,
+  declared = false,
   trailingControl,
 }: DomainRowProps) {
   const display = getMasteryTierDisplay(masteryPoints);
@@ -48,7 +52,7 @@ export function DomainRow({
             <span style={metaLabelStyle}>Add questions here to reach mastery.</span>
           ) : (
             <>
-              <span style={metaLabelStyle}>Your q’s</span>
+              <span style={metaLabelStyle}>Your q's</span>
               <div style={dotsWrapStyle} aria-hidden>
                 {Array.from({ length: CONTRIBUTION_DOT_COUNT }).map((_, index) => (
                   <span
@@ -65,9 +69,13 @@ export function DomainRow({
         </div>
       </div>
       {trailingControl ?? (
-        <span style={chevronStyle} aria-hidden>
-          ›
-        </span>
+        <div style={trailingStyle}>
+          {declared ? <span style={declaredBadgeStyle}>Declared</span> : null}
+          {pointsLabel ? <span style={pointsStyle}>{pointsLabel}</span> : null}
+          <span style={chevronStyle} aria-hidden>
+            &rsaquo;
+          </span>
+        </div>
       )}
     </div>
   );
@@ -152,8 +160,33 @@ const dotStyle: CSSProperties = {
   borderRadius: '999px',
 };
 
+const trailingStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  flexShrink: 0,
+};
+
+const declaredBadgeStyle: CSSProperties = {
+  border: '1px solid #1a1208',
+  borderRadius: '999px',
+  padding: '0.16rem 0.42rem',
+  color: '#1a1208',
+  fontSize: '0.62rem',
+  fontWeight: 700,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+};
+
+const pointsStyle: CSSProperties = {
+  minWidth: '4.2rem',
+  textAlign: 'right',
+  color: '#1a1208',
+  fontSize: '0.88rem',
+  fontWeight: 600,
+};
+
 const chevronStyle: CSSProperties = {
   fontSize: '1rem',
   color: '#7d7568',
 };
-

@@ -1,13 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { DomainCircle } from '@/components/knowledge/DomainCircle';
-import { DomainProgressBar } from '@/components/knowledge/DomainProgressBar';
-import { ProgressionLandscape, type ProgressionDomain } from '@/components/knowledge/ProgressionLandscape';
+import { DomainList } from '@/components/knowledge/DomainList';
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
 import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display';
-import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import type { MasteryTier } from '@/types/db';
 
 type DomainMastery = {
@@ -23,6 +22,7 @@ type DomainMastery = {
   broadCategory: string | null;
   iconKey: string;
   isDeclared: boolean;
+  isDeclaredInterest: boolean;
   isDemonstrated: boolean;
 };
 
@@ -53,7 +53,13 @@ type StreakData = {
 type KnowledgeResponse = {
   mastery: MasteryOverview;
   streak: StreakData;
+  pageData: {
+    allDomains: DomainMastery[];
+    declaredInterests: string[];
+  };
 };
+
+type SortMode = 'points' | 'tier' | 'lastActive' | 'alphabetical';
 
 const TIER_LABEL: Record<MasteryTier, string> = {
   establishing: 'Curious',
@@ -62,11 +68,20 @@ const TIER_LABEL: Record<MasteryTier, string> = {
   mastery: 'Sage',
 };
 
-const DOMAIN_TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
+const SORT_STORAGE_KEY = 'knowledge_sort_mode';
+const SORT_OPTIONS: Array<{ value: SortMode; label: string }> = [
+  { value: 'points', label: 'By Points' },
+  { value: 'tier', label: 'By Tier' },
+  { value: 'lastActive', label: 'By Last Active' },
+  { value: 'alphabetical', label: 'Alphabetical' },
+];
+
+const SORT_MODE_SET = new Set<SortMode>(SORT_OPTIONS.map((option) => option.value));
+const TIER_RANK: Record<MasteryTier, number> = {
+  establishing: 0,
+  familiar: 1,
+  solid: 2,
+  mastery: 3,
 };
 
 function isMasteryTier(value: string): value is MasteryTier {
@@ -113,6 +128,12 @@ function sourceLabel(source: string): string {
   return source.replace(/_/g, ' ');
 }
 
+function readSavedSortMode(): SortMode {
+  if (typeof window === 'undefined') return 'points';
+  const saved = localStorage.getItem(SORT_STORAGE_KEY);
+  return SORT_MODE_SET.has(saved as SortMode) ? (saved as SortMode) : 'points';
+}
+
 function LoadingSkeleton() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-5xl flex-col px-4 py-6 pb-24">
@@ -132,9 +153,11 @@ function LoadingSkeleton() {
 }
 
 export default function KnowledgePage() {
+  const router = useRouter();
   const [data, setData] = useState<KnowledgeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>('points');
 
   useEffect(() => {
     let active = true;
@@ -161,6 +184,15 @@ export default function KnowledgePage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    setSortMode(readSavedSortMode());
+  }, []);
+
+  const onSortModeChange = (nextMode: SortMode) => {
+    setSortMode(nextMode);
+    localStorage.setItem(SORT_STORAGE_KEY, nextMode);
+  };
 
   const highlights = useMemo(() => {
     if (!data) return [];
@@ -204,18 +236,25 @@ export default function KnowledgePage() {
     } => Boolean(item));
   }, [data]);
 
-  const progressionDomains = useMemo<ProgressionDomain[]>(() => {
+  const sortedDomains = useMemo(() => {
     if (!data) return [];
-    return data.mastery.domains.map((domain) => ({
-      canonicalSubcategory: domain.displayName,
-      canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
-      broadCategory: domain.broadCategory,
-      currentTier: asTier(domain.tier),
-      correctAnswerCount: domain.questionsCorrect,
-      authoredCount: 0,
-      iconKey: domain.iconKey,
-    }));
-  }, [data]);
+    return [...data.pageData.allDomains].sort((a, b) => {
+      if (sortMode === 'tier') {
+        const tierDiff = TIER_RANK[asTier(b.tier)] - TIER_RANK[asTier(a.tier)];
+        if (tierDiff !== 0) return tierDiff;
+        return b.points - a.points || a.displayName.localeCompare(b.displayName);
+      }
+      if (sortMode === 'lastActive') {
+        const aTime = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
+        const bTime = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
+        return bTime - aTime || b.points - a.points || a.displayName.localeCompare(b.displayName);
+      }
+      if (sortMode === 'alphabetical') {
+        return a.displayName.localeCompare(b.displayName) || b.points - a.points;
+      }
+      return b.points - a.points || a.displayName.localeCompare(b.displayName);
+    });
+  }, [data, sortMode]);
 
   if (loading) return <LoadingSkeleton />;
 
@@ -262,56 +301,40 @@ export default function KnowledgePage() {
 
       <section className="mb-8">
         <h2 className="font-serif text-2xl font-semibold">Your Knowledge Map</h2>
-        {data.mastery.domains.length === 0 ? (
-          <p className="mt-4 rounded-lg border bg-card p-5 text-sm text-muted-foreground">
-            Answer some questions to start building your map.
-          </p>
+        {sortedDomains.length === 0 ? (
+          <div className="mt-4 rounded-lg border bg-card p-5 text-sm text-muted-foreground">
+            <p>Your map will fill in as you answer questions.</p>
+            <button
+              type="button"
+              className="mt-4 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
+              onClick={() => router.push('/daily/setup')}
+            >
+              Play today's round
+            </button>
+          </div>
         ) : (
           <>
-            <div className="mt-4 rounded-lg border bg-card p-4 text-card-foreground">
-              <ProgressionLandscape
-                domains={progressionDomains}
-                maxCorrectAnswerCount={Math.max(...progressionDomains.map((domain) => domain.correctAnswerCount), 1)}
-                highlightSlug={null}
-              />
+            <div className="mt-4 flex flex-wrap gap-2">
+              {SORT_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    sortMode === option.value
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => onSortModeChange(option.value)}
+                  aria-pressed={sortMode === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {data.mastery.domains.map((domain) => {
-                const tier = asTier(domain.tier);
-                return (
-                  <article key={domain.domain} className="rounded-lg border bg-card p-4 text-card-foreground">
-                    <div className="flex items-start gap-4">
-                      <DomainCircle
-                        diameter={70}
-                        iconKey={domain.iconKey}
-                        canonicalSubcategory={domain.displayName}
-                        currentTier={tier}
-                        showTierLabel={false}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-lg font-semibold leading-snug">{domain.displayName}</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">{DOMAIN_TIER_LABEL[tier]}</p>
-                        <DomainProgressBar tier={tier} progressWithinTier={domain.tierProgress / 100} />
-                      </div>
-                    </div>
-                    <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <dt className="text-muted-foreground">Correct rate</dt>
-                        <dd className="font-medium">{domain.correctRate}% correct</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">Questions</dt>
-                        <dd className="font-medium">{formatNumber(domain.questionsAnswered)} answered</dd>
-                      </div>
-                      <div className="col-span-2">
-                        <dt className="text-muted-foreground">Last active</dt>
-                        <dd className="font-medium">{daysAgo(domain.lastActivityAt)}</dd>
-                      </div>
-                    </dl>
-                  </article>
-                );
-              })}
-            </div>
+            <DomainList
+              domains={sortedDomains}
+              onDomainSelect={(domain) => router.push(`/knowledge/${encodeURIComponent(domain)}`)}
+            />
           </>
         )}
       </section>

@@ -1,61 +1,53 @@
-import type { CSSProperties } from 'react';
-import type { KnowledgeDomain } from '@/server/profile/knowledge-types';
-import { KNOWLEDGE_GRAPH_DOMAIN_LIMIT } from '@/server/profile/knowledge-graph';
-import { getKnowledgeTierInterpretation } from '@/server/profile/knowledge-tier-copy';
-import { DomainProgressBar } from '@/components/knowledge/DomainProgressBar';
+import { DomainRow } from '@/components/knowledge/DomainRow';
+import type { MasteryTier } from '@/types/db';
 
-type DomainListProps = {
-  domains: KnowledgeDomain[];
+export type KnowledgeMapDomain = {
+  domain: string;
+  displayName: string;
+  points: number;
+  tier: string;
+  tierProgress: number;
+  questionsAnswered: number;
+  isDeclaredInterest: boolean;
 };
 
-export function DomainList({ domains }: DomainListProps) {
-  const overflowDomains = domains.slice(KNOWLEDGE_GRAPH_DOMAIN_LIMIT);
+type DomainListProps = {
+  domains: KnowledgeMapDomain[];
+  onDomainSelect?: (domain: string) => void;
+};
 
-  if (overflowDomains.length === 0) {
-    return null;
-  }
+export function DomainList({ domains, onDomainSelect }: DomainListProps) {
+  if (domains.length === 0) return null;
 
   return (
-    <section aria-label="More domains" style={sectionStyle}>
-      <ul style={listStyle}>
-        {overflowDomains.map((domain) => (
-          <li key={domain.name} style={listItemStyle}>
-            <p style={domainNameStyle}>{domain.name}</p>
-            <p style={tierStyle}>{getKnowledgeTierInterpretation(domain.tier)}</p>
-            <DomainProgressBar tier={domain.tier} progressWithinTier={domain.progressWithinTier} />
-          </li>
-        ))}
-      </ul>
-    </section>
+    <div className="mt-4 divide-y rounded-lg border bg-card text-card-foreground">
+      {domains.map((domain) => (
+        <button
+          key={domain.domain}
+          type="button"
+          className="block w-full bg-transparent px-4 py-0 text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => onDomainSelect?.(domain.domain)}
+        >
+          <DomainRow
+            domain={domain.displayName}
+            masteryPoints={domain.points}
+            yourQuestionsCount={domain.questionsAnswered}
+            tierOverride={asTier(domain.tier)}
+            progressOverride={domain.tierProgress / 100}
+            pointsLabel={`${formatNumber(domain.points)} pts`}
+            declared={domain.isDeclaredInterest}
+          />
+        </button>
+      ))}
+    </div>
   );
 }
 
-const sectionStyle: CSSProperties = {
-  marginTop: '0.75rem',
-};
+function asTier(value: string): MasteryTier {
+  if (value === 'familiar' || value === 'solid' || value === 'mastery') return value;
+  return 'establishing';
+}
 
-const listStyle: CSSProperties = {
-  margin: 0,
-  padding: 0,
-  listStyle: 'none',
-  display: 'grid',
-  gap: '0.5rem',
-};
-
-const listItemStyle: CSSProperties = {
-  display: 'grid',
-  gap: '0.35rem',
-  paddingBottom: '0.4rem',
-  borderBottom: '1px solid rgba(123, 97, 255, 0.18)',
-};
-
-const domainNameStyle: CSSProperties = {
-  margin: 0,
-  color: 'rgba(26, 19, 51, 0.9)',
-};
-
-const tierStyle: CSSProperties = {
-  margin: 0,
-  color: 'rgba(73, 63, 105, 0.82)',
-  fontSize: '0.92rem',
-};
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat().format(Math.round(value));
+}

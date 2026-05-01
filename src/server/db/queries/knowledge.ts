@@ -25,7 +25,13 @@ export type DomainMastery = {
   broadCategory: string | null;
   iconKey: string;
   isDeclared: boolean;
+  isDeclaredInterest: boolean;
   isDemonstrated: boolean;
+};
+
+export type KnowledgePageData = {
+  allDomains: DomainMastery[];
+  declaredInterests: string[];
 };
 
 export type RecentActivity = {
@@ -97,6 +103,42 @@ function toIso(value: Date | string | null | undefined): string | null {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
+}
+
+function toDomainMasteryRow(
+  knowledgeDomain: {
+    domain: string;
+    broadCategory: string | null;
+    isDeclared: boolean;
+    isDemonstrated: boolean;
+  },
+  masteryByDomain: Map<string, typeof playerMastery.$inferSelect>,
+  statsByDomain: Map<string, AnswerStats>,
+): DomainMastery {
+  const domain = knowledgeDomain.domain;
+  const row = masteryByDomain.get(domainKey(domain));
+  const points = Number(row?.totalPoints ?? 0);
+  const tierDisplay = getMasteryTierDisplay(points);
+  const stats = statsByDomain.get(domainKey(domain));
+  const questionsAnswered = stats?.answered ?? 0;
+  const questionsCorrect = stats?.correct ?? 0;
+
+  return {
+    domain,
+    displayName: displayNameForDomain(domain),
+    points,
+    tier: tierDisplay.tier,
+    tierProgress: percent(tierDisplay.progressWithinTier * 100),
+    questionsAnswered,
+    questionsCorrect,
+    correctRate: questionsAnswered > 0 ? percent((questionsCorrect / questionsAnswered) * 100) : 0,
+    lastActivityAt: toIso(stats?.lastActivityAt),
+    broadCategory: knowledgeDomain.broadCategory ?? row?.broadCategory ?? null,
+    iconKey: toCanonicalDomainSlug(domain),
+    isDeclared: knowledgeDomain.isDeclared,
+    isDeclaredInterest: knowledgeDomain.isDeclared,
+    isDemonstrated: knowledgeDomain.isDemonstrated,
+  };
 }
 
 export async function getUserMasteryOverview(userId: string): Promise<MasteryOverview> {
@@ -186,31 +228,9 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
     });
   }
 
-  const domains = [...knowledgeDomainNames.values()].map((knowledgeDomain) => {
-    const domain = knowledgeDomain.domain;
-    const row = masteryByDomain.get(domainKey(domain));
-    const points = Number(row?.totalPoints ?? 0);
-    const tierDisplay = getMasteryTierDisplay(points);
-    const stats = statsByDomain.get(domainKey(domain));
-    const questionsAnswered = stats?.answered ?? 0;
-    const questionsCorrect = stats?.correct ?? 0;
-
-    return {
-      domain,
-      displayName: displayNameForDomain(domain),
-      points,
-      tier: tierDisplay.tier,
-      tierProgress: percent(tierDisplay.progressWithinTier * 100),
-      questionsAnswered,
-      questionsCorrect,
-      correctRate: questionsAnswered > 0 ? percent((questionsCorrect / questionsAnswered) * 100) : 0,
-      lastActivityAt: toIso(stats?.lastActivityAt),
-      broadCategory: knowledgeDomain.broadCategory ?? row?.broadCategory ?? null,
-      iconKey: toCanonicalDomainSlug(domain),
-      isDeclared: knowledgeDomain.isDeclared,
-      isDemonstrated: knowledgeDomain.isDemonstrated,
-    };
-  }).sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
+  const domains = [...knowledgeDomainNames.values()]
+    .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain))
+    .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
 
   return {
     totalPoints,
@@ -226,6 +246,97 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
       source: sourceLabel(row),
       createdAt: row.createdAt.toISOString(),
     })),
+  };
+}
+
+export async function getKnowledgePageData(userId: string): Promise<KnowledgePageData> {
+  const [declaredRows, masteryRows, eventRows] = await Promise.all([
+    db
+      .select()
+      .from(declaredInterests)
+      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true))),
+    db
+      .select()
+      .from(playerMastery)
+      .where(eq(playerMastery.userId, userId))
+      .orderBy(desc(playerMastery.totalPoints)),
+    db
+      .select()
+      .from(masteryEvents)
+      .where(eq(masteryEvents.userId, userId)),
+  ]);
+
+  const statsByDomain = new Map<string, AnswerStats>();
+  for (const event of eventRows) {
+    if (!event.answerState) continue;
+    const key = domainKey(event.canonicalSubcategory);
+    const existing = statsByDomain.get(key) ?? {
+      answered: 0,
+      correct: 0,
+      lastActivityAt: null,
+    };
+    existing.answered += 1;
+    if (event.answerState !== 'incorrect') existing.correct += 1;
+    if (!existing.lastActivityAt || event.createdAt > existing.lastActivityAt) {
+      existing.lastActivityAt = event.createdAt;
+    }
+    statsByDomain.set(key, existing);
+  }
+
+  const masteryByDomain = new Map(masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]));
+  const knowledgeDomainNames = new Map<string, {
+    domain: string;
+    broadCategory: string | null;
+    isDeclared: boolean;
+    isDemonstrated: boolean;
+  }>();
+
+  for (const row of masteryRows) {
+    const domain = row.canonicalSubcategory.trim().replace(/\s+/g, ' ');
+    if (!domain) continue;
+    knowledgeDomainNames.set(domainKey(domain), {
+      domain,
+      broadCategory: row.broadCategory,
+      isDeclared: false,
+      isDemonstrated: statsByDomain.has(domainKey(domain)),
+    });
+  }
+
+  for (const row of eventRows) {
+    const domain = row.canonicalSubcategory.trim().replace(/\s+/g, ' ');
+    if (!domain) continue;
+    const key = domainKey(domain);
+    const existing = knowledgeDomainNames.get(key);
+    knowledgeDomainNames.set(key, {
+      domain: existing?.domain ?? domain,
+      broadCategory: existing?.broadCategory ?? null,
+      isDeclared: existing?.isDeclared ?? false,
+      isDemonstrated: existing?.isDemonstrated ?? Boolean(row.answerState),
+    });
+  }
+
+  for (const row of declaredRows) {
+    const domain = row.domain.trim().replace(/\s+/g, ' ');
+    if (!domain) continue;
+    const key = domainKey(domain);
+    const existing = knowledgeDomainNames.get(key);
+    knowledgeDomainNames.set(key, {
+      domain: existing?.domain ?? domain,
+      broadCategory: existing?.broadCategory ?? row.broadCategory,
+      isDeclared: true,
+      isDemonstrated: existing?.isDemonstrated ?? false,
+    });
+  }
+
+  const allDomains = [...knowledgeDomainNames.values()]
+    .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain))
+    .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
+
+  return {
+    allDomains,
+    declaredInterests: declaredRows
+      .map((row) => row.domain.trim().replace(/\s+/g, ' '))
+      .filter(Boolean),
   };
 }
 
