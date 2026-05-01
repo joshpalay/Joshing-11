@@ -57,6 +57,17 @@ export type MasteryOverview = {
   recentActivity: RecentActivity[];
 };
 
+export type ProgressionView = {
+  domain: string;
+  displayName: string;
+  tier: MasteryTier;
+  points: number;
+  pointsToNextTier: number | null;
+  progressPercent: number;
+  nextTier: MasteryTier | null;
+  isAtTopTier: boolean;
+};
+
 export type StreakData = {
   currentStreak: number;
   longestStreak: number;
@@ -392,6 +403,43 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
       .map((row) => row.domain.trim().replace(/\s+/g, ' '))
       .filter(Boolean),
   };
+}
+
+export async function getProgressionLandscape(userId: string): Promise<ProgressionView[]> {
+  const masteryRows = await db
+    .select()
+    .from(playerMastery)
+    .where(eq(playerMastery.userId, userId));
+
+  return masteryRows
+    .map((row) => {
+      const points = Number(row.totalPoints ?? 0);
+      const tierDisplay = getMasteryTierDisplay(points);
+      const nextTier = nextTierFor(tierDisplay.tier);
+      const nextThreshold = nextTier ? TIER_THRESHOLD_POINTS[nextTier] : null;
+
+      return {
+        domain: row.canonicalSubcategory,
+        displayName: displayNameForDomain(row.canonicalSubcategory),
+        tier: tierDisplay.tier,
+        points,
+        pointsToNextTier: nextThreshold === null ? null : Math.max(0, Math.ceil(nextThreshold - points)),
+        progressPercent: percent(tierDisplay.progressWithinTier * 100),
+        nextTier,
+        isAtTopTier: nextTier === null,
+      } satisfies ProgressionView;
+    })
+    .sort((a, b) => {
+      if (a.isAtTopTier !== b.isAtTopTier) return a.isAtTopTier ? 1 : -1;
+      if (a.pointsToNextTier !== null && b.pointsToNextTier !== null) {
+        const distance = a.pointsToNextTier - b.pointsToNextTier;
+        if (distance !== 0) return distance;
+      }
+      if (a.pointsToNextTier === null && b.pointsToNextTier !== null) return 1;
+      if (a.pointsToNextTier !== null && b.pointsToNextTier === null) return -1;
+      return b.progressPercent - a.progressPercent || a.displayName.localeCompare(b.displayName);
+    })
+    .slice(0, 30);
 }
 
 export async function getDomainDetail(userId: string, domain: string): Promise<DomainDetail | null> {

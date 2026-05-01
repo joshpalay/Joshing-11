@@ -73,3 +73,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'save_failed', message }, { status: 400 });
   }
 }
+
+export async function PATCH(request: Request) {
+  return POST(request);
+}
