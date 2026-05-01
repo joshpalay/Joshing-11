@@ -1,0 +1,138 @@
+/**
+ * Session creation and validation using UserSession (Prisma).
+ * A signed JWT is stored in an httpOnly cookie; PRD: 90-day persistence.
+ */
+
+import { randomBytes } from 'crypto';
+import { SignJWT, jwtVerify } from 'jose';
+import { cookies } from 'next/headers';
+
+import { prisma } from '@/lib/prisma';
+
+const SESSION_COOKIE_NAME = 'joshing_session';
+const SESSION_DAYS = 90;
+
+type SessionJwtPayload = {
+  sid: string;
+};
+
+export type Session = {
+  id: string;
+  userId: string;
+};
+
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is required in production.');
+  }
+
+  if (!secret) {
+    return new TextEncoder().encode('development-only-joshing-session-secret');
+  }
+
+  try {
+    return Buffer.from(secret, 'base64');
+  } catch {
+    return new TextEncoder().encode(secret);
+  }
+}
+
+/**
+ * Create a new UserSession for the user and set the session cookie.
+ * Call after successful OTP verification (login).
+ */
+export async function createSession(userId: string): Promise<string> {
+  const sessionId = randomBytes(24).toString('hex');
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + SESSION_DAYS);
+
+  const token = await new SignJWT({ sid: sessionId } satisfies SessionJwtPayload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setExpirationTime(`${SESSION_DAYS}d`)
+    .sign(getJwtSecret());
+
+  await prisma.userSession.create({
+    data: {
+      user_id: userId,
+      token,
+      expires_at: expiresAt,
+    },
+  });
+
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: SESSION_DAYS * 24 * 60 * 60,
+    path: '/',
+  });
+
+  return token;
+}
+
+/**
+ * Get the current session token from the request cookie.
+ */
+export async function getSessionToken(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
+}
+
+/**
+ * Validate JWT and UserSession: returns session if valid and not expired.
+ */
+export async function validateSessionToken(
+  token: string
+): Promise<{ user_id: string; session_id: string } | null> {
+  let jwtUserId: string | undefined;
+  let jwtSessionId: unknown;
+
+  try {
+    const verified = await jwtVerify<SessionJwtPayload>(token, getJwtSecret());
+    jwtUserId = verified.payload.sub;
+    jwtSessionId = verified.payload.sid;
+  } catch {
+    return null;
+  }
+
+  if (!jwtUserId || typeof jwtSessionId !== 'string') return null;
+
+  const session = await prisma.userSession.findUnique({
+    where: { token },
+    select: { id: true, user_id: true, expires_at: true },
+  });
+
+  if (!session || session.expires_at < new Date() || session.user_id !== jwtUserId) return null;
+
+  return { user_id: session.user_id, session_id: session.id };
+}
+
+export async function getSession(): Promise<Session | null> {
+  const token = await getSessionToken();
+  if (!token) return null;
+
+  const session = await validateSessionToken(token);
+  if (!session) return null;
+
+  return {
+    id: session.session_id,
+    userId: session.user_id,
+  };
+}
+
+/**
+ * Delete the session (logout): remove from DB and clear cookie.
+ */
+export async function destroySession(): Promise<void> {
+  const token = await getSessionToken();
+  if (token) {
+    await prisma.userSession.deleteMany({ where: { token } });
+  }
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE_NAME);
+}

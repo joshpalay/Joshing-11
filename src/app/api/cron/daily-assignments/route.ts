@@ -1,0 +1,93 @@
+import { eq } from 'drizzle-orm';
+import { NextRequest, NextResponse } from 'next/server';
+
+import { createDailyQueueItem, getTodaysDailyQueue } from '@/server/db/queries/daily';
+import { db, users } from '@/server/db';
+import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
+import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { sendSms } from '@/server/sms';
+
+export const dynamic = 'force-dynamic';
+
+function asQueueSlots(value: unknown): QueueSlot[] {
+  return Array.isArray(value) ? (value as QueueSlot[]) : [];
+}
+
+function getBaseUrl(request: NextRequest): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL;
+  if (configured) return configured.replace(/\/$/, '');
+  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
+  const protocol = request.headers.get('x-forwarded-proto') ?? 'https';
+  return host ? `${protocol}://${host}` : 'http://localhost:3000';
+}
+
+function isAuthorized(request: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET;
+  if (!secret) return true;
+  const authHeader = request.headers.get('authorization');
+  return authHeader === `Bearer ${secret}`;
+}
+
+export async function GET(request: NextRequest) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const baseUrl = getBaseUrl(request);
+  const onboardedUsers = await db
+    .select({
+      id: users.id,
+      phoneNumber: users.phoneNumber,
+      smsOptIn: users.smsOptIn,
+    })
+    .from(users)
+    .where(eq(users.onboardingComplete, true));
+
+  const results = {
+    users: onboardedUsers.length,
+    generated: 0,
+    existing: 0,
+    failed: 0,
+    smsSent: 0,
+  };
+
+  for (const user of onboardedUsers) {
+    try {
+      let queue = await getTodaysDailyQueue(user.id);
+      const existingSlots = queue ? asQueueSlots(queue.slots) : [];
+
+      if (!queue || existingSlots.length === 0) {
+        const generated = await generateDailyQuestionsFromKnowledgeBase(user.id, DAILY_QUEUE_SIZE);
+        if (generated.length === 0) {
+          results.failed += 1;
+          continue;
+        }
+
+        for (const [index, question] of generated.slice(0, DAILY_QUEUE_SIZE).entries()) {
+          queue = await createDailyQueueItem(user.id, question.id, index);
+        }
+        results.generated += 1;
+      } else {
+        results.existing += 1;
+      }
+
+      if (queue && user.smsOptIn === 'opted_in' && user.phoneNumber) {
+        await sendSms(
+          user.phoneNumber,
+          `Your five for today. ${baseUrl}/daily`,
+          'daily_questions',
+          user.id,
+        );
+        results.smsSent += 1;
+      }
+    } catch (error) {
+      console.error('[cron/daily-assignments] user failed', {
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      results.failed += 1;
+    }
+  }
+
+  return NextResponse.json(results);
+}
