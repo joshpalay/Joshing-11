@@ -94,16 +94,6 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
   return [...domains.values()];
 }
 
-export async function getDailyPreferences(userId: string): Promise<DailyPreferenceRow | null> {
-  const [preference] = await db
-    .select()
-    .from(dailyPreferences)
-    .where(eq(dailyPreferences.userId, userId))
-    .limit(1);
-
-  return preference ?? null;
-}
-
 export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow | null> {
   const { assignmentDateStr } = getDailyAssignmentBounds();
   const [queue] = await db

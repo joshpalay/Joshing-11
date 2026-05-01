@@ -74,7 +74,11 @@ export default function DailyPage() {
   }, []);
 
   useEffect(() => {
-    void loadQueue();
+    const initialTimer = window.setTimeout(() => {
+      void loadQueue();
+    }, 0);
+
+    return () => window.clearTimeout(initialTimer);
   }, [loadQueue]);
 
   const currentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
@@ -259,7 +263,7 @@ export default function DailyPage() {
         />
       </header>
 
-      <section className="flex-1 overflow-y-auto px-4 py-4" style={{ paddingBottom: '96px' }}>
+      <section className="flex-1 overflow-y-auto px-4 py-4" style={{ paddingBottom: '160px' }}>
         {loading ? (
           <p className="text-sm text-[var(--text-muted)]">Loading today...</p>
         ) : error ? (
@@ -273,7 +277,7 @@ export default function DailyPage() {
 
       {currentSlot && !loading ? (
         <form
-          className="sticky bottom-0 flex gap-2 border-t px-4 py-3"
+          className="fixed inset-x-0 bottom-16 z-30 mx-auto flex max-w-lg gap-2 border-t px-4 py-3 md:bottom-0"
           style={{
             borderColor: 'var(--border)',
             background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
@@ -289,10 +293,10 @@ export default function DailyPage() {
             onChange={(event) => setAnswer(event.target.value)}
             disabled={submitting}
             placeholder="Your answer..."
-            className="min-h-11 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
+            className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
             style={{ borderColor: 'var(--border)' }}
           />
-          <button type="submit" className="btn-primary" disabled={submitting || !answer.trim()}>
+          <button type="submit" className="btn-primary shrink-0" disabled={submitting || !answer.trim()}>
             {submitting ? '...' : 'Send'}
           </button>
         </form>

@@ -18,6 +18,10 @@ export function resolveTier(points: number): MasteryTier {
   return 'establishing';
 }
 
+export function getTierForPoints(points: number): MasteryTier {
+  return resolveTier(points);
+}
+
 /**
  * PRD §8.32 — Mastery requires ≥20% of domain points from author_credit (creator earnings),
  * and (v10.24 update) at least two distinct authored questions contributing that credit.

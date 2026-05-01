@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { DomainCircle } from '@/components/knowledge/DomainCircle';
 import { DomainProgressBar } from '@/components/knowledge/DomainProgressBar';
+import { ProgressionLandscape, type ProgressionDomain } from '@/components/knowledge/ProgressionLandscape';
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
 import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display';
+import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import type { MasteryTier } from '@/types/db';
 
 type DomainMastery = {
@@ -18,6 +20,10 @@ type DomainMastery = {
   questionsCorrect: number;
   correctRate: number;
   lastActivityAt: string | null;
+  broadCategory: string | null;
+  iconKey: string;
+  isDeclared: boolean;
+  isDemonstrated: boolean;
 };
 
 type RecentActivity = {
@@ -198,6 +204,19 @@ export default function KnowledgePage() {
     } => Boolean(item));
   }, [data]);
 
+  const progressionDomains = useMemo<ProgressionDomain[]>(() => {
+    if (!data) return [];
+    return data.mastery.domains.map((domain) => ({
+      canonicalSubcategory: domain.displayName,
+      canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
+      broadCategory: domain.broadCategory,
+      currentTier: asTier(domain.tier),
+      correctAnswerCount: domain.questionsCorrect,
+      authoredCount: 0,
+      iconKey: domain.iconKey,
+    }));
+  }, [data]);
+
   if (loading) return <LoadingSkeleton />;
 
   if (error || !data) {
@@ -248,43 +267,52 @@ export default function KnowledgePage() {
             Answer some questions to start building your map.
           </p>
         ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {data.mastery.domains.map((domain) => {
-              const tier = asTier(domain.tier);
-              return (
-                <article key={domain.domain} className="rounded-lg border bg-card p-4 text-card-foreground">
-                  <div className="flex items-start gap-4">
-                    <DomainCircle
-                      diameter={70}
-                      iconKey={domain.domain}
-                      canonicalSubcategory={domain.displayName}
-                      currentTier={tier}
-                      showTierLabel={false}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-lg font-semibold leading-snug">{domain.displayName}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">{DOMAIN_TIER_LABEL[tier]}</p>
-                      <DomainProgressBar tier={tier} progressWithinTier={domain.tierProgress / 100} />
+          <>
+            <div className="mt-4 rounded-lg border bg-card p-4 text-card-foreground">
+              <ProgressionLandscape
+                domains={progressionDomains}
+                maxCorrectAnswerCount={Math.max(...progressionDomains.map((domain) => domain.correctAnswerCount), 1)}
+                highlightSlug={null}
+              />
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {data.mastery.domains.map((domain) => {
+                const tier = asTier(domain.tier);
+                return (
+                  <article key={domain.domain} className="rounded-lg border bg-card p-4 text-card-foreground">
+                    <div className="flex items-start gap-4">
+                      <DomainCircle
+                        diameter={70}
+                        iconKey={domain.iconKey}
+                        canonicalSubcategory={domain.displayName}
+                        currentTier={tier}
+                        showTierLabel={false}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-lg font-semibold leading-snug">{domain.displayName}</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">{DOMAIN_TIER_LABEL[tier]}</p>
+                        <DomainProgressBar tier={tier} progressWithinTier={domain.tierProgress / 100} />
+                      </div>
                     </div>
-                  </div>
-                  <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <dt className="text-muted-foreground">Correct rate</dt>
-                      <dd className="font-medium">{domain.correctRate}% correct</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Questions</dt>
-                      <dd className="font-medium">{formatNumber(domain.questionsAnswered)} answered</dd>
-                    </div>
-                    <div className="col-span-2">
-                      <dt className="text-muted-foreground">Last active</dt>
-                      <dd className="font-medium">{daysAgo(domain.lastActivityAt)}</dd>
-                    </div>
-                  </dl>
-                </article>
-              );
-            })}
-          </div>
+                    <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <dt className="text-muted-foreground">Correct rate</dt>
+                        <dd className="font-medium">{domain.correctRate}% correct</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Questions</dt>
+                        <dd className="font-medium">{formatNumber(domain.questionsAnswered)} answered</dd>
+                      </div>
+                      <div className="col-span-2">
+                        <dt className="text-muted-foreground">Last active</dt>
+                        <dd className="font-medium">{daysAgo(domain.lastActivityAt)}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                );
+              })}
+            </div>
+          </>
         )}
       </section>
 
@@ -316,7 +344,7 @@ export default function KnowledgePage() {
                   {highlight.domain ? (
                     <DomainCircle
                       diameter={42}
-                      iconKey={highlight.domain.domain}
+                      iconKey={highlight.domain.iconKey}
                       canonicalSubcategory={highlight.domain.displayName}
                       currentTier={asTier(highlight.domain.tier)}
                       showTierLabel={false}

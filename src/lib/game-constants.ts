@@ -4,6 +4,7 @@
  */
 import { getBasePoints } from '@/server/mastery/awards';
 import type { AnswerState, DifficultyEstimate } from '@/types/db';
+import { CATEGORIES } from '@/lib/questions-types';
 
 export const QUESTIONS_PER_DAY = 5;
 /** @deprecated Legacy flat scoring constant. Use `canonicalPointsForAnswer` instead. */
@@ -14,6 +15,7 @@ export const DEFAULT_MINIMUM_QUESTIONS = 5;
 export const MINIMUM_QUESTIONS_FLOOR = 5;
 /** Max active members per group (join + invite enforcement). Product: 10. */
 export const MAX_GROUP_SIZE = 10;
+export const QUESTION_DOMAIN_KEYS = CATEGORIES;
 
 /** After a daily assignment's `expires_at`, catch-up remains available for this many days (D3 Decision 2 / B6). */
 export const CATCH_UP_ELIGIBLE_DAYS_AFTER_EXPIRY = 7;

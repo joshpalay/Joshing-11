@@ -9,6 +9,12 @@ type ActivitiesResponse = {
   unreadCount?: number;
 };
 
+type MeResponse = {
+  user?: {
+    display_name?: string | null;
+  };
+};
+
 const navItems = [
   { href: '/', label: 'Home', Icon: Home },
   { href: '/feed', label: 'Feed', Icon: Rss },
@@ -17,9 +23,19 @@ const navItems = [
   { href: '/account', label: 'Account', Icon: User },
 ];
 
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase();
+}
+
 export function Nav() {
   const pathname = usePathname();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [accountInitials, setAccountInitials] = useState<string | null>(null);
+  const visibleUnreadCount = pathname === '/activities' ? 0 : unreadCount;
+  const showNewGameShortcut = pathname !== '/daily';
 
   const loadUnreadCount = useCallback(async () => {
     try {
@@ -35,18 +51,53 @@ export function Nav() {
     }
   }, []);
 
+  const loadCurrentUser = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' });
+      if (!response.ok) {
+        setAccountInitials(null);
+        return;
+      }
+      const body = await response.json().catch(() => null) as MeResponse | null;
+      const initials = body?.user?.display_name ? initialsFor(body.user.display_name) : '';
+      setAccountInitials(initials || null);
+    } catch {
+      setAccountInitials(null);
+    }
+  }, []);
+
   useEffect(() => {
-    void loadUnreadCount();
+    const initialTimer = window.setTimeout(() => {
+      void loadUnreadCount();
+      void loadCurrentUser();
+    }, 0);
     const timer = window.setInterval(() => {
       void loadUnreadCount();
     }, 60_000);
 
-    return () => window.clearInterval(timer);
-  }, [loadUnreadCount]);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+    };
+  }, [loadCurrentUser, loadUnreadCount]);
 
-  useEffect(() => {
-    if (pathname === '/activities') setUnreadCount(0);
-  }, [pathname]);
+  function AccountIcon({ active }: { active: boolean }) {
+    if (!accountInitials) {
+      return <User className="size-4" />;
+    }
+
+    return (
+      <span
+        className={[
+          'grid size-5 place-items-center rounded-full text-[10px] font-semibold',
+          active ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground',
+        ].join(' ')}
+        aria-hidden="true"
+      >
+        {accountInitials}
+      </span>
+    );
+  }
 
   return (
     <>
@@ -56,7 +107,8 @@ export function Nav() {
           <div className="flex items-center gap-2 text-sm">
             {navItems.map(({ href, label, Icon }) => {
               const active = pathname === href;
-              const showUnreadDot = label === 'Activities' && unreadCount > 0;
+              const showUnreadDot = label === 'Activities' && visibleUnreadCount > 0;
+              const isAccount = label === 'Account';
 
               return (
                 <Link
@@ -68,7 +120,7 @@ export function Nav() {
                   ].join(' ')}
                 >
                   <span className="relative grid size-5 place-items-center">
-                    <Icon className="size-4" />
+                    {isAccount ? <AccountIcon active={active} /> : <Icon className="size-4" />}
                     {showUnreadDot ? (
                       <span className="absolute right-0 top-0 size-2 rounded-full bg-primary" aria-hidden="true" />
                     ) : null}
@@ -84,7 +136,8 @@ export function Nav() {
         <div className="mx-auto grid max-w-md grid-cols-5">
           {navItems.map(({ href, label, Icon }) => {
             const active = pathname === href;
-            const showUnreadDot = label === 'Activities' && unreadCount > 0;
+            const showUnreadDot = label === 'Activities' && visibleUnreadCount > 0;
+            const isAccount = label === 'Account';
 
             return (
               <Link
@@ -96,7 +149,7 @@ export function Nav() {
                 ].join(' ')}
               >
                 <span className="relative grid size-5 place-items-center">
-                  <Icon className="size-4" />
+                  {isAccount ? <AccountIcon active={active} /> : <Icon className="size-4" />}
                   {showUnreadDot ? (
                     <span className="absolute right-0 top-0 size-2 rounded-full bg-primary" aria-hidden="true" />
                   ) : null}
@@ -107,13 +160,15 @@ export function Nav() {
           })}
         </div>
       </nav>
-      <Link
-        href="/new-game"
-        className="fixed bottom-20 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg md:hidden"
-        aria-label="New Game"
-      >
-        <Plus className="size-6" />
-      </Link>
+      {showNewGameShortcut ? (
+        <Link
+          href="/new-game"
+          className="fixed bottom-20 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg md:hidden"
+          aria-label="New Game"
+        >
+          <Plus className="size-6" />
+        </Link>
+      ) : null}
     </>
   );
 }

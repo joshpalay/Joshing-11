@@ -1,433 +1,283 @@
 'use client';
 
-import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
-import {
-  CATEGORIES,
-  QUESTION_TYPES,
-  categoryLabel,
-} from '@/lib/questions-types';
-import { validateBreadcrumbContext } from '@/lib/breadcrumb-validation';
+import { Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+
+import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 
 export type QuestionFormValues = {
-  question_text: string;
-  answer_text: string;
-  breadcrumb_context: string;
-  short_label: string;
-  accepted_alternatives: string; // comma-separated
-  category: string;
-  visibility: string;
-  creator_note: string;
-  question_type: string;
-  answer_source: string;
-  minimum_required: string;
-  category_overridden: boolean;
-  difficulty_estimate: string;
-  tags: string; // comma-separated
+  text: string;
+  correctAnswer: string;
+  alternateAnswers: string[];
+  explanation: string | null;
+  domain: string;
+  difficulty: number;
 };
 
-const defaultValues: QuestionFormValues = {
-  question_text: '',
-  answer_text: '',
-  breadcrumb_context: '',
-  short_label: '',
-  accepted_alternatives: '',
-  category: 'other',
-  visibility: 'public',
-  creator_note: '',
-  question_type: 'factual',
-  answer_source: '',
-  minimum_required: '',
-  category_overridden: false,
-  difficulty_estimate: '',
-  tags: '',
-};
-
-type AnswerSuggestion = {
-  type: 'factual' | 'personal' | 'ambiguous' | 'factual_uncertain';
-  suggested_answer: string | null;
-  note: string | null;
-  is_list: boolean;
-  min_list_items: number | null;
-  difficulty_estimate: 'accessible' | 'moderate' | 'specialist' | null;
-  suggested_phrasings?: string[];
+type SuggestionResponse = {
+  correctAnswer: string;
+  alternateAnswers: string[];
+  explanation: string;
 };
 
 type Props = {
+  mode?: 'create' | 'edit';
   initialValues?: Partial<QuestionFormValues>;
   onSubmit: (values: QuestionFormValues) => Promise<void>;
-  submitLabel: string;
+  submitLabel?: string;
   loadingLabel?: string;
+  onCancel?: () => void;
 };
 
+const defaults: QuestionFormValues = {
+  text: '',
+  correctAnswer: '',
+  alternateAnswers: [],
+  explanation: '',
+  domain: 'other',
+  difficulty: 3,
+};
+
+function normalizeInitialValues(initialValues?: Partial<QuestionFormValues>): QuestionFormValues {
+  return {
+    ...defaults,
+    ...initialValues,
+    alternateAnswers: initialValues?.alternateAnswers ?? defaults.alternateAnswers,
+    explanation: initialValues?.explanation ?? defaults.explanation,
+  };
+}
+
+function validate(values: QuestionFormValues): string | null {
+  if (!values.text.trim()) return 'Question text is required.';
+  if (values.text.trim().length > 300) return 'Question text must be 300 characters or fewer.';
+  if (!values.correctAnswer.trim()) return 'Correct answer is required.';
+  if (values.correctAnswer.trim().length > 200) return 'Correct answer must be 200 characters or fewer.';
+  if (values.alternateAnswers.length > 5) return 'Use at most 5 alternate answers.';
+  if (values.alternateAnswers.some((answer) => answer.length > 200)) return 'Alternate answers must be 200 characters or fewer.';
+  if ((values.explanation ?? '').length > 500) return 'Explanation must be 500 characters or fewer.';
+  if (!CATEGORIES.includes(values.domain as (typeof CATEGORIES)[number])) return 'Choose a valid domain.';
+  if (!Number.isInteger(values.difficulty) || values.difficulty < 1 || values.difficulty > 5) return 'Choose a difficulty from 1 to 5.';
+  return null;
+}
+
 export function QuestionForm({
+  mode = 'create',
   initialValues,
   onSubmit,
   submitLabel,
-  loadingLabel = 'Saving…',
+  loadingLabel = 'Saving...',
+  onCancel,
 }: Props) {
-  const [values, setValues] = useState<QuestionFormValues>({
-    ...defaultValues,
-    ...initialValues,
-  });
-  const [loading, setLoading] = useState(false);
+  const [values, setValues] = useState<QuestionFormValues>(() => normalizeInitialValues(initialValues));
+  const [alternateText, setAlternateText] = useState(() => (initialValues?.alternateAnswers ?? []).join(', '));
+  const [submitting, setSubmitting] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [suggestion, setSuggestion] = useState<AnswerSuggestion | null>(null);
-  const [suggestionLoading, setSuggestionLoading] = useState(false);
-  const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSuggestedFor = useRef<string>('');
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
 
-  // Fire suggestion after 1s of inactivity on question field (PRD Prompt 4)
   useEffect(() => {
-    const q = values.question_text.trim();
-    if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
-    if (q.length < 5 || q === lastSuggestedFor.current) return;
-    suggestionTimer.current = setTimeout(async () => {
-      lastSuggestedFor.current = q;
-      setSuggestionLoading(true);
-      try {
-        const res = await fetch('/api/questions/suggest-answer', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: q }),
-        });
-        if (res.ok) {
-          const data = await res.json() as AnswerSuggestion;
-          setSuggestion(data);
-        }
-      } catch {
-        // silent — creator writes their own answer
-      } finally {
-        setSuggestionLoading(false);
-      }
-    }, 1000);
-    return () => {
-      if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
-    };
-  }, [values.question_text]);
-
-  const acceptSuggestion = () => {
-    if (!suggestion?.suggested_answer) return;
-    setValues((v) => ({
-      ...v,
-      answer_text: suggestion.suggested_answer!,
-      answer_source: 'llm_suggested',
-      question_type: suggestion.type === 'personal' ? 'personal'
-        : suggestion.type === 'ambiguous' ? 'ambiguous'
-        : 'factual',
-      difficulty_estimate: suggestion.difficulty_estimate ?? '',
-    }));
-    setSuggestion(null);
-  };
-
-  const acceptPhrasing = (phrasing: string) => {
-    setValues((v) => ({ ...v, question_text: phrasing }));
-    setSuggestion(null);
-    lastSuggestedFor.current = '';
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    setValues(normalizeInitialValues(initialValues));
+    setAlternateText((initialValues?.alternateAnswers ?? []).join(', '));
     setError(null);
-    const computedBreadcrumb = values.breadcrumb_context.trim();
-    const bcErr = validateBreadcrumbContext(computedBreadcrumb);
-    if (bcErr) {
-      setError(bcErr);
+    setSuggestionError(null);
+  }, [initialValues]);
+
+  const resolvedSubmitLabel = submitLabel ?? (mode === 'edit' ? 'Update question' : 'Save question');
+  const alternateAnswers = useMemo(
+    () => alternateText.split(',').map((answer) => answer.trim()).filter(Boolean).slice(0, 5),
+    [alternateText],
+  );
+
+  async function requestSuggestion() {
+    const questionText = values.text.trim();
+    if (!questionText) {
+      setSuggestionError('Write the question first.');
       return;
     }
-    setLoading(true);
+
+    setSuggesting(true);
+    setSuggestionError(null);
     try {
-      await onSubmit({ ...values, breadcrumb_context: computedBreadcrumb });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const response = await fetch('/api/questions/suggest', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ questionText }),
+      });
+      const body = await response.json().catch(() => null) as SuggestionResponse | { error?: string } | null;
+      if (!response.ok || !body || !('correctAnswer' in body)) throw new Error('Suggestion unavailable');
+
+      setValues((current) => ({
+        ...current,
+        correctAnswer: current.correctAnswer.trim() ? current.correctAnswer : body.correctAnswer,
+        explanation: current.explanation?.trim() ? current.explanation : body.explanation,
+      }));
+      if (!alternateText.trim() && body.alternateAnswers.length > 0) {
+        setAlternateText(body.alternateAnswers.join(', '));
+      }
+    } catch {
+      setSuggestionError('Suggestion unavailable');
     } finally {
-      setLoading(false);
+      setSuggesting(false);
     }
-  };
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextValues = {
+      ...values,
+      text: values.text.trim(),
+      correctAnswer: values.correctAnswer.trim(),
+      alternateAnswers,
+      explanation: values.explanation?.trim() || null,
+    };
+    const validationError = validate(nextValues);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(nextValues);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not save that question.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div
-          className="rounded-[var(--radius-md)] border px-4 py-3 text-[var(--danger)]"
-          style={{ borderColor: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 12%, var(--bg))' }}
-        >
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {error ? (
+        <p className="rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
-        </div>
-      )}
+        </p>
+      ) : null}
 
       <div>
-        <label htmlFor="short_label" className="mb-1 block font-mono text-xs uppercase text-[var(--text-muted)]">
-          Short label <span className="normal-case text-[var(--text-muted)]/80">(optional — for quick scanning)</span>
-        </label>
-        <input
-          id="short_label"
-          type="text"
-          value={values.short_label}
-          onChange={(e) => setValues((v) => ({ ...v, short_label: e.target.value }))}
-          maxLength={80}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)]"
-          style={{ boxShadow: 'var(--shadow-paper-rest)' }}
-          placeholder="e.g. Snorlax Question, The Bucephalus one"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="question_text" className="mb-1 block font-mono text-xs uppercase text-[var(--text-muted)]">
+        <label htmlFor="question-text" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">
           Question
         </label>
         <textarea
-          id="question_text"
+          id="question-text"
+          value={values.text}
+          onChange={(event) => setValues((current) => ({ ...current, text: event.target.value.slice(0, 300) }))}
+          rows={4}
+          maxLength={300}
           required
-          rows={3}
-          value={values.question_text}
-          onChange={(e) => {
-            setValues((v) => ({ ...v, question_text: e.target.value }));
-            setSuggestion(null);
-          }}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)]"
-          style={{ boxShadow: 'var(--shadow-paper-rest)' }}
-          placeholder="e.g. What is the name of Alexander the Great's horse?"
+          className="w-full rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-primary"
+          placeholder="What is the name of Alexander the Great's horse?"
+        />
+        <p className="mt-1 text-right text-xs text-muted-foreground">{values.text.length}/300</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void requestSuggestion()}
+          disabled={suggesting || !values.text.trim()}
+          className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
+        >
+          <Sparkles className={suggesting ? 'size-4 animate-pulse' : 'size-4'} />
+          {suggesting ? 'Suggesting...' : 'Suggest answer'}
+        </button>
+        {suggestionError ? <span className="text-sm text-destructive">{suggestionError}</span> : null}
+      </div>
+
+      <div>
+        <label htmlFor="correct-answer" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">
+          Correct answer
+        </label>
+        <input
+          id="correct-answer"
+          value={values.correctAnswer}
+          onChange={(event) => setValues((current) => ({ ...current, correctAnswer: event.target.value.slice(0, 200) }))}
+          maxLength={200}
+          required
+          className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary"
+          placeholder="Bucephalus"
         />
       </div>
 
       <div>
-        <label htmlFor="answer_text" className="mb-1 block font-mono text-xs uppercase text-[var(--text-muted)]">
-          Answer
+        <label htmlFor="alternate-answers" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">
+          Alternate answers
         </label>
         <input
-          id="answer_text"
-          type="text"
-          required
-          value={values.answer_text}
-          onChange={(e) => setValues((v) => ({ ...v, answer_text: e.target.value, answer_source: 'creator_written' }))}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)]"
-          style={{ boxShadow: 'var(--shadow-paper-rest)' }}
-          placeholder="e.g. Bucephalus"
+          id="alternate-answers"
+          value={alternateText}
+          onChange={(event) => setAlternateText(event.target.value)}
+          className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary"
+          placeholder="Accepted variations, separated by commas"
         />
-
-        {/* Accepted alternatives */}
-        <div className="mt-3">
-          <label htmlFor="accepted_alternatives" className="mb-1 block font-mono text-xs uppercase text-[var(--text-muted)]">
-            Also accept <span className="normal-case text-[var(--text-muted)]/80">(optional — comma-separated)</span>
-          </label>
-          <input
-            id="accepted_alternatives"
-            type="text"
-            value={values.accepted_alternatives}
-            onChange={(e) => setValues((v) => ({ ...v, accepted_alternatives: e.target.value }))}
-            className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)]"
-            style={{ boxShadow: 'var(--shadow-paper-rest)' }}
-            placeholder="e.g. Alex's horse, The horse of Alexander"
-          />
-          <p className="mt-0.5 font-mono text-xs text-[var(--text-muted)]">
-            Answers that should also be marked correct — separate with commas
-          </p>
-        </div>
-
-        {/* Answer not checked warning — shown when user has manually written/overridden the answer */}
-        {values.answer_source === 'creator_written' && values.answer_text && (
-          <p className="mt-1 font-mono text-xs text-[var(--text-muted)]">
-            Answer not checked — double-check before saving
-          </p>
-        )}
-
-        {/* LLM suggestion */}
-        {suggestionLoading && (
-          <p className="mt-1 font-mono text-xs text-[var(--text-muted)]">Thinking…</p>
-        )}
-        {!suggestionLoading && suggestion && (
-          <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-            {suggestion.suggested_answer ? (
-              <div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[var(--text-muted)]">
-                    Suggested: <strong className="text-[var(--text)]">{suggestion.suggested_answer}</strong>
-                    {suggestion.type === 'factual_uncertain' && (
-                      <span className="ml-1 text-[var(--text-muted)]">(verify)</span>
-                    )}
-                    {suggestion.difficulty_estimate && (
-                      <span className="ml-2 font-mono text-xs uppercase text-[var(--text-muted)]">{suggestion.difficulty_estimate}</span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={acceptSuggestion}
-                    className="shrink-0 font-mono text-xs uppercase text-[var(--accent)] hover:underline"
-                  >
-                    Use this
-                  </button>
-                </div>
-                {suggestion.type === 'factual_uncertain' && suggestion.suggested_phrasings && suggestion.suggested_phrasings.length > 0 && (
-                  <div className="mt-2 border-t border-[var(--border)] pt-2">
-                    <p className="mb-1.5 font-mono text-xs uppercase text-[var(--text-muted)]">Try a more specific phrasing:</p>
-                    <div className="flex flex-col gap-1.5">
-                      {suggestion.suggested_phrasings.map((phrasing, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => acceptPhrasing(phrasing)}
-                          className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-left text-xs text-[var(--text)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                          style={{ boxShadow: 'var(--shadow-paper-rest)' }}
-                        >
-                          {phrasing}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : suggestion.note ? (
-              <div>
-                <p className="text-[var(--text-muted)]">{suggestion.note}</p>
-                {suggestion.suggested_phrasings && suggestion.suggested_phrasings.length > 0 && (
-                  <div className="mt-2">
-                    <p className="mb-1.5 font-mono text-xs uppercase text-[var(--text-muted)]">Try a more specific phrasing:</p>
-                    <div className="flex flex-col gap-1.5">
-                      {suggestion.suggested_phrasings.map((phrasing, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => acceptPhrasing(phrasing)}
-                          className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-left text-xs text-[var(--text)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                          style={{ boxShadow: 'var(--shadow-paper-rest)' }}
-                        >
-                          {phrasing}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-        )}
-        {/* Show difficulty if already accepted */}
-        {values.difficulty_estimate && !suggestion && (
-          <p className="mt-1 font-mono text-xs uppercase text-[var(--text-muted)]">
-            Difficulty: {values.difficulty_estimate}
-          </p>
-        )}
-      </div>
-
-      {/* Breadcrumb context */}
-      <div>
-        <label htmlFor="breadcrumb_context" className="mb-1 block font-mono text-xs uppercase text-[var(--text-muted)]">
-          Why this is special to you <span className="normal-case text-[var(--text-muted)]/80">(required — up to 6 words)</span>
-        </label>
-        <input
-          id="breadcrumb_context"
-          type="text"
-          required
-          value={values.breadcrumb_context}
-          onChange={(e) => setValues((v) => ({ ...v, breadcrumb_context: e.target.value }))}
-          maxLength={30}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)]"
-          style={{ boxShadow: 'var(--shadow-paper-rest)' }}
-          placeholder="e.g. First concert together, summer '19."
-        />
-        <p className="mt-0.5 font-mono text-xs text-[var(--text-muted)]">
-          Adds the emotional clue behind this question — punctuation is okay
-        </p>
-        <p className="mt-0.5 font-mono text-xs text-[var(--text-muted)]">
-          {values.breadcrumb_context.trim().split(/\s+/).filter(Boolean).length}/6 words · {values.breadcrumb_context.trim().length}/30 characters
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{alternateAnswers.length}/5 alternates</p>
       </div>
 
       <div>
-        <label htmlFor="tags" className="mb-1 block font-mono text-xs uppercase text-[var(--text-muted)]">
-          Tags <span className="normal-case text-[var(--text-muted)]/80">(optional — comma-separated)</span>
+        <label htmlFor="explanation" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">
+          Explanation
         </label>
-        <input
-          id="tags"
-          type="text"
-          value={values.tags}
-          onChange={(e) => setValues((v) => ({ ...v, tags: e.target.value }))}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)]"
-          style={{ boxShadow: 'var(--shadow-paper-rest)' }}
-          placeholder="e.g. pokemon, nintendo, gen-1"
+        <textarea
+          id="explanation"
+          value={values.explanation ?? ''}
+          onChange={(event) => setValues((current) => ({ ...current, explanation: event.target.value.slice(0, 500) }))}
+          rows={4}
+          maxLength={500}
+          className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary"
+          placeholder="A short note that helps someone learn if they miss it."
         />
-        <p className="mt-0.5 font-mono text-xs text-[var(--text-muted)]">
-          Specific topics — auto-suggested after saving if left blank
-        </p>
+        <p className="mt-1 text-right text-xs text-muted-foreground">{(values.explanation ?? '').length}/500</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="category" className="mb-1 block font-mono text-xs uppercase text-[var(--text-muted)]">
-            Category
+          <label htmlFor="domain" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">
+            Domain
           </label>
           <select
-            id="category"
-            value={values.category}
-            onChange={(e) => setValues((v) => ({ ...v, category: e.target.value, category_overridden: true }))}
-            className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)]"
-            style={{ boxShadow: 'var(--shadow-paper-rest)' }}
+            id="domain"
+            value={values.domain}
+            onChange={(event) => setValues((current) => ({ ...current, domain: event.target.value }))}
+            className="h-11 w-full rounded-md border bg-background px-3 outline-none focus:border-primary"
           >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {categoryLabel(c)}
+            {CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {categoryLabel(category)}
               </option>
             ))}
           </select>
-          {!values.category_overridden && (
-            <p className="mt-0.5 font-mono text-xs text-[var(--text-muted)]">Auto-assigned after saving</p>
-          )}
         </div>
-        <label
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.65rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--text-muted)',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={values.visibility === 'private'}
-            onChange={(e) =>
-              setValues((prev) => ({
-                ...prev,
-                visibility: e.target.checked ? 'private' : 'public',
-              }))}
-          />
-          Set as private
-        </label>
+
+        <div>
+          <label htmlFor="difficulty" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">
+            Difficulty
+          </label>
+          <select
+            id="difficulty"
+            value={values.difficulty}
+            onChange={(event) => setValues((current) => ({ ...current, difficulty: Number(event.target.value) }))}
+            className="h-11 w-full rounded-md border bg-background px-3 outline-none focus:border-primary"
+          >
+            {[1, 2, 3, 4, 5].map((difficulty) => (
+              <option key={difficulty} value={difficulty}>
+                {difficulty}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div>
-        <label htmlFor="question_type" className="mb-1 block font-mono text-xs uppercase text-[var(--text-muted)]">
-          Question type
-        </label>
-        <select
-          id="question_type"
-          value={values.question_type}
-          onChange={(e) => setValues((v) => ({ ...v, question_type: e.target.value }))}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[var(--text)]"
-          style={{ boxShadow: 'var(--shadow-paper-rest)' }}
-        >
-          {QUESTION_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-6">
-        <button type="submit" disabled={loading} className="btn-primary">
-          {loading ? loadingLabel : submitLabel}
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <button type="submit" disabled={submitting} className="btn-primary">
+          {submitting ? loadingLabel : resolvedSubmitLabel}
         </button>
-        <Link
-          href="/questions"
-          className="font-mono text-sm uppercase text-[var(--text-muted)] hover:underline"
-        >
-          Cancel
-        </Link>
+        {onCancel ? (
+          <button type="button" onClick={onCancel} className="btn-ghost" disabled={submitting}>
+            Cancel
+          </button>
+        ) : null}
       </div>
     </form>
   );

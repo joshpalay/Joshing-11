@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-assignments",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/biweekly-ceremony",
+      "schedule": "0 8 1,15 * *"
+    }
+  ]
+}

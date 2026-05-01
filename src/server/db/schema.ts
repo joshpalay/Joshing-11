@@ -12,6 +12,7 @@ import {
   timestamp,
   unique,
   uniqueIndex,
+  uuid,
 } from 'drizzle-orm/pg-core';
 
 const id = (name = 'id') => text(name).primaryKey().default(sql`gen_random_uuid()::text`);
@@ -92,6 +93,9 @@ export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'anniversary_milestone',
   'creator_note_prompt',
   'ceremony_ready',
+  'joshing_game_received',
+  'joshing_game_progress',
+  'joshing_game_complete',
 ]);
 export const answerStateEnum = pgEnum('AnswerState', [
   'first_correct',
@@ -418,6 +422,22 @@ export const questionFeedback = pgTable(
   ],
 );
 
+export const questionRatings = pgTable(
+  'QuestionRating',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull().references(() => users.id),
+    questionId: text('question_id').notNull().references(() => questions.id),
+    rating: text('rating').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique('QuestionRating_user_id_question_id_key').on(table.userId, table.questionId),
+    index('QuestionRating_user_id_idx').on(table.userId),
+    index('QuestionRating_question_id_idx').on(table.questionId),
+  ],
+);
+
 export const dailyQueues = pgTable(
   'DailyQueue',
   {
@@ -440,7 +460,9 @@ export const dailyPreferences = pgTable(
     userId: text('user_id').notNull().references(() => users.id),
     friendIds: text('friend_ids').array().notNull().default(textArrayDefault),
     includeCommunity: boolean('include_community').notNull().default(false),
-    selectedDomains: text('selected_domains').array().notNull().default(textArrayDefault),
+    difficulty: text('difficulty').notNull().default('adaptive'),
+    domainMode: text('domain_mode').notNull().default('random'),
+    selectedDomains: jsonb('selected_domains').$type<string[]>().notNull().default([]),
     difficultyPreference: text('difficulty_preference').notNull().default('normal'),
     updatedAt: updatedAt(),
   },

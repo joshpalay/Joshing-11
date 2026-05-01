@@ -83,9 +83,7 @@ export function QuestionBankPicker({ onSelect, maxSelect = 5, preselectedIds = [
         <div className="card p-4 text-center">
           <p className="text-sm text-[var(--text-muted)]">Your question bank is empty.</p>
           <Link
-            href="/questions/new"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/questions"
             className="mt-2 inline-block font-mono text-xs uppercase text-[var(--accent)] hover:underline"
           >
             Add questions first

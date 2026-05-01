@@ -1,47 +1,78 @@
-import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { validateBreadcrumbContext } from '@/lib/breadcrumb-validation';
-import { categorizeQuestion, suggestTags } from '@/lib/llm';
+import { QUESTION_DOMAIN_KEYS } from '@/lib/game-constants';
 import { getSession } from '@/server/auth/session';
-import { db, questionAudienceTags, questions, userQuestionBank } from '@/server/db';
+import {
+  createQuestion,
+  getQuestion,
+  getQuestionsForUser,
+} from '@/server/db/queries/questions';
 
 export const dynamic = 'force-dynamic';
 
-const CATEGORIES = ['music', 'literature', 'history', 'film_tv', 'sport', 'science', 'philosophy', 'pop_culture', 'language', 'other'] as const;
-const VISIBILITIES = ['private', 'public'] as const;
-const QUESTION_TYPES = ['factual', 'personal', 'ambiguous', 'factual_uncertain'] as const;
-const DIFFICULTIES = ['accessible', 'moderate', 'specialist'] as const;
-const ANSWER_SOURCES = ['llm_suggested', 'creator_written', 'llm_edited'] as const;
+const VALID_DOMAINS = new Set<string>(QUESTION_DOMAIN_KEYS);
 
-function splitCsv(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
-  if (typeof value !== 'string') return [];
-  return value.split(',').map((item) => item.trim()).filter(Boolean);
+function splitAlternates(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
 }
 
-function toQuestionRecord(row: typeof questions.$inferSelect, tags: string[] = []) {
+function difficultyFromLegacy(value: unknown): number | null {
+  if (value === 'accessible') return 1;
+  if (value === 'moderate') return 3;
+  if (value === 'specialist') return 5;
+  return null;
+}
+
+function readCreatePayload(body: Record<string, unknown> | null) {
+  const text = typeof body?.text === 'string'
+    ? body.text.trim()
+    : typeof body?.question_text === 'string'
+      ? body.question_text.trim()
+      : '';
+  const correctAnswer = typeof body?.correctAnswer === 'string'
+    ? body.correctAnswer.trim()
+    : typeof body?.answer_text === 'string'
+      ? body.answer_text.trim()
+      : '';
+  const alternateAnswers = splitAlternates(body?.alternateAnswers ?? body?.accepted_alternatives).slice(0, 5);
+  const explanation = typeof body?.explanation === 'string'
+    ? body.explanation.trim() || null
+    : typeof body?.creator_note === 'string'
+      ? body.creator_note.trim() || null
+      : null;
+  const isLegacyPayload = typeof body?.question_text === 'string' || typeof body?.answer_text === 'string';
+  const domain = typeof body?.domain === 'string'
+    ? body.domain
+    : typeof body?.category === 'string'
+      ? body.category
+      : isLegacyPayload
+        ? 'other'
+        : '';
+  const difficulty = typeof body?.difficulty === 'number'
+    ? body.difficulty
+    : difficultyFromLegacy(body?.difficulty_estimate) ?? (isLegacyPayload ? 3 : null);
+  const difficultyValue = difficulty ?? Number.NaN;
+
+  const errors: string[] = [];
+  if (!text || text.length > 300) errors.push('text');
+  if (!correctAnswer || correctAnswer.length > 200) errors.push('correctAnswer');
+  if (alternateAnswers.length > 5 || alternateAnswers.some((answer) => answer.length > 200)) errors.push('alternateAnswers');
+  if (explanation && explanation.length > 500) errors.push('explanation');
+  if (!VALID_DOMAINS.has(domain)) errors.push('domain');
+  if (!Number.isInteger(difficultyValue) || difficultyValue < 1 || difficultyValue > 5) errors.push('difficulty');
+
   return {
-    id: row.id,
-    creator_id: row.creatorId,
-    question_text: row.questionText,
-    breadcrumb_context: row.breadcrumbContext,
-    answer_text: row.answerText,
-    short_label: row.shortLabel,
-    accepted_alternatives: row.acceptedAlternatives,
-    answer_source: row.answerSource,
-    question_type: row.questionType,
-    difficulty_estimate: row.difficultyEstimate,
-    minimum_required: row.minimumRequired,
-    category: row.category,
-    category_overridden: row.categoryOverridden,
-    creator_note: row.creatorNote,
-    visibility: row.visibility,
-    created_at: row.createdAt,
-    updated_at: row.updatedAt,
-    tags,
-    asked_count: row.askedCount,
-    correct_count: row.correctCount,
+    value: { text, correctAnswer, alternateAnswers, explanation, domain, difficulty: difficultyValue },
+    errors,
   };
 }
 
@@ -49,31 +80,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const [ownedRows, bankRows] = await Promise.all([
-    db.select().from(questions).where(and(eq(questions.creatorId, session.userId), isNull(questions.deletedAt))).orderBy(asc(questions.createdAt)),
-    db
-      .select({ question: questions })
-      .from(userQuestionBank)
-      .innerJoin(questions, eq(userQuestionBank.questionId, questions.id))
-      .where(and(eq(userQuestionBank.userId, session.userId), isNull(questions.deletedAt))),
-  ]);
-
-  const byId = new Map<string, typeof questions.$inferSelect>();
-  for (const question of ownedRows) byId.set(question.id, question);
-  for (const row of bankRows) byId.set(row.question.id, row.question);
-  const rows = [...byId.values()];
-  const tagRows = rows.length
-    ? await db.select().from(questionAudienceTags).where(inArray(questionAudienceTags.questionId, rows.map((row) => row.id)))
-    : [];
-  const tagsByQuestion = new Map<string, string[]>();
-  for (const tag of tagRows) {
-    tagsByQuestion.set(tag.questionId, [...(tagsByQuestion.get(tag.questionId) ?? []), tag.tag]);
-  }
-
-  return NextResponse.json({
-    questions: rows.map((row) => toQuestionRecord(row, tagsByQuestion.get(row.id) ?? [])),
-    count: rows.length,
-  });
+  return NextResponse.json({ questions: await getQuestionsForUser(session.userId) });
 }
 
 export async function POST(request: NextRequest) {
@@ -81,61 +88,12 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-  const questionText = typeof body?.question_text === 'string' ? body.question_text.trim() : '';
-  const answerText = typeof body?.answer_text === 'string' ? body.answer_text.trim() : '';
-  const breadcrumbContext = typeof body?.breadcrumb_context === 'string' ? body.breadcrumb_context.trim() : '';
-  if (!questionText || !answerText) {
-    return NextResponse.json({ error: 'validation', message: 'question_text and answer_text are required' }, { status: 400 });
-  }
-  const breadcrumbError = validateBreadcrumbContext(breadcrumbContext);
-  if (breadcrumbError) return NextResponse.json({ error: 'validation', message: breadcrumbError }, { status: 400 });
-
-  const category = CATEGORIES.includes(body?.category as typeof CATEGORIES[number]) ? body?.category as typeof CATEGORIES[number] : 'other';
-  const visibility = VISIBILITIES.includes(body?.visibility as typeof VISIBILITIES[number]) ? body?.visibility as typeof VISIBILITIES[number] : 'public';
-  const questionType = QUESTION_TYPES.includes(body?.question_type as typeof QUESTION_TYPES[number]) ? body?.question_type as typeof QUESTION_TYPES[number] : 'factual';
-  const difficultyEstimate = DIFFICULTIES.includes(body?.difficulty_estimate as typeof DIFFICULTIES[number]) ? body?.difficulty_estimate as typeof DIFFICULTIES[number] : null;
-  const answerSource = ANSWER_SOURCES.includes(body?.answer_source as typeof ANSWER_SOURCES[number]) ? body?.answer_source as typeof ANSWER_SOURCES[number] : null;
-  const tags = splitCsv(body?.tags).map((tag) => tag.toLowerCase()).slice(0, 10);
-  const acceptedAlternatives = splitCsv(body?.accepted_alternatives);
-  const categoryOverridden = typeof body?.category_overridden === 'boolean' ? body.category_overridden : false;
-
-  const [created] = await db.insert(questions).values({
-    creatorId: session.userId,
-    questionText,
-    answerText,
-    breadcrumbContext,
-    shortLabel: typeof body?.short_label === 'string' ? body.short_label.trim().slice(0, 80) || null : null,
-    acceptedAlternatives,
-    answerSource,
-    questionType,
-    difficultyEstimate,
-    llmDifficulty: difficultyEstimate,
-    calibratedDifficulty: difficultyEstimate,
-    category,
-    categoryOverridden,
-    visibility,
-    creatorNote: typeof body?.creator_note === 'string' ? body.creator_note.trim() || null : null,
-  }).returning();
-
-  if (tags.length) {
-    await db.insert(questionAudienceTags).values(tags.map((tag) => ({ questionId: created.id, creatorId: session.userId, tag })));
-  } else {
-    void suggestTags(questionText, answerText, category).then(async (result) => {
-      if (!result.tags.length) return;
-      await db.insert(questionAudienceTags).values(result.tags.map((tag) => ({ questionId: created.id, creatorId: session.userId, tag }))).catch(() => undefined);
-    });
+  const { value, errors } = readCreatePayload(body);
+  if (errors.length > 0) {
+    return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
 
-  if (!categoryOverridden) {
-    void categorizeQuestion(questionText, answerText).then(async (result) => {
-      await db.update(questions).set({
-        broadCategory: result.broad_category,
-        subcategory: result.subcategory,
-        canonicalSubcategory: result.subcategory,
-        updatedAt: new Date(),
-      }).where(eq(questions.id, created.id)).catch(() => undefined);
-    });
-  }
-
-  return NextResponse.json(toQuestionRecord(created, tags), { status: 201 });
+  const created = await createQuestion({ authorId: session.userId, ...value });
+  const question = await getQuestion(created.id, session.userId);
+  return NextResponse.json({ ...created, question, ...(question ?? {}) }, { status: 201 });
 }

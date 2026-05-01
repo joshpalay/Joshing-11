@@ -1,13 +1,34 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import type { CSSProperties } from 'react';
+import { and, eq, sql } from 'drizzle-orm';
 
-import { DomainCircle } from '@/components/knowledge/DomainCircle';
+import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { getSession } from '@/server/auth/session';
+import { db, masteryEvents } from '@/server/db';
 import { getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
 
 type PageProps = {
   params: Promise<{ id: string }>;
 };
+
+const monoStyle: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: '0.62rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+};
+
+const titleStyle: CSSProperties = {
+  fontFamily: 'var(--font-neutral), system-ui, sans-serif',
+  fontSize: '1.05rem',
+  fontWeight: 600,
+  color: '#111111',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+};
+
+const domainPalette = ['#178245', '#b7791f', '#2563eb', '#9f1239', '#6d28d9', '#0f766e'];
 
 function domainFor(question: JoshingGameView['questions'][number]['question']) {
   return question.canonicalSubcategory || question.broadCategory || question.category || 'General';
@@ -30,6 +51,19 @@ function responseKey(userId: string, questionId: string) {
   return `${userId}:${questionId}`;
 }
 
+function resultLabel(isCorrect: boolean | null | undefined) {
+  return isCorrect ? 'CORRECT' : 'WRONG';
+}
+
+function formatGameDate(value: Date) {
+  return new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' }).format(value);
+}
+
+function domainColor(domain: string) {
+  const total = [...domain].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return domainPalette[total % domainPalette.length] ?? domainPalette[0];
+}
+
 export default async function JoshingGameSummaryPage({ params }: PageProps) {
   const session = await getSession();
   if (!session) notFound();
@@ -47,38 +81,51 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
   const viewerResponses = view.responses.filter((response) => response.userId === session.userId);
   const viewerHasPlayed = viewerResponses.length >= questionCount;
   const viewerCorrect = viewerResponses.filter((response) => response.isCorrect).length;
-  const totalAnswers = view.responses.length;
+  const viewerSkipped = Math.max(0, questionCount - viewerResponses.length);
+  const gameAnswerIdPrefix = `joshing_game:${id}:%`;
 
-  const questionStats = view.questions.map((gameQuestion) => {
-    const responses = view.responses.filter((response) => response.questionId === gameQuestion.questionId);
-    const correct = responses.filter((response) => response.isCorrect).length;
-    const rate = responses.length ? Math.round((correct / responses.length) * 100) : 0;
-    return { gameQuestion, responses, correct, rate };
-  });
-  const answeredStats = questionStats.filter((stat) => stat.responses.length > 0);
-  const hardest = answeredStats.length ? [...answeredStats].sort((a, b) => a.rate - b.rate)[0] : null;
-  const easiest = answeredStats.length > 1 ? [...answeredStats].sort((a, b) => b.rate - a.rate)[0] : null;
+  const masteryRows = await db
+    .select({
+      domain: masteryEvents.canonicalSubcategory,
+      awardedPoints: masteryEvents.awardedPoints,
+    })
+    .from(masteryEvents)
+    .where(and(
+      eq(masteryEvents.userId, session.userId),
+      eq(masteryEvents.sessionContext, 'joshing_game'),
+      sql`${masteryEvents.answerId} like ${gameAnswerIdPrefix}`,
+    ));
 
-  const domains = new Map<string, { correct: number; total: number }>();
-  for (const gameQuestion of view.questions) {
-    const domain = domainFor(gameQuestion.question);
-    const response = responseByUserQuestion.get(responseKey(session.userId, gameQuestion.questionId));
-    const current = domains.get(domain) ?? { correct: 0, total: 0 };
-    domains.set(domain, {
-      correct: current.correct + (response?.isCorrect ? 1 : 0),
-      total: current.total + 1,
-    });
+  const growthByDomain = new Map<string, number>();
+  for (const row of masteryRows) {
+    growthByDomain.set(row.domain, (growthByDomain.get(row.domain) ?? 0) + Number(row.awardedPoints ?? 0));
   }
 
-  const onlyViewerGotThis = view.questions.find((gameQuestion) => {
-    const correctResponses = view.responses.filter((response) => response.questionId === gameQuestion.questionId && response.isCorrect);
-    return correctResponses.length === 1 && correctResponses[0]?.userId === session.userId;
-  });
+  const fallbackPoints = viewerResponses.reduce((sum, response) => sum + Number(response.pointsAwarded ?? 0), 0);
+  const totalPoints = masteryRows.length > 0
+    ? masteryRows.reduce((sum, row) => sum + Number(row.awardedPoints ?? 0), 0)
+    : fallbackPoints;
 
-  const discovered = view.questions.filter((gameQuestion) => {
-    const response = responseByUserQuestion.get(responseKey(session.userId, gameQuestion.questionId));
-    return !response?.isCorrect;
-  });
+  const growthRows = [...growthByDomain]
+    .map(([domain, points]) => ({ domain, points }))
+    .sort((a, b) => b.points - a.points || a.domain.localeCompare(b.domain));
+
+  const authoredQuestionIds = new Set(
+    view.questions
+      .filter((gameQuestion) => gameQuestion.question.creatorId === session.userId)
+      .map((gameQuestion) => gameQuestion.questionId),
+  );
+  const authoredQuestionsAnsweredCorrectly = new Set(
+    view.responses
+      .filter((response) => (
+        response.userId !== session.userId
+        && response.isCorrect
+        && authoredQuestionIds.has(response.questionId)
+      ))
+      .map((response) => response.questionId),
+  );
+  const impactCount = authoredQuestionsAnsweredCorrectly.size;
+  const showGroupProgress = view.recipients.length > 1;
 
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
@@ -86,116 +133,183 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         <div className="mb-4 rounded-md border bg-muted p-3 text-sm">Finish playing to see full results</div>
       ) : null}
 
-      <section className="card p-5">
-        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">The Story</p>
-        <h1 className="mt-2 font-serif text-4xl font-semibold">{view.game.title}</h1>
-        {!isCreator ? <p className="mt-2 text-muted-foreground">From {view.creator.displayName}</p> : null}
-        <p className="mt-4 text-sm text-muted-foreground">
-          {view.recipients.length} players · {totalAnswers} total answers submitted
+      <header>
+        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
+          <Link href="/feed" className="underline underline-offset-2">HOME</Link>
+          {' / '}
+          {view.game.title}
+          {' / SUMMARY'}
         </p>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          {hardest ? (
-            <article className="rounded-md border p-3">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Hardest question</p>
-              <p className="mt-2 text-sm">{hardest.gameQuestion.question.questionText}</p>
-              <p className="mt-2 font-serif text-2xl">{hardest.rate}%</p>
-            </article>
-          ) : null}
-          {easiest ? (
-            <article className="rounded-md border p-3">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Everyone knew this</p>
-              <p className="mt-2 text-sm">{easiest.gameQuestion.question.questionText}</p>
-              <p className="mt-2 font-serif text-2xl">{easiest.rate}%</p>
-            </article>
-          ) : null}
-        </div>
-      </section>
+        <h1
+          style={{
+            marginTop: '10px',
+            fontFamily: 'var(--font-neutral), system-ui, sans-serif',
+            fontSize: '1.45rem',
+            fontWeight: 700,
+            color: '#111111',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+          }}
+        >
+          How You Did
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">{formatGameDate(view.game.createdAt)}</p>
+      </header>
 
-      <section className="card mt-4 p-5">
-        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Your Game</p>
-        {viewerHasPlayed ? (
-          <>
-            <p className="mt-3 font-serif text-4xl font-semibold">{viewerCorrect} out of {questionCount}</p>
-            <div className="mt-5 flex flex-wrap gap-4">
-              {[...domains].map(([domain, stat]) => (
-                <div key={domain} className="text-center">
-                  <DomainCircle diameter={72} iconKey={domain} canonicalSubcategory={domain} currentTier={null} showTierLabel={false} />
-                  <p className="mt-1 text-xs text-muted-foreground">{stat.correct}/{stat.total}</p>
-                </div>
-              ))}
-            </div>
-            <article className="mt-5 rounded-md border p-3">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Only you got this</p>
-              <p className="mt-2 text-sm">{onlyViewerGotThis ? onlyViewerGotThis.question.questionText : 'No solo pulls this time.'}</p>
-            </article>
-          </>
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">Play to see your results.</p>
-        )}
+      <section
+        className="mt-5 rounded-md border px-5 py-5"
+        style={{
+          background: 'color-mix(in srgb, var(--success) 10%, var(--surface))',
+          borderColor: 'color-mix(in srgb, var(--success) 22%, var(--border))',
+        }}
+      >
+        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>Total</p>
+        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[#111111]">+{Math.round(totalPoints)}</p>
+        <p style={{ ...monoStyle, marginTop: '12px', color: 'var(--text-muted)' }}>
+          {viewerCorrect}/{questionCount} correct{viewerSkipped > 0 ? ` · ${viewerSkipped} skipped` : ''}
+        </p>
       </section>
 
       {viewerHasPlayed ? (
-        <section className="card mt-4 p-5">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">What You Discovered</p>
-          {discovered.length === 0 ? (
-            <p className="mt-3 text-sm text-muted-foreground">You got everything in this game.</p>
-          ) : (
-            <div className="mt-4 space-y-3">
-              {discovered.map((gameQuestion) => (
-                <article key={gameQuestion.questionId} className="rounded-md border p-3">
-                  <p className="font-medium">{gameQuestion.question.questionText}</p>
-                  <p className="mt-2 text-sm">Answer: {gameQuestion.question.answerText}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{explanationFor(gameQuestion.question)}</p>
+        <section className="mt-6">
+          <h2 style={titleStyle}>Round Recap</h2>
+          <div className="mt-3 space-y-3">
+            {view.questions.map((gameQuestion) => {
+              const response = responseByUserQuestion.get(responseKey(session.userId, gameQuestion.questionId));
+              const correct = Boolean(response?.isCorrect);
+
+              return (
+                <article key={gameQuestion.questionId} className="card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
+                      {gameQuestion.question.creatorId === view.game.creatorId
+                        ? `From ${view.creator.displayName}`
+                        : 'From the question bank'}
+                    </p>
+                    <span
+                      className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
+                        correct
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-rose-200 bg-rose-50 text-rose-700'
+                      }`}
+                    >
+                      {resultLabel(response?.isCorrect)}
+                    </span>
+                  </div>
+                  <p className="mt-3 font-medium leading-snug text-foreground">{gameQuestion.question.questionText}</p>
+                  <div className="mt-3 space-y-1 text-sm">
+                    <p className="text-muted-foreground">
+                      <span className="font-medium text-foreground">You:</span>{' '}
+                      {response?.submittedAnswer?.trim() || 'No answer submitted'}
+                    </p>
+                    <p className="text-muted-foreground">
+                      <span className="font-medium text-foreground">Answer:</span> {gameQuestion.question.answerText}
+                    </p>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{explanationFor(gameQuestion.question)}</p>
+                  <div className="mt-4">
+                    <QuestionRatingButtons questionId={gameQuestion.questionId} />
+                  </div>
                 </article>
-              ))}
-            </div>
-          )}
-          <button className="btn-ghost mt-4" type="button" disabled>Replay coming soon</button>
+              );
+            })}
+          </div>
         </section>
       ) : null}
 
-      <section className="card mt-4 p-5">
-        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">How Everyone Did</p>
-        {viewerHasPlayed || isCreator ? (
-          <>
-            <div className="mt-4 space-y-2">
-              {view.recipients.map((recipient) => (
-                <div key={recipient.userId} className="flex items-center justify-between rounded-md border p-3 text-sm">
-                  <span>{recipient.displayName}</span>
-                  <span>{recipient.score ?? view.responses.filter((response) => response.userId === recipient.userId && response.isCorrect).length}/{questionCount} {recipient.completedAt ? '✓' : ''}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-5 overflow-x-auto">
-              <table className="w-full min-w-[560px] border-collapse text-sm">
-                <thead>
-                  <tr>
-                    <th className="border-b p-2 text-left">Question</th>
-                    {view.recipients.map((recipient) => <th key={recipient.userId} className="border-b p-2 text-center">{recipient.displayName}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {view.questions.map((gameQuestion) => (
-                    <tr key={gameQuestion.questionId}>
-                      <td className="border-b p-2">{truncate(gameQuestion.question.questionText)}</td>
-                      {view.recipients.map((recipient) => {
-                        const response = responseByUserQuestion.get(responseKey(recipient.userId, gameQuestion.questionId));
-                        return (
-                          <td key={recipient.userId} className="border-b p-2 text-center">
-                            {response ? (response.isCorrect ? '✓' : '✗') : '—'}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
+      <section className="card mt-4 px-5 py-4">
+        <h2 style={titleStyle}>Your Growth Recap</h2>
+        {growthRows.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">No mastery movement was recorded for this game.</p>
         ) : (
-          <p className="mt-3 text-sm text-muted-foreground">Play to unlock results.</p>
+          <div className="mt-3 divide-y">
+            {growthRows.map((row) => {
+              const gainedPoints = Math.round(row.points);
+              const isNewTerritory = gainedPoints === 0;
+
+              return (
+                <div key={row.domain} className="flex items-center gap-3 py-3">
+                  <span
+                    className="h-4 w-4 shrink-0 rounded-full border"
+                    style={{
+                      background: isNewTerritory ? 'var(--muted)' : domainColor(row.domain),
+                      borderColor: isNewTerritory ? 'var(--border)' : 'transparent',
+                    }}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    {isNewTerritory ? (
+                      <p style={{ ...monoStyle, fontSize: '0.52rem', color: 'var(--text-muted)' }}>New territory</p>
+                    ) : null}
+                    <p className="truncate font-serif text-sm font-bold text-[#111111]">{row.domain}</p>
+                  </div>
+                  <p className="shrink-0 font-mono text-sm font-bold uppercase text-[#111111]">+{gainedPoints} PTS</p>
+                </div>
+              );
+            })}
+          </div>
         )}
       </section>
+
+      <section className="card mt-4 px-5 py-4">
+        <h2 style={titleStyle}>Your Impact Recap</h2>
+        <p className="mt-3 text-sm leading-6 text-[var(--text)]">
+          {impactCount > 0
+            ? `${impactCount} of your questions were answered correctly this round.`
+            : 'None of your questions were answered correctly this season.'}
+        </p>
+      </section>
+
+      {showGroupProgress ? (
+        <section className="card mt-4 p-5">
+          <h2 style={titleStyle}>Group Progress Recap</h2>
+          {viewerHasPlayed || isCreator ? (
+            <>
+              <p style={{ ...monoStyle, marginTop: '14px', color: 'var(--text-muted)' }}>How Everyone Did</p>
+              <div className="mt-3 space-y-2">
+                {view.recipients.map((recipient) => (
+                  <div key={recipient.userId} className="flex items-center justify-between rounded-md border p-3 text-sm">
+                    <span>{recipient.displayName}</span>
+                    <span>
+                      {recipient.score ?? view.responses.filter((response) => response.userId === recipient.userId && response.isCorrect).length}/{questionCount}
+                      {recipient.completedAt ? ' done' : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[560px] border-collapse text-sm">
+                  <thead>
+                    <tr>
+                      <th className="border-b p-2 text-left">Question</th>
+                      {view.recipients.map((recipient) => (
+                        <th key={recipient.userId} className="border-b p-2 text-center">{recipient.displayName}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.questions.map((gameQuestion) => (
+                      <tr key={gameQuestion.questionId}>
+                        <td className="border-b p-2">{truncate(gameQuestion.question.questionText)}</td>
+                        {view.recipients.map((recipient) => {
+                          const response = responseByUserQuestion.get(responseKey(recipient.userId, gameQuestion.questionId));
+                          return (
+                            <td key={recipient.userId} className="border-b p-2 text-center">
+                              {response ? (response.isCorrect ? 'Y' : 'N') : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">Play to unlock results.</p>
+          )}
+        </section>
+      ) : null}
 
       <Link className="btn-ghost mt-4" href="/feed">Back to Feed</Link>
     </main>

@@ -15,6 +15,27 @@
       "when": 1777630800000,
       "tag": "0001_add_ceremony_ready_sms_type",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777654136670,
+      "tag": "0002_add_joshing_game_sms_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777654800000,
+      "tag": "0003_question_rating",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777662000000,
+      "tag": "0004_daily_preference_configuration",
+      "breakpoints": true
     }
   ]
 }

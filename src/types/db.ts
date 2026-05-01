@@ -1,3 +1,5 @@
+import type { smsMessageTypeEnum } from '@/server/db/schema';
+
 export type AnswerState =
   | 'first_correct'
   | 'first_correct_after_wrong'
@@ -16,17 +18,7 @@ export type MasteryTier =
   | 'solid'
   | 'mastery';
 
-export type SmsMessageType =
-  | 'otp'
-  | 'daily_questions'
-  | 'invitation'
-  | 'game_complete'
-  | 'creator_note_prompt'
-  | 'reaction_notification'
-  | 'joshing_game_received'
-  | 'joshing_game_progress'
-  | 'joshing_game_complete'
-  | 'ceremony_ready';
+export type SmsMessageType = (typeof smsMessageTypeEnum.enumValues)[number];
 
 export type Category = string;
 // Category is used as a string throughout - no enum needed.

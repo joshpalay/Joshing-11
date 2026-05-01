@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server';
 
 import { createSession } from '@/server/auth/session';
 import { isUsPhoneNumber, normalizePhone } from '@/server/auth/phone';
-import { getUserByPhone, createUser, updateUser } from '@/server/db/queries/users';
-import { db, friendInvitations, friendships } from '@/server/db';
+import { db, friendInvitations, friendships, users } from '@/server/db';
 
 const TEMPORARY_OTP_CODE = '000000';
 
@@ -14,8 +13,44 @@ type VerifyOtpBody = {
   invitationToken?: unknown;
 };
 
+type AuthUser = {
+  id: string;
+  phoneNumber: string;
+  displayName: string | null;
+  timezone: string;
+};
+
 function friendshipPair(a: string, b: string) {
   return a < b ? { userAId: a, userBId: b } : { userAId: b, userBId: a };
+}
+
+async function getOrCreateUserForLogin(phoneNumber: string): Promise<AuthUser> {
+  const selection = {
+    id: users.id,
+    phoneNumber: users.phoneNumber,
+    displayName: users.displayName,
+    timezone: users.timezone,
+  };
+
+  const [createdUser] = await db
+    .insert(users)
+    .values({ phoneNumber })
+    .onConflictDoNothing({ target: users.phoneNumber })
+    .returning(selection);
+
+  if (createdUser) return createdUser;
+
+  const [existingUser] = await db
+    .select(selection)
+    .from(users)
+    .where(eq(users.phoneNumber, phoneNumber))
+    .limit(1);
+
+  if (!existingUser) {
+    throw new Error('Unable to find or create user for verified phone number.');
+  }
+
+  return existingUser;
 }
 
 async function acceptInvitation(token: string, inviteeUserId: string) {
@@ -104,10 +139,7 @@ export async function POST(request: Request) {
     }
 
     const normalizedPhone = normalizePhone(phone);
-    const existingUser = await getUserByPhone(normalizedPhone);
-    const user = existingUser
-      ? await updateUser(existingUser.id, { phoneVerified: true })
-      : await createUser(normalizedPhone);
+    const user = await getOrCreateUserForLogin(normalizedPhone);
 
     await createSession(user.id);
 
@@ -121,7 +153,7 @@ export async function POST(request: Request) {
         phone_number: user.phoneNumber,
         display_name: user.displayName,
         timezone: user.timezone,
-        onboardingComplete: 'onboardingComplete' in user ? user.onboardingComplete : false,
+        onboardingComplete: false,
       },
       invitation,
     });
