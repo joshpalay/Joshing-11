@@ -4,7 +4,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, questions, users } from '@/server/db';
 import { areFriends } from '@/server/db/queries/friends';
-import { rollOffOldItems } from '@/server/db/queries/feed';
+import {
+  rollOffOldItems,
+  userAnsweredQuestionCorrectly,
+  userHasQuestionInBlockingFeed,
+} from '@/server/db/queries/feed';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
@@ -56,6 +60,23 @@ export async function POST(request: NextRequest) {
 
   if (!question[0] || !recipient[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   if (!friendship) return NextResponse.json({ error: 'not_friends', message: 'You can only send to friends.' }, { status: 403 });
+
+  const [alreadyCorrect, alreadyInFeed] = await Promise.all([
+    userAnsweredQuestionCorrectly(parsed.recipientUserId, parsed.questionId),
+    userHasQuestionInBlockingFeed(parsed.recipientUserId, parsed.questionId),
+  ]);
+  if (alreadyCorrect) {
+    return NextResponse.json(
+      { error: 'already_answered', message: 'That friend has already answered this one correctly.' },
+      { status: 409 },
+    );
+  }
+  if (alreadyInFeed) {
+    return NextResponse.json(
+      { error: 'already_in_feed', message: 'That question is already waiting in their Feed.' },
+      { status: 409 },
+    );
+  }
 
   const [sentToday] = await db
     .select({ count: sql<number>`count(*)` })

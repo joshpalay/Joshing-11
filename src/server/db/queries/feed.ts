@@ -7,6 +7,7 @@ export type NewFeedItem = typeof feedItems.$inferInsert;
 export type FeedItemState = 'active' | 'answered' | 'skipped' | 'dismissed' | 'rolled_off' | 'played';
 
 const VISIBLE_FEED_STATES = ['active', 'skipped'] as const;
+const BLOCKING_FEED_STATES = ['active', 'skipped', 'dismissed'] as const;
 
 export async function getFeedForUser(userId: string): Promise<FeedItem[]> {
   const [pinned, nonPinned] = await Promise.all([
@@ -79,6 +80,20 @@ export async function userHasQuestionInVisibleFeed(userId: string, questionId: s
       eq(feedItems.recipientUserId, userId),
       eq(feedItems.questionId, questionId),
       inArray(feedItems.state, VISIBLE_FEED_STATES),
+    ))
+    .limit(1);
+
+  return Boolean(row);
+}
+
+export async function userHasQuestionInBlockingFeed(userId: string, questionId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: feedItems.id })
+    .from(feedItems)
+    .where(and(
+      eq(feedItems.recipientUserId, userId),
+      eq(feedItems.questionId, questionId),
+      inArray(feedItems.state, BLOCKING_FEED_STATES),
     ))
     .limit(1);
 

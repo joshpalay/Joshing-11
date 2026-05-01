@@ -104,7 +104,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     : previousTier;
 
   await db.transaction(async (tx) => {
-    if (isCorrect && !alreadyCorrect) {
+    if (isCorrect && (!alreadyCorrect || !existingMastery[0])) {
       await tx
         .insert(playerMastery)
         .values({
@@ -127,7 +127,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
             updatedAt: new Date(),
           },
         });
+    }
 
+    if (isCorrect && !alreadyCorrect) {
       await tx.insert(masteryEvents).values({
         userId: session.userId,
         canonicalSubcategory: domain,
