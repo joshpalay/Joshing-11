@@ -5,6 +5,8 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 
+import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
+
 export type ChatMessage =
   | { id: string; kind: 'system'; text: string }
   | {
@@ -14,6 +16,7 @@ export type ChatMessage =
       questionText: string;
       creatorName: string | null;
       onDismiss?: () => void;
+      dismissLabel?: string;
     }
   | { id: string; kind: 'user'; text: string }
   | {
@@ -104,10 +107,12 @@ function QuestionRow({
   questionText,
   creatorName,
   onDismiss,
+  dismissLabel = "Skip - don't show again",
 }: {
   questionText: string;
   creatorName: string | null;
   onDismiss?: () => void;
+  dismissLabel?: string;
 }) {
   const [dismissed, setDismissed] = useState(false);
 
@@ -161,6 +166,7 @@ function QuestionRow({
         ) : (
           <button
             type="button"
+            aria-label={dismissLabel === 'X' ? 'Dismiss question' : dismissLabel}
             onClick={handleDismiss}
             style={{
               alignSelf: 'flex-start',
@@ -180,7 +186,7 @@ function QuestionRow({
               paddingLeft: '2px',
             }}
           >
-            Skip — don&apos;t show again
+            {dismissLabel}
           </button>
         )
       ) : null}
@@ -229,6 +235,34 @@ function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: stri
       >
         “{text}”
       </p>
+    </div>
+  );
+}
+
+function BreadcrumbRow({ text }: { text: string }) {
+  return (
+    <div className="flex justify-start py-0.5">
+      <div
+        style={{
+          maxWidth: '82%',
+          background: 'color-mix(in srgb, var(--surface-2) 64%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--border) 75%, transparent)',
+          borderRadius: 'var(--radius-md)',
+          padding: '8px 12px',
+        }}
+      >
+        <p
+          style={{
+            margin: 0,
+            fontSize: '0.78rem',
+            fontStyle: 'italic',
+            color: 'color-mix(in srgb, var(--text-muted) 78%, var(--text))',
+            lineHeight: 1.35,
+          }}
+        >
+          {text}
+        </p>
+      </div>
     </div>
   );
 }
@@ -383,12 +417,6 @@ function ResultRow({
   const expired = result === 'expired';
   const correct = result === 'correct';
   const copy = CORRECT_COPY[copyVariant % 4];
-  const normalizedQuestion = questionText.trim().replace(/\s+/g, ' ').toLowerCase();
-  const normalizedBreadcrumb = breadcrumb?.trim().replace(/\s+/g, ' ').toLowerCase() || '';
-  const showBreadcrumb = Boolean(
-    normalizedBreadcrumb
-    && normalizedBreadcrumb !== normalizedQuestion
-  );
   const resultToneStyle: CSSProperties = expired
     ? {
       background: 'var(--surface-2)',
@@ -429,7 +457,6 @@ function ResultRow({
               {copy.subLabel}
             </p>
             {relationalFeedbackLine ? <RelationalFeedbackFade text={relationalFeedbackLine} /> : null}
-            {showBreadcrumb && breadcrumb ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} /> : null}
           </>
         ) : (
           <>
@@ -447,7 +474,6 @@ function ResultRow({
                 {correctAnswer}
               </p>
             ) : null}
-            {showBreadcrumb && breadcrumb ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} /> : null}
           </>
         )}
       </div>
@@ -460,18 +486,19 @@ function ResultRow({
 
 function SessionCloseRow({ text }: { text: string }) {
   return (
-    <p
+    <div
       className="mt-4"
       style={{
-        fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-        fontSize: '0.95rem',
-        color: 'var(--text-muted)',
-        lineHeight: 1.45,
-        margin: 0,
+        alignSelf: 'flex-start',
+        maxWidth: '88%',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface-2)',
+        padding: '14px 16px',
       }}
     >
-      {text}
-    </p>
+      <SessionCloseMessage closeCopy={text} />
+    </div>
   );
 }
 
@@ -622,25 +649,28 @@ export function GameplayChatThread({
                 questionText={m.questionText}
                 creatorName={m.creatorName}
                 onDismiss={m.onDismiss}
+                dismissLabel={m.dismissLabel}
               />
             );
           case 'user':
             return <UserRow key={m.id} text={m.text} />;
           case 'result':
             return (
-              <ResultRow
-                key={m.id}
-                result={m.result}
-                submitted={m.submitted}
-                questionText={m.questionText}
-                correctAnswer={m.correctAnswer}
-                consolation={m.consolation}
-                breadcrumb={m.breadcrumb}
-                copyVariant={m.copyVariant}
-                creatorName={m.creatorName}
-                relationalFeedbackLine={m.relationalFeedbackLine}
-                canonicalSubcategory={m.canonicalSubcategory}
-              />
+              <div key={m.id} className="space-y-2">
+                <ResultRow
+                  result={m.result}
+                  submitted={m.submitted}
+                  questionText={m.questionText}
+                  correctAnswer={m.correctAnswer}
+                  consolation={m.consolation}
+                  breadcrumb={m.breadcrumb}
+                  copyVariant={m.copyVariant}
+                  creatorName={m.creatorName}
+                  relationalFeedbackLine={m.relationalFeedbackLine}
+                  canonicalSubcategory={m.canonicalSubcategory}
+                />
+                {m.breadcrumb ? <BreadcrumbRow text={m.breadcrumb} /> : null}
+              </div>
             );
           case 'session_complete':
             return (

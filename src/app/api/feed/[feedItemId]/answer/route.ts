@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, playerMastery, questions } from '@/server/db';
+import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { getBasePoints } from '@/server/mastery/awards';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
@@ -72,9 +73,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
     .limit(1);
 
   const previousTier: MasteryTier = existingMastery[0]?.tier ?? 'establishing';
-  const answerState = alreadyCorrect ? 'repeat_correct' : 'first_correct';
+  const answerState = isCorrect ? (alreadyCorrect ? 'repeat_correct' : 'first_correct') : 'incorrect';
   const basePoints = isCorrect ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, answerState) : 0;
   const pointsAwarded = isCorrect ? basePoints : 0;
+  const breadcrumb = await generateBreadcrumb({
+    questionId: question.id,
+    questionText: question.questionText,
+    correctAnswer: question.answerText,
+    submittedAnswer: parsed.submittedAnswer,
+    isCorrect,
+    domain,
+  }).catch(() => null);
   const masteryDelta = isCorrect && !alreadyCorrect
     ? await writeMasteryEvent({
         userId: session.userId,
@@ -128,6 +137,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     correct: isCorrect,
     explanation: question.explainerFull ?? question.explainerBrief ?? question.factualExplanation,
     pointsAwarded,
+    answerState,
+    breadcrumb,
     awarded_points: pointsAwarded,
     masteryDelta,
     mastery_delta: masteryDelta,

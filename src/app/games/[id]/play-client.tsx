@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { GameplayChatThread, type ChatMessage } from '@/components/play/GameplayChat';
@@ -10,6 +10,8 @@ type GradeResponse = {
   isCorrect: boolean;
   explanation: string;
   pointsAwarded: number;
+  correctAnswer?: string;
+  breadcrumb?: string | null;
   viewerStatus: 'not_started' | 'in_progress' | 'complete';
 };
 
@@ -24,6 +26,8 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
   const [answer, setAnswer] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pausingAfterAnswer, setPausingAfterAnswer] = useState(false);
+  const nextQuestionTimerRef = useRef<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const rows: ChatMessage[] = [{ id: 'intro', kind: 'system', text: game.game.title }];
     for (const response of game.responses.filter((item) => item.userId === viewerId)) {
@@ -65,7 +69,14 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
     return rows;
   });
 
-  const currentQuestion = orderedQuestions.find((question) => !answeredIds.has(question.questionId));
+  useEffect(() => {
+    return () => {
+      if (nextQuestionTimerRef.current) window.clearTimeout(nextQuestionTimerRef.current);
+    };
+  }, []);
+
+  const actualCurrentQuestion = orderedQuestions.find((question) => !answeredIds.has(question.questionId));
+  const currentQuestion = pausingAfterAnswer ? undefined : actualCurrentQuestion;
 
   async function submitAnswer() {
     if (!currentQuestion || !answer.trim() || pending) return;
@@ -91,6 +102,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
       nextAnswered.add(currentQuestion.questionId);
       setAnsweredIds(nextAnswered);
       const nextQuestion = orderedQuestions.find((question) => !nextAnswered.has(question.questionId));
+      setPausingAfterAnswer(true);
       setMessages((current) => [
         ...current,
         {
@@ -100,29 +112,36 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
           questionText: currentQuestion.question.questionText,
           result: body.isCorrect ? 'correct' : 'wrong',
           submitted,
-          correctAnswer: body.isCorrect ? null : currentQuestion.question.answerText,
+          correctAnswer: body.isCorrect ? null : body.correctAnswer ?? currentQuestion.question.answerText,
           consolation: null,
-          breadcrumb: body.explanation ?? null,
+          breadcrumb: body.breadcrumb ?? null,
           copyVariant: currentQuestion.position,
           creatorName: game.creator.displayName,
           canonicalSubcategory: currentQuestion.question.canonicalSubcategory,
         },
-        ...(nextQuestion
-          ? [{
+      ]);
+
+      nextQuestionTimerRef.current = window.setTimeout(() => {
+        setPausingAfterAnswer(false);
+        if (nextQuestion) {
+          setMessages((current) => [
+            ...current,
+            {
               id: `current-${nextQuestion.questionId}`,
               kind: 'question' as const,
               assignmentId: nextQuestion.questionId,
               questionText: nextQuestion.question.questionText,
               creatorName: game.creator.displayName,
-            }]
-          : []),
-      ]);
+            },
+          ]);
+        } else if (body.viewerStatus === 'complete') {
+          router.push(`/games/${game.game.id}/summary`);
+        }
+      }, 850);
 
-      if (!nextQuestion || body.viewerStatus === 'complete') {
-        router.push(`/games/${game.game.id}/summary`);
-      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not record that answer.');
+      setPausingAfterAnswer(false);
     } finally {
       setPending(false);
     }

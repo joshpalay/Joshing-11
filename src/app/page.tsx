@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { Activity, Brain, Gamepad2, Rss } from 'lucide-react';
 import FeedList from '@/components/FeedList';
 import TodaysFiveCard from '@/components/TodaysFiveCard';
+import { getSession } from '@/server/auth/session';
+import { getCatchupQuestions } from '@/server/db/queries/daily';
 
 const secondaryLinks = [
   {
@@ -30,7 +32,10 @@ const secondaryLinks = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const session = await getSession();
+  const catchupCount = session ? (await getCatchupQuestions(session.userId)).length : 0;
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-6 pb-24 md:py-10">
       <section className="border-b pb-6 md:flex md:items-end md:justify-between md:gap-8">
@@ -45,7 +50,10 @@ export default function Home() {
             Play five questions, build your knowledge map, and keep the day moving.
           </p>
         </div>
-        <TodaysFiveCard />
+        <div className="mt-6 w-full space-y-3 md:mt-0 md:max-w-xs">
+          <TodaysFiveCard />
+          {catchupCount > 0 ? <CatchupCard count={catchupCount} /> : null}
+        </div>
       </section>
 
       <section className="border-b py-6">
@@ -84,5 +92,19 @@ export default function Home() {
         ))}
       </section>
     </main>
+  );
+}
+
+function CatchupCard({ count }: { count: number }) {
+  return (
+    <div className="rounded-lg border bg-card p-4 text-card-foreground">
+      <p className="text-sm font-semibold text-foreground">
+        {count} {count === 1 ? 'question' : 'questions'} you missed
+      </p>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">Catch up · 0.25× points</p>
+      <Link href="/daily/catchup" className="btn-ghost mt-4 min-h-11 w-full justify-center">
+        Catch up →
+      </Link>
+    </div>
   );
 }

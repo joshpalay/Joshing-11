@@ -35,6 +35,8 @@ export type QueueSlot = {
   awarded_points?: number;
   /** Skip marker — true if the player skipped this slot. See Phase 4 skip mechanic. */
   skipped?: boolean;
+  /** Catch-up dismissal marker; dismissed slots stop appearing in catch-up. */
+  dismissed_at?: string;
   /**
    * True when the effective difficulty for this slot's domain was stepped up above the
    * user's base preference due to mastery progress. Used by the UI to show "Getting harder".
@@ -43,6 +45,8 @@ export type QueueSlot = {
   /** Filled on answer; lets session/summary re-render the reveal after the player taps NEXT. */
   reveal_canonical_answer?: string;
   reveal_explainer?: string;
+  /** Short contextual breadcrumb shown in the chat thread after grading. */
+  reveal_breadcrumb?: string | null;
   /** Joshing Bot quip for this turn (null if the LLM returned nothing). */
   reveal_quip?: string | null;
 };
@@ -52,7 +56,7 @@ export type QueueSlot = {
  * A skip writes a SkippedDailyQuestion row and temporarily cools that question
  * down in the queue builder.
  */
-export const DAILY_SKIP_LIMIT = 3;
+export const DAILY_SKIP_LIMIT = 5;
 
 export const PERSONAL_DAILY_SESSION_CONTEXT = 'personal_daily';
 export const DAILY_QUEUE_SIZE = 5;

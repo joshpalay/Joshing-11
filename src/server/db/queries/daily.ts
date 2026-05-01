@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 
 import {
   dailyPreferences,
@@ -10,6 +10,7 @@ import {
   playerMastery,
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
+import { asQueueSlots, dailyQueueItemId, minusUtcDays } from '@/server/daily/catchup';
 import type { QueueSlot } from '@/server/daily/types';
 
 export type KnowledgeBaseDomain = {
@@ -23,12 +24,24 @@ export type KnowledgeBaseDomain = {
 export type DailyPreferenceRow = typeof dailyPreferences.$inferSelect;
 export type DailyQueueRow = typeof dailyQueues.$inferSelect;
 
+export type CatchupQuestion = {
+  dailyQueueItemId: string;
+  queueId: string;
+  queueDate: string;
+  slotIndex: number;
+  questionId: string;
+  questionText: string;
+  answer: string;
+  explainer: string;
+  domain: string;
+  broadCategory: string;
+  basePoints: number;
+  submittedAnswer: string | null;
+  skipped: boolean;
+};
+
 function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
-}
-
-function asQueueSlots(value: unknown): QueueSlot[] {
-  return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
 export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
@@ -116,6 +129,68 @@ export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
     .select()
     .from(generatedQuestions)
     .where(inArray(generatedQuestions.id, generatedIds));
+}
+
+export async function getCatchupQuestions(userId: string): Promise<CatchupQuestion[]> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+  const oldestDateStr = minusUtcDays(assignmentDateStr, 7);
+
+  const queues = await db
+    .select()
+    .from(dailyQueues)
+    .where(and(
+      eq(dailyQueues.userId, userId),
+      lt(dailyQueues.queueDate, assignmentDateStr),
+      gt(dailyQueues.queueDate, oldestDateStr),
+    ))
+    .orderBy(asc(dailyQueues.queueDate));
+
+  const candidateSlots = queues.flatMap((queue) =>
+    asQueueSlots(queue.slots)
+      .filter((slot) =>
+        !slot.answered
+        && !slot.dismissed_at
+        && Boolean(slot.generated_question_id)
+      )
+      .map((slot) => ({ queue, slot }))
+  );
+
+  const generatedIds = candidateSlots
+    .map(({ slot }) => slot.generated_question_id)
+    .filter((id): id is string => Boolean(id));
+
+  if (generatedIds.length === 0) return [];
+
+  const questions = await db
+    .select()
+    .from(generatedQuestions)
+    .where(and(
+      eq(generatedQuestions.userId, userId),
+      inArray(generatedQuestions.id, generatedIds),
+    ));
+  const questionById = new Map(questions.map((question) => [question.id, question]));
+
+  return candidateSlots
+    .map(({ queue, slot }) => {
+      const question = slot.generated_question_id ? questionById.get(slot.generated_question_id) : null;
+      if (!question) return null;
+      return {
+        dailyQueueItemId: dailyQueueItemId(queue.id, slot.slot_index),
+        queueId: queue.id,
+        queueDate: String(queue.queueDate),
+        slotIndex: slot.slot_index,
+        questionId: question.id,
+        questionText: slot.question_text || question.questionText,
+        answer: question.answer,
+        explainer: question.explainer,
+        domain: slot.domain || question.canonicalSubcategory,
+        broadCategory: question.broadCategory,
+        basePoints: question.basePoints,
+        submittedAnswer: slot.submitted_answer ?? null,
+        skipped: Boolean(slot.skipped),
+      } satisfies CatchupQuestion;
+    })
+    .filter((question): question is CatchupQuestion => Boolean(question));
 }
 
 export async function createDailyQueueItem(

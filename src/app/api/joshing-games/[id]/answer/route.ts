@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeActivity } from '@/server/activity/write-activity';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, users } from '@/server/db';
+import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import {
   checkJoshingGameCompletion,
   getJoshingGame,
@@ -91,6 +92,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (!freshView) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
+    const answeredQuestion = existingView.questions.find((item) => item.questionId === parsed.questionId);
+    const correctAnswer = answeredQuestion?.question.answerText ?? '';
+    const domain = answeredQuestion
+      ? answeredQuestion.question.canonicalSubcategory || answeredQuestion.question.broadCategory || answeredQuestion.question.category
+      : 'General Knowledge';
+    const breadcrumb = answeredQuestion
+      ? await generateBreadcrumb({
+          questionId: answeredQuestion.questionId,
+          questionText: answeredQuestion.question.questionText,
+          correctAnswer,
+          submittedAnswer: parsed.submittedAnswer,
+          isCorrect: grade.isCorrect,
+          domain,
+        }).catch(() => null)
+      : null;
+
     const newlyComplete = completion.userComplete && !beforeCompletion.userComplete;
     const creator = await getSmsUser(existingView.game.creatorId);
     const actor = await getSmsUser(session.userId);
@@ -142,6 +159,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({
       ...grade,
+      correctAnswer,
+      answerState: grade.answerState,
+      breadcrumb,
       viewerStatus: freshView.viewerStatus,
     });
   } catch (error) {

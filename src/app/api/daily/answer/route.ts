@@ -8,6 +8,7 @@ import {
   db,
   generatedQuestions,
 } from '@/server/db';
+import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { type QueueSlot } from '@/server/daily/types';
 
@@ -86,17 +87,27 @@ export async function POST(request: NextRequest) {
   );
   const isCorrect = grade.result === 'correct';
   const pointsAwarded = isCorrect ? Math.round(question.basePoints) : 0;
+  const answerState = isCorrect ? 'correct' : 'incorrect';
+  const breadcrumb = await generateBreadcrumb({
+    questionId: question.id,
+    questionText: question.questionText,
+    correctAnswer: question.answer,
+    submittedAnswer: parsed.submittedAnswer,
+    isCorrect,
+    domain: question.canonicalSubcategory,
+  }).catch(() => null);
 
   const nextSlots = slots.map((item, index) => {
     if (index !== parsed.slotIndex) return item;
     return {
       ...item,
       answered: true,
-      answer_state: isCorrect ? 'correct' : 'incorrect',
+      answer_state: answerState,
       submitted_answer: parsed.submittedAnswer,
       awarded_points: pointsAwarded,
       reveal_canonical_answer: question.answer,
       reveal_explainer: question.explainer,
+      reveal_breadcrumb: breadcrumb,
       reveal_quip: grade.consolation,
     } satisfies QueueSlot;
   });
@@ -124,6 +135,8 @@ export async function POST(request: NextRequest) {
     isCorrect,
     explanation: question.explainer,
     pointsAwarded,
+    answerState,
+    breadcrumb,
     masteryDelta,
     correctAnswer: question.answer,
     consolation: grade.consolation,

@@ -4,7 +4,7 @@ import { db, masteryEvents, playerMastery } from '@/server/db';
 import { effectiveTier } from '@/server/mastery/tiers';
 import type { AnswerState, MasteryTier } from '@/types/db';
 
-type MasteryEventSourceType = 'daily' | 'feed' | 'joshing_game' | 'author_credit';
+type MasteryEventSourceType = 'daily' | 'feed' | 'joshing_game' | 'catchup' | 'author_credit';
 
 export type WriteMasteryEventParams = {
   userId: string;
@@ -83,7 +83,12 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
     await tx.insert(masteryEvents).values({
       userId: params.userId,
       canonicalSubcategory: params.domain,
-      sourceType: params.sourceType === 'author_credit' ? 'author_credit' : 'live_correct',
+      sourceType:
+        params.sourceType === 'author_credit'
+          ? 'author_credit'
+          : params.sourceType === 'catchup'
+            ? 'catchup_correct'
+            : 'live_correct',
       questionId: params.eventQuestionId ?? null,
       answeredByUserId: params.answeredByUserId ?? params.userId,
       answerId: `${params.sourceType}:${params.sourceId}:${params.questionId}:${params.answeredByUserId ?? params.userId}`,

@@ -3,6 +3,7 @@ import {
   getKnowledgeBase,
   getTodaysDailyQueue,
 } from '@/server/db/queries/daily';
+import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 
@@ -23,11 +24,20 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const existing = await getTodaysDailyQueue(userId);
   if (existing && asQueueSlots(existing.slots).length > 0) return;
 
-  const knowledgeBase = await getKnowledgeBase(userId);
+  const [knowledgeBase, preferences] = await Promise.all([
+    getKnowledgeBase(userId),
+    getDailyPreferences(userId),
+  ]);
   if (knowledgeBase.length === 0) {
     throw new DailyQueueFillError(
       'no_knowledge_base',
       'Add declared interests before generating Daily Five.',
+    );
+  }
+  if (preferences.domainMode === 'custom' && preferences.selectedDomains.length === 0) {
+    throw new DailyQueueFillError(
+      'no_knowledge_base',
+      'Choose at least one domain before starting a custom Daily Five.',
     );
   }
 

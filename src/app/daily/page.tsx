@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { GameplayChatThread, newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
@@ -23,33 +24,44 @@ type AnswerResponse = {
   answer?: string;
   consolation?: string | null;
   quip?: string | null;
+  breadcrumb?: string | null;
 };
 
 function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
   return slots.find((slot) => !slot.answered && !slot.skipped) ?? null;
 }
 
+function sessionCloseCopy(slots: QueueSlot[]): string {
+  if (slots.length > 0 && slots.every((slot) => slot.skipped)) return "We'll come back to these.";
+  const answered = slots.filter((slot) => slot.answered);
+  if (answered.length > 0 && answered.every((slot) => slot.answer_state === 'correct')) {
+    return 'Five for five. See you tomorrow.';
+  }
+  if (answered.length > 0 && answered.every((slot) => slot.answer_state === 'incorrect')) {
+    return 'Tough round. The map grows anyway.';
+  }
+  return "That's today's round. See you tomorrow.";
+}
+
 export default function DailyPage() {
+  const router = useRouter();
   const [queue, setQueue] = useState<QueueResponse | null>(null);
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let response = await fetch('/api/daily/queue', { cache: 'no-store', credentials: 'include' });
-      let body = await response.json().catch(() => null);
+      const response = await fetch('/api/daily/queue', { cache: 'no-store', credentials: 'include' });
+      const body = await response.json().catch(() => null);
 
       if (response.ok && body?.queue === null) {
-        response = await fetch('/api/daily/queue', {
-          method: 'POST',
-          cache: 'no-store',
-          credentials: 'include',
-        });
-        body = await response.json().catch(() => null);
+        router.replace('/daily/setup');
+        return;
       }
 
       if (!response.ok) {
@@ -61,17 +73,23 @@ export default function DailyPage() {
         return;
       }
 
+      const slots = Array.isArray(body.slots) ? body.slots : [];
+      if (slots.length > 0 && !currentPendingSlot(slots)) {
+        router.replace('/daily/summary');
+        return;
+      }
+
       setQueue({
         queue_id: body.queue_id,
         queue_date: body.queue_date,
-        slots: Array.isArray(body.slots) ? body.slots : [],
+        slots,
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load today.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const initialTimer = window.setTimeout(() => {
@@ -81,9 +99,19 @@ export default function DailyPage() {
     return () => window.clearTimeout(initialTimer);
   }, [loadQueue]);
 
-  const currentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
-  const answeredCount = queue?.slots.filter((slot) => slot.answered).length ?? 0;
-  const allDone = Boolean(queue && queue.slots.length > 0 && !currentSlot);
+  const actualCurrentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
+  const currentSlot = pausedAfterSlotIndex === null ? actualCurrentSlot : null;
+  const completedCount = queue?.slots.filter((slot) => slot.answered || slot.skipped).length ?? 0;
+  const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
+
+  useEffect(() => {
+    if (!allDone || loading) return;
+    const timer = window.setTimeout(() => {
+      router.replace('/daily/summary');
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [allDone, loading, router]);
 
   const skipCurrent = useCallback(async () => {
     if (!queue || !currentSlot || submitting) return;
@@ -139,7 +167,7 @@ export default function DailyPage() {
           submitted: slot.submitted_answer ?? '',
           correctAnswer: slot.answer_state === 'correct' ? null : slot.reveal_canonical_answer ?? null,
           consolation: slot.reveal_quip ?? null,
-          breadcrumb: slot.reveal_explainer ?? null,
+          breadcrumb: slot.reveal_breadcrumb ?? null,
           copyVariant: slot.slot_index,
           creatorName: 'Joshing',
           canonicalSubcategory: slot.domain,
@@ -150,7 +178,7 @@ export default function DailyPage() {
         rows.push({
           id: `s-${slot.slot_index}`,
           kind: 'system',
-          text: `Skipped: ${slot.domain}`,
+          text: "Skipped. We'll bring it back later.",
         });
         continue;
       }
@@ -161,7 +189,6 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: 'From Joshing',
-          onDismiss: () => void skipCurrent(),
         });
         break;
       }
@@ -169,13 +196,9 @@ export default function DailyPage() {
 
     if (allDone) {
       rows.push({
-        id: 'complete',
-        kind: 'session_complete',
-        pointsToday: queue.slots.reduce((sum, slot) => sum + (slot.awarded_points ?? 0), 0),
-        reviewHref: '/knowledge',
-        detailsHref: '/',
-        roundsRemaining: 0,
-        nextRoundOpensAt: null,
+        id: 'session-close',
+        kind: 'session_close',
+        text: sessionCloseCopy(queue.slots),
       });
     }
 
@@ -228,12 +251,15 @@ export default function DailyPage() {
                     awarded_points: body.pointsAwarded ?? body.awarded_points ?? 0,
                     reveal_canonical_answer: body.correctAnswer ?? body.answer,
                     reveal_explainer: body.explanation ?? body.explainer,
+                    reveal_breadcrumb: body.breadcrumb ?? null,
                     reveal_quip: body.consolation ?? body.quip ?? null,
                   }
                 : slot
             ),
           }
         : existing);
+      setPausedAfterSlotIndex(currentSlot.slot_index);
+      window.setTimeout(() => setPausedAfterSlotIndex(null), 850);
       setAnswer('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not record that answer.');
@@ -258,7 +284,7 @@ export default function DailyPage() {
         </div>
         <GeometricProgress
           total={queue?.slots.length || DAILY_QUEUE_SIZE}
-          current={(currentSlot?.slot_index ?? answeredCount) + 1}
+          current={(currentSlot?.slot_index ?? completedCount) + 1}
           results={results}
         />
       </header>
@@ -277,7 +303,7 @@ export default function DailyPage() {
 
       {currentSlot && !loading ? (
         <form
-          className="fixed inset-x-0 bottom-16 z-30 mx-auto flex max-w-lg gap-2 border-t px-4 py-3 md:bottom-0"
+          className="fixed inset-x-0 bottom-16 z-30 mx-auto max-w-lg border-t px-4 py-3 md:bottom-0"
           style={{
             borderColor: 'var(--border)',
             background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
@@ -288,16 +314,26 @@ export default function DailyPage() {
             void submitAnswer();
           }}
         >
-          <input
-            value={answer}
-            onChange={(event) => setAnswer(event.target.value)}
+          <div className="flex gap-2">
+            <input
+              value={answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              disabled={submitting}
+              placeholder="Your answer..."
+              className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
+              style={{ borderColor: 'var(--border)' }}
+            />
+            <button type="submit" className="btn-primary shrink-0" disabled={submitting || !answer.trim()}>
+              {submitting ? '...' : 'Send'}
+            </button>
+          </div>
+          <button
+            type="button"
+            className="mt-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
             disabled={submitting}
-            placeholder="Your answer..."
-            className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
-            style={{ borderColor: 'var(--border)' }}
-          />
-          <button type="submit" className="btn-primary shrink-0" disabled={submitting || !answer.trim()}>
-            {submitting ? '...' : 'Send'}
+            onClick={() => void skipCurrent()}
+          >
+            Skip
           </button>
         </form>
       ) : null}

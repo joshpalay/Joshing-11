@@ -39,6 +39,7 @@ type AnswerResponse = {
   pointsAwarded?: number;
   quip?: string | null;
   consolation?: string | null;
+  breadcrumb?: string | null;
 };
 
 type ResultState = {
@@ -47,6 +48,7 @@ type ResultState = {
   explanation: string | null;
   points: number;
   quip: string | null;
+  breadcrumb: string | null;
 };
 
 type JoshingGameFeedView = {
@@ -217,6 +219,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
           explanation: body.explanation ?? null,
           points: body.awarded_points ?? body.pointsAwarded ?? 0,
           quip: body.quip ?? body.consolation ?? null,
+          breadcrumb: body.breadcrumb ?? null,
         },
       }));
     } catch (caught) {
@@ -295,6 +298,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                     {!result.correct ? <p className="mt-1">Answer: {result.answer}</p> : null}
                     {result.explanation ? <p className="mt-1 text-muted-foreground">{result.explanation}</p> : null}
                     {result.quip ? <p className="mt-1 text-muted-foreground">{result.quip}</p> : null}
+                    {result.breadcrumb ? <p className="mt-2 text-muted-foreground italic">{result.breadcrumb}</p> : null}
                     <button
                       className="mt-3 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm"
                       type="button"

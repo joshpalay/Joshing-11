@@ -43,8 +43,9 @@ export async function GET() {
 
   const slots = asQueueSlots(queue.slots);
   const answered = slots.filter((slot) => slot.answered).length;
+  const skipped = slots.filter((slot) => slot.skipped).length;
   const total = slots.length || DAILY_QUEUE_SIZE;
-  const questionsAnswered = Math.min(answered, DAILY_QUEUE_SIZE);
+  const questionsAnswered = Math.min(answered + skipped, DAILY_QUEUE_SIZE);
   const questionsRemaining = Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0);
   const isComplete = questionsAnswered >= DAILY_QUEUE_SIZE;
 

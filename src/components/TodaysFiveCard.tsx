@@ -9,6 +9,7 @@ type DailyStatus = {
   questionsAnswered: number;
   isComplete: boolean;
   nextRoundAt: string;
+  queueId: string | null;
 };
 
 const FALLBACK_STATUS: DailyStatus = {
@@ -16,6 +17,7 @@ const FALLBACK_STATUS: DailyStatus = {
   questionsAnswered: 0,
   isComplete: false,
   nextRoundAt: new Date().toISOString(),
+  queueId: null,
 };
 
 function formatCountdown(targetIso: string, nowMs: number): string {
@@ -67,6 +69,7 @@ export default function TodaysFiveCard() {
                 ? body.complete
                 : FALLBACK_STATUS.isComplete,
           nextRoundAt: typeof body.nextRoundAt === 'string' ? body.nextRoundAt : FALLBACK_STATUS.nextRoundAt,
+          queueId: typeof body.queue_id === 'string' ? body.queue_id : null,
         });
       } catch {
         if (!cancelled) setStatus(FALLBACK_STATUS);
@@ -88,6 +91,7 @@ export default function TodaysFiveCard() {
   const effectiveStatus = status ?? FALLBACK_STATUS;
   const answered = Math.max(0, Math.min(effectiveStatus.questionsAnswered, 5));
   const isComplete = effectiveStatus.isComplete || effectiveStatus.questionsRemaining <= 0;
+  const playHref = !effectiveStatus.queueId ? '/daily/setup' : isComplete ? '/daily/summary' : '/daily';
   const subtext = useMemo(() => {
     if (isComplete) {
       return `Done for today. Next round in ${formatCountdown(effectiveStatus.nextRoundAt, nowMs)}.`;
@@ -114,12 +118,12 @@ export default function TodaysFiveCard() {
       </div>
 
       {isComplete ? (
-        <Link href="/daily" className="btn-ghost mt-4 min-h-11 w-full justify-center gap-2">
+        <Link href={playHref} className="btn-ghost mt-4 min-h-11 w-full justify-center gap-2">
           <Clock className="size-4" aria-hidden="true" />
           See your recap
         </Link>
       ) : (
-        <Link href="/daily" className="btn-primary mt-4 min-h-11 w-full justify-center gap-2">
+        <Link href={playHref} className="btn-primary mt-4 min-h-11 w-full justify-center gap-2">
           <MessageCircleQuestion className="size-4" aria-hidden="true" />
           Play now
         </Link>
