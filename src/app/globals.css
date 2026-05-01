@@ -80,6 +80,23 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    --bg: var(--background);
+    --surface: var(--card);
+    --surface-2: var(--muted);
+    --card-bg: var(--card);
+    --text: var(--foreground);
+    --text-muted: var(--muted-foreground);
+    --accent-contrast: var(--primary-foreground);
+    --success: #178245;
+    --danger: var(--destructive);
+    --wrong: var(--destructive);
+    --font-neutral: var(--font-sans);
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    --font-literata: Georgia, "Times New Roman", serif;
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.625rem;
+    --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
 }
 
 .dark {
@@ -126,4 +143,18 @@
   html {
     @apply font-sans;
     }
+}
+
+@layer components {
+  .card {
+    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
+  }
+
+  .btn-primary {
+    @apply inline-flex min-h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:pointer-events-none disabled:opacity-45;
+  }
+
+  .btn-ghost {
+    @apply inline-flex min-h-10 items-center justify-center rounded-md border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45;
+  }
 }

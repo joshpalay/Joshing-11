@@ -1,25 +1,29 @@
-import { Prisma } from '@prisma/client';
 import { invalidateMultitudesCacheForUser } from '@/server/profile/multitudes';
-import type { AnswerState, DifficultyEstimate, MasterySourceType, MasteryTier, PrismaClient } from '@prisma/client';
+import type { AnswerState, DifficultyEstimate, MasteryTier } from '@/types/db';
 import { effectiveTier } from '@/server/mastery/tiers';
 
-type DbClient = Prisma.TransactionClient | PrismaClient;
-type TransactionClient = Prisma.TransactionClient;
+// TODO R2: replace Prisma transaction/client shapes with Drizzle equivalents.
+type DbClient = any;
+type TransactionClient = any;
+type LegacyDifficultyEstimate = DifficultyEstimate | 'accessible' | 'moderate' | 'specialist';
+type MasterySourceType = 'live_correct' | 'authored' | 'author_credit' | 'catchup_correct';
+type PrismaKnownRequestError = Error & { code?: string };
+type AwardableAnswerState = 'first_correct' | 'first_correct_after_wrong';
 
 /** Portrait / declared-proven weighting — not the §8.32 mastery point table. */
-const PORTRAIT_DIFFICULTY_WEIGHT: Record<DifficultyEstimate, number> = {
+const PORTRAIT_DIFFICULTY_WEIGHT = {
   accessible: 1,
   moderate: 2,
   specialist: 3,
-};
+} as Record<LegacyDifficultyEstimate, number>;
 
-export function getDifficultyPoints(difficulty: DifficultyEstimate): number {
+export function getDifficultyPoints(difficulty: LegacyDifficultyEstimate): number {
   return PORTRAIT_DIFFICULTY_WEIGHT[difficulty];
 }
 
 /** PRD §8.32 — answering points from difficulty + answer_state (live-equivalent base before session weight). */
 export function getBasePoints(
-  difficulty: DifficultyEstimate | null,
+  difficulty: LegacyDifficultyEstimate | null,
   answerState: AnswerState
 ): number {
   if (answerState === 'repeat_correct' || answerState === 'incorrect') return 0;
@@ -28,8 +32,8 @@ export function getBasePoints(
     specialist: { first_correct: 100, first_correct_after_wrong: 25 },
     moderate: { first_correct: 50, first_correct_after_wrong: 13 },
     accessible: { first_correct: 10, first_correct_after_wrong: 3 },
-  } as const;
-  return table[d][answerState];
+  } as Record<LegacyDifficultyEstimate, Record<AwardableAnswerState, number>>;
+  return table[d][answerState as AwardableAnswerState];
 }
 
 /** PRD §8.32 — creator earnings from empirical correct rate on the question. */
@@ -301,7 +305,7 @@ export async function awardMasteryPoints(
   input: AwardMasteryPointsInput
 ): Promise<AwardMasteryPointsResult> {
   if ('$transaction' in db) {
-    return db.$transaction((tx) => applyMasteryAward(tx, input));
+    return db.$transaction((tx: TransactionClient) => applyMasteryAward(tx, input));
   }
 
   return applyMasteryAward(db, input);
@@ -338,7 +342,7 @@ type AwardAuthorCreditInput = {
   answeredByUserId: string;
   answerResult: 'correct' | 'wrong' | 'expired';
   isCatchUp: boolean;
-  difficulty: DifficultyEstimate | null;
+  difficulty: LegacyDifficultyEstimate | null;
 };
 
 export async function awardAuthorCreditIfEligible(db: DbClient, input: AwardAuthorCreditInput) {
@@ -367,8 +371,8 @@ export async function awardAuthorCreditIfEligible(db: DbClient, input: AwardAuth
     return { awarded: result.awarded, reason: result.awarded ? ('awarded' as const) : ('not_awarded' as const) };
   } catch (error) {
     if (
-      error instanceof Prisma.PrismaClientKnownRequestError
-      && error.code === 'P2002'
+      error instanceof Error
+      && (error as PrismaKnownRequestError).code === 'P2002'
     ) {
       return { awarded: false, reason: 'duplicate' as const };
     }

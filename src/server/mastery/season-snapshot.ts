@@ -1,6 +1,6 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+// TODO R2: replace Prisma transaction/client shapes with Drizzle equivalents.
 
-type DbClient = Prisma.TransactionClient | PrismaClient;
+type DbClient = unknown;
 
 type SnapshotSeasonMasteryInput = {
   groupId: string;

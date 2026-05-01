@@ -14,17 +14,6 @@ vi.mock('@/server/profile/portrait', () => ({
   getPortraitData: getPortraitDataMock,
 }));
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    answer: {
-      findMany: answerFindManyMock,
-    },
-    user: {
-      findMany: userFindManyMock,
-    },
-  },
-}));
-
 import { getFriendPortraitData } from '@/server/profile/friend';
 
 describe('friend portrait data shaping', () => {

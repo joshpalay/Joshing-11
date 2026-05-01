@@ -1,4 +1,6 @@
-import type { AnswerResult, AnswerState } from '@prisma/client';
+import type { AnswerState } from '@/types/db';
+
+type AnswerResult = 'correct' | 'wrong' | 'expired';
 
 function isCorrectResult(result: AnswerResult): boolean {
   return result === 'correct';

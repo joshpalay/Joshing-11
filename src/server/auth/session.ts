@@ -4,10 +4,12 @@
  */
 
 import { randomBytes } from 'crypto';
+import { eq } from 'drizzle-orm';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/server/db';
+import { userSessions } from '@/server/db/schema';
 
 const SESSION_COOKIE_NAME = 'joshing_session';
 const SESSION_DAYS = 90;
@@ -55,13 +57,7 @@ export async function createSession(userId: string): Promise<string> {
     .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(getJwtSecret());
 
-  await prisma.userSession.create({
-    data: {
-      user_id: userId,
-      token,
-      expires_at: expiresAt,
-    },
-  });
+  await db.insert(userSessions).values({ userId, token, expiresAt });
 
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
@@ -102,14 +98,15 @@ export async function validateSessionToken(
 
   if (!jwtUserId || typeof jwtSessionId !== 'string') return null;
 
-  const session = await prisma.userSession.findUnique({
-    where: { token },
-    select: { id: true, user_id: true, expires_at: true },
-  });
+  const [session] = await db
+    .select({ id: userSessions.id, userId: userSessions.userId, expiresAt: userSessions.expiresAt })
+    .from(userSessions)
+    .where(eq(userSessions.token, token))
+    .limit(1);
 
-  if (!session || session.expires_at < new Date() || session.user_id !== jwtUserId) return null;
+  if (!session || session.expiresAt < new Date() || session.userId !== jwtUserId) return null;
 
-  return { user_id: session.user_id, session_id: session.id };
+  return { user_id: session.userId, session_id: session.id };
 }
 
 export async function getSession(): Promise<Session | null> {
@@ -131,7 +128,7 @@ export async function getSession(): Promise<Session | null> {
 export async function destroySession(): Promise<void> {
   const token = await getSessionToken();
   if (token) {
-    await prisma.userSession.deleteMany({ where: { token } });
+    await db.delete(userSessions).where(eq(userSessions.token, token));
   }
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);

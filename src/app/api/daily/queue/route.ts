@@ -1,13 +1,9 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import {
-  createDailyQueueItem,
-  getKnowledgeBase,
-  getTodaysDailyQueue,
-} from '@/server/db/queries/daily';
-import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { getTodaysDailyQueue } from '@/server/db/queries/daily';
+import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
+import { type QueueSlot } from '@/server/daily/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,32 +40,19 @@ export async function POST() {
   const userId = await requireUserId();
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const existing = await getTodaysDailyQueue(userId);
-  if (existing && asQueueSlots(existing.slots).length > 0) {
-    return NextResponse.json(serializeQueue(existing));
+  try {
+    await fillDailyQueueForUser(userId);
+  } catch (error) {
+    if (error instanceof DailyQueueFillError) {
+      return NextResponse.json(
+        { error: error.code, message: error.message },
+        { status: error.code === 'no_knowledge_base' ? 409 : 503 },
+      );
+    }
+    throw error;
   }
 
-  const knowledgeBase = await getKnowledgeBase(userId);
-  if (knowledgeBase.length === 0) {
-    return NextResponse.json(
-      { error: 'no_knowledge_base', message: 'Add declared interests before generating Daily Five.' },
-      { status: 409 },
-    );
-  }
-
-  const generated = await generateDailyQuestionsFromKnowledgeBase(userId, DAILY_QUEUE_SIZE);
-  if (generated.length === 0) {
-    return NextResponse.json(
-      { error: 'generation_failed', message: "Today's Daily Five is taking longer than usual." },
-      { status: 503 },
-    );
-  }
-
-  let queue = existing;
-  for (const [index, question] of generated.slice(0, DAILY_QUEUE_SIZE).entries()) {
-    queue = await createDailyQueueItem(userId, question.id, index);
-  }
-
+  const queue = await getTodaysDailyQueue(userId);
   if (!queue) {
     return NextResponse.json({ error: 'queue_not_created' }, { status: 500 });
   }

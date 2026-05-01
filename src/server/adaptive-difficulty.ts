@@ -9,17 +9,22 @@
  *   - Default served difficulty for a new domain: moderate.
  */
 
-import { prisma } from '@/lib/prisma';
-import type { DifficultyEstimate } from '@prisma/client';
+import { and, eq } from 'drizzle-orm';
 
-const DIFFICULTY_STEPS: DifficultyEstimate[] = ['accessible', 'moderate', 'specialist'];
+import { db } from '@/server/db';
+import { userDomainDifficulties } from '@/server/db/schema';
+import type { DifficultyEstimate } from '@/types/db';
 
-function stepDown(d: DifficultyEstimate): DifficultyEstimate {
+type ServedDifficultyEstimate = Extract<DifficultyEstimate, never> | 'accessible' | 'moderate' | 'specialist';
+
+const DIFFICULTY_STEPS: ServedDifficultyEstimate[] = ['accessible', 'moderate', 'specialist'];
+
+function stepDown(d: ServedDifficultyEstimate): ServedDifficultyEstimate {
   const idx = DIFFICULTY_STEPS.indexOf(d);
   return idx > 0 ? DIFFICULTY_STEPS[idx - 1] : d;
 }
 
-function stepUp(d: DifficultyEstimate): DifficultyEstimate {
+function stepUp(d: ServedDifficultyEstimate): ServedDifficultyEstimate {
   const idx = DIFFICULTY_STEPS.indexOf(d);
   return idx < DIFFICULTY_STEPS.length - 1 ? DIFFICULTY_STEPS[idx + 1] : d;
 }
@@ -36,23 +41,36 @@ export async function updateDomainDifficulty(
   if (!canonicalSubcategory) return;
 
   // Upsert to ensure the record exists with defaults before we read it.
-  const existing = await prisma.userDomainDifficulty.upsert({
-    where: { user_id_canonical_subcategory: { user_id: userId, canonical_subcategory: canonicalSubcategory } },
-    create: {
-      user_id: userId,
-      canonical_subcategory: canonicalSubcategory,
-      served_difficulty: 'moderate',
-      consecutive_correct: 0,
-      consecutive_incorrect: 0,
-    },
-    update: {},
-  });
+  const [existing] = await db
+    .insert(userDomainDifficulties)
+    .values({
+      userId,
+      canonicalSubcategory,
+      servedDifficulty: 'moderate',
+      consecutiveCorrect: 0,
+      consecutiveIncorrect: 0,
+    })
+    .onConflictDoNothing({
+      target: [userDomainDifficulties.userId, userDomainDifficulties.canonicalSubcategory],
+    })
+    .returning();
+
+  const current =
+    existing ??
+    (await db.query.userDomainDifficulties.findFirst({
+      where: and(
+        eq(userDomainDifficulties.userId, userId),
+        eq(userDomainDifficulties.canonicalSubcategory, canonicalSubcategory),
+      ),
+    }));
+
+  if (!current) return;
 
   const isCorrect = result === 'correct';
-  const newCorrect = isCorrect ? existing.consecutive_correct + 1 : 0;
-  const newIncorrect = isCorrect ? 0 : existing.consecutive_incorrect + 1;
+  const newCorrect = isCorrect ? current.consecutiveCorrect + 1 : 0;
+  const newIncorrect = isCorrect ? 0 : current.consecutiveIncorrect + 1;
 
-  let newServedDifficulty = existing.served_difficulty;
+  let newServedDifficulty = current.servedDifficulty;
   let finalCorrect = newCorrect;
   let finalIncorrect = newIncorrect;
 
@@ -66,12 +84,18 @@ export async function updateDomainDifficulty(
     finalIncorrect = 0;
   }
 
-  await prisma.userDomainDifficulty.update({
-    where: { user_id_canonical_subcategory: { user_id: userId, canonical_subcategory: canonicalSubcategory } },
-    data: {
-      served_difficulty: newServedDifficulty,
-      consecutive_correct: finalCorrect,
-      consecutive_incorrect: finalIncorrect,
-    },
-  });
+  await db
+    .update(userDomainDifficulties)
+    .set({
+      servedDifficulty: newServedDifficulty,
+      consecutiveCorrect: finalCorrect,
+      consecutiveIncorrect: finalIncorrect,
+      lastUpdated: new Date(),
+    })
+    .where(
+      and(
+        eq(userDomainDifficulties.userId, userId),
+        eq(userDomainDifficulties.canonicalSubcategory, canonicalSubcategory),
+      ),
+    );
 }

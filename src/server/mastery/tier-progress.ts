@@ -1,4 +1,4 @@
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 import { getMasteryTierThresholds, resolveTier } from '@/server/mastery/tiers';
 
 const ORDER: MasteryTier[] = ['establishing', 'familiar', 'solid', 'mastery'];

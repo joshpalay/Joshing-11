@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 import { DomainCircle } from '@/components/knowledge/DomainCircle';
 import { buildKnowledgeCardPublicUrl } from '@/lib/knowledge-card';
 

@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { gradeAnswer } from '@/server/grading';
@@ -7,15 +7,11 @@ import {
   dailyQueues,
   db,
   generatedQuestions,
-  masteryEvents,
-  playerMastery,
 } from '@/server/db';
-import { effectiveTier } from '@/server/mastery/tiers';
-import { PERSONAL_DAILY_SESSION_CONTEXT, type QueueSlot } from '@/server/daily/types';
+import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
+import { type QueueSlot } from '@/server/daily/types';
 
 export const dynamic = 'force-dynamic';
-
-type MasteryTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 
 function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
@@ -36,25 +32,6 @@ function parseBody(value: unknown): { queueId: string; slotIndex: number; submit
 
   if (!queueId || slotIndex === null || !submittedAnswer) return null;
   return { queueId, slotIndex, submittedAnswer };
-}
-
-async function readAuthorCredit(userId: string, domain: string) {
-  const [row] = await db
-    .select({
-      points: sql<number>`coalesce(sum(${masteryEvents.awardedPoints}), 0)`,
-      distinctQuestions: sql<number>`count(distinct ${masteryEvents.questionId})`,
-    })
-    .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.canonicalSubcategory, domain),
-      eq(masteryEvents.sourceType, 'author_credit'),
-    ));
-
-  return {
-    points: Number(row?.points ?? 0),
-    distinctQuestions: Number(row?.distinctQuestions ?? 0),
-  };
 }
 
 export async function POST(request: NextRequest) {
@@ -109,40 +86,6 @@ export async function POST(request: NextRequest) {
   );
   const isCorrect = grade.result === 'correct';
   const pointsAwarded = isCorrect ? Math.round(question.basePoints) : 0;
-  const answerId = `daily:${queue.id}:${parsed.slotIndex}`;
-
-  const [existingMastery, authorCredit] = await Promise.all([
-    db
-      .select()
-      .from(playerMastery)
-      .where(and(
-        eq(playerMastery.userId, session.userId),
-        eq(playerMastery.canonicalSubcategory, question.canonicalSubcategory),
-      ))
-      .limit(1),
-    readAuthorCredit(session.userId, question.canonicalSubcategory),
-  ]);
-
-  const previousTier: MasteryTier = existingMastery[0]?.tier ?? 'establishing';
-  const nextTotalPoints = (existingMastery[0]?.totalPoints ?? 0) + pointsAwarded;
-  const nextTier = isCorrect
-    ? effectiveTier(nextTotalPoints, authorCredit.points, authorCredit.distinctQuestions)
-    : previousTier;
-  const masteryDelta = isCorrect
-    ? {
-        domain: question.canonicalSubcategory,
-        points: pointsAwarded,
-        previousTier,
-        newTier: nextTier,
-        tierChanged: previousTier !== nextTier,
-      }
-    : {
-        domain: question.canonicalSubcategory,
-        points: 0,
-        previousTier,
-        newTier: previousTier,
-        tierChanged: false,
-      };
 
   const nextSlots = slots.map((item, index) => {
     if (index !== parsed.slotIndex) return item;
@@ -158,51 +101,24 @@ export async function POST(request: NextRequest) {
     } satisfies QueueSlot;
   });
 
-  await db.transaction(async (tx) => {
-    await tx.insert(masteryEvents).values({
-      userId: session.userId,
-      canonicalSubcategory: question.canonicalSubcategory,
-      sourceType: 'live_correct',
-      questionId: null,
-      answeredByUserId: session.userId,
-      answerId,
-      basePoints: question.basePoints,
-      weight: 1,
-      awardedPoints: pointsAwarded,
-      answerState: isCorrect ? 'first_correct' : 'incorrect',
-      sessionContext: PERSONAL_DAILY_SESSION_CONTEXT,
-    });
-
-    if (isCorrect) {
-      await tx
-        .insert(playerMastery)
-        .values({
-          userId: session.userId,
-          canonicalSubcategory: question.canonicalSubcategory,
-          broadCategory: question.broadCategory,
-          totalPoints: pointsAwarded,
-          tier: nextTier,
-          tierReachedAt: previousTier !== nextTier ? new Date() : null,
-          seasonPointsStart: 0,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [playerMastery.userId, playerMastery.canonicalSubcategory],
-          set: {
-            broadCategory: question.broadCategory,
-            totalPoints: nextTotalPoints,
-            tier: nextTier,
-            tierReachedAt: previousTier !== nextTier ? new Date() : existingMastery[0]?.tierReachedAt ?? null,
-            updatedAt: new Date(),
-          },
-        });
-    }
-
-    await tx
-      .update(dailyQueues)
-      .set({ slots: nextSlots })
-      .where(eq(dailyQueues.id, queue.id));
+  const masteryDelta = await writeMasteryEvent({
+    userId: session.userId,
+    questionId: question.id,
+    domain: question.canonicalSubcategory,
+    answerState: isCorrect ? 'first_correct' : 'incorrect',
+    pointsAwarded,
+    sourceType: 'daily',
+    sourceId: `${queue.id}:${parsed.slotIndex}`,
+    broadCategory: question.broadCategory,
+    eventQuestionId: null,
+    basePoints: question.basePoints,
+    weight: 1,
   });
+
+  await db
+    .update(dailyQueues)
+    .set({ slots: nextSlots })
+    .where(eq(dailyQueues.id, queue.id));
 
   return NextResponse.json({
     isCorrect,

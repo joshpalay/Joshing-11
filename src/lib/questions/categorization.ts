@@ -2,10 +2,24 @@
  * Canonical subcategory resolution for hyper-specific territories (PRD §8.2 / §8.31).
  * See Docs/qa-hyper-specific-categories.md for QA when LLM tagging is off or fails.
  */
-import type { Category, PrismaClient } from '@prisma/client';
+import type { Category } from '@/types/db';
 import { resolveCanonicalSubcategoryWithLLM } from '@/lib/llm';
 
-type DbClient = Pick<PrismaClient, 'question'>;
+// TODO R2: rewire to Drizzle db client
+type DbClient = {
+  question: {
+    findMany: (args: {
+      where: {
+        broad_category: string;
+        canonical_subcategory: { not: null };
+      };
+      distinct: ['canonical_subcategory'];
+      select: { canonical_subcategory: true };
+      take: number;
+    }) => Promise<Array<{ canonical_subcategory: string | null }>>;
+    count: (args: { where: { canonical_subcategory: string } }) => Promise<number>;
+  };
+};
 
 const BROAD_TO_CATEGORY: Array<{ patterns: RegExp[]; category: Category }> = [
   { patterns: [/music/i], category: 'music' },

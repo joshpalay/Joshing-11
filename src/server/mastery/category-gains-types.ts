@@ -1,4 +1,4 @@
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 
 /** Shape returned by `GET /api/users/:userId/mastery/round-delta` for each bucket. */
 export type CategoryGainsDeltaRow = {

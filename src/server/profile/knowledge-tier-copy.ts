@@ -1,4 +1,4 @@
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 
 export const KNOWLEDGE_TIER_LABEL: Record<MasteryTier, string> = {
   establishing: 'Establishing',

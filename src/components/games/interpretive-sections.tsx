@@ -245,8 +245,10 @@ export function GroupProgressSection({
   groupId,
   gameId,
 }: {
-  groupId: string;
-  gameId: string;
+  // TODO v11.0: groupId prop - needs new data source
+  groupId?: unknown;
+  // TODO v11.0: gameId prop - needs new data source
+  gameId?: unknown;
 }) {
   return <GroupOverlapMap groupId={groupId} gameId={gameId} />;
 }

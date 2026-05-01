@@ -41,6 +41,7 @@ export async function GET() {
   const gameById = new Map(gameRows.map((game) => [game.id, game]));
 
   return NextResponse.json({
+    viewer_user_id: session.userId,
     items: feed.map((item) => {
       const question = item.questionId ? questionById.get(item.questionId) : undefined;
       const sourceUser = userById.get(item.sourceUserId);

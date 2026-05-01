@@ -5,8 +5,10 @@
  */
 
 import { randomInt } from 'crypto';
+import { and, count, desc, eq, gt, gte } from 'drizzle-orm';
 
-import { prisma } from '@/lib/prisma';
+import { db } from '@/server/db';
+import { otpCodes, smsLogs } from '@/server/db/schema';
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -31,8 +33,8 @@ export async function requestOtp(phone: string): Promise<{ code: string; normali
   const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
   // Delete any existing codes for this number before creating a new one
-  await prisma.otpCode.deleteMany({ where: { phone_number: normalized } });
-  await prisma.otpCode.create({ data: { phone_number: normalized, code, expires_at: expiresAt } });
+  await db.delete(otpCodes).where(eq(otpCodes.phoneNumber, normalized));
+  await db.insert(otpCodes).values({ phoneNumber: normalized, code, expiresAt });
 
   return { code, normalizedPhone: normalized };
 }
@@ -40,13 +42,15 @@ export async function requestOtp(phone: string): Promise<{ code: string; normali
 export async function verifyOtp(phone: string, code: string): Promise<string | null> {
   const normalized = normalizePhone(phone);
 
-  const entry = await prisma.otpCode.findFirst({
-    where: { phone_number: normalized, code, expires_at: { gt: new Date() } },
-    orderBy: { created_at: 'desc' },
-  });
+  const [entry] = await db
+    .select()
+    .from(otpCodes)
+    .where(and(eq(otpCodes.phoneNumber, normalized), eq(otpCodes.code, code), gt(otpCodes.expiresAt, new Date())))
+    .orderBy(desc(otpCodes.createdAt))
+    .limit(1);
 
   if (entry) {
-    await prisma.otpCode.deleteMany({ where: { phone_number: normalized } });
+    await db.delete(otpCodes).where(eq(otpCodes.phoneNumber, normalized));
   }
 
   return normalized;
@@ -55,9 +59,27 @@ export async function verifyOtp(phone: string, code: string): Promise<string | n
 /** For development/testing: retrieve the stored code without consuming it. */
 export async function getStoredCodeForPhone(phone: string): Promise<string | null> {
   const normalized = normalizePhone(phone);
-  const entry = await prisma.otpCode.findFirst({
-    where: { phone_number: normalized, expires_at: { gt: new Date() } },
-    orderBy: { created_at: 'desc' },
-  });
+  const [entry] = await db
+    .select()
+    .from(otpCodes)
+    .where(and(eq(otpCodes.phoneNumber, normalized), gt(otpCodes.expiresAt, new Date())))
+    .orderBy(desc(otpCodes.createdAt))
+    .limit(1);
   return entry?.code ?? null;
+}
+
+export async function getRecentOtpRequestCount(phone: string, since: Date): Promise<number> {
+  const normalized = normalizePhone(phone);
+  const [row] = await db
+    .select({ value: count() })
+    .from(smsLogs)
+    .where(
+      and(
+        eq(smsLogs.phoneNumber, normalized),
+        eq(smsLogs.messageType, 'otp'),
+        gte(smsLogs.sentAt, since),
+      ),
+    );
+
+  return row?.value ?? 0;
 }

@@ -28,14 +28,6 @@ vi.mock('@/lib/auth/user', () => ({
   getCurrentUser: getCurrentUserMock,
 }));
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    user: {
-      findUnique: userFindUniqueMock,
-    },
-  },
-}));
-
 vi.mock('@/server/profile/friend', () => ({
   getFriendPortraitData: getFriendPortraitDataMock,
 }));

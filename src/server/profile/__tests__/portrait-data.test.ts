@@ -5,13 +5,6 @@ const { questionFindManyMock, answerFindManyMock } = vi.hoisted(() => ({
   answerFindManyMock: vi.fn(),
 }));
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    question: { findMany: questionFindManyMock },
-    answer: { findMany: answerFindManyMock },
-  },
-}));
-
 import { getPortraitData } from '@/server/profile/portrait';
 
 describe('getPortraitData', () => {

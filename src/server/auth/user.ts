@@ -3,29 +3,13 @@
  * Use in server components, route handlers, and server actions.
  */
 
-import { Prisma, type User } from '@prisma/client';
-import { prisma } from '@/lib/prisma';
+import type { InferSelectModel } from 'drizzle-orm';
+
+import type { users } from '@/server/db/schema';
+import { getUserById } from '@/server/db/queries/users';
 import { getSession } from './session';
 
-const AUTH_USER_SELECT = {
-  id: true,
-  phone_number: true,
-  display_name: true,
-  timezone: true,
-  preferred_theme: true,
-} as const;
-
-const AUTH_USER_FALLBACK_SELECT = {
-  id: true,
-  phone_number: true,
-  display_name: true,
-  timezone: true,
-} as const;
-
-function isSchemaDriftError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
-  return error instanceof Prisma.PrismaClientKnownRequestError
-    && (error.code === 'P2021' || error.code === 'P2022');
-}
+export type User = InferSelectModel<typeof users>;
 
 /**
  * Returns the authenticated user if the request has a valid session cookie.
@@ -35,44 +19,7 @@ export async function getCurrentUser(): Promise<User | null> {
   const session = await getSession();
   if (!session) return null;
 
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: session.userId },
-      // Select explicit columns so auth remains resilient when preview DBs lag
-      // behind the newest additive columns.
-      select: AUTH_USER_SELECT,
-    });
-    return user as User | null;
-  } catch (error) {
-    if (!isSchemaDriftError(error)) {
-      throw error;
-    }
-
-    console.warn('[auth] getCurrentUser primary select failed, retrying with fallback', {
-        code: error.code,
-        modelName: error.meta?.modelName,
-        sessionUserId: session.userId,
-      });
-
-    try {
-      const fallbackUser = await prisma.user.findUnique({
-        where: { id: session.userId },
-        select: AUTH_USER_FALLBACK_SELECT,
-      });
-      return fallbackUser as User | null;
-    } catch (fallbackError) {
-      if (!isSchemaDriftError(fallbackError)) {
-        throw fallbackError;
-      }
-
-      console.warn('[auth] getCurrentUser fallback select failed, returning null', {
-        code: fallbackError.code,
-        modelName: fallbackError.meta?.modelName,
-        sessionUserId: session.userId,
-      });
-      return null;
-    }
-  }
+  return getUserById(session.userId);
 }
 
 /**

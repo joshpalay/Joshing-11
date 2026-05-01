@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { DomainProgressBar } from '@/components/knowledge/DomainProgressBar';
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display';
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 
 type DomainRowProps = {
   domain: string;

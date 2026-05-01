@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Send, SkipForward, ThumbsUp, X } from 'lucide-react';
 
 type FeedApiItem = {
@@ -12,12 +13,14 @@ type FeedApiItem = {
   source_event_at: string;
   state: string;
   is_pinned: boolean;
+  joshing_game_id: string | null;
   question_text: string | null;
   domain_pill: string;
   game_title: string | null;
 };
 
 type FeedResponse = {
+  viewer_user_id: string;
   items: FeedApiItem[];
 };
 
@@ -41,14 +44,84 @@ type ResultState = {
   quip: string | null;
 };
 
+type JoshingGameFeedView = {
+  game: { id: string; title: string };
+  creator: { displayName: string };
+  questions: Array<{ questionId: string }>;
+  recipients: Array<{ userId: string; displayName: string; completedAt: string | null; score: number | null }>;
+  responses: Array<{ userId: string; questionId: string; isCorrect: boolean | null }>;
+  viewerStatus: 'not_started' | 'in_progress' | 'complete';
+};
+
 function formatEventTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
 }
 
+function JoshingGameCard({ item, viewerId }: { item: FeedApiItem; viewerId: string | null }) {
+  const [game, setGame] = useState<JoshingGameFeedView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!item.joshing_game_id) return;
+    fetch(`/api/joshing-games/${item.joshing_game_id}`, { cache: 'no-store', credentials: 'include' })
+      .then(async (response) => {
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.message ?? 'Could not load this game.');
+        setGame(body);
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : 'Could not load this game.'));
+  }, [item.joshing_game_id]);
+
+  const questionCount = game?.questions.length ?? 0;
+  const href = game?.viewerStatus === 'complete'
+    ? `/games/${game.game.id}/summary`
+    : `/games/${game?.game.id ?? item.joshing_game_id}`;
+  const cta = game?.viewerStatus === 'complete' ? 'See results' : 'Play';
+
+  return (
+    <article className="rounded-lg border bg-card p-4 text-card-foreground">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">Pinned</span>
+        <span className="text-xs text-muted-foreground">{formatEventTime(item.source_event_at)}</span>
+      </div>
+      <h2 className="font-serif text-xl font-semibold">🎯 {game?.game.title ?? item.game_title ?? 'Joshing Game'}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">From {game?.creator.displayName ?? item.source_friend_display_name}</p>
+
+      <div className="mt-4 space-y-2">
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {!game && !error ? <p className="text-sm text-muted-foreground">Loading game...</p> : null}
+        {game?.recipients.map((recipient) => {
+          const answered = game.responses.filter((response) => response.userId === recipient.userId);
+          const score = recipient.score ?? answered.filter((response) => response.isCorrect).length;
+          const label = recipient.completedAt
+            ? `✅ ${score}/${questionCount}`
+            : answered.length > 0
+              ? '⏳ Playing...'
+              : '— Not started';
+          return (
+            <div key={recipient.userId} className="flex items-center justify-between gap-3 text-sm">
+              <span>{recipient.userId === viewerId ? 'You' : recipient.displayName}</span>
+              <span className="text-muted-foreground">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 flex items-center justify-between gap-3">
+        <Link href={href} className="btn-primary">
+          {cta}
+        </Link>
+        <span className="text-sm text-muted-foreground">{questionCount || ''} {questionCount === 1 ? 'question' : 'questions'}</span>
+      </div>
+    </article>
+  );
+}
+
 export default function FeedPage() {
   const [items, setItems] = useState<FeedApiItem[]>([]);
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ResultState>>({});
   const [loading, setLoading] = useState(true);
@@ -64,6 +137,7 @@ export default function FeedPage() {
       if (!response.ok || !body || !('items' in body)) {
         throw new Error((body as { message?: string } | null)?.message ?? 'Could not load your Feed.');
       }
+      setViewerId(body.viewer_user_id);
       setItems(body.items);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load your Feed.');
@@ -175,19 +249,7 @@ export default function FeedPage() {
           {items.map((item) => {
             const result = results[item.id];
             if (item.kind === 'joshing_game') {
-              return (
-                <article key={item.id} className="rounded-lg border bg-card p-4 text-card-foreground">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">Pinned</span>
-                    <span className="text-xs text-muted-foreground">{formatEventTime(item.source_event_at)}</span>
-                  </div>
-                  <h2 className="font-serif text-xl font-semibold">{item.game_title ?? 'Joshing Game'}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{item.source_attribution}</p>
-                  <button className="mt-4 btn-primary" type="button" disabled>
-                    Coming soon
-                  </button>
-                </article>
-              );
+              return <JoshingGameCard key={item.id} item={item} viewerId={viewerId} />;
             }
 
             return (

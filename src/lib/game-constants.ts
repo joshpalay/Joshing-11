@@ -3,7 +3,7 @@
  * Pool minimum is per-group (minimum_questions_required); default 5.
  */
 import { getBasePoints } from '@/server/mastery/awards';
-import type { AnswerState, DifficultyEstimate } from '@prisma/client';
+import type { AnswerState, DifficultyEstimate } from '@/types/db';
 
 export const QUESTIONS_PER_DAY = 5;
 /** @deprecated Legacy flat scoring constant. Use `canonicalPointsForAnswer` instead. */

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DifficultyEstimate } from '@prisma/client';
+import type { DifficultyEstimate } from '@/types/db';
 import {
   awardAuthorCreditIfEligible,
   awardMasteryPoints,

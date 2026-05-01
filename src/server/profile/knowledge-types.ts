@@ -1,4 +1,4 @@
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 
 export type KnowledgeDomain = {
   name: string;

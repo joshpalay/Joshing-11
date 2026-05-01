@@ -1,10 +1,10 @@
 import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { createDailyQueueItem, getTodaysDailyQueue } from '@/server/db/queries/daily';
+import { getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { db, users } from '@/server/db';
-import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
+import { type QueueSlot } from '@/server/daily/types';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
@@ -57,15 +57,8 @@ export async function GET(request: NextRequest) {
       const existingSlots = queue ? asQueueSlots(queue.slots) : [];
 
       if (!queue || existingSlots.length === 0) {
-        const generated = await generateDailyQuestionsFromKnowledgeBase(user.id, DAILY_QUEUE_SIZE);
-        if (generated.length === 0) {
-          results.failed += 1;
-          continue;
-        }
-
-        for (const [index, question] of generated.slice(0, DAILY_QUEUE_SIZE).entries()) {
-          queue = await createDailyQueueItem(user.id, question.id, index);
-        }
+        await fillDailyQueueForUser(user.id);
+        queue = await getTodaysDailyQueue(user.id);
         results.generated += 1;
       } else {
         results.existing += 1;
@@ -81,6 +74,11 @@ export async function GET(request: NextRequest) {
         results.smsSent += 1;
       }
     } catch (error) {
+      if (error instanceof DailyQueueFillError) {
+        results.failed += 1;
+        continue;
+      }
+
       console.error('[cron/daily-assignments] user failed', {
         userId: user.id,
         error: error instanceof Error ? error.message : String(error),

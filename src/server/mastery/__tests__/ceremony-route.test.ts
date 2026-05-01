@@ -13,18 +13,6 @@ const {
 }));
 
 vi.mock('@/lib/auth/user', () => ({ getCurrentUser: getCurrentUserMock }));
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    playerMastery: {
-      findMany: playerMasteryFindManyMock,
-      findFirst: playerMasteryFindFirstMock,
-    },
-    masteryEvent: {
-      findMany: masteryEventFindManyMock,
-    },
-  },
-}));
-
 import { GET } from '@/app/api/users/[userId]/mastery/ceremony/route';
 
 describe('/api/users/[userId]/mastery/ceremony', () => {

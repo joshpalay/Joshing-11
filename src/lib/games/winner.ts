@@ -1,4 +1,5 @@
-import type { PrismaClient } from '@prisma/client';
+// PrismaClient removed - TODO R2: rewire to Drizzle db client
+type DbClient = unknown;
 export type GameWinnerMember = {
   user_id: string;
   display_name: string | null;
@@ -20,15 +21,15 @@ export type GameWinnerResult = {
  * Used by both the today/ route and the cron job when a game completes.
  */
 export async function computeGameWinner(
-  prisma: PrismaClient,
+  prisma: DbClient,
   gameId: string,
   groupId: string
 ): Promise<GameWinnerResult> {
   void prisma;
   void gameId;
   void groupId;
-  // TODO v11.0: prisma.groupMember.findMany - needs new data source
-  // TODO v11.0: prisma.group.findUnique - needs new data source
+  // TODO v11.0: group member lookup needs new data source
+  // TODO v11.0: group lookup needs new data source
   // TODO v11.0: answer.game_id winner scoping - needs new data source
   return {
     winner: null,

@@ -4,9 +4,14 @@
  * All functions are server-side only.
  */
 
-import { prisma } from '@/lib/prisma';
-import type { SmsMessageType } from '@prisma/client';
+import { and, eq, gte } from 'drizzle-orm';
+
+import type { SmsMessageType } from '@/types/db';
 import type { GameWinnerMember } from '@/lib/games/winner';
+import { db } from '@/server/db';
+import { smsLogs, users } from '@/server/db/schema';
+
+type SmsLogMessageType = typeof smsLogs.$inferInsert.messageType;
 
 /**
  * Send an SMS via Twilio and log the attempt.
@@ -20,12 +25,10 @@ export async function sendSms(
 ): Promise<void> {
   async function logAttempt() {
     try {
-      await prisma.smsLog.create({
-        data: {
-          user_id: userId ?? null,
-          phone_number: to,
-          message_type: messageType,
-        },
+      await db.insert(smsLogs).values({
+        userId: userId ?? null,
+        phoneNumber: to,
+        messageType: messageType as SmsLogMessageType,
       });
     } catch (err) {
       console.error('[SMS] Failed to log SMS:', err);
@@ -149,7 +152,7 @@ export async function sendGameCompleteSms(
   // If allMembers not provided (legacy call), fetch them
   let members = allMembers;
   if (members.length === 0) {
-    // TODO v11.0: prisma.groupMember.findMany - needs new data source
+    // TODO v11.0: group member lookup needs new data source
     members = [];
   }
 
@@ -188,29 +191,33 @@ export async function sendCreatorNotePromptSms(
   questionText: string,
   baseUrl: string
 ): Promise<void> {
-  const creator = await prisma.user.findUnique({
-    where: { id: creatorId },
-    select: { phone_number: true, sms_opt_in: true },
-  });
+  const [creator] = await db
+    .select({ phoneNumber: users.phoneNumber, smsOptIn: users.smsOptIn })
+    .from(users)
+    .where(eq(users.id, creatorId))
+    .limit(1);
 
-  if (!creator?.phone_number || creator.sms_opt_in !== 'opted_in') return;
+  if (!creator?.phoneNumber || creator.smsOptIn !== 'opted_in') return;
 
   // Deduplicate: skip if already sent within the last 24 hours
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const recentLog = await prisma.smsLog.findFirst({
-    where: {
-      user_id: creatorId,
-      message_type: 'creator_note_prompt',
-      sent_at: { gte: since },
-    },
-    select: { id: true },
-  });
+  const [recentLog] = await db
+    .select({ id: smsLogs.id })
+    .from(smsLogs)
+    .where(
+      and(
+        eq(smsLogs.userId, creatorId),
+        eq(smsLogs.messageType, 'creator_note_prompt'),
+        gte(smsLogs.sentAt, since),
+      ),
+    )
+    .limit(1);
   if (recentLog) return;
 
   const preview = questionText.length > 60 ? questionText.slice(0, 57) + '…' : questionText;
   const body = `Someone got your question wrong: "${preview}". Add a note to give context: ${baseUrl}/questions`;
 
-  await sendSms(creator.phone_number, body.length > 160 ? body.slice(0, 157) + '…' : body, 'creator_note_prompt', creatorId);
+  await sendSms(creator.phoneNumber, body.length > 160 ? body.slice(0, 157) + '…' : body, 'creator_note_prompt', creatorId);
 }
 
 /**
@@ -227,7 +234,12 @@ export async function sendDailyReminder(
 
   const message = buildDailyReminderMessage(groupNames, baseUrl);
 
-  await sendSms(phoneNumber, message, groupNames.length > 1 ? 'daily_questions_batched' : 'daily_questions', userId);
+  await sendSms(
+    phoneNumber,
+    message,
+    (groupNames.length > 1 ? 'daily_questions_batched' : 'daily_questions') as SmsMessageType,
+    userId
+  );
 }
 
 export function buildDailyReminderMessage(groupNames: string[], baseUrl: string): string {

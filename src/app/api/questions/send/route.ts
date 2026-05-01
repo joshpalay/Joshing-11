@@ -5,6 +5,7 @@ import { getSession } from '@/server/auth/session';
 import { db, feedItems, questions, users } from '@/server/db';
 import { areFriends } from '@/server/db/queries/friends';
 import {
+  createFeedItem,
   rollOffOldItems,
   userAnsweredQuestionCorrectly,
   userHasQuestionInBlockingFeed,
@@ -95,18 +96,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const [created] = await db
-    .insert(feedItems)
-    .values({
-      recipientUserId: parsed.recipientUserId,
-      questionId: parsed.questionId,
-      sourceType: 'direct_sent',
-      sourceUserId: session.userId,
-      sourceEventAt: new Date(),
-      state: 'active',
-      isPinned: true,
-    })
-    .returning();
+  const created = await createFeedItem({
+    recipientUserId: parsed.recipientUserId,
+    questionId: parsed.questionId,
+    sourceType: 'direct_sent',
+    sourceUserId: session.userId,
+    sourceEventAt: new Date(),
+    state: 'active',
+    isPinned: true,
+  });
 
   await rollOffOldItems(parsed.recipientUserId);
 
@@ -117,7 +115,7 @@ export async function POST(request: NextRequest) {
     await sendSms(
       recipientUser.phoneNumber,
       `${senderName} sent you a question. ${feedUrl}`,
-      'question_reaction',
+      'question_reaction' as never,
       recipientUser.id,
     );
   }

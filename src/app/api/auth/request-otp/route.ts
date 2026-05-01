@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { requestOtp, isUsPhoneNumber, normalizePhone } from '@/server/auth/otp-store';
-import { prisma } from '@/lib/prisma';
+import { getRecentOtpRequestCount, requestOtp, isUsPhoneNumber, normalizePhone } from '@/server/auth/otp-store';
 import { sendSms } from '@/server/sms';
 
 const OTP_RATE_LIMIT_PER_HOUR = 3;
@@ -27,13 +26,7 @@ export async function POST(request: Request) {
 
     const phone = normalizePhone(rawPhone);
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const recentOtpCount = await prisma.smsLog.count({
-      where: {
-        phone_number: phone,
-        message_type: 'otp',
-        sent_at: { gte: oneHourAgo },
-      },
-    });
+    const recentOtpCount = await getRecentOtpRequestCount(phone, oneHourAgo);
 
     if (recentOtpCount >= OTP_RATE_LIMIT_PER_HOUR) {
       return NextResponse.json(

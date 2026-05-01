@@ -1,7 +1,7 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
 import { resolveTier } from '@/server/mastery/tiers';
 
-type DbClient = Prisma.TransactionClient | PrismaClient;
+// TODO R2: replace Prisma transaction/client shapes with Drizzle equivalents.
+type DbClient = any;
 
 type MasteryMovementInput = {
   userId: string;
@@ -50,7 +50,14 @@ export async function getStrongestCategory(db: DbClient, userId: string) {
 }
 
 export async function getMasteryMovement(db: DbClient, input: MasteryMovementInput) {
-  const where: Prisma.MasteryEventWhereInput = {
+  // TODO R2: replace Prisma.MasteryEventWhereInput with Drizzle equivalent
+  const where: {
+    user_id: string;
+    created_at?: {
+      gte?: Date;
+      lte?: Date;
+    };
+  } = {
     user_id: input.userId,
     ...(input.from || input.to
       ? {
@@ -81,7 +88,11 @@ export async function getMasteryMovement(db: DbClient, input: MasteryMovementInp
     return [];
   }
 
-  const afterRows = await db.playerMastery.findMany({
+  const afterRows: Array<{
+    canonical_subcategory: string;
+    total_points: number;
+    tier: ReturnType<typeof resolveTier>;
+  }> = await db.playerMastery.findMany({
     where: {
       user_id: input.userId,
       canonical_subcategory: { in: subcategories },

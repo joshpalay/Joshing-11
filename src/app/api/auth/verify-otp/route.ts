@@ -97,7 +97,7 @@ export async function POST(request: Request) {
 
     const existingUser = await getUserByPhone(normalizedPhone);
     const user = existingUser
-      ? await updateUser(existingUser.id, { phone_verified: true })
+      ? await updateUser(existingUser.id, { phoneVerified: true })
       : await createUser(normalizedPhone);
 
     await createSession(user.id);
@@ -109,8 +109,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       user: {
         id: user.id,
-        phone_number: user.phone_number,
-        display_name: user.display_name,
+        phone_number: user.phoneNumber,
+        display_name: user.displayName,
         timezone: user.timezone,
         onboardingComplete: 'onboardingComplete' in user ? user.onboardingComplete : false,
       },

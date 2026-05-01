@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 import type { PortraitState } from '@/server/profile/portrait';
 
 const MODEL = 'claude-sonnet-4-6';

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 
 const createMock = vi.fn();
 

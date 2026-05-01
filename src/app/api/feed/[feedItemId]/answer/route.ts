@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, masteryEvents, playerMastery, questions } from '@/server/db';
+import { db, feedItems, playerMastery, questions } from '@/server/db';
 import { getBasePoints } from '@/server/mastery/awards';
-import { effectiveTier } from '@/server/mastery/tiers';
+import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
 
 export const dynamic = 'force-dynamic';
@@ -26,25 +26,6 @@ function parseBody(value: unknown): { submittedAnswer: string } | null {
       : null;
 
   return submittedAnswer ? { submittedAnswer } : null;
-}
-
-async function readAuthorCredit(userId: string, domain: string) {
-  const [row] = await db
-    .select({
-      points: sql<number>`coalesce(sum(${masteryEvents.awardedPoints}), 0)`,
-      distinctQuestions: sql<number>`count(distinct ${masteryEvents.questionId})`,
-    })
-    .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.canonicalSubcategory, domain),
-      eq(masteryEvents.sourceType, 'author_credit'),
-    ));
-
-  return {
-    points: Number(row?.points ?? 0),
-    distinctQuestions: Number(row?.distinctQuestions ?? 0),
-  };
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -82,68 +63,42 @@ export async function POST(request: NextRequest, context: RouteContext) {
     question.questionType,
   );
   const isCorrect = grade.result === 'correct';
-  const answerId = `feed:${feedItemId}`;
   const alreadyCorrect = await userAnsweredQuestionCorrectly(session.userId, question.id);
 
-  const [existingMastery, authorCredit] = await Promise.all([
-    db
-      .select()
-      .from(playerMastery)
-      .where(and(eq(playerMastery.userId, session.userId), eq(playerMastery.canonicalSubcategory, domain)))
-      .limit(1),
-    readAuthorCredit(session.userId, domain),
-  ]);
+  const existingMastery = await db
+    .select()
+    .from(playerMastery)
+    .where(and(eq(playerMastery.userId, session.userId), eq(playerMastery.canonicalSubcategory, domain)))
+    .limit(1);
 
   const previousTier: MasteryTier = existingMastery[0]?.tier ?? 'establishing';
   const answerState = alreadyCorrect ? 'repeat_correct' : 'first_correct';
   const basePoints = isCorrect ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, answerState) : 0;
   const pointsAwarded = isCorrect ? basePoints : 0;
-  const nextTotalPoints = (existingMastery[0]?.totalPoints ?? 0) + pointsAwarded;
-  const nextTier = isCorrect
-    ? effectiveTier(nextTotalPoints, authorCredit.points, authorCredit.distinctQuestions)
-    : previousTier;
-
-  await db.transaction(async (tx) => {
-    if (isCorrect && (!alreadyCorrect || !existingMastery[0])) {
-      await tx
-        .insert(playerMastery)
-        .values({
-          userId: session.userId,
-          canonicalSubcategory: domain,
-          broadCategory: question.broadCategory,
-          totalPoints: pointsAwarded,
-          tier: nextTier,
-          tierReachedAt: previousTier !== nextTier ? new Date() : null,
-          seasonPointsStart: 0,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [playerMastery.userId, playerMastery.canonicalSubcategory],
-          set: {
-            broadCategory: question.broadCategory,
-            totalPoints: nextTotalPoints,
-            tier: nextTier,
-            tierReachedAt: previousTier !== nextTier ? new Date() : existingMastery[0]?.tierReachedAt ?? null,
-            updatedAt: new Date(),
-          },
-        });
-    }
-
-    if (isCorrect && !alreadyCorrect) {
-      await tx.insert(masteryEvents).values({
+  const masteryDelta = isCorrect && !alreadyCorrect
+    ? await writeMasteryEvent({
         userId: session.userId,
-        canonicalSubcategory: domain,
-        sourceType: 'live_correct',
         questionId: question.id,
-        answeredByUserId: session.userId,
-        answerId,
+        domain,
+        answerState,
+        pointsAwarded,
+        sourceType: 'feed',
+        sourceId: feedItemId,
+        broadCategory: question.broadCategory,
+        eventQuestionId: question.id,
         basePoints,
         weight: 1,
-        awardedPoints: pointsAwarded,
-        answerState,
-        sessionContext: 'feed',
-      });
+      })
+    : {
+        domain,
+        points: pointsAwarded,
+        previousTier,
+        newTier: previousTier,
+        tierChanged: false,
+      };
 
+  await db.transaction(async (tx) => {
+    if (isCorrect && !alreadyCorrect) {
       await tx
         .update(questions)
         .set({
@@ -174,20 +129,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     explanation: question.explainerFull ?? question.explainerBrief ?? question.factualExplanation,
     pointsAwarded,
     awarded_points: pointsAwarded,
-    masteryDelta: {
-      domain,
-      points: pointsAwarded,
-      previousTier,
-      newTier: nextTier,
-      tierChanged: previousTier !== nextTier,
-    },
-    mastery_delta: {
-      domain,
-      points: pointsAwarded,
-      previousTier,
-      newTier: nextTier,
-      tierChanged: previousTier !== nextTier,
-    },
+    masteryDelta,
+    mastery_delta: masteryDelta,
     correctAnswer: question.answerText,
     answer: question.answerText,
     consolation: grade.consolation,

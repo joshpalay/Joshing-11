@@ -5,7 +5,9 @@
  * and returned to the client from the queue / answer endpoints.
  */
 
-import type { DifficultyEstimate } from '@prisma/client';
+import type { DifficultyEstimate } from '@/types/db';
+
+type DailyDifficultyEstimate = DifficultyEstimate | 'accessible' | 'moderate' | 'specialist';
 
 export type QueueSlotSource = 'friend' | 'bot' | 'community';
 export type QueueSlotAnswerState = 'correct' | 'incorrect';
@@ -59,17 +61,17 @@ export const DAILY_QUEUE_SIZE = 5;
  * Difficulty → base points for B9 personal daily. Always prefer
  * calibrated_difficulty, fall back to llm_difficulty, then difficulty_estimate.
  */
-export const DAILY_BASE_POINTS: Record<DifficultyEstimate, number> = {
+export const DAILY_BASE_POINTS = {
   specialist: 100,
   moderate: 50,
   accessible: 10,
-};
+} as Record<DailyDifficultyEstimate, number>;
 
 export const FRIEND_WEIGHT = 1.0;
 export const BOT_WEIGHT = 1.0;
 
 export function resolveDailyBasePoints(
-  difficulty: DifficultyEstimate | string | null | undefined
+  difficulty: DailyDifficultyEstimate | string | null | undefined
 ): number {
   if (!difficulty) return DAILY_BASE_POINTS.moderate;
   if (difficulty === 'specialist' || difficulty === 'moderate' || difficulty === 'accessible') {

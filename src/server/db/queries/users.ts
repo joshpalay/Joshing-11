@@ -1,8 +1,9 @@
-import type { Prisma, User } from '@prisma/client';
+import type { InferSelectModel } from 'drizzle-orm';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 
-import { prisma } from '@/lib/prisma';
 import { db, declaredInterests, friendInvitations, users } from '@/server/db';
+
+type User = InferSelectModel<typeof users>;
 
 export type DeclaredInterestInput = {
   label: string;
@@ -71,32 +72,38 @@ function parsePreSeededInterests(value: unknown): PreSeededInterest[] {
   }).slice(0, 3);
 }
 
-export function getUserByPhone(phone: string) {
-  return prisma.user.findUnique({
-    where: { phone_number: phone },
+export async function getUserByPhone(phone: string) {
+  const user = await db.query.users.findFirst({
+    where: eq(users.phoneNumber, phone),
   });
+  return user ?? null;
 }
 
-export function getUserById(id: string) {
-  return prisma.user.findUnique({
-    where: { id },
+export async function getUserById(id: string) {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, id),
   });
+  return user ?? null;
 }
 
 export function createUser(phone: string) {
-  return prisma.user.create({
-    data: {
-      phone_number: phone,
-      phone_verified: true,
-    },
-  });
+  return db
+    .insert(users)
+    .values({
+      phoneNumber: phone,
+      phoneVerified: true,
+    })
+    .returning()
+    .then(([user]) => user);
 }
 
 export function updateUser(id: string, data: Partial<User>) {
-  return prisma.user.update({
-    where: { id },
-    data: data as Prisma.UserUpdateInput,
-  });
+  return db
+    .update(users)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(users.id, id))
+    .returning()
+    .then(([user]) => user);
 }
 
 export async function saveDeclaredInterests(userId: string, interests: DeclaredInterestInput[]) {

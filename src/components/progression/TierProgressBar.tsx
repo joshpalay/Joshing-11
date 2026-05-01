@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 import { getKnowledgeTierProgressionLabel } from '@/server/profile/knowledge-tier-copy';
 
 type TierProgressBarProps = {

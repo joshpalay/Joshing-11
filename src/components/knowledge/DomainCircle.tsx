@@ -1,5 +1,5 @@
 import { DOMAIN_ICON_COMPONENTS, DomainInitialIcon } from '@/components/icons/domain-icons';
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 import type { CSSProperties } from 'react';
 
 const TIER_LABEL: Record<MasteryTier, string> = {

@@ -1,4 +1,4 @@
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 import { resolveTier } from '@/server/mastery/tiers';
 import type { PortraitCategory } from '@/server/profile/portrait';
 import { B5_PERSONAL_MASTERY_COPY } from '@/server/profile/personal-mastery-copy';

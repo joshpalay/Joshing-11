@@ -1,4 +1,4 @@
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
 
 type Props = {

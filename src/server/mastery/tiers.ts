@@ -1,4 +1,4 @@
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 
 /** PRD §8.32 — minimum points to enter each tier (establishing is default below familiar). */
 export const TIER_THRESHOLD_POINTS: Record<MasteryTier, number> = {

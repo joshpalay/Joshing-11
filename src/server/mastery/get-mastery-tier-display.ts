@@ -1,4 +1,4 @@
-import type { MasteryTier } from '@prisma/client';
+import type { MasteryTier } from '@/types/db';
 import { resolveTier, TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
 
 export type MasteryTierDisplay = {

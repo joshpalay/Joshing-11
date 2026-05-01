@@ -34,14 +34,6 @@ vi.mock('@/server/profile/multitudes', () => ({
   buildMultitudesCacheKey: buildMultitudesCacheKeyMock,
   generateMultitudesCopy: generateMultitudesCopyMock,
 }));
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    user: {
-      findUnique: userFindUniqueMock,
-    },
-  },
-}));
-
 import { GET as getOwnPortrait } from '@/app/api/users/[userId]/portrait/route';
 import { GET as getFriendPortrait } from '@/app/api/users/[userId]/portrait/friend/route';
 import { GET as getMastery } from '@/app/api/users/[userId]/mastery/route';
