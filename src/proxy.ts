@@ -20,7 +20,7 @@ async function getAuthenticatedUser(request: NextRequest): Promise<AuthMeRespons
   return data?.user ?? null;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === '/login';
   const isOnboardingPage = pathname === '/onboarding';

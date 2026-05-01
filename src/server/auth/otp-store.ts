@@ -9,19 +9,11 @@ import { and, count, desc, eq, gt, gte } from 'drizzle-orm';
 
 import { db } from '@/server/db';
 import { otpCodes, smsLogs } from '@/server/db/schema';
+import { normalizePhone } from './phone';
+
+export { isUsPhoneNumber, normalizePhone } from './phone';
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
-
-export function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
-  return phone.startsWith('+') ? phone : `+${digits}`;
-}
-
-export function isUsPhoneNumber(phone: string): boolean {
-  return /^\+1\d{10}$/.test(normalizePhone(phone));
-}
 
 function generateCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');

@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getRecentOtpRequestCount, requestOtp, isUsPhoneNumber, normalizePhone } from '@/server/auth/otp-store';
-import { sendSms } from '@/server/sms';
-
-const OTP_RATE_LIMIT_PER_HOUR = 3;
+import { isUsPhoneNumber, normalizePhone } from '@/server/auth/phone';
 
 export async function POST(request: Request) {
   try {
@@ -25,20 +22,8 @@ export async function POST(request: Request) {
     }
 
     const phone = normalizePhone(rawPhone);
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const recentOtpCount = await getRecentOtpRequestCount(phone, oneHourAgo);
 
-    if (recentOtpCount >= OTP_RATE_LIMIT_PER_HOUR) {
-      return NextResponse.json(
-        { error: 'rate_limited', message: 'Too many codes requested. Try again later.' },
-        { status: 429 },
-      );
-    }
-
-    const { code, normalizedPhone } = await requestOtp(phone);
-    await sendSms(normalizedPhone, `Your Joshing code: ${code}`, 'otp');
-
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, phone });
   } catch (error) {
     console.error('[auth/request-otp] failed', error);
     return NextResponse.json(

@@ -25,7 +25,7 @@ export default function LoginPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function sendCode(event: FormEvent) {
+  async function continueWithPhone(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
@@ -45,7 +45,7 @@ export default function LoginPanel() {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setError(data?.message ?? 'Unable to send a code.');
+        setError(data?.message ?? 'Unable to continue.');
         return;
       }
 
@@ -92,7 +92,7 @@ export default function LoginPanel() {
     <section className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-sm">
       <div className="mb-5">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {step === 'phone' ? 'Login with phone' : 'Verify code'}
+          {step === 'phone' ? 'Login with phone' : 'Enter code'}
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-normal">Joshing</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -101,7 +101,7 @@ export default function LoginPanel() {
       </div>
 
       {step === 'phone' ? (
-        <form className="space-y-3" onSubmit={sendCode}>
+        <form className="space-y-3" onSubmit={continueWithPhone}>
           <label className="block text-sm font-medium" htmlFor="phone">
             Phone number
           </label>
@@ -121,13 +121,13 @@ export default function LoginPanel() {
             className="h-11 w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
             disabled={loading}
           >
-            {loading ? 'Sending...' : 'Text me a code'}
+            {loading ? 'Continuing...' : 'Continue'}
           </button>
         </form>
       ) : (
         <form className="space-y-3" onSubmit={verifyCode}>
           <label className="block text-sm font-medium" htmlFor="code">
-            6-digit code
+            Temporary code
           </label>
           <input
             id="code"
@@ -135,7 +135,7 @@ export default function LoginPanel() {
             inputMode="numeric"
             autoComplete="one-time-code"
             className="h-11 w-full rounded-md border bg-background px-3 text-base outline-none ring-offset-background focus:ring-2 focus:ring-ring"
-            placeholder="123456"
+            placeholder="000000"
             value={code}
             onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
             disabled={loading}

@@ -2,9 +2,11 @@ import { and, eq, isNull, or } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { createSession } from '@/server/auth/session';
-import { verifyOtp } from '@/server/auth/otp-store';
+import { isUsPhoneNumber, normalizePhone } from '@/server/auth/phone';
 import { getUserByPhone, createUser, updateUser } from '@/server/db/queries/users';
 import { db, friendInvitations, friendships } from '@/server/db';
+
+const TEMPORARY_OTP_CODE = '000000';
 
 type VerifyOtpBody = {
   phone?: unknown;
@@ -87,14 +89,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedPhone = await verifyOtp(phone, code);
-    if (!normalizedPhone) {
+    if (!isUsPhoneNumber(phone)) {
+      return NextResponse.json(
+        { error: 'invalid_phone', message: 'US phone number required' },
+        { status: 400 },
+      );
+    }
+
+    if (code !== TEMPORARY_OTP_CODE) {
       return NextResponse.json(
         { error: 'invalid_code', message: 'Code invalid or expired' },
         { status: 401 },
       );
     }
 
+    const normalizedPhone = normalizePhone(phone);
     const existingUser = await getUserByPhone(normalizedPhone);
     const user = existingUser
       ? await updateUser(existingUser.id, { phoneVerified: true })
