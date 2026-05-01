@@ -642,12 +642,15 @@ model ProfileDomainVisibility {
   id                    String   @id @default(cuid())
   user_id               String
   canonical_subcategory String
+  domain                String
+  visibility            String   @default("public")
   is_visible            Boolean  @default(true)
   updated_at            DateTime @default(now()) @updatedAt
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([user_id, canonical_subcategory])
+  @@unique([user_id, domain])
   @@index([user_id])
   @@map("PROFILE_DOMAIN_VISIBILITY")
 }

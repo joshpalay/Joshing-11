@@ -2,43 +2,68 @@
 
 import { useState } from 'react';
 
+export type DomainVisibility = 'private' | 'friends' | 'public';
+
 type Props = {
-  userId: string;
   domainName: string;
-  initialVisible: boolean;
+  initialVisibility: DomainVisibility;
+  onChange?: (visibility: DomainVisibility) => Promise<void> | void;
 };
 
-export function DomainVisibilityToggle({ userId, domainName, initialVisible }: Props) {
-  const [isVisible, setIsVisible] = useState(initialVisible);
+const OPTIONS: DomainVisibility[] = ['private', 'friends', 'public'];
+
+export function DomainVisibilityToggle({ domainName, initialVisibility, onChange }: Props) {
+  const [visibility, setVisibility] = useState<DomainVisibility>(initialVisibility);
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const label = isVisible ? 'Visible' : 'Private';
-
-  const onToggle = async () => {
-    if (isSaving) return;
-    const next = !isVisible;
-    setIsVisible(next);
+  const setNextVisibility = async (next: DomainVisibility) => {
+    if (isSaving || next === visibility) return;
+    const previous = visibility;
+    setVisibility(next);
+    setError(null);
     setIsSaving(true);
 
     try {
-      const res = await fetch(`/api/users/${userId}/knowledge/${encodeURIComponent(domainName)}/visibility`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ isVisible: next }),
-      });
+      if (onChange) {
+        await onChange(next);
+      } else {
+        const res = await fetch(`/api/knowledge/${encodeURIComponent(domainName)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ visibility: next }),
+        });
 
-      if (!res.ok) {
-        setIsVisible(!next);
+        if (!res.ok) throw new Error('Could not update visibility');
       }
+    } catch {
+      setVisibility(previous);
+      setError('Could not save that visibility setting.');
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <button type="button" className="btn-secondary" onClick={onToggle} disabled={isSaving}>
-      Show this domain on my profile: {label}
-    </button>
+    <div>
+      <div className="grid grid-cols-3 rounded-full border bg-card p-1 text-sm font-medium" aria-label={`Visibility for ${domainName}`}>
+        {OPTIONS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            className={`min-h-10 rounded-full px-3 capitalize transition ${
+              visibility === option ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => void setNextVisibility(option)}
+            disabled={isSaving}
+            aria-pressed={visibility === option}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+    </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Check } from 'lucide-react';
 
 type Difficulty = 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive';
@@ -65,6 +65,7 @@ function groupByCategory(domains: DomainRow[]) {
 
 export default function DailySetupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,10 +103,12 @@ export default function DailySetupPage() {
         const body = (await preferencesResponse.json()) as PreferencesResponse;
         if (cancelled) return;
 
+        const requestedDomain = searchParams.get('domain')?.trim();
+        const requestedCustom = searchParams.get('domainMode') === 'custom' && requestedDomain;
         setDomains(body.domains ?? []);
         setDifficulty(body.preferences?.difficulty ?? 'adaptive');
-        setDomainMode(body.preferences?.domainMode ?? 'random');
-        setSelectedDomains(new Set(body.preferences?.selectedDomains ?? []));
+        setDomainMode(requestedCustom ? 'custom' : body.preferences?.domainMode ?? 'random');
+        setSelectedDomains(new Set(requestedCustom ? [requestedDomain] : body.preferences?.selectedDomains ?? []));
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : 'Could not load setup.');
       } finally {
@@ -117,7 +120,7 @@ export default function DailySetupPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, searchParams]);
 
   const categoryGroups = useMemo(() => groupByCategory(domains), [domains]);
   const masteryDomains = useMemo(

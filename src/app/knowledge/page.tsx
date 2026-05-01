@@ -362,7 +362,15 @@ export default function KnowledgePage() {
           <h2 className="font-serif text-2xl font-semibold">Highlights</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             {highlights.map((highlight) => (
-              <article key={highlight.key} className="rounded-lg border bg-card p-4 text-card-foreground">
+              <button
+                key={highlight.key}
+                type="button"
+                className="rounded-lg border bg-card p-4 text-left text-card-foreground transition hover:border-foreground/30 disabled:cursor-default disabled:hover:border-border"
+                onClick={() => {
+                  if (highlight.domain) router.push(`/knowledge/${encodeURIComponent(highlight.domain.domain)}`);
+                }}
+                disabled={!highlight.domain}
+              >
                 <div className="flex items-center gap-3">
                   {highlight.domain ? (
                     <DomainCircle
@@ -378,7 +386,7 @@ export default function KnowledgePage() {
                     <p className="mt-1 text-sm text-muted-foreground">{highlight.body}</p>
                   </div>
                 </div>
-              </article>
+              </button>
             ))}
           </div>
         </section>

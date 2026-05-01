@@ -533,6 +533,8 @@ export const profileDomainVisibility = pgTable(
     id: id(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
+    domain: text('domain').notNull(),
+    visibility: text('visibility').$type<'public' | 'friends' | 'private'>().notNull().default('public'),
     isVisible: boolean('is_visible').notNull().default(true),
     updatedAt: updatedAt(),
   },
@@ -541,6 +543,7 @@ export const profileDomainVisibility = pgTable(
       table.userId,
       table.canonicalSubcategory,
     ),
+    unique('PROFILE_DOMAIN_VISIBILITY_user_id_domain_key').on(table.userId, table.domain),
     index('PROFILE_DOMAIN_VISIBILITY_user_id_idx').on(table.userId),
   ],
 );
