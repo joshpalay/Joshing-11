@@ -1,6 +1,7 @@
 const REQUIRED_ENV_VARS = [
   'DATABASE_URL',
   'CRON_SECRET',
+  'JWT_SECRET',
   'ANTHROPIC_API_KEY',
   'TWILIO_ACCOUNT_SID',
   'TWILIO_AUTH_TOKEN',
@@ -10,15 +11,6 @@ const REQUIRED_ENV_VARS = [
 const OPTIONAL_ENV_VARS = ['NEXT_PUBLIC_APP_URL'] as const;
 
 export default function checkEnv() {
-  const jwtSecret =
-    process.env.JWT_SECRET?.trim() ||
-    process.env.AUTH_SECRET?.trim() ||
-    process.env.NEXTAUTH_SECRET?.trim() ||
-    process.env.CRON_SECRET?.trim();
-  if (!jwtSecret) {
-    throw new Error('Missing required environment variable: JWT_SECRET/AUTH_SECRET/NEXTAUTH_SECRET (or CRON_SECRET fallback)');
-  }
-
   for (const key of REQUIRED_ENV_VARS) {
     if (!process.env[key]?.trim()) {
       throw new Error(`Missing required environment variable: ${key}`);
