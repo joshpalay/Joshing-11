@@ -14,6 +14,10 @@ import { userSessions } from '@/server/db/schema';
 const SESSION_COOKIE_NAME = 'joshing_session';
 const SESSION_DAYS = 90;
 
+const SESSION_SECRET_KEYS = ['JWT_SECRET', 'AUTH_SECRET', 'NEXTAUTH_SECRET'] as const;
+const MISSING_SECRET_ERROR =
+  'JWT_SECRET (or AUTH_SECRET/NEXTAUTH_SECRET) is required in production. Configure it in your deployment environment variables.';
+
 type SessionJwtPayload = {
   sid: string;
 };
@@ -23,22 +27,40 @@ export type Session = {
   userId: string;
 };
 
+function readConfiguredSessionSecret(): string | null {
+  for (const key of SESSION_SECRET_KEYS) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+
+  const cronFallback = process.env.CRON_SECRET?.trim();
+  if (cronFallback) {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(
+        '[auth/session] Using CRON_SECRET as JWT fallback. Set JWT_SECRET (or AUTH_SECRET/NEXTAUTH_SECRET) in deployment env vars.',
+      );
+    }
+    return cronFallback;
+  }
+
+  return null;
+}
+
 function getJwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET;
+  const secret = readConfiguredSessionSecret();
 
   if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET is required in production.');
+    throw new Error(MISSING_SECRET_ERROR);
   }
 
   if (!secret) {
     return new TextEncoder().encode('development-only-joshing-session-secret');
   }
 
-  try {
-    return Buffer.from(secret, 'base64');
-  } catch {
-    return new TextEncoder().encode(secret);
-  }
+  const decoded = Buffer.from(secret, 'base64');
+  if (decoded.length > 0) return decoded;
+
+  return new TextEncoder().encode(secret);
 }
 
 /**
