@@ -15,6 +15,8 @@ const SESSION_COOKIE_NAME = 'joshing_session';
 const SESSION_DAYS = 90;
 
 const SESSION_SECRET_KEYS = ['JWT_SECRET', 'AUTH_SECRET', 'NEXTAUTH_SECRET'] as const;
+const MISSING_SECRET_ERROR =
+  'JWT_SECRET (or AUTH_SECRET/NEXTAUTH_SECRET) is required in production. Configure it in your deployment environment variables.';
 
 type SessionJwtPayload = {
   sid: string;
@@ -48,9 +50,7 @@ function getJwtSecret(): Uint8Array {
   const secret = readConfiguredSessionSecret();
 
   if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error(
-      'JWT_SECRET (or AUTH_SECRET/NEXTAUTH_SECRET) is required in production. Configure it in your deployment environment variables.',
-    );
+    throw new Error(MISSING_SECRET_ERROR);
   }
 
   if (!secret) {
