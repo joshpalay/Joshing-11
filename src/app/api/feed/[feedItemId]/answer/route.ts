@@ -132,7 +132,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     await tx
       .update(feedItems)
-      .set({ state: 'answered' })
+      .set({
+        state: 'answered',
+        submittedAnswer: parsed.submittedAnswer,
+      })
       .where(eq(feedItems.id, feedItemId));
   });
 

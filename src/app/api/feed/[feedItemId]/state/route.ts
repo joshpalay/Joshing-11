@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
@@ -35,15 +35,38 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   const [item] = await db
-    .select({ id: feedItems.id })
+    .select({
+      id: feedItems.id,
+      recipientUserId: feedItems.recipientUserId,
+      questionId: feedItems.questionId,
+      sourceType: feedItems.sourceType,
+    })
     .from(feedItems)
     .where(and(eq(feedItems.id, feedItemId), eq(feedItems.recipientUserId, session.userId)))
     .limit(1);
 
   if (!item) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  const updated = await updateFeedItemState(feedItemId, state);
+  if (item.sourceType === 'thumbs_upped' && item.questionId) {
+    const relatedItems = await db
+      .select({ id: feedItems.id })
+      .from(feedItems)
+      .where(and(
+        eq(feedItems.recipientUserId, item.recipientUserId),
+        eq(feedItems.questionId, item.questionId),
+        eq(feedItems.sourceType, 'thumbs_upped'),
+      ));
+
+    await db
+      .update(feedItems)
+      .set({ state })
+      .where(inArray(feedItems.id, relatedItems.map((relatedItem) => relatedItem.id)));
+  } else {
+    await updateFeedItemState(feedItemId, state);
+  }
+
+  const [updated] = await db.select().from(feedItems).where(eq(feedItems.id, feedItemId)).limit(1);
   const rolledOff = await rollOffOldItems(session.userId);
 
-  return NextResponse.json({ item: updated, rolled_off: rolledOff });
+  return NextResponse.json({ item: updated ?? null, rolled_off: rolledOff });
 }

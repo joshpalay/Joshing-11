@@ -10,6 +10,7 @@ import {
   questions,
   users,
 } from '@/server/db';
+import { getFriends } from '@/server/db/queries/friends';
 import type { MasteryTier } from '@/types/db';
 
 export type Beat1Mastered = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
@@ -196,6 +197,10 @@ async function computeBeat3(userId: string, cycleStart: Date, cycleEndExclusive:
 }
 
 async function computeBeat4(userId: string): Promise<Beat4Alignment | null> {
+  const friends = await getFriends(userId);
+  const friendIds = new Set(friends.map((friend) => friend.id));
+  if (friendIds.size === 0) return null;
+
   const rows = await db
     .select({
       userId: playerMastery.userId,
@@ -211,7 +216,7 @@ async function computeBeat4(userId: string): Promise<Beat4Alignment | null> {
 
   const candidates = new Map<string, { displayName: string; sharedDomains: string[] }>();
   rows.forEach((row) => {
-    if (row.userId === userId || !viewerDomains.has(row.domain)) return;
+    if (row.userId === userId || !friendIds.has(row.userId) || !viewerDomains.has(row.domain)) return;
     const current = candidates.get(row.userId) ?? { displayName: row.displayName?.trim() || 'Someone', sharedDomains: [] };
     current.sharedDomains.push(row.domain);
     candidates.set(row.userId, current);

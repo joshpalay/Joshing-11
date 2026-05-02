@@ -1,3 +1,12 @@
+/**
+ * @deprecated Not in use in v11.0.
+ *
+ * This file is preserved as a reference for porting v10.25 logic to
+ * Drizzle when needed. It should NOT be imported by active code.
+ * If you find yourself wanting to call from this file, port the
+ * function to a Drizzle-native implementation in src/server/ first.
+ */
+
 import { invalidateMultitudesCacheForUser } from '@/server/profile/multitudes';
 import type { AnswerState, DifficultyEstimate, MasteryTier } from '@/types/db';
 import { effectiveTier } from '@/server/mastery/tiers';

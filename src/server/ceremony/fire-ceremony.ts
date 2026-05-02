@@ -53,7 +53,7 @@ export async function fireCeremony(userId: string): Promise<string> {
     .where(eq(users.id, userId))
     .limit(1);
 
-  if (user?.phoneNumber && user.smsOptIn === 'opted_in') {
+  if (user?.phoneNumber && user.smsOptIn !== 'opted_out') {
     await sendSms(
       user.phoneNumber,
       `Two weeks of Joshing. Here's what you've been up to. ${appUrl()}/ceremony/${ceremony.id}`,

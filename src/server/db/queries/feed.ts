@@ -1,15 +1,69 @@
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 
-import { db, feedItems, masteryEvents } from '@/server/db';
+import { db, feedItems, masteryEvents, users } from '@/server/db';
 
 export type FeedItem = typeof feedItems.$inferSelect;
 export type NewFeedItem = typeof feedItems.$inferInsert;
 export type FeedItemState = 'active' | 'answered' | 'skipped' | 'dismissed' | 'rolled_off' | 'played';
+export type CollapsedFeedItem = FeedItem & {
+  thumbsUpCount?: number;
+  additionalEndorsers?: Array<{ userId: string; displayName: string }>;
+};
 
 const VISIBLE_FEED_STATES = ['active', 'skipped'] as const;
 const BLOCKING_FEED_STATES = ['active', 'skipped', 'dismissed'] as const;
 
-export async function getFeedForUser(userId: string): Promise<FeedItem[]> {
+function thumbsupCollapseKey(item: FeedItem): string | null {
+  if (item.sourceType !== 'thumbs_upped' || !item.questionId) return null;
+  return item.questionId;
+}
+
+async function collapseThumbsUpItems(items: FeedItem[]): Promise<CollapsedFeedItem[]> {
+  const groups = new Map<string, FeedItem[]>();
+  items.forEach((item) => {
+    const key = thumbsupCollapseKey(item);
+    if (!key) return;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  });
+
+  const collapsedById = new Map<string, CollapsedFeedItem>();
+  const hiddenIds = new Set<string>();
+  const additionalUserIds = new Set<string>();
+
+  groups.forEach((group) => {
+    if (group.length <= 1) return;
+    const [mostRecent, ...older] = [...group].sort((a, b) => b.sourceEventAt.getTime() - a.sourceEventAt.getTime());
+    older.forEach((item) => {
+      hiddenIds.add(item.id);
+      additionalUserIds.add(item.sourceUserId);
+    });
+    collapsedById.set(mostRecent.id, {
+      ...mostRecent,
+      thumbsUpCount: group.length,
+      additionalEndorsers: older.map((item) => ({ userId: item.sourceUserId, displayName: 'A friend' })),
+    });
+  });
+
+  if (additionalUserIds.size > 0) {
+    const userRows = await db
+      .select({ id: users.id, displayName: users.displayName })
+      .from(users)
+      .where(inArray(users.id, [...additionalUserIds]));
+    const nameById = new Map(userRows.map((user) => [user.id, user.displayName?.trim() || 'A friend']));
+    collapsedById.forEach((item) => {
+      item.additionalEndorsers = item.additionalEndorsers?.map((endorser) => ({
+        ...endorser,
+        displayName: nameById.get(endorser.userId) ?? 'A friend',
+      }));
+    });
+  }
+
+  return items
+    .filter((item) => !hiddenIds.has(item.id))
+    .map((item) => collapsedById.get(item.id) ?? item);
+}
+
+export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[]> {
   const [pinned, nonPinned] = await Promise.all([
     db
       .select()
@@ -32,7 +86,7 @@ export async function getFeedForUser(userId: string): Promise<FeedItem[]> {
       .limit(25),
   ]);
 
-  return [...pinned, ...nonPinned];
+  return collapseThumbsUpItems([...pinned, ...nonPinned]);
 }
 
 export async function createFeedItem(data: NewFeedItem): Promise<FeedItem> {

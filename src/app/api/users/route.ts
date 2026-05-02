@@ -1,8 +1,7 @@
-import { asc, ne } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { db, users } from '@/server/db';
+import { getFriends } from '@/server/db/queries/friends';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,12 +13,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  // TODO Phase 8: replace with friends-only list when friend system is built.
-  const rows = await db
-    .select({ id: users.id, displayName: users.displayName, phoneNumber: users.phoneNumber })
-    .from(users)
-    .where(ne(users.id, session.userId))
-    .orderBy(asc(users.displayName), asc(users.phoneNumber));
+  const rows = await getFriends(session.userId);
 
   return NextResponse.json(
     rows.map((user) => ({

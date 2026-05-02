@@ -16,6 +16,12 @@ function domainPill(question: typeof questions.$inferSelect | undefined) {
   return question?.canonicalSubcategory || question?.broadCategory || question?.category || 'General';
 }
 
+function thumbsupAttribution(sourceName: string, count: number | undefined) {
+  if (!count || count <= 1) return `${sourceName} thumbed up`;
+  if (count === 2) return `${sourceName} + 1 other thumbed up`;
+  return `${sourceName} + ${count - 1} others thumbed up`;
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -64,11 +70,13 @@ export async function GET() {
             ? `${sourceName} wrote this`
             : item.sourceType === 'joshing_game'
               ? `${sourceName} sent you a Joshing Game`
-              : `${sourceName} thumbed up`,
+              : thumbsupAttribution(sourceName, item.thumbsUpCount),
         source_event_at: item.sourceEventAt,
         personal_message: item.personalMessage,
         state: item.state,
         is_pinned: item.isPinned,
+        thumbs_up_count: item.thumbsUpCount ?? 1,
+        additional_endorsers: item.additionalEndorsers ?? [],
         question_text: question?.questionText ?? null,
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,

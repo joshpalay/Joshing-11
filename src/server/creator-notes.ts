@@ -102,7 +102,10 @@ export async function findWrongAnswerContext(questionId: string, recipientUserId
   }
 
   const [feedItem] = await db
-    .select({ id: feedItems.id })
+    .select({
+      id: feedItems.id,
+      submittedAnswer: feedItems.submittedAnswer,
+    })
     .from(feedItems)
     .where(and(
       eq(feedItems.questionId, questionId),
@@ -121,11 +124,12 @@ export async function findWrongAnswerContext(questionId: string, recipientUserId
       eq(masteryEvents.questionId, questionId),
       eq(masteryEvents.answeredByUserId, recipientUserId),
       eq(masteryEvents.sessionContext, 'feed'),
+      inArray(masteryEvents.answerState, ['first_correct', 'first_correct_after_wrong', 'repeat_correct']),
     ))
     .limit(1);
 
   if (correctEvent) return null;
-  return { contextType: 'feed' as const, contextId: feedItem.id, submittedAnswer: null };
+  return { contextType: 'feed' as const, contextId: feedItem.id, submittedAnswer: feedItem.submittedAnswer };
 }
 
 export async function createCreatorNote(params: {

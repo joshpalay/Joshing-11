@@ -18,7 +18,14 @@ export type MasteryTier =
   | 'solid'
   | 'mastery';
 
-export type SmsMessageType = (typeof smsMessageTypeEnum.enumValues)[number];
+export type SmsMessageType = Exclude<
+  (typeof smsMessageTypeEnum.enumValues)[number],
+  | 'star_notification'
+  | 'game_complete'
+  | 'game_summary_ready'
+  | 'incognito_round_invitation'
+  | 'anniversary_milestone'
+>;
 
 export type Category = string;
 // Category is used as a string throughout - no enum needed.

@@ -356,6 +356,14 @@ async function hydrateCreatorNotes(items: ActivityItemRow[]) {
     .where(inArray(creatorNotes.id, noteIds));
 
   const questionIds = [...new Set(rows.map((row) => row.note.questionId))];
+  const feedItemIds = [
+    ...new Set(
+      rows
+        .filter((row) => row.note.contextType === 'feed')
+        .map((row) => row.note.contextId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
   const gameRows = questionIds.length > 0
     ? await db
         .select({
@@ -366,9 +374,21 @@ async function hydrateCreatorNotes(items: ActivityItemRow[]) {
         .from(joshingGameResponses)
         .where(inArray(joshingGameResponses.questionId, questionIds))
     : [];
+  const feedRows = feedItemIds.length > 0
+    ? await db
+        .select({
+          feedItemId: feedItems.id,
+          submittedAnswer: feedItems.submittedAnswer,
+        })
+        .from(feedItems)
+        .where(inArray(feedItems.id, feedItemIds))
+    : [];
 
   const submittedByQuestionUser = new Map(
     gameRows.map((row) => [`${row.questionId}:${row.userId}`, row.submittedAnswer] as const),
+  );
+  const submittedByFeedItem = new Map(
+    feedRows.map((row) => [row.feedItemId, row.submittedAnswer] as const),
   );
 
   return new Map(rows.map((row) => [
@@ -377,7 +397,9 @@ async function hydrateCreatorNotes(items: ActivityItemRow[]) {
       id: row.note.id,
       questionText: row.questionText,
       correctAnswer: row.correctAnswer,
-      submittedAnswer: submittedByQuestionUser.get(`${row.note.questionId}:${row.note.recipientUserId}`) ?? null,
+      submittedAnswer: row.note.contextType === 'feed' && row.note.contextId
+        ? submittedByFeedItem.get(row.note.contextId) ?? null
+        : submittedByQuestionUser.get(`${row.note.questionId}:${row.note.recipientUserId}`) ?? null,
       noteText: row.note.noteText,
       deliveredAt: row.note.deliveredAt,
     },

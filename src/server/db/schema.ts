@@ -77,6 +77,15 @@ export const creatorResponseCannedEnum = pgEnum('CreatorResponseCanned', [
   'just_for_you',
   'story_here',
 ]);
+/**
+ * Vestigial v10.25 message types retained for database compatibility only.
+ * Do not use in new application code:
+ * - star_notification
+ * - game_complete
+ * - game_summary_ready
+ * - incognito_round_invitation
+ * - anniversary_milestone
+ */
 export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'otp',
   'daily_questions',
@@ -633,6 +642,7 @@ export const feedItems = pgTable(
     sourceUserId: text('sourceUserId').notNull().references(() => users.id),
     sourceEventAt: timestamp('sourceEventAt', { withTimezone: true }).notNull().defaultNow(),
     personalMessage: text('personalMessage'),
+    submittedAnswer: text('submittedAnswer'),
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),

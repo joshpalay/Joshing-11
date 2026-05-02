@@ -170,8 +170,8 @@ export async function sendGameCompleteSms(
         ceremonyOpts
       );
       const truncated = body.length > 160 ? body.slice(0, 157) + '…' : body;
-      sendSms(member.phone_number, truncated, 'game_complete', member.user_id).catch(
-        (err) => console.error('[SMS] game_complete send failed:', err)
+      sendSms(member.phone_number, truncated, 'joshing_game_complete', member.user_id).catch(
+        (err) => console.error('[SMS] joshing_game_complete send failed:', err)
       );
     }
   }

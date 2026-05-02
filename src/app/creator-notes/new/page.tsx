@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 
 import { CreatorNoteForm } from '@/app/creator-notes/new/CreatorNoteForm';
+import { creatorNoteSubmittedAnswerText } from '@/lib/creator-note-submitted-answer';
 import { getSession } from '@/server/auth/session';
 import { findWrongAnswerContext } from '@/server/creator-notes';
 import { db, questions, users } from '@/server/db';
@@ -74,7 +75,7 @@ export default async function NewCreatorNotePage({ searchParams }: PageProps) {
         </p>
         <p className="mt-2 text-muted-foreground">
           <span className="font-medium text-foreground">{recipientName} said:</span>{' '}
-          {wrongAnswer.submittedAnswer?.trim() || 'Their answer was not saved.'}
+          {creatorNoteSubmittedAnswerText(wrongAnswer.submittedAnswer, 'Their')}
         </p>
       </section>
 

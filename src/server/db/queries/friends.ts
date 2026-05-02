@@ -1,4 +1,4 @@
-import { and, eq, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, or } from 'drizzle-orm';
 
 import { db, friendships, users } from '@/server/db';
 
@@ -7,21 +7,22 @@ export type Friendship = typeof friendships.$inferSelect;
 
 export async function getFriends(userId: string): Promise<User[]> {
   const rows = await db
-    .select({ user: users })
+    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
     .from(friendships)
-    .innerJoin(
-      users,
-      or(
-        and(eq(friendships.userAId, userId), eq(users.id, friendships.userBId)),
-        and(eq(friendships.userBId, userId), eq(users.id, friendships.userAId)),
-      ),
-    )
     .where(and(
       eq(friendships.status, 'active'),
       or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
     ));
+  const friendIds = rows.map((friendship) => (
+    friendship.userAId === userId ? friendship.userBId : friendship.userAId
+  ));
+  if (friendIds.length === 0) return [];
 
-  return rows.map((row) => row.user);
+  return db
+    .select()
+    .from(users)
+    .where(inArray(users.id, friendIds))
+    .orderBy(asc(users.displayName), asc(users.phoneNumber));
 }
 
 export async function getFriendship(userAId: string, userBId: string): Promise<Friendship | null> {

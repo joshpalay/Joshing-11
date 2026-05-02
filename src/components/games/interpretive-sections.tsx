@@ -2,7 +2,6 @@
 
 import { type CSSProperties, type ReactNode, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { GroupOverlapMap } from '@/components/games/GroupOverlapMap';
 import { KnowledgeCircle, getDomainColor } from '@/components/knowledge/CategoryCircles';
 
 const monoStyle: CSSProperties = {
@@ -239,18 +238,6 @@ export function ImpactSection({
       </div>
     </section>
   );
-}
-
-export function GroupProgressSection({
-  groupId,
-  gameId,
-}: {
-  // TODO v11.0: groupId prop - needs new data source
-  groupId?: unknown;
-  // TODO v11.0: gameId prop - needs new data source
-  gameId?: unknown;
-}) {
-  return <GroupOverlapMap groupId={groupId} gameId={gameId} />;
 }
 
 export type DiscoveryRow = {

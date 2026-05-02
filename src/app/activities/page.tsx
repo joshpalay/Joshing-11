@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { CreatorNoteReadButton } from '@/app/activities/CreatorNoteReadButton';
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
+import { creatorNoteSubmittedAnswerText } from '@/lib/creator-note-submitted-answer';
 import { getSession } from '@/server/auth/session';
 import { getActivitiesForUser, type ActivityItemView } from '@/server/db/queries/activity';
 
@@ -80,7 +81,7 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
   return <>Something happened on Joshing</>;
 }
 
-function ActivitySubcopy({ item }: { item: ActivityItemView }) {
+export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
   if (item.type === 'creator_note_received') {
     const note = item.reference.creatorNote;
     if (!note) return null;
@@ -93,7 +94,7 @@ function ActivitySubcopy({ item }: { item: ActivityItemView }) {
           </p>
           <p className="mt-1 text-muted-foreground">
             <span className="font-medium text-foreground">You said:</span>{' '}
-            {note.submittedAnswer?.trim() || 'Your answer was not saved.'}
+            {creatorNoteSubmittedAnswerText(note.submittedAnswer, 'Your')}
           </p>
           <blockquote className="mt-3 border-l-4 border-primary/40 bg-muted/50 px-3 py-2 text-foreground">
             {note.noteText}
