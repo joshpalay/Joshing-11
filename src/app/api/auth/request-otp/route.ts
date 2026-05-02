@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { isUsPhoneNumber, normalizePhone } from '@/server/auth/phone';
+import { isUsPhoneNumber, normalizePhone, requestOtp } from '@/server/auth';
 
 export async function POST(request: Request) {
   try {
@@ -22,8 +22,13 @@ export async function POST(request: Request) {
     }
 
     const phone = normalizePhone(rawPhone);
+    const { code } = await requestOtp(phone);
 
-    return NextResponse.json({ ok: true, phone });
+    return NextResponse.json({
+      ok: true,
+      phone,
+      ...(process.env.NODE_ENV !== 'production' ? { debugCode: code } : {}),
+    });
   } catch (error) {
     console.error('[auth/request-otp] failed', error);
     return NextResponse.json(

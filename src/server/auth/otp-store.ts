@@ -41,9 +41,9 @@ export async function verifyOtp(phone: string, code: string): Promise<string | n
     .orderBy(desc(otpCodes.createdAt))
     .limit(1);
 
-  if (entry) {
-    await db.delete(otpCodes).where(eq(otpCodes.phoneNumber, normalized));
-  }
+  if (!entry) return null;
+
+  await db.delete(otpCodes).where(eq(otpCodes.phoneNumber, normalized));
 
   return normalized;
 }
