@@ -5,4 +5,4 @@
 
 export { createSession, getSession, getSessionToken, validateSessionToken, destroySession } from './session';
 export { getCurrentUser, requireUser } from './user';
-export { requestOtp, verifyOtp, getStoredCodeForPhone } from './otp-store';
+export { requestOtp, verifyOtp, getStoredCodeForPhone, isUsPhoneNumber, normalizePhone } from './otp-store';
