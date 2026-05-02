@@ -37,7 +37,8 @@ Open `.env.local` and fill in:
 | `DATABASE_URL` | Supabase pooled connection (port 6543) |
 | `DIRECT_URL` | Supabase direct connection (port 5432) |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
-| `JWT_SECRET` | 32+ random bytes, base64-encoded |
+| `JWT_SECRET` | 32+ random bytes, base64-encoded (preferred) |
+| `AUTH_SECRET` | Alias for `JWT_SECRET` in hosted environments |
 | `NEXT_PUBLIC_APP_URL` | Base URL (e.g. `http://localhost:3000`) |
 
 **3. Run database migrations** *(once schema is ready — Phase 1.2)*
