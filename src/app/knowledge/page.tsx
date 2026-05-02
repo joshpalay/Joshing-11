@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Repeat2, X } from 'lucide-react';
+import { Combine, Plus, Repeat2, X } from 'lucide-react';
 
 import { DomainCircle } from '@/components/knowledge/DomainCircle';
 import { DomainList } from '@/components/knowledge/DomainList';
@@ -63,6 +63,13 @@ type KnowledgeResponse = {
     allDomains: DomainMastery[];
     declaredInterests: string[];
   };
+};
+
+type TidyResult = {
+  mergesApplied: number;
+  domainsBefore: number;
+  domainsAfter: number;
+  details: Array<{ sources: string[]; target: string; rationale: string }>;
 };
 
 type SortMode = 'points' | 'tier' | 'lastActive' | 'alphabetical';
@@ -217,6 +224,9 @@ export default function KnowledgePage() {
   const [canonicalizing, setCanonicalizing] = useState(false);
   const [savingInterests, setSavingInterests] = useState(false);
   const [interestError, setInterestError] = useState<string | null>(null);
+  const [tidyConfirmOpen, setTidyConfirmOpen] = useState(false);
+  const [tidying, setTidying] = useState(false);
+  const [tidyNotice, setTidyNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -448,6 +458,29 @@ export default function KnowledgePage() {
     }
   };
 
+  const confirmTidy = async () => {
+    setTidying(true);
+    try {
+      const response = await fetch('/api/knowledge/tidy', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const body = await response.json().catch(() => null) as TidyResult | { message?: string } | null;
+      if (!response.ok || !body || !('mergesApplied' in body)) {
+        throw new Error((body as { message?: string } | null)?.message ?? 'Could not tidy your map.');
+      }
+      await reloadKnowledge();
+      setTidyConfirmOpen(false);
+      setTidyNotice(body.mergesApplied > 0 ? `${body.mergesApplied} domains combined` : 'Nothing to combine');
+      window.setTimeout(() => setTidyNotice(null), 3600);
+    } catch (caught) {
+      setTidyNotice(caught instanceof Error ? caught.message : 'Could not tidy your map.');
+      window.setTimeout(() => setTidyNotice(null), 4200);
+    } finally {
+      setTidying(false);
+    }
+  };
+
   if (loading) return <LoadingSkeleton />;
 
   if (error || !data) {
@@ -657,6 +690,21 @@ export default function KnowledgePage() {
         </div>
       </section>
 
+      <section className="mt-8 border-t pt-4">
+        <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <p>Map maintenance</p>
+          <button
+            type="button"
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-xs font-medium uppercase tracking-[0.08em] transition hover:text-foreground disabled:opacity-50"
+            onClick={() => setTidyConfirmOpen(true)}
+            disabled={tidying}
+          >
+            <Combine className="size-3.5" />
+            Tidy up my map
+          </button>
+        </div>
+      </section>
+
       {interestModal ? (
         <div className="fixed inset-0 z-50 flex items-end bg-black/30 px-3 py-4 sm:items-center sm:justify-center">
           <div className="w-full max-w-lg rounded-lg border bg-background p-5 shadow-xl">
@@ -768,6 +816,54 @@ export default function KnowledgePage() {
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {tidyConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/30 px-3 py-4 sm:items-center sm:justify-center">
+          <div className="w-full max-w-md rounded-lg border bg-background p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-serif text-2xl font-semibold">Tidy up your map?</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  We'll look for domains in your map that could be combined. This is automatic and based on what you've answered. You can't undo this.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                onClick={() => setTidyConfirmOpen(false)}
+                aria-label="Close"
+                disabled={tidying}
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="min-h-10 rounded-md border px-4 text-sm font-medium text-muted-foreground"
+                onClick={() => setTidyConfirmOpen(false)}
+                disabled={tidying}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="min-h-10 rounded-md bg-foreground px-4 text-sm font-medium text-background disabled:opacity-50"
+                onClick={() => void confirmTidy()}
+                disabled={tidying}
+              >
+                {tidying ? 'Tidying...' : 'Confirm tidy'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {tidyNotice ? (
+        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full border bg-background px-4 py-2 text-sm font-medium shadow-lg">
+          {tidyNotice}
         </div>
       ) : null}
     </main>

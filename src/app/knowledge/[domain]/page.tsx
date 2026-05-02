@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { DomainVisibilityToggle, type DomainVisibility } from '@/components/knowledge/DomainVisibilityToggle';
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
+import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import type { MasteryTier } from '@/types/db';
 
@@ -26,6 +27,7 @@ type QuestionAnswer = {
   isCorrect: boolean;
   answeredAt: string;
   source: 'daily' | 'joshing_game';
+  isInBank?: boolean;
 };
 
 type DomainDetail = {
@@ -291,9 +293,20 @@ export default function DomainDetailPage() {
                       <p><span className="font-medium">Correct answer:</span> {answer.correctAnswer ?? 'Not saved'}</p>
                       <p><span className="font-medium">Your answer:</span> {answer.submittedAnswer ?? 'Not saved'}</p>
                       {answer.questionId ? (
-                        <SendQuestionAction
-                          question={{ id: answer.questionId, text: answer.questionText, domain: detail.displayName }}
-                        />
+                        <div className="flex flex-wrap gap-2">
+                          <SendQuestionAction
+                            question={{ id: answer.questionId, text: answer.questionText, domain: detail.displayName }}
+                          />
+                          {answer.source === 'joshing_game' ? (
+                            <AddToBankAction
+                              questionId={answer.questionId}
+                              initialInBank={Boolean(answer.isInBank)}
+                              contextType="joshing_game"
+                              label=""
+                              className="inline-flex min-h-10 w-10 items-center justify-center rounded-md border px-0"
+                            />
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   ) : null}

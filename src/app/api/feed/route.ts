@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { db, joshingGames, questions, users } from '@/server/db';
+import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getFeedForUser } from '@/server/db/queries/feed';
 
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,7 @@ export async function GET() {
   const sourceUserIds = feed.map((item) => item.sourceUserId);
   const gameIds = feed.map((item) => item.joshingGameId).filter((id): id is string => Boolean(id));
 
-  const [questionRows, sourceRows, gameRows] = await Promise.all([
+  const [questionRows, sourceRows, gameRows, bankedById] = await Promise.all([
     questionIds.length
       ? db.select().from(questions).where(inArray(questions.id, questionIds))
       : Promise.resolve([]),
@@ -34,6 +35,7 @@ export async function GET() {
     gameIds.length
       ? db.select().from(joshingGames).where(inArray(joshingGames.id, gameIds))
       : Promise.resolve([]),
+    checkBankedQuestions(session.userId, questionIds),
   ]);
 
   const questionById = new Map(questionRows.map((question) => [question.id, question]));
@@ -68,6 +70,7 @@ export async function GET() {
         state: item.state,
         is_pinned: item.isPinned,
         question_text: question?.questionText ?? null,
+        is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
         domain_pill: domainPill(question),
         game_title: game?.title ?? null,

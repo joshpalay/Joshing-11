@@ -20,6 +20,10 @@ export type QuestionRecord = {
   tags: string[];
   asked_count: number;
   correct_count: number;
+  isOwnAuthored?: boolean;
+  authorName?: string;
+  isInBank?: boolean;
+  bankedAt?: string;
   contribution_state?: 'addable' | 'already_added' | 'locked_permission' | 'locked_game_state';
 };
 

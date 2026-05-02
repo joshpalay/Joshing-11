@@ -24,6 +24,10 @@ export type Beat5Gave = {
 export type BeatsPayload = {
   cycleStart: string;
   cycleEnd: string;
+  mergeNote?: {
+    mergesApplied: number;
+    details: Array<{ sources: string[]; target: string; rationale: string }>;
+  };
   beat1: Beat1Mastered | null;
   beat2: Beat2Discovered | null;
   beat3: Beat3Shaped | null;

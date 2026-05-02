@@ -4,7 +4,7 @@ import { db, masteryEvents, playerMastery } from '@/server/db';
 import { effectiveTier } from '@/server/mastery/tiers';
 import type { AnswerState, MasteryTier } from '@/types/db';
 
-type MasteryEventSourceType = 'daily' | 'feed' | 'joshing_game' | 'catchup' | 'author_credit';
+type MasteryEventSourceType = 'daily' | 'feed' | 'joshing_game' | 'catchup' | 'author_credit' | 'curator_credit';
 
 export type WriteMasteryEventParams = {
   userId: string;
@@ -84,8 +84,8 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
       userId: params.userId,
       canonicalSubcategory: params.domain,
       sourceType:
-        params.sourceType === 'author_credit'
-          ? 'author_credit'
+        params.sourceType === 'author_credit' || params.sourceType === 'curator_credit'
+          ? params.sourceType
           : params.sourceType === 'catchup'
             ? 'catchup_correct'
             : 'live_correct',
@@ -95,7 +95,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
       basePoints: Math.round(params.basePoints ?? params.pointsAwarded),
       weight: params.weight ?? (params.pointsAwarded > 0 ? 1 : 0),
       awardedPoints: params.pointsAwarded,
-      answerState: params.sourceType === 'author_credit' ? null : params.answerState,
+      answerState: params.sourceType === 'author_credit' || params.sourceType === 'curator_credit' ? null : params.answerState,
       sessionContext: params.sourceType,
     });
 

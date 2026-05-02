@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Check, Share2 } from 'lucide-react';
+import { Check, Share2, X } from 'lucide-react';
 
+import { ShareCard } from '@/components/ShareCard';
 import { DomainCircle } from '@/components/knowledge/DomainCircle';
 import type { MasteryTier } from '@/types/db';
 
@@ -153,7 +154,15 @@ export default function CeremonyPage() {
   const [ceremony, setCeremony] = useState<CeremonyRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [copied, setCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,9 +192,30 @@ export default function CeremonyPage() {
 
   async function share(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation();
-    const origin = window.location.origin;
-    await navigator.clipboard.writeText(`${origin}/ceremony/${ceremonyId}`);
-    setCopied(true);
+    setShareLoading(true);
+    try {
+      const response = await fetch(`/api/ceremony/${ceremonyId}/share-token`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message ?? 'Could not create share link.');
+      setShareUrl(body.url);
+    } catch (caught) {
+      setToast(caught instanceof Error ? caught.message : 'Could not create share link.');
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
+  async function copyShareUrl() {
+    if (!shareUrl) return;
+    await navigator.clipboard.writeText(shareUrl);
+    setToast('Link copied');
+  }
+
+  function saveImageHint() {
+    setToast('Long-press the card to save it.');
   }
 
   if (error) {
@@ -220,9 +250,10 @@ export default function CeremonyPage() {
                 type="button"
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-stone-500 px-5 text-sm text-stone-50"
                 onClick={share}
+                disabled={shareLoading}
               >
-                {copied ? <Check className="size-4" /> : <Share2 className="size-4" />}
-                {copied ? 'Copied' : 'Share'}
+                <Share2 className="size-4" />
+                {shareLoading ? 'Opening...' : 'Share'}
               </button>
               <button
                 type="button"
@@ -240,6 +271,69 @@ export default function CeremonyPage() {
           <Beat beat={beats[currentIndex]!} />
         )}
       </div>
+
+      {shareUrl ? (
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center overflow-y-auto bg-stone-950/80 px-5 py-8"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Share your two weeks"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (event.target === event.currentTarget) setShareUrl(null);
+          }}
+        >
+          <div className="flex w-full max-w-md flex-col items-center gap-5">
+            <ShareCard
+              beatsPayload={ceremony.beatsPayload}
+              userName="You"
+              cycleStart={ceremony.beatsPayload.cycleStart}
+              cycleEnd={ceremony.beatsPayload.cycleEnd}
+            />
+
+            <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
+              <button
+                type="button"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-stone-100 px-4 text-sm font-medium text-stone-950"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  copyShareUrl().catch(() => setToast('Could not copy link.'));
+                }}
+              >
+                <Check className="size-4" />
+                Copy link
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-12 items-center justify-center rounded-md border border-stone-500 px-4 text-sm text-stone-50"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  saveImageHint();
+                }}
+              >
+                Save image
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-stone-500 px-4 text-sm text-stone-50"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShareUrl(null);
+                }}
+              >
+                <X className="size-4" />
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {toast ? (
+        <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-full bg-stone-100 px-4 py-2 text-sm font-medium text-stone-950 shadow-lg">
+          {toast}
+        </div>
+      ) : null}
 
       {!isEnd && beats.length > 0 ? (
         <div className="absolute bottom-7 left-0 right-0 z-10 flex justify-center gap-2">

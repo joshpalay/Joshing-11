@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { writeActivity } from '@/server/activity/write-activity';
 import { computeBeats } from '@/server/ceremony/compute-beats';
 import { biweeklyCeremonies, db, users } from '@/server/db';
+import { runDomainMergesForUser } from '@/server/mastery/ceremony';
 import { sendSms } from '@/server/sms';
 
 function isoDate(date: Date): string {
@@ -18,7 +19,14 @@ export async function fireCeremony(userId: string): Promise<string> {
   const cycleStart = new Date(cycleEnd);
   cycleStart.setDate(cycleStart.getDate() - 14);
 
+  const mergeResult = await runDomainMergesForUser(userId);
   const beatsPayload = await computeBeats(userId, cycleStart, cycleEnd);
+  if (mergeResult.mergesApplied > 0) {
+    beatsPayload.mergeNote = {
+      mergesApplied: mergeResult.mergesApplied,
+      details: mergeResult.details,
+    };
+  }
   const [ceremony] = await db
     .insert(biweeklyCeremonies)
     .values({

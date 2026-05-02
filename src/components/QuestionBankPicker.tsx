@@ -14,13 +14,15 @@ import type { QuestionRecord } from '@/lib/questions-types';
 type Props = {
   /** Called when the user selects existing questions to contribute */
   onSelect: (questionIds: string[]) => void;
+  /** Lets parent flows cache the loaded bank rows for later selected-card rendering */
+  onQuestionsLoaded?: (questions: QuestionRecord[]) => void;
   /** Max questions the user can contribute in this flow */
   maxSelect?: number;
   /** IDs already selected/contributed */
   preselectedIds?: string[];
 };
 
-export function QuestionBankPicker({ onSelect, maxSelect = 5, preselectedIds = [] }: Props) {
+export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5, preselectedIds = [] }: Props) {
   const [questions, setQuestions] = useState<QuestionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set(preselectedIds));
@@ -36,8 +38,11 @@ export function QuestionBankPicker({ onSelect, maxSelect = 5, preselectedIds = [
         const d = data as { questions?: QuestionRecord[] };
         if (d && Array.isArray(d.questions)) {
           setQuestions(d.questions);
+          onQuestionsLoaded?.(d.questions);
         } else if (Array.isArray(data)) {
-          setQuestions(data as QuestionRecord[]);
+          const rows = data as QuestionRecord[];
+          setQuestions(rows);
+          onQuestionsLoaded?.(rows);
         } else {
           throw new Error('Unexpected response');
         }
@@ -119,6 +124,8 @@ export function QuestionBankPicker({ onSelect, maxSelect = 5, preselectedIds = [
                     <p className={`text-sm text-[var(--text${q.short_label ? '-muted' : ''})]`}>{q.question_text.length > 80 ? q.question_text.slice(0, 80) + '…' : q.question_text}</p>
                     <p className="mt-0.5 font-mono text-xs uppercase text-[var(--text-muted)]">
                       {categoryLabel(q.category)}
+                      {' · '}
+                      {q.isOwnAuthored ? 'Written by you' : `From ${q.authorName ?? 'a friend'}`}
                     </p>
                   </div>
                 </label>

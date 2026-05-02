@@ -24,6 +24,11 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === '/login';
   const isOnboardingPage = pathname === '/onboarding';
+  const isAllowedOnboardingPath =
+    isOnboardingPage ||
+    pathname === '/logout' ||
+    pathname.startsWith('/api/onboarding/') ||
+    pathname.startsWith('/api/auth/');
 
   const user = await getAuthenticatedUser(request);
 
@@ -36,7 +41,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (!user.onboardingComplete && !isOnboardingPage) {
+  if (!user.onboardingComplete && !isAllowedOnboardingPath) {
     const onboardingUrl = request.nextUrl.clone();
     onboardingUrl.pathname = '/onboarding';
     onboardingUrl.search = '';

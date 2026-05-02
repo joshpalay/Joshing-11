@@ -5,12 +5,36 @@ import {
   parseJsonObject,
 } from '@/lib/llm';
 
-export type ProposedInterest = {
-  label: string;
-  description: string;
-  broadCategory: string;
+export type WarmupAnswers = {
+  reReadBook?: string;
+  musicianOrComposer?: string;
+  hourLongTopic?: string;
+  studied?: string;
+  filmOrShow?: string;
+  anythingElse?: string;
 };
 
+export type ProposedInterest = {
+  domain: string;
+  broadCategory: string;
+  rationale: string;
+};
+
+export type CanonicalizedInterest = {
+  suggested: string;
+  broadCategory: string;
+  explanation: string;
+};
+
+const CANONICALIZE_MODEL = 'claude-haiku-4-5';
+const WARMUP_LABELS: Record<keyof WarmupAnswers, string> = {
+  reReadBook: "book you've read more than once",
+  musicianOrComposer: 'musician or composer you keep coming back to',
+  hourLongTopic: 'topic you could discuss for an hour',
+  studied: 'formal study',
+  filmOrShow: 'film, TV show, or director that matters to you',
+  anythingElse: 'anything else you wanted us to know',
+};
 const FALLBACK_CATEGORIES = [
   'Literature',
   'Music',
@@ -34,68 +58,123 @@ function titleCase(value: string): string {
     .trim();
 }
 
-function fallbackInterests(warmupAnswers: string[]): ProposedInterest[] {
-  const candidates = warmupAnswers
-    .map((answer) => answer.replace(/[^\p{L}\p{N}\s'&-]/gu, ' ').replace(/\s+/g, ' ').trim())
-    .filter((answer) => answer.length >= 3)
-    .flatMap((answer, index) => {
-      const short = titleCase(answer.split(/\s+/).slice(0, 5).join(' '));
-      if (!short) return [];
-      return [{
-        label: short,
-        description: `A focused area drawn from your warm-up answer about ${short}.`,
+function cleanWarmupAnswers(warmupAnswers: WarmupAnswers): Array<{ field: keyof WarmupAnswers; answer: string }> {
+  return (Object.keys(WARMUP_LABELS) as Array<keyof WarmupAnswers>).flatMap((field) => {
+    const answer = asTrimmedString(warmupAnswers[field]);
+    return answer ? [{ field, answer: answer.slice(0, 200) }] : [];
+  });
+}
+
+function parseJsonArray(rawText: string): unknown[] | null {
+  const trimmed = rawText.trim();
+  if (!trimmed) return null;
+
+  const candidates: string[] = [trimmed];
+  const fencedJsonBlocks = [...trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+  for (const match of fencedJsonBlocks) {
+    const block = match[1]?.trim();
+    if (block) candidates.push(block);
+  }
+
+  const start = trimmed.indexOf('[');
+  const end = trimmed.lastIndexOf(']');
+  if (start !== -1 && end > start) {
+    candidates.push(trimmed.slice(start, end + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Try the next candidate.
+    }
+  }
+
+  return null;
+}
+
+function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; answer: string }>): ProposedInterest[] {
+  const candidates = cleanAnswers
+    .map(({ field, answer }, index) => {
+      const domain = titleCase(
+        answer
+          .replace(/[^\p{L}\p{N}\s'&-]/gu, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .split(/\s+/)
+          .slice(0, 5)
+          .join(' '),
+      );
+
+      if (domain.length < 2) return null;
+
+      return {
+        domain,
         broadCategory: FALLBACK_CATEGORIES[index % FALLBACK_CATEGORIES.length] ?? 'Other',
-      }];
-    });
+        rationale: `Based on your answer for ${WARMUP_LABELS[field]}.`,
+      };
+    })
+    .filter((interest): interest is ProposedInterest => Boolean(interest));
 
   const defaults: ProposedInterest[] = [
     {
-      label: 'Modern Literary Fiction',
-      description: 'Contemporary novels, recurring authors, and the shelves people return to.',
+      domain: 'Modern Literary Fiction',
       broadCategory: 'Literature',
+      rationale: 'A focused reading territory that can support rich trivia.',
     },
     {
-      label: 'Auteur Film Favorites',
-      description: 'Specific directors, eras, and movies that reward close watching.',
+      domain: 'Auteur Film Favorites',
       broadCategory: 'Film & Television',
+      rationale: 'A film-specific lane that can be narrowed further as you play.',
     },
     {
-      label: 'Personal Canon Music',
-      description: 'Artists, albums, and styles that have become part of your inner soundtrack.',
+      domain: 'Personal Canon Music',
       broadCategory: 'Music',
+      rationale: 'A music lane based on artists you return to often.',
     },
     {
-      label: 'Recent Cultural Obsessions',
-      description: 'The shows, references, and odd corners you keep wanting to discuss.',
+      domain: 'Recent Cultural Obsessions',
       broadCategory: 'Pop Culture',
+      rationale: 'A flexible lane for recurring references and current fixations.',
+    },
+    {
+      domain: '20th-Century Cultural History',
+      broadCategory: 'History',
+      rationale: 'A historically grounded lane for specific eras and movements.',
+    },
+    {
+      domain: 'Everyday Science Concepts',
+      broadCategory: 'Science',
+      rationale: 'A factual lane that tends to generate accessible questions.',
     },
   ];
 
-  return [...candidates, ...defaults].slice(0, 8);
+  return uniqueByDomain([...candidates, ...defaults]).slice(0, 12);
 }
 
 function normalizeInterest(value: unknown): ProposedInterest | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const label = asTrimmedString(record.label);
-  const description = asTrimmedString(record.description);
+  const domain = asTrimmedString(record.domain ?? record.label);
   const broadCategory = asTrimmedString(record.broadCategory ?? record.broad_category);
+  const rationale = asTrimmedString(record.rationale ?? record.description);
 
-  if (!label || !description || !broadCategory) return null;
+  if (!domain || !broadCategory || !rationale) return null;
 
   return {
-    label: label.slice(0, 80),
-    description: description.slice(0, 180),
+    domain: domain.slice(0, 100),
     broadCategory: broadCategory.slice(0, 80),
+    rationale: rationale.slice(0, 180),
   };
 }
 
-function uniqueByLabel(interests: ProposedInterest[]): ProposedInterest[] {
+function uniqueByDomain(interests: ProposedInterest[]): ProposedInterest[] {
   const seen = new Set<string>();
   const unique: ProposedInterest[] = [];
 
   for (const interest of interests) {
-    const key = interest.label.toLowerCase();
+    const key = interest.domain.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(interest);
@@ -104,67 +183,100 @@ function uniqueByLabel(interests: ProposedInterest[]): ProposedInterest[] {
   return unique;
 }
 
-export async function proposeInterests(warmupAnswers: string[]): Promise<ProposedInterest[]> {
-  const cleanAnswers = warmupAnswers
-    .map((answer) => answer.trim())
-    .filter((answer) => answer.length > 0)
-    .slice(0, 6);
+export async function proposeInterests(warmupAnswers: WarmupAnswers): Promise<ProposedInterest[]> {
+  const cleanAnswers = cleanWarmupAnswers(warmupAnswers);
 
   if (cleanAnswers.length === 0) {
     return fallbackInterests([]);
   }
 
   const systemPrompt = `You propose declared interests for Joshing, a daily personal trivia game.
-Return JSON only:
-{
-  "interests": [
-    { "label": "...", "description": "...", "broadCategory": "..." }
-  ]
-}
+Return a JSON array only. No wrapper object, no markdown:
+[
+  { "domain": "...", "broadCategory": "...", "rationale": "..." }
+]
 
 Rules:
-- Generate 8 to 12 candidate interests.
-- Every label must be hyper-specific and portrait-friendly, not broad.
+- Generate exactly 8 to 12 candidate interests.
+- Every domain must be hyper-specific and useful for trivia.
+- Avoid broad categories as domains. Never use domains like "Music", "Literature", "History", "Film", "Science", or "Pop Culture".
 - Prefer person/era/movement/work/scene labels over generic fields.
-- Good: "Late-Period Bowie", "19th-Century English Novels", "Weimar Cinema".
-- Bad: "Music", "Books", "Movies", "History", "General Trivia".
-- Keep labels under 7 words.
-- Descriptions are one sentence, warm and concrete.
-- broadCategory is stable and broad, such as Literature, Music, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Other.
-- Do not invent private facts. Infer only plausible interest territories from the answers.`;
+- Good domains: "Late Tchaikovsky", "19th-Century Russian Symphonies", "Modernist American Poetry", "Weimar-Era Cinema".
+- Bad domains: "Music", "Books", "Movies", "History", "General Trivia".
+- Distribute across the warm-up answers. Include at least one candidate per non-empty warm-up field if possible.
+- Each rationale must briefly tie the candidate to a specific warm-up answer.
+- broadCategory is stable and broad, such as Classical Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Other.
+- Do not invent private facts. Infer plausible interest territories only from the answers.`;
 
   const userMessage = `Warm-up answers:
-${cleanAnswers.map((answer, index) => `${index + 1}. ${answer}`).join('\n')}
+${cleanAnswers.map(({ field, answer }) => `- ${WARMUP_LABELS[field]}: ${answer}`).join('\n')}
 
-Propose candidate interests.`;
+Propose candidate interests. Return JSON array only.`;
 
-  try {
-    const client = getAnthropicClient();
-    if (!client) return fallbackInterests(cleanAnswers);
+  const client = getAnthropicClient();
+  if (!client) return fallbackInterests(cleanAnswers);
 
-    const response = await client.messages.create({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1100,
-      temperature: 0.7,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    });
+  const response = await client.messages.create({
+    model: ANTHROPIC_MODEL,
+    max_tokens: 1300,
+    temperature: 0.65,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
+  });
 
-    const text = extractTextContent(response.content);
-    const parsed = parseJsonObject(text);
-    const rawInterests = Array.isArray(parsed?.interests) ? parsed.interests : [];
-    const interests = uniqueByLabel(rawInterests.flatMap((interest) => {
-      const normalized = normalizeInterest(interest);
-      return normalized ? [normalized] : [];
-    }));
+  const text = extractTextContent(response.content);
+  const parsed = parseJsonArray(text);
+  const interests = uniqueByDomain((parsed ?? []).flatMap((interest) => {
+    const normalized = normalizeInterest(interest);
+    return normalized ? [normalized] : [];
+  }));
 
-    if (interests.length < 8) {
-      return uniqueByLabel([...interests, ...fallbackInterests(cleanAnswers)]).slice(0, 12);
-    }
-
-    return interests.slice(0, 12);
-  } catch (error) {
-    console.warn('[LLM] proposeInterests fallback', error);
-    return fallbackInterests(cleanAnswers);
+  if (interests.length < 8) {
+    return uniqueByDomain([...interests, ...fallbackInterests(cleanAnswers)]).slice(0, 12);
   }
+
+  return interests.slice(0, 12);
+}
+
+export async function canonicalizeInterest(rawInput: string): Promise<CanonicalizedInterest> {
+  const cleanInput = rawInput.trim().replace(/\s+/g, ' ').slice(0, 100);
+  const fallback: CanonicalizedInterest = {
+    suggested: cleanInput,
+    broadCategory: 'Other',
+    explanation: 'Kept your original wording because a suggestion was not available.',
+  };
+
+  if (!cleanInput) return fallback;
+
+  const client = getAnthropicClient();
+  if (!client) return fallback;
+
+  const systemPrompt = `The user wants to add this as a declared trivia interest.
+Suggest a more hyper-specific version that would generate good trivia questions. If the input is already specific enough, return it unchanged.
+Avoid broad categories like "Music", "Literature", "History". Prefer forms like "Late Tchaikovsky", "Russian 19th-Century Novels", "Weimar-Era Cinema".
+Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation": "..." }`;
+
+  const response = await client.messages.create({
+    model: CANONICALIZE_MODEL,
+    max_tokens: 260,
+    temperature: 0.2,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: cleanInput }],
+  });
+
+  const text = extractTextContent(response.content);
+  const parsed = parseJsonObject(text);
+  const suggested = asTrimmedString(parsed?.suggested);
+  const broadCategory = asTrimmedString(parsed?.broadCategory ?? parsed?.broad_category);
+  const explanation = asTrimmedString(parsed?.explanation);
+
+  if (!suggested || !broadCategory || !explanation) {
+    return fallback;
+  }
+
+  return {
+    suggested: suggested.slice(0, 100),
+    broadCategory: broadCategory.slice(0, 80),
+    explanation: explanation.slice(0, 180),
+  };
 }

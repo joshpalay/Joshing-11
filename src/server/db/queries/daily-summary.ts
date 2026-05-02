@@ -8,6 +8,8 @@ import {
   playerMastery,
 } from '@/server/db';
 import { resolveTier } from '@/server/mastery/tiers';
+import { getDeliveredCreatorNotesForQuestions, type DeliveredCreatorNote } from '@/server/creator-notes';
+import { checkBankedQuestions } from '@/server/db/queries/bank';
 import type { QueueSlot } from '@/server/daily/types';
 import type { MasteryTier } from '@/types/db';
 
@@ -25,6 +27,7 @@ export type DailySummaryView = {
 
 export type QuestionRecap = {
   questionId: string;
+  bankQuestionId: string | null;
   questionText: string;
   submittedAnswer: string | null;
   correctAnswer: string;
@@ -33,6 +36,8 @@ export type QuestionRecap = {
   explanation: string;
   domain: string;
   domainDisplayName: string;
+  isInBank: boolean;
+  creatorNote: DeliveredCreatorNote | null;
 };
 
 export type DomainGain = {
@@ -160,11 +165,19 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     })
     .filter((row): row is TierCrossing => Boolean(row));
 
+  const recapQuestionIds = slots
+    .map((slot) => slot.question_id)
+    .filter((id): id is string => Boolean(id));
+  const bankedById = await checkBankedQuestions(userId, recapQuestionIds);
+  const creatorNotesByQuestionId = await getDeliveredCreatorNotesForQuestions(userId, recapQuestionIds);
+
   const recaps = slots.map<QuestionRecap>((slot) => {
     const generated = slot.generated_question_id ? questionById.get(slot.generated_question_id) : null;
     const domain = slot.domain || generated?.canonicalSubcategory || 'General';
+    const questionId = slot.question_id ?? slot.generated_question_id ?? `${queue?.id ?? dateString}:${slot.slot_index}`;
     return {
-      questionId: slot.generated_question_id ?? slot.question_id ?? `${queue?.id ?? dateString}:${slot.slot_index}`,
+      questionId,
+      bankQuestionId: slot.question_id ?? null,
       questionText: slot.question_text || generated?.questionText || '',
       submittedAnswer: slot.submitted_answer ?? null,
       correctAnswer: slot.reveal_canonical_answer ?? generated?.answer ?? '',
@@ -173,6 +186,8 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       explanation: slot.reveal_explainer ?? generated?.explainer ?? '',
       domain,
       domainDisplayName: displayNameForDomain(domain),
+      isInBank: slot.question_id ? Boolean(bankedById[slot.question_id]) : false,
+      creatorNote: slot.question_id ? creatorNotesByQuestionId.get(slot.question_id) ?? null : null,
     };
   });
 

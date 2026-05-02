@@ -13,6 +13,7 @@ import {
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
 import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display';
+import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import type { MasteryTier } from '@/types/db';
@@ -93,6 +94,7 @@ export type QuestionAnswer = {
   isCorrect: boolean;
   answeredAt: string;
   source: 'daily' | 'joshing_game';
+  isInBank?: boolean;
 };
 
 export type DomainDetail = {
@@ -569,7 +571,16 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
       ? 'private'
       : 'public';
 
+  const questionHistoryIds = [...gameAnswers, ...dailyAnswers]
+    .map((answer) => answer.source === 'joshing_game' ? answer.questionId : null)
+    .filter((id): id is string => Boolean(id));
+  const bankedById = await checkBankedQuestions(userId, questionHistoryIds);
+
   const questionHistory = [...gameAnswers, ...dailyAnswers]
+    .map((answer) => ({
+      ...answer,
+      isInBank: answer.questionId ? Boolean(bankedById[answer.questionId]) : false,
+    }))
     .sort((a, b) => new Date(b.answeredAt).getTime() - new Date(a.answeredAt).getTime())
     .slice(0, 50);
 

@@ -92,6 +92,7 @@ export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'incognito_round_invitation',
   'anniversary_milestone',
   'creator_note_prompt',
+  'creator_note_received',
   'ceremony_ready',
   'joshing_game_received',
   'joshing_game_progress',
@@ -116,7 +117,9 @@ export const masterySourceTypeEnum = pgEnum('MasterySourceType', [
   'live_correct',
   'authored',
   'author_credit',
+  'curator_credit',
   'catchup_correct',
+  'domain_merged',
 ]);
 export const feedbackSignalEnum = pgEnum('FeedbackSignal', ['thumbs_up', 'thumbs_down']);
 
@@ -260,6 +263,8 @@ export const userQuestionBank = pgTable(
     userId: text('user_id').notNull().references(() => users.id),
     questionId: text('question_id').notNull().references(() => questions.id),
     addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+    addedFromContextType: text('added_from_context_type').$type<'feed' | 'joshing_game' | 'manual'>(),
+    addedFromContextId: text('added_from_context_id'),
   },
   (table) => [
     unique('UserQuestionBank_user_id_question_id_key').on(table.userId, table.questionId),
@@ -303,6 +308,7 @@ export const masteryEvents = pgTable(
     awardedPoints: doublePrecision('awarded_points').notNull().default(0),
     answerState: answerStateEnum('answer_state'),
     sessionContext: text('session_context'),
+    metadata: jsonb('metadata'),
     createdAt: createdAt(),
   },
   (table) => [
@@ -338,6 +344,28 @@ export const questionReactions = pgTable(
     index('QuestionReaction_senderUserId_idx').on(table.senderUserId),
     index('QuestionReaction_questionId_idx').on(table.questionId),
     index('QuestionReaction_context_idx').on(table.contextType, table.contextId),
+  ],
+);
+
+export const creatorNotes = pgTable(
+  'CreatorNote',
+  {
+    id: id(),
+    authorUserId: text('authorUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    recipientUserId: text('recipientUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    contextType: text('contextType').$type<'feed' | 'joshing_game' | 'daily'>().notNull(),
+    contextId: text('contextId'),
+    noteText: text('noteText').notNull(),
+    promptedAt: timestamp('promptedAt', { withTimezone: true }).notNull().defaultNow(),
+    writtenAt: timestamp('writtenAt', { withTimezone: true }),
+    deliveredAt: timestamp('deliveredAt', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('CreatorNote_authorUserId_promptedAt_idx').on(table.authorUserId, table.promptedAt),
+    index('CreatorNote_recipientUserId_questionId_idx').on(table.recipientUserId, table.questionId),
+    index('CreatorNote_questionId_idx').on(table.questionId),
   ],
 );
 

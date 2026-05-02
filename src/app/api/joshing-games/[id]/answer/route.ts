@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { writeActivity } from '@/server/activity/write-activity';
 import { getSession } from '@/server/auth/session';
+import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, users } from '@/server/db';
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import {
@@ -107,6 +108,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
           domain,
         }).catch(() => null)
       : null;
+
+    if (!grade.isCorrect) {
+      void promptCreatorNoteAfterWrongAnswer({
+        questionId: parsed.questionId,
+        recipientUserId: session.userId,
+        contextType: 'joshing_game',
+        contextId: id,
+      });
+    }
 
     const newlyComplete = completion.userComplete && !beforeCompletion.userComplete;
     const creator = await getSmsUser(existingView.game.creatorId);

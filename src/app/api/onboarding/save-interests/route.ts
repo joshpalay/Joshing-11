@@ -12,39 +12,27 @@ type SaveInterestsBody = {
 };
 
 function parseInterest(value: unknown): DeclaredInterestInput | null {
-  if (typeof value === 'string') {
-    const label = value.trim();
-    return label ? { label } : null;
-  }
-
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
   const record = value as Record<string, unknown>;
-  const label = typeof record.label === 'string' ? record.label.trim() : '';
-  if (!label) return null;
+  const domain = typeof record.domain === 'string' ? record.domain.trim().replace(/\s+/g, ' ') : '';
+  if (domain.length < 2 || domain.length > 100) return null;
 
   return {
-    label,
-    description: typeof record.description === 'string' ? record.description.trim() : null,
-    broadCategory:
-      typeof record.broadCategory === 'string'
-        ? record.broadCategory.trim()
-        : typeof record.broad_category === 'string'
-          ? record.broad_category.trim()
-          : null,
+    label: domain,
+    broadCategory: typeof record.broadCategory === 'string' && record.broadCategory.trim()
+      ? record.broadCategory.trim().slice(0, 80)
+      : null,
   };
 }
 
 function parseInterests(value: unknown): DeclaredInterestInput[] | null {
-  if (!Array.isArray(value)) return null;
+  if (!Array.isArray(value) || value.length < 1 || value.length > 5) return null;
 
-  const interests = value.flatMap((item) => {
-    const parsed = parseInterest(item);
-    return parsed ? [parsed] : [];
-  });
+  const interests = value.map(parseInterest);
+  if (interests.some((interest) => !interest)) return null;
 
-  if (interests.length === 0 || interests.length > 5) return null;
-
-  return interests;
+  return interests as DeclaredInterestInput[];
 }
 
 export async function POST(request: Request) {
@@ -58,22 +46,18 @@ export async function POST(request: Request) {
 
   if (!interests) {
     return NextResponse.json(
-      { error: 'invalid_request', message: 'Select 1 to 5 interests.' },
+      { error: 'invalid_request', message: 'Save 1 to 5 interests. Domains must be 2 to 100 characters.' },
       { status: 400 },
     );
   }
 
   try {
-    const savedInterests = await saveDeclaredInterests(session.userId, interests);
+    await saveDeclaredInterests(session.userId, interests);
     await markOnboardingComplete(session.userId);
 
-    return NextResponse.json({ interests: savedInterests, onboardingComplete: true });
+    return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to save interests.';
     return NextResponse.json({ error: 'save_failed', message }, { status: 400 });
   }
-}
-
-export async function PATCH(request: Request) {
-  return POST(request);
 }

@@ -25,6 +25,11 @@ type PreferencesResponse = {
   domains: DomainRow[];
 };
 
+type AdaptiveLevelResponse = {
+  level: number;
+  label: string;
+};
+
 const DIFFICULTIES: { value: Difficulty; label: string; copy: string }[] = [
   { value: 'normal', label: 'Normal', copy: 'Approachable. Designed for ~70% correct.' },
   { value: 'moderate', label: 'Moderate', copy: 'A real challenge. ~50% correct.' },
@@ -74,18 +79,20 @@ export default function DailySetupPage() {
   const [domainMode, setDomainMode] = useState<DomainMode>('random');
   const [sortMode, setSortMode] = useState<DomainSortMode>('category');
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(new Set());
+  const [adaptiveLabel, setAdaptiveLabel] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        const [statusResponse, preferencesResponse] = await Promise.all([
+        const [statusResponse, preferencesResponse, adaptiveResponse] = await Promise.all([
           fetch('/api/daily/status', { credentials: 'include', cache: 'no-store' }),
           fetch('/api/daily/preferences', { credentials: 'include', cache: 'no-store' }),
+          fetch('/api/account/adaptive-level', { credentials: 'include', cache: 'no-store' }),
         ]);
 
-        if (statusResponse.status === 401 || preferencesResponse.status === 401) {
+        if (statusResponse.status === 401 || preferencesResponse.status === 401 || adaptiveResponse.status === 401) {
           router.replace('/login');
           return;
         }
@@ -109,6 +116,11 @@ export default function DailySetupPage() {
         setDifficulty(body.preferences?.difficulty ?? 'adaptive');
         setDomainMode(requestedCustom ? 'custom' : body.preferences?.domainMode ?? 'random');
         setSelectedDomains(new Set(requestedCustom ? [requestedDomain] : body.preferences?.selectedDomains ?? []));
+
+        if (adaptiveResponse.ok) {
+          const adaptiveBody = (await adaptiveResponse.json()) as AdaptiveLevelResponse;
+          setAdaptiveLabel(adaptiveBody.label ?? null);
+        }
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : 'Could not load setup.');
       } finally {
@@ -218,7 +230,11 @@ export default function DailySetupPage() {
             );
           })}
         </div>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">{selectedCopy(difficulty)}</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          {difficulty === 'adaptive' && adaptiveLabel
+            ? `Calibrated to your recent performance: ${adaptiveLabel}`
+            : selectedCopy(difficulty)}
+        </p>
       </section>
 
       <section className="py-7">

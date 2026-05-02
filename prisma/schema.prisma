@@ -186,7 +186,9 @@ enum MasterySourceType {
   live_correct
   authored
   author_credit
+  curator_credit
   catchup_correct
+  domain_merged
 }
 
 enum FeedbackSignal {
@@ -379,10 +381,12 @@ model QuestionAudienceTag {
 }
 
 model UserQuestionBank {
-  id          String   @id @default(cuid())
-  user_id     String
-  question_id String
-  added_at    DateTime @default(now())
+  id                      String   @id @default(cuid())
+  user_id                 String
+  question_id             String
+  added_at                DateTime @default(now())
+  added_from_context_type String?
+  added_from_context_id   String?
 
   user     User     @relation(fields: [user_id], references: [id])
   question Question @relation(fields: [question_id], references: [id])
@@ -623,6 +627,7 @@ model MasteryEvent {
   awarded_points        Float             @default(0)
   answer_state          AnswerState?
   session_context       String?
+  metadata              Json?
   created_at            DateTime          @default(now())
 
   user     User      @relation(fields: [user_id], references: [id])

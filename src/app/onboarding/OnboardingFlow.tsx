@@ -1,104 +1,339 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { Check, Edit3, Loader2, Plus, X } from 'lucide-react';
 
-type Interest = {
-  label: string;
-  description?: string | null;
-  broadCategory?: string | null;
+type CurrentStep = 'welcome' | 'warmup' | 'review' | 'pick' | 'complete';
+
+export type WarmupAnswers = {
+  reReadBook?: string;
+  musicianOrComposer?: string;
+  hourLongTopic?: string;
+  studied?: string;
+  filmOrShow?: string;
+  anythingElse?: string;
+};
+
+export type ProposedInterest = {
+  domain: string;
+  broadCategory: string;
+  rationale?: string | null;
+};
+
+type SelectedInterest = {
+  domain: string;
+  broadCategory: string;
+};
+
+export type PreSeededInterest = ProposedInterest & {
+  inviterName?: string | null;
 };
 
 type OnboardingFlowProps = {
-  preSeededInterests: Interest[];
+  preSeededInterests: PreSeededInterest[];
 };
 
-const WARMUP_QUESTIONS = [
-  "What's a book you've read more than once?",
-  'Who is a musician or composer you keep coming back to?',
-  'A topic you could talk about for an hour without preparation?',
-  'Something you studied formally, even briefly?',
-  'A film, TV show, or director that means something to you?',
-  "Anything else you'd want us to know?",
+type CanonicalSuggestion = {
+  original: string;
+  suggested: string;
+  broadCategory: string;
+  explanation: string | null;
+};
+
+const WARMUP_FIELDS: Array<{
+  field: keyof WarmupAnswers;
+  label: string;
+  placeholder: string;
+  optional?: boolean;
+}> = [
+  {
+    field: 'reReadBook',
+    label: "What's a book you've read more than once?",
+    placeholder: 'e.g. Middlemarch, or The Brothers Karamazov',
+  },
+  {
+    field: 'musicianOrComposer',
+    label: "Who's a musician or composer you keep coming back to?",
+    placeholder: 'e.g. Late-period Bowie, or Tchaikovsky symphonies',
+  },
+  {
+    field: 'hourLongTopic',
+    label: 'A topic you could talk about for an hour without preparation?',
+    placeholder: 'e.g. the French Revolution, or Italian Renaissance painting',
+  },
+  {
+    field: 'studied',
+    label: 'Something you studied formally, even briefly?',
+    placeholder: 'e.g. art history in college, or Russian for two years',
+  },
+  {
+    field: 'filmOrShow',
+    label: 'A film, TV show, or director that means something to you?',
+    placeholder: 'e.g. Tarkovsky films, or The Sopranos',
+  },
+  {
+    field: 'anythingElse',
+    label: "Anything else you'd want us to know?",
+    placeholder: 'Anything',
+    optional: true,
+  },
 ];
 
-function normalizeInterest(interest: Interest): Interest | null {
-  const label = interest.label.trim().replace(/\s+/g, ' ');
-  if (!label) return null;
+const LOADING_COPY = [
+  'Reading your answers...',
+  'Looking for connections...',
+  'Building your map...',
+];
+
+const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
+  { step: 'warmup', label: 'Warmup' },
+  { step: 'review', label: 'Review' },
+  { step: 'pick', label: 'Confirm' },
+];
+
+function normalizeDomain(domain: string) {
+  return domain.trim().replace(/\s+/g, ' ');
+}
+
+function selectedKey(interest: SelectedInterest) {
+  return interest.domain.trim().toLowerCase();
+}
+
+function toSelected(interest: ProposedInterest): SelectedInterest | null {
+  const domain = normalizeDomain(interest.domain);
+  if (domain.length < 2) return null;
 
   return {
-    label,
-    description: interest.description?.trim() || null,
-    broadCategory: interest.broadCategory?.trim() || null,
+    domain,
+    broadCategory: normalizeDomain(interest.broadCategory || 'Other') || 'Other',
   };
 }
 
-function isSameInterest(a: Interest, b: Interest) {
-  return a.label.trim().toLowerCase() === b.label.trim().toLowerCase();
+function isSelected(selectedInterests: SelectedInterest[], interest: ProposedInterest) {
+  const selected = toSelected(interest);
+  return selected ? selectedInterests.some((item) => selectedKey(item) === selectedKey(selected)) : false;
+}
+
+function isBeforeNoonEastern() {
+  const easternParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const hour = Number(easternParts.find((part) => part.type === 'hour')?.value ?? '12');
+  return hour < 12;
+}
+
+function Spinner({ small = false }: { small?: boolean }) {
+  return (
+    <Loader2
+      className={`${small ? 'size-4' : 'size-7'} animate-spin`}
+      aria-hidden="true"
+    />
+  );
+}
+
+function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
+  const activeIndex = currentStep === 'welcome'
+    ? 0
+    : currentStep === 'complete'
+      ? STEP_DOTS.length
+      : Math.max(0, STEP_DOTS.findIndex((item) => item.step === currentStep));
+
+  return (
+    <div className="flex items-center justify-center gap-3" aria-label="Onboarding progress">
+      {STEP_DOTS.map((item, index) => {
+        const active = index <= activeIndex;
+        const current = item.step === currentStep || (currentStep === 'welcome' && index === 0);
+
+        return (
+          <div key={item.step} className="flex items-center gap-2">
+            <span
+              className={[
+                'block size-2.5 rounded-full transition',
+                active ? 'bg-foreground' : 'bg-border',
+                current ? 'ring-4 ring-foreground/10' : '',
+              ].join(' ')}
+            />
+            <span className="sr-only">{item.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="space-y-2">
+      <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">{title}</h1>
+      <p className="text-base leading-7 text-muted-foreground">{subtitle}</p>
+    </div>
+  );
 }
 
 export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowProps) {
   const router = useRouter();
-  const hasPreSeeded = preSeededInterests.length > 0;
-  const [step, setStep] = useState<1 | 2 | 3>(hasPreSeeded ? 1 : 2);
-  const [selected, setSelected] = useState<Interest[]>([]);
-  const [warmupAnswers, setWarmupAnswers] = useState(() => WARMUP_QUESTIONS.map(() => ''));
-  const [proposals, setProposals] = useState<Interest[]>([]);
-  const [customLabel, setCustomLabel] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [currentStep, setCurrentStep] = useState<CurrentStep>('welcome');
+  const [warmupAnswers, setWarmupAnswers] = useState<WarmupAnswers>({});
+  const [proposedInterests, setProposedInterests] = useState<ProposedInterest[] | null>(null);
+  const [selectedInterests, setSelectedInterests] = useState<SelectedInterest[]>(
+    () => preSeededInterests.flatMap((interest) => {
+      const selected = toSelected(interest);
+      return selected ? [selected] : [];
+    }).slice(0, 5),
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCanonicalizing, setIsCanonicalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingCopyIndex, setLoadingCopyIndex] = useState(0);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingDomain, setEditingDomain] = useState('');
+  const [showComposer, setShowComposer] = useState(false);
+  const [customInput, setCustomInput] = useState('');
+  const [canonicalSuggestion, setCanonicalSuggestion] = useState<CanonicalSuggestion | null>(null);
+  const [customChoice, setCustomChoice] = useState<'suggested' | 'mine' | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showDailySetup = useMemo(() => isBeforeNoonEastern(), []);
 
+  const inviterName = preSeededInterests.find((interest) => interest.inviterName)?.inviterName ?? 'A friend';
   const answeredCount = useMemo(
-    () => warmupAnswers.filter((answer) => answer.trim().length > 0).length,
+    () => WARMUP_FIELDS.filter(({ field }) => normalizeDomain(warmupAnswers[field] ?? '').length > 0).length,
     [warmupAnswers],
   );
-  const remainingSlots = 5 - selected.length;
+  const canGenerate = answeredCount >= 2;
+  const reviewInterests = useMemo(
+    () => [
+      ...preSeededInterests,
+      ...(proposedInterests ?? []).filter(
+        (interest) => !preSeededInterests.some(
+          (seeded) => selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) === selectedKey(toSelected(interest) ?? { domain: '', broadCategory: '' }),
+        ),
+      ),
+    ],
+    [preSeededInterests, proposedInterests],
+  );
 
-  function setSeededInterests(interests: Interest[]) {
-    setSelected(interests.flatMap((interest) => {
-      const normalized = normalizeInterest(interest);
-      return normalized ? [normalized] : [];
-    }).slice(0, 5));
-    setStep(2);
-  }
+  useEffect(() => {
+    if (!isLoading || currentStep !== 'warmup') return;
 
-  function toggleInterest(interest: Interest) {
-    const normalized = normalizeInterest(interest);
-    if (!normalized) return;
+    const interval = window.setInterval(() => {
+      setLoadingCopyIndex((current) => (current + 1) % LOADING_COPY.length);
+    }, 3000);
 
-    setSelected((current) => {
-      if (current.some((item) => isSameInterest(item, normalized))) {
-        return current.filter((item) => !isSameInterest(item, normalized));
-      }
+    return () => window.clearInterval(interval);
+  }, [currentStep, isLoading]);
 
-      if (current.length >= 5) return current;
-      return [...current, normalized];
-    });
-  }
+  useEffect(() => {
+    const rawInput = normalizeDomain(customInput);
+    setCanonicalSuggestion(null);
+    setCustomChoice(null);
 
-  function updateSelected(index: number, label: string) {
-    setSelected((current) => current.map((interest, itemIndex) => (
-      itemIndex === index ? { ...interest, label } : interest
-    )));
-  }
-
-  function addCustomInterest() {
-    const normalized = normalizeInterest({ label: customLabel });
-    if (!normalized || selected.length >= 5) return;
-    if (selected.some((interest) => isSameInterest(interest, normalized))) return;
-
-    setSelected((current) => [...current, normalized]);
-    setCustomLabel('');
-  }
-
-  async function generateProposals() {
-    setError(null);
-    if (answeredCount < 4) {
-      setError('Answer at least four warm-up questions.');
+    if (!showComposer || rawInput.length <= 3) {
+      setIsCanonicalizing(false);
       return;
     }
 
-    setLoading(true);
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setIsCanonicalizing(true);
+      try {
+        const response = await fetch('/api/onboarding/canonicalize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rawInput }),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || typeof data?.suggested !== 'string') return;
+
+        setCanonicalSuggestion({
+          original: data.original ?? rawInput,
+          suggested: data.suggested,
+          broadCategory: data.broadCategory ?? 'Other',
+          explanation: data.explanation ?? null,
+        });
+      } catch (fetchError) {
+        if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
+          setCanonicalSuggestion(null);
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsCanonicalizing(false);
+      }
+    }, 800);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [customInput, showComposer]);
+
+  function updateWarmupAnswer(field: keyof WarmupAnswers, value: string) {
+    setWarmupAnswers((current) => ({ ...current, [field]: value.slice(0, 200) }));
+  }
+
+  function toggleInterest(interest: ProposedInterest) {
+    const selected = toSelected(interest);
+    if (!selected) return;
+
+    setSelectedInterests((current) => {
+      const exists = current.some((item) => selectedKey(item) === selectedKey(selected));
+      if (exists) return current.filter((item) => selectedKey(item) !== selectedKey(selected));
+      if (current.length >= 5) return current;
+      return [...current, selected];
+    });
+  }
+
+  function beginEdit(interest: ProposedInterest) {
+    const selected = toSelected(interest);
+    if (!selected) return;
+
+    setEditingKey(selectedKey(selected));
+    setEditingDomain(selected.domain);
+  }
+
+  function saveEdit(interest: ProposedInterest) {
+    const selected = toSelected(interest);
+    const nextDomain = normalizeDomain(editingDomain);
+    if (!selected || nextDomain.length < 2) return;
+
+    const edited = { ...interest, domain: nextDomain };
+    setProposedInterests((current) => current?.map((item) => (
+      selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) === selectedKey(selected)
+        ? edited
+        : item
+    )) ?? current);
+    setSelectedInterests((current) => current.map((item) => (
+      selectedKey(item) === selectedKey(selected)
+        ? { ...item, domain: nextDomain }
+        : item
+    )));
+    setEditingKey(null);
+    setEditingDomain('');
+  }
+
+  function startLongPress(interest: ProposedInterest) {
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => beginEdit(interest), 500);
+  }
+
+  function clearLongPress() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
+
+  async function generateProposals() {
+    if (!canGenerate) return;
+
+    setError(null);
+    setIsLoading(true);
+    setLoadingCopyIndex(0);
+
     try {
       const response = await fetch('/api/onboarding/propose-interests', {
         method: 'POST',
@@ -107,31 +342,36 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
       });
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok || !Array.isArray(data?.interests)) {
-        setError(data?.message ?? 'Unable to propose interests.');
+      if (!response.ok || !Array.isArray(data?.proposedInterests)) {
+        setError("We couldn't generate suggestions. You can try again or write your own.");
         return;
       }
 
-      setProposals(data.interests);
-      setStep(3);
+      setProposedInterests(data.proposedInterests);
+      setCurrentStep('review');
+    } catch {
+      setError("We couldn't generate suggestions. You can try again or write your own.");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }
 
   async function saveInterests() {
-    setError(null);
-    const cleanSelected = selected.flatMap((interest) => {
-      const normalized = normalizeInterest(interest);
-      return normalized ? [normalized] : [];
-    });
+    const cleanSelected = selectedInterests
+      .flatMap((interest) => {
+        const selected = toSelected(interest);
+        return selected ? [selected] : [];
+      })
+      .slice(0, 5);
 
-    if (cleanSelected.length === 0 || cleanSelected.length > 5) {
-      setError('Lock in 1 to 5 interests.');
+    if (cleanSelected.length === 0) {
+      setError('Pick at least 1 to continue.');
       return;
     }
 
-    setLoading(true);
+    setError(null);
+    setIsLoading(true);
+
     try {
       const response = await fetch('/api/onboarding/save-interests', {
         method: 'POST',
@@ -140,227 +380,419 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
       });
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-        setError(data?.message ?? 'Unable to save interests.');
+      if (!response.ok || data?.ok !== true) {
+        setError(data?.message ?? data?.error ?? 'Unable to save interests.');
         return;
       }
 
-      router.replace('/');
+      setCurrentStep('complete');
       router.refresh();
+    } catch {
+      setError('Unable to save interests.');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }
 
-  return (
-    <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6">
-      <section className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Step {step} of 3
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-normal sm:text-4xl">
-            Choose your five
-          </h1>
+  function skipSuggestions() {
+    setError(null);
+    setProposedInterests([]);
+    setShowComposer(true);
+    setCurrentStep('review');
+  }
+
+  function addCustomInterest() {
+    const rawInput = normalizeDomain(customInput);
+    const chosenDomain = customChoice === 'suggested' && canonicalSuggestion
+      ? canonicalSuggestion.suggested
+      : rawInput;
+    const broadCategory = canonicalSuggestion?.broadCategory ?? 'Other';
+    const selected = toSelected({ domain: chosenDomain, broadCategory });
+
+    if (!selected || selectedInterests.length >= 5) return;
+
+    setSelectedInterests((current) => {
+      if (current.some((item) => selectedKey(item) === selectedKey(selected))) return current;
+      return [...current, selected].slice(0, 5);
+    });
+    setCustomInput('');
+    setCanonicalSuggestion(null);
+    setCustomChoice(null);
+  }
+
+  if (isLoading && currentStep === 'warmup') {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background px-5 py-12 text-foreground">
+        <div className="flex max-w-sm flex-col items-center gap-5 text-center">
+          <div className="grid size-16 place-items-center rounded-full border bg-card shadow-sm">
+            <Spinner />
+          </div>
+          <p className="text-xl font-semibold">{LOADING_COPY[loadingCopyIndex]}</p>
         </div>
+      </main>
+    );
+  }
 
-        <div className="rounded-lg border bg-card p-5 shadow-sm sm:p-6">
-          {step === 1 ? (
-            <div className="space-y-5">
-              <div>
-                <h2 className="text-xl font-semibold tracking-normal">Your invite came with a few ideas</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Keep any that feel right. They count toward your five.
-                </p>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {preSeededInterests.map((interest) => {
-                  const selectedSeed = selected.some((item) => isSameInterest(item, interest));
-                  return (
-                    <button
-                      key={interest.label}
-                      type="button"
-                      onClick={() => toggleInterest(interest)}
-                      className={`min-h-14 rounded-md border px-3 py-2 text-left text-sm transition ${
-                        selectedSeed
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border bg-background hover:bg-accent'
-                      }`}
-                    >
-                      <span className="block font-medium">{interest.label}</span>
-                      {interest.broadCategory ? (
-                        <span className="block text-xs opacity-75">{interest.broadCategory}</span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <button
-                  type="button"
-                  className="h-11 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
-                  onClick={() => setSeededInterests(preSeededInterests)}
-                >
-                  Accept all
-                </button>
-                <button
-                  type="button"
-                  className="h-11 rounded-md border px-4 text-sm font-medium"
-                  onClick={() => setStep(2)}
-                >
-                  Keep selected
-                </button>
-                <button
-                  type="button"
-                  className="h-11 rounded-md px-4 text-sm font-medium text-muted-foreground"
-                  onClick={() => setSeededInterests([])}
-                >
-                  Start fresh
-                </button>
-              </div>
-            </div>
-          ) : null}
+  return (
+    <main className="min-h-screen bg-background px-4 pb-10 pt-8 text-foreground sm:px-6 sm:pt-12">
+      <section className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-2xl flex-col">
+        <ProgressDots currentStep={currentStep} />
 
-          {step === 2 ? (
-            <div className="space-y-5">
-              <div>
-                <h2 className="text-xl font-semibold tracking-normal">Warm-up questions</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Short answers are enough. Four or more gives Joshing room to work.
-                </p>
+        <div className="mt-9 flex flex-1 flex-col">
+          {currentStep === 'welcome' ? (
+            <div className="flex flex-1 flex-col justify-center gap-8">
+              <StepHeader
+                title="Welcome to Joshing"
+                subtitle="The trivia you wish you were asked."
+              />
+              <div className="space-y-4 text-base leading-7 text-muted-foreground">
+                <p>Every day, you&apos;ll get five questions calibrated to your intellectual world.</p>
+                <p>First, let&apos;s figure out what that world looks like.</p>
+                <p>It takes about two minutes.</p>
               </div>
-              <div className="grid gap-4">
-                {WARMUP_QUESTIONS.map((question, index) => (
-                  <label key={question} className="grid gap-2 text-sm font-medium">
-                    {question}
-                    <textarea
-                      className="min-h-20 resize-y rounded-md border bg-background px-3 py-2 text-base font-normal outline-none ring-offset-background focus:ring-2 focus:ring-ring"
-                      value={warmupAnswers[index] ?? ''}
-                      onChange={(event) => {
-                        const next = [...warmupAnswers];
-                        next[index] = event.target.value;
-                        setWarmupAnswers(next);
-                      }}
-                    />
-                  </label>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="h-11 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
-                onClick={generateProposals}
-                disabled={loading}
-              >
-                {loading ? 'Finding interests...' : 'Find my interests'}
+
+              {preSeededInterests.length > 0 ? (
+                <div className="rounded-lg border bg-card p-4 text-sm leading-6 shadow-sm">
+                  <p className="font-medium">
+                    {inviterName} thought you&apos;d like questions about:
+                  </p>
+                  <ul className="mt-2 space-y-1 text-muted-foreground">
+                    {preSeededInterests.slice(0, 3).map((interest) => (
+                      <li key={interest.domain}>- {interest.domain}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-muted-foreground">
+                    We&apos;ll add these in - you can change them later.
+                  </p>
+                </div>
+              ) : null}
+
+              <button type="button" className="btn-primary h-12 w-full" onClick={() => setCurrentStep('warmup')}>
+                Let&apos;s go
               </button>
             </div>
           ) : null}
 
-          {step === 3 ? (
-            <div className="space-y-5">
-              <div>
-                <h2 className="text-xl font-semibold tracking-normal">Pick up to five</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {remainingSlots > 0 ? `${remainingSlots} slot${remainingSlots === 1 ? '' : 's'} left.` : 'Your five are full.'}
-                </p>
-              </div>
+          {currentStep === 'warmup' ? (
+            <div className="flex flex-1 flex-col gap-7">
+              <StepHeader
+                title="Tell us about yourself"
+                subtitle="Free text. No wrong answers. The more specific, the better."
+              />
 
-              <div className="grid gap-2 sm:grid-cols-2">
-                {proposals.map((interest) => {
-                  const active = selected.some((item) => isSameInterest(item, interest));
+              <div className="space-y-4">
+                {WARMUP_FIELDS.map(({ field, label, placeholder, optional }) => {
+                  const value = warmupAnswers[field] ?? '';
                   return (
-                    <button
-                      key={`${interest.label}-${interest.broadCategory ?? ''}`}
-                      type="button"
-                      onClick={() => toggleInterest(interest)}
-                      className={`min-h-24 rounded-md border px-3 py-3 text-left text-sm transition ${
-                        active
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border bg-background hover:bg-accent disabled:opacity-50'
-                      }`}
-                      disabled={!active && selected.length >= 5}
-                      title={interest.description ?? undefined}
-                    >
-                      <span className="block font-medium">{interest.label}</span>
-                      <span className="mt-1 block text-xs leading-5 opacity-75">
-                        {interest.description}
+                    <label key={field} className="block">
+                      <span className="text-sm font-medium">
+                        {label}
+                        {optional ? <span className="text-muted-foreground"> optional</span> : null}
                       </span>
-                    </button>
+                      <input
+                        className="mt-2 h-12 w-full rounded-md border bg-card px-3 text-base outline-none transition placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring"
+                        maxLength={200}
+                        placeholder={placeholder}
+                        value={value}
+                        onChange={(event) => updateWarmupAnswer(field, event.target.value)}
+                      />
+                      {value.length > 150 ? (
+                        <span className="mt-1 block text-right text-xs text-muted-foreground">
+                          {value.length}/200
+                        </span>
+                      ) : null}
+                    </label>
                   );
                 })}
               </div>
 
-              <div className="space-y-3 rounded-md border bg-background p-3">
-                <p className="text-sm font-medium">Your five</p>
-                {selected.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Pick from above or write your own.</p>
-                ) : (
-                  <div className="grid gap-2">
-                    {selected.map((interest, index) => (
-                      <div key={`${interest.label}-${index}`} className="flex gap-2">
-                        <input
-                          className="h-10 min-w-0 flex-1 rounded-md border bg-card px-3 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-ring"
-                          value={interest.label}
-                          onChange={(event) => updateSelected(index, event.target.value)}
-                        />
-                        <button
-                          type="button"
-                          className="h-10 rounded-md border px-3 text-sm"
-                          onClick={() => setSelected((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    className="h-10 min-w-0 flex-1 rounded-md border bg-card px-3 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-ring"
-                    placeholder="Write your own interest"
-                    value={customLabel}
-                    onChange={(event) => setCustomLabel(event.target.value)}
-                    disabled={selected.length >= 5}
-                  />
-                  <button
-                    type="button"
-                    className="h-10 rounded-md border px-3 text-sm font-medium disabled:opacity-50"
-                    onClick={addCustomInterest}
-                    disabled={selected.length >= 5}
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
+              {error ? (
+                <ErrorPanel
+                  message={error}
+                  actions={(
+                    <>
+                      <button type="button" className="btn-primary h-10" onClick={generateProposals}>
+                        Try again
+                      </button>
+                      <button type="button" className="btn-ghost h-10" onClick={skipSuggestions}>
+                        Skip suggestions
+                      </button>
+                    </>
+                  )}
+                />
+              ) : null}
 
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="mt-auto pt-2">
                 <button
                   type="button"
-                  className="h-11 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
-                  onClick={saveInterests}
-                  disabled={loading || selected.length === 0}
+                  className="btn-primary h-12 w-full"
+                  onClick={generateProposals}
+                  disabled={!canGenerate || isLoading}
                 >
-                  {loading ? 'Locking...' : 'Lock my five'}
-                </button>
-                <button
-                  type="button"
-                  className="h-11 rounded-md border px-4 text-sm font-medium"
-                  onClick={() => setStep(2)}
-                  disabled={loading}
-                >
-                  Revisit answers
+                  See suggestions
                 </button>
               </div>
             </div>
           ) : null}
-        </div>
 
-        {error ? (
-          <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
+          {currentStep === 'review' ? (
+            <div className="flex flex-1 flex-col gap-7">
+              <StepHeader
+                title="Here's what we found"
+                subtitle="Pick up to 5. You can edit any of them, or write your own."
+              />
+
+              <div className="space-y-3">
+                {reviewInterests.map((interest) => {
+                  const selected = isSelected(selectedInterests, interest);
+                  const normalized = toSelected(interest);
+                  const atCap = selectedInterests.length >= 5 && !selected;
+                  const fromInvite = preSeededInterests.some((seeded) => selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) === selectedKey(normalized ?? { domain: '', broadCategory: '' }));
+                  const key = `${interest.domain}-${interest.broadCategory}`;
+                  const editing = normalized ? editingKey === selectedKey(normalized) : false;
+
+                  return (
+                    <div
+                      key={key}
+                      className={[
+                        'rounded-lg border p-4 transition',
+                        selected ? 'border-foreground bg-foreground text-background' : 'bg-card',
+                        atCap ? 'opacity-45' : '',
+                      ].join(' ')}
+                      title={atCap ? '5 max - deselect one to add another' : undefined}
+                      onPointerDown={() => startLongPress(interest)}
+                      onPointerUp={clearLongPress}
+                      onPointerLeave={clearLongPress}
+                    >
+                      {editing ? (
+                        <div className="space-y-3">
+                          <input
+                            className="h-11 w-full rounded-md border bg-background px-3 text-base text-foreground outline-none focus:ring-2 focus:ring-ring"
+                            value={editingDomain}
+                            maxLength={100}
+                            onChange={(event) => setEditingDomain(event.target.value)}
+                          />
+                          <div className="flex gap-2">
+                            <button type="button" className="btn-primary h-9" onClick={() => saveEdit(interest)}>
+                              Save
+                            </button>
+                            <button type="button" className="btn-ghost h-9" onClick={() => setEditingKey(null)}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => toggleInterest(interest)}
+                            disabled={atCap}
+                          >
+                            <span className="block text-xl font-semibold tracking-normal">{interest.domain}</span>
+                            <span className={`mt-1 block text-xs font-medium uppercase ${selected ? 'text-background/70' : 'text-muted-foreground'}`}>
+                              {interest.broadCategory}
+                            </span>
+                            {interest.rationale ? (
+                              <span className={`mt-3 block text-sm italic leading-6 ${selected ? 'text-background/80' : 'text-muted-foreground'}`}>
+                                {interest.rationale}
+                              </span>
+                            ) : null}
+                            {fromInvite ? (
+                              <span className={`mt-3 inline-flex rounded-sm border px-2 py-1 text-[11px] font-semibold uppercase ${selected ? 'border-background/30 text-background/80' : 'text-muted-foreground'}`}>
+                                From {inviterName}
+                              </span>
+                            ) : null}
+                          </button>
+                          <button
+                            type="button"
+                            className={`grid size-9 shrink-0 place-items-center rounded-md border ${selected ? 'border-background/30' : 'hover:bg-muted'}`}
+                            aria-label={`Edit ${interest.domain}`}
+                            title="Edit"
+                            onClick={() => beginEdit(interest)}
+                          >
+                            <Edit3 className="size-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-3">
+                {!showComposer ? (
+                  <button
+                    type="button"
+                    className="btn-ghost h-11 w-full gap-2"
+                    onClick={() => setShowComposer(true)}
+                    disabled={selectedInterests.length >= 5}
+                  >
+                    <Plus className="size-4" />
+                    Write your own
+                  </button>
+                ) : (
+                  <div className="rounded-lg border bg-card p-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="h-11 min-w-0 flex-1 rounded-md border bg-background px-3 text-base outline-none focus:ring-2 focus:ring-ring"
+                        placeholder="Write an interest"
+                        value={customInput}
+                        maxLength={100}
+                        onChange={(event) => setCustomInput(event.target.value)}
+                        disabled={selectedInterests.length >= 5}
+                      />
+                      <button
+                        type="button"
+                        className="grid size-11 place-items-center rounded-md border hover:bg-muted"
+                        aria-label="Close composer"
+                        title="Close"
+                        onClick={() => setShowComposer(false)}
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+
+                    <div className="mt-3 min-h-11 text-sm">
+                      {isCanonicalizing ? (
+                        <p className="flex items-center gap-2 text-muted-foreground">
+                          <Spinner small />
+                          Checking wording...
+                        </p>
+                      ) : null}
+                      {canonicalSuggestion ? (
+                        <div className="space-y-3 rounded-md border bg-background p-3">
+                          <p>
+                            Suggested: <span className="font-medium">{canonicalSuggestion.suggested}</span>
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="btn-primary h-9"
+                              onClick={() => setCustomChoice('suggested')}
+                            >
+                              <Check className="size-4" />
+                              Use this
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-ghost h-9"
+                              onClick={() => setCustomChoice('mine')}
+                            >
+                              Keep mine
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-primary mt-3 h-11 w-full"
+                      onClick={addCustomInterest}
+                      disabled={
+                        normalizeDomain(customInput).length < 2 ||
+                        selectedInterests.length >= 5 ||
+                        (canonicalSuggestion !== null && customChoice === null)
+                      }
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="sticky bottom-0 mt-auto border-t bg-background/95 py-4 backdrop-blur">
+                <div className="mb-3 flex items-center justify-between text-sm">
+                  <span className="font-medium">{selectedInterests.length} of 5 selected</span>
+                  <span className="text-muted-foreground">
+                    {selectedInterests.length === 0 ? 'Pick at least 1 to continue' : null}
+                    {selectedInterests.length === 5 ? '5 max - deselect one to add another' : null}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" className="btn-ghost h-12" onClick={() => setCurrentStep('warmup')}>
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary h-12"
+                    onClick={() => setCurrentStep('pick')}
+                    disabled={selectedInterests.length === 0}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {currentStep === 'pick' ? (
+            <div className="flex flex-1 flex-col gap-7">
+              <StepHeader
+                title="Here's your starting map"
+                subtitle="These are what your daily round will draw from. You can change them any time from your Knowledge page."
+              />
+
+              <ol className="space-y-3">
+                {selectedInterests.map((interest, index) => (
+                  <li key={`${interest.domain}-${index}`} className="flex gap-3 rounded-lg border bg-card p-4">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-sm font-semibold text-background">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 pt-1">
+                      <span className="block font-semibold">{interest.domain}</span>
+                      <span className="mt-1 block text-sm text-muted-foreground">
+                        {interest.broadCategory}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+
+              {error ? <ErrorPanel message={error} /> : null}
+
+              <div className="mt-auto grid grid-cols-2 gap-3 pt-4">
+                <button type="button" className="btn-ghost h-12" onClick={() => setCurrentStep('review')} disabled={isLoading}>
+                  Back
+                </button>
+                <button type="button" className="btn-primary h-12" onClick={saveInterests} disabled={isLoading}>
+                  {isLoading ? 'Saving...' : 'Lock it in'}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {currentStep === 'complete' ? (
+            <div className="flex flex-1 flex-col justify-center gap-8">
+              <StepHeader
+                title="You're set."
+                subtitle="Your first daily round will be ready at noon EST."
+              />
+              <p className="text-base leading-7 text-muted-foreground">Until then, take a look around.</p>
+              <div className="space-y-3">
+                <button type="button" className="btn-primary h-12 w-full" onClick={() => router.push('/')}>
+                  Go to home
+                </button>
+                {showDailySetup ? (
+                  <button type="button" className="btn-ghost h-12 w-full" onClick={() => router.push('/daily/setup')}>
+                    Set up today&apos;s round now
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </section>
     </main>
+  );
+}
+
+function ErrorPanel({ message, actions }: { message: string; actions?: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+      <p>{message}</p>
+      {actions ? <div className="mt-3 flex flex-wrap gap-2">{actions}</div> : null}
+    </div>
   );
 }

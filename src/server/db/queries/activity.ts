@@ -2,6 +2,7 @@ import { and, count, desc, eq, gt, inArray, isNull, ne } from 'drizzle-orm';
 
 import {
   activityItems,
+  creatorNotes,
   db,
   feedItems,
   joshingGameQuestions,
@@ -53,6 +54,17 @@ export type ActivityItemView = Pick<
       questionText: string;
       personalMessage: string | null;
     };
+    curatedQuestion?: {
+      questionText: string;
+    };
+    creatorNote?: {
+      id: string;
+      questionText: string;
+      correctAnswer: string;
+      submittedAnswer: string | null;
+      noteText: string;
+      deliveredAt: Date | null;
+    };
   };
 };
 
@@ -77,6 +89,8 @@ function isActivityType(value: string): value is ActivityItemType {
     'friend_request_accepted',
     'received_direct_question',
     'reaction_received',
+    'question_curated',
+    'creator_note_received',
   ].includes(value);
 }
 
@@ -294,6 +308,79 @@ async function hydrateDirectQuestions(items: ActivityItemRow[]) {
   ] as const));
 }
 
+async function hydrateCuratedQuestions(items: ActivityItemRow[]) {
+  const questionIds = [
+    ...new Set(
+      items
+        .filter((item) => item.referenceType === 'question')
+        .map((item) => item.referenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (questionIds.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['curatedQuestion']>>();
+  }
+
+  const rows = await db
+    .select({
+      id: questions.id,
+      questionText: questions.questionText,
+    })
+    .from(questions)
+    .where(inArray(questions.id, questionIds));
+
+  return new Map(rows.map((row) => [row.id, { questionText: row.questionText }] as const));
+}
+
+async function hydrateCreatorNotes(items: ActivityItemRow[]) {
+  const noteIds = [
+    ...new Set(
+      items
+        .filter((item) => item.referenceType === 'creator_note')
+        .map((item) => item.referenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (noteIds.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['creatorNote']>>();
+  }
+
+  const rows = await db
+    .select({
+      note: creatorNotes,
+      questionText: questions.questionText,
+      correctAnswer: questions.answerText,
+    })
+    .from(creatorNotes)
+    .innerJoin(questions, eq(creatorNotes.questionId, questions.id))
+    .where(inArray(creatorNotes.id, noteIds));
+
+  const gameRows = await db
+    .select({
+      questionId: joshingGameResponses.questionId,
+      userId: joshingGameResponses.userId,
+      submittedAnswer: joshingGameResponses.submittedAnswer,
+    })
+    .from(joshingGameResponses)
+    .where(inArray(joshingGameResponses.questionId, rows.map((row) => row.note.questionId)));
+
+  const submittedByQuestionUser = new Map(
+    gameRows.map((row) => [`${row.questionId}:${row.userId}`, row.submittedAnswer] as const),
+  );
+
+  return new Map(rows.map((row) => [
+    row.note.id,
+    {
+      id: row.note.id,
+      questionText: row.questionText,
+      correctAnswer: row.correctAnswer,
+      submittedAnswer: submittedByQuestionUser.get(`${row.note.questionId}:${row.note.recipientUserId}`) ?? null,
+      noteText: row.note.noteText,
+      deliveredAt: row.note.deliveredAt,
+    },
+  ] as const));
+}
+
 export async function getActivitiesForUser(userId: string): Promise<ActivityItemView[]> {
   const rows = await db
     .select()
@@ -306,12 +393,14 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     .orderBy(desc(activityItems.createdAt))
     .limit(100);
 
-  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById] = await Promise.all([
+  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById] = await Promise.all([
     hydrateActors(rows),
     hydrateGames(rows, userId),
     hydrateMasteryEvents(rows),
     hydrateReactions(rows),
     hydrateDirectQuestions(rows),
+    hydrateCuratedQuestions(rows),
+    hydrateCreatorNotes(rows),
   ]);
 
   return rows
@@ -338,6 +427,12 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
           : undefined,
         directQuestion: row.referenceType === 'feed_item' && row.referenceId
           ? directQuestionsById.get(row.referenceId)
+          : undefined,
+        curatedQuestion: row.referenceType === 'question' && row.referenceId
+          ? curatedQuestionsById.get(row.referenceId)
+          : undefined,
+        creatorNote: row.referenceType === 'creator_note' && row.referenceId
+          ? creatorNotesById.get(row.referenceId)
           : undefined,
       },
     }));

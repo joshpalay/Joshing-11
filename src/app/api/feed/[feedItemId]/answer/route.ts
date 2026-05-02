@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
+import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, playerMastery, questions } from '@/server/db';
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { getBasePoints } from '@/server/mastery/awards';
@@ -84,27 +85,30 @@ export async function POST(request: NextRequest, context: RouteContext) {
     isCorrect,
     domain,
   }).catch(() => null);
-  const masteryDelta = isCorrect && !alreadyCorrect
-    ? await writeMasteryEvent({
-        userId: session.userId,
-        questionId: question.id,
-        domain,
-        answerState,
-        pointsAwarded,
-        sourceType: 'feed',
-        sourceId: feedItemId,
-        broadCategory: question.broadCategory,
-        eventQuestionId: question.id,
-        basePoints,
-        weight: 1,
-      })
-    : {
-        domain,
-        points: pointsAwarded,
-        previousTier,
-        newTier: previousTier,
-        tierChanged: false,
-      };
+  const masteryDelta = await writeMasteryEvent({
+    userId: session.userId,
+    questionId: question.id,
+    domain,
+    answerState,
+    pointsAwarded: isCorrect && !alreadyCorrect ? pointsAwarded : 0,
+    sourceType: 'feed',
+    sourceId: feedItemId,
+    broadCategory: question.broadCategory,
+    eventQuestionId: isCorrect && !alreadyCorrect ? question.id : null,
+    basePoints,
+    weight: isCorrect && !alreadyCorrect ? 1 : 0,
+  }).catch((error: unknown) => {
+    console.warn('[feed/answer] failed to write mastery/adaptive answer event', {
+      error: error instanceof Error ? error.message : 'unknown',
+    });
+    return {
+      domain,
+      points: pointsAwarded,
+      previousTier,
+      newTier: previousTier,
+      tierChanged: false,
+    };
+  });
 
   await db.transaction(async (tx) => {
     if (isCorrect && !alreadyCorrect) {
@@ -131,6 +135,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .set({ state: 'answered' })
       .where(eq(feedItems.id, feedItemId));
   });
+
+  if (!isCorrect) {
+    void promptCreatorNoteAfterWrongAnswer({
+      questionId: question.id,
+      recipientUserId: session.userId,
+      contextType: 'feed',
+      contextId: feedItemId,
+    });
+  }
 
   return NextResponse.json({
     isCorrect,

@@ -67,6 +67,8 @@ export function Nav() {
   }, []);
 
   useEffect(() => {
+    if (pathname === '/onboarding') return;
+
     const initialTimer = window.setTimeout(() => {
       void loadUnreadCount();
       void loadCurrentUser();
@@ -79,7 +81,11 @@ export function Nav() {
       window.clearTimeout(initialTimer);
       window.clearInterval(timer);
     };
-  }, [loadCurrentUser, loadUnreadCount]);
+  }, [loadCurrentUser, loadUnreadCount, pathname]);
+
+  if (pathname === '/onboarding') {
+    return null;
+  }
 
   function AccountIcon({ active }: { active: boolean }) {
     if (!accountInitials) {

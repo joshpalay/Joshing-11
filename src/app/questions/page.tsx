@@ -9,6 +9,7 @@ import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
+type OwnershipFilter = 'all' | 'mine' | 'saved';
 type DrawerState =
   | { mode: 'closed' }
   | { mode: 'create' }
@@ -77,6 +78,7 @@ export default function QuestionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [domainFilter, setDomainFilter] = useState('all');
+  const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState<DrawerState>({ mode: 'closed' });
@@ -118,6 +120,10 @@ export default function QuestionsPage() {
   const filteredQuestions = useMemo(() => {
     const query = search.trim().toLowerCase();
     return questions
+      .filter((question) => (
+        ownershipFilter === 'all'
+          || (ownershipFilter === 'mine' ? question.isOwnAuthored : !question.isOwnAuthored)
+      ))
       .filter((question) => domainFilter === 'all' || question.domain === domainFilter)
       .filter((question) => !query || question.text.toLowerCase().includes(query))
       .slice()
@@ -127,10 +133,11 @@ export default function QuestionsPage() {
         if (sortMode === 'easiest') return b.correctRate - a.correctRate || b.timesAnswered - a.timesAnswered;
         return Date.parse(b.createdAt) - Date.parse(a.createdAt);
       });
-  }, [domainFilter, questions, search, sortMode]);
+  }, [domainFilter, ownershipFilter, questions, search, sortMode]);
 
   function clearFilters() {
     setDomainFilter('all');
+    setOwnershipFilter('all');
     setSortMode('newest');
     setSearch('');
   }
@@ -165,10 +172,17 @@ export default function QuestionsPage() {
 
   async function confirmDelete(question: QuestionView) {
     setCardError((current) => ({ ...current, [question.id]: '' }));
-    const response = await fetch(`/api/questions/${question.id}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    });
+    const response = question.isOwnAuthored
+      ? await fetch(`/api/questions/${question.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+      : await fetch('/api/bank', {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ questionId: question.id }),
+        });
     if (response.status === 409) {
       setCardError((current) => ({ ...current, [question.id]: 'This question has been used in a game.' }));
       setConfirmingId(null);
@@ -205,13 +219,26 @@ export default function QuestionsPage() {
       <header className="mb-5 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-serif text-3xl font-semibold">Your Questions</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{questions.length} questions</p>
+          <p className="mt-1 text-sm text-muted-foreground">{questions.length} banked questions</p>
         </div>
         <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={() => setDrawer({ mode: 'create' })}>
           <Plus className="size-4" />
           Write a question
         </button>
       </header>
+
+      <section className="mb-4 flex flex-wrap gap-2">
+        {(['all', 'mine', 'saved'] as OwnershipFilter[]).map((filter) => (
+          <button
+            key={filter}
+            type="button"
+            onClick={() => setOwnershipFilter(filter)}
+            className={`rounded-md border px-3 py-2 text-sm ${ownershipFilter === filter ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-muted'}`}
+          >
+            {filter === 'all' ? 'All' : filter === 'mine' ? 'Mine' : 'Saved'}
+          </button>
+        ))}
+      </section>
 
       <section className="mb-5 grid gap-3 rounded-lg border bg-card p-3 sm:grid-cols-[1fr_1fr_2fr]">
         <select
@@ -264,6 +291,7 @@ export default function QuestionsPage() {
       ) : (
         <section className="space-y-3">
           {filteredQuestions.map((question) => {
+            const isOwnAuthored = question.isOwnAuthored ?? true;
             const inUse = question.usedInGamesCount > 0;
             const color = DOMAIN_COLORS[question.domain] ?? '#64748b';
             const deleting = removingId === question.id;
@@ -282,6 +310,9 @@ export default function QuestionsPage() {
                   </span>
                   <span className="font-mono text-xs text-muted-foreground" aria-label={`Difficulty ${question.difficulty} of 5`}>
                     {difficultyDots(question.difficulty)}
+                  </span>
+                  <span className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    {isOwnAuthored ? 'Written by you' : `From ${question.authorName ?? 'a friend'}`}
                   </span>
                 </div>
                 <p className="line-clamp-2 text-base font-medium leading-7">{question.text}</p>
@@ -303,7 +334,12 @@ export default function QuestionsPage() {
                     </>
                   ) : (
                     <>
-                      {inUse ? (
+                      {!isOwnAuthored ? (
+                        <span className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground" title="Original author only">
+                          <Lock className="size-4" />
+                          Edit
+                        </span>
+                      ) : inUse ? (
                         <span className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground" title="Used in a game - cannot be edited">
                           <Lock className="size-4" />
                           Edit
@@ -314,7 +350,7 @@ export default function QuestionsPage() {
                           Edit
                         </button>
                       )}
-                      {inUse ? (
+                      {isOwnAuthored && inUse ? (
                         <span className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground" title="Used in a game - cannot be edited">
                           <Lock className="size-4" />
                           Delete

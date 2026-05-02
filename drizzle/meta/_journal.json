@@ -57,6 +57,13 @@
       "when": 1777780800000,
       "tag": "0007_send_to_friend_note",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777784400000,
+      "tag": "0008_add_to_bank_provenance",
+      "breakpoints": true
     }
   ]
 }

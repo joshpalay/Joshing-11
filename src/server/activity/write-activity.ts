@@ -9,7 +9,9 @@ export type ActivityItemType =
   | 'friend_request'
   | 'friend_request_accepted'
   | 'received_direct_question'
-  | 'reaction_received';
+  | 'reaction_received'
+  | 'question_curated'
+  | 'creator_note_received';
 
 export async function writeActivity(params: {
   userId: string;

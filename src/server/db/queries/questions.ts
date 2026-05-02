@@ -1,4 +1,4 @@
-import { and, countDistinct, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, countDistinct, eq, isNull, sql } from 'drizzle-orm';
 
 import {
   db,
@@ -6,6 +6,7 @@ import {
   joshingGameResponses,
   joshingGames,
   questions,
+  userQuestionBank,
 } from '@/server/db';
 import { categoryLabel } from '@/lib/questions-types';
 
@@ -43,6 +44,9 @@ export type QuestionView = {
   tags: string[];
   asked_count: number;
   correct_count: number;
+  isInBank?: boolean;
+  isOwnAuthored?: boolean;
+  authorName?: string;
 };
 
 export type QuestionMutationResult = { ok: boolean; reason?: 'not_found' | 'in_use' };
@@ -110,7 +114,7 @@ async function readQuestionStats(questionId: string) {
   };
 }
 
-async function toQuestionView(row: QuestionRow): Promise<QuestionView> {
+export async function toQuestionView(row: QuestionRow): Promise<QuestionView> {
   const stats = await readQuestionStats(row.id);
   const domain = row.category;
   const createdAt = toIso(row.createdAt) ?? new Date().toISOString();
@@ -154,13 +158,8 @@ async function toQuestionView(row: QuestionRow): Promise<QuestionView> {
 }
 
 export async function getQuestionsForUser(userId: string): Promise<QuestionView[]> {
-  const rows = await db
-    .select()
-    .from(questions)
-    .where(and(eq(questions.creatorId, userId), isNull(questions.deletedAt)))
-    .orderBy(desc(questions.createdAt));
-
-  return Promise.all(rows.map(toQuestionView));
+  const { getBankedQuestions } = await import('@/server/db/queries/bank');
+  return getBankedQuestions(userId);
 }
 
 export async function getQuestion(questionId: string, userId: string): Promise<QuestionView | null> {
@@ -200,6 +199,17 @@ export async function createQuestion(params: {
       visibility: 'public',
     })
     .returning({ id: questions.id });
+
+  await db
+    .insert(userQuestionBank)
+    .values({
+      userId: params.authorId,
+      questionId: created.id,
+      addedFromContextType: 'manual',
+    })
+    .onConflictDoNothing({
+      target: [userQuestionBank.userId, userQuestionBank.questionId],
+    });
 
   return { id: created.id };
 }

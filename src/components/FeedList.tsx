@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Send, SkipForward, ThumbsUp, X } from 'lucide-react';
 
+import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { QuestionReactionPrompt } from '@/components/play/GameplayChat';
 
@@ -21,6 +22,7 @@ type FeedApiItem = {
   is_pinned: boolean;
   joshing_game_id: string | null;
   question_text: string | null;
+  is_in_bank: boolean;
   domain_pill: string;
   game_title: string | null;
 };
@@ -338,6 +340,17 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                         className="ml-2 mt-3 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted"
                       />
                     ) : null}
+                    {item.question_id ? (
+                      <AddToBankAction
+                        questionId={item.question_id}
+                        initialInBank={item.is_in_bank}
+                        contextType="feed"
+                        contextId={item.id}
+                        label=""
+                        className="ml-2 mt-3 inline-flex size-9 items-center justify-center rounded-md border px-0"
+                        onChange={(inBank) => setItems((current) => current.map((row) => row.id === item.id ? { ...row, is_in_bank: inBank } : row))}
+                      />
+                    ) : null}
                     {item.question_id && viewerId && item.source_user_id !== viewerId ? (
                       <QuestionReactionPrompt
                         prompt={{
@@ -392,6 +405,17 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                           question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill }}
                           label=""
                           className="inline-flex h-11 w-11 items-center justify-center rounded-md border hover:bg-muted"
+                        />
+                      ) : null}
+                      {item.question_id ? (
+                        <AddToBankAction
+                          questionId={item.question_id}
+                          initialInBank={item.is_in_bank}
+                          contextType="feed"
+                          contextId={item.id}
+                          label=""
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-md border px-0"
+                          onChange={(inBank) => setItems((current) => current.map((row) => row.id === item.id ? { ...row, is_in_bank: inBank } : row))}
                         />
                       ) : null}
                     </div>

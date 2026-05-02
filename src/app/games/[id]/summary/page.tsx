@@ -4,9 +4,11 @@ import type { CSSProperties } from 'react';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
+import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { getSession } from '@/server/auth/session';
 import { db, masteryEvents } from '@/server/db';
+import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
 
 type PageProps = {
@@ -78,6 +80,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
   if (view.viewerStatus === 'not_started') redirect(`/games/${id}`);
 
   const questionCount = view.questions.length;
+  const bankedById = await checkBankedQuestions(session.userId, view.questions.map((question) => question.questionId));
   const responseByUserQuestion = new Map(view.responses.map((response) => [responseKey(response.userId, response.questionId), response]));
   const viewerResponses = view.responses.filter((response) => response.userId === session.userId);
   const viewerHasPlayed = viewerResponses.length >= questionCount;
@@ -218,6 +221,14 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       }}
                       label=""
                       className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    />
+                    <AddToBankAction
+                      questionId={gameQuestion.questionId}
+                      initialInBank={Boolean(bankedById[gameQuestion.questionId])}
+                      contextType="joshing_game"
+                      contextId={id}
+                      label=""
+                      className="inline-flex size-9 items-center justify-center rounded-md border px-0"
                     />
                   </div>
                 </article>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { CreatorNoteReadButton } from '@/app/activities/CreatorNoteReadButton';
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
 import { getSession } from '@/server/auth/session';
@@ -68,10 +69,40 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     return <>{actorName(item)} sent you a question</>;
   }
 
+  if (item.type === 'question_curated') {
+    return <>{actorName(item)} saved your question</>;
+  }
+
+  if (item.type === 'creator_note_received') {
+    return <>{actorName(item)} sent you a note about a question you missed</>;
+  }
+
   return <>Something happened on Joshing</>;
 }
 
 function ActivitySubcopy({ item }: { item: ActivityItemView }) {
+  if (item.type === 'creator_note_received') {
+    const note = item.reference.creatorNote;
+    if (!note) return null;
+    return (
+      <CreatorNoteReadButton noteId={note.id}>
+        <div className="rounded-md border bg-background p-3 text-sm leading-6">
+          <p><span className="font-medium text-foreground">Question:</span> {note.questionText}</p>
+          <p className="mt-1 text-muted-foreground">
+            <span className="font-medium text-foreground">Answer:</span> {note.correctAnswer}
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            <span className="font-medium text-foreground">You said:</span>{' '}
+            {note.submittedAnswer?.trim() || 'Your answer was not saved.'}
+          </p>
+          <blockquote className="mt-3 border-l-4 border-primary/40 bg-muted/50 px-3 py-2 text-foreground">
+            {note.noteText}
+          </blockquote>
+        </div>
+      </CreatorNoteReadButton>
+    );
+  }
+
   if (item.type === 'received_direct_question') {
     const directQuestion = item.reference.directQuestion;
     if (!directQuestion) return null;
@@ -84,6 +115,12 @@ function ActivitySubcopy({ item }: { item: ActivityItemView }) {
         <p className="line-clamp-2">{directQuestion.questionText}</p>
       </div>
     );
+  }
+
+  if (item.type === 'question_curated') {
+    const curatedQuestion = item.reference.curatedQuestion;
+    if (!curatedQuestion) return null;
+    return <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{curatedQuestion.questionText}</p>;
   }
 
   if (item.type !== 'reaction_received') return null;

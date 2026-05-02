@@ -1,5 +1,3 @@
-import { eq } from 'drizzle-orm';
-
 import {
   ANTHROPIC_MODEL,
   extractTextContent,
@@ -7,7 +5,11 @@ import {
   parseJsonObject,
 } from '@/lib/llm';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
-import { db, generatedQuestions, users } from '@/server/db';
+import { db, generatedQuestions } from '@/server/db';
+import {
+  mapAdaptiveLevelToDifficultyHint,
+  updateAdaptiveLevel,
+} from '@/server/adaptive-difficulty';
 import { getKnowledgeBase, getRecentDailyQuestionTexts } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { resolveDailyBasePoints } from './types';
@@ -46,25 +48,20 @@ type LlmQuestion = {
   difficulty_estimate: 'accessible' | 'moderate' | 'specialist';
 };
 
-const DIFFICULTY_HINTS: Record<string, string> = {
-  normal: 'Target roughly a 70% correct rate for a knowledgeable player. Favor accessible questions with one satisfying twist.',
-  moderate: 'Target roughly a 50% correct rate. Questions should reward genuine knowledge without becoming obscure.',
-  challenging: 'Target roughly a 30% correct rate. Write specialist questions that require real expert knowledge of the domain.',
-  ridiculous: 'Target roughly a 15% correct rate. Write highly specific facts, precise dates or numbers, arcane terminology, or details only a true expert would know. Mark most questions difficulty_estimate: "specialist".',
+const FIXED_DIFFICULTY_LEVELS: Record<string, number> = {
+  normal: 1.0,
+  moderate: 2.0,
+  challenging: 3.0,
+  ridiculous: 4.0,
 };
-
-function adaptiveDifficultyHint(adaptiveLevel: number | null | undefined): string {
-  const level = Number.isFinite(adaptiveLevel) ? Number(adaptiveLevel) : 1;
-  if (level < 0.8) return DIFFICULTY_HINTS.normal;
-  if (level < 1.15) return 'Use the player adaptive level to target a balanced challenge, roughly a 55-60% correct rate.';
-  if (level < 1.5) return 'Use the player adaptive level to target a firm challenge, roughly a 40-45% correct rate.';
-  return 'Use the player adaptive level to target a very hard round, roughly a 25-30% correct rate.';
-}
 
 function difficultyInstruction(preference: string | undefined, adaptiveLevel?: number | null): string | null {
   if (!preference) return null;
-  if (preference === 'adaptive') return adaptiveDifficultyHint(adaptiveLevel);
-  return DIFFICULTY_HINTS[preference] ?? null;
+  if (preference === 'adaptive') {
+    return mapAdaptiveLevelToDifficultyHint(adaptiveLevel ?? 1).promptHint;
+  }
+  const fixedLevel = FIXED_DIFFICULTY_LEVELS[preference];
+  return fixedLevel === undefined ? null : mapAdaptiveLevelToDifficultyHint(fixedLevel).promptHint;
 }
 
 function buildUserPrompt(
@@ -297,12 +294,14 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   userId: string,
   count: number,
 ): Promise<GeneratedQuestionRow[]> {
-  const [knowledgeBase, preferences, previousQuestionTexts, userRows] = await Promise.all([
+  const [knowledgeBase, preferences, previousQuestionTexts] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
     getRecentDailyQuestionTexts(userId),
-    db.select({ adaptiveLevel: users.adaptiveLevel }).from(users).where(eq(users.id, userId)).limit(1),
   ]);
+  const adaptiveLevel = preferences.difficulty === 'adaptive'
+    ? await updateAdaptiveLevel(userId)
+    : FIXED_DIFFICULTY_LEVELS[preferences.difficulty] ?? null;
 
   const allDomains = knowledgeBase.map((domain) => domain.domain);
   const selectedDomains = preferences.domainMode === 'custom' && preferences.selectedDomains.length > 0
@@ -319,6 +318,6 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     undefined,
     preferences.difficulty,
     undefined,
-    userRows[0]?.adaptiveLevel ?? null,
+    adaptiveLevel,
   );
 }

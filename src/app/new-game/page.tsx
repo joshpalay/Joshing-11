@@ -257,6 +257,12 @@ export default function NewGamePage() {
                 <QuestionBankPicker
                   key={selectedQuestions.map((question) => question.id).join(':')}
                   onSelect={syncBankSelection}
+                  onQuestionsLoaded={(rows) => {
+                    setQuestionsById((current) => ({
+                      ...current,
+                      ...Object.fromEntries(rows.map((question) => [question.id, question])),
+                    }));
+                  }}
                   maxSelect={MAX_QUESTIONS}
                   preselectedIds={selectedQuestions.map((question) => question.id)}
                 />

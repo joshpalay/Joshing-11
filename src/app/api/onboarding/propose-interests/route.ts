@@ -1,21 +1,42 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { proposeInterests } from '@/server/llm/interests';
+import { proposeInterests, type WarmupAnswers } from '@/server/llm/interests';
 
 type ProposeInterestsBody = {
   warmupAnswers?: unknown;
 };
 
-function parseWarmupAnswers(value: unknown): string[] | null {
-  if (!Array.isArray(value)) return null;
+const WARMUP_FIELDS = [
+  'reReadBook',
+  'musicianOrComposer',
+  'hourLongTopic',
+  'studied',
+  'filmOrShow',
+  'anythingElse',
+] as const satisfies ReadonlyArray<keyof WarmupAnswers>;
 
-  const answers = value
-    .map((answer) => (typeof answer === 'string' ? answer.trim() : ''))
-    .filter((answer) => answer.length > 0)
-    .slice(0, 6);
+function parseWarmupAnswers(value: unknown): WarmupAnswers | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 
-  return answers.length > 0 ? answers : null;
+  const record = value as Record<string, unknown>;
+  const answers: WarmupAnswers = {};
+  let nonEmptyCount = 0;
+
+  for (const field of WARMUP_FIELDS) {
+    const raw = record[field];
+    if (raw === undefined || raw === null) continue;
+    if (typeof raw !== 'string') return null;
+
+    const answer = raw.trim().replace(/\s+/g, ' ');
+    if (answer.length > 200) return null;
+    if (answer.length > 0) {
+      answers[field] = answer;
+      nonEmptyCount += 1;
+    }
+  }
+
+  return nonEmptyCount >= 2 ? answers : null;
 }
 
 export async function POST(request: Request) {
@@ -29,12 +50,18 @@ export async function POST(request: Request) {
 
   if (!warmupAnswers) {
     return NextResponse.json(
-      { error: 'invalid_request', message: 'warmupAnswers must include at least one answer.' },
+      { error: 'invalid_request', message: 'Answer at least 2 warm-up questions, 200 characters max each.' },
       { status: 400 },
     );
   }
 
-  const interests = await proposeInterests(warmupAnswers);
-
-  return NextResponse.json({ interests });
+  try {
+    const proposedInterests = await proposeInterests(warmupAnswers);
+    return NextResponse.json({ proposedInterests });
+  } catch {
+    return NextResponse.json(
+      { error: "We couldn't generate suggestions. Please try again." },
+      { status: 500 },
+    );
+  }
 }

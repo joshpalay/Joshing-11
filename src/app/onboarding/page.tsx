@@ -1,12 +1,9 @@
 import { redirect } from 'next/navigation';
 
 import { getSession } from '@/server/auth/session';
-import {
-  getPreSeededInterestsForUser,
-  getUserOnboardingProfile,
-} from '@/server/db/queries/users';
+import { getUserOnboardingProfile } from '@/server/db/queries/users';
 
-import OnboardingFlow from './OnboardingFlow';
+import OnboardingFlow, { type PreSeededInterest } from './OnboardingFlow';
 
 export default async function OnboardingPage() {
   const session = await getSession();
@@ -24,7 +21,9 @@ export default async function OnboardingPage() {
     redirect('/');
   }
 
-  const preSeededInterests = await getPreSeededInterestsForUser(user.id);
+  // TODO Phase 11: load preSeededInterests from invitation token
+  // when friend invitation flow is built.
+  const preSeededInterests: PreSeededInterest[] = [];
 
   return <OnboardingFlow preSeededInterests={preSeededInterests} />;
 }
