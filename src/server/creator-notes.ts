@@ -80,7 +80,6 @@ export async function promptCreatorNoteAfterWrongAnswer(params: {
 export async function findWrongAnswerContext(questionId: string, recipientUserId: string) {
   const [gameResponse] = await db
     .select({
-      contextType: joshingGameResponses.gameId,
       contextId: joshingGameResponses.gameId,
       submittedAnswer: joshingGameResponses.submittedAnswer,
       answeredAt: joshingGameResponses.answeredAt,

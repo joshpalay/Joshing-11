@@ -7,6 +7,7 @@ import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons'
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { getSession } from '@/server/auth/session';
+import { getDeliveredCreatorNotesForQuestions } from '@/server/creator-notes';
 import { db, masteryEvents } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
@@ -81,6 +82,10 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
 
   const questionCount = view.questions.length;
   const bankedById = await checkBankedQuestions(session.userId, view.questions.map((question) => question.questionId));
+  const creatorNotesByQuestionId = await getDeliveredCreatorNotesForQuestions(
+    session.userId,
+    view.questions.map((question) => question.questionId),
+  );
   const responseByUserQuestion = new Map(view.responses.map((response) => [responseKey(response.userId, response.questionId), response]));
   const viewerResponses = view.responses.filter((response) => response.userId === session.userId);
   const viewerHasPlayed = viewerResponses.length >= questionCount;
@@ -181,6 +186,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
             {view.questions.map((gameQuestion) => {
               const response = responseByUserQuestion.get(responseKey(session.userId, gameQuestion.questionId));
               const correct = Boolean(response?.isCorrect);
+              const creatorNote = creatorNotesByQuestionId.get(gameQuestion.questionId);
 
               return (
                 <article key={gameQuestion.questionId} className="card p-4">
@@ -211,6 +217,12 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                     </p>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">{explanationFor(gameQuestion.question)}</p>
+                  {creatorNote ? (
+                    <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
+                      <span className="font-medium">A note from {creatorNote.authorName}:</span>{' '}
+                      {creatorNote.noteText}
+                    </p>
+                  ) : null}
                   <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                     <QuestionRatingButtons questionId={gameQuestion.questionId} />
                     <SendQuestionAction

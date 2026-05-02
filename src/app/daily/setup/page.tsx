@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check } from 'lucide-react';
@@ -69,6 +69,14 @@ function groupByCategory(domains: DomainRow[]) {
 }
 
 export default function DailySetupPage() {
+  return (
+    <Suspense>
+      <DailySetupContent />
+    </Suspense>
+  );
+}
+
+function DailySetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);

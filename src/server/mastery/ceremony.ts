@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 
 import {
   db,
@@ -341,19 +341,16 @@ export async function runDomainMergesForUser(userId: string): Promise<MergeResul
 }
 
 export async function getCategoryTotals(db: DbClient, userId: string) {
-  return db.playerMastery.findMany({
-    where: { user_id: userId },
-    select: {
-      canonical_subcategory: true,
-      total_points: true,
-      tier: true,
-      updated_at: true,
-    },
-    orderBy: [
-      { total_points: 'desc' },
-      { canonical_subcategory: 'asc' },
-    ],
-  });
+  return db
+    .select({
+      canonical_subcategory: playerMastery.canonicalSubcategory,
+      total_points: playerMastery.totalPoints,
+      tier: playerMastery.tier,
+      updated_at: playerMastery.updatedAt,
+    })
+    .from(playerMastery)
+    .where(eq(playerMastery.userId, userId))
+    .orderBy(desc(playerMastery.totalPoints), asc(playerMastery.canonicalSubcategory));
 }
 
 export async function getTopCategoriesPerPlayer(db: DbClient, userId: string, limit = 3) {
@@ -362,51 +359,35 @@ export async function getTopCategoriesPerPlayer(db: DbClient, userId: string, li
 }
 
 export async function getStrongestCategory(db: DbClient, userId: string) {
-  const strongest = await db.playerMastery.findFirst({
-    where: { user_id: userId },
-    select: {
-      canonical_subcategory: true,
-      total_points: true,
-      tier: true,
-      updated_at: true,
-    },
-    orderBy: [
-      { total_points: 'desc' },
-      { updated_at: 'desc' },
-      { canonical_subcategory: 'asc' },
-    ],
-  });
+  const [strongest] = await db
+    .select({
+      canonical_subcategory: playerMastery.canonicalSubcategory,
+      total_points: playerMastery.totalPoints,
+      tier: playerMastery.tier,
+      updated_at: playerMastery.updatedAt,
+    })
+    .from(playerMastery)
+    .where(eq(playerMastery.userId, userId))
+    .orderBy(desc(playerMastery.totalPoints), desc(playerMastery.updatedAt), asc(playerMastery.canonicalSubcategory))
+    .limit(1);
 
-  return strongest;
+  return strongest ?? null;
 }
 
 export async function getMasteryMovement(db: DbClient, input: MasteryMovementInput) {
-  // TODO R2: replace Prisma.MasteryEventWhereInput with Drizzle equivalent
-  const where: {
-    user_id: string;
-    created_at?: {
-      gte?: Date;
-      lte?: Date;
-    };
-  } = {
-    user_id: input.userId,
-    ...(input.from || input.to
-      ? {
-          created_at: {
-            ...(input.from ? { gte: input.from } : {}),
-            ...(input.to ? { lte: input.to } : {}),
-          },
-        }
-      : {}),
-  };
+  const filters = [
+    eq(masteryEvents.userId, input.userId),
+    input.from ? gte(masteryEvents.createdAt, input.from) : undefined,
+    input.to ? lte(masteryEvents.createdAt, input.to) : undefined,
+  ].filter(Boolean);
 
-  const events = await db.masteryEvent.findMany({
-    where,
-    select: {
-      canonical_subcategory: true,
-      awarded_points: true,
-    },
-  });
+  const events = await db
+    .select({
+      canonical_subcategory: masteryEvents.canonicalSubcategory,
+      awarded_points: masteryEvents.awardedPoints,
+    })
+    .from(masteryEvents)
+    .where(and(...filters));
 
   const deltaBySubcategory = new Map<string, number>();
   for (const event of events) {
@@ -423,17 +404,17 @@ export async function getMasteryMovement(db: DbClient, input: MasteryMovementInp
     canonical_subcategory: string;
     total_points: number;
     tier: ReturnType<typeof resolveTier>;
-  }> = await db.playerMastery.findMany({
-    where: {
-      user_id: input.userId,
-      canonical_subcategory: { in: subcategories },
-    },
-    select: {
-      canonical_subcategory: true,
-      total_points: true,
-      tier: true,
-    },
-  });
+  }> = await db
+    .select({
+      canonical_subcategory: playerMastery.canonicalSubcategory,
+      total_points: playerMastery.totalPoints,
+      tier: playerMastery.tier,
+    })
+    .from(playerMastery)
+    .where(and(
+      eq(playerMastery.userId, input.userId),
+      inArray(playerMastery.canonicalSubcategory, subcategories),
+    ));
 
   const afterBySubcategory = new Map(
     afterRows.map((row) => [row.canonical_subcategory, row])

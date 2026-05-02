@@ -29,6 +29,7 @@ type ArchiveItem = {
   isInBank: boolean;
   myRating: 'up' | 'down' | null;
   canUseQuestionActions?: boolean;
+  creatorNote: { authorName: string; noteText: string } | null;
 };
 
 type ArchiveFacet = {
@@ -366,6 +367,13 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
           <summary className="cursor-pointer font-medium text-foreground">Explanation</summary>
           <p className="mt-2">{item.explanation}</p>
         </details>
+      ) : null}
+
+      {item.creatorNote ? (
+        <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
+          <span className="font-medium">A note from {item.creatorNote.authorName}:</span>{' '}
+          {item.creatorNote.noteText}
+        </p>
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

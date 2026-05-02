@@ -355,14 +355,17 @@ async function hydrateCreatorNotes(items: ActivityItemRow[]) {
     .innerJoin(questions, eq(creatorNotes.questionId, questions.id))
     .where(inArray(creatorNotes.id, noteIds));
 
-  const gameRows = await db
-    .select({
-      questionId: joshingGameResponses.questionId,
-      userId: joshingGameResponses.userId,
-      submittedAnswer: joshingGameResponses.submittedAnswer,
-    })
-    .from(joshingGameResponses)
-    .where(inArray(joshingGameResponses.questionId, rows.map((row) => row.note.questionId)));
+  const questionIds = [...new Set(rows.map((row) => row.note.questionId))];
+  const gameRows = questionIds.length > 0
+    ? await db
+        .select({
+          questionId: joshingGameResponses.questionId,
+          userId: joshingGameResponses.userId,
+          submittedAnswer: joshingGameResponses.submittedAnswer,
+        })
+        .from(joshingGameResponses)
+        .where(inArray(joshingGameResponses.questionId, questionIds))
+    : [];
 
   const submittedByQuestionUser = new Map(
     gameRows.map((row) => [`${row.questionId}:${row.userId}`, row.submittedAnswer] as const),

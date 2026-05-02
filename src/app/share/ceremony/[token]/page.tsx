@@ -2,13 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ShareCard } from '@/components/ShareCard';
-import type { BeatsPayload } from '@/server/ceremony/compute-beats';
+import type { ShareCardBeatsPayload } from '@/components/ShareCard';
 
 type ShareCardResponse = {
   userName: string;
   cycleStart: string;
   cycleEnd: string;
-  beatsPayload: BeatsPayload;
+  beatsPayload: ShareCardBeatsPayload;
 };
 
 function baseUrl(): string {

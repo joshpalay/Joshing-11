@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { biweeklyCeremonies, db } from '@/server/db';
 import type { BiweeklyCeremony } from '@/server/db/queries/ceremony';
@@ -29,10 +29,18 @@ export async function generateShareCardToken(ceremonyId: string): Promise<string
       const [updated] = await db
         .update(biweeklyCeremonies)
         .set({ shareCardToken: token })
-        .where(eq(biweeklyCeremonies.id, ceremonyId))
+        .where(and(eq(biweeklyCeremonies.id, ceremonyId), isNull(biweeklyCeremonies.shareCardToken)))
         .returning({ shareCardToken: biweeklyCeremonies.shareCardToken });
 
       if (updated?.shareCardToken) return updated.shareCardToken;
+
+      const [raced] = await db
+        .select({ shareCardToken: biweeklyCeremonies.shareCardToken })
+        .from(biweeklyCeremonies)
+        .where(eq(biweeklyCeremonies.id, ceremonyId))
+        .limit(1);
+
+      if (raced?.shareCardToken) return raced.shareCardToken;
     } catch (error) {
       const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : null;
       if (code !== '23505') throw error;

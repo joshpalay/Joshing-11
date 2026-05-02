@@ -1,12 +1,21 @@
 import { forwardRef, type CSSProperties } from 'react';
 
-import type { BeatsPayload } from '@/server/ceremony/compute-beats';
 import type { MasteryTier } from '@/types/db';
 
 type ShareCardSize = 'square' | 'portrait';
 
+export type ShareCardBeatsPayload = {
+  cycleStart: string;
+  cycleEnd: string;
+  beat1: { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[] | null;
+  beat2: { domain: string; questionCount: number; correctCount: number }[] | null;
+  beat3: { userId?: string; displayName: string; contributionCount: number }[] | null;
+  beat4: { userId?: string; displayName: string; sharedDomains: string[] } | null;
+  beat5: { totalCreatorPoints: number; topQuestion: { text: string; answeredCount: number } | null } | null;
+};
+
 export type ShareCardProps = {
-  beatsPayload: BeatsPayload;
+  beatsPayload: ShareCardBeatsPayload;
   userName: string;
   cycleStart: string;
   cycleEnd: string;
@@ -34,14 +43,14 @@ function formatRange(start: string, end: string): string {
   return `${monthDay.format(startDate)} - ${monthDay.format(endDate)}`;
 }
 
-function estimatePoints(payload: BeatsPayload): number {
+function estimatePoints(payload: ShareCardBeatsPayload): number {
   const masteryPoints = (payload.beat1 ?? []).reduce((sum, beat) => {
     return sum + Math.max(0, TIER_POINTS[beat.toTier] - TIER_POINTS[beat.fromTier]);
   }, 0);
   return Math.round(masteryPoints + (payload.beat5?.totalCreatorPoints ?? 0));
 }
 
-function buildHighlights(payload: BeatsPayload): string[] {
+function buildHighlights(payload: ShareCardBeatsPayload): string[] {
   const highlights: string[] = [];
   const mastered = payload.beat1?.[0];
   if (mastered) {
