@@ -14,6 +14,8 @@ import { userSessions } from '@/server/db/schema';
 const SESSION_COOKIE_NAME = 'joshing_session';
 const SESSION_DAYS = 90;
 
+const SESSION_SECRET_KEYS = ['JWT_SECRET', 'AUTH_SECRET', 'NEXTAUTH_SECRET'] as const;
+
 type SessionJwtPayload = {
   sid: string;
 };
@@ -23,12 +25,31 @@ export type Session = {
   userId: string;
 };
 
+function readConfiguredSessionSecret(): string | null {
+  for (const key of SESSION_SECRET_KEYS) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+
+  const cronFallback = process.env.CRON_SECRET?.trim();
+  if (cronFallback) {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(
+        '[auth/session] Using CRON_SECRET as JWT fallback. Set JWT_SECRET (or AUTH_SECRET/NEXTAUTH_SECRET) in deployment env vars.',
+      );
+    }
+    return cronFallback;
+  }
+
+  return null;
+}
+
 function getJwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET?.trim() || process.env.AUTH_SECRET?.trim();
+  const secret = readConfiguredSessionSecret();
 
   if (!secret && process.env.NODE_ENV === 'production') {
     throw new Error(
-      'JWT_SECRET (or AUTH_SECRET) is required in production. Configure it in your deployment environment variables.',
+      'JWT_SECRET (or AUTH_SECRET/NEXTAUTH_SECRET) is required in production. Configure it in your deployment environment variables.',
     );
   }
 
