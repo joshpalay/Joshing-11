@@ -24,21 +24,22 @@ export type Session = {
 };
 
 function getJwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET;
+  const secret = process.env.JWT_SECRET?.trim() || process.env.AUTH_SECRET?.trim();
 
   if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET is required in production.');
+    throw new Error(
+      'JWT_SECRET (or AUTH_SECRET) is required in production. Configure it in your deployment environment variables.',
+    );
   }
 
   if (!secret) {
     return new TextEncoder().encode('development-only-joshing-session-secret');
   }
 
-  try {
-    return Buffer.from(secret, 'base64');
-  } catch {
-    return new TextEncoder().encode(secret);
-  }
+  const decoded = Buffer.from(secret, 'base64');
+  if (decoded.length > 0) return decoded;
+
+  return new TextEncoder().encode(secret);
 }
 
 /**
