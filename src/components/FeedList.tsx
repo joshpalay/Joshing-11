@@ -4,13 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Send, SkipForward, ThumbsUp, X } from 'lucide-react';
 
+import { SendQuestionAction } from '@/components/SendQuestionAction';
+import { QuestionReactionPrompt } from '@/components/play/GameplayChat';
+
 type FeedApiItem = {
   id: string;
   kind: 'question' | 'joshing_game';
+  question_id: string | null;
   source_type: string;
+  source_user_id: string;
   source_friend_display_name: string;
   source_attribution: string;
   source_event_at: string;
+  personal_message: string | null;
   state: string;
   is_pinned: boolean;
   joshing_game_id: string | null;
@@ -278,8 +284,17 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
             }
 
             return (
-              <article key={item.id} className="rounded-lg border bg-card p-4 text-card-foreground">
+              <article
+                key={item.id}
+                className={[
+                  'rounded-lg border bg-card p-4 text-card-foreground',
+                  item.source_type === 'direct_sent' ? 'border-l-4 border-l-primary shadow-sm' : '',
+                ].join(' ')}
+              >
                 <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {item.source_type === 'direct_sent' ? (
+                    <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">Sent to you</span>
+                  ) : null}
                   {item.is_pinned ? (
                     <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">Pinned</span>
                   ) : null}
@@ -290,7 +305,14 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                 </div>
 
                 <p className="text-base leading-7 text-foreground">{item.question_text}</p>
-                <p className="mt-2 text-sm text-muted-foreground">{item.source_attribution}</p>
+                <p className="mt-2 text-sm font-medium text-foreground">
+                  {item.source_type === 'direct_sent'
+                    ? `${item.source_friend_display_name} sent this to you`
+                    : item.source_attribution}
+                </p>
+                {item.personal_message ? (
+                  <p className="mt-1 text-sm italic text-muted-foreground">&ldquo;{item.personal_message}&rdquo;</p>
+                ) : null}
 
                 {result ? (
                   <div className="mt-4 rounded-md bg-muted p-3 text-sm">
@@ -309,6 +331,23 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                       <ThumbsUp className="size-4" />
                       Pass it on
                     </button>
+                    {item.question_id ? (
+                      <SendQuestionAction
+                        question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill }}
+                        label="Send to friend"
+                        className="ml-2 mt-3 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted"
+                      />
+                    ) : null}
+                    {item.question_id && viewerId && item.source_user_id !== viewerId ? (
+                      <QuestionReactionPrompt
+                        prompt={{
+                          senderName: item.source_friend_display_name,
+                          questionId: item.question_id,
+                          contextType: 'feed',
+                          contextId: item.id,
+                        }}
+                      />
+                    ) : null}
                   </div>
                 ) : (
                   <form
@@ -348,6 +387,13 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                       >
                         <X className="size-4" />
                       </button>
+                      {item.question_id ? (
+                        <SendQuestionAction
+                          question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill }}
+                          label=""
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-md border hover:bg-muted"
+                        />
+                      ) : null}
                     </div>
                   </form>
                 )}

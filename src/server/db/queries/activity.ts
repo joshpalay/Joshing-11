@@ -1,16 +1,20 @@
-import { and, count, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNull, ne } from 'drizzle-orm';
 
 import {
   activityItems,
   db,
+  feedItems,
   joshingGameQuestions,
   joshingGameRecipients,
   joshingGameResponses,
   joshingGames,
   masteryEvents,
   playerMastery,
+  questionReactions,
+  questions,
   users,
 } from '@/server/db';
+import { getCannedReaction } from '@/lib/reactions';
 import type { ActivityItemType } from '@/server/activity/write-activity';
 import type { MasteryTier } from '@/types/db';
 
@@ -36,6 +40,19 @@ export type ActivityItemView = Pick<
       domain: string;
       tier: MasteryTier | null;
     };
+    reaction?: {
+      id: string;
+      reactionLabel: string;
+      reactionEmoji: string;
+      customMessage: string | null;
+      repliedAt: Date | null;
+      questionText: string;
+    };
+    directQuestion?: {
+      feedItemId: string;
+      questionText: string;
+      personalMessage: string | null;
+    };
   };
 };
 
@@ -58,6 +75,8 @@ function isActivityType(value: string): value is ActivityItemType {
     'ceremony_ready',
     'friend_request',
     'friend_request_accepted',
+    'received_direct_question',
+    'reaction_received',
   ].includes(value);
 }
 
@@ -201,6 +220,80 @@ async function hydrateMasteryEvents(items: ActivityItemRow[]) {
   return new Map(tierRows);
 }
 
+async function hydrateReactions(items: ActivityItemRow[]) {
+  const reactionIds = [
+    ...new Set(
+      items
+        .filter((item) => item.referenceType === 'question_reaction')
+        .map((item) => item.referenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (reactionIds.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['reaction']>>();
+  }
+
+  const rows = await db
+    .select({
+      id: questionReactions.id,
+      reactionType: questionReactions.reactionType,
+      customMessage: questionReactions.customMessage,
+      repliedAt: questionReactions.repliedAt,
+      questionText: questions.questionText,
+    })
+    .from(questionReactions)
+    .innerJoin(questions, eq(questionReactions.questionId, questions.id))
+    .where(inArray(questionReactions.id, reactionIds));
+
+  return new Map(rows.map((row) => {
+    const reaction = getCannedReaction(row.reactionType);
+    return [
+      row.id,
+      {
+        id: row.id,
+        reactionLabel: reaction?.label ?? row.reactionType,
+        reactionEmoji: reaction?.emoji ?? '',
+        customMessage: row.customMessage,
+        repliedAt: row.repliedAt,
+        questionText: row.questionText,
+      },
+    ] as const;
+  }));
+}
+
+async function hydrateDirectQuestions(items: ActivityItemRow[]) {
+  const feedItemIds = [
+    ...new Set(
+      items
+        .filter((item) => item.referenceType === 'feed_item')
+        .map((item) => item.referenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (feedItemIds.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['directQuestion']>>();
+  }
+
+  const rows = await db
+    .select({
+      feedItemId: feedItems.id,
+      personalMessage: feedItems.personalMessage,
+      questionText: questions.questionText,
+    })
+    .from(feedItems)
+    .innerJoin(questions, eq(feedItems.questionId, questions.id))
+    .where(inArray(feedItems.id, feedItemIds));
+
+  return new Map(rows.map((row) => [
+    row.feedItemId,
+    {
+      feedItemId: row.feedItemId,
+      questionText: row.questionText,
+      personalMessage: row.personalMessage,
+    },
+  ] as const));
+}
+
 export async function getActivitiesForUser(userId: string): Promise<ActivityItemView[]> {
   const rows = await db
     .select()
@@ -213,10 +306,12 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     .orderBy(desc(activityItems.createdAt))
     .limit(100);
 
-  const [actorsById, gamesById, masteryEventsById] = await Promise.all([
+  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById] = await Promise.all([
     hydrateActors(rows),
     hydrateGames(rows, userId),
     hydrateMasteryEvents(rows),
+    hydrateReactions(rows),
+    hydrateDirectQuestions(rows),
   ]);
 
   return rows
@@ -238,6 +333,12 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
         masteryEvent: row.referenceType === 'mastery_event' && row.referenceId
           ? masteryEventsById.get(row.referenceId)
           : undefined,
+        reaction: row.referenceType === 'question_reaction' && row.referenceId
+          ? reactionsById.get(row.referenceId)
+          : undefined,
+        directQuestion: row.referenceType === 'feed_item' && row.referenceId
+          ? directQuestionsById.get(row.referenceId)
+          : undefined,
       },
     }));
 }
@@ -249,11 +350,17 @@ export async function getUnreadCount(userId: string): Promise<number> {
     .where(and(
       eq(activityItems.userId, userId),
       eq(activityItems.read, false),
+      ne(activityItems.type, 'reaction_received'),
       isNull(activityItems.deletedAt),
       gt(activityItems.createdAt, activityCutoff()),
     ));
 
-  return row?.value ?? 0;
+  const [reactionRow] = await db
+    .select({ value: count() })
+    .from(questionReactions)
+    .where(and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)));
+
+  return (row?.value ?? 0) + (reactionRow?.value ?? 0);
 }
 
 export async function markAllRead(userId: string): Promise<void> {

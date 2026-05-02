@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ThumbsDown, ThumbsUp } from 'lucide-react';
 import { type CSSProperties, useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 
+import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { cn } from '@/lib/utils';
 import type { DailySummaryView, QuestionRecap, TierCrossing } from '@/server/db/queries/daily-summary';
 
@@ -229,8 +230,13 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
       {question.explanation ? (
         <p className="mt-3 text-sm leading-6 text-muted-foreground">{question.explanation}</p>
       ) : null}
-      <div className="mt-4">
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
         <DailyQuestionFeedbackButtons questionId={question.questionId} />
+        <SendQuestionAction
+          question={{ id: question.questionId, text: question.questionText, domain: question.domainDisplayName }}
+          label=""
+          className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        />
       </div>
     </article>
   );

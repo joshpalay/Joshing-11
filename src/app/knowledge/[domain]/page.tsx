@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { DomainVisibilityToggle, type DomainVisibility } from '@/components/knowledge/DomainVisibilityToggle';
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
+import { SendQuestionAction } from '@/components/SendQuestionAction';
 import type { MasteryTier } from '@/types/db';
 
 type MasteryEvent = {
@@ -264,30 +265,39 @@ export default function DomainDetailPage() {
             {detail.questionHistory.map((answer) => {
               const expanded = expandedAnswerId === answer.id;
               return (
-                <button
+                <div
                   key={answer.id}
-                  type="button"
-                  className="block w-full px-4 py-3 text-left transition hover:bg-muted/50"
-                  onClick={() => setExpandedAnswerId(expanded ? null : answer.id)}
-                  aria-expanded={expanded}
+                  className="px-4 py-3 transition hover:bg-muted/50"
                 >
-                  <div className="flex items-start gap-3">
+                  <button
+                    type="button"
+                    className="block w-full text-left"
+                    onClick={() => setExpandedAnswerId(expanded ? null : answer.id)}
+                    aria-expanded={expanded}
+                  >
+                    <div className="flex items-start gap-3">
                     <span className={`mt-0.5 font-semibold ${answer.isCorrect ? 'text-green-700' : 'text-destructive'}`}>
                       {answer.isCorrect ? '✓' : '✗'}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{answer.questionText}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{relativeTime(answer.answeredAt)}</p>
-                      {expanded ? (
-                        <div className="mt-3 space-y-2 rounded-md border bg-background p-3 text-sm">
-                          <p>{answer.questionText}</p>
-                          <p><span className="font-medium">Correct answer:</span> {answer.correctAnswer ?? 'Not saved'}</p>
-                          <p><span className="font-medium">Your answer:</span> {answer.submittedAnswer ?? 'Not saved'}</p>
-                        </div>
+                    </div>
+                    </div>
+                  </button>
+                  {expanded ? (
+                    <div className="ml-7 mt-3 space-y-2 rounded-md border bg-background p-3 text-sm">
+                      <p>{answer.questionText}</p>
+                      <p><span className="font-medium">Correct answer:</span> {answer.correctAnswer ?? 'Not saved'}</p>
+                      <p><span className="font-medium">Your answer:</span> {answer.submittedAnswer ?? 'Not saved'}</p>
+                      {answer.questionId ? (
+                        <SendQuestionAction
+                          question={{ id: answer.questionId, text: answer.questionText, domain: detail.displayName }}
+                        />
                       ) : null}
                     </div>
-                  </div>
-                </button>
+                  ) : null}
+                </div>
               );
             })}
           </div>

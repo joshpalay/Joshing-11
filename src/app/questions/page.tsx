@@ -4,6 +4,7 @@ import { Lock, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
+import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 import type { QuestionView } from '@/server/db/queries/questions';
 
@@ -324,6 +325,9 @@ export default function QuestionsPage() {
                           Delete
                         </button>
                       )}
+                      <SendQuestionAction
+                        question={{ id: question.id, text: question.text, domain: question.domainDisplayName }}
+                      />
                     </>
                   )}
                 </div>

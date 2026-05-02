@@ -43,6 +43,20 @@
       "when": 1777671600000,
       "tag": "0005_profile_domain_visibility_three_state",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777737600000,
+      "tag": "0006_question_reactions_contexts",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777780800000,
+      "tag": "0007_send_to_friend_note",
+      "breakpoints": true
     }
   ]
 }

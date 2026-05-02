@@ -64,6 +64,7 @@ export async function GET() {
               ? `${sourceName} sent you a Joshing Game`
               : `${sourceName} thumbed up`,
         source_event_at: item.sourceEventAt,
+        personal_message: item.personalMessage,
         state: item.state,
         is_pinned: item.isPinned,
         question_text: question?.questionText ?? null,

@@ -52,9 +52,17 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
         consolation: null,
         breadcrumb: null,
         copyVariant: item.position,
-        creatorName: game.creator.displayName,
-        canonicalSubcategory: item.question.canonicalSubcategory,
-      });
+          creatorName: game.creator.displayName,
+          canonicalSubcategory: item.question.canonicalSubcategory,
+          reactionPrompt: game.game.creatorId !== viewerId
+            ? {
+                senderName: game.creator.displayName,
+                questionId: item.questionId,
+                contextType: 'joshing_game',
+                contextId: game.game.id,
+              }
+            : null,
+        });
     }
     const next = orderedQuestions.find((question) => !initialAnswered.has(question.questionId));
     if (next) {
@@ -118,6 +126,14 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
           copyVariant: currentQuestion.position,
           creatorName: game.creator.displayName,
           canonicalSubcategory: currentQuestion.question.canonicalSubcategory,
+          reactionPrompt: game.game.creatorId !== viewerId
+            ? {
+                senderName: game.creator.displayName,
+                questionId: currentQuestion.questionId,
+                contextType: 'joshing_game',
+                contextId: game.game.id,
+              }
+            : null,
         },
       ]);
 

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
+import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
 import { getSession } from '@/server/auth/session';
 import { getActivitiesForUser, type ActivityItemView } from '@/server/db/queries/activity';
 
@@ -11,6 +12,11 @@ function formatActivityTime(value: Date) {
 
 function actorName(item: ActivityItemView) {
   return item.actor?.displayName ?? 'Someone';
+}
+
+function isUnread(item: ActivityItemView) {
+  if (item.type === 'reaction_received') return !item.reference.reaction?.repliedAt;
+  return !item.read;
 }
 
 function ActivityCopy({ item }: { item: ActivityItemView }) {
@@ -54,7 +60,45 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     return <>You and {actorName(item)} are now friends</>;
   }
 
+  if (item.type === 'reaction_received') {
+    return <>{actorName(item)} reacted to your question</>;
+  }
+
+  if (item.type === 'received_direct_question') {
+    return <>{actorName(item)} sent you a question</>;
+  }
+
   return <>Something happened on Joshing</>;
+}
+
+function ActivitySubcopy({ item }: { item: ActivityItemView }) {
+  if (item.type === 'received_direct_question') {
+    const directQuestion = item.reference.directQuestion;
+    if (!directQuestion) return null;
+
+    return (
+      <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+        {directQuestion.personalMessage ? (
+          <p className="italic">&ldquo;{directQuestion.personalMessage}&rdquo;</p>
+        ) : null}
+        <p className="line-clamp-2">{directQuestion.questionText}</p>
+      </div>
+    );
+  }
+
+  if (item.type !== 'reaction_received') return null;
+  const reaction = item.reference.reaction;
+  if (!reaction) return null;
+
+  return (
+    <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+      <p>
+        {reaction.reactionEmoji ? `${reaction.reactionEmoji} ` : ''}{reaction.reactionLabel}
+        {reaction.customMessage ? ` - ${reaction.customMessage}` : ''}
+      </p>
+      <p className="line-clamp-2 italic">{reaction.questionText}</p>
+    </div>
+  );
 }
 
 function ActivityCta({ item }: { item: ActivityItemView }) {
@@ -79,6 +123,19 @@ function ActivityCta({ item }: { item: ActivityItemView }) {
 
   if (item.type === 'ceremony_ready') {
     return <Link href={`/ceremony/${item.referenceId}`} className="btn-primary">See it now</Link>;
+  }
+
+  if (item.type === 'reaction_received') {
+    return (
+      <ReactionGotItButton
+        reactionId={item.reference.reaction?.id ?? item.referenceId}
+        replied={Boolean(item.reference.reaction?.repliedAt)}
+      />
+    );
+  }
+
+  if (item.type === 'received_direct_question') {
+    return <Link href="/feed" className="btn-primary">Answer</Link>;
   }
 
   return null;
@@ -111,7 +168,7 @@ export default async function ActivitiesPage() {
               key={item.id}
               className={[
                 'rounded-lg border bg-card p-4 text-card-foreground transition',
-                item.read ? 'border-l-transparent opacity-75' : 'border-l-[3px] border-l-primary',
+                isUnread(item) ? 'border-l-[3px] border-l-primary' : 'border-l-transparent opacity-75',
               ].join(' ')}
             >
               <div className="flex items-start justify-between gap-4">
@@ -119,6 +176,7 @@ export default async function ActivitiesPage() {
                   <p className="text-base leading-7">
                     <ActivityCopy item={item} />
                   </p>
+                  <ActivitySubcopy item={item} />
                   <p className="mt-1 text-xs text-muted-foreground">{formatActivityTime(item.createdAt)}</p>
                 </div>
                 <ActivityCta item={item} />

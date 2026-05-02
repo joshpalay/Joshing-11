@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
+import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { getSession } from '@/server/auth/session';
 import { db, masteryEvents } from '@/server/db';
 import { getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
@@ -207,8 +208,17 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                     </p>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">{explanationFor(gameQuestion.question)}</p>
-                  <div className="mt-4">
+                  <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                     <QuestionRatingButtons questionId={gameQuestion.questionId} />
+                    <SendQuestionAction
+                      question={{
+                        id: gameQuestion.questionId,
+                        text: gameQuestion.question.questionText,
+                        domain: domainFor(gameQuestion.question),
+                      }}
+                      label=""
+                      className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    />
                   </div>
                 </article>
               );

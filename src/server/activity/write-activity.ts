@@ -7,7 +7,9 @@ export type ActivityItemType =
   | 'friend_mastery'
   | 'ceremony_ready'
   | 'friend_request'
-  | 'friend_request_accepted';
+  | 'friend_request_accepted'
+  | 'received_direct_question'
+  | 'reaction_received';
 
 export async function writeActivity(params: {
   userId: string;

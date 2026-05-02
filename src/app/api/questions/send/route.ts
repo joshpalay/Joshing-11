@@ -1,9 +1,9 @@
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gt, sql } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { writeActivity } from '@/server/activity/write-activity';
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, questions, users } from '@/server/db';
-import { areFriends } from '@/server/db/queries/friends';
+import { db, feedItems, generatedQuestions, questions, users } from '@/server/db';
 import {
   createFeedItem,
   rollOffOldItems,
@@ -14,7 +14,7 @@ import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
 
-function parseBody(value: unknown): { questionId: string; recipientUserId: string } | null {
+function parseBody(value: unknown): { questionId: string; recipientUserId: string; personalMessage: string | null } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const questionId = typeof record.question_id === 'string'
@@ -29,12 +29,50 @@ function parseBody(value: unknown): { questionId: string; recipientUserId: strin
       : typeof record.recipientUserId === 'string'
         ? record.recipientUserId
         : null;
+  const rawMessage = typeof record.personalMessage === 'string'
+    ? record.personalMessage
+    : typeof record.personal_message === 'string'
+      ? record.personal_message
+      : '';
+  const personalMessage = rawMessage.trim().slice(0, 200) || null;
 
-  return questionId && recipientUserId ? { questionId, recipientUserId } : null;
+  return questionId && recipientUserId ? { questionId, recipientUserId, personalMessage } : null;
 }
 
-function startOfUtcDay(date = new Date()) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+function lastTwentyFourHours(date = new Date()) {
+  return new Date(date.getTime() - 24 * 60 * 60 * 1000);
+}
+
+async function resolveQuestionIdForSend(questionId: string, senderUserId: string): Promise<string | null> {
+  const [question] = await db.select({ id: questions.id }).from(questions).where(eq(questions.id, questionId)).limit(1);
+  if (question) return question.id;
+
+  const [generated] = await db
+    .select()
+    .from(generatedQuestions)
+    .where(eq(generatedQuestions.id, questionId))
+    .limit(1);
+
+  if (!generated) return null;
+
+  const [created] = await db
+    .insert(questions)
+    .values({
+      creatorId: senderUserId,
+      sourceQuestionId: generated.id,
+      questionText: generated.questionText,
+      answerText: generated.answer,
+      factualExplanation: generated.explainer,
+      category: 'other',
+      broadCategory: generated.broadCategory,
+      canonicalSubcategory: generated.canonicalSubcategory,
+      difficultyEstimate: generated.difficultyEstimate === 'accessible' || generated.difficultyEstimate === 'moderate' || generated.difficultyEstimate === 'specialist'
+        ? generated.difficultyEstimate
+        : null,
+    })
+    .returning({ id: questions.id });
+
+  return created?.id ?? null;
 }
 
 export async function POST(request: NextRequest) {
@@ -52,19 +90,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'validation', message: 'Choose a friend to send this to.' }, { status: 400 });
   }
 
-  const [question, recipient, senderNameRow, friendship] = await Promise.all([
-    db.select().from(questions).where(eq(questions.id, parsed.questionId)).limit(1),
+  const sendableQuestionId = await resolveQuestionIdForSend(parsed.questionId, session.userId);
+
+  const [question, recipient, senderNameRow] = await Promise.all([
+    sendableQuestionId
+      ? db.select().from(questions).where(eq(questions.id, sendableQuestionId)).limit(1)
+      : Promise.resolve([]),
     db.select().from(users).where(eq(users.id, parsed.recipientUserId)).limit(1),
     db.select({ displayName: users.displayName }).from(users).where(eq(users.id, session.userId)).limit(1),
-    areFriends(session.userId, parsed.recipientUserId),
   ]);
 
   if (!question[0] || !recipient[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  if (!friendship) return NextResponse.json({ error: 'not_friends', message: 'You can only send to friends.' }, { status: 403 });
 
   const [alreadyCorrect, alreadyInFeed] = await Promise.all([
-    userAnsweredQuestionCorrectly(parsed.recipientUserId, parsed.questionId),
-    userHasQuestionInBlockingFeed(parsed.recipientUserId, parsed.questionId),
+    userAnsweredQuestionCorrectly(parsed.recipientUserId, sendableQuestionId!),
+    userHasQuestionInBlockingFeed(parsed.recipientUserId, sendableQuestionId!),
   ]);
   if (alreadyCorrect) {
     return NextResponse.json(
@@ -86,24 +126,33 @@ export async function POST(request: NextRequest) {
       eq(feedItems.recipientUserId, parsed.recipientUserId),
       eq(feedItems.sourceUserId, session.userId),
       eq(feedItems.sourceType, 'direct_sent'),
-      gte(feedItems.sourceEventAt, startOfUtcDay()),
+      gt(feedItems.createdAt, lastTwentyFourHours()),
     ));
 
   if (Number(sentToday?.count ?? 0) >= 5) {
     return NextResponse.json(
-      { error: 'daily_limit', message: 'You have sent this friend five questions today.' },
+      { error: "You've sent this person 5 questions today. Try again tomorrow." },
       { status: 429 },
     );
   }
 
   const created = await createFeedItem({
     recipientUserId: parsed.recipientUserId,
-    questionId: parsed.questionId,
+    questionId: sendableQuestionId!,
     sourceType: 'direct_sent',
     sourceUserId: session.userId,
     sourceEventAt: new Date(),
+    personalMessage: parsed.personalMessage,
     state: 'active',
     isPinned: true,
+  });
+
+  await writeActivity({
+    userId: parsed.recipientUserId,
+    type: 'received_direct_question',
+    actorUserId: session.userId,
+    referenceId: created.id,
+    referenceType: 'feed_item',
   });
 
   await rollOffOldItems(parsed.recipientUserId);

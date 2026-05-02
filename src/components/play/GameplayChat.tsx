@@ -6,6 +6,14 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
+import { CANNED_REACTIONS, type ReactionKey } from '@/lib/reactions';
+
+export type ReactionPromptData = {
+  senderName: string;
+  questionId: string;
+  contextType: 'feed' | 'joshing_game';
+  contextId: string | null;
+};
 
 export type ChatMessage =
   | { id: string; kind: 'system'; text: string }
@@ -39,6 +47,7 @@ export type ChatMessage =
       relationalFeedbackLine?: string | null;
       /** Domain exclusion — canonical subcategory for "remove from rotation" affordance */
       canonicalSubcategory?: string | null;
+      reactionPrompt?: ReactionPromptData | null;
     }
   | {
       id: string;
@@ -289,6 +298,141 @@ function RelationalFeedbackFade({ text }: { text: string }) {
   );
 }
 
+function reactionEmoji(value: string): string {
+  switch (value) {
+    case ':exploding_head:': return '🤯';
+    case ':ok_hand:': return '👌';
+    case ':smirk:': return '😏';
+    case ':face_palm:': return '🤦';
+    case ':sunny:': return '☀️';
+    case ':thought_balloon:': return '💭';
+    default: return value;
+  }
+}
+
+export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData }) {
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'hidden' | 'error'>('idle');
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customMessage, setCustomMessage] = useState('');
+
+  useEffect(() => {
+    if (status !== 'idle') return;
+    const timer = window.setTimeout(() => setStatus('hidden'), 8000);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== 'sent') return;
+    const timer = window.setTimeout(() => setStatus('hidden'), 1800);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+
+  const sendReaction = useCallback(async (reactionType: ReactionKey) => {
+    setStatus('sending');
+    try {
+      const response = await fetch('/api/reactions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          questionId: prompt.questionId,
+          contextType: prompt.contextType,
+          contextId: prompt.contextId,
+          reactionType,
+          customMessage: customMessage.trim() || null,
+        }),
+      });
+      if (!response.ok) throw new Error('Could not send reaction');
+      setStatus('sent');
+    } catch {
+      setStatus('error');
+    }
+  }, [customMessage, prompt.contextId, prompt.contextType, prompt.questionId]);
+
+  if (status === 'hidden') return null;
+
+  if (status === 'sent') {
+    return (
+      <p style={{ ...monoStyle, marginTop: '8px', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+        Sent to {prompt.senderName} ✓
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: '10px', maxWidth: '100%' }}>
+      <p style={{ ...monoStyle, marginBottom: '6px', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+        React to {prompt.senderName}?
+      </p>
+      {customOpen ? (
+        <input
+          value={customMessage}
+          onChange={(event) => setCustomMessage(event.target.value)}
+          placeholder="Add a short note..."
+          maxLength={160}
+          style={{
+            marginBottom: '8px',
+            width: '100%',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            padding: '8px 10px',
+            fontSize: '0.82rem',
+            color: 'var(--text)',
+          }}
+        />
+      ) : null}
+      <div style={{ display: 'flex', gap: '6px', maxWidth: '100%', overflowX: 'auto', paddingBottom: '3px' }}>
+        {CANNED_REACTIONS.map((reaction) => (
+          <button
+            key={reaction.key}
+            type="button"
+            onClick={() => void sendReaction(reaction.key)}
+            disabled={status === 'sending'}
+            style={{
+              flex: '0 0 auto',
+              minHeight: '34px',
+              borderRadius: '999px',
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--text)',
+              padding: '0 10px',
+              fontSize: '0.78rem',
+              cursor: status === 'sending' ? 'default' : 'pointer',
+            }}
+          >
+            <span aria-hidden style={{ marginRight: '5px' }}>{reactionEmoji(reaction.emoji)}</span>
+            {reaction.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setCustomOpen((open) => !open)}
+          disabled={status === 'sending'}
+          aria-label="Add a custom message"
+          style={{
+            flex: '0 0 auto',
+            width: '34px',
+            height: '34px',
+            borderRadius: '999px',
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            color: 'var(--text)',
+            cursor: status === 'sending' ? 'default' : 'pointer',
+          }}
+        >
+          +
+        </button>
+      </div>
+      {status === 'error' ? (
+        <p style={{ marginTop: '6px', fontSize: '0.72rem', color: 'var(--danger)' }}>
+          Could not send that reaction.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 type ExclusionState =
   | { kind: 'idle' }
   | { kind: 'confirmed' }
@@ -402,6 +546,7 @@ function ResultRow({
   creatorName,
   relationalFeedbackLine,
   canonicalSubcategory,
+  reactionPrompt,
 }: {
   result: 'correct' | 'wrong' | 'expired';
   submitted: string;
@@ -413,6 +558,7 @@ function ResultRow({
   creatorName: string | null;
   relationalFeedbackLine?: string | null;
   canonicalSubcategory?: string | null;
+  reactionPrompt?: ReactionPromptData | null;
 }) {
   const expired = result === 'expired';
   const correct = result === 'correct';
@@ -480,6 +626,7 @@ function ResultRow({
       {canonicalSubcategory ? (
         <DomainExclusionAffordance canonicalSubcategory={canonicalSubcategory} />
       ) : null}
+      {reactionPrompt ? <QuestionReactionPrompt prompt={reactionPrompt} /> : null}
     </div>
   );
 }
@@ -668,6 +815,7 @@ export function GameplayChatThread({
                   creatorName={m.creatorName}
                   relationalFeedbackLine={m.relationalFeedbackLine}
                   canonicalSubcategory={m.canonicalSubcategory}
+                  reactionPrompt={m.reactionPrompt}
                 />
                 {m.breadcrumb ? <BreadcrumbRow text={m.breadcrumb} /> : null}
               </div>
