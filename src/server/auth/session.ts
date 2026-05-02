@@ -49,7 +49,7 @@ function getJwtSecret(): Uint8Array {
 
   if (!secret && process.env.NODE_ENV === 'production') {
     throw new Error(
-      'Missing session secret in production. Configure JWT_SECRET, AUTH_SECRET, or NEXTAUTH_SECRET.',
+      'JWT_SECRET (or AUTH_SECRET/NEXTAUTH_SECRET) is required in production. Configure it in your deployment environment variables.',
     );
   }
 
