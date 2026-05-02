@@ -1,7 +1,7 @@
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
-import { normalizePhone } from '@/server/auth';
+import { verifyOtp } from '@/server/auth';
 import { createSession } from '@/server/auth/session';
 import { db, friendInvitations, friendships, users } from '@/server/db';
 
@@ -122,14 +122,14 @@ export async function POST(request: Request) {
       );
     }
 
-    if (code !== '000000') {
+    const normalizedPhone = await verifyOtp(phone, code);
+
+    if (!normalizedPhone) {
       return NextResponse.json(
         { error: 'invalid_code', message: 'Code invalid or expired' },
         { status: 401 },
       );
     }
-
-    const normalizedPhone = normalizePhone(phone);
 
     const user = await getOrCreateUserForLogin(normalizedPhone);
 
