@@ -147,12 +147,26 @@ export async function getReactionsForUser(userId: string): Promise<ReactionView[
 }
 
 export async function getUnrepliedReactionCount(userId: string): Promise<number> {
-  const rows = await db
-    .select({ id: questionReactions.id })
-    .from(questionReactions)
-    .where(and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)));
+  try {
+    const rows = await db
+      .select({ id: questionReactions.id })
+      .from(questionReactions)
+      .where(and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)));
 
-  return rows.length;
+    return rows.length;
+  } catch (error) {
+    const pgError = error as { code?: string; message?: string };
+    const missingCamelCaseColumn = pgError.code === '42703'
+      && (pgError.message?.includes('recipientUserId') || pgError.message?.includes('repliedAt'));
+    if (!missingCamelCaseColumn) throw error;
+
+    const result = await db.execute(sql<{ value: string }>`
+      select count(*)::text as value
+      from "QuestionReaction"
+      where "creator_id" = ${userId} and "creator_responded_at" is null
+    `);
+    return Number(result.rows[0]?.value ?? 0);
+  }
 }
 
 export async function markReactionReplied(reactionId: string, userId: string): Promise<boolean> {
