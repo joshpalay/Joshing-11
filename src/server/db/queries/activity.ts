@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, inArray, isNull, ne } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import {
   activityItems,
@@ -475,12 +475,28 @@ export async function getUnreadCount(userId: string): Promise<number> {
       gt(activityItems.createdAt, activityCutoff()),
     ));
 
-  const [reactionRow] = await db
-    .select({ value: count() })
-    .from(questionReactions)
-    .where(and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)));
+  let reactionCount = 0;
+  try {
+    const [reactionRow] = await db
+      .select({ value: count() })
+      .from(questionReactions)
+      .where(and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)));
+    reactionCount = reactionRow?.value ?? 0;
+  } catch (error) {
+    const pgError = error as { code?: string; message?: string };
+    const missingCamelCaseColumn = pgError.code === '42703'
+      && (pgError.message?.includes('recipientUserId') || pgError.message?.includes('repliedAt'));
+    if (!missingCamelCaseColumn) throw error;
 
-  return (row?.value ?? 0) + (reactionRow?.value ?? 0);
+    const result = await db.execute(sql<{ value: string }>`
+      select count(*)::text as value
+      from "QuestionReaction"
+      where "creator_id" = ${userId} and "creator_responded_at" is null
+    `);
+    reactionCount = Number(result.rows[0]?.value ?? 0);
+  }
+
+  return (row?.value ?? 0) + reactionCount;
 }
 
 export async function markAllRead(userId: string): Promise<void> {
