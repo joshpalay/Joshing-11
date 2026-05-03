@@ -289,7 +289,7 @@ export default function DailyPage() {
         />
       </header>
 
-      <section className="flex-1 overflow-y-auto px-4 py-4" style={{ paddingBottom: '160px' }}>
+      <section className="flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
           <p className="text-sm text-[var(--text-muted)]">Loading today...</p>
         ) : error ? (
@@ -303,7 +303,7 @@ export default function DailyPage() {
 
       {currentSlot && !loading ? (
         <form
-          className="fixed inset-x-0 bottom-16 z-30 mx-auto max-w-lg border-t px-4 py-3 md:bottom-0"
+          className="sticky bottom-0 z-30 mt-auto border-t px-4 py-3"
           style={{
             borderColor: 'var(--border)',
             background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
