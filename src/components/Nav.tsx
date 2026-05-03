@@ -17,7 +17,7 @@ type MeResponse = {
 
 const navItems = [
   { href: '/', label: 'Home', Icon: Home },
-  { href: '/feed', label: 'Feed', Icon: Rss },
+  { href: '/feed', label: 'Friends', Icon: Rss },
   { href: '/knowledge', label: 'Knowledge', Icon: Brain },
   { href: '/activities', label: 'Activities', Icon: Bell },
   { href: '/account', label: 'Account', Icon: User },

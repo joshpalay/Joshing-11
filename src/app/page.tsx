@@ -52,21 +52,16 @@ export default async function Home() {
         </div>
         <div className="mt-6 w-full space-y-3 md:mt-0 md:max-w-xs">
           <TodaysFiveCard />
+          <div className="rounded-lg border bg-card p-4 text-card-foreground">
+            <p className="mb-3 text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">What's happening</p>
+            <FeedList limit={3} />
+            <div className="mt-2 flex justify-end">
+              <Link href="/feed" className="text-sm font-medium underline-offset-4 hover:underline">
+                Friends
+              </Link>
+            </div>
+          </div>
           {catchupCount > 0 ? <CatchupCard count={catchupCount} /> : null}
-        </div>
-      </section>
-
-      <section className="border-b py-6">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            What&apos;s happening
-          </h2>
-        </div>
-        <FeedList limit={5} />
-        <div className="mt-1 flex justify-end">
-          <Link href="/feed" className="text-sm font-medium text-foreground underline-offset-4 hover:underline">
-            See more
-          </Link>
         </div>
       </section>
 
