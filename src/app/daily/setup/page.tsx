@@ -352,7 +352,7 @@ function DailySetupContent() {
         </p>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-16 z-50 border-t bg-background/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:bottom-0 md:pb-3">
         <div className="mx-auto flex max-w-xl items-center gap-3">
           <Link href="/" className="btn-ghost min-h-11 px-4">
             Home
