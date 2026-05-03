@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
@@ -9,6 +9,7 @@ import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/serv
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
+import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,37 +24,44 @@ function parseBody(value: unknown): { dailyQueueItemId: string; submittedAnswer:
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (!session) return catchUpErrorResponse(401, 'unauthorized');
 
   const parsed = parseBody(await request.json().catch(() => null));
   if (!parsed) {
-    return NextResponse.json(
-      { error: 'validation', message: 'dailyQueueItemId and submittedAnswer are required' },
-      { status: 400 },
-    );
+    return catchUpErrorResponse(400, 'validation', 'dailyQueueItemId and submittedAnswer are required');
   }
 
   const catchupItem = (await getCatchupQuestions(session.userId))
     .find((item) => item.dailyQueueItemId === parsed.dailyQueueItemId);
-  if (!catchupItem) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (!catchupItem) {
+    return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found', {
+      refresh_required: true,
+    });
+  }
 
   const [queue] = await db
     .select()
     .from(dailyQueues)
     .where(eq(dailyQueues.id, catchupItem.queueId))
     .limit(1);
-  if (!queue || queue.userId !== session.userId) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (!queue || queue.userId !== session.userId) {
+    return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found', {
+      refresh_required: true,
+    });
+  }
 
   const slots = asQueueSlots(queue.slots);
   const slot = findQueueSlotBySlotIndex(slots, catchupItem.slotIndex);
   if (!slot || slot.answered || slot.dismissed_at) {
-    return NextResponse.json({ error: 'invalid_state', message: 'catch-up item is already closed' }, { status: 400 });
+    return catchUpErrorResponse(400, 'catch_up_not_eligible', 'catch-up item is already closed', {
+      refresh_required: true,
+    });
   }
 
   const grade = await gradeAnswer(
     parsed.submittedAnswer,
-    catchupItem.answer,
-    [],
+    catchupItem.correctAnswer,
+    catchupItem.alternateAnswers,
     catchupItem.questionText,
     'factual',
   );
@@ -63,7 +71,7 @@ export async function POST(request: NextRequest) {
   const breadcrumb = await generateBreadcrumb({
     questionId: catchupItem.questionId,
     questionText: catchupItem.questionText,
-    correctAnswer: catchupItem.answer,
+    correctAnswer: catchupItem.correctAnswer,
     submittedAnswer: parsed.submittedAnswer,
     isCorrect,
     domain: catchupItem.domain,
@@ -76,8 +84,8 @@ export async function POST(request: NextRequest) {
       answer_state: answerState,
       submitted_answer: parsed.submittedAnswer,
       awarded_points: pointsAwarded,
-      reveal_canonical_answer: catchupItem.answer,
-      reveal_explainer: catchupItem.explainer,
+      reveal_canonical_answer: catchupItem.correctAnswer,
+      reveal_explainer: catchupItem.explanation ?? '',
       reveal_breadcrumb: breadcrumb,
       reveal_quip: grade.consolation,
     } satisfies QueueSlot;
@@ -102,7 +110,12 @@ export async function POST(request: NextRequest) {
     .set({ slots: nextSlots })
     .where(eq(dailyQueues.id, catchupItem.queueId));
 
-  return NextResponse.json({
+  const nextItem = (await getCatchupQuestions(session.userId))[0] ?? null;
+
+  return Response.json({
+    dailyQueueItemId: catchupItem.dailyQueueItemId,
+    questionId: catchupItem.questionId,
+    result: grade.result,
     isCorrect,
     correct: isCorrect,
     pointsAwarded,
@@ -111,11 +124,28 @@ export async function POST(request: NextRequest) {
     awarded_points: pointsAwarded,
     masteryDelta,
     mastery_delta: masteryDelta,
-    correctAnswer: catchupItem.answer,
-    answer: catchupItem.answer,
-    explanation: catchupItem.explainer,
-    explainer: catchupItem.explainer,
+    correctAnswer: catchupItem.correctAnswer,
+    answer: catchupItem.correctAnswer,
+    explanation: catchupItem.explanation,
+    explainer: catchupItem.explanation,
     consolation: grade.consolation,
     quip: grade.consolation,
+    nextItem: nextItem
+      ? {
+          dailyQueueItemId: nextItem.dailyQueueItemId,
+          questionId: nextItem.questionId,
+          questionText: nextItem.questionText,
+          correctAnswer: nextItem.correctAnswer,
+          alternateAnswers: nextItem.alternateAnswers,
+          explanation: nextItem.explanation,
+          domain: nextItem.domain,
+          domainDisplayName: nextItem.domainDisplayName,
+          queueDate: nextItem.queueDate,
+          queueAge: nextItem.queueAge,
+          wasSkipped: nextItem.wasSkipped,
+          expiresAt: nextItem.expiresAt,
+          expiresSoon: nextItem.expiresSoon,
+        }
+      : null,
   });
 }

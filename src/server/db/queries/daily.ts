@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 
 import {
   dailyPreferences,
@@ -10,8 +10,17 @@ import {
   playerMastery,
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
-import { asQueueSlots, dailyQueueItemId, minusUtcDays } from '@/server/daily/catchup';
+import { categoryLabel } from '@/lib/questions-types';
+import { asQueueSlots, dailyQueueItemId } from '@/server/daily/catchup';
 import type { QueueSlot } from '@/server/daily/types';
+import {
+  catchUpExpiresAt,
+  expiresWithin24Hours,
+  isCatchUpQueueDateEligible,
+  isCatchUpSlotEligible,
+  queueAgeInDays,
+} from '@/server/play/catch-up-eligibility';
+import { orderCatchUpItems } from '@/server/play/catch-up-turn-sequencing';
 
 export type KnowledgeBaseDomain = {
   domain: string;
@@ -24,21 +33,28 @@ export type KnowledgeBaseDomain = {
 export type DailyPreferenceRow = typeof dailyPreferences.$inferSelect;
 export type DailyQueueRow = typeof dailyQueues.$inferSelect;
 
-export type CatchupQuestion = {
+export type CatchupQueueItem = {
   dailyQueueItemId: string;
   queueId: string;
   queueDate: string;
+  queueAge: number;
+  expiresAt: string;
+  expiresSoon: boolean;
   slotIndex: number;
   questionId: string;
   questionText: string;
-  answer: string;
-  explainer: string;
+  correctAnswer: string;
+  alternateAnswers: string[];
+  explanation: string | null;
   domain: string;
+  domainDisplayName: string;
   broadCategory: string;
   basePoints: number;
   submittedAnswer: string | null;
-  skipped: boolean;
+  wasSkipped: boolean;
 };
+
+export type CatchupQuestion = CatchupQueueItem;
 
 function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
@@ -133,7 +149,6 @@ export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
 
 export async function getCatchupQuestions(userId: string): Promise<CatchupQuestion[]> {
   const { assignmentDateStr } = getDailyAssignmentBounds();
-  const oldestDateStr = minusUtcDays(assignmentDateStr, 7);
 
   const queues = await db
     .select()
@@ -141,17 +156,12 @@ export async function getCatchupQuestions(userId: string): Promise<CatchupQuesti
     .where(and(
       eq(dailyQueues.userId, userId),
       lt(dailyQueues.queueDate, assignmentDateStr),
-      gt(dailyQueues.queueDate, oldestDateStr),
     ))
     .orderBy(asc(dailyQueues.queueDate));
 
   const candidateSlots = queues.flatMap((queue) =>
     asQueueSlots(queue.slots)
-      .filter((slot) =>
-        !slot.answered
-        && !slot.dismissed_at
-        && Boolean(slot.generated_question_id)
-      )
+      .filter((slot) => isCatchUpQueueDateEligible(String(queue.queueDate), assignmentDateStr) && isCatchUpSlotEligible(slot))
       .map((slot) => ({ queue, slot }))
   );
 
@@ -170,27 +180,37 @@ export async function getCatchupQuestions(userId: string): Promise<CatchupQuesti
     ));
   const questionById = new Map(questions.map((question) => [question.id, question]));
 
-  return candidateSlots
-    .map(({ queue, slot }) => {
+  const mapped = candidateSlots
+    .map(({ queue, slot }): CatchupQuestion | null => {
       const question = slot.generated_question_id ? questionById.get(slot.generated_question_id) : null;
       if (!question) return null;
+      const queueDate = String(queue.queueDate);
+      const expiresAt = catchUpExpiresAt(queueDate);
+      const domain = slot.domain || question.canonicalSubcategory;
       return {
         dailyQueueItemId: dailyQueueItemId(queue.id, slot.slot_index),
         queueId: queue.id,
-        queueDate: String(queue.queueDate),
+        queueDate,
+        queueAge: queueAgeInDays(queueDate, assignmentDateStr),
+        expiresAt,
+        expiresSoon: expiresWithin24Hours(expiresAt),
         slotIndex: slot.slot_index,
         questionId: question.id,
         questionText: slot.question_text || question.questionText,
-        answer: question.answer,
-        explainer: question.explainer,
-        domain: slot.domain || question.canonicalSubcategory,
+        correctAnswer: question.answer,
+        alternateAnswers: [] as string[],
+        explanation: question.explainer,
+        domain,
+        domainDisplayName: categoryLabel(domain),
         broadCategory: question.broadCategory,
         basePoints: question.basePoints,
         submittedAnswer: slot.submitted_answer ?? null,
-        skipped: Boolean(slot.skipped),
+        wasSkipped: Boolean(slot.skipped),
       } satisfies CatchupQuestion;
     })
     .filter((question): question is CatchupQuestion => Boolean(question));
+
+  return orderCatchUpItems(mapped);
 }
 
 export async function createDailyQueueItem(

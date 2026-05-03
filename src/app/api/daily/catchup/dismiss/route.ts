@@ -1,54 +1,71 @@
 import { eq } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { dailyQueues, db } from '@/server/db';
 import { getCatchupQuestions } from '@/server/db/queries/daily';
 import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
+import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
 
 export const dynamic = 'force-dynamic';
 
-function parseBody(value: unknown): { dailyQueueItemId: string } | null {
+type DismissReason = 'not_interested' | 'too_old' | 'unclear';
+
+const DISMISS_REASONS = new Set<DismissReason>(['not_interested', 'too_old', 'unclear']);
+
+function parseBody(value: unknown): { dailyQueueItemId: string; reason?: DismissReason } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const dailyQueueItemId = (value as Record<string, unknown>).dailyQueueItemId;
-  return typeof dailyQueueItemId === 'string' ? { dailyQueueItemId } : null;
+  const record = value as Record<string, unknown>;
+  const dailyQueueItemId = record.dailyQueueItemId;
+  const reason = record.reason;
+  return typeof dailyQueueItemId === 'string'
+    ? {
+        dailyQueueItemId,
+        reason: typeof reason === 'string' && DISMISS_REASONS.has(reason as DismissReason)
+          ? reason as DismissReason
+          : undefined,
+      }
+    : null;
 }
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (!session) return catchUpErrorResponse(401, 'unauthorized');
 
   const parsed = parseBody(await request.json().catch(() => null));
   if (!parsed) {
-    return NextResponse.json(
-      { error: 'validation', message: 'dailyQueueItemId is required' },
-      { status: 400 },
-    );
+    return catchUpErrorResponse(400, 'validation', 'dailyQueueItemId is required');
   }
 
   const catchupItem = (await getCatchupQuestions(session.userId))
     .find((item) => item.dailyQueueItemId === parsed.dailyQueueItemId);
-  if (!catchupItem) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (!catchupItem) return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found');
 
   const [queue] = await db
     .select()
     .from(dailyQueues)
     .where(eq(dailyQueues.id, catchupItem.queueId))
     .limit(1);
-  if (!queue || queue.userId !== session.userId) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (!queue || queue.userId !== session.userId) {
+    return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found');
+  }
 
   const slots = asQueueSlots(queue.slots);
   const slot = findQueueSlotBySlotIndex(slots, catchupItem.slotIndex);
   if (!slot || slot.answered || slot.dismissed_at) {
-    return NextResponse.json({ error: 'invalid_state', message: 'catch-up item is already closed' }, { status: 400 });
+    return catchUpErrorResponse(400, 'invalid_state', 'catch-up item is already closed');
   }
 
   const dismissedAt = new Date().toISOString();
   const nextSlots = replaceQueueSlot(
     slots,
     catchupItem.slotIndex,
-    (item) => ({ ...item, dismissed_at: dismissedAt }) satisfies QueueSlot,
+    (item) => ({
+      ...item,
+      dismissed_at: dismissedAt,
+      dismissed_reason: parsed.reason,
+    }) satisfies QueueSlot,
   );
 
   await db
@@ -56,5 +73,5 @@ export async function POST(request: NextRequest) {
     .set({ slots: nextSlots })
     .where(eq(dailyQueues.id, catchupItem.queueId));
 
-  return NextResponse.json({ dismissed: true });
+  return Response.json({ dismissed: true });
 }

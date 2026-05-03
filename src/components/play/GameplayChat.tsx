@@ -25,6 +25,8 @@ export type ChatMessage =
       creatorName: string | null;
       onDismiss?: () => void;
       dismissLabel?: string;
+      subhead?: string | null;
+      badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
     }
   | { id: string; kind: 'user'; text: string }
   | {
@@ -48,6 +50,8 @@ export type ChatMessage =
       /** Domain exclusion — canonical subcategory for "remove from rotation" affordance */
       canonicalSubcategory?: string | null;
       reactionPrompt?: ReactionPromptData | null;
+      pointsAwarded?: number | null;
+      pointsLabel?: string | null;
     }
   | {
       id: string;
@@ -113,11 +117,15 @@ function SystemRow({ text }: { text: string }) {
 }
 
 function QuestionRow({
+  subhead,
+  badges = [],
   questionText,
   creatorName,
   onDismiss,
   dismissLabel = "Skip - don't show again",
 }: {
+  subhead?: string | null;
+  badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
   creatorName: string | null;
   onDismiss?: () => void;
@@ -132,6 +140,39 @@ function QuestionRow({
 
   return (
     <div className="flex flex-col gap-0.5">
+      {subhead || badges.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 pb-1 pl-0.5">
+          {subhead ? (
+            <p
+              style={{
+                ...monoStyle,
+                fontSize: '0.58rem',
+                color: 'var(--text-muted)',
+              }}
+            >
+              {subhead}
+            </p>
+          ) : null}
+          {badges.map((badge) => (
+            <span
+              key={badge.label}
+              style={{
+                ...monoStyle,
+                borderRadius: '999px',
+                border: '1px solid var(--border)',
+                background: badge.tone === 'warning'
+                  ? 'color-mix(in srgb, #b45309 12%, var(--surface))'
+                  : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                color: badge.tone === 'warning' ? '#b45309' : 'var(--text-muted)',
+                fontSize: '0.52rem',
+                padding: '2px 6px',
+              }}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {creatorName ? (
         <p
           style={{
@@ -547,6 +588,8 @@ function ResultRow({
   relationalFeedbackLine,
   canonicalSubcategory,
   reactionPrompt,
+  pointsAwarded,
+  pointsLabel,
 }: {
   result: 'correct' | 'wrong' | 'expired';
   submitted: string;
@@ -559,6 +602,8 @@ function ResultRow({
   relationalFeedbackLine?: string | null;
   canonicalSubcategory?: string | null;
   reactionPrompt?: ReactionPromptData | null;
+  pointsAwarded?: number | null;
+  pointsLabel?: string | null;
 }) {
   const expired = result === 'expired';
   const correct = result === 'correct';
@@ -622,6 +667,12 @@ function ResultRow({
             ) : null}
           </>
         )}
+        {typeof pointsAwarded === 'number' ? (
+          <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
+            +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
+            {pointsLabel ? ` - ${pointsLabel}` : ''}
+          </p>
+        ) : null}
       </div>
       {canonicalSubcategory ? (
         <DomainExclusionAffordance canonicalSubcategory={canonicalSubcategory} />
@@ -797,6 +848,8 @@ export function GameplayChatThread({
                 creatorName={m.creatorName}
                 onDismiss={m.onDismiss}
                 dismissLabel={m.dismissLabel}
+                subhead={m.subhead}
+                badges={m.badges}
               />
             );
           case 'user':
@@ -816,6 +869,8 @@ export function GameplayChatThread({
                   relationalFeedbackLine={m.relationalFeedbackLine}
                   canonicalSubcategory={m.canonicalSubcategory}
                   reactionPrompt={m.reactionPrompt}
+                  pointsAwarded={m.pointsAwarded}
+                  pointsLabel={m.pointsLabel}
                 />
                 {m.breadcrumb ? <BreadcrumbRow text={m.breadcrumb} /> : null}
               </div>

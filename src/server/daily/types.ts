@@ -37,6 +37,7 @@ export type QueueSlot = {
   skipped?: boolean;
   /** Catch-up dismissal marker; dismissed slots stop appearing in catch-up. */
   dismissed_at?: string;
+  dismissed_reason?: 'not_interested' | 'too_old' | 'unclear';
   /**
    * True when the effective difficulty for this slot's domain was stepped up above the
    * user's base preference due to mastery progress. Used by the UI to show "Getting harder".
