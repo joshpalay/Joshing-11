@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Combine, Plus, Repeat2, X } from 'lucide-react';
 
@@ -157,6 +157,14 @@ function LoadingSkeleton() {
 }
 
 export default function KnowledgePage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <KnowledgePageContent />
+    </Suspense>
+  );
+}
+
+function KnowledgePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const highlightedDomainSlug = searchParams.get('domain');
