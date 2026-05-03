@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  experimental: {
+    instrumentationHook: true,
+  },
 }
 
 export default nextConfig
