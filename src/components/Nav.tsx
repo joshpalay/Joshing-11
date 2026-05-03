@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, Brain, Home, Plus, Rss, User } from 'lucide-react';
+import { Bell, Brain, Home, Menu, Plus, Rss, User, X } from 'lucide-react';
 
 type ActivitiesResponse = {
   unreadCount?: number;
@@ -34,6 +34,7 @@ export function Nav() {
   const pathname = usePathname();
   const [unreadCount, setUnreadCount] = useState(0);
   const [accountInitials, setAccountInitials] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const visibleUnreadCount = pathname === '/activities' ? 0 : unreadCount;
   const showNewGameShortcut = pathname !== '/daily' && pathname !== '/daily/setup';
 
@@ -120,6 +121,7 @@ export function Nav() {
                 <Link
                   key={href}
                   href={href}
+                  onClick={() => setMenuOpen(false)}
                   className={[
                     'inline-flex min-h-10 items-center gap-2 rounded-md px-3 transition hover:bg-muted hover:text-foreground',
                     active ? 'text-foreground' : 'text-muted-foreground',
@@ -138,33 +140,49 @@ export function Nav() {
           </div>
         </div>
       </nav>
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-2 py-2 backdrop-blur md:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5">
-          {navItems.map(({ href, label, Icon }) => {
-            const active = pathname === href;
-            const showUnreadDot = label === 'Activities' && visibleUnreadCount > 0;
-            const isAccount = label === 'Account';
-
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={[
-                  'flex min-h-12 flex-col items-center justify-center gap-1 rounded-md text-[11px] transition',
-                  active ? 'text-foreground' : 'text-muted-foreground',
-                ].join(' ')}
-              >
-                <span className="relative grid size-5 place-items-center">
-                  {isAccount ? <AccountIcon active={active} /> : <Icon className="size-4" />}
-                  {showUnreadDot ? (
-                    <span className="absolute right-0 top-0 size-2 rounded-full bg-primary" aria-hidden="true" />
-                  ) : null}
-                </span>
-                {label}
-              </Link>
-            );
-          })}
+      <nav className="sticky top-0 z-40 border-b bg-background/95 px-4 py-3 backdrop-blur md:hidden">
+        <div className="mx-auto flex max-w-md items-center justify-between">
+          <Link href="/" className="font-serif text-lg font-semibold">Joshing</Link>
+          <button
+            type="button"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-nav-menu"
+            onClick={() => setMenuOpen((current) => !current)}
+          >
+            {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
         </div>
+        {menuOpen ? (
+          <div id="mobile-nav-menu" className="mx-auto mt-3 grid max-w-md gap-1">
+            {navItems.map(({ href, label, Icon }) => {
+              const active = pathname === href;
+              const showUnreadDot = label === 'Activities' && visibleUnreadCount > 0;
+              const isAccount = label === 'Account';
+
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMenuOpen(false)}
+                  className={[
+                    'flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition',
+                    active ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  ].join(' ')}
+                >
+                  <span className="relative grid size-5 place-items-center">
+                    {isAccount ? <AccountIcon active={active} /> : <Icon className="size-4" />}
+                    {showUnreadDot ? (
+                      <span className="absolute right-0 top-0 size-2 rounded-full bg-primary" aria-hidden="true" />
+                    ) : null}
+                  </span>
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
       </nav>
       {showNewGameShortcut ? (
         <Link
