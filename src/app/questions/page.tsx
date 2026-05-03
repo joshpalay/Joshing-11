@@ -17,11 +17,11 @@ type DrawerState =
 
 
 const DIFFICULTY_COPY: Record<number, string> = {
-  1: 'Very easy',
-  2: 'Easy',
-  3: 'Medium',
-  4: 'Hard',
-  5: 'Expert',
+  1: 'Accessible',
+  2: 'Accessible → Moderate',
+  3: 'Moderate',
+  4: 'Moderate → Specialist',
+  5: 'Specialist',
 };
 
 const DOMAIN_COLORS: Record<string, string> = {

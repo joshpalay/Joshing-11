@@ -31,11 +31,11 @@ type Props = {
 
 
 const DIFFICULTY_SCALE: Record<number, { label: string; hint: string }> = {
-  1: { label: 'Very easy', hint: 'Most players should get this quickly.' },
-  2: { label: 'Easy', hint: 'Familiar fact with a little recall needed.' },
-  3: { label: 'Medium', hint: 'Balanced challenge for the average player.' },
-  4: { label: 'Hard', hint: 'Requires strong domain knowledge.' },
-  5: { label: 'Expert', hint: 'Deep-cut or specialist-level question.' },
+  1: { label: 'Accessible', hint: 'Most players should be able to get this one.' },
+  2: { label: 'Accessible → Moderate', hint: 'Leans approachable but needs some recall.' },
+  3: { label: 'Moderate', hint: 'Balanced challenge with topic familiarity.' },
+  4: { label: 'Moderate → Specialist', hint: 'Leans advanced and rewards deeper knowledge.' },
+  5: { label: 'Specialist', hint: 'Best for enthusiasts or experts in the domain.' },
 };
 
 const defaults: QuestionFormValues = {
