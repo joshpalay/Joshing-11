@@ -40,6 +40,8 @@ function formatCountdown(targetIso: string, nowMs: number): string {
 export default function TodaysFiveCard() {
   const [status, setStatus] = useState<DailyStatus | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +101,24 @@ export default function TodaysFiveCard() {
     return answered > 0 ? `${answered} of 5 answered` : 'Ready when you are';
   }, [answered, effectiveStatus.nextRoundAt, isComplete, nowMs]);
 
+  const resetForToday = async () => {
+    if (resetting) return;
+    setResetError(null);
+    setResetting(true);
+    try {
+      const response = await fetch('/api/daily/reset', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message ?? 'Could not reset daily round.');
+      window.location.assign('/daily/setup');
+    } catch (caught) {
+      setResetError(caught instanceof Error ? caught.message : 'Could not reset daily round.');
+      setResetting(false);
+    }
+  };
+
   return (
     <div className="mt-6 w-full rounded-lg border bg-card p-4 text-card-foreground md:mt-0 md:max-w-xs">
       <div className="flex items-start gap-3">
@@ -118,10 +138,23 @@ export default function TodaysFiveCard() {
       </div>
 
       {isComplete ? (
-        <Link href={playHref} className="btn-ghost mt-4 min-h-11 w-full justify-center gap-2">
-          <Clock className="size-4" aria-hidden="true" />
-          See your recap
-        </Link>
+        <>
+          <Link href={playHref} className="btn-ghost mt-4 min-h-11 w-full justify-center gap-2">
+            <Clock className="size-4" aria-hidden="true" />
+            See your recap
+          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              void resetForToday();
+            }}
+            disabled={resetting}
+            className="mt-2 w-full text-center text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4 disabled:opacity-60"
+          >
+            {resetting ? 'Resetting…' : 'Reset game for today and play again'}
+          </button>
+          {resetError ? <p className="mt-2 text-xs text-destructive">{resetError}</p> : null}
+        </>
       ) : (
         <Link href={playHref} className="btn-primary mt-4 min-h-11 w-full justify-center gap-2">
           <MessageCircleQuestion className="size-4" aria-hidden="true" />
