@@ -157,7 +157,9 @@ export async function getUnrepliedReactionCount(userId: string): Promise<number>
   } catch (error) {
     const pgError = error as { code?: string; message?: string };
     const missingCamelCaseColumn = pgError.code === '42703'
-      && (pgError.message?.includes('recipientUserId') || pgError.message?.includes('repliedAt'));
+      && (pgError.message?.includes('recipientUserId')
+        || pgError.message?.includes('repliedAt')
+        || pgError.message?.includes('QuestionReaction'));
     if (!missingCamelCaseColumn) throw error;
 
     const result = await db.execute(sql<{ value: string }>`
