@@ -9,6 +9,7 @@ import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { getBasePoints } from '@/server/mastery/awards';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
+import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 
 export const dynamic = 'force-dynamic';
 
@@ -138,6 +139,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })
       .where(eq(feedItems.id, feedItemId));
   });
+
+  // Propagate this answer to the answering user's friends' Feeds
+  void createFeedItemsForFriendsFromAnswer(
+    session.userId,
+    question.id,
+    isCorrect ? 'correct' : 'incorrect',
+  );
 
   if (!isCorrect) {
     void promptCreatorNoteAfterWrongAnswer({

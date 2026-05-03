@@ -186,6 +186,8 @@ function KnowledgePageContent() {
   const [tidyConfirmOpen, setTidyConfirmOpen] = useState(false);
   const [tidying, setTidying] = useState(false);
   const [tidyNotice, setTidyNotice] = useState<string | null>(null);
+  const [dismissedDomains, setDismissedDomains] = useState<string[]>([]);
+  const [reinstating, setReinstating] = useState<string | null>(null);
 
   const loadKnowledge = async () => {
     const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
@@ -200,7 +202,14 @@ function KnowledgePageContent() {
     let active = true;
     setView(readSavedView());
     setLoading(true);
-    loadKnowledge()
+    Promise.all([
+      loadKnowledge(),
+      fetch('/api/feed/dismissed-domains', { cache: 'no-store', credentials: 'include' })
+        .then((r) => r.json().catch(() => null))
+        .then((body: { domains?: string[] } | null) => {
+          if (active && body?.domains) setDismissedDomains(body.domains);
+        }),
+    ])
       .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : 'Could not load your Knowledge Map.');
       })
@@ -344,6 +353,23 @@ function KnowledgePageContent() {
       setInterestError(caught instanceof Error ? caught.message : 'Could not save your interests.');
     } finally {
       setSavingInterests(false);
+    }
+  };
+
+  const reinstateDomain = async (domain: string) => {
+    setReinstating(domain);
+    try {
+      const response = await fetch('/api/feed/dismiss-domain', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ domain }),
+      });
+      if (response.ok) {
+        setDismissedDomains((current) => current.filter((d) => d !== domain));
+      }
+    } finally {
+      setReinstating(null);
     }
   };
 
@@ -505,6 +531,28 @@ function KnowledgePageContent() {
           ))}
         </div>
       </section>
+
+      {dismissedDomains.length > 0 && (
+        <section style={sectionStyle} aria-label="Dismissed domains">
+          <p style={knowledgeEyebrowStyle}>FOCUSED FEED</p>
+          <p style={knowledgeSubtitleStyle}>DOMAINS YOU'VE HIDDEN FROM YOUR FEED — RE-OPEN ANY TIME</p>
+          <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {dismissedDomains.map((domain) => (
+              <div key={domain} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                <span style={{ fontSize: 14 }}>{domain}</span>
+                <button
+                  type="button"
+                  style={linkButtonStyle}
+                  onClick={() => void reinstateDomain(domain)}
+                  disabled={reinstating === domain}
+                >
+                  {reinstating === domain ? 'Reopening...' : `Re-open ${domain} in your Feed`}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section style={maintenanceStyle}>
         <p style={emptyStyle}>Map maintenance</p>

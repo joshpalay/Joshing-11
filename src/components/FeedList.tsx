@@ -2,11 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Send, SkipForward, ThumbsUp, X } from 'lucide-react';
+import { Send, SkipForward, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { QuestionReactionPrompt } from '@/components/play/GameplayChat';
+
+type FriendResult = {
+  userId: string;
+  displayName: string;
+  result: 'correct' | 'incorrect' | null;
+};
 
 type FeedApiItem = {
   id: string;
@@ -16,6 +22,8 @@ type FeedApiItem = {
   source_user_id: string;
   source_friend_display_name: string;
   source_attribution: string;
+  source_result: 'correct' | 'incorrect' | null;
+  friend_results: FriendResult[] | null;
   source_event_at: string;
   personal_message: string | null;
   state: string;
@@ -78,6 +86,17 @@ function formatEventTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
 }
 
+function comparisonCopy(playerCorrect: boolean, friendResults: FriendResult[] | null): string {
+  const primaryFriend = friendResults?.[0];
+  const friendName = primaryFriend?.displayName ?? 'They';
+  const friendCorrect = primaryFriend?.result === 'correct';
+
+  if (playerCorrect && friendCorrect) return 'You both had it.';
+  if (playerCorrect && !friendCorrect) return `You got it. ${friendName} couldn't.`;
+  if (!playerCorrect && friendCorrect) return `${friendName} had it. You'll get it next time.`;
+  return 'Neither of you got it. Good question.';
+}
+
 function JoshingGameCard({ item, viewerId }: { item: FeedApiItem; viewerId: string | null }) {
   const [game, setGame] = useState<JoshingGameFeedView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -112,8 +131,8 @@ function JoshingGameCard({ item, viewerId }: { item: FeedApiItem; viewerId: stri
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {!game && !error ? <p className="text-sm text-muted-foreground">Loading game...</p> : null}
         {game?.recipients.map((recipient) => {
-          const answered = game.responses.filter((response) => response.userId === recipient.userId);
-          const score = recipient.score ?? answered.filter((response) => response.isCorrect).length;
+          const answered = game.responses.filter((r) => r.userId === recipient.userId);
+          const score = recipient.score ?? answered.filter((r) => r.isCorrect).length;
           const label = recipient.completedAt
             ? `✅ ${score}/${questionCount}`
             : answered.length > 0
@@ -138,11 +157,15 @@ function JoshingGameCard({ item, viewerId }: { item: FeedApiItem; viewerId: stri
   );
 }
 
+type QuestionCardState = 'unanswered' | 'answered' | 'reacted';
+
 export default function FeedList({ limit = 25 }: FeedListProps) {
   const [items, setItems] = useState<FeedApiItem[]>([]);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ResultState>>({});
+  const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({});
+  const [toasts, setToasts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -181,6 +204,15 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
     return "You're caught up. Check back later.";
   }, [error, loading]);
 
+  const showToast = useCallback((itemId: string, message: string) => {
+    setToasts((t) => ({ ...t, [itemId]: message }));
+    setTimeout(() => setToasts((t) => { const next = { ...t }; delete next[itemId]; return next; }), 3000);
+  }, []);
+
+  const removeItem = useCallback((itemId: string) => {
+    setItems((current) => current.filter((item) => item.id !== itemId));
+  }, []);
+
   const updateState = useCallback(async (itemId: string, state: 'skipped' | 'dismissed') => {
     setBusyId(itemId);
     setError(null);
@@ -195,13 +227,36 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
         const body = await response.json().catch(() => null);
         throw new Error(body?.message ?? 'Could not update that Feed item.');
       }
-      setItems((current) => current.filter((item) => item.id !== itemId));
+      removeItem(itemId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not update that Feed item.');
     } finally {
       setBusyId(null);
     }
-  }, []);
+  }, [removeItem]);
+
+  const dismissDomain = useCallback(async (itemId: string, domain: string) => {
+    setBusyId(itemId);
+    try {
+      const response = await fetch('/api/feed/dismiss-domain', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ domain }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message ?? 'Could not dismiss domain.');
+      }
+      // Remove all items with this domain from local state
+      setItems((current) => current.filter((item) => item.domain_pill !== domain));
+      showToast(itemId, `Got it. No more ${domain} questions.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not dismiss domain.');
+    } finally {
+      setBusyId(null);
+    }
+  }, [showToast]);
 
   const submitAnswer = useCallback(async (item: FeedApiItem) => {
     const submitted = answers[item.id]?.trim();
@@ -230,6 +285,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
           breadcrumb: body.breadcrumb ?? null,
         },
       }));
+      setCardStates((s) => ({ ...s, [item.id]: 'answered' }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not submit that answer.');
     } finally {
@@ -239,22 +295,22 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
 
   const thumbsup = useCallback(async (itemId: string) => {
     setBusyId(itemId);
-    setError(null);
     try {
-      const response = await fetch(`/api/feed/${itemId}/thumbsup`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.message ?? 'Could not record that thumbs-up.');
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not record that thumbs-up.');
+      await fetch(`/api/feed/${itemId}/thumbsup`, { method: 'POST', credentials: 'include' });
     } finally {
       setBusyId(null);
     }
   }, []);
+
+  const thumbsdown = useCallback(async (itemId: string) => {
+    setBusyId(itemId);
+    try {
+      const response = await fetch(`/api/feed/${itemId}/thumbsdown`, { method: 'POST', credentials: 'include' });
+      if (response.ok) removeItem(itemId);
+    } finally {
+      setBusyId(null);
+    }
+  }, [removeItem]);
 
   return (
     <>
@@ -281,6 +337,9 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
         <section className="space-y-3 pb-8">
           {visibleItems.map((item) => {
             const result = results[item.id];
+            const cardState = cardStates[item.id] ?? (item.state === 'answered' ? 'answered' : 'unanswered');
+            const toast = toasts[item.id];
+
             if (item.kind === 'joshing_game') {
               return <JoshingGameCard key={item.id} item={item} viewerId={viewerId} />;
             }
@@ -293,6 +352,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                   item.source_type === 'direct_sent' ? 'border-l-4 border-l-primary shadow-sm' : '',
                 ].join(' ')}
               >
+                {/* Header row */}
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   {item.source_type === 'direct_sent' ? (
                     <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">Sent to you</span>
@@ -306,63 +366,88 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                   <span className="ml-auto text-xs text-muted-foreground">{formatEventTime(item.source_event_at)}</span>
                 </div>
 
+                {/* Question text */}
                 <p className="text-base leading-7 text-foreground">{item.question_text}</p>
-                <p className="mt-2 text-sm font-medium text-foreground">
-                  {item.source_type === 'direct_sent'
-                    ? `${item.source_friend_display_name} sent this to you`
-                    : item.source_attribution}
-                </p>
+
+                {/* Attribution line */}
+                <p className="mt-2 text-sm font-medium text-foreground">{item.source_attribution}</p>
                 {item.personal_message ? (
                   <p className="mt-1 text-sm italic text-muted-foreground">&ldquo;{item.personal_message}&rdquo;</p>
                 ) : null}
 
-                {result ? (
+                {/* Toast */}
+                {toast ? (
+                  <p className="mt-2 text-sm text-muted-foreground">{toast}</p>
+                ) : null}
+
+                {/* State 2 — Answered */}
+                {cardState === 'answered' && result ? (
                   <div className="mt-4 rounded-md bg-muted p-3 text-sm">
-                    <p className="font-medium">{result.correct ? `Correct. +${result.points}` : 'Not quite.'}</p>
+                    {/* Comparison copy */}
+                    <p className="font-medium">
+                      {item.source_type === 'friend_answered'
+                        ? comparisonCopy(result.correct, item.friend_results)
+                        : result.correct ? `Correct. +${result.points}` : 'Not quite.'}
+                    </p>
                     {!result.correct ? <p className="mt-1">Answer: {result.answer}</p> : null}
                     {result.explanation ? <p className="mt-1 text-muted-foreground">{result.explanation}</p> : null}
                     {result.quip ? <p className="mt-1 text-muted-foreground">{result.quip}</p> : null}
                     {result.breadcrumb ? <p className="mt-2 text-muted-foreground italic">{result.breadcrumb}</p> : null}
-                    <button
-                      className="mt-3 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm"
-                      type="button"
-                      onClick={() => void thumbsup(item.id)}
-                      disabled={busyId === item.id}
-                      title="Thumbs-up"
-                    >
-                      <ThumbsUp className="size-4" />
-                      Pass it on
-                    </button>
-                    {item.question_id ? (
-                      <SendQuestionAction
-                        question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill }}
-                        label="Send to friend"
-                        className="ml-2 mt-3 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted"
-                      />
-                    ) : null}
-                    {item.question_id ? (
-                      <AddToBankAction
-                        questionId={item.question_id}
-                        initialInBank={item.is_in_bank}
-                        contextType="feed"
-                        contextId={item.id}
-                        label=""
-                        className="ml-2 mt-3 inline-flex size-9 items-center justify-center rounded-md border px-0"
-                        onChange={(inBank) => setItems((current) => current.map((row) => row.id === item.id ? { ...row, is_in_bank: inBank } : row))}
-                      />
-                    ) : null}
-                    {item.question_id && viewerId && item.source_user_id !== viewerId ? (
-                      <QuestionReactionPrompt
-                        prompt={{
-                          senderName: item.source_friend_display_name,
-                          questionId: item.question_id,
-                          contextType: 'feed',
-                          contextId: item.id,
-                        }}
-                      />
-                    ) : null}
+
+                    {/* Post-answer actions */}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm"
+                        type="button"
+                        onClick={() => void thumbsup(item.id)}
+                        disabled={busyId === item.id}
+                        title="Great question"
+                      >
+                        <ThumbsUp className="size-4" />
+                        Great question
+                      </button>
+                      <button
+                        className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground"
+                        type="button"
+                        onClick={() => void thumbsdown(item.id)}
+                        disabled={busyId === item.id}
+                        title="Not a fair question"
+                      >
+                        <ThumbsDown className="size-4" />
+                        Not fair
+                      </button>
+                      {item.question_id ? (
+                        <SendQuestionAction
+                          question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill }}
+                          label="Send to friend"
+                          className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted"
+                        />
+                      ) : null}
+                      {item.question_id ? (
+                        <AddToBankAction
+                          questionId={item.question_id}
+                          initialInBank={item.is_in_bank}
+                          contextType="feed"
+                          contextId={item.id}
+                          label=""
+                          className="inline-flex size-9 items-center justify-center rounded-md border px-0"
+                          onChange={(inBank) => setItems((current) => current.map((row) => row.id === item.id ? { ...row, is_in_bank: inBank } : row))}
+                        />
+                      ) : null}
+                      {item.question_id && viewerId && item.source_user_id !== viewerId ? (
+                        <QuestionReactionPrompt
+                          prompt={{
+                            senderName: item.source_friend_display_name,
+                            questionId: item.question_id,
+                            contextType: 'feed',
+                            contextId: item.id,
+                          }}
+                        />
+                      ) : null}
+                    </div>
                   </div>
-                ) : (
+                ) : cardState === 'unanswered' ? (
+                  /* State 1 — Unanswered */
                   <form
                     className="mt-4 flex flex-col gap-3 sm:flex-row"
                     onSubmit={(event) => {
@@ -377,7 +462,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                       placeholder="Your answer..."
                       disabled={busyId === item.id}
                     />
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button className="btn-primary inline-flex h-11 items-center gap-2" type="submit" disabled={busyId === item.id || !answers[item.id]?.trim()}>
                         <Send className="size-4" />
                         Send
@@ -400,6 +485,15 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                       >
                         <X className="size-4" />
                       </button>
+                      <button
+                        className="inline-flex h-11 items-center gap-1.5 rounded-md border px-3 text-sm text-muted-foreground"
+                        type="button"
+                        onClick={() => void dismissDomain(item.id, item.domain_pill)}
+                        disabled={busyId === item.id}
+                        title={`Not my focus: ${item.domain_pill}`}
+                      >
+                        Not my focus
+                      </button>
                       {item.question_id ? (
                         <SendQuestionAction
                           question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill }}
@@ -420,7 +514,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                       ) : null}
                     </div>
                   </form>
-                )}
+                ) : null}
               </article>
             );
           })}

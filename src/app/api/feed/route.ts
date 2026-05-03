@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { db, joshingGames, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { getFeedForUser } from '@/server/db/queries/feed';
+import { getFeedForUser, type CollapsedFeedItem } from '@/server/db/queries/feed';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +14,30 @@ function displayName(name: string | null, fallback = 'A friend') {
 
 function domainPill(question: typeof questions.$inferSelect | undefined) {
   return question?.canonicalSubcategory || question?.broadCategory || question?.category || 'General';
+}
+
+function resultVerb(result: string | null, name: string): string {
+  return result === 'correct' ? `${name} got this right` : `${name} couldn't get this`;
+}
+
+function friendAnsweredAttribution(item: CollapsedFeedItem, userById: Map<string, { displayName: string | null }>, domain: string): string {
+  const results = item.friendResults;
+  if (!results || results.length === 0) {
+    const name = displayName(userById.get(item.sourceUserId)?.displayName ?? null);
+    const verb = resultVerb(item.sourceResult ?? null, name);
+    return `${verb} — ${domain}`;
+  }
+
+  if (results.length === 1) {
+    const { displayName: dn, result } = results[0];
+    return `${resultVerb(result, dn)} — ${domain}`;
+  }
+
+  // Multiple friends: "Robyn got this right · Greg couldn't get it — Domain"
+  const parts = results
+    .slice(0, 3) // cap at 3 names for readability
+    .map(({ displayName: dn, result }) => (result === 'correct' ? `${dn} got it` : `${dn} couldn't get it`));
+  return `${parts.join(' · ')} — ${domain}`;
 }
 
 function thumbsupAttribution(sourceName: string, count: number | undefined) {
@@ -28,7 +52,7 @@ export async function GET() {
 
   const feed = await getFeedForUser(session.userId);
   const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
-  const sourceUserIds = feed.map((item) => item.sourceUserId);
+  const sourceUserIds = [...new Set(feed.map((item) => item.sourceUserId))];
   const gameIds = feed.map((item) => item.joshingGameId).filter((id): id is string => Boolean(id));
 
   const [questionRows, sourceRows, gameRows, bankedById] = await Promise.all([
@@ -44,9 +68,9 @@ export async function GET() {
     checkBankedQuestions(session.userId, questionIds),
   ]);
 
-  const questionById = new Map(questionRows.map((question) => [question.id, question]));
-  const userById = new Map(sourceRows.map((user) => [user.id, user]));
-  const gameById = new Map(gameRows.map((game) => [game.id, game]));
+  const questionById = new Map(questionRows.map((q) => [q.id, q]));
+  const userById = new Map(sourceRows.map((u) => [u.id, u]));
+  const gameById = new Map(gameRows.map((g) => [g.id, g]));
 
   return NextResponse.json({
     viewer_user_id: session.userId,
@@ -55,6 +79,19 @@ export async function GET() {
       const sourceUser = userById.get(item.sourceUserId);
       const sourceName = displayName(sourceUser?.displayName ?? null);
       const game = item.joshingGameId ? gameById.get(item.joshingGameId) : undefined;
+      const domain = domainPill(question);
+
+      let source_attribution: string;
+      if (item.sourceType === 'direct_sent') {
+        source_attribution = `${sourceName} sent this to you`;
+      } else if (item.sourceType === 'friend_answered') {
+        source_attribution = friendAnsweredAttribution(item, userById, domain);
+      } else if (item.sourceType === 'joshing_game') {
+        source_attribution = `${sourceName} sent you a Joshing Game`;
+      } else {
+        // legacy thumbs_upped
+        source_attribution = thumbsupAttribution(sourceName, item.thumbsUpCount);
+      }
 
       return {
         id: item.id,
@@ -63,24 +100,18 @@ export async function GET() {
         joshing_game_id: item.joshingGameId,
         source_type: item.sourceType,
         source_user_id: item.sourceUserId,
+        source_result: item.sourceResult ?? null,
         source_friend_display_name: sourceName,
-        source_attribution: item.sourceType === 'direct_sent'
-          ? `${sourceName} sent this to you`
-          : item.sourceType === 'authored_shared'
-            ? `${sourceName} wrote this`
-            : item.sourceType === 'joshing_game'
-              ? `${sourceName} sent you a Joshing Game`
-              : thumbsupAttribution(sourceName, item.thumbsUpCount),
+        source_attribution,
+        friend_results: item.friendResults ?? null,
         source_event_at: item.sourceEventAt,
         personal_message: item.personalMessage,
         state: item.state,
         is_pinned: item.isPinned,
-        thumbs_up_count: item.thumbsUpCount ?? 1,
-        additional_endorsers: item.additionalEndorsers ?? [],
         question_text: question?.questionText ?? null,
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
-        domain_pill: domainPill(question),
+        domain_pill: domain,
         game_title: game?.title ?? null,
       };
     }),
