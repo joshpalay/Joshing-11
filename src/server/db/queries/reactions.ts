@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { CANNED_REACTIONS, getCannedReaction, type ReactionKey } from '@/lib/reactions';
 import { activityItems, db, questionReactions, questions, users } from '@/server/db';
