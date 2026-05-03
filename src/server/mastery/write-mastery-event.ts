@@ -80,24 +80,39 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
   const tierChanged = previousTier !== nextTier;
 
   await db.transaction(async (tx) => {
-    await tx.insert(masteryEvents).values({
-      userId: params.userId,
-      canonicalSubcategory: params.domain,
-      sourceType:
-        params.sourceType === 'author_credit' || params.sourceType === 'curator_credit'
-          ? params.sourceType
-          : params.sourceType === 'catchup'
-            ? 'catchup_correct'
-            : 'live_correct',
-      questionId: params.eventQuestionId ?? null,
-      answeredByUserId: params.answeredByUserId ?? params.userId,
-      answerId: `${params.sourceType}:${params.sourceId}:${params.questionId}:${params.answeredByUserId ?? params.userId}`,
-      basePoints: Math.round(params.basePoints ?? params.pointsAwarded),
-      weight: params.weight ?? (params.pointsAwarded > 0 ? 1 : 0),
-      awardedPoints: params.pointsAwarded,
-      answerState: params.sourceType === 'author_credit' || params.sourceType === 'curator_credit' ? null : params.answerState,
-      sessionContext: params.sourceType,
-    });
+    await tx.execute(sql`
+      insert into "MASTERY_EVENTS" (
+        "user_id",
+        "canonical_subcategory",
+        "source_type",
+        "question_id",
+        "answered_by_user_id",
+        "answer_id",
+        "base_points",
+        "weight",
+        "awarded_points",
+        "answer_state",
+        "session_context"
+      ) values (
+        ${params.userId},
+        ${params.domain},
+        ${
+          params.sourceType === 'author_credit' || params.sourceType === 'curator_credit'
+            ? params.sourceType
+            : params.sourceType === 'catchup'
+              ? 'catchup_correct'
+              : 'live_correct'
+        },
+        ${params.eventQuestionId ?? null},
+        ${params.answeredByUserId ?? params.userId},
+        ${`${params.sourceType}:${params.sourceId}:${params.questionId}:${params.answeredByUserId ?? params.userId}`},
+        ${Math.round(params.basePoints ?? params.pointsAwarded)},
+        ${params.weight ?? (params.pointsAwarded > 0 ? 1 : 0)},
+        ${params.pointsAwarded},
+        ${params.sourceType === 'author_credit' || params.sourceType === 'curator_credit' ? null : (params.answerState ?? null)},
+        ${params.sourceType}
+      )
+    `);
 
     if (params.pointsAwarded > 0) {
       await tx
