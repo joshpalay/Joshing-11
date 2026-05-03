@@ -8,10 +8,14 @@ export async function register() {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const db = drizzle(pool);
 
-    await migrate(db, {
-      migrationsFolder: path.join(process.cwd(), 'drizzle'),
-    });
-
-    await pool.end();
+    try {
+      await migrate(db, {
+        migrationsFolder: path.join(process.cwd(), 'drizzle'),
+      });
+    } catch (err) {
+      console.error('[instrumentation] DB migration failed — server will start but schema may be out of date:', err);
+    } finally {
+      await pool.end();
+    }
   }
 }
