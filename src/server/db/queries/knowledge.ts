@@ -220,11 +220,27 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
       .where(eq(playerMastery.userId, userId))
       .orderBy(desc(playerMastery.totalPoints)),
     db
-      .select()
+      .select({
+        canonicalSubcategory: masteryEvents.canonicalSubcategory,
+        sourceType: masteryEvents.sourceType,
+        questionId: masteryEvents.questionId,
+        awardedPoints: masteryEvents.awardedPoints,
+        answerState: masteryEvents.answerState,
+        sessionContext: masteryEvents.sessionContext,
+        createdAt: masteryEvents.createdAt,
+      })
       .from(masteryEvents)
       .where(eq(masteryEvents.userId, userId)),
     db
-      .select()
+      .select({
+        canonicalSubcategory: masteryEvents.canonicalSubcategory,
+        sourceType: masteryEvents.sourceType,
+        questionId: masteryEvents.questionId,
+        awardedPoints: masteryEvents.awardedPoints,
+        answerState: masteryEvents.answerState,
+        sessionContext: masteryEvents.sessionContext,
+        createdAt: masteryEvents.createdAt,
+      })
       .from(masteryEvents)
       .where(eq(masteryEvents.userId, userId))
       .orderBy(desc(masteryEvents.createdAt))
