@@ -28,11 +28,10 @@ who you say you are. Your Knowledge base is who you\'ve become ---
 shaped by the friends you let in.
 
 Alongside the daily five sits a Feed of questions your friends have
-endorsed --- questions they\'ve written, questions they\'ve thumbed up,
-questions they\'ve sent directly to you. The Feed is where the social
-life of Joshing lives. It is not a game and it is not a competition. It
-is a quiet stream of \"I thought of you when I saw this\" --- the trivia
-equivalent of sending someone a song.
+answered. It is where the social life of Joshing lives. It is not a
+game and it is not a competition. You see what your friends played, and
+how they did. The questions they sent directly to you are pinned at the
+top. The rest flows by friendship alone.
 
 Joshing is invitation-only. Every player was brought here by someone who
 wanted them here. When you invite a friend, you can pre-seed a few
@@ -247,10 +246,12 @@ share with them.
 
 - Bounded reverse-chronological stream (recommended cap: 25 items)
 
-- Three sources: direct-sent (pinned), friend authored+shared, friend
-  thumbed-up
+- Two sources: direct-sent (pinned), friend answered (reverse-
+  chronological)
 
-- Three actions per item: Answer, Skip, Dismiss
+- Pre-answer actions: Answer, Skip, Dismiss, Not my focus
+
+- Post-answer actions: Thumbs-up, Thumbs-down, React
 
 - Once-correctly-answered items do not reappear
 
@@ -377,11 +378,11 @@ minutes.
 
 **Maya**, later that evening, opens Joshing again and taps the Feed.
 There are 8 items. The top is pinned: *\"Greg sent this to you --- about
-Sondheim.\"* She answers it --- gets it right. Below, *\"Greg + 1 other
-thumbed up\"* a question about Auden. She skips. She answers two more,
-dismisses one, leaves the rest for tomorrow. She thumbs up the Sondheim
-question on the way out. It will now be eligible to appear in the Feeds
-of her other friends.
+Sondheim.\"* She answers it --- gets it right. Below, *\"Robyn got this
+right --- W.H. Auden.\"* She skips. She answers two more, dismisses one,
+leaves the rest for tomorrow. She thumbs up the Sondheim question on the
+way out --- it was a great question, and her signal will help it surface
+earlier in friends' Feeds.
 
 **6.4 The send-to-friend gesture**
 
@@ -862,13 +863,16 @@ The summary is short, interpretive, and quiet. It avoids:
 After answering a Daily Five question, the player can apply a single
 thumbs-up gesture. Thumbs-up on a Daily Five question:
 
-1.  Marks the question as endorsed by this player
+1.  Marks the question as excellent
 
-2.  Makes the question eligible to appear in the Feeds of this player\'s
-    friends (per §8.2.3)
+2.  Contributes to its surface priority in friends\' Feeds --- heavily
+    thumbed questions surface earlier in friends\' Feeds, all else equal
 
-There is no daily limit on thumbs-up. The gesture is the Feed-curation
-mechanism.
+The question enters friends\' Feeds automatically when answered (unless
+the player thumbs it down). Thumbs-up does not control propagation ---
+it is a quality signal only.
+
+There is no daily limit on thumbs-up.
 
 **8.1.12 Mastery & Points**
 
@@ -910,12 +914,17 @@ in a new demonstrated domain).
 
 **8.2.1 Concept**
 
-The Feed is a bounded, reverse-chronological stream of questions friends
-have endorsed. It is where the social life of Joshing lives. The Feed is
+The Feed is a bounded, living stream of questions your friends have
+answered. It is where the social life of Joshing lives. The Feed is
 **not** a game and is **not** required --- players who never open it can
 still get full value from the Daily Five. But for players who engage,
 the Feed is the mechanism by which their Knowledge base expands and
 their relationships with friends become legible.
+
+The Feed is organized around friendship, not endorsement. A question
+enters your Feed because a friend played it --- not because they curated
+it for you. The signal is presence, not curation. You see what they
+answered. You see how they did.
 
 **8.2.2 Where It Lives**
 
@@ -927,7 +936,9 @@ Feed.\"* No badges, no red dots, no urgency. Just a quiet count.
 
 **8.2.3 Feed Item Sources**
 
-A question enters a player\'s Feed when one of the following happens:
+A question enters a player\'s Feed when a friend answers it --- correct
+or wrong --- in any context (Daily Five, Personal Round, or from their
+own Feed).
 
   -----------------------------------------------------------------------
   **Source**       **Trigger**                             **Priority**
@@ -936,96 +947,196 @@ A question enters a player\'s Feed when one of the following happens:
                    targeting this player                   above all
                                                            others
 
-  **Friend         A friend wrote a question and toggled   Medium
-  authored +       \"Share to friends\" on save            
-  shared**                                                 
-
-  **Friend         A friend thumbed up any question they   Lower
-  thumbs-up**      answered (Daily Five or Feed)           
+  **Friend         A friend answered this question,        Reverse-
+  answered**       correct or wrong, in any session        chronological
   -----------------------------------------------------------------------
 
-Within direct-sent items: reverse-chronological. Within authored-shared
-and thumbed-up: also reverse-chronological, with multi-friend
-endorsement collapsing into a single item (*\"Greg + 2 others thumbed
-up\"*).
+**Two filters block a question from entering the Feed:**
 
-**8.2.4 Feed Mechanics**
+1.  **Thumbs-down by the friend** --- if the friend who answered the
+    question thumbed it down, the question does not propagate to
+    anyone\'s Feed. Thumbs-down is a quality gate, not a personal
+    preference signal.
+
+2.  **\"Not my focus\" by the recipient** --- if the recipient has
+    marked the question\'s domain as \"not my focus,\" questions in that
+    domain are filtered out regardless of which friend answered them.
+    This is a permanent, domain-level preference, reversible from the
+    Knowledge page.
+
+**What does NOT filter the Feed:** whether the friend got the question
+right or wrong. Both flow. The result is visible on the Feed item.
+
+When multiple friends have answered the same question, items are
+collapsed: *\"Robyn got this right · Greg couldn\'t get it --- Mrs.
+Dalloway.\"*
+
+**8.2.4 Feed Item Display**
+
+Each Feed item shows:
+
+- **Question text** (truncated if long, with \"more\" expansion)
+- **Result attribution**: *\"Robyn got this right --- Late Romantic
+  Piano\"* / *\"Robyn couldn\'t get this --- Mrs. Dalloway\"*
+- **Domain pill**
+- **Action buttons** (see §8.2.5)
+
+Tap on the friend\'s name → friend\'s profile (§8.6).
+
+**8.2.5 Feed Item Lifecycle**
+
+Each Feed item passes through states. The item is a living card --- it
+updates in place as the social moment develops.
+
+**State 1 --- Unanswered**
+
+Actions available:
+
+- **Answer** --- opens the inline chat-thread interface; question grades
+  and stores like any other answer; correct answer adds domain to
+  Knowledge base (§8.4)
+- **Skip** --- moves item to back of Feed; resurfaces if more friends
+  answer the same question
+- **Dismiss** --- removes this question from Feed permanently; domain
+  stays open
+- **Not my focus** --- removes all questions in this domain permanently;
+  reversible from Knowledge page (§8.4)
+
+**State 2 --- Answered**
+
+After answering, the item updates in place to show:
+
+- Your result: *\"You got it right\"* / *\"You couldn\'t get it\"*
+- Friend\'s result for comparison: *\"Robyn couldn\'t get it either\"* /
+  *\"Robyn had it\"*
+
+Actions available post-answer:
+
+- **Thumbs-up** --- personal quality signal (\"this was a great
+  question\"); feeds into question surface priority scoring across the
+  system; does **not** propagate the question to other players\' Feeds
+- **Thumbs-down** --- quality signal (\"this wasn\'t a fair question\");
+  removes from your Feed and prevents the question from propagating to
+  your own friends\' Feeds
+- **React** --- send a private reaction to the friend who answered it
+  (emoji + optional short text)
+
+**State 3 --- Reacted**
+
+If the friend reacts back to your answer, the item receives a quiet
+indicator: *\"Robyn reacted.\"* Tapping reveals the reaction. After
+reactions are exchanged, the item settles --- no further updates are
+surfaced on the card.
+
+**8.2.6 Feed Mechanics**
 
 - **Bounded.** The Feed displays a maximum of **25 items**. Older items
   roll off (they remain in the Feed item table but are no longer
   surfaced).
 
-- **Reverse-chronological** by triggering event (sent, shared, or
-  thumbs-upped), with direct-sent pinned above the rest.
-
-- **Three actions per item:** Answer, Skip, Dismiss
-
-  - **Answer** --- opens the chat-thread interface; question grades and
-    stores like any other answer
-
-  - **Skip** --- moves item to back of Feed; can resurface if more
-    friends endorse
-
-  - **Dismiss** --- removes from Feed permanently (one-way)
+- **Reverse-chronological** by the triggering answer event, with
+  direct-sent items pinned above the rest.
 
 - **Once correctly answered → gone.** A question the player has
   correctly answered does not reappear in their Feed, even if more
-  friends thumb it up later. Wrong-answered, expired, or skipped
-  questions can resurface if additional friends endorse.
+  friends answer it later. Wrong-answered or skipped questions can
+  resurface if additional friends answer the same question.
 
 - **No infinite scroll.** The cap is the cap. When the player reaches
   the end, the empty state is *\"You\'re caught up.\"*
 
-**8.2.5 Feed Item Display**
-
-Each Feed item shows:
-
-- Question text (truncated if long, with \"more\" expansion)
-
-- Source attribution: *\"Greg sent this to you\"* / *\"Greg + 2 others
-  thumbed up\"* / *\"Greg wrote this\"*
-
-- Domain pill (e.g., \"Late Tchaikovsky\")
-
-- The three action buttons
-
-Tap on the friend\'s name → friend\'s profile (§8.6).
-
-**8.2.6 Mastery Credit**
+**8.2.7 Mastery Credit**
 
 Feed answers count at full weight (1.0x) toward mastery --- they are as
 real as Daily Five answers.
 
-The Feed is also the **only mechanism** by which a player\'s Knowledge
-base grows beyond their declared 5 (§8.4). A correct answer to a Feed
-question in a new domain silently adds that domain to the Knowledge
-page.
+Correctly answering a Feed question in a domain not currently in the
+player\'s Knowledge base silently adds that domain to the Knowledge page
+(§8.4.5). This is the primary mechanism by which the Knowledge base
+grows beyond the player\'s declared 5.
 
-**8.2.7 Reactions on Feed Questions**
+**8.2.8 Reactions**
 
-After answering a Feed question, the player can:
+After answering a Feed question, the player can send a private reaction
+to the friend who answered it (emoji + optional short text, per v10.25
+§8.10b). This reaction is private to the pair.
 
-1.  **Send a reaction** to the friend who sent or endorsed the question
-    (per v10.25 §8.10b --- emoji + optional short text, private to the
-    pair)
+When the friend sees in their Activity tab that the player answered
+their question, they can react back. Both directions are supported.
 
-2.  **Thumbs-up the question** --- propagating it to *this* player\'s
-    friends\' Feeds in turn
+Reactions are not public, not aggregated, and not displayed to anyone
+outside the pair.
 
-**8.2.8 Empty Feed States**
+**8.2.9 Activity Tab**
+
+The Activity tab is the reverse-chronological record of social moments
+around the player\'s questions. Key events surfaced:
+
+- *\"Josh answered your Mrs. Dalloway question --- got it right.\"*
+- *\"Josh answered your Upledger Institute question --- couldn\'t get
+  it.\"*
+- *\"Greg reacted to your answer.\"*
+
+The Activity tab is where friends see the downstream effect of their
+Daily Five sessions --- who picked up their questions, how they did. It
+closes the social loop without requiring anyone to send anything
+deliberately.
+
+**8.2.10 Thumbs-Up and Thumbs-Down as Quality Signals**
+
+**Thumbs-up** (post-answer only):
+
+- Personal signal that a question was excellent
+- Feeds into question surface priority: heavily thumbed questions
+  surface earlier in friends\' Feeds, all else equal
+- Does NOT propagate the question to new feeds --- propagation is
+  handled by friendship alone
+
+**Thumbs-down** (post-answer only):
+
+- Quality signal that a question was unfair, incorrect, or poorly formed
+- Removes the question from the player\'s own Feed immediately
+- Prevents the question from entering the player\'s own friends\' Feeds
+  going forward
+- The question\'s author can see aggregate thumbs-down signals on
+  questions they wrote (in their archive, \"Written by me\" filter)
+
+**8.2.11 \"Not My Focus\" --- Domain Dismissal**
+
+\"Not my focus\" is a domain-level, permanent dismissal gesture. It
+signals: *I don\'t want questions in this domain, from any friend,
+ever.*
+
+Behavior:
+
+- Available on any unanswered Feed item, pre-answer
+- Applies to the question\'s domain (hyper-specific, per §8.4.6) ---
+  e.g., \"Upledger Institute,\" not \"Alternative Medicine\"
+- All future questions in that domain are filtered from the Feed
+  regardless of source
+- **Reversible:** The player can visit the Knowledge page → Dismissed
+  Domains → re-open any domain
+- Does not affect the Daily Five
+
+**8.2.12 Empty Feed States**
 
 **No friends yet:**
 
-*When friends thumb up questions or send you ones they think you\'d
-love, they\'ll show up here.* \[Invite a friend\]
+*When your friends play, their questions will show up here.* \[Invite a
+friend\]
 
 **Friends but no Feed activity:**
 
-*Quiet today. When your friends play, their Feed will fill up.*
+*Quiet today. Check back when your friends have played.*
 
 **Caught up:**
 
 *You\'re caught up. Check back later.*
+
+**All domains dismissed:**
+
+*You\'ve focused your Feed. You can re-open domains from your Knowledge
+page.*
 
 **8.3 Send-to-Friend**
 
@@ -1043,8 +1154,7 @@ saw them. It is the highest-intent social gesture in the product.
   question creation flow (§8.5)
 
 - At save, the player chooses one or more destinations: Bank (default
-  on), Share to friends\' Feeds (default off), Send to a specific friend
-  (opens picker)
+  on), Send to a specific friend (opens picker)
 
 **In-context:**
 
@@ -1144,7 +1254,7 @@ A demonstrated domain is added to the Knowledge base when the player
 **correctly answers** a question in that domain that came from one of
 these sources:
 
-- The Feed (friend thumbed-up, friend authored+shared)
+- The Feed (friend answered a question in this domain)
 
 - A direct send-to-friend message
 
@@ -1302,16 +1412,13 @@ At save, the player chooses one or more destinations:
   **Bank**          ON                Question is saved to the player\'s
                                       question bank
 
-  **Share to        OFF               Question becomes eligible to appear
-  friends\' Feeds**                   in any friend\'s Feed (per §8.2.3)
-
   **Send to a       OFF (opens picker Question is sent directly to a chosen
   friend**          if toggled on)    friend (pinned in their Feed, per
                                       §8.3)
   -------------------------------------------------------------------------
 
 Multiple destinations can be chosen simultaneously. A question can be
-banked + shared + sent in a single save.
+banked + sent in a single save.
 
 **8.5.3 The Bank**
 
@@ -1319,8 +1426,6 @@ The player\'s bank is a private collection of questions they\'ve
 authored or imported. From the bank, the player can:
 
 - Send any banked question to a friend
-
-- Share any banked question to friends\' Feeds
 
 - Edit (text, answer, creator note)
 
@@ -1616,7 +1721,7 @@ exchanged or co-experienced:
 
 - Questions A wrote that B answered correctly (and vice versa)
 
-- Questions A thumbed up that B also thumbed up
+- Questions both A and B answered correctly in the same domain
 
 - Domains both A and B have demonstrated activity in (per Knowledge
   base)
@@ -1738,8 +1843,11 @@ into the same tier total.
   Friend sent you a       *Greg sent you a question.* \[link\]   ON, opt-out
   question                                                       
 
-  Friend thumbs-upped     *Maya thumbed up your Sondheim         OFF, opt-in
-  your question           question.*                             
+  Friend thought your     *Maya thought your Sondheim question   OFF, opt-in
+  question was excellent  was excellent.*                        
+
+  Friend answered your    *Robyn answered your Mrs. Dalloway     OFF, opt-in
+  question                question.*                             
 
   Friend reaction to your *Greg reacted to your question.*       OFF, opt-in
   question                                                       

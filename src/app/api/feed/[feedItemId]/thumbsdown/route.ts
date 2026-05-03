@@ -1,8 +1,8 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, questionFeedback, questions } from '@/server/db';
+import { db, feedItems, questionFeedback } from '@/server/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,21 +23,24 @@ export async function POST(_request: Request, context: RouteContext) {
 
   if (!item?.questionId) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  // Record quality signal
+  // Record quality signal (thumbs-down = unfair/poorly formed question)
   await db
     .insert(questionFeedback)
     .values({
       userId: session.userId,
       questionId: item.questionId,
-      signal: 'thumbs_up',
+      signal: 'thumbs_down',
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: [questionFeedback.userId, questionFeedback.questionId],
+      set: { signal: 'thumbs_down' },
+    });
 
-  // Increment surface priority score — thumbs-up affects ordering, not propagation
+  // Remove from this user's Feed
   await db
-    .update(questions)
-    .set({ surfacePriorityScore: sql`${questions.surfacePriorityScore} + 1` })
-    .where(eq(questions.id, item.questionId));
+    .update(feedItems)
+    .set({ state: 'dismissed' })
+    .where(and(eq(feedItems.id, feedItemId), eq(feedItems.recipientUserId, session.userId)));
 
   return NextResponse.json({ ok: true });
 }

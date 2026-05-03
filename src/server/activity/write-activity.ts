@@ -11,7 +11,8 @@ export type ActivityItemType =
   | 'received_direct_question'
   | 'reaction_received'
   | 'question_curated'
-  | 'creator_note_received';
+  | 'creator_note_received'
+  | 'friend_answered_your_question';
 
 export async function writeActivity(params: {
   userId: string;

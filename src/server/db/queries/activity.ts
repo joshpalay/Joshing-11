@@ -91,6 +91,7 @@ function isActivityType(value: string): value is ActivityItemType {
     'reaction_received',
     'question_curated',
     'creator_note_received',
+    'friend_answered_your_question',
   ].includes(value);
 }
 

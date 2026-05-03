@@ -1,11 +1,17 @@
-import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
-import { db, feedItems, masteryEvents, users } from '@/server/db';
+import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
 
 export type FeedItem = typeof feedItems.$inferSelect;
 export type NewFeedItem = typeof feedItems.$inferInsert;
 export type FeedItemState = 'active' | 'answered' | 'skipped' | 'dismissed' | 'rolled_off' | 'played';
+
+export type FriendResult = { userId: string; displayName: string; result: 'correct' | 'incorrect' | null };
+
 export type CollapsedFeedItem = FeedItem & {
+  // friend_answered collapse: all friends who answered this question
+  friendResults?: FriendResult[];
+  // legacy thumbs_upped collapse
   thumbsUpCount?: number;
   additionalEndorsers?: Array<{ userId: string; displayName: string }>;
 };
@@ -13,30 +19,91 @@ export type CollapsedFeedItem = FeedItem & {
 const VISIBLE_FEED_STATES = ['active', 'skipped'] as const;
 const BLOCKING_FEED_STATES = ['active', 'skipped', 'dismissed'] as const;
 
-function thumbsupCollapseKey(item: FeedItem): string | null {
-  if (item.sourceType !== 'thumbs_upped' || !item.questionId) return null;
-  return item.questionId;
+async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<CollapsedFeedItem[]> {
+  const friendAnsweredByQuestion = new Map<string, FeedItem[]>();
+
+  for (const item of items) {
+    if (item.sourceType === 'friend_answered' && item.questionId) {
+      const group = friendAnsweredByQuestion.get(item.questionId) ?? [];
+      group.push(item);
+      friendAnsweredByQuestion.set(item.questionId, group);
+    }
+  }
+
+  // Collect all source user IDs we need display names for
+  const sourceUserIds = new Set<string>();
+  friendAnsweredByQuestion.forEach((group) => {
+    if (group.length > 1) group.forEach((item) => sourceUserIds.add(item.sourceUserId));
+  });
+
+  const nameById = new Map<string, string>();
+  if (sourceUserIds.size > 0) {
+    const userRows = await db
+      .select({ id: users.id, displayName: users.displayName })
+      .from(users)
+      .where(inArray(users.id, [...sourceUserIds]));
+    for (const row of userRows) {
+      nameById.set(row.id, row.displayName?.trim() || 'A friend');
+    }
+  }
+
+  // Build the hidden IDs set and the representative items
+  const hiddenIds = new Set<string>();
+  const collapsedById = new Map<string, CollapsedFeedItem>();
+
+  friendAnsweredByQuestion.forEach((group, _questionId) => {
+    if (group.length <= 1) return;
+    const sorted = [...group].sort((a, b) => b.sourceEventAt.getTime() - a.sourceEventAt.getTime());
+    const [mostRecent, ...older] = sorted;
+    older.forEach((item) => hiddenIds.add(item.id));
+
+    const friendResults: FriendResult[] = sorted.map((item) => ({
+      userId: item.sourceUserId,
+      displayName: nameById.get(item.sourceUserId) ?? 'A friend',
+      result: (item.sourceResult as 'correct' | 'incorrect' | null) ?? null,
+    }));
+
+    collapsedById.set(mostRecent.id, { ...mostRecent, friendResults });
+  });
+
+  return items
+    .filter((item) => !hiddenIds.has(item.id))
+    .map((item) => {
+      if (collapsedById.has(item.id)) return collapsedById.get(item.id)!;
+      // Single friend_answered item — wrap in friendResults for consistent display
+      if (item.sourceType === 'friend_answered') {
+        return {
+          ...item,
+          friendResults: [{
+            userId: item.sourceUserId,
+            displayName: nameById.get(item.sourceUserId) ?? 'A friend',
+            result: (item.sourceResult as 'correct' | 'incorrect' | null) ?? null,
+          }],
+        } satisfies CollapsedFeedItem;
+      }
+      return item;
+    });
 }
 
-async function collapseThumbsUpItems(items: FeedItem[]): Promise<CollapsedFeedItem[]> {
+// Legacy thumbs_upped collapsing (for items already in the DB)
+async function collapseThumbsUpItems(items: FeedItem[]): Promise<FeedItem[]> {
   const groups = new Map<string, FeedItem[]>();
   items.forEach((item) => {
-    const key = thumbsupCollapseKey(item);
-    if (!key) return;
+    if (item.sourceType !== 'thumbs_upped' || !item.questionId) return;
+    const key = item.questionId;
     groups.set(key, [...(groups.get(key) ?? []), item]);
   });
 
-  const collapsedById = new Map<string, CollapsedFeedItem>();
+  if (groups.size === 0) return items;
+
   const hiddenIds = new Set<string>();
+  const collapsedById = new Map<string, CollapsedFeedItem>();
   const additionalUserIds = new Set<string>();
 
   groups.forEach((group) => {
     if (group.length <= 1) return;
     const [mostRecent, ...older] = [...group].sort((a, b) => b.sourceEventAt.getTime() - a.sourceEventAt.getTime());
-    older.forEach((item) => {
-      hiddenIds.add(item.id);
-      additionalUserIds.add(item.sourceUserId);
-    });
+    older.forEach((item) => { hiddenIds.add(item.id); additionalUserIds.add(item.sourceUserId); });
     collapsedById.set(mostRecent.id, {
       ...mostRecent,
       thumbsUpCount: group.length,
@@ -49,21 +116,79 @@ async function collapseThumbsUpItems(items: FeedItem[]): Promise<CollapsedFeedIt
       .select({ id: users.id, displayName: users.displayName })
       .from(users)
       .where(inArray(users.id, [...additionalUserIds]));
-    const nameById = new Map(userRows.map((user) => [user.id, user.displayName?.trim() || 'A friend']));
+    const nameById = new Map(userRows.map((u) => [u.id, u.displayName?.trim() || 'A friend']));
     collapsedById.forEach((item) => {
-      item.additionalEndorsers = item.additionalEndorsers?.map((endorser) => ({
-        ...endorser,
-        displayName: nameById.get(endorser.userId) ?? 'A friend',
+      item.additionalEndorsers = item.additionalEndorsers?.map((e) => ({
+        ...e,
+        displayName: nameById.get(e.userId) ?? 'A friend',
       }));
     });
   }
 
-  return items
-    .filter((item) => !hiddenIds.has(item.id))
-    .map((item) => collapsedById.get(item.id) ?? item);
+  return items.filter((item) => !hiddenIds.has(item.id)).map((item) => collapsedById.get(item.id) ?? item);
+}
+
+export async function getDismissedDomains(userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ canonicalSubcategory: feedDismissedDomains.canonicalSubcategory })
+    .from(feedDismissedDomains)
+    .where(and(
+      eq(feedDismissedDomains.userId, userId),
+      isNull(feedDismissedDomains.reinstatedAt),
+    ));
+  return rows.map((r) => r.canonicalSubcategory);
+}
+
+export async function dismissDomain(userId: string, canonicalSubcategory: string): Promise<void> {
+  // Check if already dismissed
+  const [existing] = await db
+    .select({ id: feedDismissedDomains.id })
+    .from(feedDismissedDomains)
+    .where(and(
+      eq(feedDismissedDomains.userId, userId),
+      eq(feedDismissedDomains.canonicalSubcategory, canonicalSubcategory),
+      isNull(feedDismissedDomains.reinstatedAt),
+    ))
+    .limit(1);
+
+  if (existing) return;
+
+  await db.insert(feedDismissedDomains).values({ userId, canonicalSubcategory });
+
+  // Soft-delete all active feed items in this domain for this user
+  const domainItems = await db
+    .select({ feedItemId: feedItems.id })
+    .from(feedItems)
+    .innerJoin(questions, eq(feedItems.questionId, questions.id))
+    .where(and(
+      eq(feedItems.recipientUserId, userId),
+      inArray(feedItems.state, VISIBLE_FEED_STATES),
+      eq(questions.canonicalSubcategory, canonicalSubcategory),
+    ));
+
+  if (domainItems.length > 0) {
+    await db
+      .update(feedItems)
+      .set({ state: 'dismissed' })
+      .where(inArray(feedItems.id, domainItems.map((r) => r.feedItemId)));
+  }
+}
+
+export async function reinstateDomain(userId: string, canonicalSubcategory: string): Promise<void> {
+  await db
+    .update(feedDismissedDomains)
+    .set({ reinstatedAt: new Date() })
+    .where(and(
+      eq(feedDismissedDomains.userId, userId),
+      eq(feedDismissedDomains.canonicalSubcategory, canonicalSubcategory),
+      isNull(feedDismissedDomains.reinstatedAt),
+    ));
 }
 
 export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[]> {
+  const dismissedDomains = await getDismissedDomains(userId);
+  const dismissedSet = new Set(dismissedDomains);
+
   const [pinned, nonPinned] = await Promise.all([
     db
       .select()
@@ -83,10 +208,41 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
         inArray(feedItems.state, VISIBLE_FEED_STATES),
       ))
       .orderBy(desc(feedItems.sourceEventAt))
-      .limit(25),
+      .limit(50), // fetch extra to account for domain filtering
   ]);
 
-  return collapseThumbsUpItems([...pinned, ...nonPinned]);
+  if (dismissedSet.size > 0) {
+    // Fetch question domains to filter dismissed
+    const questionIds = [...new Set(
+      [...pinned, ...nonPinned]
+        .map((item) => item.questionId)
+        .filter((id): id is string => Boolean(id)),
+    )];
+
+    const domainRows = questionIds.length > 0
+      ? await db
+          .select({ id: questions.id, canonicalSubcategory: questions.canonicalSubcategory })
+          .from(questions)
+          .where(inArray(questions.id, questionIds))
+      : [];
+
+    const domainByQuestionId = new Map(domainRows.map((r) => [r.id, r.canonicalSubcategory]));
+
+    const filterItem = (item: FeedItem) => {
+      if (!item.questionId) return true;
+      const domain = domainByQuestionId.get(item.questionId);
+      return !domain || !dismissedSet.has(domain);
+    };
+
+    const filteredNonPinned = nonPinned.filter(filterItem).slice(0, 25);
+    const all = [...pinned.filter(filterItem), ...filteredNonPinned];
+    const afterThumbsUp = await collapseThumbsUpItems(all);
+    return collapseFriendAnsweredItems(afterThumbsUp);
+  }
+
+  const all = [...pinned, ...nonPinned.slice(0, 25)];
+  const afterThumbsUp = await collapseThumbsUpItems(all);
+  return collapseFriendAnsweredItems(afterThumbsUp);
 }
 
 export async function createFeedItem(data: NewFeedItem): Promise<FeedItem> {

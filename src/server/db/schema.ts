@@ -106,6 +106,7 @@ export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'joshing_game_received',
   'joshing_game_progress',
   'joshing_game_complete',
+  'friend_answered_question',
 ]);
 export const answerStateEnum = pgEnum('AnswerState', [
   'first_correct',
@@ -235,6 +236,7 @@ export const questions = pgTable(
     sharedToFriendsFeed: boolean('sharedToFriendsFeed').notNull().default(false),
     askedCount: integer('asked_count').notNull().default(0),
     correctCount: integer('correct_count').notNull().default(0),
+    surfacePriorityScore: doublePrecision('surface_priority_score').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -640,6 +642,7 @@ export const feedItems = pgTable(
     joshingGameId: text('joshingGameId').references(() => joshingGames.id, { onDelete: 'set null' }),
     sourceType: text('sourceType').notNull(),
     sourceUserId: text('sourceUserId').notNull().references(() => users.id),
+    sourceResult: text('sourceResult'),
     sourceEventAt: timestamp('sourceEventAt', { withTimezone: true }).notNull().defaultNow(),
     personalMessage: text('personalMessage'),
     submittedAnswer: text('submittedAnswer'),
@@ -738,6 +741,21 @@ export const activityItems = pgTable(
   (table) => [
     index('ActivityItem_userId_read_idx').on(table.userId, table.read, table.createdAt.desc()),
     index('ActivityItem_userId_createdAt_idx').on(table.userId, table.createdAt.desc()),
+  ],
+);
+
+export const feedDismissedDomains = pgTable(
+  'FeedDismissedDomain',
+  {
+    id: id(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    canonicalSubcategory: text('canonicalSubcategory').notNull(),
+    dismissedAt: timestamp('dismissedAt', { withTimezone: true }).notNull().defaultNow(),
+    reinstatedAt: timestamp('reinstatedAt', { withTimezone: true }),
+  },
+  (table) => [
+    index('FeedDismissedDomain_userId_idx').on(table.userId),
+    index('FeedDismissedDomain_userId_sub_idx').on(table.userId, table.canonicalSubcategory),
   ],
 );
 

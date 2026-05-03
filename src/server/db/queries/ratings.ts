@@ -1,63 +1,8 @@
-import { and, count, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 
-import { db, feedItems, joshingGameResponses, masteryEvents, questionRatings, users } from '@/server/db';
-import { rollOffOldItems } from '@/server/db/queries/feed';
+import { db, questionRatings, questions } from '@/server/db';
 
 export type QuestionRatingValue = 'up' | 'down';
-
-async function createThumbsUpFeedItems(userId: string, questionId: string) {
-  const [candidateUsers, correctResponses, correctMasteryEvents, existingItems] = await Promise.all([
-    db
-      .select({ id: users.id })
-      .from(users)
-      .where(ne(users.id, userId)),
-    db
-      .select({ userId: joshingGameResponses.userId })
-      .from(joshingGameResponses)
-      .where(and(
-        eq(joshingGameResponses.questionId, questionId),
-        eq(joshingGameResponses.isCorrect, true),
-      )),
-    db
-      .select({ userId: masteryEvents.userId })
-      .from(masteryEvents)
-      .where(and(
-        eq(masteryEvents.questionId, questionId),
-        eq(masteryEvents.answeredByUserId, masteryEvents.userId),
-        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-        sql`${masteryEvents.awardedPoints} > 0`,
-      )),
-    db
-      .select({ recipientUserId: feedItems.recipientUserId })
-      .from(feedItems)
-      .where(eq(feedItems.questionId, questionId)),
-  ]);
-
-  const correctUserIds = new Set([
-    ...correctResponses.map((response) => response.userId),
-    ...correctMasteryEvents.map((event) => event.userId),
-  ]);
-  const existingRecipientIds = new Set(existingItems.map((item) => item.recipientUserId));
-  const recipientUserIds = candidateUsers
-    .map((user) => user.id)
-    .filter((recipientUserId) => !correctUserIds.has(recipientUserId) && !existingRecipientIds.has(recipientUserId));
-
-  if (recipientUserIds.length === 0) return;
-
-  await db.insert(feedItems).values(
-    recipientUserIds.map((recipientUserId) => ({
-      recipientUserId,
-      questionId,
-      sourceType: 'thumbs_upped',
-      sourceUserId: userId,
-      sourceEventAt: new Date(),
-      state: 'active',
-      isPinned: false,
-    })),
-  );
-
-  await Promise.all(recipientUserIds.map((recipientUserId) => rollOffOldItems(recipientUserId)));
-}
 
 export async function setRating(
   userId: string,
@@ -83,7 +28,11 @@ export async function setRating(
     });
 
   if (rating === 'up') {
-    await createThumbsUpFeedItems(userId, questionId);
+    // Thumbs-up is a quality signal — increment surface priority score
+    await db
+      .update(questions)
+      .set({ surfacePriorityScore: sql`${questions.surfacePriorityScore} + 1` })
+      .where(eq(questions.id, questionId));
   }
 }
 
