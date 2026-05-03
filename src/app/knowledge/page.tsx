@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Combine, Plus, Repeat2, X } from 'lucide-react';
 
-import { DomainCircle } from '@/components/knowledge/DomainCircle';
-import { DomainList } from '@/components/knowledge/DomainList';
-import { ProgressionLandscape, type ProgressionView } from '@/components/knowledge/ProgressionLandscape';
-import { SpiderGraph } from '@/components/knowledge/SpiderGraph';
-import { TierProgressBar } from '@/components/progression/TierProgressBar';
-import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display';
+import { DomainCard } from '@/components/knowledge/DomainCard';
+import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
+import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
+import { ProgressionLandscape, type ProgressionDomain } from '@/components/knowledge/ProgressionLandscape';
+import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
+import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import type { KnowledgeDomain } from '@/server/profile/knowledge-types';
 import type { MasteryTier } from '@/types/db';
 
@@ -30,39 +31,26 @@ type DomainMastery = {
   isDemonstrated: boolean;
 };
 
-type RecentActivity = {
-  domain: string;
-  displayName: string;
-  points: number;
-  source: string;
-  createdAt: string;
-};
-
-type MasteryOverview = {
-  totalPoints: number;
-  currentTier: string;
-  tierProgress: number;
-  nextTier: string | null;
-  pointsToNextTier: number | null;
-  domains: DomainMastery[];
-  recentActivity: RecentActivity[];
-};
-
-type StreakData = {
-  currentStreak: number;
-  longestStreak: number;
-  lastActivityDate: string | null;
-};
-
 type KnowledgeResponse = {
-  mastery: MasteryOverview;
-  streak: StreakData;
-  portraitData: unknown;
-  progressionLandscape: ProgressionView[];
+  mastery: {
+    totalPoints: number;
+    domains: DomainMastery[];
+  };
   pageData: {
     allDomains: DomainMastery[];
     declaredInterests: string[];
   };
+};
+
+type InterestModalState = {
+  slotIndex: number;
+  currentDomain: string | null;
+};
+
+type ProposedInterest = {
+  label: string;
+  description?: string | null;
+  broadCategory?: string | null;
 };
 
 type TidyResult = {
@@ -72,106 +60,71 @@ type TidyResult = {
   details: Array<{ sources: string[]; target: string; rationale: string }>;
 };
 
-type SortMode = 'points' | 'tier' | 'lastActive' | 'alphabetical';
-type KnowledgeViewMode = 'spider' | 'list' | 'progression';
-type InterestModalState = {
-  slotIndex: number;
-  currentDomain: string | null;
-};
-type ProposedInterest = {
-  label: string;
-  description?: string | null;
-  broadCategory?: string | null;
-};
+type KnowledgeView = 'classic' | 'progression';
 
-const TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Curious',
-  familiar: 'Explorer',
-  solid: 'Scholar',
-  mastery: 'Sage',
-};
+const KNOWLEDGE_VIEW_KEY = 'joshing_knowledge_view';
 
-const SORT_STORAGE_KEY = 'knowledge_sort_mode';
-const VIEW_STORAGE_KEY = 'knowledge_view_mode';
-const SORT_OPTIONS: Array<{ value: SortMode; label: string }> = [
-  { value: 'points', label: 'By Points' },
-  { value: 'tier', label: 'By Tier' },
-  { value: 'lastActive', label: 'By Last Active' },
-  { value: 'alphabetical', label: 'Alphabetical' },
-];
-
-const SORT_MODE_SET = new Set<SortMode>(SORT_OPTIONS.map((option) => option.value));
-const TIER_RANK: Record<MasteryTier, number> = {
-  establishing: 0,
-  familiar: 1,
-  solid: 2,
-  mastery: 3,
-};
-
-const VIEW_OPTIONS: Array<{ value: KnowledgeViewMode; label: string }> = [
-  { value: 'spider', label: 'Spider' },
-  { value: 'list', label: 'List' },
-  { value: 'progression', label: 'Progression' },
-];
-
-function isMasteryTier(value: string): value is MasteryTier {
-  return value === 'establishing' || value === 'familiar' || value === 'solid' || value === 'mastery';
+function readSavedView(): KnowledgeView {
+  if (typeof window === 'undefined') return 'progression';
+  const raw = localStorage.getItem(KNOWLEDGE_VIEW_KEY);
+  if (raw === 'classic' || raw === 'progression') return raw;
+  return 'progression';
 }
 
 function asTier(value: string): MasteryTier {
-  return isMasteryTier(value) ? value : 'establishing';
+  if (value === 'familiar' || value === 'solid' || value === 'mastery') return value;
+  return 'establishing';
 }
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(Math.round(value));
 }
 
-function daysAgo(value: string | null): string {
-  if (!value) return 'No activity yet';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'No activity yet';
-  const now = new Date();
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const diff = Math.max(0, Math.round((startToday - startDate) / 86_400_000));
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Yesterday';
-  return `${diff} days ago`;
-}
-
-function relativeTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return daysAgo(value);
-}
-
-function sourceLabel(source: string): string {
-  if (source === 'joshing_game') return 'Game';
-  if (source === 'daily') return 'Daily';
-  if (source === 'author_credit') return 'Creator';
-  return source.replace(/_/g, ' ');
-}
-
-function readSavedSortMode(): SortMode {
-  if (typeof window === 'undefined') return 'points';
-  const saved = localStorage.getItem(SORT_STORAGE_KEY);
-  return SORT_MODE_SET.has(saved as SortMode) ? (saved as SortMode) : 'points';
-}
-
-function readSavedViewMode(): KnowledgeViewMode {
-  if (typeof window === 'undefined') return 'list';
-  const saved = localStorage.getItem(VIEW_STORAGE_KEY);
-  return saved === 'spider' || saved === 'list' || saved === 'progression' ? saved : 'list';
-}
-
 function domainKey(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function displayMind(domains: DomainMastery[], declaredInterests: string[]): string {
+  const top = domains.filter((domain) => domain.points > 0).slice(0, 3).map((domain) => domain.displayName);
+  if (top.length >= 2) return `Your mind is building around ${top.slice(0, -1).join(', ')} and ${top.at(-1)}.`;
+  if (top.length === 1) return `Your mind is building around ${top[0]}.`;
+  if (declaredInterests.length > 0) return `Your mind is ready to explore ${declaredInterests.slice(0, 3).join(', ')}.`;
+  return 'Your mind will take shape as you play and write questions.';
+}
+
+function toKnowledgeDomain(domain: DomainMastery): KnowledgeDomain {
+  return {
+    name: domain.displayName,
+    tier: asTier(domain.tier),
+    progressWithinTier: domain.tierProgress / 100,
+    masteryPoints: domain.points,
+    declaredQuestionCount: domain.isDeclaredInterest ? Math.max(1, domain.questionsAnswered) : domain.questionsAnswered,
+    provenCorrectCount: domain.questionsCorrect,
+    isVisibleOnProfile: true,
+    broadCategory: domain.broadCategory,
+  };
+}
+
+function toPortraitEntry(domain: DomainMastery): PortraitEntry {
+  return {
+    canonicalSubcategory: domain.displayName,
+    broadCategory: domain.broadCategory ?? 'Other',
+    totalMasteryPoints: Math.max(domain.points, domain.isDeclaredInterest ? 1 : 0),
+    tier: asTier(domain.tier),
+    authoredAnsweredCount: domain.questionsAnswered,
+  };
+}
+
+function toProgressionDomain(domain: DomainMastery): ProgressionDomain {
+  return {
+    canonicalSubcategory: domain.displayName,
+    canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
+    broadCategory: domain.broadCategory,
+    currentTier: asTier(domain.tier),
+    correctAnswerCount: domain.questionsCorrect,
+    authoredCount: domain.questionsAnswered,
+    iconKey: domain.iconKey,
+  };
 }
 
 function emptyDomain(domain: string): DomainMastery {
@@ -186,7 +139,7 @@ function emptyDomain(domain: string): DomainMastery {
     correctRate: 0,
     lastActivityAt: null,
     broadCategory: null,
-    iconKey: domain.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'other',
+    iconKey: toCanonicalDomainSlug(domain),
     isDeclared: true,
     isDeclaredInterest: true,
     isDemonstrated: false,
@@ -195,29 +148,27 @@ function emptyDomain(domain: string): DomainMastery {
 
 function LoadingSkeleton() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-5xl flex-col px-4 py-6 pb-24">
-      <div className="mb-8 h-40 animate-pulse rounded-lg border bg-muted" />
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="h-48 animate-pulse rounded-lg border bg-muted" />
-        ))}
-      </div>
-      <div className="space-y-3">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-14 animate-pulse rounded-lg border bg-muted" />
-        ))}
-      </div>
+    <main style={mainStyle}>
+      <section style={sectionStyle}>
+        <p style={emptyStyle}>Loading...</p>
+      </section>
     </main>
   );
 }
 
 export default function KnowledgePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const highlightedDomainSlug = searchParams.get('domain');
+  const tierCrossed = searchParams.get('tier_crossed');
+
   const [data, setData] = useState<KnowledgeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortMode, setSortMode] = useState<SortMode>('points');
-  const [viewMode, setViewMode] = useState<KnowledgeViewMode>('list');
+  const [view, setView] = useState<KnowledgeView>('progression');
+  const [activeSlug, setActiveSlug] = useState<string | null>(highlightedDomainSlug);
+  const [isFading, setIsFading] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [interestModal, setInterestModal] = useState<InterestModalState | null>(null);
   const [selectedInterest, setSelectedInterest] = useState<ProposedInterest | null>(null);
   const [customInterest, setCustomInterest] = useState('');
@@ -228,152 +179,90 @@ export default function KnowledgePage() {
   const [tidying, setTidying] = useState(false);
   const [tidyNotice, setTidyNotice] = useState<string | null>(null);
 
+  const loadKnowledge = async () => {
+    const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
+    const body = await response.json().catch(() => null) as KnowledgeResponse | { message?: string } | null;
+    if (!response.ok || !body || !('pageData' in body)) {
+      throw new Error((body as { message?: string } | null)?.message ?? 'Could not load your Knowledge Map.');
+    }
+    setData(body);
+  };
+
   useEffect(() => {
     let active = true;
-
-    async function loadKnowledge() {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
-        const body = await response.json().catch(() => null) as KnowledgeResponse | { message?: string } | null;
-        if (!response.ok || !body || !('mastery' in body)) {
-          throw new Error((body as { message?: string } | null)?.message ?? 'Could not load your Knowledge Map.');
-        }
-        if (active) setData(body);
-      } catch (caught) {
+    setView(readSavedView());
+    setLoading(true);
+    loadKnowledge()
+      .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : 'Could not load your Knowledge Map.');
-      } finally {
+      })
+      .finally(() => {
         if (active) setLoading(false);
-      }
-    }
-
-    void loadKnowledge();
+      });
     return () => {
       active = false;
     };
   }, []);
 
   useEffect(() => {
-    setSortMode(readSavedSortMode());
-    setViewMode(readSavedViewMode());
-  }, []);
+    if (!tierCrossed) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('tier_crossed');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [tierCrossed]);
 
-  const onSortModeChange = (nextMode: SortMode) => {
-    setSortMode(nextMode);
-    localStorage.setItem(SORT_STORAGE_KEY, nextMode);
-  };
+  useEffect(() => {
+    if (!highlightedDomainSlug) return;
+    setActiveSlug(highlightedDomainSlug);
+    const timer = window.setTimeout(() => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('domain');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+      setActiveSlug(null);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [highlightedDomainSlug]);
 
-  const onViewModeChange = (nextMode: KnowledgeViewMode) => {
-    setViewMode(nextMode);
-    localStorage.setItem(VIEW_STORAGE_KEY, nextMode);
-  };
-
-  const reloadKnowledge = async () => {
-    const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
-    const body = await response.json().catch(() => null) as KnowledgeResponse | { message?: string } | null;
-    if (!response.ok || !body || !('mastery' in body)) {
-      throw new Error((body as { message?: string } | null)?.message ?? 'Could not refresh your Knowledge Map.');
-    }
-    setData(body);
-  };
-
-  const highlights = useMemo(() => {
-    if (!data) return [];
-    const strongest = data.mastery.domains
-      .filter((domain) => domain.questionsAnswered >= 5)
-      .sort((a, b) => b.correctRate - a.correctRate || b.questionsAnswered - a.questionsAnswered)[0];
-    const mostExplored = data.mastery.domains
-      .filter((domain) => domain.questionsAnswered > 0)
-      .sort((a, b) => b.questionsAnswered - a.questionsAnswered)[0];
-
-    return [
-      strongest
-        ? {
-          key: 'strongest',
-          title: 'Strongest domain',
-          body: `${strongest.displayName} - ${strongest.correctRate}% correct`,
-          domain: strongest,
-        }
-        : null,
-      mostExplored
-        ? {
-          key: 'explored',
-          title: 'Most explored',
-          body: `${mostExplored.displayName} - ${formatNumber(mostExplored.questionsAnswered)} questions`,
-          domain: mostExplored,
-        }
-        : null,
-      data.streak.currentStreak >= 3
-        ? {
-          key: 'streak',
-          title: 'On a streak',
-          body: `🔥 ${formatNumber(data.streak.currentStreak)} days in a row`,
-          domain: null,
-        }
-        : null,
-    ].filter((item): item is {
-      key: string;
-      title: string;
-      body: string;
-      domain: DomainMastery | null;
-    } => Boolean(item));
-  }, [data]);
-
-  const sortedDomains = useMemo(() => {
-    if (!data) return [];
-    return [...data.pageData.allDomains].sort((a, b) => {
-      if (sortMode === 'tier') {
-        const tierDiff = TIER_RANK[asTier(b.tier)] - TIER_RANK[asTier(a.tier)];
-        if (tierDiff !== 0) return tierDiff;
-        return b.points - a.points || a.displayName.localeCompare(b.displayName);
-      }
-      if (sortMode === 'lastActive') {
-        const aTime = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
-        const bTime = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
-        return bTime - aTime || b.points - a.points || a.displayName.localeCompare(b.displayName);
-      }
-      if (sortMode === 'alphabetical') {
-        return a.displayName.localeCompare(b.displayName) || b.points - a.points;
-      }
-      return b.points - a.points || a.displayName.localeCompare(b.displayName);
-    });
-  }, [data, sortMode]);
-
-  const spiderDomains = useMemo<KnowledgeDomain[]>(() => {
-    if (!data) return [];
-    return sortedDomains.map((domain) => ({
-      name: domain.displayName,
-      tier: asTier(domain.tier),
-      progressWithinTier: domain.tierProgress / 100,
-      masteryPoints: domain.points,
-      declaredQuestionCount: domain.isDeclaredInterest ? 1 : 0,
-      provenCorrectCount: domain.questionsCorrect,
-      isVisibleOnProfile: true,
-      broadCategory: domain.broadCategory,
-    }));
-  }, [data, sortedDomains]);
-
-  const declaredSlots = useMemo(() => {
-    if (!data) return [];
-    const byKey = new Map(data.pageData.allDomains.map((domain) => [domainKey(domain.domain), domain]));
-    const filled = data.pageData.declaredInterests.slice(0, 5).map((domain) => {
-      return byKey.get(domainKey(domain)) ?? emptyDomain(domain);
-    });
-    return Array.from({ length: 5 }, (_, index) => filled[index] ?? null);
-  }, [data]);
-
-  const declaredKeys = useMemo(
-    () => new Set((data?.pageData.declaredInterests ?? []).map(domainKey)),
+  const sortedDomains = useMemo(
+    () => [...(data?.pageData.allDomains ?? [])].sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName)),
     [data],
   );
 
+  const activeDomains = useMemo(() => sortedDomains.map(toKnowledgeDomain), [sortedDomains]);
+  const portraitEntries = useMemo(() => sortedDomains.map(toPortraitEntry), [sortedDomains]);
+  const progressionDomains = useMemo(() => sortedDomains.map(toProgressionDomain), [sortedDomains]);
+  const maxCorrectAnswerCount = useMemo(
+    () => Math.max(...progressionDomains.map((domain) => domain.correctAnswerCount), 1),
+    [progressionDomains],
+  );
+  const declaredSlots = useMemo(() => {
+    if (!data) return [];
+    const byKey = new Map(data.pageData.allDomains.map((domain) => [domainKey(domain.domain), domain]));
+    const filled = data.pageData.declaredInterests.slice(0, 5).map((domain) => byKey.get(domainKey(domain)) ?? emptyDomain(domain));
+    return Array.from({ length: 5 }, (_, index) => filled[index] ?? null);
+  }, [data]);
+  const declaredKeys = useMemo(() => new Set((data?.pageData.declaredInterests ?? []).map(domainKey)), [data]);
   const demonstratedChoices = useMemo(() => {
     if (!data) return [];
     return data.pageData.allDomains
       .filter((domain) => (domain.isDemonstrated || domain.points > 0) && !declaredKeys.has(domainKey(domain.domain)))
       .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
   }, [data, declaredKeys]);
+
+  const topCardDomains = useMemo(() => sortedDomains.filter((domain) => domain.points > 0).slice(0, 8), [sortedDomains]);
+  const yourMind = data ? displayMind(sortedDomains, data.pageData.declaredInterests) : '';
+  const displayName = 'You';
+  const hasAnything = sortedDomains.length > 0;
+
+  const onToggleView = (nextView: KnowledgeView) => {
+    if (nextView === view) return;
+    setIsFading(true);
+    window.setTimeout(() => {
+      setView(nextView);
+      localStorage.setItem(KNOWLEDGE_VIEW_KEY, nextView);
+      setIsFading(false);
+    }, 150);
+  };
 
   const openInterestModal = (slotIndex: number, currentDomain: string | null) => {
     setInterestModal({ slotIndex, currentDomain });
@@ -415,10 +304,9 @@ export default function KnowledgePage() {
   };
 
   const confirmInterestChange = async () => {
-    if (!data || !interestModal || !selectedInterest?.label) return;
+    if (!interestModal || !selectedInterest?.label) return;
     setSavingInterests(true);
     setInterestError(null);
-
     const nextInterests = (declaredSlots
       .map((slot, index) => {
         if (index === interestModal.slotIndex) {
@@ -428,12 +316,7 @@ export default function KnowledgePage() {
             broadCategory: selectedInterest.broadCategory,
           };
         }
-        return slot
-          ? {
-            label: slot.domain,
-            broadCategory: slot.broadCategory,
-          }
-          : null;
+        return slot ? { label: slot.domain, broadCategory: slot.broadCategory } : null;
       }) as Array<ProposedInterest | null>)
       .filter((interest): interest is ProposedInterest => Boolean(interest?.label.trim()))
       .slice(0, 5);
@@ -447,10 +330,8 @@ export default function KnowledgePage() {
       });
       const body = await response.json().catch(() => null) as { message?: string } | null;
       if (!response.ok) throw new Error(body?.message ?? 'Could not save your interests.');
-      await reloadKnowledge();
-      setInterestModal(null);
-      setSelectedInterest(null);
-      setCustomInterest('');
+      await loadKnowledge();
+      closeInterestModal();
     } catch (caught) {
       setInterestError(caught instanceof Error ? caught.message : 'Could not save your interests.');
     } finally {
@@ -461,15 +342,12 @@ export default function KnowledgePage() {
   const confirmTidy = async () => {
     setTidying(true);
     try {
-      const response = await fetch('/api/knowledge/tidy', {
-        method: 'POST',
-        credentials: 'include',
-      });
+      const response = await fetch('/api/knowledge/tidy', { method: 'POST', credentials: 'include' });
       const body = await response.json().catch(() => null) as TidyResult | { message?: string } | null;
       if (!response.ok || !body || !('mergesApplied' in body)) {
         throw new Error((body as { message?: string } | null)?.message ?? 'Could not tidy your map.');
       }
-      await reloadKnowledge();
+      await loadKnowledge();
       setTidyConfirmOpen(false);
       setTidyNotice(body.mergesApplied > 0 ? `${body.mergesApplied} domains combined` : 'Nothing to combine');
       window.setTimeout(() => setTidyNotice(null), 3600);
@@ -485,202 +363,132 @@ export default function KnowledgePage() {
 
   if (error || !data) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-2xl flex-col items-center justify-center px-4 py-10 text-center">
-        <p className="text-sm uppercase tracking-[0.1em] text-muted-foreground">Knowledge</p>
-        <h1 className="mt-2 font-serif text-3xl font-semibold">Could not load your map</h1>
-        <p className="mt-3 text-sm text-muted-foreground">{error ?? 'Something went sideways.'}</p>
+      <main style={mainStyle}>
+        <section style={sectionStyle}>
+          <p style={eyebrowStyle}>Knowledge</p>
+          <h1 style={sentenceStyle}>Could not load your map</h1>
+          <p style={emptyStyle}>{error ?? 'Something went sideways.'}</p>
+        </section>
       </main>
     );
   }
 
-  const overallDisplay = getMasteryTierDisplay(data.mastery.totalPoints);
-  const overallTier = overallDisplay.tier;
-  const atMaxTier = !data.mastery.nextTier;
-
   return (
-    <main className="mx-auto flex min-h-dvh max-w-5xl flex-col px-4 py-6 pb-24">
-      <section className="mb-8 rounded-lg border bg-card p-5 text-card-foreground">
-        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Knowledge</p>
-        <h1 className="mt-2 font-serif text-5xl font-semibold leading-tight">{TIER_LABEL[overallTier]}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{formatNumber(data.mastery.totalPoints)} total points</p>
-        {data.streak.currentStreak > 0 ? (
-          <p className="mt-4 text-sm font-medium">🔥 {formatNumber(data.streak.currentStreak)} day streak</p>
-        ) : null}
-        {atMaxTier ? (
-          <p className="mt-5 text-sm text-muted-foreground">You've reached the top tier.</p>
-        ) : (
-          <div className="mt-5">
-            <TierProgressBar
-              tier={overallTier}
-              progressWithinTier={data.mastery.tierProgress / 100}
-              ariaLabelPrefix="Overall knowledge progression"
-            />
-            {data.mastery.pointsToNextTier !== null ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {formatNumber(data.mastery.pointsToNextTier)} points to the next tier
-              </p>
-            ) : null}
-          </div>
-        )}
+    <main style={mainStyle}>
+      {tierCrossed && highlightedDomainSlug && (
+        <section style={tierCrossedBannerStyle}>
+          You reached {tierCrossed} in this domain this session.
+        </section>
+      )}
+
+      <section style={headerSectionStyle} aria-label="Your Mind">
+        <p style={eyebrowStyle}>Your Mind</p>
+        <h1 style={sentenceStyle}>{yourMind}</h1>
+        <p style={{ margin: '10px 0 0', fontSize: '0.82rem' }}>
+          <Link href="/daily/setup" className="text-[var(--text-muted)] underline underline-offset-2">
+            Personal Daily
+          </Link>
+        </p>
       </section>
 
-      <section className="mb-8">
-        <h2 className="font-serif text-2xl font-semibold">Your Knowledge Map</h2>
-        {sortedDomains.length === 0 ? (
-          <div className="mt-4 rounded-lg border bg-card p-5 text-sm text-muted-foreground">
-            <p>Your map will fill in as you answer questions.</p>
-            <button
-              type="button"
-              className="mt-4 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
-              onClick={() => router.push('/daily/setup')}
-            >
-              Play today's round
-            </button>
+      {topCardDomains.length > 0 && (
+        <section style={sectionStyle} aria-label="Knowledge card">
+          <KnowledgeCard
+            playerDisplayName={displayName}
+            portraitStatement={yourMind}
+            domains={topCardDomains.map((domain) => ({
+              canonicalSubcategory: domain.displayName,
+              canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
+              currentTier: asTier(domain.tier),
+              lifetimePoints: domain.points,
+              iconKey: domain.iconKey,
+            }))}
+            overflowCount={Math.max(0, sortedDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
+            tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${sortedDomains.length} territories`}
+            rarestTerritory={null}
+            rarestTerritorySolo={false}
+            shareText={`My Joshing knowledge portrait: ${topCardDomains.map((domain) => domain.displayName).join(', ')}`}
+            shareCardToken=""
+            shareCardExpiresAt=""
+            readOnly
+            highlightedSlug={activeSlug}
+          />
+        </section>
+      )}
+
+      {hasAnything && (
+        <section style={sectionStyle} aria-label="Knowledge progression">
+          <div style={knowledgeSectionHeaderStyle}>
+            <p style={knowledgeEyebrowStyle}>YOUR KNOWLEDGE</p>
+            <p style={knowledgeSubtitleStyle}>SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;</p>
           </div>
-        ) : (
-          <>
-            <div className="mt-4 inline-grid grid-cols-3 rounded-full border bg-card p-1 text-sm font-medium">
-              {VIEW_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`min-h-10 rounded-full px-4 transition ${
-                    viewMode === option.value
-                      ? 'bg-foreground text-background'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={() => onViewModeChange(option.value)}
-                  aria-pressed={viewMode === option.value}
-                >
-                  {option.label}
-                </button>
-              ))}
+
+          <div style={toggleRowStyle} aria-label="Knowledge view toggle">
+            <div style={toggleWrapStyle}>
+              <button type="button" onClick={() => onToggleView('classic')} style={view === 'classic' ? activeToggleStyle : inactiveToggleStyle} aria-pressed={view === 'classic'}>
+                Classic
+              </button>
+              <button type="button" onClick={() => onToggleView('progression')} style={view === 'progression' ? activeToggleStyle : inactiveToggleStyle} aria-pressed={view === 'progression'}>
+                Progression
+              </button>
             </div>
+          </div>
 
-            {viewMode === 'list' ? (
-              <div className="mt-4 flex flex-wrap gap-2">
-              {SORT_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                    sortMode === option.value
-                      ? 'border-foreground bg-foreground text-background'
-                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={() => onSortModeChange(option.value)}
-                  aria-pressed={sortMode === option.value}
-                >
-                  {option.label}
-                </button>
-              ))}
-              </div>
-            ) : null}
-
-            {viewMode === 'spider' ? (
-              <div className="mt-4 rounded-lg border bg-card p-3">
-                <SpiderGraph domains={spiderDomains} />
-              </div>
-            ) : viewMode === 'progression' ? (
-              <div>
-                <h3 className="mt-5 text-sm font-semibold">Closest to next tier</h3>
-                <ProgressionLandscape
-                  domains={data.progressionLandscape}
-                  onDomainSelect={(domain) => router.push(`/knowledge/${encodeURIComponent(domain)}`)}
-                />
+          <div style={{ ...contentShellStyle, opacity: isFading ? 0 : 1 }}>
+            {view === 'classic' ? (
+              <div style={cardStackStyle}>
+                {activeDomains.map((domain) => (
+                  <div key={domain.name} id={`knowledge-domain-${toCanonicalDomainSlug(domain.name)}`}>
+                    <DomainCard
+                      domain={domain}
+                      highlighted={activeSlug === toCanonicalDomainSlug(domain.name)}
+                    />
+                  </div>
+                ))}
               </div>
             ) : (
-              <DomainList
-                domains={sortedDomains}
-                onDomainSelect={(domain) => router.push(`/knowledge/${encodeURIComponent(domain)}`)}
-              />
-            )}
-          </>
-        )}
-      </section>
-
-      <section className="mb-8">
-        <h2 className="font-serif text-2xl font-semibold">Recent Activity</h2>
-        {data.mastery.recentActivity.length === 0 ? (
-          <p className="mt-4 rounded-lg border bg-card p-5 text-sm text-muted-foreground">No activity yet.</p>
-        ) : (
-          <div className="mt-4 divide-y rounded-lg border bg-card">
-            {data.mastery.recentActivity.slice(0, 10).map((item, index) => (
-              <div key={`${item.domain}-${item.createdAt}-${index}`} className="flex items-center gap-3 px-4 py-3 text-sm">
-                <span className="min-w-0 flex-1 font-medium">{item.displayName}</span>
-                <span className="text-foreground">+{formatNumber(item.points)} pts</span>
-                <span className="text-muted-foreground">{sourceLabel(item.source)}</span>
-                <span className="text-muted-foreground">{relativeTime(item.createdAt)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {highlights.length > 0 ? (
-        <section className="mb-8">
-          <h2 className="font-serif text-2xl font-semibold">Highlights</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            {highlights.map((highlight) => (
-              <button
-                key={highlight.key}
-                type="button"
-                className="rounded-lg border bg-card p-4 text-left text-card-foreground transition hover:border-foreground/30 disabled:cursor-default disabled:hover:border-border"
-                onClick={() => {
-                  if (highlight.domain) router.push(`/knowledge/${encodeURIComponent(highlight.domain.domain)}`);
-                }}
-                disabled={!highlight.domain}
-              >
-                <div className="flex items-center gap-3">
-                  {highlight.domain ? (
-                    <DomainCircle
-                      diameter={42}
-                      iconKey={highlight.domain.iconKey}
-                      canonicalSubcategory={highlight.domain.displayName}
-                      currentTier={asTier(highlight.domain.tier)}
-                      showTierLabel={false}
-                    />
-                  ) : null}
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold">{highlight.title}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">{highlight.body}</p>
-                  </div>
+              <div id="portrait-circles-section">
+                <PortraitCircles entries={portraitEntries} />
+                <div style={{ marginTop: 24 }}>
+                  <ProgressionLandscape
+                    domains={progressionDomains}
+                    maxCorrectAnswerCount={maxCorrectAnswerCount}
+                    highlightSlug={activeSlug}
+                    onDomainSelect={(domain) => router.push(`/knowledge/${encodeURIComponent(domain)}`)}
+                  />
                 </div>
-              </button>
-            ))}
+                <div style={sharePortraitWrapStyle}>
+                  <button type="button" style={sharePortraitBtnStyle} onClick={() => setShareModalOpen(true)}>
+                    Share portrait
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
-      ) : null}
+      )}
 
-      <section>
+      <section style={sectionStyle}>
         <div>
-          <h2 className="font-serif text-2xl font-semibold">Your Declared Interests</h2>
-          <p className="mt-1 text-sm text-muted-foreground">These are what your daily round draws from.</p>
+          <p style={knowledgeEyebrowStyle}>YOUR TOPICS</p>
+          <p style={knowledgeSubtitleStyle}>THE FIVE DECLARED INTERESTS YOUR DAILY ROUND DRAWS FROM</p>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-5">
+        <div style={declaredGridStyle}>
           {declaredSlots.map((slot, index) => (
-            <div key={slot?.domain ?? `empty-${index}`} className="flex min-h-32 flex-col justify-between rounded-lg border bg-card p-3">
+            <div key={slot?.domain ?? `empty-${index}`} style={declaredCardStyle}>
               {slot ? (
                 <>
-                  <div className="min-w-0">
-                    <h3 className="line-clamp-2 text-sm font-semibold text-foreground">{slot.displayName}</h3>
-                    <p className="mt-1 text-xs capitalize text-muted-foreground">{slot.tier}</p>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={declaredTitleStyle}>{slot.displayName}</h3>
+                    <p style={declaredMetaStyle}>{slot.broadCategory ?? asTier(slot.tier)}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="mt-4 inline-flex min-h-9 items-center justify-center gap-1 rounded-md border px-3 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground transition hover:text-foreground"
-                    onClick={() => openInterestModal(index, slot.domain)}
-                  >
+                  <button type="button" style={declaredButtonStyle} onClick={() => openInterestModal(index, slot.domain)}>
                     <Repeat2 className="size-3.5" />
                     Swap
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  className="flex h-full min-h-24 flex-col items-center justify-center gap-2 rounded-md border border-dashed text-sm font-medium text-muted-foreground transition hover:text-foreground"
-                  onClick={() => openInterestModal(index, null)}
-                >
+                <button type="button" style={emptyDeclaredButtonStyle} onClick={() => openInterestModal(index, null)}>
                   <Plus className="size-4" />
                   Add interest
                 </button>
@@ -690,65 +498,49 @@ export default function KnowledgePage() {
         </div>
       </section>
 
-      <section className="mt-8 border-t pt-4">
-        <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>Map maintenance</p>
-          <button
-            type="button"
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-xs font-medium uppercase tracking-[0.08em] transition hover:text-foreground disabled:opacity-50"
-            onClick={() => setTidyConfirmOpen(true)}
-            disabled={tidying}
-          >
-            <Combine className="size-3.5" />
-            Tidy up my map
-          </button>
-        </div>
+      <section style={maintenanceStyle}>
+        <p style={emptyStyle}>Map maintenance</p>
+        <button type="button" style={tidyButtonStyle} onClick={() => setTidyConfirmOpen(true)} disabled={tidying}>
+          <Combine className="size-3.5" />
+          Tidy up my map
+        </button>
       </section>
 
+      {shareModalOpen && (
+        <SharePortraitModal entries={portraitEntries} playerDisplayName={displayName} onClose={() => setShareModalOpen(false)} />
+      )}
+
       {interestModal ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/30 px-3 py-4 sm:items-center sm:justify-center">
-          <div className="w-full max-w-lg rounded-lg border bg-background p-5 shadow-xl">
-            <div className="flex items-start justify-between gap-4">
+        <div style={modalOverlayStyle}>
+          <div style={modalStyle}>
+            <div style={modalHeaderStyle}>
               <div>
-                <h2 className="font-serif text-2xl font-semibold">
-                  {interestModal.currentDomain ? `Swap ${interestModal.currentDomain}` : 'Add to your declared interests'}
-                </h2>
+                <h2 style={modalTitleStyle}>{interestModal.currentDomain ? `Swap ${interestModal.currentDomain}` : 'Add to your declared interests'}</h2>
                 {interestModal.currentDomain ? (
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Your progress in {interestModal.currentDomain} is preserved. It will move to your demonstrated knowledge.
-                  </p>
+                  <p style={modalCopyStyle}>Your progress in {interestModal.currentDomain} is preserved. It moves to your demonstrated knowledge.</p>
                 ) : null}
               </div>
-              <button
-                type="button"
-                className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                onClick={closeInterestModal}
-                aria-label="Close"
-              >
+              <button type="button" style={iconButtonStyle} onClick={closeInterestModal} aria-label="Close">
                 <X className="size-4" />
               </button>
             </div>
 
-            <div className="mt-5 grid gap-5">
+            <div style={modalBodyStyle}>
               <div>
-                <h3 className="text-sm font-semibold">Pick from your knowledge base</h3>
+                <h3 style={modalSubheadStyle}>Pick from your knowledge base</h3>
                 {demonstratedChoices.length === 0 ? (
-                  <p className="mt-2 rounded-lg border bg-card p-3 text-sm text-muted-foreground">
-                    No demonstrated domains are available to add right now.
-                  </p>
+                  <p style={choiceEmptyStyle}>No demonstrated domains are available to add right now.</p>
                 ) : (
-                  <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border bg-card">
+                  <div style={choiceListStyle}>
                     {demonstratedChoices.map((domain) => (
                       <button
                         key={domain.domain}
                         type="button"
-                        className={`flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0 ${
-                          selectedInterest?.label === domain.domain ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                        style={selectedInterest?.label === domain.domain ? selectedChoiceStyle : choiceButtonStyle}
                         onClick={() => setSelectedInterest({ label: domain.domain, broadCategory: domain.broadCategory ?? undefined })}
                       >
-                        <span className="min-w-0 truncate font-medium">{domain.displayName}</span>
-                        <span className="shrink-0 text-xs capitalize">{domain.tier}</span>
+                        <span>{domain.displayName}</span>
+                        <span>{asTier(domain.tier)}</span>
                       </button>
                     ))}
                   </div>
@@ -756,34 +548,23 @@ export default function KnowledgePage() {
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold">Write a new interest</h3>
-                <div className="mt-2 flex gap-2">
+                <h3 style={modalSubheadStyle}>Write a new interest</h3>
+                <div style={customInterestRowStyle}>
                   <input
                     value={customInterest}
                     onChange={(event) => setCustomInterest(event.target.value)}
                     placeholder="Late-period Bowie, Weimar cinema..."
-                    className="min-h-10 flex-1 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    style={inputStyle}
                   />
-                  <button
-                    type="button"
-                    className="min-h-10 rounded-md bg-foreground px-3 text-sm font-medium text-background disabled:opacity-50"
-                    disabled={!customInterest.trim() || canonicalizing}
-                    onClick={() => void proposeCustomInterest()}
-                  >
+                  <button type="button" style={modalPrimaryStyle} disabled={!customInterest.trim() || canonicalizing} onClick={() => void proposeCustomInterest()}>
                     {canonicalizing ? 'Refining...' : 'Refine'}
                   </button>
                 </div>
                 {selectedInterest ? (
-                  <div className="mt-3 rounded-lg border bg-card p-3 text-sm">
-                    <p className="font-medium">{selectedInterest.label}</p>
-                    {selectedInterest.description ? (
-                      <p className="mt-1 text-muted-foreground">{selectedInterest.description}</p>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="mt-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
-                      onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}
-                    >
+                  <div style={selectedInterestStyle}>
+                    <p style={{ margin: 0, fontWeight: 600 }}>{selectedInterest.label}</p>
+                    {selectedInterest.description ? <p style={modalCopyStyle}>{selectedInterest.description}</p> : null}
+                    <button type="button" style={linkButtonStyle} onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}>
                       Use my wording
                     </button>
                   </div>
@@ -791,27 +572,11 @@ export default function KnowledgePage() {
               </div>
             </div>
 
-            {interestError ? (
-              <p className="mt-4 rounded-md border border-destructive/40 bg-card p-3 text-sm text-destructive">
-                {interestError}
-              </p>
-            ) : null}
+            {interestError ? <p style={errorStyle}>{interestError}</p> : null}
 
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                className="min-h-10 rounded-md border px-4 text-sm font-medium text-muted-foreground"
-                onClick={closeInterestModal}
-                disabled={savingInterests}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="min-h-10 rounded-md bg-foreground px-4 text-sm font-medium text-background disabled:opacity-50"
-                onClick={() => void confirmInterestChange()}
-                disabled={!selectedInterest?.label || savingInterests}
-              >
+            <div style={modalActionsStyle}>
+              <button type="button" style={modalSecondaryStyle} onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
+              <button type="button" style={modalPrimaryStyle} onClick={() => void confirmInterestChange()} disabled={!selectedInterest?.label || savingInterests}>
                 {savingInterests ? 'Saving...' : interestModal.currentDomain ? 'Confirm swap' : 'Confirm add'}
               </button>
             </div>
@@ -820,40 +585,20 @@ export default function KnowledgePage() {
       ) : null}
 
       {tidyConfirmOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/30 px-3 py-4 sm:items-center sm:justify-center">
-          <div className="w-full max-w-md rounded-lg border bg-background p-5 shadow-xl">
-            <div className="flex items-start justify-between gap-4">
+        <div style={modalOverlayStyle}>
+          <div style={smallModalStyle}>
+            <div style={modalHeaderStyle}>
               <div>
-                <h2 className="font-serif text-2xl font-semibold">Tidy up your map?</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  We'll look for domains in your map that could be combined. This is automatic and based on what you've answered. You can't undo this.
-                </p>
+                <h2 style={modalTitleStyle}>Tidy up your map?</h2>
+                <p style={modalCopyStyle}>We'll look for domains in your map that could be combined. This is automatic and based on what you've answered.</p>
               </div>
-              <button
-                type="button"
-                className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                onClick={() => setTidyConfirmOpen(false)}
-                aria-label="Close"
-                disabled={tidying}
-              >
+              <button type="button" style={iconButtonStyle} onClick={() => setTidyConfirmOpen(false)} aria-label="Close" disabled={tidying}>
                 <X className="size-4" />
               </button>
             </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                className="min-h-10 rounded-md border px-4 text-sm font-medium text-muted-foreground"
-                onClick={() => setTidyConfirmOpen(false)}
-                disabled={tidying}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="min-h-10 rounded-md bg-foreground px-4 text-sm font-medium text-background disabled:opacity-50"
-                onClick={() => void confirmTidy()}
-                disabled={tidying}
-              >
+            <div style={modalActionsStyle}>
+              <button type="button" style={modalSecondaryStyle} onClick={() => setTidyConfirmOpen(false)} disabled={tidying}>Cancel</button>
+              <button type="button" style={modalPrimaryStyle} onClick={() => void confirmTidy()} disabled={tidying}>
                 {tidying ? 'Tidying...' : 'Confirm tidy'}
               </button>
             </div>
@@ -861,11 +606,413 @@ export default function KnowledgePage() {
         </div>
       ) : null}
 
-      {tidyNotice ? (
-        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full border bg-background px-4 py-2 text-sm font-medium shadow-lg">
-          {tidyNotice}
-        </div>
-      ) : null}
+      {tidyNotice ? <div style={toastStyle}>{tidyNotice}</div> : null}
     </main>
   );
 }
+
+const mainStyle: CSSProperties = {
+  width: 'min(760px, 94vw)',
+  margin: '0 auto',
+  padding: '1.25rem 0 2.5rem',
+  display: 'grid',
+  gap: '0.9rem',
+};
+
+const headerSectionStyle: CSSProperties = {
+  background: '#ffffff',
+  border: '1px solid #ddd6c7',
+  padding: '1rem 0.95rem',
+};
+
+const sectionStyle: CSSProperties = {
+  background: '#ffffff',
+  border: '1px solid #ddd6c7',
+  padding: '1rem 0.95rem',
+};
+
+const tierCrossedBannerStyle: CSSProperties = {
+  background: '#f0e6c8',
+  color: '#1a1208',
+  padding: '0.75rem 0.95rem',
+  fontSize: 16,
+};
+
+const eyebrowStyle: CSSProperties = {
+  margin: 0,
+  fontSize: '0.72rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  color: 'var(--text-muted)',
+};
+
+const sentenceStyle: CSSProperties = {
+  margin: '0.35rem 0 0',
+  fontSize: 'clamp(1.1rem, 2.5vw, 1.55rem)',
+  lineHeight: 1.35,
+  color: '#111111',
+  fontFamily: 'var(--font-neutral), system-ui, sans-serif',
+  fontWeight: 600,
+};
+
+const knowledgeSectionHeaderStyle: CSSProperties = {
+  marginBottom: '0.5rem',
+};
+
+const knowledgeEyebrowStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  fontVariant: 'small-caps',
+  color: '#1a1208',
+  fontFamily: 'var(--font-neutral), system-ui, sans-serif',
+  letterSpacing: '0.06em',
+};
+
+const knowledgeSubtitleStyle: CSSProperties = {
+  margin: '0.15rem 0 0',
+  fontSize: 10,
+  fontVariant: 'small-caps',
+  color: '#8a8070',
+  letterSpacing: '0.06em',
+  fontFamily: 'var(--font-neutral), system-ui, sans-serif',
+};
+
+const toggleRowStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  margin: '0.75rem 0',
+};
+
+const toggleWrapStyle: CSSProperties = {
+  display: 'flex',
+  gap: 8,
+};
+
+const activeToggleStyle: CSSProperties = {
+  minHeight: 34,
+  padding: '0 14px',
+  borderRadius: 999,
+  border: 'none',
+  background: '#1a1208',
+  color: '#f5f0e8',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: 14,
+};
+
+const inactiveToggleStyle: CSSProperties = {
+  minHeight: 34,
+  padding: '0 12px',
+  borderRadius: 999,
+  border: 'none',
+  background: 'transparent',
+  color: '#8a8070',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: 14,
+};
+
+const contentShellStyle: CSSProperties = {
+  transition: 'opacity 150ms ease',
+};
+
+const cardStackStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.6rem',
+};
+
+const emptyStyle: CSSProperties = {
+  margin: 0,
+  color: '#696257',
+};
+
+const sharePortraitWrapStyle: CSSProperties = {
+  marginTop: '1.25rem',
+  display: 'flex',
+  justifyContent: 'center',
+};
+
+const sharePortraitBtnStyle: CSSProperties = {
+  padding: '11px 32px',
+  border: '1.5px solid #0e0e0e',
+  backgroundColor: '#0e0e0e',
+  color: '#faf8f2',
+  fontFamily: "'Courier New', monospace",
+  fontSize: 12,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  cursor: 'pointer',
+  boxShadow: '2px 2px 0 #3a3a3a',
+};
+
+const declaredGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))',
+  gap: '0.6rem',
+  marginTop: '0.85rem',
+};
+
+const declaredCardStyle: CSSProperties = {
+  minHeight: 132,
+  border: '1px solid #e8e2d6',
+  borderRadius: 8,
+  padding: '0.75rem',
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'space-between',
+  background: '#fdfbf6',
+};
+
+const declaredTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: '0.9rem',
+  lineHeight: 1.25,
+  color: '#1a1208',
+};
+
+const declaredMetaStyle: CSSProperties = {
+  margin: '0.25rem 0 0',
+  color: '#8a8070',
+  fontSize: '0.72rem',
+};
+
+const declaredButtonStyle: CSSProperties = {
+  minHeight: 34,
+  border: '1px solid #ddd6c7',
+  background: '#fff',
+  color: '#696257',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  fontSize: '0.68rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  cursor: 'pointer',
+};
+
+const emptyDeclaredButtonStyle: CSSProperties = {
+  minHeight: 104,
+  border: '1px dashed #c8c0b0',
+  background: 'transparent',
+  color: '#8a8070',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  fontSize: '0.82rem',
+  cursor: 'pointer',
+};
+
+const maintenanceStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '1rem',
+  borderTop: '1px solid #ddd6c7',
+  padding: '0.85rem 0.2rem 0',
+};
+
+const tidyButtonStyle: CSSProperties = {
+  minHeight: 36,
+  border: '1px solid #ddd6c7',
+  background: '#ffffff',
+  color: '#1a1208',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  padding: '0 12px',
+  fontSize: '0.7rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  cursor: 'pointer',
+};
+
+const modalOverlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 50,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'rgba(0,0,0,0.3)',
+  padding: 16,
+};
+
+const modalStyle: CSSProperties = {
+  width: 'min(540px, 100%)',
+  maxHeight: '90vh',
+  overflowY: 'auto',
+  background: '#fff',
+  border: '1px solid #ddd6c7',
+  padding: 20,
+  boxShadow: '0 18px 48px rgba(0,0,0,0.18)',
+};
+
+const smallModalStyle: CSSProperties = {
+  ...modalStyle,
+  width: 'min(430px, 100%)',
+};
+
+const modalHeaderStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: 16,
+};
+
+const modalTitleStyle: CSSProperties = {
+  margin: 0,
+  color: '#1a1208',
+  fontSize: '1.45rem',
+  fontFamily: 'var(--font-literata), serif',
+};
+
+const modalCopyStyle: CSSProperties = {
+  margin: '0.45rem 0 0',
+  color: '#696257',
+  fontSize: '0.88rem',
+  lineHeight: 1.5,
+};
+
+const iconButtonStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  border: 'none',
+  background: 'transparent',
+  color: '#8a8070',
+  display: 'grid',
+  placeItems: 'center',
+  cursor: 'pointer',
+};
+
+const modalBodyStyle: CSSProperties = {
+  display: 'grid',
+  gap: 20,
+  marginTop: 20,
+};
+
+const modalSubheadStyle: CSSProperties = {
+  margin: 0,
+  color: '#1a1208',
+  fontSize: '0.9rem',
+};
+
+const choiceEmptyStyle: CSSProperties = {
+  margin: '0.5rem 0 0',
+  border: '1px solid #e8e2d6',
+  padding: 12,
+  color: '#696257',
+  fontSize: '0.88rem',
+};
+
+const choiceListStyle: CSSProperties = {
+  marginTop: 8,
+  maxHeight: 176,
+  overflowY: 'auto',
+  border: '1px solid #e8e2d6',
+};
+
+const choiceButtonStyle: CSSProperties = {
+  width: '100%',
+  minHeight: 38,
+  border: 'none',
+  borderBottom: '1px solid #e8e2d6',
+  background: '#fff',
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: 12,
+  padding: '0 12px',
+  color: '#696257',
+  cursor: 'pointer',
+};
+
+const selectedChoiceStyle: CSSProperties = {
+  ...choiceButtonStyle,
+  background: '#f5f0e8',
+  color: '#1a1208',
+};
+
+const customInterestRowStyle: CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  marginTop: 8,
+};
+
+const inputStyle: CSSProperties = {
+  minHeight: 40,
+  flex: 1,
+  border: '1px solid #ddd6c7',
+  padding: '0 10px',
+  background: '#fff',
+  color: '#1a1208',
+};
+
+const selectedInterestStyle: CSSProperties = {
+  marginTop: 12,
+  border: '1px solid #e8e2d6',
+  background: '#fdfbf6',
+  padding: 12,
+};
+
+const linkButtonStyle: CSSProperties = {
+  marginTop: 8,
+  border: 'none',
+  background: 'transparent',
+  color: '#696257',
+  textDecoration: 'underline',
+  cursor: 'pointer',
+  padding: 0,
+  fontSize: '0.76rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+};
+
+const errorStyle: CSSProperties = {
+  margin: '1rem 0 0',
+  border: '1px solid #c0392b66',
+  color: '#8b1a0e',
+  padding: 12,
+  fontSize: '0.88rem',
+};
+
+const modalActionsStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 8,
+  marginTop: 20,
+};
+
+const modalSecondaryStyle: CSSProperties = {
+  minHeight: 40,
+  border: '1px solid #ddd6c7',
+  background: '#fff',
+  color: '#696257',
+  padding: '0 16px',
+  cursor: 'pointer',
+};
+
+const modalPrimaryStyle: CSSProperties = {
+  minHeight: 40,
+  border: '1px solid #1a1208',
+  background: '#1a1208',
+  color: '#f5f0e8',
+  padding: '0 16px',
+  cursor: 'pointer',
+};
+
+const toastStyle: CSSProperties = {
+  position: 'fixed',
+  bottom: 20,
+  left: '50%',
+  transform: 'translateX(-50%)',
+  zIndex: 60,
+  border: '1px solid #ddd6c7',
+  background: '#fff',
+  color: '#1a1208',
+  padding: '9px 16px',
+  boxShadow: '0 8px 24px rgba(0,0,0,0.16)',
+  fontSize: '0.88rem',
+};

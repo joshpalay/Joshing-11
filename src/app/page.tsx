@@ -57,7 +57,7 @@ export default async function Home() {
             <FeedList limit={3} />
             <div className="mt-2 flex justify-end">
               <Link href="/feed" className="text-sm font-medium underline-offset-4 hover:underline">
-                Friends
+                Feed
               </Link>
             </div>
           </div>

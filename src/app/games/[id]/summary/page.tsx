@@ -1,16 +1,19 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { CSSProperties } from 'react';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
+import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay';
+import MasteryMoment from '@/components/review/MasteryMoment';
 import { getSession } from '@/server/auth/session';
 import { getDeliveredCreatorNotesForQuestions } from '@/server/creator-notes';
-import { db, masteryEvents } from '@/server/db';
+import { db, masteryEvents, playerMastery } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
+import { resolveTier } from '@/server/mastery/tiers';
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -31,8 +34,6 @@ const titleStyle: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
 };
-
-const domainPalette = ['#178245', '#b7791f', '#2563eb', '#9f1239', '#6d28d9', '#0f766e'];
 
 function domainFor(question: JoshingGameView['questions'][number]['question']) {
   return question.canonicalSubcategory || question.broadCategory || question.category || 'General';
@@ -61,11 +62,6 @@ function resultLabel(isCorrect: boolean | null | undefined) {
 
 function formatGameDate(value: Date) {
   return new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' }).format(value);
-}
-
-function domainColor(domain: string) {
-  const total = [...domain].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return domainPalette[total % domainPalette.length] ?? domainPalette[0];
 }
 
 export default async function JoshingGameSummaryPage({ params }: PageProps) {
@@ -110,6 +106,29 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
     growthByDomain.set(row.domain, (growthByDomain.get(row.domain) ?? 0) + Number(row.awardedPoints ?? 0));
   }
 
+  const touchedDomains = [...growthByDomain.keys()];
+  const masteryAfterRows = touchedDomains.length > 0
+    ? await db
+        .select({
+          domain: playerMastery.canonicalSubcategory,
+          broadCategory: playerMastery.broadCategory,
+          totalPoints: playerMastery.totalPoints,
+          tier: playerMastery.tier,
+        })
+        .from(playerMastery)
+        .where(and(
+          eq(playerMastery.userId, session.userId),
+          inArray(playerMastery.canonicalSubcategory, touchedDomains),
+        ))
+    : [];
+  const masteryAfterByDomain = new Map(masteryAfterRows.map((row) => [row.domain, row]));
+  const broadCategoryByDomain = new Map<string, string>();
+  for (const gameQuestion of view.questions) {
+    const question = gameQuestion.question;
+    const domain = domainFor(question);
+    broadCategoryByDomain.set(domain, question.broadCategory || question.category || domain);
+  }
+
   const fallbackPoints = viewerResponses.reduce((sum, response) => sum + Number(response.pointsAwarded ?? 0), 0);
   const totalPoints = masteryRows.length > 0
     ? masteryRows.reduce((sum, row) => sum + Number(row.awardedPoints ?? 0), 0)
@@ -118,6 +137,21 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
   const growthRows = [...growthByDomain]
     .map(([domain, points]) => ({ domain, points }))
     .sort((a, b) => b.points - a.points || a.domain.localeCompare(b.domain));
+  const growthCircleItems = growthRows.map((row) => {
+    const masteryAfter = masteryAfterByDomain.get(row.domain);
+    const pointsAfter = Number(masteryAfter?.totalPoints ?? row.points);
+    const pointsBefore = Math.max(0, pointsAfter - row.points);
+    return {
+      canonical_subcategory: row.domain,
+      broad_category: masteryAfter?.broadCategory || broadCategoryByDomain.get(row.domain) || row.domain,
+      points_before: pointsBefore,
+      points_after: pointsAfter,
+      tier_before: resolveTier(pointsBefore),
+      tier_after: masteryAfter?.tier ?? resolveTier(pointsAfter),
+      new_territory: pointsBefore <= 0,
+    };
+  });
+  const firstTierCrossing = growthCircleItems.find((item) => item.tier_before !== item.tier_after);
 
   const authoredQuestionIds = new Set(
     view.questions
@@ -252,37 +286,18 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
 
       <section className="card mt-4 px-5 py-4">
         <h2 style={titleStyle}>Your Growth Recap</h2>
-        {growthRows.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">No mastery movement was recorded for this game.</p>
-        ) : (
-          <div className="mt-3 divide-y">
-            {growthRows.map((row) => {
-              const gainedPoints = Math.round(row.points);
-              const isNewTerritory = gainedPoints === 0;
-
-              return (
-                <div key={row.domain} className="flex items-center gap-3 py-3">
-                  <span
-                    className="h-4 w-4 shrink-0 rounded-full border"
-                    style={{
-                      background: isNewTerritory ? 'var(--muted)' : domainColor(row.domain),
-                      borderColor: isNewTerritory ? 'var(--border)' : 'transparent',
-                    }}
-                    aria-hidden
-                  />
-                  <div className="min-w-0 flex-1">
-                    {isNewTerritory ? (
-                      <p style={{ ...monoStyle, fontSize: '0.52rem', color: 'var(--text-muted)' }}>New territory</p>
-                    ) : null}
-                    <p className="truncate font-serif text-sm font-bold text-[#111111]">{row.domain}</p>
-                  </div>
-                  <p className="shrink-0 font-mono text-sm font-bold uppercase text-[#111111]">+{gainedPoints} PTS</p>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <CategoryGainsDisplay
+          gameItems={growthCircleItems}
+          emptyMessage="No mastery movement was recorded for this game."
+        />
       </section>
+
+      {firstTierCrossing ? (
+        <MasteryMoment
+          subcategory={firstTierCrossing.canonical_subcategory}
+          newTier={firstTierCrossing.tier_after}
+        />
+      ) : null}
 
       <section className="card mt-4 px-5 py-4">
         <h2 style={titleStyle}>Your Impact Recap</h2>

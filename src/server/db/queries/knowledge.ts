@@ -59,14 +59,13 @@ export type MasteryOverview = {
 };
 
 export type ProgressionView = {
-  domain: string;
-  displayName: string;
-  tier: MasteryTier;
-  points: number;
-  pointsToNextTier: number | null;
-  progressPercent: number;
-  nextTier: MasteryTier | null;
-  isAtTopTier: boolean;
+  canonicalSubcategory: string;
+  canonicalSubcategorySlug: string;
+  broadCategory: string | null;
+  currentTier: MasteryTier | null;
+  correctAnswerCount: number;
+  authoredCount: number;
+  iconKey: string;
 };
 
 export type StreakData = {
@@ -426,40 +425,23 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
 }
 
 export async function getProgressionLandscape(userId: string): Promise<ProgressionView[]> {
-  const masteryRows = await db
-    .select()
-    .from(playerMastery)
-    .where(eq(playerMastery.userId, userId));
+  const pageData = await getKnowledgePageData(userId);
 
-  return masteryRows
-    .map((row) => {
-      const points = Number(row.totalPoints ?? 0);
-      const tierDisplay = getMasteryTierDisplay(points);
-      const nextTier = nextTierFor(tierDisplay.tier);
-      const nextThreshold = nextTier ? TIER_THRESHOLD_POINTS[nextTier] : null;
-
-      return {
-        domain: row.canonicalSubcategory,
-        displayName: displayNameForDomain(row.canonicalSubcategory),
-        tier: tierDisplay.tier,
-        points,
-        pointsToNextTier: nextThreshold === null ? null : Math.max(0, Math.ceil(nextThreshold - points)),
-        progressPercent: percent(tierDisplay.progressWithinTier * 100),
-        nextTier,
-        isAtTopTier: nextTier === null,
-      } satisfies ProgressionView;
-    })
+  return pageData.allDomains
+    .map((domain) => ({
+      canonicalSubcategory: domain.displayName,
+      canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
+      broadCategory: domain.broadCategory,
+      currentTier: domain.tier as MasteryTier,
+      correctAnswerCount: domain.questionsCorrect,
+      authoredCount: domain.questionsAnswered,
+      iconKey: domain.iconKey,
+    }))
     .sort((a, b) => {
-      if (a.isAtTopTier !== b.isAtTopTier) return a.isAtTopTier ? 1 : -1;
-      if (a.pointsToNextTier !== null && b.pointsToNextTier !== null) {
-        const distance = a.pointsToNextTier - b.pointsToNextTier;
-        if (distance !== 0) return distance;
-      }
-      if (a.pointsToNextTier === null && b.pointsToNextTier !== null) return 1;
-      if (a.pointsToNextTier !== null && b.pointsToNextTier === null) return -1;
-      return b.progressPercent - a.progressPercent || a.displayName.localeCompare(b.displayName);
-    })
-    .slice(0, 30);
+      const tierDiff = TIER_ORDER.indexOf(b.currentTier ?? 'establishing') - TIER_ORDER.indexOf(a.currentTier ?? 'establishing');
+      if (tierDiff !== 0) return tierDiff;
+      return b.correctAnswerCount - a.correctAnswerCount || a.canonicalSubcategory.localeCompare(b.canonicalSubcategory);
+    });
 }
 
 export async function getDomainDetail(userId: string, domain: string): Promise<DomainDetail | null> {

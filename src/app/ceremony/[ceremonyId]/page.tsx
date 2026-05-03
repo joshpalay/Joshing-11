@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Check, Share2, X } from 'lucide-react';
 
 import { ShareCard } from '@/components/ShareCard';
-import { DomainCircle } from '@/components/knowledge/DomainCircle';
+import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import type { MasteryTier } from '@/types/db';
 
 type Beat1 = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
@@ -52,6 +52,43 @@ function questionLabel(count: number) {
   return count === 1 ? 'question' : 'questions';
 }
 
+const TIER_SCALE: Record<MasteryTier, number> = {
+  establishing: 0.28,
+  familiar: 0.48,
+  solid: 0.72,
+  mastery: 1,
+};
+
+function CeremonyCircle({
+  domain,
+  size = 72,
+  scale = 1,
+}: {
+  domain: string;
+  size?: number;
+  scale?: number;
+}) {
+  const color = getPortraitDomainColor(domain);
+  const circleSize = Math.round(size * scale);
+  return (
+    <span
+      aria-hidden
+      className="inline-grid shrink-0 place-items-center"
+      style={{ width: size, height: size }}
+    >
+      <span
+        className="block rounded-full"
+        style={{
+          width: circleSize,
+          height: circleSize,
+          background: `radial-gradient(circle at 38% 38%, ${color.light.replace('0.12', '0.3')}, ${color.light})`,
+          border: `1px solid ${color.primary}55`,
+        }}
+      />
+    </span>
+  );
+}
+
 function beatViews(payload: BeatsPayload): BeatView[] {
   const views: BeatView[] = [];
   if (payload.beat1) views.push({ id: 1, content: payload.beat1 });
@@ -67,11 +104,17 @@ function Beat({ beat }: { beat: BeatView }) {
     return (
       <div className="mx-auto max-w-2xl text-center">
         <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">You leveled up.</h1>
-        <div className="mt-10 space-y-4 text-lg text-stone-200 sm:text-xl">
+        <div className="mx-auto mt-10 grid max-w-xl gap-4 text-left">
           {beat.content.map((crossing) => (
-            <p key={`${crossing.domain}-${crossing.toTier}`}>
-              {crossing.domain}: {TIER_LABEL[crossing.fromTier]} {'->'} {TIER_LABEL[crossing.toTier]}
-            </p>
+            <div key={`${crossing.domain}-${crossing.toTier}`} className="flex items-center gap-4">
+              <CeremonyCircle domain={crossing.domain} size={74} scale={TIER_SCALE[crossing.toTier]} />
+              <div>
+                <p className="font-serif text-xl font-semibold text-stone-50">{crossing.domain}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.16em] text-stone-400">
+                  {TIER_LABEL[crossing.fromTier]} {'->'} {TIER_LABEL[crossing.toTier]}
+                </p>
+              </div>
+            </div>
           ))}
         </div>
       </div>
@@ -88,16 +131,16 @@ function Beat({ beat }: { beat: BeatView }) {
           Through your friends, you picked up {total} {questionLabel(total)} in {joinList(domains)}.
         </p>
         <div className="mt-10 flex flex-wrap justify-center gap-5">
-          {domains.map((domain) => (
-            <DomainCircle
-              key={domain}
-              diameter={82}
-              iconKey={domain}
-              canonicalSubcategory={domain}
-              currentTier={null}
-              highlighted
-              showTierLabel={false}
-            />
+          {beat.content.map((item) => (
+            <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
+              <CeremonyCircle domain={item.domain} size={88} scale={Math.min(1, 0.45 + item.correctCount / Math.max(item.questionCount, 1) * 0.45)} />
+              <div>
+                <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.14em] text-stone-400">
+                  {item.correctCount}/{item.questionCount}
+                </p>
+              </div>
+            </div>
           ))}
         </div>
       </div>

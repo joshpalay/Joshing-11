@@ -134,6 +134,24 @@ export default function TodaysFiveCard() {
             Today&apos;s Five
           </p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{subtext}</p>
+          <div className="mt-3 flex items-center gap-1.5" aria-label={`${answered} of 5 answered`}>
+            {Array.from({ length: 5 }, (_, index) => {
+              const filled = index < answered;
+              return (
+                <span
+                  key={index}
+                  className="block rounded-full"
+                  style={{
+                    width: filled ? 9 : 8,
+                    height: filled ? 9 : 8,
+                    background: filled ? 'var(--foreground)' : 'transparent',
+                    border: filled ? 'none' : '1px solid color-mix(in srgb, var(--foreground) 35%, transparent)',
+                    opacity: filled ? 0.85 : 0.7,
+                  }}
+                />
+              );
+            })}
+          </div>
         </div>
       </div>
 

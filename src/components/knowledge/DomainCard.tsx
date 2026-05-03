@@ -9,7 +9,7 @@ type Props = {
 };
 
 export function DomainCard({ domain, highlighted = false, trailingControl }: Props) {
-  const href = trailingControl ? undefined : `/profile/domains/${encodeURIComponent(domain.name)}`;
+  const href = trailingControl ? undefined : `/knowledge/${encodeURIComponent(domain.name)}`;
 
   return (
     <DomainRow

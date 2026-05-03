@@ -6,6 +6,8 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useState, useTrans
 
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { AddToBankAction } from '@/components/AddToBankAction';
+import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay';
+import MasteryMoment from '@/components/review/MasteryMoment';
 import { cn } from '@/lib/utils';
 import type { DailySummaryView, QuestionRecap, TierCrossing } from '@/server/db/queries/daily-summary';
 
@@ -27,17 +29,10 @@ const titleStyle: CSSProperties = {
   letterSpacing: '0.05em',
 };
 
-const domainPalette = ['#178245', '#b7791f', '#2563eb', '#9f1239', '#6d28d9', '#0f766e'];
-
 function formatDate(value: string) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' }).format(date);
-}
-
-function domainColor(domain: string) {
-  const total = [...domain].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return domainPalette[total % domainPalette.length] ?? domainPalette[0];
 }
 
 function formatTier(tier: string) {
@@ -82,6 +77,17 @@ export default function DailySummaryPage() {
   }, []);
 
   const line = useMemo(() => summary ? interpretiveLine(summary) : null, [summary]);
+  const growthCircleItems = useMemo(() => {
+    if (!summary) return [];
+    return summary.domainGains.map((gain) => ({
+      canonical_subcategory: gain.displayName,
+      broad_category: gain.broadCategory,
+      points_total: gain.totalPoints,
+      points_gained_this_round: gain.pointsGained,
+      tier_current: gain.currentTier,
+    }));
+  }, [summary]);
+  const firstTierCrossing = summary?.tierCrossings[0] ?? null;
 
   if (loading) {
     return (
@@ -151,40 +157,18 @@ export default function DailySummaryPage() {
 
       <section className="card mt-4 px-5 py-4">
         <h2 style={titleStyle}>Your Growth Recap</h2>
-        {summary.domainGains.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">No mastery movement was recorded today.</p>
-        ) : (
-          <div className="mt-3 divide-y">
-            {summary.domainGains.map((gain) => {
-              const crossing = summary.tierCrossings.find((item) => item.domain === gain.domain);
-              return (
-                <div key={gain.domain} className="flex items-center gap-3 py-3">
-                  <span
-                    className="h-4 w-4 shrink-0 rounded-full border"
-                    style={{
-                      background: gain.isNewTerritory ? 'var(--muted)' : domainColor(gain.domain),
-                      borderColor: gain.isNewTerritory ? 'var(--border)' : 'transparent',
-                    }}
-                    aria-hidden
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {gain.isNewTerritory ? (
-                        <p style={{ ...monoStyle, fontSize: '0.52rem', color: 'var(--text-muted)' }}>New Territory</p>
-                      ) : null}
-                      {crossing ? <TierLabel crossing={crossing} /> : null}
-                    </div>
-                    <p className="truncate font-serif text-sm font-bold text-[#111111]">{gain.displayName}</p>
-                  </div>
-                  <p className="shrink-0 font-mono text-sm font-bold uppercase text-[#111111]">
-                    +{Math.round(gain.pointsGained)} PTS
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <CategoryGainsDisplay
+          roundItems={growthCircleItems}
+          emptyMessage="No mastery movement was recorded today."
+        />
       </section>
+
+      {firstTierCrossing ? (
+        <MasteryMoment
+          subcategory={summary.domainGains.find((gain) => gain.domain === firstTierCrossing.domain)?.displayName ?? firstTierCrossing.domain}
+          newTier={firstTierCrossing.toTier}
+        />
+      ) : null}
 
       {line ? (
         <p className="mt-4 text-sm leading-6 text-muted-foreground">{line}</p>

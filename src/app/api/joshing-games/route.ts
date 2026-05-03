@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { db, questions, userQuestionBank, users } from '@/server/db';
+import { getFriends } from '@/server/db/queries/friends';
 import { createJoshingGame, JoshingGameValidationError } from '@/server/db/queries/joshing-game';
 import { sendSms } from '@/server/sms';
 
@@ -105,6 +106,15 @@ export async function POST(request: NextRequest) {
 
   if (recipientRows.length !== uniqueRecipientIds.length) {
     return NextResponse.json({ error: 'validation', message: 'All recipientIds must be valid users' }, { status: 400 });
+  }
+
+  const friends = await getFriends(session.userId);
+  const friendIds = new Set(friends.map((friend) => friend.id));
+  if (uniqueRecipientIds.some((recipientId) => !friendIds.has(recipientId))) {
+    return NextResponse.json(
+      { error: 'You can only send Joshing Games to friends.' },
+      { status: 403 },
+    );
   }
 
   const allowedQuestionIds = new Set(allowedQuestionRows.map((row) => row.id));

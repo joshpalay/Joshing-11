@@ -43,7 +43,10 @@ export type QuestionRecap = {
 export type DomainGain = {
   domain: string;
   displayName: string;
+  broadCategory: string;
   pointsGained: number;
+  totalPoints: number;
+  currentTier: MasteryTier;
   isNewTerritory: boolean;
 };
 
@@ -144,6 +147,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     ? await db
         .select({
           domain: playerMastery.canonicalSubcategory,
+          broadCategory: playerMastery.broadCategory,
           totalPoints: playerMastery.totalPoints,
           tier: playerMastery.tier,
         })
@@ -208,7 +212,10 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       .map((domain) => ({
         domain,
         displayName: displayNameForDomain(domain),
+        broadCategory: masteryByDomain.get(domain)?.broadCategory || domain,
         pointsGained: pointsByDomain.get(domain) ?? 0,
+        totalPoints: Number(masteryByDomain.get(domain)?.totalPoints ?? pointsByDomain.get(domain) ?? 0),
+        currentTier: masteryByDomain.get(domain)?.tier ?? resolveTier(pointsByDomain.get(domain) ?? 0),
         isNewTerritory: newTerritory.includes(domain),
       }))
       .sort((a, b) => b.pointsGained - a.pointsGained || a.displayName.localeCompare(b.displayName)),
