@@ -15,6 +15,15 @@ type DrawerState =
   | { mode: 'create' }
   | { mode: 'edit'; question: QuestionView };
 
+
+const DIFFICULTY_COPY: Record<number, string> = {
+  1: 'Very easy',
+  2: 'Easy',
+  3: 'Medium',
+  4: 'Hard',
+  5: 'Expert',
+};
+
 const DOMAIN_COLORS: Record<string, string> = {
   music: '#7c3aed',
   literature: '#0f766e',
@@ -308,8 +317,10 @@ export default function QuestionsPage() {
                   >
                     {question.domainDisplayName}
                   </span>
-                  <span className="font-mono text-xs text-muted-foreground" aria-label={`Difficulty ${question.difficulty} of 5`}>
+                  <span className="font-mono text-xs text-muted-foreground" aria-label={`Difficulty ${question.difficulty} of 5 (${DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'})`}>
                     {difficultyDots(question.difficulty)}
+                    {' · '}
+                    {question.difficulty}/5 {DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'}
                   </span>
                   <span className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                     {isOwnAuthored ? 'Written by you' : `From ${question.authorName ?? 'a friend'}`}
