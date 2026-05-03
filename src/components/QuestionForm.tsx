@@ -29,6 +29,15 @@ type Props = {
   onCancel?: () => void;
 };
 
+
+const DIFFICULTY_SCALE: Record<number, { label: string; hint: string }> = {
+  1: { label: 'Accessible', hint: 'Most players should be able to get this one.' },
+  2: { label: 'Accessible → Moderate', hint: 'Leans approachable but needs some recall.' },
+  3: { label: 'Moderate', hint: 'Balanced challenge with topic familiarity.' },
+  4: { label: 'Moderate → Specialist', hint: 'Leans advanced and rewards deeper knowledge.' },
+  5: { label: 'Specialist', hint: 'Best for enthusiasts or experts in the domain.' },
+};
+
 const defaults: QuestionFormValues = {
   text: '',
   correctAnswer: '',
@@ -262,10 +271,13 @@ export function QuestionForm({
           >
             {[1, 2, 3, 4, 5].map((difficulty) => (
               <option key={difficulty} value={difficulty}>
-                {difficulty}
+                {difficulty} · {DIFFICULTY_SCALE[difficulty].label}
               </option>
             ))}
           </select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Rank {values.difficulty}/5 — {DIFFICULTY_SCALE[values.difficulty].label}. {DIFFICULTY_SCALE[values.difficulty].hint}
+          </p>
         </div>
       </div>
 
