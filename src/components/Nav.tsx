@@ -84,6 +84,7 @@ export function Nav() {
     };
   }, [loadCurrentUser, loadUnreadCount, pathname]);
 
+
   if (pathname === '/onboarding') {
     return null;
   }
@@ -108,54 +109,22 @@ export function Nav() {
 
   return (
     <>
-      <nav className="hidden border-b bg-background/95 px-4 py-3 backdrop-blur md:block">
+      <nav className="sticky top-0 z-40 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <Link href="/" className="font-serif text-lg font-semibold">Joshing</Link>
-          <div className="flex items-center gap-2 text-sm">
-            {navItems.map(({ href, label, Icon }) => {
-              const active = pathname === href;
-              const showUnreadDot = label === 'Activities' && visibleUnreadCount > 0;
-              const isAccount = label === 'Account';
-
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMenuOpen(false)}
-                  className={[
-                    'inline-flex min-h-10 items-center gap-2 rounded-md px-3 transition hover:bg-muted hover:text-foreground',
-                    active ? 'text-foreground' : 'text-muted-foreground',
-                  ].join(' ')}
-                >
-                  <span className="relative grid size-5 place-items-center">
-                    {isAccount ? <AccountIcon active={active} /> : <Icon className="size-4" />}
-                    {showUnreadDot ? (
-                      <span className="absolute right-0 top-0 size-2 rounded-full bg-primary" aria-hidden="true" />
-                    ) : null}
-                  </span>
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </nav>
-      <nav className="sticky top-0 z-40 border-b bg-background/95 px-4 py-3 backdrop-blur md:hidden">
-        <div className="mx-auto flex max-w-md items-center justify-between">
           <Link href="/" className="font-serif text-lg font-semibold">Joshing</Link>
           <button
             type="button"
             className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
             aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={menuOpen}
-            aria-controls="mobile-nav-menu"
+            aria-controls="nav-menu"
             onClick={() => setMenuOpen((current) => !current)}
           >
             {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
         {menuOpen ? (
-          <div id="mobile-nav-menu" className="mx-auto mt-3 grid max-w-md gap-1">
+          <div id="nav-menu" className="mx-auto mt-3 grid max-w-4xl gap-1">
             {navItems.map(({ href, label, Icon }) => {
               const active = pathname === href;
               const showUnreadDot = label === 'Activities' && visibleUnreadCount > 0;
