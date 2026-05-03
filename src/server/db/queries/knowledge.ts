@@ -149,7 +149,9 @@ function nextTierFor(tier: MasteryTier): MasteryTier | null {
   return TIER_ORDER[index + 1];
 }
 
-function sourceLabel(row: typeof masteryEvents.$inferSelect): string {
+type SourceLabelRow = Pick<typeof masteryEvents.$inferSelect, 'sourceType' | 'sessionContext'>;
+
+function sourceLabel(row: SourceLabelRow): string {
   if (row.sessionContext === 'daily' || row.sessionContext === 'joshing_game') {
     return row.sessionContext;
   }
