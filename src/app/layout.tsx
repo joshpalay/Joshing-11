@@ -1,6 +1,12 @@
 import type { Metadata } from 'next'
+import { Montserrat } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
+
+
+const montserrat = Montserrat({
+  subsets: ['latin'],
+})
 
 export const metadata: Metadata = {
   title: 'Joshing',
@@ -14,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="font-sans">
-      <body>
+      <body className={montserrat.className}>
         <Nav />
         {children}
       </body>
