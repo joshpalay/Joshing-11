@@ -170,7 +170,10 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
         <h1 className="font-serif text-xl font-semibold">{game.game.title}</h1>
         <p className="text-sm text-muted-foreground">{answeredIds.size} of {orderedQuestions.length}</p>
       </header>
-      <section className="flex-1 px-4 py-4" style={{ paddingBottom: '96px' }}>
+      <section
+        className="flex-1 overflow-y-auto px-4 py-4"
+        style={{ paddingBottom: 'calc(140px + env(safe-area-inset-bottom))' }}
+      >
         <GameplayChatThread messages={messages} />
         {error ? <p className="mt-4 rounded-md border border-destructive p-3 text-sm text-destructive">{error}</p> : null}
       </section>
