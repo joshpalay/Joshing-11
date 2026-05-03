@@ -289,7 +289,10 @@ export default function DailyPage() {
         />
       </header>
 
-      <section className="flex-1 overflow-y-auto px-4 py-4">
+      <section
+        className="flex-1 overflow-y-auto px-4 py-4"
+        style={{ paddingBottom: "calc(140px + env(safe-area-inset-bottom))" }}
+      >
         {loading ? (
           <p className="text-sm text-[var(--text-muted)]">Loading today...</p>
         ) : error ? (
