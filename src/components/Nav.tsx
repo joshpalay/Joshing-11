@@ -35,7 +35,7 @@ export function Nav() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [accountInitials, setAccountInitials] = useState<string | null>(null);
   const visibleUnreadCount = pathname === '/activities' ? 0 : unreadCount;
-  const showNewGameShortcut = pathname !== '/daily';
+  const showNewGameShortcut = pathname !== '/daily' && pathname !== '/daily/setup';
 
   const loadUnreadCount = useCallback(async () => {
     try {
