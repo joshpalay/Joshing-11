@@ -5,7 +5,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "db:migrate": "drizzle-kit migrate",
+    "build": "npm run db:migrate && next build",
     "start": "next start",
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
     "smoke:daily-catchup": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/daily-catchup.smoke.mjs",
