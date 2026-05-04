@@ -1,6 +1,6 @@
 **JOSHING --- PRODUCT REQUIREMENTS DOCUMENT**
 
-**Version 11.0** **April 2026**
+**Version 11.1** **May 2026**
 
 *The trivia you wish you were asked.*
 
@@ -359,11 +359,13 @@ layer in deferred items, but launch is launch.
 this --- try it tonight.\"* She taps the link. Joshing asks for her
 phone, sends an OTP, she\'s in. Greg has pre-seeded three interests for
 her: Sondheim Musicals, Modernist Poetry, Italian Cinema. She accepts
-two, edits one, and is asked to answer five warm-up questions. Joshing
-proposes nine candidate interests. She picks two more --- Late-Period
-Bowie and 19th-Century English Novels --- locking her five. She receives
-a confirmation: *\"Tomorrow at noon, your first five questions
-arrive.\"*
+two, edits one. Next, Joshing asks when she was born and where she grew
+up --- she enters 1981 and suburban New Jersey. Then two warm-up
+questions: a book she\'s gone deep on, and a topic she could talk about
+for an hour. Joshing combines both signals and proposes thirteen
+candidate interests. She picks two more --- Late-Period Bowie and
+19th-Century English Novels --- locking her five. She receives a
+confirmation: *\"Tomorrow at noon, your first five questions arrive.\"*
 
 **6.2 The daily ritual**
 
@@ -379,10 +381,14 @@ minutes.
 **Maya**, later that evening, opens Joshing again and taps the Feed.
 There are 8 items. The top is pinned: *\"Greg sent this to you --- about
 Sondheim.\"* She answers it --- gets it right. Below, *\"Robyn got this
-right --- W.H. Auden.\"* She skips. She answers two more, dismisses one,
-leaves the rest for tomorrow. She thumbs up the Sondheim question on the
-way out --- it was a great question, and her signal will help it surface
-earlier in friends' Feeds.
+right --- W.H. Auden.\"* She skips. *\"Robyn couldn\'t get this ---
+Weimar Cinema.\"* She answers it and gets it wrong; the card updates in
+place with both their results side by side. She dismisses one more,
+leaves the rest for tomorrow. On the way out she taps thumbs-up on the
+Sondheim question --- it was a great question, and her signal will push
+it higher in friends\' Feeds. She does not need to do anything to share
+the questions she answered; those propagated to her friends\' Feeds the
+moment she answered them.
 
 **6.4 The send-to-friend gesture**
 
@@ -501,11 +507,12 @@ Joshing is invitation-only. There are two paths to a new account:
 
 **7.3 Onboarding (Hybrid Interest Declaration)**
 
-After authentication, a new player goes through a three-step interest
+After authentication, a new player goes through a four-step interest
 declaration flow before reaching the home screen.
 
-**Step 1 --- Pre-seeded interests (if applicable).** If the inviter
-pre-seeded 1--3 interests, these are shown first:
+**Step 1 --- Pre-seeded interests (if applicable).**
+
+If the inviter pre-seeded 1--3 interests, these are shown first:
 
 *Greg invited you to Joshing. He thought you\'d like questions about:*
 
@@ -517,48 +524,68 @@ pre-seeded 1--3 interests, these are shown first:
 
 *\[Accept all\] \[Pick which to keep\] \[Skip and start fresh\]*
 
-Accepted pre-seeded interests count toward the 5-interest cap.
+Accepted pre-seeded interests count toward the 5-interest cap. If no
+pre-seeded interests, proceed directly to Step 2.
 
-**Step 2 --- Warm-up questions.** The player answers 4--6 short
-free-text questions:
+**Step 2 --- Cultural anchor: birth year + where you grew up.**
 
-- *What\'s a book you\'ve read more than once?*
+Two fields, presented plainly:
 
-- *Who\'s a musician or composer you keep coming back to?*
+*When were you born?* \[Year picker\]
 
-- *A topic you could talk about for an hour without preparation?*
+*Where did you grow up?* \[Country selector; if US, state/region
+selector appears\]
 
-- *Something you studied formally --- even briefly?*
+These two facts are passed to the LLM, which generates a first pass of
+hyper-specific culturally-anchored candidate interests. Examples:
 
-- *A film, TV show, or director that means something to you?*
+- Born 1979, suburban Michigan → candidates: Saturday Morning Cartoons
+  of the 1980s, He-Man and the Masters of the Universe, Animaniacs,
+  Early MTV (1981--1987), Top 40 Radio of the Late 1980s
 
-- *(Optional)* *Anything else you\'d want us to know?*
+- Born 1968, London → candidates: British New Wave Cinema, Post-Punk UK
+  Music, Thatcher-Era British Television, 1970s BBC Drama
 
-These answers are passed to the LLM, which generates 8--12 candidate
-interests at hyper-specific granularity.
+- Born 1985, São Paulo → candidates reflect Brazilian rather than
+  American cultural touchstones
 
-**Step 3 --- Pick five.** The candidates are presented:
+Geography determines cultural context. The LLM must use both year and
+country/region to generate meaningful candidates. If geography produces
+insufficient signal, the LLM falls back to the warm-up answers alone.
+
+**Step 3 --- Warm-up questions (trimmed to 2--3).**
+
+Free-text questions to capture intellectual territory the cultural
+anchor misses:
+
+1.  *\"A book, composer, or filmmaker you\'ve gone deep on?\"*
+    (required)
+
+2.  *\"A topic you could talk about for an hour without preparation?\"*
+    (required)
+
+3.  *\"Anything else --- a period of history, a sport, a field you
+    studied?\"* (optional)
+
+The LLM combines both signals (cultural anchor + warm-up answers) to
+produce 10--14 candidate interests at hyper-specific granularity.
+
+**Step 4 --- Pick five.**
 
 *Here are some areas that might fit. Pick up to 5.*
 
-\[Late-Period Bowie\] \[19th-Century English Novels\] \[Italian
-Renaissance Painting\] \[Hungarian Uprising of 1956\] \[Sondheim\'s Late
-Period\] \[Robert Hayden\'s Poetry\] \[Werner Herzog Documentaries\]
+\[Saturday Morning Cartoons, 1980s\] \[He-Man and the Masters of the
+Universe\] \[19th-Century English Novels\] \[Italian Renaissance
+Painting\] \[Sondheim\'s Late Period\] \[Werner Herzog Documentaries\]
 \[The Wire\] \[The Federalist Papers\]
 
 Player can:
 
-- Tap to select up to (5 minus pre-seeded already-accepted)
+- Tap to select, edit any candidate in free text, reject all and write
+  their own, mix freely
 
-- Edit any candidate in free text before locking
-
-- Reject all candidates and write up to 5 of their own
-
-- Mix freely
-
-**Lock and confirm.** Player taps \"Lock my five.\" Joshing confirms:
-*\"Tomorrow at noon, your first Daily Five arrives. You\'ll receive an
-SMS.\"*
+**Lock and confirm.** *\"Tomorrow at noon, your first Daily Five
+arrives. You\'ll receive an SMS.\"*
 
 **7.4 First Daily Five Messaging**
 
@@ -814,6 +841,9 @@ The chat-thread interface preserves all v10.25 mechanics including:
 - The breadcrumb system for partial answers (per v10.25 §8.8a,
   simplified --- no \"you both know this\" copy)
 
+- After grading, a per-answer quip appears below the result bubble
+  (§8.1.14)
+
 **8.1.9 Answer Grading**
 
 Grading is performed by the LLM with a deterministic answer key check
@@ -885,8 +915,9 @@ answering questions the player wrote (per §8.10.4).
 
 **8.1.13 Session Close Messaging**
 
-Per v10.25 §8.38, the session-close copy is adaptive based on
-performance:
+Two layers appear at session close:
+
+**Layer 1 --- Score line** (unchanged):
 
   -------------------------------------
   **Performance**   **Close copy**
@@ -906,9 +937,72 @@ performance:
                     another five.*
   -------------------------------------
 
-Plus interpretive line referencing the most-significant-mastery-event of
-the session (tier crossing, point gain in a key domain, or first answer
-in a new demonstrated domain).
+**Layer 2 --- Interpretive line** (one line, highest-priority match
+only; omitted if nothing qualifies):
+
+1.  Tier crossing → *\"You moved to Familiar in Late Tchaikovsky.\"*
+
+2.  First correct in a new demonstrated domain → *\"New ground:
+    \[Domain\] is yours now.\"*
+
+3.  5/5 → *\"Clean sweep.\"*
+
+4.  0/5 → *\"Every one of them. Tomorrow.\"*
+
+5.  3+ correct in a row → *\"Three in a row at one point.\"*
+
+6.  All wrong in a single domain → *\"\[Domain\] is worth a deeper
+    look.\"*
+
+7.  Otherwise → omit
+
+The interpretive line appears below the score line with a 300ms delay
+--- after, not simultaneously.
+
+**8.1.14 Per-Answer Commentary**
+
+After each answer is graded, a single quip appears below the result
+bubble in small, muted text. It feels like an aside, not a headline.
+Design constraint: **8 words maximum per quip. No exceptions.**
+
+Quips are contextual --- they vary by correctness, surface, and whether
+a friend\'s result is known.
+
+**Daily Five --- correct (solo):**
+- *\"That\'s your ground.\"*
+- *\"Knew it.\"*
+- *\"Of course you did.\"*
+- *\"Solid.\"*
+- *\"There it is.\"*
+
+**Daily Five --- wrong (solo):**
+- *\"Now you know.\"*
+- *\"Close. It\'ll come.\"*
+- *\"Good question.\"*
+- *\"That one\'s yours now.\"*
+- *\"Tomorrow\'s version of you will know.\"* (use sparingly)
+
+**Feed --- both correct:**
+- *\"Same wavelength.\"*
+- *\"You both had it.\"*
+- *\"Common ground.\"*
+
+**Feed --- you correct, friend wrong:**
+- *\"You had it. \[Name\] didn\'t.\"*
+- *\"You carried that one.\"*
+
+**Feed --- you wrong, friend correct:**
+- *\"\[Name\] had it. You\'ll get there.\"*
+- *\"\[Name\]\'s ground. Now it\'s yours too.\"*
+
+**Feed --- both wrong:**
+- *\"Neither of you. Good question.\"*
+- *\"That one got you both.\"*
+- *\"Tough one.\"*
+
+Quips are selected server-side at grade time and stored on the answer
+record. This ensures consistency if the player refreshes or returns to a
+session mid-way. Do not randomize purely client-side.
 
 **8.2 The Feed**
 
@@ -1248,36 +1342,75 @@ When an interest is swapped out:
   accumulated correct answers, it meets the demonstrated-domain floor of
   1)
 
-**8.4.3 Demonstrated Domains (Friend-Mediated Expansion)**
+**8.4.3 Demonstrated Domains (Expansion Paths)**
 
-A demonstrated domain is added to the Knowledge base when the player
-**correctly answers** a question in that domain that came from one of
-these sources:
+A demonstrated domain is added to the Knowledge base via two paths:
 
-- The Feed (friend answered a question in this domain)
+**Path 1 --- Friend-mediated correct answer.**
+
+A domain is added when the player correctly answers a question in that
+domain from:
+
+- The Feed (friend answered, propagated automatically)
 
 - A direct send-to-friend message
 
-- A question imported from a friend\'s bank
+- A Joshing Game
 
 **LLM-generated Daily Five questions cannot add new domains to the
-Knowledge base.** They can only deepen mastery in existing Knowledge
-base domains.
+Knowledge base via this path.** They can only deepen mastery in existing
+Knowledge base domains.
 
-This rule is structurally important: friends are the mechanism of
-intellectual expansion. Every friend a player adds literally widens the
-universe their daily ritual can be drawn from.
+**Path 2 --- Authorship.**
+
+A domain is also added to the Knowledge base when the player **writes a
+question** in that domain and saves it to their bank.
+
+If you can write a factual question about a domain, you know that
+territory. Authorship is self-declaration --- it opens the domain
+immediately, at the same 1-question threshold as a correct answer.
+Saving to bank is sufficient; the question does not need to be sent or
+answered.
+
+Practical effect: a player who wants to open \"1980s Andrew Lloyd Webber
+Musicals\" but has no friend active in that domain can write one
+question about it. The domain opens, becomes eligible for Daily Five
+Random selection, and the player can now accumulate mastery there.
+
+**Combined rule:** A demonstrated domain opens via the *first* of: (a)
+player correctly answers a friend-mediated question in that domain, or
+(b) player writes and saves a question in that domain.
+
+**Authorship does not bypass hyper-specific categorization** --- the
+LLM-assigned domain must meet the same specificity standard as any other
+domain.
+
+Friends are the primary mechanism of intellectual expansion through
+play; authorship is the self-directed alternative.
+
+**Ceremony impact:** Beat 2 (\"What You Discovered\") uses distinct copy
+by source:
+
+- Friend-mediated: *\"You found new ground in \[Domain\]. From a
+  question \[Friend\] sent you.\"*
+
+- Authored: *\"You opened \[Domain\]. You wrote the first question
+  there.\"*
 
 **8.4.4 The 1-Question Floor**
 
 A demonstrated domain becomes eligible for Daily Five generation after
-**1 correct answer** in that domain. The single correct answer:
+**1 correct answer** in that domain (or 1 authored question saved to
+bank --- see §8.4.3 Path 2). The single trigger event:
 
 - Adds the domain to the Knowledge page (silently, per §8.4.5)
 
 - Makes the domain eligible for Daily Five Random selection
 
-- Counts toward initial mastery in that domain
+- Counts toward initial mastery in that domain (for correct-answer path)
+
+The floor applies equally to friend-mediated correct answers and to
+authored questions.
 
 **8.4.5 Quiet Accrual**
 
@@ -1369,6 +1502,29 @@ domain. Personal rounds:
 
 Personal rounds exist for the player who wants to deliberately go deep
 in a single area. They are an opt-in power-user surface.
+
+**8.4.10 Adjacent Domain Discovery (Post-Launch)**
+
+Adjacent domain discovery is the ability for Joshing to surface a
+related domain after a player engages deeply with an existing one ---
+e.g., a player deep in Andrew Lloyd Webber 1980s Musicals might be
+offered \"Stephen Sondheim\" or \"French Musical Theatre of the 1980s\"
+as a suggested expansion.
+
+This feature is **explicitly deferred to post-launch.** It is noted here
+to avoid designing the KB schema in a way that forecloses it, and to
+establish the design constraint when it is built: **one suggestion,
+dismissible, opt-in only. Never automatic KB expansion.**
+
+The risk to avoid: algorithmic reach that feels like the product
+deciding your intellectual world. Adjacent suggestions must feel like a
+quiet offer, not a recommendation engine.
+
+Design questions to resolve before building: trigger condition (N
+correct answers? tier crossing?), suggestion surface (inline after
+session? standalone?), whether dismissed suggestions can resurface,
+whether accepted suggestions open the KB automatically or require a
+correct answer first.
 
 **8.5 Question Creation**
 

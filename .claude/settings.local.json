@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npx tsc *)",
       "Bash(xargs grep *)",
-      "Bash(npx vercel *)"
+      "Bash(npx vercel *)",
+      "Bash(gh run *)"
     ]
   }
 }
