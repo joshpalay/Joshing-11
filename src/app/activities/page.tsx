@@ -78,6 +78,15 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     return <>{actorName(item)} sent you a note about a question you missed</>;
   }
 
+  if (item.type === 'friend_answered_your_question') {
+    const faq = item.reference.friendAnsweredQuestion;
+    const domain = faq?.domain;
+    const domainText = domain ? ` ${domain}` : '';
+    return faq?.result === 'correct'
+      ? <>{actorName(item)} got your{domainText} question right</>
+      : <>{actorName(item)} answered your{domainText} question — couldn&apos;t get it</>;
+  }
+
   return <>Something happened on Joshing</>;
 }
 

@@ -6,12 +6,15 @@ import {
 } from '@/lib/llm';
 
 export type WarmupAnswers = {
-  reReadBook?: string;
-  musicianOrComposer?: string;
+  bookComposerFilmmaker?: string;
   hourLongTopic?: string;
-  studied?: string;
-  filmOrShow?: string;
   anythingElse?: string;
+};
+
+export type DemographicContext = {
+  birthYear?: number | null;
+  grewUpCountry?: string | null;
+  grewUpRegion?: string | null;
 };
 
 export type ProposedInterest = {
@@ -28,12 +31,9 @@ export type CanonicalizedInterest = {
 
 const CANONICALIZE_MODEL = 'claude-haiku-4-5';
 const WARMUP_LABELS: Record<keyof WarmupAnswers, string> = {
-  reReadBook: "book you've read more than once",
-  musicianOrComposer: 'musician or composer you keep coming back to',
-  hourLongTopic: 'topic you could discuss for an hour',
-  studied: 'formal study',
-  filmOrShow: 'film, TV show, or director that matters to you',
-  anythingElse: 'anything else you wanted us to know',
+  bookComposerFilmmaker: 'book, composer, or filmmaker you have gone deep on',
+  hourLongTopic: 'topic you could talk about for an hour without preparation',
+  anythingElse: 'anything else — a period of history, a sport, a field you studied',
 };
 const FALLBACK_CATEGORIES = [
   'Literature',
@@ -150,7 +150,7 @@ function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; ans
     },
   ];
 
-  return uniqueByDomain([...candidates, ...defaults]).slice(0, 12);
+  return uniqueByDomain([...candidates, ...defaults]).slice(0, 14);
 }
 
 function normalizeInterest(value: unknown): ProposedInterest | null {
@@ -183,12 +183,17 @@ function uniqueByDomain(interests: ProposedInterest[]): ProposedInterest[] {
   return unique;
 }
 
-export async function proposeInterests(warmupAnswers: WarmupAnswers): Promise<ProposedInterest[]> {
+export async function proposeInterests(
+  warmupAnswers: WarmupAnswers,
+  demographics: DemographicContext = {},
+): Promise<ProposedInterest[]> {
   const cleanAnswers = cleanWarmupAnswers(warmupAnswers);
 
   if (cleanAnswers.length === 0) {
     return fallbackInterests([]);
   }
+
+  const demographicLine = buildDemographicLine(demographics);
 
   const systemPrompt = `You propose declared interests for Joshing, a daily personal trivia game.
 Return a JSON array only. No wrapper object, no markdown:
@@ -197,16 +202,16 @@ Return a JSON array only. No wrapper object, no markdown:
 ]
 
 Rules:
-- Generate exactly 8 to 12 candidate interests.
+- Generate exactly 10 to 14 candidate interests.
 - Every domain must be hyper-specific and useful for trivia.
 - Avoid broad categories as domains. Never use domains like "Music", "Literature", "History", "Film", "Science", or "Pop Culture".
 - Prefer person/era/movement/work/scene labels over generic fields.
 - Good domains: "Late Tchaikovsky", "19th-Century Russian Symphonies", "Modernist American Poetry", "Weimar-Era Cinema".
 - Bad domains: "Music", "Books", "Movies", "History", "General Trivia".
 - Distribute across the warm-up answers. Include at least one candidate per non-empty warm-up field if possible.
-- Each rationale must briefly tie the candidate to a specific warm-up answer.
+- Each rationale must briefly tie the candidate to a specific warm-up answer or demographic context.
 - broadCategory is stable and broad, such as Classical Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Other.
-- Do not invent private facts. Infer plausible interest territories only from the answers.`;
+- Do not invent private facts. Infer plausible interest territories only from the answers and demographic context.${demographicLine ? `\n- ${demographicLine}` : ''}`;
 
   const userMessage = `Warm-up answers:
 ${cleanAnswers.map(({ field, answer }) => `- ${WARMUP_LABELS[field]}: ${answer}`).join('\n')}
@@ -218,7 +223,7 @@ Propose candidate interests. Return JSON array only.`;
 
   const response = await client.messages.create({
     model: ANTHROPIC_MODEL,
-    max_tokens: 1300,
+    max_tokens: 1600,
     temperature: 0.65,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
@@ -231,11 +236,24 @@ Propose candidate interests. Return JSON array only.`;
     return normalized ? [normalized] : [];
   }));
 
-  if (interests.length < 8) {
-    return uniqueByDomain([...interests, ...fallbackInterests(cleanAnswers)]).slice(0, 12);
+  if (interests.length < 10) {
+    return uniqueByDomain([...interests, ...fallbackInterests(cleanAnswers)]).slice(0, 14);
   }
 
-  return interests.slice(0, 12);
+  return interests.slice(0, 14);
+}
+
+function buildDemographicLine(demographics: DemographicContext): string {
+  const { birthYear, grewUpCountry, grewUpRegion } = demographics;
+  if (!birthYear && !grewUpCountry) return '';
+
+  const location = [grewUpRegion, grewUpCountry].filter(Boolean).join(', ');
+  const parts: string[] = [];
+  if (birthYear) parts.push(`born in ${birthYear}`);
+  if (location) parts.push(`grew up in ${location}`);
+
+  const intro = `The player was ${parts.join(' and ')}. Use this to infer culturally-specific knowledge domains from that era and place — television, music, film, political events, sports — that someone of that age and geography would plausibly know well. Combine this with their warm-up answers to generate hyper-specific candidates. Generate domains like "Saturday Morning Cartoons, 1980s US" or "Thatcher-Era British Television" rather than generic ones.`;
+  return intro;
 }
 
 export async function canonicalizeInterest(rawInput: string): Promise<CanonicalizedInterest> {

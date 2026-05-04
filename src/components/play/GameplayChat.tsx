@@ -49,6 +49,8 @@ export type ChatMessage =
       relationalFeedbackLine?: string | null;
       /** Domain exclusion — canonical subcategory for "remove from rotation" affordance */
       canonicalSubcategory?: string | null;
+      /** Per-answer commentary quip shown below the result bubble */
+      quip?: string | null;
       reactionPrompt?: ReactionPromptData | null;
       pointsAwarded?: number | null;
       pointsLabel?: string | null;
@@ -590,6 +592,7 @@ function ResultRow({
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
+  quip,
 }: {
   result: 'correct' | 'wrong' | 'expired';
   submitted: string;
@@ -604,6 +607,7 @@ function ResultRow({
   reactionPrompt?: ReactionPromptData | null;
   pointsAwarded?: number | null;
   pointsLabel?: string | null;
+  quip?: string | null;
 }) {
   const expired = result === 'expired';
   const correct = result === 'correct';
@@ -674,6 +678,9 @@ function ResultRow({
           </p>
         ) : null}
       </div>
+      {quip ? (
+        <p className="text-sm text-muted-foreground mt-1 italic">{quip}</p>
+      ) : null}
       {canonicalSubcategory ? (
         <DomainExclusionAffordance canonicalSubcategory={canonicalSubcategory} />
       ) : null}
@@ -871,6 +878,7 @@ export function GameplayChatThread({
                   reactionPrompt={m.reactionPrompt}
                   pointsAwarded={m.pointsAwarded}
                   pointsLabel={m.pointsLabel}
+                  quip={m.quip}
                 />
                 {m.breadcrumb ? <BreadcrumbRow text={m.breadcrumb} /> : null}
               </div>

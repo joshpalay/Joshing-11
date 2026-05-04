@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { writeActivity } from '@/server/activity/write-activity';
+import { selectQuip } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, users } from '@/server/db';
@@ -173,6 +174,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       answerState: grade.answerState,
       breadcrumb,
       viewerStatus: freshView.viewerStatus,
+      quip: selectQuip(grade.isCorrect, 'joshing_game', null),
     });
   } catch (error) {
     if (error instanceof JoshingGameValidationError) {

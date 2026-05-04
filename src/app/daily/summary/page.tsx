@@ -39,15 +39,55 @@ function formatTier(tier: string) {
   return tier.replace(/_/g, ' ').toUpperCase();
 }
 
-function interpretiveLine(summary: DailySummaryView) {
+function interpretiveLine(summary: DailySummaryView): string | null {
+  // 1. Tier crossing
   const crossing = summary.tierCrossings[0];
   if (crossing) {
     const domain = summary.domainGains.find((gain) => gain.domain === crossing.domain)?.displayName ?? crossing.domain;
-    return `You crossed into ${formatTier(crossing.toTier).toLowerCase()} in ${domain}.`;
+    return `You moved to ${formatTier(crossing.toTier).toLowerCase()} in ${domain}.`;
   }
+
+  // 2. First correct in new demonstrated domain
   const newDomain = summary.domainGains.find((gain) => gain.isNewTerritory);
-  if (newDomain) return `You picked up something new in ${newDomain.displayName}.`;
-  if (summary.questions.length > 0 && summary.totalCorrect === summary.questions.length) return 'Clean sweep.';
+  if (newDomain) return `New ground: ${newDomain.displayName} is yours now.`;
+
+  const answered = summary.questions.filter((q) => !q.isSkipped);
+  const total = answered.length;
+
+  // 3. 5/5
+  if (total > 0 && summary.totalCorrect === total && total === 5) return 'Clean sweep.';
+
+  // 4. 0/5
+  if (total > 0 && summary.totalCorrect === 0 && total === 5) return 'Every one of them. Tomorrow.';
+
+  // 5. 3+ correct in a row
+  let streak = 0;
+  let maxStreak = 0;
+  for (const q of answered) {
+    if (q.isCorrect) {
+      streak += 1;
+      if (streak > maxStreak) maxStreak = streak;
+    } else {
+      streak = 0;
+    }
+  }
+  if (maxStreak >= 3) return 'Three in a row at one point.';
+
+  // 6. All wrong in a single domain
+  const domainGroups = new Map<string, { total: number; wrong: number }>();
+  for (const q of answered) {
+    const key = q.domainDisplayName;
+    const entry = domainGroups.get(key) ?? { total: 0, wrong: 0 };
+    entry.total += 1;
+    if (!q.isCorrect) entry.wrong += 1;
+    domainGroups.set(key, entry);
+  }
+  for (const [domain, counts] of domainGroups) {
+    if (counts.total >= 2 && counts.wrong === counts.total) {
+      return `${domain} is worth a deeper look.`;
+    }
+  }
+
   return null;
 }
 
@@ -170,15 +210,29 @@ export default function DailySummaryPage() {
         />
       ) : null}
 
-      {line ? (
-        <p className="mt-4 text-sm leading-6 text-muted-foreground">{line}</p>
-      ) : null}
+      {line ? <InterpretiveLine text={line} /> : null}
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <Link className="btn-primary sm:flex-1" href="/knowledge">See your knowledge map</Link>
         <Link className="btn-ghost sm:flex-1" href="/">Back home</Link>
       </div>
     </main>
+  );
+}
+
+function InterpretiveLine({ text }: { text: string }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setVisible(true), 300);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <p
+      className="mt-4 text-sm leading-6 text-muted-foreground"
+      style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.4s ease' }}
+    >
+      {text}
+    </p>
   );
 }
 

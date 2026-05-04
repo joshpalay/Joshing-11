@@ -36,7 +36,7 @@ function friendAnsweredAttribution(item: CollapsedFeedItem, userById: Map<string
   // Multiple friends: "Robyn got this right · Greg couldn't get it — Domain"
   const parts = results
     .slice(0, 3) // cap at 3 names for readability
-    .map(({ displayName: dn, result }) => (result === 'correct' ? `${dn} got it` : `${dn} couldn't get it`));
+    .map(({ displayName: dn, result }) => (result === 'correct' ? `${dn} got this right` : `${dn} couldn't get it`));
   return `${parts.join(' · ')} — ${domain}`;
 }
 

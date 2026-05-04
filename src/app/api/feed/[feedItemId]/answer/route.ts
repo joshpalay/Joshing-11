@@ -1,7 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { gradeAnswer } from '@/server/grading';
+import { gradeAnswer, selectQuip } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, playerMastery, questions } from '@/server/db';
@@ -66,6 +66,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     question.questionType,
   );
   const isCorrect = grade.result === 'correct';
+  const rawSource = row.feedItem.sourceResult;
+  const friendResult = (rawSource === 'correct' || rawSource === 'incorrect') ? rawSource : null;
+  const quip = selectQuip(isCorrect, 'feed', friendResult);
   const alreadyCorrect = await userAnsweredQuestionCorrectly(session.userId, question.id);
 
   const existingMastery = await db
@@ -169,6 +172,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     correctAnswer: question.answerText,
     answer: question.answerText,
     consolation: grade.consolation,
-    quip: grade.consolation,
+    quip,
   });
 }

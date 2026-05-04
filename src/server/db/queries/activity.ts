@@ -57,6 +57,10 @@ export type ActivityItemView = Pick<
     curatedQuestion?: {
       questionText: string;
     };
+    friendAnsweredQuestion?: {
+      domain: string | null;
+      result: 'correct' | 'incorrect';
+    };
     creatorNote?: {
       id: string;
       questionText: string;
@@ -407,6 +411,52 @@ async function hydrateCreatorNotes(items: ActivityItemRow[]) {
   ] as const));
 }
 
+async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
+  const relevant = items.filter(
+    (item) => item.type === 'friend_answered_your_question'
+      && item.referenceType === 'question'
+      && item.referenceId
+      && item.actorUserId,
+  );
+  if (relevant.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['friendAnsweredQuestion']>>();
+  }
+
+  const questionIds = [...new Set(relevant.map((item) => item.referenceId!))];
+  const actorIds = [...new Set(relevant.map((item) => item.actorUserId!))];
+
+  const [questionRows, masteryRows] = await Promise.all([
+    db
+      .select({ id: questions.id, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })
+      .from(questions)
+      .where(inArray(questions.id, questionIds)),
+    db
+      .select({ userId: masteryEvents.userId, questionId: masteryEvents.questionId })
+      .from(masteryEvents)
+      .where(and(
+        inArray(masteryEvents.userId, actorIds),
+        inArray(masteryEvents.questionId, questionIds),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        sql`${masteryEvents.awardedPoints} > 0`,
+      )),
+  ]);
+
+  const domainByQuestion = new Map(
+    questionRows.map((r) => [r.id, r.canonicalSubcategory ?? r.broadCategory ?? null]),
+  );
+  const correctSet = new Set(masteryRows.map((r) => `${r.userId}:${r.questionId}`));
+
+  return new Map(
+    relevant.map((item) => [
+      item.id,
+      {
+        domain: domainByQuestion.get(item.referenceId!) ?? null,
+        result: correctSet.has(`${item.actorUserId}:${item.referenceId}`) ? 'correct' : 'incorrect',
+      } satisfies NonNullable<ActivityItemView['reference']['friendAnsweredQuestion']>,
+    ]),
+  );
+}
+
 export async function getActivitiesForUser(userId: string): Promise<ActivityItemView[]> {
   const rows = await db
     .select()
@@ -419,7 +469,7 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     .orderBy(desc(activityItems.createdAt))
     .limit(100);
 
-  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById] = await Promise.all([
+  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById] = await Promise.all([
     hydrateActors(rows),
     hydrateGames(rows, userId),
     hydrateMasteryEvents(rows),
@@ -427,6 +477,7 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     hydrateDirectQuestions(rows),
     hydrateCuratedQuestions(rows),
     hydrateCreatorNotes(rows),
+    hydrateFriendAnsweredQuestions(rows),
   ]);
 
   return rows
@@ -454,8 +505,11 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
         directQuestion: row.referenceType === 'feed_item' && row.referenceId
           ? directQuestionsById.get(row.referenceId)
           : undefined,
-        curatedQuestion: row.referenceType === 'question' && row.referenceId
+        curatedQuestion: row.referenceType === 'question' && row.referenceId && row.type === 'question_curated'
           ? curatedQuestionsById.get(row.referenceId)
+          : undefined,
+        friendAnsweredQuestion: row.type === 'friend_answered_your_question'
+          ? friendAnsweredQuestionsById.get(row.id)
           : undefined,
         creatorNote: row.referenceType === 'creator_note' && row.referenceId
           ? creatorNotesById.get(row.referenceId)

@@ -8,12 +8,33 @@
 import { gradeAnswerWithLLM } from '@/lib/llm';
 
 export type GradeResult = 'correct' | 'wrong';
+export type Surface = 'daily' | 'feed' | 'joshing_game';
+export type FriendResult = 'correct' | 'incorrect' | null;
 
 export type GradeOutcome = {
   result: GradeResult;
   // "Snarky but Sweet" consolation for thematically-close wrong answers (null otherwise)
   consolation: string | null;
 };
+
+function randomFrom<T>(options: readonly T[]): T {
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+export function selectQuip(isCorrect: boolean, _surface: Surface, friendResult: FriendResult): string {
+  if (isCorrect && friendResult === null)
+    return randomFrom(["That's your ground.", "Knew it.", "Of course you did.", "Solid.", "There it is."]);
+  if (!isCorrect && friendResult === null)
+    return randomFrom(["Now you know.", "Close. It'll come.", "Good question.", "That one's yours now."]);
+  if (isCorrect && friendResult === 'correct')
+    return randomFrom(["Same wavelength.", "You both had it.", "Common ground."]);
+  if (isCorrect && friendResult === 'incorrect')
+    return randomFrom(["You carried that one.", "You had it."]);
+  if (!isCorrect && friendResult === 'correct')
+    return randomFrom(["Good question.", "They had it. You'll get there."]);
+  // !isCorrect && friendResult === 'incorrect'
+  return randomFrom(["Neither of you. Good question.", "That one got you both.", "Tough one."]);
+}
 
 /**
  * Fast-path exact match before calling the LLM.

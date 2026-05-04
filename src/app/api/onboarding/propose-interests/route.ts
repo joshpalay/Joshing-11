@@ -1,18 +1,16 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { proposeInterests, type WarmupAnswers } from '@/server/llm/interests';
+import { proposeInterests, type DemographicContext, type WarmupAnswers } from '@/server/llm/interests';
 
 type ProposeInterestsBody = {
   warmupAnswers?: unknown;
+  demographicContext?: unknown;
 };
 
 const WARMUP_FIELDS = [
-  'reReadBook',
-  'musicianOrComposer',
+  'bookComposerFilmmaker',
   'hourLongTopic',
-  'studied',
-  'filmOrShow',
   'anythingElse',
 ] as const satisfies ReadonlyArray<keyof WarmupAnswers>;
 
@@ -39,6 +37,30 @@ function parseWarmupAnswers(value: unknown): WarmupAnswers | null {
   return nonEmptyCount >= 2 ? answers : null;
 }
 
+function parseDemographicContext(value: unknown): DemographicContext {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  const record = value as Record<string, unknown>;
+
+  const birthYear = typeof record.birthYear === 'number'
+    ? Math.floor(record.birthYear)
+    : null;
+
+  const grewUpCountry = typeof record.grewUpCountry === 'string'
+    ? record.grewUpCountry.trim().slice(0, 10) || null
+    : null;
+
+  const grewUpRegion = typeof record.grewUpRegion === 'string'
+    ? record.grewUpRegion.trim().slice(0, 100) || null
+    : null;
+
+  return {
+    birthYear: birthYear && birthYear >= 1920 && birthYear <= 2010 ? birthYear : null,
+    grewUpCountry,
+    grewUpRegion,
+  };
+}
+
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) {
@@ -55,8 +77,10 @@ export async function POST(request: Request) {
     );
   }
 
+  const demographics = parseDemographicContext(body?.demographicContext);
+
   try {
-    const proposedInterests = await proposeInterests(warmupAnswers);
+    const proposedInterests = await proposeInterests(warmupAnswers, demographics);
     return NextResponse.json({ proposedInterests });
   } catch {
     return NextResponse.json(

@@ -48,8 +48,10 @@ export type QueueSlot = {
   reveal_explainer?: string;
   /** Short contextual breadcrumb shown in the chat thread after grading. */
   reveal_breadcrumb?: string | null;
-  /** Joshing Bot quip for this turn (null if the LLM returned nothing). */
+  /** LLM consolation quip for near-miss wrong answers. */
   reveal_quip?: string | null;
+  /** Per-answer commentary quip from selectQuip(). */
+  quip?: string | null;
 };
 
 /**

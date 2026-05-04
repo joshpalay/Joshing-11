@@ -5,14 +5,11 @@ import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Edit3, Loader2, Plus, X } from 'lucide-react';
 
-type CurrentStep = 'welcome' | 'warmup' | 'review' | 'pick' | 'complete';
+type CurrentStep = 'welcome' | 'background' | 'warmup' | 'review' | 'pick' | 'complete';
 
 export type WarmupAnswers = {
-  reReadBook?: string;
-  musicianOrComposer?: string;
+  bookComposerFilmmaker?: string;
   hourLongTopic?: string;
-  studied?: string;
-  filmOrShow?: string;
   anythingElse?: string;
 };
 
@@ -49,14 +46,9 @@ const WARMUP_FIELDS: Array<{
   optional?: boolean;
 }> = [
   {
-    field: 'reReadBook',
-    label: "What's a book you've read more than once?",
-    placeholder: 'e.g. Middlemarch, or The Brothers Karamazov',
-  },
-  {
-    field: 'musicianOrComposer',
-    label: "Who's a musician or composer you keep coming back to?",
-    placeholder: 'e.g. Late-period Bowie, or Tchaikovsky symphonies',
+    field: 'bookComposerFilmmaker',
+    label: 'A book, composer, or filmmaker you\'ve gone deep on?',
+    placeholder: 'e.g. Middlemarch, or Shostakovich, or Tarkovsky films',
   },
   {
     field: 'hourLongTopic',
@@ -64,21 +56,99 @@ const WARMUP_FIELDS: Array<{
     placeholder: 'e.g. the French Revolution, or Italian Renaissance painting',
   },
   {
-    field: 'studied',
-    label: 'Something you studied formally, even briefly?',
-    placeholder: 'e.g. art history in college, or Russian for two years',
-  },
-  {
-    field: 'filmOrShow',
-    label: 'A film, TV show, or director that means something to you?',
-    placeholder: 'e.g. Tarkovsky films, or The Sopranos',
-  },
-  {
     field: 'anythingElse',
-    label: "Anything else you'd want us to know?",
+    label: 'Anything else — a period of history, a sport, a field you studied?',
     placeholder: 'Anything',
     optional: true,
   },
+];
+
+const COUNTRIES: Array<{ code: string; name: string }> = [
+  { code: 'US', name: 'United States' },
+  { code: 'GB', name: 'United Kingdom' },
+  { code: 'CA', name: 'Canada' },
+  { code: 'AU', name: 'Australia' },
+  { code: 'IE', name: 'Ireland' },
+  { code: 'NZ', name: 'New Zealand' },
+  { code: 'ZA', name: 'South Africa' },
+  { code: 'AT', name: 'Austria' },
+  { code: 'BE', name: 'Belgium' },
+  { code: 'BR', name: 'Brazil' },
+  { code: 'CL', name: 'Chile' },
+  { code: 'CN', name: 'China' },
+  { code: 'CO', name: 'Colombia' },
+  { code: 'HR', name: 'Croatia' },
+  { code: 'CZ', name: 'Czech Republic' },
+  { code: 'DK', name: 'Denmark' },
+  { code: 'EG', name: 'Egypt' },
+  { code: 'ET', name: 'Ethiopia' },
+  { code: 'FI', name: 'Finland' },
+  { code: 'FR', name: 'France' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'GH', name: 'Ghana' },
+  { code: 'GR', name: 'Greece' },
+  { code: 'HU', name: 'Hungary' },
+  { code: 'IN', name: 'India' },
+  { code: 'ID', name: 'Indonesia' },
+  { code: 'IR', name: 'Iran' },
+  { code: 'IL', name: 'Israel' },
+  { code: 'IT', name: 'Italy' },
+  { code: 'JP', name: 'Japan' },
+  { code: 'KE', name: 'Kenya' },
+  { code: 'MX', name: 'Mexico' },
+  { code: 'MA', name: 'Morocco' },
+  { code: 'NL', name: 'Netherlands' },
+  { code: 'NG', name: 'Nigeria' },
+  { code: 'NO', name: 'Norway' },
+  { code: 'PK', name: 'Pakistan' },
+  { code: 'PE', name: 'Peru' },
+  { code: 'PH', name: 'Philippines' },
+  { code: 'PL', name: 'Poland' },
+  { code: 'PT', name: 'Portugal' },
+  { code: 'RO', name: 'Romania' },
+  { code: 'RU', name: 'Russia' },
+  { code: 'SA', name: 'Saudi Arabia' },
+  { code: 'RS', name: 'Serbia' },
+  { code: 'SK', name: 'Slovakia' },
+  { code: 'KR', name: 'South Korea' },
+  { code: 'ES', name: 'Spain' },
+  { code: 'SE', name: 'Sweden' },
+  { code: 'CH', name: 'Switzerland' },
+  { code: 'TW', name: 'Taiwan' },
+  { code: 'TH', name: 'Thailand' },
+  { code: 'TR', name: 'Turkey' },
+  { code: 'UA', name: 'Ukraine' },
+  { code: 'VN', name: 'Vietnam' },
+  { code: 'OTHER', name: 'Other' },
+];
+
+const US_STATES: Array<{ code: string; name: string }> = [
+  { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' }, { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' }, { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' }, { code: 'DE', name: 'Delaware' },
+  { code: 'FL', name: 'Florida' }, { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' }, { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' }, { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' }, { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' }, { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' }, { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' }, { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' }, { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' }, { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' }, { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' }, { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' }, { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' }, { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' }, { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' }, { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' }, { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' }, { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' }, { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' }, { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' }, { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' },
+  { code: 'DC', name: 'Washington D.C.' },
 ];
 
 const LOADING_COPY = [
@@ -88,6 +158,7 @@ const LOADING_COPY = [
 ];
 
 const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
+  { step: 'background', label: 'About You' },
   { step: 'warmup', label: 'Warmup' },
   { step: 'review', label: 'Review' },
   { step: 'pick', label: 'Confirm' },
@@ -137,7 +208,7 @@ function Spinner({ small = false }: { small?: boolean }) {
 
 function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
   const activeIndex = currentStep === 'welcome'
-    ? 0
+    ? -1
     : currentStep === 'complete'
       ? STEP_DOTS.length
       : Math.max(0, STEP_DOTS.findIndex((item) => item.step === currentStep));
@@ -146,7 +217,7 @@ function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
     <div className="flex items-center justify-center gap-3" aria-label="Onboarding progress">
       {STEP_DOTS.map((item, index) => {
         const active = index <= activeIndex;
-        const current = item.step === currentStep || (currentStep === 'welcome' && index === 0);
+        const current = item.step === currentStep;
 
         return (
           <div key={item.step} className="flex items-center gap-2">
@@ -177,6 +248,9 @@ function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
 export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowProps) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<CurrentStep>('welcome');
+  const [birthYear, setBirthYear] = useState('');
+  const [grewUpCountry, setGrewUpCountry] = useState('');
+  const [grewUpRegion, setGrewUpRegion] = useState('');
   const [warmupAnswers, setWarmupAnswers] = useState<WarmupAnswers>({});
   const [proposedInterests, setProposedInterests] = useState<ProposedInterest[] | null>(null);
   const [selectedInterests, setSelectedInterests] = useState<SelectedInterest[]>(
@@ -199,11 +273,15 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
   const showDailySetup = useMemo(() => isBeforeNoonEastern(), []);
 
   const inviterName = preSeededInterests.find((interest) => interest.inviterName)?.inviterName ?? 'A friend';
-  const answeredCount = useMemo(
-    () => WARMUP_FIELDS.filter(({ field }) => normalizeDomain(warmupAnswers[field] ?? '').length > 0).length,
-    [warmupAnswers],
-  );
-  const canGenerate = answeredCount >= 2;
+
+  const parsedBirthYear = parseInt(birthYear, 10);
+  const birthYearValid = birthYear.length === 4 && parsedBirthYear >= 1920 && parsedBirthYear <= 2010;
+  const canAdvanceBackground = birthYearValid && grewUpCountry !== '';
+
+  const canGenerate =
+    normalizeDomain(warmupAnswers.bookComposerFilmmaker ?? '').length > 0 &&
+    normalizeDomain(warmupAnswers.hourLongTopic ?? '').length > 0;
+
   const reviewInterests = useMemo(
     () => [
       ...preSeededInterests,
@@ -338,7 +416,14 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
       const response = await fetch('/api/onboarding/propose-interests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ warmupAnswers }),
+        body: JSON.stringify({
+          warmupAnswers,
+          demographicContext: {
+            birthYear: birthYearValid ? parsedBirthYear : null,
+            grewUpCountry: grewUpCountry || null,
+            grewUpRegion: grewUpRegion || null,
+          },
+        }),
       });
       const data = await response.json().catch(() => ({}));
 
@@ -467,9 +552,85 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                 </div>
               ) : null}
 
-              <button type="button" className="btn-primary h-12 w-full" onClick={() => setCurrentStep('warmup')}>
+              <button type="button" className="btn-primary h-12 w-full" onClick={() => setCurrentStep('background')}>
                 Let&apos;s go
               </button>
+            </div>
+          ) : null}
+
+          {currentStep === 'background' ? (
+            <div className="flex flex-1 flex-col gap-7">
+              <StepHeader
+                title="A little about you"
+                subtitle="This helps us find knowledge territories that match your era and place."
+              />
+
+              <div className="space-y-5">
+                <label className="block">
+                  <span className="text-sm font-medium">What year were you born?</span>
+                  <input
+                    type="number"
+                    className="mt-2 h-12 w-full rounded-md border bg-card px-3 text-base outline-none transition placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring"
+                    placeholder="e.g. 1978"
+                    min={1920}
+                    max={2010}
+                    value={birthYear}
+                    onChange={(e) => setBirthYear(e.target.value.slice(0, 4))}
+                  />
+                  {birthYear.length === 4 && !birthYearValid ? (
+                    <span className="mt-1 block text-xs text-destructive">
+                      Please enter a year between 1920 and 2010.
+                    </span>
+                  ) : null}
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium">Where did you grow up?</span>
+                  <select
+                    className="mt-2 h-12 w-full rounded-md border bg-card px-3 text-base outline-none transition focus:ring-2 focus:ring-ring"
+                    value={grewUpCountry}
+                    onChange={(e) => {
+                      setGrewUpCountry(e.target.value);
+                      setGrewUpRegion('');
+                    }}
+                  >
+                    <option value="">Select a country</option>
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {grewUpCountry === 'US' ? (
+                  <label className="block">
+                    <span className="text-sm font-medium">Which state?</span>
+                    <select
+                      className="mt-2 h-12 w-full rounded-md border bg-card px-3 text-base outline-none transition focus:ring-2 focus:ring-ring"
+                      value={grewUpRegion}
+                      onChange={(e) => setGrewUpRegion(e.target.value)}
+                    >
+                      <option value="">Select a state</option>
+                      {US_STATES.map((s) => (
+                        <option key={s.code} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+
+              <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
+                <button type="button" className="btn-ghost h-12" onClick={() => setCurrentStep('welcome')}>
+                  Back
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary h-12"
+                  onClick={() => setCurrentStep('warmup')}
+                  disabled={!canAdvanceBackground}
+                >
+                  Continue
+                </button>
+              </div>
             </div>
           ) : null}
 
@@ -522,10 +683,13 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                 />
               ) : null}
 
-              <div className="mt-auto pt-2">
+              <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
+                <button type="button" className="btn-ghost h-12" onClick={() => setCurrentStep('background')}>
+                  Back
+                </button>
                 <button
                   type="button"
-                  className="btn-primary h-12 w-full"
+                  className="btn-primary h-12"
                   onClick={generateProposals}
                   disabled={!canGenerate || isLoading}
                 >
