@@ -29,6 +29,14 @@ export type MergeResult = {
   details: Array<{ sources: string[]; target: string; rationale: string }>;
 };
 
+export type AggressiveBackfillResult = {
+  mergesProposed: number;
+  mergesApplied: number;
+  domainsBefore: number;
+  domainsAfter: number;
+  details: Array<{ sources: string[]; target: string; rationale: string }>;
+};
+
 type SuggestedMerge = {
   sources: string[];
   target: string;
@@ -121,24 +129,69 @@ ${domainNames.map((name) => `- ${name}`).join('\n')}`;
   return parseSuggestedMerges(parseJsonObject(extractTextContent(response.content)));
 }
 
-export async function runDomainMergesForUser(userId: string): Promise<MergeResult> {
-  const masteryRows = await db
-    .select()
-    .from(playerMastery)
-    .where(eq(playerMastery.userId, userId))
-    .orderBy(desc(playerMastery.totalPoints));
+async function suggestAggressiveDomainMerges(
+  domains: Array<{ name: string; questionCount: number; tier: MasteryTier }>,
+): Promise<SuggestedMerge[]> {
+  const client = getAnthropicClient();
+  if (!client || domains.length < 2) return [];
 
-  const domainsBefore = masteryRows.length;
-  if (masteryRows.length < 2) {
-    return { mergesApplied: 0, domainsBefore, domainsAfter: domainsBefore, details: [] };
-  }
+  const domainList = domains
+    .map((d) => `- ${d.name} (${d.questionCount} questions, tier: ${d.tier})`)
+    .join('\n');
 
+  const prompt = `You are consolidating a user's trivia domain list. The user has accumulated domains over time. Some are at the wrong granularity — facets of a work or artist that should be merged into the parent domain.
+
+Domain labels should identify a body of knowledge: a work, an artist, a period, a discipline. They should never identify a facet (themes, characters, structure, symbolism, technique, style, form).
+
+RULES FOR MERGING:
+
+1. AGGRESSIVE on facet-to-parent merges. Any domain that names a facet of an existing work or artist MUST be merged into the parent domain.
+Examples:
+"Mrs. Dalloway – Characters & Themes" → merge into "Mrs. Dalloway"
+"Mrs. Dalloway – Themes & Characters" → merge into "Mrs. Dalloway"
+"Mrs. Dalloway – Narrative Technique" → merge into "Mrs. Dalloway"
+"Ulysses – Structure & Symbolism" → merge into "Ulysses"
+"Ulysses – Structure & Technique" → merge into "Ulysses"
+
+If the parent does not yet exist, CREATE it from the merge.
+
+2. AGGRESSIVE on near-duplicate merges. Any two labels that refer to the same body of knowledge with different wording must be merged.
+Examples:
+"Late Tchaikovsky" + "Tchaikovsky's Late Period" → one domain
+"Joyce's Ulysses" + "James Joyce's Ulysses" + "Ulysses" → one domain (prefer the most concise canonical name)
+
+3. CONSERVATIVE on splits and on cross-work merges.
+Do NOT merge:
+"Mrs. Dalloway" + "To the Lighthouse" (different works)
+"Late Tchaikovsky" + "Early Tchaikovsky" (different periods)
+"Bach's Well-Tempered Clavier" + "Bach's Cello Suites" (different works)
+
+Here are the user's current domains:
+${domainList}
+
+Propose merges. Respond in JSON only:
+{ "merges": [ { "sources": ["...", "..."], "target": "...", "rationale": "brief explanation" } ] }
+
+If no merges are needed: { "merges": [] }`;
+
+  const response = await client.messages.create({
+    model: ANTHROPIC_MODEL,
+    max_tokens: 1200,
+    temperature: 0,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  return parseSuggestedMerges(parseJsonObject(extractTextContent(response.content)));
+}
+
+// Shared transaction logic used by both runDomainMergesForUser and runAggressiveDomainBackfillForUser.
+async function applyMergesForUser(
+  userId: string,
+  masteryRows: (typeof playerMastery.$inferSelect)[],
+  suggestions: SuggestedMerge[],
+  verbose = false,
+): Promise<MergeResult['details']> {
   const byKey = new Map(masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]));
-  const suggestions = await suggestDomainMerges(masteryRows.map((row) => row.canonicalSubcategory));
-  if (suggestions.length === 0) {
-    return { mergesApplied: 0, domainsBefore, domainsAfter: domainsBefore, details: [] };
-  }
-
   const applied: MergeResult['details'] = [];
   const consumedSourceKeys = new Set<string>();
 
@@ -311,6 +364,10 @@ export async function runDomainMergesForUser(userId: string): Promise<MergeResul
         },
       });
 
+      if (verbose) {
+        console.log(`  [backfill-domains] APPLIED: [${sourceDomains.join(', ')}] → "${target}" (${totalPoints} pts, tier: ${tier}) — ${suggestion.rationale}`);
+      }
+
       for (const row of sourceRowsToDelete) {
         consumedSourceKeys.add(domainKey(row.canonicalSubcategory));
         byKey.delete(domainKey(row.canonicalSubcategory));
@@ -327,6 +384,28 @@ export async function runDomainMergesForUser(userId: string): Promise<MergeResul
     }
   });
 
+  return applied;
+}
+
+export async function runDomainMergesForUser(userId: string): Promise<MergeResult> {
+  const masteryRows = await db
+    .select()
+    .from(playerMastery)
+    .where(eq(playerMastery.userId, userId))
+    .orderBy(desc(playerMastery.totalPoints));
+
+  const domainsBefore = masteryRows.length;
+  if (masteryRows.length < 2) {
+    return { mergesApplied: 0, domainsBefore, domainsAfter: domainsBefore, details: [] };
+  }
+
+  const suggestions = await suggestDomainMerges(masteryRows.map((row) => row.canonicalSubcategory));
+  if (suggestions.length === 0) {
+    return { mergesApplied: 0, domainsBefore, domainsAfter: domainsBefore, details: [] };
+  }
+
+  const applied = await applyMergesForUser(userId, masteryRows, suggestions);
+
   const domainsAfter = await db
     .select({ id: playerMastery.id })
     .from(playerMastery)
@@ -336,6 +415,80 @@ export async function runDomainMergesForUser(userId: string): Promise<MergeResul
     mergesApplied: applied.length,
     domainsBefore,
     domainsAfter: domainsAfter.length,
+    details: applied,
+  };
+}
+
+export async function runAggressiveDomainBackfillForUser(
+  userId: string,
+  options: { dryRun?: boolean } = {},
+): Promise<AggressiveBackfillResult> {
+  const { dryRun = false } = options;
+
+  const masteryRows = await db
+    .select()
+    .from(playerMastery)
+    .where(eq(playerMastery.userId, userId))
+    .orderBy(desc(playerMastery.totalPoints));
+
+  const domainsBefore = masteryRows.length;
+  if (masteryRows.length < 2) {
+    return { mergesProposed: 0, mergesApplied: 0, domainsBefore, domainsAfter: domainsBefore, details: [] };
+  }
+
+  const questionCountRows = await db
+    .select({
+      canonicalSubcategory: masteryEvents.canonicalSubcategory,
+      questionCount: sql<number>`count(distinct ${masteryEvents.questionId})`,
+    })
+    .from(masteryEvents)
+    .where(eq(masteryEvents.userId, userId))
+    .groupBy(masteryEvents.canonicalSubcategory);
+
+  const countByDomain = new Map(
+    questionCountRows.map((row) => [domainKey(row.canonicalSubcategory), Number(row.questionCount)]),
+  );
+
+  const domainsWithContext = masteryRows.map((row) => ({
+    name: row.canonicalSubcategory,
+    questionCount: countByDomain.get(domainKey(row.canonicalSubcategory)) ?? 0,
+    tier: row.tier,
+  }));
+
+  const suggestions = await suggestAggressiveDomainMerges(domainsWithContext);
+  const mergesProposed = suggestions.length;
+
+  if (mergesProposed > 0) {
+    console.log(`[backfill-domains] user=${userId} proposed=${mergesProposed} dryRun=${dryRun}`);
+    for (const s of suggestions) {
+      console.log(`  PROPOSE: [${s.sources.join(', ')}] → "${s.target}" — ${s.rationale}`);
+    }
+  } else {
+    console.log(`[backfill-domains] user=${userId} no merges proposed`);
+  }
+
+  if (dryRun || mergesProposed === 0) {
+    return {
+      mergesProposed,
+      mergesApplied: 0,
+      domainsBefore,
+      domainsAfter: domainsBefore,
+      details: suggestions.map((s) => ({ sources: s.sources, target: s.target, rationale: s.rationale })),
+    };
+  }
+
+  const applied = await applyMergesForUser(userId, masteryRows, suggestions, true);
+
+  const domainsAfterRows = await db
+    .select({ id: playerMastery.id })
+    .from(playerMastery)
+    .where(eq(playerMastery.userId, userId));
+
+  return {
+    mergesProposed,
+    mergesApplied: applied.length,
+    domainsBefore,
+    domainsAfter: domainsAfterRows.length,
     details: applied,
   };
 }
