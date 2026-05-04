@@ -12,6 +12,7 @@ import {
 } from '@/server/adaptive-difficulty';
 import { getKnowledgeBase, getRecentDailyQuestionTexts } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { resolveDailyBasePoints } from './types';
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
@@ -23,13 +24,38 @@ Questions must be:
 - Drawn from the intellectual and cultural world of the domain, not biographical trivia
 - Written at a level that would reward genuine knowledge
 
+GRANULARITY RULES:
+Domain labels identify a body of knowledge — a work, an artist, a period, a discipline. They never identify a facet, aspect, or angle on that knowledge.
+
+GOOD domain labels:
+- "Mrs. Dalloway"
+- "Late Tchaikovsky"
+- "James Joyce's Ulysses"
+- "Italian Renaissance Painting"
+- "Weimar Cinema"
+- "1956 Hungarian Uprising"
+- "Stephen Sondheim"
+
+BAD domain labels (never propose these):
+- "Mrs. Dalloway – Characters & Themes" (facet of a work)
+- "Ulysses – Structure & Symbolism" (facet of a work)
+- "Tchaikovsky's Symphonic Form" (facet of an artist)
+- "Italian Renaissance – Color Theory" (facet of a period)
+- "Joyce's Use of Stream of Consciousness" (technique, not territory)
+
+If a question is about a facet, assign it to the parent domain. A question about Clarissa Dalloway's character → "Mrs. Dalloway". A question about Bach's fugal technique → "Bach's Well-Tempered Clavier" if it's specific to that work, otherwise "Johann Sebastian Bach" or the appropriate work-level domain.
+
+Do not invent meta-categories. Do not append qualifiers like "themes," "characters," "structure," "technique," "form," "style" to a domain.
+
+When in doubt: prefer the broader, work-level label. Use the exact domain name provided to you — the canonical_subcategory for a question should match the domain it was generated for.
+
 Return ONLY valid JSON. No preamble, no markdown fences, no explanation.
 
 Return format:
 {
   "questions": [
     {
-      "canonical_subcategory": "string, hyper-specific, never 'Other'",
+      "canonical_subcategory": "string, the domain label at work/artist/period/discipline level — must match the domain this question was generated for",
       "broad_category": "string",
       "question_text": "string",
       "answer": "string",
@@ -268,12 +294,17 @@ export async function generateDailyQuestions(
   const persisted: GeneratedQuestionRow[] = [];
 
   for (const question of generated.slice(0, count)) {
+    const { canonicalDomain } = await reconcileProposedDomain(
+      question.canonical_subcategory,
+      userId,
+    ).catch(() => ({ canonicalDomain: question.canonical_subcategory, reconciled: false }));
+
     const basePoints = resolveDailyBasePoints(question.difficulty_estimate);
     const [row] = await db
       .insert(generatedQuestions)
       .values({
         userId,
-        canonicalSubcategory: question.canonical_subcategory,
+        canonicalSubcategory: canonicalDomain,
         broadCategory: question.broad_category,
         questionText: question.question_text,
         answer: question.answer,
