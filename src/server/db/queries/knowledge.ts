@@ -345,7 +345,11 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
       .where(eq(playerMastery.userId, userId))
       .orderBy(desc(playerMastery.totalPoints)),
     db
-      .select()
+      .select({
+        canonicalSubcategory: masteryEvents.canonicalSubcategory,
+        answerState: masteryEvents.answerState,
+        createdAt: masteryEvents.createdAt,
+      })
       .from(masteryEvents)
       .where(eq(masteryEvents.userId, userId)),
   ]);
@@ -460,7 +464,14 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
       .where(eq(playerMastery.userId, userId)),
     db
       .select({
-        event: masteryEvents,
+        event: {
+          id: masteryEvents.id,
+          awardedPoints: masteryEvents.awardedPoints,
+          answerState: masteryEvents.answerState,
+          createdAt: masteryEvents.createdAt,
+          sessionContext: masteryEvents.sessionContext,
+          sourceType: masteryEvents.sourceType,
+        },
         questionText: questions.questionText,
       })
       .from(masteryEvents)

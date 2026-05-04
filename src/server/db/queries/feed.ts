@@ -129,14 +129,20 @@ async function collapseThumbsUpItems(items: FeedItem[]): Promise<FeedItem[]> {
 }
 
 export async function getDismissedDomains(userId: string): Promise<string[]> {
-  const rows = await db
-    .select({ canonicalSubcategory: feedDismissedDomains.canonicalSubcategory })
-    .from(feedDismissedDomains)
-    .where(and(
-      eq(feedDismissedDomains.userId, userId),
-      isNull(feedDismissedDomains.reinstatedAt),
-    ));
-  return rows.map((r) => r.canonicalSubcategory);
+  try {
+    const rows = await db
+      .select({ canonicalSubcategory: feedDismissedDomains.canonicalSubcategory })
+      .from(feedDismissedDomains)
+      .where(and(
+        eq(feedDismissedDomains.userId, userId),
+        isNull(feedDismissedDomains.reinstatedAt),
+      ));
+    return rows.map((r) => r.canonicalSubcategory);
+  } catch (error) {
+    const pgError = error as { code?: string };
+    if (pgError.code === '42P01') return []; // FeedDismissedDomain table not yet migrated
+    throw error;
+  }
 }
 
 export async function dismissDomain(userId: string, canonicalSubcategory: string): Promise<void> {
