@@ -49,7 +49,7 @@ function interpretiveLine(summary: DailySummaryView): string | null {
 
   // 2. First correct in new demonstrated domain
   const newDomain = summary.domainGains.find((gain) => gain.isNewTerritory);
-  if (newDomain) return `New ground: ${newDomain.displayName} is yours now.`;
+  if (newDomain) return `You found new ground in ${newDomain.displayName}.`;
 
   const answered = summary.questions.filter((q) => !q.isSkipped);
   const total = answered.length;

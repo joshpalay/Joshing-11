@@ -50,7 +50,9 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const feed = await getFeedForUser(session.userId);
+  const rawFeed = await getFeedForUser(session.userId);
+  // authored_shared is deprecated — filter inert rows until cleanup script removes them
+  const feed = rawFeed.filter((item) => item.sourceType !== 'authored_shared');
   const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
   const sourceUserIds = [...new Set(feed.map((item) => item.sourceUserId))];
   const gameIds = feed.map((item) => item.joshingGameId).filter((id): id is string => Boolean(id));
@@ -89,7 +91,7 @@ export async function GET() {
       } else if (item.sourceType === 'joshing_game') {
         source_attribution = `${sourceName} sent you a Joshing Game`;
       } else {
-        // legacy thumbs_upped
+        // legacy thumbs_upped (authored_shared rows are inert and filtered before this)
         source_attribution = thumbsupAttribution(sourceName, item.thumbsUpCount);
       }
 

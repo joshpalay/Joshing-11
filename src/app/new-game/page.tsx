@@ -101,6 +101,7 @@ export default function NewGamePage() {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',
+      // In the game builder, respect whatever share options the user chose
       body: JSON.stringify(values),
     });
     const body = await response.json().catch(() => null);

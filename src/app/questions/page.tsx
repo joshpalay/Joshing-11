@@ -65,6 +65,7 @@ function initialValues(question: QuestionView): QuestionFormValues {
     explanation: question.explanation,
     domain: question.domain,
     difficulty: question.difficulty,
+    sendToFriendIds: [],
   };
 }
 
@@ -162,7 +163,12 @@ export default function QuestionsPage() {
     if (!response.ok || !body?.question) throw new Error(body?.error ?? 'Could not save that question.');
     setQuestions((current) => [body.question!, ...current]);
     setDrawer({ mode: 'closed' });
-    setToast('Question saved.');
+    if (values.sendToFriendIds.length > 0) {
+      const n = values.sendToFriendIds.length;
+      setToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
+    } else {
+      setToast('Saved to your bank.');
+    }
   }
 
   async function saveEdit(questionId: string, values: QuestionFormValues) {

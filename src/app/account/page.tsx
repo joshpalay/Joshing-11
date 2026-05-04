@@ -250,6 +250,7 @@ export default function AccountPage() {
 
       <section className="mb-7 divide-y rounded-lg border bg-card text-card-foreground">
         {[
+          { href: '/knowledge?interests=manage', label: 'Manage interests' },
           { href: '/archive', label: 'Archive' },
           { href: '/questions', label: 'Your Questions' },
           { href: '/knowledge', label: 'Knowledge Map' },

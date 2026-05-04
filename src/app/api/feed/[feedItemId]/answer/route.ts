@@ -10,6 +10,7 @@ import { getBasePoints } from '@/server/mastery/awards';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
+import { upgradeKBDomainToDemonstrated } from '@/server/db/queries/daily';
 
 export const dynamic = 'force-dynamic';
 
@@ -142,6 +143,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })
       .where(eq(feedItems.id, feedItemId));
   });
+
+  // Promote author's declared territory to demonstrated when a non-author answers correctly
+  if (isCorrect && !alreadyCorrect && session.userId !== question.creatorId) {
+    void upgradeKBDomainToDemonstrated(question.creatorId, question.category);
+  }
 
   // Propagate this answer to the answering user's friends' Feeds
   void createFeedItemsForFriendsFromAnswer(

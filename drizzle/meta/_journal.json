@@ -99,6 +99,13 @@
       "when": 1746403200000,
       "tag": "0013_onboarding_demographics",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1746576000000,
+      "tag": "0014_territory_type",
+      "breakpoints": true
     }
   ]
 }

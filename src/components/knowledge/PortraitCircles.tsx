@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useState, useMemo, type CSSProperties } from 'react';
+import { getDomainCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
 
 type PortraitTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 type SortMode = 'domain' | 'mastery';
@@ -65,14 +66,7 @@ export function getPortraitDomainColor(domain: string): DomainColor {
 }
 
 const SPARSE_THRESHOLD = 5;
-const MIN_SIZE = 30;
-const MAX_SIZE = 82;
 const MIN_OPACITY = 0.22;
-
-export function getPortraitCircleSize(pts: number, maxPts: number): number {
-  const n = pts / Math.max(maxPts, 1);
-  return Math.round(MIN_SIZE + n * (MAX_SIZE - MIN_SIZE));
-}
 
 export function getPortraitCircleOpacity(pts: number, maxPts: number): number {
   const n = pts / Math.max(maxPts, 1);
@@ -114,23 +108,23 @@ function buildSections(entries: PortraitEntry[], sortMode: SortMode): Section[] 
 
 export function PortraitDomainCircle({
   entry,
-  maxPoints,
+  maxPointsForTier,
   forceFullOpacity = false,
   showCount = true,
   circleScale = 1,
   selected = false,
 }: {
   entry: PortraitEntry;
-  maxPoints: number;
+  maxPointsForTier: number;
   forceFullOpacity?: boolean;
   showCount?: boolean;
   circleScale?: number;
   selected?: boolean;
 }) {
   const dc = getPortraitDomainColor(entry.broadCategory);
-  const size = Math.round(getPortraitCircleSize(entry.totalMasteryPoints, maxPoints) * circleScale);
-  const opacity = forceFullOpacity ? 1 : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPoints);
-  const labelOpacity = 0.5 + (entry.totalMasteryPoints / Math.max(maxPoints, 1)) * 0.5;
+  const size = Math.round(getDomainCircleSize(entry.tier as CircleSizingTier, entry.totalMasteryPoints, maxPointsForTier) * circleScale);
+  const opacity = forceFullOpacity ? 1 : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier);
+  const labelOpacity = 0.5 + (entry.totalMasteryPoints / Math.max(maxPointsForTier, 1)) * 0.5;
   const showMasteryCount =
     showCount &&
     entry.tier !== 'establishing' && entry.authoredAnsweredCount > 0;
@@ -204,9 +198,16 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
   const [sortMode, setSortMode] = useState<SortMode>('domain');
 
   const validEntries = entries.filter((e) => e.broadCategory && e.broadCategory !== 'Other');
-  const maxPoints = Math.max(...validEntries.map((e) => e.totalMasteryPoints), 1);
   const isSparse = validEntries.length < SPARSE_THRESHOLD;
   const sections = buildSections(validEntries, sortMode);
+
+  const maxPointsByTier = useMemo(() => {
+    const result: Record<string, number> = { establishing: 1, familiar: 1, solid: 1, mastery: 1 };
+    for (const e of validEntries) {
+      if (e.totalMasteryPoints > (result[e.tier] ?? 1)) result[e.tier] = e.totalMasteryPoints;
+    }
+    return result;
+  }, [validEntries]);
   const allDomains = [...new Set(validEntries.map((e) => e.broadCategory))];
 
   return (
@@ -300,7 +301,7 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
             </div>
             <div style={circlesRowStyle}>
               {sectionEntries.map((entry) => (
-                <PortraitDomainCircle key={entry.canonicalSubcategory} entry={entry} maxPoints={maxPoints} />
+                <PortraitDomainCircle key={entry.canonicalSubcategory} entry={entry} maxPointsForTier={maxPointsByTier[entry.tier] ?? 1} />
               ))}
             </div>
           </div>

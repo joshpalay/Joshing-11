@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Send, SkipForward, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 
@@ -166,6 +166,8 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
   const [results, setResults] = useState<Record<string, ResultState>>({});
   const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({});
   const [toasts, setToasts] = useState<Record<string, string>>({});
+  const [thumbsDownState, setThumbsDownState] = useState<Record<string, 'removed' | 'restored'>>({});
+  const thumbsDownTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -303,14 +305,41 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
   }, []);
 
   const thumbsdown = useCallback(async (itemId: string) => {
+    const current = thumbsDownState[itemId];
     setBusyId(itemId);
     try {
-      const response = await fetch(`/api/feed/${itemId}/thumbsdown`, { method: 'POST', credentials: 'include' });
-      if (response.ok) removeItem(itemId);
+      if (current === 'removed') {
+        // Undo: restore the item
+        const response = await fetch(`/api/feed/${itemId}/thumbsdown`, { method: 'DELETE', credentials: 'include' });
+        if (response.ok) {
+          if (thumbsDownTimers.current[itemId]) {
+            clearTimeout(thumbsDownTimers.current[itemId]);
+            delete thumbsDownTimers.current[itemId];
+          }
+          setThumbsDownState((s) => ({ ...s, [itemId]: 'restored' }));
+          // Auto-fade restored message after 4s
+          thumbsDownTimers.current[itemId] = setTimeout(() => {
+            setThumbsDownState((s) => { const next = { ...s }; delete next[itemId]; return next; });
+            delete thumbsDownTimers.current[itemId];
+          }, 4000);
+        }
+      } else {
+        // First tap: dismiss and show confirmation
+        const response = await fetch(`/api/feed/${itemId}/thumbsdown`, { method: 'POST', credentials: 'include' });
+        if (response.ok) {
+          setThumbsDownState((s) => ({ ...s, [itemId]: 'removed' }));
+          // Auto-remove from list after 4s
+          thumbsDownTimers.current[itemId] = setTimeout(() => {
+            removeItem(itemId);
+            setThumbsDownState((s) => { const next = { ...s }; delete next[itemId]; return next; });
+            delete thumbsDownTimers.current[itemId];
+          }, 4000);
+        }
+      }
     } finally {
       setBusyId(null);
     }
-  }, [removeItem]);
+  }, [removeItem, thumbsDownState]);
 
   return (
     <>
@@ -344,6 +373,8 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
               return <JoshingGameCard key={item.id} item={item} viewerId={viewerId} />;
             }
 
+            const thumbsDownMsg = thumbsDownState[item.id];
+
             return (
               <article
                 key={item.id}
@@ -370,7 +401,9 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                 <p className="text-base leading-7 text-foreground">{item.question_text}</p>
 
                 {/* Attribution line */}
-                <p className="mt-2 text-sm font-medium text-foreground">{item.source_attribution}</p>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <p className="text-sm font-medium text-foreground">{item.source_attribution}</p>
+                </div>
                 {item.personal_message ? (
                   <p className="mt-1 text-sm italic text-muted-foreground">&ldquo;{item.personal_message}&rdquo;</p>
                 ) : null}
@@ -378,6 +411,15 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                 {/* Toast */}
                 {toast ? (
                   <p className="mt-2 text-sm text-muted-foreground">{toast}</p>
+                ) : null}
+
+                {/* Thumbs-down inline confirmation */}
+                {thumbsDownMsg ? (
+                  <p className="mt-2 text-xs italic text-muted-foreground">
+                    {thumbsDownMsg === 'removed'
+                      ? "Removed from your feed. Won’t pass to your friends."
+                      : 'Restored. This may pass to your friends.'}
+                  </p>
                 ) : null}
 
                 {/* State 2 — Answered */}

@@ -25,7 +25,8 @@ import { orderCatchUpItems } from '@/server/play/catch-up-turn-sequencing';
 export type KnowledgeBaseDomain = {
   domain: string;
   broadCategory: string | null;
-  source: 'declared' | 'friend_mediated';
+  source: 'declared' | 'friend_mediated' | 'authorship';
+  territoryType: 'declared' | 'demonstrated';
   totalPoints: number;
   tier: 'establishing' | 'familiar' | 'solid' | 'mastery';
 };
@@ -66,6 +67,7 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
       .select({
         domain: declaredInterests.domain,
         broadCategory: declaredInterests.broadCategory,
+        territoryType: declaredInterests.territoryType,
       })
       .from(declaredInterests)
       .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
@@ -97,10 +99,12 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
   for (const row of declared) {
     const domain = normalizeDomain(row.domain);
     if (!domain) continue;
+    const territoryType = row.territoryType ?? 'declared';
     domains.set(domain.toLowerCase(), {
       domain,
       broadCategory: row.broadCategory,
       source: 'declared',
+      territoryType,
       totalPoints: 0,
       tier: 'establishing',
     });
@@ -115,6 +119,7 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
       domain: existing?.domain ?? domain,
       broadCategory: existing?.broadCategory ?? row.broadCategory,
       source: existing?.source ?? 'friend_mediated',
+      territoryType: 'demonstrated',
       totalPoints: row.totalPoints,
       tier: row.tier,
     });
@@ -313,4 +318,49 @@ export async function userHasFriendMediatedDomain(userId: string, domain: string
     .limit(1);
 
   return Boolean(row);
+}
+
+export async function getKBDomainEntry(userId: string, domain: string) {
+  const [row] = await db
+    .select()
+    .from(declaredInterests)
+    .where(and(
+      eq(declaredInterests.userId, userId),
+      eq(declaredInterests.domain, domain),
+      eq(declaredInterests.isActive, true),
+    ))
+    .limit(1);
+
+  return row ?? null;
+}
+
+export async function addKBDomainAsDeclared(
+  userId: string,
+  domain: string,
+  broadCategory?: string | null,
+): Promise<void> {
+  await db
+    .insert(declaredInterests)
+    .values({
+      userId,
+      domain,
+      broadCategory: broadCategory ?? null,
+      territoryType: 'declared',
+    })
+    .onConflictDoNothing({
+      target: [declaredInterests.userId, declaredInterests.domain],
+    });
+}
+
+export async function upgradeKBDomainToDemonstrated(userId: string, domain: string): Promise<void> {
+  const existing = await getKBDomainEntry(userId, domain);
+  if (existing && existing.territoryType === 'declared') {
+    await db
+      .update(declaredInterests)
+      .set({ territoryType: 'demonstrated' })
+      .where(and(
+        eq(declaredInterests.userId, userId),
+        eq(declaredInterests.domain, domain),
+      ));
+  }
 }

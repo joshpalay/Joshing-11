@@ -12,6 +12,7 @@ export type QuestionFormValues = {
   explanation: string | null;
   domain: string;
   difficulty: number;
+  sendToFriendIds: string[];
 };
 
 type SuggestionResponse = {
@@ -20,9 +21,15 @@ type SuggestionResponse = {
   explanation: string;
 };
 
+type FriendOption = {
+  id: string;
+  displayName: string;
+};
+
 type Props = {
   mode?: 'create' | 'edit';
   initialValues?: Partial<QuestionFormValues>;
+  initialSpecificMode?: boolean;
   onSubmit: (values: QuestionFormValues) => Promise<void>;
   submitLabel?: string;
   loadingLabel?: string;
@@ -45,6 +52,7 @@ const defaults: QuestionFormValues = {
   explanation: '',
   domain: 'other',
   difficulty: 3,
+  sendToFriendIds: [],
 };
 
 function normalizeInitialValues(initialValues?: Partial<QuestionFormValues>): QuestionFormValues {
@@ -53,6 +61,7 @@ function normalizeInitialValues(initialValues?: Partial<QuestionFormValues>): Qu
     ...initialValues,
     alternateAnswers: initialValues?.alternateAnswers ?? defaults.alternateAnswers,
     explanation: initialValues?.explanation ?? defaults.explanation,
+    sendToFriendIds: initialValues?.sendToFriendIds ?? defaults.sendToFriendIds,
   };
 }
 
@@ -66,12 +75,14 @@ function validate(values: QuestionFormValues): string | null {
   if ((values.explanation ?? '').length > 500) return 'Explanation must be 500 characters or fewer.';
   if (!CATEGORIES.includes(values.domain as (typeof CATEGORIES)[number])) return 'Choose a valid domain.';
   if (!Number.isInteger(values.difficulty) || values.difficulty < 1 || values.difficulty > 5) return 'Choose a difficulty from 1 to 5.';
+  if (values.sendToFriendIds.length > 20) return 'You can send to at most 20 friends at once.';
   return null;
 }
 
 export function QuestionForm({
   mode = 'create',
   initialValues,
+  initialSpecificMode = false,
   onSubmit,
   submitLabel,
   loadingLabel = 'Saving...',
@@ -84,12 +95,56 @@ export function QuestionForm({
   const [error, setError] = useState<string | null>(null);
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
 
+  // Specific-friends mode state
+  const [specificMode, setSpecificMode] = useState(initialSpecificMode);
+  const [friends, setFriends] = useState<FriendOption[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+
   useEffect(() => {
     setValues(normalizeInitialValues(initialValues));
     setAlternateText((initialValues?.alternateAnswers ?? []).join(', '));
     setError(null);
     setSuggestionError(null);
   }, [initialValues]);
+
+  useEffect(() => {
+    if (initialSpecificMode) void loadFriends();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadFriends() {
+    if (friends.length > 0 || friendsLoading) return;
+    setFriendsLoading(true);
+    try {
+      const response = await fetch('/api/users', { cache: 'no-store', credentials: 'include' });
+      const body = await response.json().catch(() => null) as FriendOption[] | null;
+      if (response.ok && Array.isArray(body)) setFriends(body);
+    } finally {
+      setFriendsLoading(false);
+    }
+  }
+
+  function toggleSpecificMode(on: boolean) {
+    setSpecificMode(on);
+    if (on) {
+      setValues((current) => ({ ...current, sendToFriendIds: [] }));
+      void loadFriends();
+    } else {
+      setValues((current) => ({ ...current, sendToFriendIds: [] }));
+    }
+  }
+
+  function toggleFriendPick(friendId: string) {
+    setValues((current) => {
+      const already = current.sendToFriendIds.includes(friendId);
+      return {
+        ...current,
+        sendToFriendIds: already
+          ? current.sendToFriendIds.filter((id) => id !== friendId)
+          : [...current.sendToFriendIds, friendId],
+      };
+    });
+  }
 
   const resolvedSubmitLabel = submitLabel ?? (mode === 'edit' ? 'Update question' : 'Save question');
   const alternateAnswers = useMemo(
@@ -156,6 +211,9 @@ export function QuestionForm({
       setSubmitting(false);
     }
   }
+
+  // Only show destinations panel in create mode
+  const showDestinations = mode === 'create';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -280,6 +338,68 @@ export function QuestionForm({
           </p>
         </div>
       </div>
+
+      {showDestinations ? (
+        <div className="rounded-md border bg-muted/40 p-4">
+          <p className="mb-3 text-xs uppercase tracking-[0.1em] text-muted-foreground">Destinations</p>
+
+          {/* Save to bank — always on */}
+          <label className="mb-2 flex cursor-default items-center gap-2 text-sm">
+            <input type="checkbox" checked readOnly disabled className="rounded" />
+            <span className="text-foreground">Save to bank</span>
+          </label>
+
+          {/* Send to specific friends */}
+          <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={specificMode}
+              onChange={(event) => toggleSpecificMode(event.target.checked)}
+              className="rounded"
+            />
+            <span className="text-foreground">Send to specific friends</span>
+          </label>
+
+          {/* Friend picker */}
+          {specificMode ? (
+            <div className="mt-1">
+              {friendsLoading ? (
+                <p className="text-xs text-muted-foreground">Loading friends...</p>
+              ) : friends.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No friends found.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {friends.map((friend) => {
+                    const selected = values.sendToFriendIds.includes(friend.id);
+                    return (
+                      <button
+                        key={friend.id}
+                        type="button"
+                        onClick={() => toggleFriendPick(friend.id)}
+                        className={[
+                          'rounded-full border px-3 py-1 text-sm transition',
+                          selected
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-background hover:bg-muted',
+                        ].join(' ')}
+                      >
+                        {friend.displayName}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* Helper text */}
+          <p className="mt-3 text-xs text-muted-foreground">
+            {specificMode
+              ? 'Sent directly to the friends you pick.'
+              : 'Saved to your bank.'}
+          </p>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-3 pt-2">
         <button type="submit" disabled={submitting} className="btn-primary">

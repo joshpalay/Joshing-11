@@ -1,7 +1,8 @@
 'use client';
 
-import { Fragment, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DomainCircle } from '@/components/knowledge/DomainCircle';
+import { getDomainCircleSize } from '@/lib/knowledge/circle-sizing';
 import type { MasteryTier } from '@/types/db';
 
 const TIERS = ['establishing', 'familiar', 'solid', 'mastery'] as const;
@@ -14,12 +15,8 @@ const TIER_LABEL: Record<Tier, string> = {
   mastery: 'MASTERY',
 };
 
-const MAX_CIRCLE_DIAMETER = 72;
-const MIN_CIRCLE_DIAMETER = 28;
-const GHOST_CIRCLE_DIAMETER = 28;
-const MAX_CIRCLE_DIAMETER_MOBILE = 60;
-const MIN_CIRCLE_DIAMETER_MOBILE = 24;
-const GHOST_CIRCLE_DIAMETER_MOBILE = 24;
+const GHOST_CIRCLE_DIAMETER = 18;
+const GHOST_CIRCLE_DIAMETER_MOBILE = 15;
 const MOBILE_BREAKPOINT = 430;
 const MOBILE_COL_WIDTH = 160;
 const SCROLL_HINT_KEY = 'knowledge_progression_scroll_hint_count';
@@ -59,17 +56,13 @@ function consumeScrollHint(): boolean {
   }
 }
 
-function getCircleDiameter(correctAnswerCount: number, maxCorrectAnswerCount: number, isMobile: boolean): number {
-  const max = isMobile ? MAX_CIRCLE_DIAMETER_MOBILE : MAX_CIRCLE_DIAMETER;
-  const min = isMobile ? MIN_CIRCLE_DIAMETER_MOBILE : MIN_CIRCLE_DIAMETER;
-  const ghost = isMobile ? GHOST_CIRCLE_DIAMETER_MOBILE : GHOST_CIRCLE_DIAMETER;
-  if (correctAnswerCount === 0) return ghost;
-  return Math.round(min + (correctAnswerCount / Math.max(1, maxCorrectAnswerCount)) * (max - min));
+function getCircleDiameter(correctAnswerCount: number, tier: Tier, maxForTier: number, isMobile: boolean): number {
+  if (correctAnswerCount === 0) return isMobile ? GHOST_CIRCLE_DIAMETER_MOBILE : GHOST_CIRCLE_DIAMETER;
+  return getDomainCircleSize(tier, correctAnswerCount, maxForTier, isMobile);
 }
 
 export function ProgressionLandscape({
   domains,
-  maxCorrectAnswerCount,
   highlightSlug,
   onDomainSelect,
 }: ProgressionLandscapeProps) {
@@ -163,6 +156,15 @@ export function ProgressionLandscape({
     return () => window.clearTimeout(timer);
   }, [highlightSlug, isMobile]);
 
+  const maxPerTier = useMemo(() => {
+    const result: Record<Tier, number> = { establishing: 1, familiar: 1, solid: 1, mastery: 1 };
+    for (const domain of domains) {
+      const tier = (domain.currentTier ?? 'establishing') as Tier;
+      if (domain.correctAnswerCount > result[tier]) result[tier] = domain.correctAnswerCount;
+    }
+    return result;
+  }, [domains]);
+
   const sortedCategories = [...new Set(domains.map((domain) => domain.broadCategory ?? ''))].sort((a, b) => {
     if (!a && !b) return 0;
     if (!a) return 1;
@@ -229,7 +231,7 @@ export function ProgressionLandscape({
                     <div style={categoryLabelStyle}>{colIdx === 0 ? (category || 'Other') : ''}</div>
                     {cellDomains.map((domain) => {
                       const isGhost = domain.correctAnswerCount === 0;
-                      const diameter = getCircleDiameter(domain.correctAnswerCount, maxCorrectAnswerCount, isMobile);
+                      const diameter = getCircleDiameter(domain.correctAnswerCount, tier, maxPerTier[tier], isMobile);
                       const isHighlighted = highlightSlug === domain.canonicalSubcategorySlug && expiredHighlightSlug !== domain.canonicalSubcategorySlug;
 
                       return (

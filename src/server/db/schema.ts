@@ -596,6 +596,7 @@ export const declaredInterests = pgTable(
     broadCategory: text('broadCategory'),
     declaredAt: timestamp('declaredAt', { withTimezone: true }).notNull().defaultNow(),
     isActive: boolean('isActive').notNull().default(true),
+    territoryType: text('territory_type').$type<'declared' | 'demonstrated'>().notNull().default('declared'),
   },
   (table) => [
     unique('DeclaredInterest_userId_domain_key').on(table.userId, table.domain),

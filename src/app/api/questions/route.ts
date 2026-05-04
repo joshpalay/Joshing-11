@@ -1,9 +1,9 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { QUESTION_DOMAIN_KEYS } from '@/lib/game-constants';
 import { getSession } from '@/server/auth/session';
-import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
+import { db, feedItems, questions, users } from '@/server/db';
 import {
   createQuestion,
   getQuestion,
@@ -12,9 +12,10 @@ import {
 import { getFriends } from '@/server/db/queries/friends';
 import {
   rollOffOldItems,
-  userAnsweredQuestionCorrectly,
   userHasQuestionInBlockingFeed,
+  userAnsweredQuestionCorrectly,
 } from '@/server/db/queries/feed';
+import { addKBDomainAsDeclared } from '@/server/db/queries/daily';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
@@ -71,8 +72,6 @@ function readCreatePayload(body: Record<string, unknown> | null) {
     : difficultyFromLegacy(body?.difficulty_estimate) ?? (isLegacyPayload ? 3 : null);
   const difficultyValue = difficulty ?? Number.NaN;
 
-  // Share options
-  const shareToFeed = body?.shareToFeed === false ? false : true; // default true
   const rawSendToFriendIds = Array.isArray(body?.sendToFriendIds)
     ? (body.sendToFriendIds as unknown[]).filter((id): id is string => typeof id === 'string').slice(0, 20)
     : [];
@@ -84,10 +83,9 @@ function readCreatePayload(body: Record<string, unknown> | null) {
   if (explanation && explanation.length > 500) errors.push('explanation');
   if (!VALID_DOMAINS.has(domain)) errors.push('domain');
   if (!Number.isInteger(difficultyValue) || difficultyValue < 1 || difficultyValue > 5) errors.push('difficulty');
-  if (shareToFeed && rawSendToFriendIds.length > 0) errors.push('shareToFeed'); // mutually exclusive
 
   return {
-    value: { text, correctAnswer, alternateAnswers, explanation, domain, difficulty: difficultyValue, shareToFeed, sendToFriendIds: rawSendToFriendIds },
+    value: { text, correctAnswer, alternateAnswers, explanation, domain, difficulty: difficultyValue, sendToFriendIds: rawSendToFriendIds },
     errors,
   };
 }
@@ -109,47 +107,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
 
-  const { shareToFeed, sendToFriendIds, ...questionFields } = value;
+  const { sendToFriendIds, ...questionFields } = value;
 
   const created = await createQuestion({ authorId: session.userId, ...questionFields });
+  // Open domain as declared territory — idempotent, one door per domain
+  void addKBDomainAsDeclared(session.userId, questionFields.domain);
   const question = await getQuestion(created.id, session.userId);
 
-  const questionDomain = created.canonicalSubcategory ?? created.broadCategory ?? null;
-
-  if (shareToFeed && questionDomain) {
-    const friends = await getFriends(session.userId);
-    for (const friend of friends) {
-      // Skip friends who dismissed this domain
-      const [dismissed] = await db
-        .select({ id: feedDismissedDomains.id })
-        .from(feedDismissedDomains)
-        .where(and(
-          eq(feedDismissedDomains.userId, friend.id),
-          eq(feedDismissedDomains.canonicalSubcategory, questionDomain),
-          isNull(feedDismissedDomains.reinstatedAt),
-        ))
-        .limit(1);
-      if (dismissed) continue;
-
-      // Skip friends who already answered this correctly
-      const alreadyCorrect = await userAnsweredQuestionCorrectly(friend.id, created.id);
-      if (alreadyCorrect) continue;
-
-      await db.insert(feedItems).values({
-        recipientUserId: friend.id,
-        questionId: created.id,
-        sourceType: 'authored_shared',
-        sourceUserId: session.userId,
-        sourceEventAt: new Date(),
-        state: 'active',
-        isPinned: false,
-      });
-      await rollOffOldItems(friend.id);
-    }
-
-    // Mark question as shared
-    await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
-  } else if (sendToFriendIds.length > 0) {
+  if (sendToFriendIds.length > 0) {
     // Validate that all recipients are actual friends
     const friends = await getFriends(session.userId);
     const friendIdSet = new Set(friends.map((f) => f.id));

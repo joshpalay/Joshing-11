@@ -290,6 +290,18 @@ export async function generateDailyQuestions(
   return persisted;
 }
 
+const DECLARED_DOMAIN_WEIGHT = 0.5;
+
+function weightedFilterDomains(knowledgeBase: Awaited<ReturnType<typeof getKnowledgeBase>>): string[] {
+  const filtered = knowledgeBase.filter((d) => {
+    if (d.territoryType === 'demonstrated') return true;
+    return Math.random() < DECLARED_DOMAIN_WEIGHT;
+  });
+  return filtered.length > 0
+    ? filtered.map((d) => d.domain)
+    : knowledgeBase.map((d) => d.domain);
+}
+
 export async function generateDailyQuestionsFromKnowledgeBase(
   userId: string,
   count: number,
@@ -304,10 +316,16 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     : FIXED_DIFFICULTY_LEVELS[preferences.difficulty] ?? null;
 
   const allDomains = knowledgeBase.map((domain) => domain.domain);
-  const selectedDomains = preferences.domainMode === 'custom' && preferences.selectedDomains.length > 0
-    ? preferences.selectedDomains.filter((domain) => allDomains.includes(domain))
-    : allDomains;
-  const domainsForRound = selectedDomains.length > 0 ? selectedDomains : allDomains;
+
+  let domainsForRound: string[];
+  if (preferences.domainMode === 'custom' && preferences.selectedDomains.length > 0) {
+    // Custom mode: user explicitly selected domains, use as-is
+    const filtered = preferences.selectedDomains.filter((domain) => allDomains.includes(domain));
+    domainsForRound = filtered.length > 0 ? filtered : allDomains;
+  } else {
+    // Random mode: apply territory weights (declared=0.5x, demonstrated=1.0x)
+    domainsForRound = weightedFilterDomains(knowledgeBase);
+  }
 
   return generateDailyQuestions(
     domainsForRound,

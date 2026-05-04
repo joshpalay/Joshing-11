@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Combine, Plus, Repeat2, X } from 'lucide-react';
+import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 
 import { DomainCard } from '@/components/knowledge/DomainCard';
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
@@ -169,6 +170,7 @@ function KnowledgePageContent() {
   const searchParams = useSearchParams();
   const highlightedDomainSlug = searchParams.get('domain');
   const tierCrossed = searchParams.get('tier_crossed');
+  const manageInterestsParam = searchParams.get('interests');
 
   const [data, setData] = useState<KnowledgeResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -188,6 +190,10 @@ function KnowledgePageContent() {
   const [tidyNotice, setTidyNotice] = useState<string | null>(null);
   const [dismissedDomains, setDismissedDomains] = useState<string[]>([]);
   const [reinstating, setReinstating] = useState<string | null>(null);
+  const [manageInterestsOpen, setManageInterestsOpen] = useState(false);
+  const [sendQuestionOpen, setSendQuestionOpen] = useState(false);
+  const [writeQuestionOpen, setWriteQuestionOpen] = useState(false);
+  const [questionToast, setQuestionToast] = useState<string | null>(null);
 
   const loadKnowledge = async () => {
     const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
@@ -227,6 +233,14 @@ function KnowledgePageContent() {
     url.searchParams.delete('tier_crossed');
     window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
   }, [tierCrossed]);
+
+  useEffect(() => {
+    if (manageInterestsParam !== 'manage') return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('interests');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    setManageInterestsOpen(true);
+  }, [manageInterestsParam]);
 
   useEffect(() => {
     if (!highlightedDomainSlug) return;
@@ -354,6 +368,21 @@ function KnowledgePageContent() {
     } finally {
       setSavingInterests(false);
     }
+  };
+
+  const submitQuestion = async (values: QuestionFormValues) => {
+    const response = await fetch('/api/questions', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+    const body = await response.json().catch(() => null) as { message?: string } | null;
+    if (!response.ok) throw new Error(body?.message ?? 'Could not save that question.');
+    setSendQuestionOpen(false);
+    setWriteQuestionOpen(false);
+    setQuestionToast('Question saved.');
+    window.setTimeout(() => setQuestionToast(null), 2500);
   };
 
   const reinstateDomain = async (domain: string) => {
@@ -502,33 +531,18 @@ function KnowledgePageContent() {
         </section>
       )}
 
-      <section style={sectionStyle}>
-        <div>
-          <p style={knowledgeEyebrowStyle}>YOUR TOPICS</p>
-          <p style={knowledgeSubtitleStyle}>THE FIVE DECLARED INTERESTS YOUR DAILY ROUND DRAWS FROM</p>
-        </div>
-        <div style={declaredGridStyle}>
-          {declaredSlots.map((slot, index) => (
-            <div key={slot?.domain ?? `empty-${index}`} style={declaredCardStyle}>
-              {slot ? (
-                <>
-                  <div style={{ minWidth: 0 }}>
-                    <h3 style={declaredTitleStyle}>{slot.displayName}</h3>
-                    <p style={declaredMetaStyle}>{slot.broadCategory ?? asTier(slot.tier)}</p>
-                  </div>
-                  <button type="button" style={declaredButtonStyle} onClick={() => openInterestModal(index, slot.domain)}>
-                    <Repeat2 className="size-3.5" />
-                    Swap
-                  </button>
-                </>
-              ) : (
-                <button type="button" style={emptyDeclaredButtonStyle} onClick={() => openInterestModal(index, null)}>
-                  <Plus className="size-4" />
-                  Add interest
-                </button>
-              )}
-            </div>
-          ))}
+      <section style={growMapSectionStyle}>
+        <h2 style={growMapHeadingStyle}>Grow your map</h2>
+        <p style={growMapBodyStyle}>Your map grows in two directions.</p>
+        <p style={growMapBodyStyle}>When you send a friend a question and they answer it correctly, that domain joins your map. When a friend sends you a question and you answer it correctly, that domain joins your map too. Either direction works. Both are how it expands.</p>
+        <p style={growMapBodyStyle}>Try asking a friend about something you&apos;d love to know more about — Disney World, 1970s BBC Drama, the 1956 Hungarian Uprising. The ask itself is the start.</p>
+        <div style={growMapActionsStyle}>
+          <button type="button" style={growMapPrimaryBtnStyle} onClick={() => setSendQuestionOpen(true)}>
+            Send a friend a question
+          </button>
+          <button type="button" style={growMapSecondaryBtnStyle} onClick={() => setWriteQuestionOpen(true)}>
+            Write a question
+          </button>
         </div>
       </section>
 
@@ -567,7 +581,7 @@ function KnowledgePageContent() {
       )}
 
       {interestModal ? (
-        <div style={modalOverlayStyle}>
+        <div style={{ ...modalOverlayStyle, zIndex: 55 }}>
           <div style={modalStyle}>
             <div style={modalHeaderStyle}>
               <div>
@@ -663,6 +677,90 @@ function KnowledgePageContent() {
       ) : null}
 
       {tidyNotice ? <div style={toastStyle}>{tidyNotice}</div> : null}
+      {questionToast ? <div style={{ ...toastStyle, bottom: tidyNotice ? 64 : 20 }}>{questionToast}</div> : null}
+
+      {manageInterestsOpen ? (
+        <div style={modalOverlayStyle}>
+          <div style={modalStyle}>
+            <div style={modalHeaderStyle}>
+              <div>
+                <h2 style={modalTitleStyle}>Manage interests</h2>
+                <p style={modalCopyStyle}>Your five declared interests seed your Daily Five questions.</p>
+              </div>
+              <button type="button" style={iconButtonStyle} onClick={() => setManageInterestsOpen(false)} aria-label="Close">
+                <X className="size-4" />
+              </button>
+            </div>
+            <div style={{ ...declaredGridStyle, marginTop: 20 }}>
+              {declaredSlots.map((slot, index) => (
+                <div key={slot?.domain ?? `empty-${index}`} style={declaredCardStyle}>
+                  {slot ? (
+                    <>
+                      <div style={{ minWidth: 0 }}>
+                        <h3 style={declaredTitleStyle}>{slot.displayName}</h3>
+                        <p style={declaredMetaStyle}>{slot.broadCategory ?? asTier(slot.tier)}</p>
+                      </div>
+                      <button type="button" style={declaredButtonStyle} onClick={() => openInterestModal(index, slot.domain)}>
+                        <Repeat2 className="size-3.5" />
+                        Swap
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" style={emptyDeclaredButtonStyle} onClick={() => openInterestModal(index, null)}>
+                      <Plus className="size-4" />
+                      Add interest
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{ ...modalActionsStyle, justifyContent: 'flex-start', marginTop: 16 }}>
+              <button type="button" style={modalSecondaryStyle} onClick={() => setManageInterestsOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {sendQuestionOpen ? (
+        <div style={modalOverlayStyle}>
+          <div style={{ ...modalStyle, maxHeight: '92vh' }}>
+            <div style={modalHeaderStyle}>
+              <h2 style={modalTitleStyle}>Send a friend a question</h2>
+              <button type="button" style={iconButtonStyle} onClick={() => setSendQuestionOpen(false)} aria-label="Close">
+                <X className="size-4" />
+              </button>
+            </div>
+            <div style={{ marginTop: 20 }}>
+              <QuestionForm
+                initialSpecificMode
+                onSubmit={submitQuestion}
+                submitLabel="Send question"
+                onCancel={() => setSendQuestionOpen(false)}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {writeQuestionOpen ? (
+        <div style={modalOverlayStyle}>
+          <div style={{ ...modalStyle, maxHeight: '92vh' }}>
+            <div style={modalHeaderStyle}>
+              <h2 style={modalTitleStyle}>Write a question</h2>
+              <button type="button" style={iconButtonStyle} onClick={() => setWriteQuestionOpen(false)} aria-label="Close">
+                <X className="size-4" />
+              </button>
+            </div>
+            <div style={{ marginTop: 20 }}>
+              <QuestionForm
+                onSubmit={submitQuestion}
+                submitLabel="Save question"
+                onCancel={() => setWriteQuestionOpen(false)}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -1057,6 +1155,55 @@ const modalPrimaryStyle: CSSProperties = {
   color: '#f5f0e8',
   padding: '0 16px',
   cursor: 'pointer',
+};
+
+const growMapSectionStyle: CSSProperties = {
+  background: '#fdfbf6',
+  border: '1px solid #ddd6c7',
+  padding: '1.25rem 0.95rem',
+};
+
+const growMapHeadingStyle: CSSProperties = {
+  margin: 0,
+  fontSize: '1.1rem',
+  fontFamily: 'var(--font-literata), serif',
+  color: '#1a1208',
+};
+
+const growMapBodyStyle: CSSProperties = {
+  margin: '0.75rem 0 0',
+  fontSize: '0.88rem',
+  lineHeight: 1.6,
+  color: '#696257',
+};
+
+const growMapActionsStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 10,
+  marginTop: '1.25rem',
+};
+
+const growMapPrimaryBtnStyle: CSSProperties = {
+  minHeight: 40,
+  border: '1px solid #1a1208',
+  background: '#1a1208',
+  color: '#f5f0e8',
+  padding: '0 16px',
+  cursor: 'pointer',
+  fontSize: '0.82rem',
+  fontFamily: 'inherit',
+};
+
+const growMapSecondaryBtnStyle: CSSProperties = {
+  minHeight: 40,
+  border: '1px solid #ddd6c7',
+  background: '#fff',
+  color: '#1a1208',
+  padding: '0 16px',
+  cursor: 'pointer',
+  fontSize: '0.82rem',
+  fontFamily: 'inherit',
 };
 
 const toastStyle: CSSProperties = {
