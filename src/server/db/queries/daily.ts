@@ -61,9 +61,9 @@ function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
-  const [declared, demonstrated] = await Promise.all([
-    db
+async function getDeclaredInterests(userId: string) {
+  try {
+    return await db
       .select({
         domain: declaredInterests.domain,
         broadCategory: declaredInterests.broadCategory,
@@ -71,7 +71,28 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
       })
       .from(declaredInterests)
       .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
-      .orderBy(asc(declaredInterests.declaredAt)),
+      .orderBy(asc(declaredInterests.declaredAt));
+  } catch (err) {
+    const pgError = err as { code?: string };
+    if (pgError.code === '42703') {
+      // territory_type column not yet migrated — default to 'declared'
+      const rows = await db
+        .select({
+          domain: declaredInterests.domain,
+          broadCategory: declaredInterests.broadCategory,
+        })
+        .from(declaredInterests)
+        .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
+        .orderBy(asc(declaredInterests.declaredAt));
+      return rows.map((r) => ({ ...r, territoryType: 'declared' as const }));
+    }
+    throw err;
+  }
+}
+
+export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
+  const [declared, demonstrated] = await Promise.all([
+    getDeclaredInterests(userId),
     db
       .select({
         domain: playerMastery.canonicalSubcategory,

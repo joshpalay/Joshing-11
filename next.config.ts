@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     // Include migration SQL files so drizzle migrate() works in Vercel serverless
     '/api/**': ['./drizzle/**'],
+    '/**': ['./drizzle/**'],
   },
 }
 
