@@ -14,7 +14,12 @@ import { getFriends } from '@/server/db/queries/friends';
 import type { MasteryTier } from '@/types/db';
 
 export type Beat1Mastered = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
-export type Beat2Discovered = { domain: string; questionCount: number; correctCount: number }[];
+export type Beat2DiscoveredItem = { domain: string; questionCount: number; correctCount: number };
+export type Beat2Discovered = {
+  friendMediated: Beat2DiscoveredItem[];
+  authored: { domain: string }[];
+  promoted: { domain: string }[];
+};
 export type Beat3Shaped = { userId: string; displayName: string; contributionCount: number }[];
 export type Beat4Alignment = { userId: string; displayName: string; sharedDomains: string[] };
 export type Beat5Gave = {
@@ -104,7 +109,7 @@ async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive:
     .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
   const declaredDomains = new Set(interests.map((interest) => interest.domain));
 
-  const [gameAnswers, feedAnswers, correctQuestionIds] = await Promise.all([
+  const [gameAnswers, feedAnswers, correctQuestionIds, authoredDeclared, promotedRows] = await Promise.all([
     db
       .select({ question: questions, isCorrect: joshingGameResponses.isCorrect })
       .from(joshingGameResponses)
@@ -125,6 +130,25 @@ async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive:
         lt(feedItems.sourceEventAt, cycleEndExclusive),
       )),
     readCorrectQuestionIds(userId, cycleStart, cycleEndExclusive),
+    db
+      .select({ domain: declaredInterests.domain })
+      .from(declaredInterests)
+      .where(and(
+        eq(declaredInterests.userId, userId),
+        eq(declaredInterests.isActive, true),
+        sql`${declaredInterests.territoryType} = 'declared'`,
+        gte(declaredInterests.declaredAt, cycleStart),
+        lt(declaredInterests.declaredAt, cycleEndExclusive),
+      )),
+    db
+      .select({ domain: masteryEvents.canonicalSubcategory })
+      .from(masteryEvents)
+      .where(and(
+        eq(masteryEvents.userId, userId),
+        eq(masteryEvents.sourceType, 'declared_promoted'),
+        gte(masteryEvents.createdAt, cycleStart),
+        lt(masteryEvents.createdAt, cycleEndExclusive),
+      )),
   ]);
 
   const byDomain = new Map<string, { domain: string; questionCount: number; correctCount: number }>();
@@ -139,8 +163,20 @@ async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive:
   gameAnswers.forEach((row) => add(domainFor(row.question), row.isCorrect === true));
   feedAnswers.forEach((row) => add(domainFor(row.question), correctQuestionIds.has(row.question.id)));
 
-  const discovered = [...byDomain.values()].sort((a, b) => b.questionCount - a.questionCount || a.domain.localeCompare(b.domain));
-  return discovered.length ? discovered : null;
+  const friendMediated = [...byDomain.values()].sort((a, b) => b.questionCount - a.questionCount || a.domain.localeCompare(b.domain));
+
+  const seenAuthored = new Set<string>();
+  const authored = authoredDeclared
+    .map((row) => ({ domain: row.domain }))
+    .filter((row) => { if (seenAuthored.has(row.domain)) return false; seenAuthored.add(row.domain); return true; });
+
+  const seenPromoted = new Set<string>();
+  const promoted = promotedRows
+    .map((row) => ({ domain: row.domain }))
+    .filter((row) => { if (seenPromoted.has(row.domain)) return false; seenPromoted.add(row.domain); return true; });
+
+  if (friendMediated.length === 0 && authored.length === 0 && promoted.length === 0) return null;
+  return { friendMediated, authored, promoted };
 }
 
 async function computeBeat3(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Beat3Shaped | null> {

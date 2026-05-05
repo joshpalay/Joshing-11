@@ -8,7 +8,11 @@ export type ShareCardBeatsPayload = {
   cycleStart: string;
   cycleEnd: string;
   beat1: { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[] | null;
-  beat2: { domain: string; questionCount: number; correctCount: number }[] | null;
+  beat2: {
+    friendMediated: { domain: string; questionCount: number; correctCount: number }[];
+    authored: { domain: string }[];
+    promoted: { domain: string }[];
+  } | null;
   beat3: { userId?: string; displayName: string; contributionCount: number }[] | null;
   beat4: { userId?: string; displayName: string; sharedDomains: string[] } | null;
   beat5: { totalCreatorPoints: number; topQuestion: { text: string; answeredCount: number } | null } | null;
@@ -57,7 +61,7 @@ function buildHighlights(payload: ShareCardBeatsPayload): string[] {
     highlights.push(`Crossed into ${TIER_LABEL[mastered.toTier]} in ${mastered.domain}`);
   }
 
-  const discovered = payload.beat2?.[0];
+  const discovered = payload.beat2?.friendMediated[0] ?? payload.beat2?.authored[0] ?? payload.beat2?.promoted[0];
   if (discovered) {
     highlights.push(`Picked up ${discovered.domain}`);
   }

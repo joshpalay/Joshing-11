@@ -61,6 +61,10 @@ export type ActivityItemView = Pick<
       domain: string | null;
       result: 'correct' | 'incorrect';
     };
+    declaredPromoted?: {
+      domain: string;
+      questionText: string;
+    };
     creatorNote?: {
       id: string;
       questionText: string;
@@ -96,6 +100,7 @@ function isActivityType(value: string): value is ActivityItemType {
     'question_curated',
     'creator_note_received',
     'friend_answered_your_question',
+    'declared_promoted',
   ].includes(value);
 }
 
@@ -457,6 +462,32 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
   );
 }
 
+async function hydrateDeclaredPromoted(items: ActivityItemRow[]) {
+  const relevant = items.filter(
+    (item) => item.type === 'declared_promoted' && item.referenceType === 'question' && item.referenceId,
+  );
+  if (relevant.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['declaredPromoted']>>();
+  }
+
+  const questionIds = [...new Set(relevant.map((item) => item.referenceId!))];
+  const rows = await db
+    .select({ id: questions.id, questionText: questions.questionText, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+    .from(questions)
+    .where(inArray(questions.id, questionIds));
+
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return new Map(
+    relevant.map((item) => {
+      const q = byId.get(item.referenceId!);
+      return [item.id, {
+        domain: q ? (q.canonicalSubcategory ?? q.broadCategory ?? q.category) : '',
+        questionText: q?.questionText ?? '',
+      }] as const;
+    }),
+  );
+}
+
 export async function getActivitiesForUser(userId: string): Promise<ActivityItemView[]> {
   const rows = await db
     .select()
@@ -469,7 +500,7 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     .orderBy(desc(activityItems.createdAt))
     .limit(100);
 
-  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById] = await Promise.all([
+  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, declaredPromotedById] = await Promise.all([
     hydrateActors(rows),
     hydrateGames(rows, userId),
     hydrateMasteryEvents(rows),
@@ -478,6 +509,7 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     hydrateCuratedQuestions(rows),
     hydrateCreatorNotes(rows),
     hydrateFriendAnsweredQuestions(rows),
+    hydrateDeclaredPromoted(rows),
   ]);
 
   return rows
@@ -510,6 +542,9 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
           : undefined,
         friendAnsweredQuestion: row.type === 'friend_answered_your_question'
           ? friendAnsweredQuestionsById.get(row.id)
+          : undefined,
+        declaredPromoted: row.type === 'declared_promoted'
+          ? declaredPromotedById.get(row.id)
           : undefined,
         creatorNote: row.referenceType === 'creator_note' && row.referenceId
           ? creatorNotesById.get(row.referenceId)

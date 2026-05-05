@@ -87,6 +87,14 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
       : <>{actorName(item)} answered your{domainText} question — couldn&apos;t get it</>;
   }
 
+  if (item.type === 'declared_promoted') {
+    const dp = item.reference.declaredPromoted;
+    const domain = dp?.domain;
+    return domain
+      ? <>{actorName(item)} answered your {domain} question — that domain is now proven territory on your map</>
+      : <>{actorName(item)} answered your question — a domain is now proven territory on your map</>;
+  }
+
   return <>Something happened on Joshing</>;
 }
 
@@ -183,6 +191,12 @@ function ActivityCta({ item }: { item: ActivityItemView }) {
 
   if (item.type === 'received_direct_question') {
     return <Link href="/feed" className="btn-primary">Answer</Link>;
+  }
+
+  if (item.type === 'declared_promoted') {
+    const domain = item.reference.declaredPromoted?.domain;
+    const href = domain ? `/knowledge/${encodeURIComponent(domain)}` : '/knowledge';
+    return <Link href={href} className="btn-primary">See your map</Link>;
   }
 
   return null;

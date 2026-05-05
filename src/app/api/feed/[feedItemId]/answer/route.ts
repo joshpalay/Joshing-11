@@ -4,13 +4,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { gradeAnswer, selectQuip } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
-import { db, feedItems, playerMastery, questions } from '@/server/db';
+import { db, feedItems, playerMastery, questions, users } from '@/server/db';
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { getBasePoints } from '@/server/mastery/awards';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
-import { upgradeKBDomainToDemonstrated } from '@/server/db/queries/daily';
+import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,9 +46,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const [row] = await db
-    .select({ feedItem: feedItems, question: questions })
+    .select({ feedItem: feedItems, question: questions, sourceDisplayName: users.displayName })
     .from(feedItems)
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
+    .leftJoin(users, eq(feedItems.sourceUserId, users.id))
     .where(and(eq(feedItems.id, feedItemId), eq(feedItems.recipientUserId, session.userId)))
     .limit(1);
 
@@ -69,7 +70,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const isCorrect = grade.result === 'correct';
   const rawSource = row.feedItem.sourceResult;
   const friendResult = (rawSource === 'correct' || rawSource === 'incorrect') ? rawSource : null;
-  const quip = selectQuip(isCorrect, 'feed', friendResult);
+  const friendName = row.sourceDisplayName ?? undefined;
+  const quip = selectQuip({ isCorrect, surface: 'feed', friendResult, friendName });
   const alreadyCorrect = await userAnsweredQuestionCorrectly(session.userId, question.id);
 
   const existingMastery = await db
@@ -140,13 +142,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .set({
         state: 'answered',
         submittedAnswer: parsed.submittedAnswer,
+        quip,
       })
       .where(eq(feedItems.id, feedItemId));
   });
 
   // Promote author's declared territory to demonstrated when a non-author answers correctly
   if (isCorrect && !alreadyCorrect && session.userId !== question.creatorId) {
-    void upgradeKBDomainToDemonstrated(question.creatorId, question.category);
+    void promoteDeclaredToDemonstrated({
+      userId: question.creatorId,
+      domain,
+      triggeringFriendId: session.userId,
+      questionId: question.id,
+    });
   }
 
   // Propagate this answer to the answering user's friends' Feeds

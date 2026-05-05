@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
   const isCorrect = grade.result === 'correct';
   const pointsAwarded = isCorrect ? Math.round(question.basePoints) : 0;
   const answerState = isCorrect ? 'correct' : 'incorrect';
-  const quip = selectQuip(isCorrect, 'daily', null);
+  const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
   const breadcrumb = await generateBreadcrumb({
     questionId: question.id,
     questionText: question.questionText,

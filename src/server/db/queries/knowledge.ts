@@ -33,6 +33,7 @@ export type DomainMastery = {
   isDeclared: boolean;
   isDeclaredInterest: boolean;
   isDemonstrated: boolean;
+  territoryType: 'declared' | 'demonstrated';
 };
 
 export type KnowledgePageData = {
@@ -66,6 +67,7 @@ export type ProgressionView = {
   correctAnswerCount: number;
   authoredCount: number;
   iconKey: string;
+  territoryType: 'declared' | 'demonstrated';
 };
 
 export type StreakData = {
@@ -179,6 +181,7 @@ function toDomainMasteryRow(
     broadCategory: string | null;
     isDeclared: boolean;
     isDemonstrated: boolean;
+    territoryType?: 'declared' | 'demonstrated';
   },
   masteryByDomain: Map<string, typeof playerMastery.$inferSelect>,
   statsByDomain: Map<string, AnswerStats>,
@@ -190,6 +193,8 @@ function toDomainMasteryRow(
   const stats = statsByDomain.get(domainKey(domain));
   const questionsAnswered = stats?.answered ?? 0;
   const questionsCorrect = stats?.correct ?? 0;
+  const territoryType: 'declared' | 'demonstrated' =
+    knowledgeDomain.territoryType ?? (knowledgeDomain.isDemonstrated ? 'demonstrated' : 'declared');
 
   return {
     domain,
@@ -206,6 +211,7 @@ function toDomainMasteryRow(
     isDeclared: knowledgeDomain.isDeclared,
     isDeclaredInterest: knowledgeDomain.isDeclared,
     isDemonstrated: knowledgeDomain.isDemonstrated,
+    territoryType,
   };
 }
 
@@ -287,6 +293,7 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
     broadCategory: string | null;
     isDeclared: boolean;
     isDemonstrated: boolean;
+    territoryType?: 'declared' | 'demonstrated';
   }>();
 
   for (const row of declaredRows) {
@@ -377,6 +384,7 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
     broadCategory: string | null;
     isDeclared: boolean;
     isDemonstrated: boolean;
+    territoryType?: 'declared' | 'demonstrated';
   }>();
 
   for (const row of masteryRows) {
@@ -408,11 +416,13 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
     if (!domain) continue;
     const key = domainKey(domain);
     const existing = knowledgeDomainNames.get(key);
+    const isDemonstrated = existing?.isDemonstrated ?? false;
     knowledgeDomainNames.set(key, {
       domain: existing?.domain ?? domain,
       broadCategory: existing?.broadCategory ?? row.broadCategory,
       isDeclared: true,
-      isDemonstrated: existing?.isDemonstrated ?? false,
+      isDemonstrated,
+      territoryType: isDemonstrated ? 'demonstrated' : (row.territoryType ?? 'declared'),
     });
   }
 
@@ -440,6 +450,7 @@ export async function getProgressionLandscape(userId: string): Promise<Progressi
       correctAnswerCount: domain.questionsCorrect,
       authoredCount: domain.questionsAnswered,
       iconKey: domain.iconKey,
+      territoryType: domain.territoryType,
     }))
     .sort((a, b) => {
       const tierDiff = TIER_ORDER.indexOf(b.currentTier ?? 'establishing') - TIER_ORDER.indexOf(a.currentTier ?? 'establishing');

@@ -5,7 +5,7 @@ import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/master
 import { computeAnswerState } from '@/server/answer-state';
 import { gradeAnswer } from '@/server/grading';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { upgradeKBDomainToDemonstrated } from '@/server/db/queries/daily';
+import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import type { QueueSlot } from '@/server/daily/types';
 import type { AnswerState } from '@/types/db';
 import {
@@ -447,7 +447,12 @@ export async function submitJoshingGameResponse(params: {
     }
 
     // Promote author's declared territory to demonstrated
-    void upgradeKBDomainToDemonstrated(question.creatorId, question.category);
+    void promoteDeclaredToDemonstrated({
+      userId: question.creatorId,
+      domain,
+      triggeringFriendId: params.userId,
+      questionId: params.questionId,
+    });
   }
 
   return {

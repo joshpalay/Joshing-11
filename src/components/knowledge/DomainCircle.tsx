@@ -20,6 +20,7 @@ type DomainCircleProps = {
   isGhost?: boolean;
   /** Whether to render the tier label below the domain name. Defaults to true. */
   showTierLabel?: boolean;
+  territoryType?: 'declared' | 'demonstrated';
   onTap?: () => void;
 };
 
@@ -33,6 +34,7 @@ export function DomainCircle({
   id,
   isGhost = false,
   showTierLabel = true,
+  territoryType,
   onTap,
 }: DomainCircleProps) {
   const iconSize = Math.round(diameter * 0.4);
@@ -81,7 +83,7 @@ export function DomainCircle({
           height: `${diameter}px`,
           borderRadius: '999px',
           border: `1px solid ${highlighted ? '#1a1208' : '#d4cfc7'}`,
-          background: '#f5f0e8',
+          background: territoryType === 'declared' ? 'rgba(245, 240, 232, 0.3)' : '#f5f0e8',
           margin: '0 auto',
           display: 'grid',
           placeItems: 'center',

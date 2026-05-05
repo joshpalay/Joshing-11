@@ -9,7 +9,12 @@ import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import type { MasteryTier } from '@/types/db';
 
 type Beat1 = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
-type Beat2 = { domain: string; questionCount: number; correctCount: number }[];
+type Beat2FriendItem = { domain: string; questionCount: number; correctCount: number };
+type Beat2 = {
+  friendMediated: Beat2FriendItem[];
+  authored: { domain: string }[];
+  promoted: { domain: string }[];
+};
 type Beat3 = { userId: string; displayName: string; contributionCount: number }[];
 type Beat4 = { userId: string; displayName: string; sharedDomains: string[] };
 type Beat5 = { totalCreatorPoints: number; topQuestion: { text: string; answeredCount: number } | null };
@@ -122,27 +127,65 @@ function Beat({ beat }: { beat: BeatView }) {
   }
 
   if (beat.id === 2) {
-    const total = beat.content.reduce((sum, item) => sum + item.questionCount, 0);
-    const domains = beat.content.map((item) => item.domain);
+    const { friendMediated, authored, promoted } = beat.content;
+    const friendTotal = friendMediated.reduce((sum, item) => sum + item.questionCount, 0);
     return (
-      <div className="mx-auto max-w-3xl text-center">
-        <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">You went somewhere new.</h1>
-        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-          Through your friends, you picked up {total} {questionLabel(total)} in {joinList(domains)}.
-        </p>
-        <div className="mt-10 flex flex-wrap justify-center gap-5">
-          {beat.content.map((item) => (
-            <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
-              <CeremonyCircle domain={item.domain} size={88} scale={Math.min(1, 0.45 + item.correctCount / Math.max(item.questionCount, 1) * 0.45)} />
-              <div>
-                <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
-                <p className="mt-1 text-xs uppercase tracking-[0.14em] text-stone-400">
-                  {item.correctCount}/{item.questionCount}
-                </p>
-              </div>
+      <div className="mx-auto max-w-3xl space-y-16 text-center">
+        {friendMediated.length > 0 && (
+          <div>
+            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">You went somewhere new.</h1>
+            <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+              Through your friends, you picked up {friendTotal} {questionLabel(friendTotal)} in {joinList(friendMediated.map((item) => item.domain))}.
+            </p>
+            <div className="mt-10 flex flex-wrap justify-center gap-5">
+              {friendMediated.map((item) => (
+                <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
+                  <CeremonyCircle domain={item.domain} size={88} scale={Math.min(1, 0.45 + item.correctCount / Math.max(item.questionCount, 1) * 0.45)} />
+                  <div>
+                    <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.14em] text-stone-400">
+                      {item.correctCount}/{item.questionCount}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+        {authored.length > 0 && (
+          <div>
+            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">You staked new territory.</h1>
+            <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+              You wrote questions that opened {authored.length === 1 ? 'a new domain' : `${authored.length} new domains`}: {joinList(authored.map((item) => item.domain))}.
+            </p>
+            <div className="mt-10 flex flex-wrap justify-center gap-5">
+              {authored.map((item) => (
+                <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
+                  <CeremonyCircle domain={item.domain} size={88} scale={0.35} />
+                  <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-stone-400">Declared</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {promoted.length > 0 && (
+          <div>
+            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">Your territory came to life.</h1>
+            <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+              A friend answered your questions and proved your knowledge in {joinList(promoted.map((item) => item.domain))}.
+            </p>
+            <div className="mt-10 flex flex-wrap justify-center gap-5">
+              {promoted.map((item) => (
+                <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
+                  <CeremonyCircle domain={item.domain} size={88} scale={0.7} />
+                  <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-stone-400">Demonstrated</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }

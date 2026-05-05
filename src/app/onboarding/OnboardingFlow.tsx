@@ -190,11 +190,15 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
   const inviterName = preSeededInterests.find((interest) => interest.inviterName)?.inviterName ?? 'A friend';
 
   const parsedBirthYear = parseInt(birthYear, 10);
-  const birthYearValid = birthYear.length === 4 && parsedBirthYear >= 1920 && parsedBirthYear <= 2010;
-  const canAdvanceBackground = birthYearValid && grewUpCountry !== '';
+  const maxBirthYear = new Date().getFullYear() - 13;
+  const birthYearValid = birthYear.length === 4 && parsedBirthYear >= 1920 && parsedBirthYear <= maxBirthYear;
+  const canAdvanceBackground =
+    birthYearValid &&
+    grewUpCountry !== '' &&
+    (grewUpCountry !== 'US' || grewUpRegion !== '');
 
   const canGenerate =
-    normalizeDomain(warmupAnswers.bookComposerFilmmaker ?? '').length > 0 &&
+    normalizeDomain(warmupAnswers.deepDive ?? '').length > 0 &&
     normalizeDomain(warmupAnswers.hourLongTopic ?? '').length > 0;
 
   const reviewInterests = useMemo(
@@ -333,11 +337,11 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           warmupAnswers,
-          demographicContext: {
-            birthYear: birthYearValid ? parsedBirthYear : null,
-            grewUpCountry: grewUpCountry || null,
-            grewUpRegion: grewUpRegion || null,
-          },
+          culturalAnchor: birthYearValid && grewUpCountry ? {
+            birthYear: parsedBirthYear,
+            grewUpCountry,
+            grewUpRegion: grewUpRegion || undefined,
+          } : undefined,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -476,8 +480,8 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
           {currentStep === 'background' ? (
             <div className="flex flex-1 flex-col gap-7">
               <StepHeader
-                title="A little about you"
-                subtitle="This helps us find knowledge territories that match your era and place."
+                title="Tell us where you're coming from"
+                subtitle="Two quick facts that help us calibrate. We won't share these."
               />
 
               <div className="space-y-5">
@@ -494,7 +498,7 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                   />
                   {birthYear.length === 4 && !birthYearValid ? (
                     <span className="mt-1 block text-xs text-destructive">
-                      Please enter a year between 1920 and 2010.
+                      Please enter a year between 1920 and {maxBirthYear}.
                     </span>
                   ) : null}
                 </label>
@@ -552,8 +556,8 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
           {currentStep === 'warmup' ? (
             <div className="flex flex-1 flex-col gap-7">
               <StepHeader
-                title="Tell us about yourself"
-                subtitle="Free text. No wrong answers. The more specific, the better."
+                title="Tell us about your interests"
+                subtitle="Free text. The more specific, the better."
               />
 
               <div className="space-y-4">

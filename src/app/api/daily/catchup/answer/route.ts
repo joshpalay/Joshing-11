@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 
-import { gradeAnswer } from '@/server/grading';
+import { gradeAnswer, selectQuip } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { dailyQueues, db } from '@/server/db';
 import { getCatchupQuestions } from '@/server/db/queries/daily';
@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
   const isCorrect = grade.result === 'correct';
   const pointsAwarded = isCorrect ? Math.round(catchupItem.basePoints * 0.25) : 0;
   const answerState = isCorrect ? 'correct' : 'incorrect';
+  const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
   const breadcrumb = await generateBreadcrumb({
     questionId: catchupItem.questionId,
     questionText: catchupItem.questionText,
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest) {
       reveal_explainer: catchupItem.explanation ?? '',
       reveal_breadcrumb: breadcrumb,
       reveal_quip: grade.consolation,
+      quip,
     } satisfies QueueSlot;
   });
 
@@ -136,7 +138,7 @@ export async function POST(request: NextRequest) {
     explanation: catchupItem.explanation,
     explainer: catchupItem.explanation,
     consolation: grade.consolation,
-    quip: grade.consolation,
+    quip,
     nextItem: nextItem
       ? {
           dailyQueueItemId: nextItem.dailyQueueItemId,

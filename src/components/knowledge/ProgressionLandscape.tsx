@@ -31,6 +31,7 @@ export interface ProgressionDomain {
   correctAnswerCount: number;
   authoredCount: number;
   iconKey: string;
+  territoryType: 'declared' | 'demonstrated';
 }
 
 interface ProgressionLandscapeProps {
@@ -246,6 +247,7 @@ export function ProgressionLandscape({
                             highlighted={isHighlighted}
                             isGhost={isGhost}
                             showTierLabel={!columnHeadersVisible[tier]}
+                            territoryType={domain.territoryType}
                             onTap={isGhost ? undefined : () => onDomainSelect?.(domain.canonicalSubcategory)}
                           />
                         </div>

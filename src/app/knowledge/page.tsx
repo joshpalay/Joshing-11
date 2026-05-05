@@ -30,6 +30,7 @@ type DomainMastery = {
   isDeclared: boolean;
   isDeclaredInterest: boolean;
   isDemonstrated: boolean;
+  territoryType?: 'declared' | 'demonstrated';
 };
 
 type KnowledgeResponse = {
@@ -125,6 +126,7 @@ function toProgressionDomain(domain: DomainMastery): ProgressionDomain {
     correctAnswerCount: domain.questionsCorrect,
     authoredCount: domain.questionsAnswered,
     iconKey: domain.iconKey,
+    territoryType: (domain.territoryType as 'declared' | 'demonstrated' | undefined) ?? 'demonstrated',
   };
 }
 

@@ -653,6 +653,7 @@ export const feedItems = pgTable(
     submittedAnswer: text('submittedAnswer'),
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
+    quip: text('quip'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -702,6 +703,7 @@ export const joshingGameResponses = pgTable(
     isPartial: boolean('isPartial').notNull().default(false),
     answerState: text('answerState'),
     pointsAwarded: doublePrecision('pointsAwarded'),
+    quip: text('quip'),
     answeredAt: timestamp('answeredAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },

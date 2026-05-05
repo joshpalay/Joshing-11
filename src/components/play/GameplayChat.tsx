@@ -579,6 +579,29 @@ function DomainExclusionAffordance({ canonicalSubcategory }: { canonicalSubcateg
   );
 }
 
+function QuipLine({ text }: { text: string }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setVisible(true), 150);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <p
+      style={{
+        fontSize: '0.875rem',
+        color: 'var(--text-muted)',
+        fontStyle: 'italic',
+        marginTop: '4px',
+        marginLeft: '8px',
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 0.3s ease',
+      }}
+    >
+      {text}
+    </p>
+  );
+}
+
 function ResultRow({
   result,
   questionText,
@@ -592,7 +615,6 @@ function ResultRow({
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
-  quip,
 }: {
   result: 'correct' | 'wrong' | 'expired';
   submitted: string;
@@ -607,7 +629,6 @@ function ResultRow({
   reactionPrompt?: ReactionPromptData | null;
   pointsAwarded?: number | null;
   pointsLabel?: string | null;
-  quip?: string | null;
 }) {
   const expired = result === 'expired';
   const correct = result === 'correct';
@@ -678,9 +699,6 @@ function ResultRow({
           </p>
         ) : null}
       </div>
-      {quip ? (
-        <p className="text-sm text-muted-foreground mt-1 italic">{quip}</p>
-      ) : null}
       {canonicalSubcategory ? (
         <DomainExclusionAffordance canonicalSubcategory={canonicalSubcategory} />
       ) : null}
@@ -878,9 +896,9 @@ export function GameplayChatThread({
                   reactionPrompt={m.reactionPrompt}
                   pointsAwarded={m.pointsAwarded}
                   pointsLabel={m.pointsLabel}
-                  quip={m.quip}
                 />
                 {m.breadcrumb ? <BreadcrumbRow text={m.breadcrumb} /> : null}
+                {m.quip ? <QuipLine text={m.quip} /> : null}
               </div>
             );
           case 'session_complete':

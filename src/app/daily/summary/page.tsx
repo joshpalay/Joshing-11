@@ -228,7 +228,7 @@ function InterpretiveLine({ text }: { text: string }) {
   }, []);
   return (
     <p
-      className="mt-4 text-sm leading-6 text-muted-foreground"
+      className="mt-4 text-sm italic leading-6 text-muted-foreground"
       style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.4s ease' }}
     >
       {text}

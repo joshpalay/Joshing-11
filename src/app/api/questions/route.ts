@@ -15,7 +15,7 @@ import {
   userHasQuestionInBlockingFeed,
   userAnsweredQuestionCorrectly,
 } from '@/server/db/queries/feed';
-import { addKBDomainAsDeclared } from '@/server/db/queries/daily';
+import { openKBDomain } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
@@ -110,8 +110,12 @@ export async function POST(request: NextRequest) {
   const { sendToFriendIds, ...questionFields } = value;
 
   const created = await createQuestion({ authorId: session.userId, ...questionFields });
-  // Open domain as declared territory — idempotent, one door per domain
-  void addKBDomainAsDeclared(session.userId, questionFields.domain);
+  const kbResult = await openKBDomain({
+    userId: session.userId,
+    domain: questionFields.domain,
+    via: 'authorship',
+    questionId: created.id,
+  });
   const question = await getQuestion(created.id, session.userId);
 
   if (sendToFriendIds.length > 0) {
@@ -164,5 +168,13 @@ export async function POST(request: NextRequest) {
     await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
   }
 
-  return NextResponse.json({ ...created, question, ...(question ?? {}) }, { status: 201 });
+  return NextResponse.json(
+    {
+      ...created,
+      question,
+      ...(question ?? {}),
+      openedDomain: kbResult.opened ? questionFields.domain : null,
+    },
+    { status: 201 },
+  );
 }
