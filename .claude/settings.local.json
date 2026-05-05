@@ -4,7 +4,9 @@
       "Bash(npx tsc *)",
       "Bash(xargs grep *)",
       "Bash(npx vercel *)",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
