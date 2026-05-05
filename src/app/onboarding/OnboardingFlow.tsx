@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Edit3, Loader2, Plus, X } from 'lucide-react';
+import { COUNTRIES } from '@/lib/onboarding/countries';
+import { US_STATES } from '@/lib/onboarding/us-regions';
 
 type CurrentStep = 'welcome' | 'background' | 'warmup' | 'review' | 'pick' | 'complete';
 
 export type WarmupAnswers = {
-  bookComposerFilmmaker?: string;
+  deepDive?: string;
   hourLongTopic?: string;
   anythingElse?: string;
 };
@@ -46,9 +48,9 @@ const WARMUP_FIELDS: Array<{
   optional?: boolean;
 }> = [
   {
-    field: 'bookComposerFilmmaker',
+    field: 'deepDive',
     label: 'A book, composer, or filmmaker you\'ve gone deep on?',
-    placeholder: 'e.g. Middlemarch, or Shostakovich, or Tarkovsky films',
+    placeholder: 'e.g. Middlemarch, or Tchaikovsky\'s symphonies, or Werner Herzog',
   },
   {
     field: 'hourLongTopic',
@@ -63,93 +65,6 @@ const WARMUP_FIELDS: Array<{
   },
 ];
 
-const COUNTRIES: Array<{ code: string; name: string }> = [
-  { code: 'US', name: 'United States' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'IE', name: 'Ireland' },
-  { code: 'NZ', name: 'New Zealand' },
-  { code: 'ZA', name: 'South Africa' },
-  { code: 'AT', name: 'Austria' },
-  { code: 'BE', name: 'Belgium' },
-  { code: 'BR', name: 'Brazil' },
-  { code: 'CL', name: 'Chile' },
-  { code: 'CN', name: 'China' },
-  { code: 'CO', name: 'Colombia' },
-  { code: 'HR', name: 'Croatia' },
-  { code: 'CZ', name: 'Czech Republic' },
-  { code: 'DK', name: 'Denmark' },
-  { code: 'EG', name: 'Egypt' },
-  { code: 'ET', name: 'Ethiopia' },
-  { code: 'FI', name: 'Finland' },
-  { code: 'FR', name: 'France' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'GH', name: 'Ghana' },
-  { code: 'GR', name: 'Greece' },
-  { code: 'HU', name: 'Hungary' },
-  { code: 'IN', name: 'India' },
-  { code: 'ID', name: 'Indonesia' },
-  { code: 'IR', name: 'Iran' },
-  { code: 'IL', name: 'Israel' },
-  { code: 'IT', name: 'Italy' },
-  { code: 'JP', name: 'Japan' },
-  { code: 'KE', name: 'Kenya' },
-  { code: 'MX', name: 'Mexico' },
-  { code: 'MA', name: 'Morocco' },
-  { code: 'NL', name: 'Netherlands' },
-  { code: 'NG', name: 'Nigeria' },
-  { code: 'NO', name: 'Norway' },
-  { code: 'PK', name: 'Pakistan' },
-  { code: 'PE', name: 'Peru' },
-  { code: 'PH', name: 'Philippines' },
-  { code: 'PL', name: 'Poland' },
-  { code: 'PT', name: 'Portugal' },
-  { code: 'RO', name: 'Romania' },
-  { code: 'RU', name: 'Russia' },
-  { code: 'SA', name: 'Saudi Arabia' },
-  { code: 'RS', name: 'Serbia' },
-  { code: 'SK', name: 'Slovakia' },
-  { code: 'KR', name: 'South Korea' },
-  { code: 'ES', name: 'Spain' },
-  { code: 'SE', name: 'Sweden' },
-  { code: 'CH', name: 'Switzerland' },
-  { code: 'TW', name: 'Taiwan' },
-  { code: 'TH', name: 'Thailand' },
-  { code: 'TR', name: 'Turkey' },
-  { code: 'UA', name: 'Ukraine' },
-  { code: 'VN', name: 'Vietnam' },
-  { code: 'OTHER', name: 'Other' },
-];
-
-const US_STATES: Array<{ code: string; name: string }> = [
-  { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' },
-  { code: 'AZ', name: 'Arizona' }, { code: 'AR', name: 'Arkansas' },
-  { code: 'CA', name: 'California' }, { code: 'CO', name: 'Colorado' },
-  { code: 'CT', name: 'Connecticut' }, { code: 'DE', name: 'Delaware' },
-  { code: 'FL', name: 'Florida' }, { code: 'GA', name: 'Georgia' },
-  { code: 'HI', name: 'Hawaii' }, { code: 'ID', name: 'Idaho' },
-  { code: 'IL', name: 'Illinois' }, { code: 'IN', name: 'Indiana' },
-  { code: 'IA', name: 'Iowa' }, { code: 'KS', name: 'Kansas' },
-  { code: 'KY', name: 'Kentucky' }, { code: 'LA', name: 'Louisiana' },
-  { code: 'ME', name: 'Maine' }, { code: 'MD', name: 'Maryland' },
-  { code: 'MA', name: 'Massachusetts' }, { code: 'MI', name: 'Michigan' },
-  { code: 'MN', name: 'Minnesota' }, { code: 'MS', name: 'Mississippi' },
-  { code: 'MO', name: 'Missouri' }, { code: 'MT', name: 'Montana' },
-  { code: 'NE', name: 'Nebraska' }, { code: 'NV', name: 'Nevada' },
-  { code: 'NH', name: 'New Hampshire' }, { code: 'NJ', name: 'New Jersey' },
-  { code: 'NM', name: 'New Mexico' }, { code: 'NY', name: 'New York' },
-  { code: 'NC', name: 'North Carolina' }, { code: 'ND', name: 'North Dakota' },
-  { code: 'OH', name: 'Ohio' }, { code: 'OK', name: 'Oklahoma' },
-  { code: 'OR', name: 'Oregon' }, { code: 'PA', name: 'Pennsylvania' },
-  { code: 'RI', name: 'Rhode Island' }, { code: 'SC', name: 'South Carolina' },
-  { code: 'SD', name: 'South Dakota' }, { code: 'TN', name: 'Tennessee' },
-  { code: 'TX', name: 'Texas' }, { code: 'UT', name: 'Utah' },
-  { code: 'VT', name: 'Vermont' }, { code: 'VA', name: 'Virginia' },
-  { code: 'WA', name: 'Washington' }, { code: 'WV', name: 'West Virginia' },
-  { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' },
-  { code: 'DC', name: 'Washington D.C.' },
-];
 
 const LOADING_COPY = [
   'Reading your answers...',

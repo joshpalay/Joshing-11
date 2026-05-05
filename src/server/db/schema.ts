@@ -130,6 +130,7 @@ export const masterySourceTypeEnum = pgEnum('MasterySourceType', [
   'curator_credit',
   'catchup_correct',
   'domain_merged',
+  'declared_promoted',
 ]);
 export const feedbackSignalEnum = pgEnum('FeedbackSignal', ['thumbs_up', 'thumbs_down']);
 

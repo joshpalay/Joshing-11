@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
 
+import { VALID_ISO_CODES } from '@/lib/onboarding/countries';
 import { getSession } from '@/server/auth/session';
-import { proposeInterests, type DemographicContext, type WarmupAnswers } from '@/server/llm/interests';
+import { updateUser } from '@/server/db/queries/users';
+import { proposeInterests, type CulturalAnchor, type WarmupAnswers } from '@/server/llm/interests';
 
 type ProposeInterestsBody = {
   warmupAnswers?: unknown;
-  demographicContext?: unknown;
+  culturalAnchor?: unknown;
 };
 
 const WARMUP_FIELDS = [
-  'bookComposerFilmmaker',
+  'deepDive',
   'hourLongTopic',
   'anythingElse',
 ] as const satisfies ReadonlyArray<keyof WarmupAnswers>;
@@ -37,25 +39,34 @@ function parseWarmupAnswers(value: unknown): WarmupAnswers | null {
   return nonEmptyCount >= 2 ? answers : null;
 }
 
-function parseDemographicContext(value: unknown): DemographicContext {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+function parseCulturalAnchor(value: unknown): CulturalAnchor | null | 'invalid' {
+  if (!value) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return 'invalid';
 
   const record = value as Record<string, unknown>;
 
-  const birthYear = typeof record.birthYear === 'number'
-    ? Math.floor(record.birthYear)
-    : null;
+  const birthYearRaw = record.birthYear;
+  if (birthYearRaw === undefined || birthYearRaw === null) return 'invalid';
+  if (typeof birthYearRaw !== 'number' || !Number.isInteger(birthYearRaw)) return 'invalid';
+  const currentYear = new Date().getFullYear();
+  if (birthYearRaw < 1920 || birthYearRaw > currentYear - 13) return 'invalid';
 
-  const grewUpCountry = typeof record.grewUpCountry === 'string'
-    ? record.grewUpCountry.trim().slice(0, 10) || null
-    : null;
+  const grewUpCountryRaw = record.grewUpCountry;
+  if (typeof grewUpCountryRaw !== 'string') return 'invalid';
+  const grewUpCountry = grewUpCountryRaw.trim().toUpperCase();
+  if (!VALID_ISO_CODES.has(grewUpCountry) && grewUpCountry !== 'OTHER') return 'invalid';
 
-  const grewUpRegion = typeof record.grewUpRegion === 'string'
-    ? record.grewUpRegion.trim().slice(0, 100) || null
-    : null;
+  const grewUpRegionRaw = record.grewUpRegion;
+  let grewUpRegion: string | undefined;
+  if (grewUpRegionRaw !== undefined && grewUpRegionRaw !== null) {
+    if (typeof grewUpRegionRaw !== 'string') return 'invalid';
+    const trimmed = grewUpRegionRaw.trim();
+    if (trimmed.length > 100) return 'invalid';
+    if (trimmed.length > 0) grewUpRegion = trimmed;
+  }
 
   return {
-    birthYear: birthYear && birthYear >= 1920 && birthYear <= 2010 ? birthYear : null,
+    birthYear: birthYearRaw,
     grewUpCountry,
     grewUpRegion,
   };
@@ -77,10 +88,25 @@ export async function POST(request: Request) {
     );
   }
 
-  const demographics = parseDemographicContext(body?.demographicContext);
+  const culturalAnchorResult = parseCulturalAnchor(body?.culturalAnchor);
+  if (culturalAnchorResult === 'invalid') {
+    return NextResponse.json(
+      { error: 'invalid_request', message: 'Invalid cultural anchor: birthYear must be between 1920 and current year minus 13, grewUpCountry must be a valid ISO 3166-1 alpha-2 code, grewUpRegion max 100 chars.' },
+      { status: 400 },
+    );
+  }
+  const culturalAnchor = culturalAnchorResult ?? undefined;
+
+  if (culturalAnchor) {
+    await updateUser(session.userId, {
+      birthYear: culturalAnchor.birthYear,
+      grewUpCountry: culturalAnchor.grewUpCountry,
+      grewUpRegion: culturalAnchor.grewUpRegion ?? null,
+    });
+  }
 
   try {
-    const proposedInterests = await proposeInterests(warmupAnswers, demographics);
+    const proposedInterests = await proposeInterests({ warmupAnswers, culturalAnchor });
     return NextResponse.json({ proposedInterests });
   } catch {
     return NextResponse.json(

@@ -338,6 +338,15 @@ export async function addKBDomainAsDeclared(
   userId: string,
   domain: string,
   broadCategory?: string | null,
+): Promise<{ opened: boolean; alreadyExisted: boolean }> {
+  const { openKBDomain } = await import('@/server/knowledge/open-domain');
+  return openKBDomain({ userId, domain, via: 'authorship', broadCategory });
+}
+
+async function _legacyInsertDeclared(
+  userId: string,
+  domain: string,
+  broadCategory?: string | null,
 ): Promise<void> {
   await db
     .insert(declaredInterests)

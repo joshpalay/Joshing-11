@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 
-import { db, feedDismissedDomains, feedItems, masteryEvents, questionFeedback, questions } from '@/server/db';
+import { db, feedDismissedDomains, feedItems, masteryEvents, questionFeedback, questionRatings, questions } from '@/server/db';
 import { writeActivity } from '@/server/activity/write-activity';
 import { getFriends } from '@/server/db/queries/friends';
 import { rollOffOldItems, userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
@@ -10,7 +10,23 @@ export async function createFeedItemsForFriendsFromAnswer(
   questionId: string,
   result: 'correct' | 'incorrect',
 ): Promise<void> {
-  // Don't propagate if the answering user thumbed this question down
+  try {
+    await _createFeedItemsForFriendsFromAnswer(userId, questionId, result);
+  } catch (error) {
+    console.error('[createFeedItemsForFriendsFromAnswer] propagation error (suppressed):', {
+      userId,
+      questionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function _createFeedItemsForFriendsFromAnswer(
+  userId: string,
+  questionId: string,
+  result: 'correct' | 'incorrect',
+): Promise<void> {
+  // Don't propagate if the answering user thumbed this question down via either signal path
   const [thumbsDown] = await db
     .select({ id: questionFeedback.id })
     .from(questionFeedback)
@@ -21,7 +37,17 @@ export async function createFeedItemsForFriendsFromAnswer(
     ))
     .limit(1);
 
-  if (thumbsDown) return;
+  const [ratingDown] = thumbsDown ? [] : await db
+    .select({ id: questionRatings.id })
+    .from(questionRatings)
+    .where(and(
+      eq(questionRatings.userId, userId),
+      eq(questionRatings.questionId, questionId),
+      eq(questionRatings.rating, 'down'),
+    ))
+    .limit(1);
+
+  if (thumbsDown || ratingDown) return;
 
   const [question] = await db
     .select({ canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })

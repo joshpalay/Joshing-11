@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
@@ -23,12 +23,14 @@ export async function POST(_request: Request, context: RouteContext) {
 
   if (!item?.questionId) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
+  const questionId = item.questionId;
+
   // Record quality signal (thumbs-down = unfair/poorly formed question)
   await db
     .insert(questionFeedback)
     .values({
       userId: session.userId,
-      questionId: item.questionId,
+      questionId,
       signal: 'thumbs_down',
     })
     .onConflictDoUpdate({
@@ -41,6 +43,24 @@ export async function POST(_request: Request, context: RouteContext) {
     .update(feedItems)
     .set({ state: 'dismissed' })
     .where(and(eq(feedItems.id, feedItemId), eq(feedItems.recipientUserId, session.userId)));
+
+  // Retroactively roll off items this user propagated to friends for this question
+  const propagated = await db
+    .select({ id: feedItems.id })
+    .from(feedItems)
+    .where(and(
+      eq(feedItems.sourceUserId, session.userId),
+      eq(feedItems.questionId, questionId),
+      ne(feedItems.recipientUserId, session.userId),
+      inArray(feedItems.state, ['active', 'skipped']),
+    ));
+
+  if (propagated.length > 0) {
+    await db
+      .update(feedItems)
+      .set({ state: 'rolled_off' })
+      .where(inArray(feedItems.id, propagated.map((r) => r.id)));
+  }
 
   return NextResponse.json({ ok: true });
 }

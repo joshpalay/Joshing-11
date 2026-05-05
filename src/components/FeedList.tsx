@@ -40,6 +40,7 @@ type FeedMeta = {
   has_dismissed_domains: boolean;
   total_item_count: number;
   active_item_count: number;
+  pre_filter_active_count: number;
 };
 
 type FeedResponse = {
@@ -214,7 +215,8 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
     if (loading) return 'Loading your Feed...';
     if (error) return error;
     if (!feedMeta?.has_friends) return "When your friends play, their questions will show up here.";
-    if (feedMeta.has_dismissed_domains && feedMeta.total_item_count === 0) {
+    // pre_filter_active_count > 0 means items exist in active/skipped state but are hidden by domain filters
+    if (feedMeta.has_dismissed_domains && feedMeta.pre_filter_active_count > 0) {
       return "You've focused your Feed. You can re-open domains from your Knowledge page.";
     }
     if (feedMeta.total_item_count > 0) return "You're caught up.";

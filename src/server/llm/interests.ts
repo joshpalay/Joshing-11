@@ -6,15 +6,15 @@ import {
 } from '@/lib/llm';
 
 export type WarmupAnswers = {
-  bookComposerFilmmaker?: string;
+  deepDive?: string;
   hourLongTopic?: string;
   anythingElse?: string;
 };
 
-export type DemographicContext = {
-  birthYear?: number | null;
-  grewUpCountry?: string | null;
-  grewUpRegion?: string | null;
+export type CulturalAnchor = {
+  birthYear: number;
+  grewUpCountry: string;
+  grewUpRegion?: string;
 };
 
 export type ProposedInterest = {
@@ -31,7 +31,7 @@ export type CanonicalizedInterest = {
 
 const CANONICALIZE_MODEL = 'claude-haiku-4-5';
 const WARMUP_LABELS: Record<keyof WarmupAnswers, string> = {
-  bookComposerFilmmaker: 'book, composer, or filmmaker you have gone deep on',
+  deepDive: 'book, composer, or filmmaker you have gone deep on',
   hourLongTopic: 'topic you could talk about for an hour without preparation',
   anythingElse: 'anything else — a period of history, a sport, a field you studied',
 };
@@ -183,17 +183,18 @@ function uniqueByDomain(interests: ProposedInterest[]): ProposedInterest[] {
   return unique;
 }
 
-export async function proposeInterests(
-  warmupAnswers: WarmupAnswers,
-  demographics: DemographicContext = {},
-): Promise<ProposedInterest[]> {
+export async function proposeInterests(input: {
+  warmupAnswers: WarmupAnswers;
+  culturalAnchor?: CulturalAnchor;
+}): Promise<ProposedInterest[]> {
+  const { warmupAnswers, culturalAnchor } = input;
   const cleanAnswers = cleanWarmupAnswers(warmupAnswers);
 
   if (cleanAnswers.length === 0) {
     return fallbackInterests([]);
   }
 
-  const demographicLine = buildDemographicLine(demographics);
+  const demographicLine = buildCulturalAnchorPrompt(culturalAnchor);
 
   const systemPrompt = `You propose declared interests for Joshing, a daily personal trivia game.
 Return a JSON array only. No wrapper object, no markdown:
@@ -211,7 +212,7 @@ Rules:
 - Distribute across the warm-up answers. Include at least one candidate per non-empty warm-up field if possible.
 - Each rationale must briefly tie the candidate to a specific warm-up answer or demographic context.
 - broadCategory is stable and broad, such as Classical Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Other.
-- Do not invent private facts. Infer plausible interest territories only from the answers and demographic context.${demographicLine ? `\n- ${demographicLine}` : ''}`;
+- Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}`;
 
   const userMessage = `Warm-up answers:
 ${cleanAnswers.map(({ field, answer }) => `- ${WARMUP_LABELS[field]}: ${answer}`).join('\n')}
@@ -243,17 +244,23 @@ Propose candidate interests. Return JSON array only.`;
   return interests.slice(0, 14);
 }
 
-function buildDemographicLine(demographics: DemographicContext): string {
-  const { birthYear, grewUpCountry, grewUpRegion } = demographics;
-  if (!birthYear && !grewUpCountry) return '';
+function buildCulturalAnchorPrompt(anchor: CulturalAnchor | undefined): string {
+  if (!anchor) return '';
 
+  const { birthYear, grewUpCountry, grewUpRegion } = anchor;
   const location = [grewUpRegion, grewUpCountry].filter(Boolean).join(', ');
-  const parts: string[] = [];
-  if (birthYear) parts.push(`born in ${birthYear}`);
-  if (location) parts.push(`grew up in ${location}`);
 
-  const intro = `The player was ${parts.join(' and ')}. Use this to infer culturally-specific knowledge domains from that era and place — television, music, film, political events, sports — that someone of that age and geography would plausibly know well. Combine this with their warm-up answers to generate hyper-specific candidates. Generate domains like "Saturday Morning Cartoons, 1980s US" or "Thatcher-Era British Television" rather than generic ones.`;
-  return intro;
+  return `The player was born in ${birthYear} and grew up in ${location}. Use this to infer culturally-specific knowledge domains from that era and place — television, music, film, political events, sports, advertising, popular books, religious or civic touchstones — that someone of that age and geography would plausibly know well.
+
+Geography determines cultural context. Someone who grew up in Iran in the 1980s shares neither the American TV landscape nor the British one. Someone who grew up in suburban Michigan in the late 1970s shares neither the New York City cultural landscape nor the rural Midwestern one in detail.
+
+Combine cultural anchor signal with the player's warm-up answers to generate 10-14 candidate domains at hyper-specific granularity.
+
+Examples of good culturally-anchored candidates:
+- Born 1979, suburban Michigan: 'Saturday Morning Cartoons of the 1980s', 'He-Man and the Masters of the Universe', 'Animaniacs', 'Early MTV (1981-1987)', 'Top 40 Radio of the Late 1980s'
+- Born 1968, London: 'British New Wave Cinema', 'Post-Punk UK Music', 'Thatcher-Era British Television', '1970s BBC Drama'
+
+Do NOT generate generic domains like 'Music', 'Television', 'History'. Always specify era + place + medium when culturally anchored.`;
 }
 
 export async function canonicalizeInterest(rawInput: string): Promise<CanonicalizedInterest> {

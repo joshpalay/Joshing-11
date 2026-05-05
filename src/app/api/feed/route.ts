@@ -50,7 +50,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const [rawFeed, friendCount, dismissedDomains, totalItemCount] = await Promise.all([
+  const [rawFeed, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
     getFeedForUser(session.userId),
     db
       .select({ value: count() })
@@ -65,6 +65,15 @@ export async function GET() {
       .select({ value: count() })
       .from(feedItems)
       .where(eq(feedItems.recipientUserId, session.userId))
+      .then((rows) => rows[0]?.value ?? 0),
+    // Items in active/skipped state before domain filtering — distinguishes "focused" from "caught up"
+    db
+      .select({ value: count() })
+      .from(feedItems)
+      .where(and(
+        eq(feedItems.recipientUserId, session.userId),
+        inArray(feedItems.state, ['active', 'skipped']),
+      ))
       .then((rows) => rows[0]?.value ?? 0),
   ]);
 
@@ -98,6 +107,7 @@ export async function GET() {
       has_dismissed_domains: dismissedDomains.length > 0,
       total_item_count: totalItemCount,
       active_item_count: feed.length,
+      pre_filter_active_count: preFilterActiveCount,
     },
     items: feed.map((item) => {
       const question = item.questionId ? questionById.get(item.questionId) : undefined;
