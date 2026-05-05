@@ -24,6 +24,16 @@ export async function register() {
       // Table or columns may not exist yet — that's fine, migrate() will create them
     }
 
+    // Migration 0012 adds "sourceResult" to FeedItem but the final statement
+    // (ALTER TYPE ... ADD VALUE) can fail in some PostgreSQL environments, leaving
+    // the migration unrecorded and the column absent on every subsequent startup.
+    // Pre-apply the column so the feed query never hits a missing-column error.
+    try {
+      await db.execute(sql`ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "sourceResult" TEXT`);
+    } catch {
+      // Column already exists or FeedItem table not yet created — migrate() handles both
+    }
+
     // If the Category enum type already exists but migration 0000 isn't recorded,
     // the migrator fails at the very first CREATE TYPE statement and aborts — leaving
     // all subsequent migrations (0006 recipientUserId, 0014 territory_type, etc.)
