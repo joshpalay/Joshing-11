@@ -120,6 +120,13 @@
       "when": 1746748800000,
       "tag": "0016_quip_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1746835200000,
+      "tag": "0017_creator_notes",
+      "breakpoints": true
     }
   ]
 }
