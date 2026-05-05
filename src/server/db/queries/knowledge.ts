@@ -2,7 +2,6 @@ import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import {
   db,
-  declaredInterests,
   dailyQueues,
   generatedQuestions,
   joshingGameResponses,
@@ -12,6 +11,7 @@ import {
   questions,
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
+import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
@@ -217,10 +217,7 @@ function toDomainMasteryRow(
 
 export async function getUserMasteryOverview(userId: string): Promise<MasteryOverview> {
   const [declaredRows, masteryRows, eventRows, recentRows] = await Promise.all([
-    db
-      .select()
-      .from(declaredInterests)
-      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true))),
+    getActiveDeclaredInterests(userId),
     db
       .select()
       .from(playerMastery)
@@ -342,10 +339,7 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
 
 export async function getKnowledgePageData(userId: string): Promise<KnowledgePageData> {
   const [declaredRows, masteryRows, eventRows] = await Promise.all([
-    db
-      .select()
-      .from(declaredInterests)
-      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true))),
+    getActiveDeclaredInterests(userId),
     db
       .select()
       .from(playerMastery)
@@ -465,10 +459,7 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
   const normalizedKey = domainKey(normalizedDomain);
 
   const [declaredRows, masteryRows, eventRows, visibilityRows, responseRows, queueRows] = await Promise.all([
-    db
-      .select()
-      .from(declaredInterests)
-      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true))),
+    getActiveDeclaredInterests(userId),
     db
       .select()
       .from(playerMastery)

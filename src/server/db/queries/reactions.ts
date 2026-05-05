@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { CANNED_REACTIONS, getCannedReaction, type ReactionKey } from '@/lib/reactions';
 import { activityItems, db, questionReactions, questions, users } from '@/server/db';
+import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 import { sendSms } from '@/server/sms';
 
 export type ReactionContextType = 'feed' | 'joshing_game';
@@ -155,11 +156,10 @@ export async function getUnrepliedReactionCount(userId: string): Promise<number>
 
     return rows.length;
   } catch (error) {
-    const pgError = error as { code?: string; message?: string };
-    const missingCamelCaseColumn = pgError.code === '42703'
-      && (pgError.message?.includes('recipientUserId')
-        || pgError.message?.includes('repliedAt')
-        || pgError.message?.includes('QuestionReaction'));
+    const missingCamelCaseColumn = pgErrorCode(error) === '42703'
+      && (pgErrorMessage(error)?.includes('recipientUserId')
+        || pgErrorMessage(error)?.includes('repliedAt')
+        || pgErrorMessage(error)?.includes('QuestionReaction'));
     if (!missingCamelCaseColumn) throw error;
 
     const result = await db.execute(sql<{ value: string }>`
