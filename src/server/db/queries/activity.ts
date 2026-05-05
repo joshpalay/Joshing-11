@@ -17,6 +17,7 @@ import {
 } from '@/server/db';
 import { getCannedReaction } from '@/lib/reactions';
 import type { ActivityItemType } from '@/server/activity/write-activity';
+import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 import type { MasteryTier } from '@/types/db';
 
 type ActivityItemRow = typeof activityItems.$inferSelect;
@@ -573,11 +574,10 @@ export async function getUnreadCount(userId: string): Promise<number> {
       .where(and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)));
     reactionCount = reactionRow?.value ?? 0;
   } catch (error) {
-    const pgError = error as { code?: string; message?: string };
-    const missingCamelCaseColumn = pgError.code === '42703'
-      && (pgError.message?.includes('recipientUserId')
-        || pgError.message?.includes('repliedAt')
-        || pgError.message?.includes('QuestionReaction'));
+    const missingCamelCaseColumn = pgErrorCode(error) === '42703'
+      && (pgErrorMessage(error)?.includes('recipientUserId')
+        || pgErrorMessage(error)?.includes('repliedAt')
+        || pgErrorMessage(error)?.includes('QuestionReaction'));
     if (!missingCamelCaseColumn) throw error;
 
     const result = await db.execute(sql<{ value: string }>`

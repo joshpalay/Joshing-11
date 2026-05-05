@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
+import { pgErrorCode } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
 export type NewFeedItem = typeof feedItems.$inferInsert;
@@ -139,8 +140,7 @@ export async function getDismissedDomains(userId: string): Promise<string[]> {
       ));
     return rows.map((r) => r.canonicalSubcategory);
   } catch (error) {
-    const pgError = error as { code?: string };
-    if (pgError.code === '42P01') return []; // FeedDismissedDomain table not yet migrated
+    if (pgErrorCode(error) === '42P01') return []; // FeedDismissedDomain table not yet migrated
     throw error;
   }
 }

@@ -13,6 +13,7 @@ import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { categoryLabel } from '@/lib/questions-types';
 import { asQueueSlots, dailyQueueItemId } from '@/server/daily/catchup';
 import type { QueueSlot } from '@/server/daily/types';
+import { pgErrorCode } from '@/server/db/pg-error';
 import {
   catchUpExpiresAt,
   expiresWithin24Hours,
@@ -73,20 +74,17 @@ async function getDeclaredInterests(userId: string) {
       .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
       .orderBy(asc(declaredInterests.declaredAt));
   } catch (err) {
-    const pgError = err as { code?: string };
-    if (pgError.code === '42703') {
-      // territory_type column not yet migrated — default to 'declared'
-      const rows = await db
-        .select({
-          domain: declaredInterests.domain,
-          broadCategory: declaredInterests.broadCategory,
-        })
-        .from(declaredInterests)
-        .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
-        .orderBy(asc(declaredInterests.declaredAt));
-      return rows.map((r) => ({ ...r, territoryType: 'declared' as const }));
-    }
-    throw err;
+    if (pgErrorCode(err) !== '42703') throw err;
+    // territory_type column not yet migrated — default to 'declared'
+    const rows = await db
+      .select({
+        domain: declaredInterests.domain,
+        broadCategory: declaredInterests.broadCategory,
+      })
+      .from(declaredInterests)
+      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
+      .orderBy(asc(declaredInterests.declaredAt));
+    return rows.map((r) => ({ ...r, territoryType: 'declared' as const }));
   }
 }
 
