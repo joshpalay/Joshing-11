@@ -6,7 +6,8 @@
       "Bash(npx vercel *)",
       "Bash(gh run *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(echo \"Exit: $?\")"
     ]
   }
 }

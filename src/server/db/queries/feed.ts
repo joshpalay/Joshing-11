@@ -195,7 +195,7 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
   const dismissedDomains = await getDismissedDomains(userId);
   const dismissedSet = new Set(dismissedDomains);
 
-  const [pinned, nonPinned] = await Promise.all([
+  const [pinned, nonPinnedRaw] = await Promise.all([
     db
       .select()
       .from(feedItems)
@@ -214,39 +214,42 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
         inArray(feedItems.state, VISIBLE_FEED_STATES),
       ))
       .orderBy(desc(feedItems.sourceEventAt))
-      .limit(50), // fetch extra to account for domain filtering
+      .limit(50), // fetch extra to account for domain filtering and sorting
   ]);
 
-  if (dismissedSet.size > 0) {
-    // Fetch question domains to filter dismissed
-    const questionIds = [...new Set(
-      [...pinned, ...nonPinned]
-        .map((item) => item.questionId)
-        .filter((id): id is string => Boolean(id)),
-    )];
+  // Fetch surface_priority_score for all question IDs so we can sort by it
+  const allQuestionIds = [...new Set(
+    [...pinned, ...nonPinnedRaw]
+      .map((item) => item.questionId)
+      .filter((id): id is string => Boolean(id)),
+  )];
 
-    const domainRows = questionIds.length > 0
-      ? await db
-          .select({ id: questions.id, canonicalSubcategory: questions.canonicalSubcategory })
-          .from(questions)
-          .where(inArray(questions.id, questionIds))
-      : [];
+  const scoreRows = allQuestionIds.length > 0
+    ? await db
+        .select({ id: questions.id, score: questions.surfacePriorityScore, canonicalSubcategory: questions.canonicalSubcategory })
+        .from(questions)
+        .where(inArray(questions.id, allQuestionIds))
+    : [];
 
-    const domainByQuestionId = new Map(domainRows.map((r) => [r.id, r.canonicalSubcategory]));
+  const scoreByQuestionId = new Map(scoreRows.map((r) => [r.id, r.score ?? 0]));
+  const domainByQuestionId = new Map(scoreRows.map((r) => [r.id, r.canonicalSubcategory]));
 
-    const filterItem = (item: FeedItem) => {
-      if (!item.questionId) return true;
-      const domain = domainByQuestionId.get(item.questionId);
-      return !domain || !dismissedSet.has(domain);
-    };
+  // Sort non-pinned by surface_priority_score DESC then sourceEventAt DESC
+  const nonPinned = [...nonPinnedRaw].sort((a, b) => {
+    const scoreA = a.questionId ? (scoreByQuestionId.get(a.questionId) ?? 0) : 0;
+    const scoreB = b.questionId ? (scoreByQuestionId.get(b.questionId) ?? 0) : 0;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    return b.sourceEventAt.getTime() - a.sourceEventAt.getTime();
+  });
 
-    const filteredNonPinned = nonPinned.filter(filterItem).slice(0, 25);
-    const all = [...pinned.filter(filterItem), ...filteredNonPinned];
-    const afterThumbsUp = await collapseThumbsUpItems(all);
-    return collapseFriendAnsweredItems(afterThumbsUp);
-  }
+  const filterItem = (item: FeedItem) => {
+    if (!item.questionId || dismissedSet.size === 0) return true;
+    const domain = domainByQuestionId.get(item.questionId);
+    return !domain || !dismissedSet.has(domain);
+  };
 
-  const all = [...pinned, ...nonPinned.slice(0, 25)];
+  const filteredNonPinned = nonPinned.filter(filterItem).slice(0, 25);
+  const all = [...pinned.filter(filterItem), ...filteredNonPinned];
   const afterThumbsUp = await collapseThumbsUpItems(all);
   return collapseFriendAnsweredItems(afterThumbsUp);
 }

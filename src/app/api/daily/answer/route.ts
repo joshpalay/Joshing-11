@@ -10,6 +10,7 @@ import {
 } from '@/server/db';
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
+import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { type QueueSlot } from '@/server/daily/types';
 
 export const dynamic = 'force-dynamic';
@@ -132,6 +133,12 @@ export async function POST(request: NextRequest) {
     .update(dailyQueues)
     .set({ slots: nextSlots })
     .where(eq(dailyQueues.id, queue.id));
+
+  void createFeedItemsForFriendsFromAnswer(
+    session.userId,
+    question.id,
+    isCorrect ? 'correct' : 'incorrect',
+  );
 
   return NextResponse.json({
     isCorrect,

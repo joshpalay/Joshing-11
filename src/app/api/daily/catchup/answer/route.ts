@@ -9,6 +9,7 @@ import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/serv
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
+import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
 
 export const dynamic = 'force-dynamic';
@@ -109,6 +110,12 @@ export async function POST(request: NextRequest) {
     .update(dailyQueues)
     .set({ slots: nextSlots })
     .where(eq(dailyQueues.id, catchupItem.queueId));
+
+  void createFeedItemsForFriendsFromAnswer(
+    session.userId,
+    catchupItem.questionId,
+    isCorrect ? 'correct' : 'incorrect',
+  );
 
   const nextItem = (await getCatchupQuestions(session.userId))[0] ?? null;
 

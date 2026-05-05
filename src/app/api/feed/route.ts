@@ -1,10 +1,10 @@
-import { inArray } from 'drizzle-orm';
+import { and, count, eq, inArray, or } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { db, joshingGames, questions, users } from '@/server/db';
+import { db, feedItems, friendships, joshingGames, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { getFeedForUser, type CollapsedFeedItem } from '@/server/db/queries/feed';
+import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem } from '@/server/db/queries/feed';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +50,24 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const rawFeed = await getFeedForUser(session.userId);
+  const [rawFeed, friendCount, dismissedDomains, totalItemCount] = await Promise.all([
+    getFeedForUser(session.userId),
+    db
+      .select({ value: count() })
+      .from(friendships)
+      .where(and(
+        eq(friendships.status, 'active'),
+        or(eq(friendships.userAId, session.userId), eq(friendships.userBId, session.userId)),
+      ))
+      .then((rows) => rows[0]?.value ?? 0),
+    getDismissedDomains(session.userId),
+    db
+      .select({ value: count() })
+      .from(feedItems)
+      .where(eq(feedItems.recipientUserId, session.userId))
+      .then((rows) => rows[0]?.value ?? 0),
+  ]);
+
   // authored_shared is deprecated — filter inert rows until cleanup script removes them
   const feed = rawFeed.filter((item) => item.sourceType !== 'authored_shared');
   const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
@@ -76,6 +93,12 @@ export async function GET() {
 
   return NextResponse.json({
     viewer_user_id: session.userId,
+    meta: {
+      has_friends: friendCount > 0,
+      has_dismissed_domains: dismissedDomains.length > 0,
+      total_item_count: totalItemCount,
+      active_item_count: feed.length,
+    },
     items: feed.map((item) => {
       const question = item.questionId ? questionById.get(item.questionId) : undefined;
       const sourceUser = userById.get(item.sourceUserId);

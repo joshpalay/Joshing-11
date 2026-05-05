@@ -13,6 +13,7 @@ import {
   JoshingGameValidationError,
   submitJoshingGameResponse,
 } from '@/server/db/queries/joshing-game';
+import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
@@ -109,6 +110,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
           domain,
         }).catch(() => null)
       : null;
+
+    void createFeedItemsForFriendsFromAnswer(
+      session.userId,
+      parsed.questionId,
+      grade.isCorrect ? 'correct' : 'incorrect',
+    );
 
     if (!grade.isCorrect) {
       void promptCreatorNoteAfterWrongAnswer({

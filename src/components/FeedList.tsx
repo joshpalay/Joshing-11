@@ -35,8 +35,16 @@ type FeedApiItem = {
   game_title: string | null;
 };
 
+type FeedMeta = {
+  has_friends: boolean;
+  has_dismissed_domains: boolean;
+  total_item_count: number;
+  active_item_count: number;
+};
+
 type FeedResponse = {
   viewer_user_id: string;
+  meta?: FeedMeta;
   items: FeedApiItem[];
 };
 
@@ -161,6 +169,7 @@ type QuestionCardState = 'unanswered' | 'answered' | 'reacted';
 
 export default function FeedList({ limit = 25 }: FeedListProps) {
   const [items, setItems] = useState<FeedApiItem[]>([]);
+  const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ResultState>>({});
@@ -183,6 +192,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
         throw new Error((body as { message?: string } | null)?.message ?? 'Could not load your Feed.');
       }
       setViewerId(body.viewer_user_id);
+      setFeedMeta(body.meta ?? null);
       setItems(body.items);
       const bannerResponse = await fetch('/api/ceremony/banner', { cache: 'no-store', credentials: 'include' });
       const bannerBody = await bannerResponse.json().catch(() => null) as { ceremony?: CeremonyBanner | null } | null;
@@ -203,8 +213,13 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
   const emptyCopy = useMemo(() => {
     if (loading) return 'Loading your Feed...';
     if (error) return error;
-    return "You're caught up. Check back later.";
-  }, [error, loading]);
+    if (!feedMeta?.has_friends) return "When your friends play, their questions will show up here.";
+    if (feedMeta.has_dismissed_domains && feedMeta.total_item_count === 0) {
+      return "You've focused your Feed. You can re-open domains from your Knowledge page.";
+    }
+    if (feedMeta.total_item_count > 0) return "You're caught up.";
+    return "Quiet today. Check back when your friends have played.";
+  }, [error, feedMeta, loading]);
 
   const showToast = useCallback((itemId: string, message: string) => {
     setToasts((t) => ({ ...t, [itemId]: message }));
@@ -359,8 +374,13 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
       ) : null}
 
       {visibleItems.length === 0 ? (
-        <section className="flex min-h-48 items-center justify-center py-12 text-center">
+        <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
           <p className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>{emptyCopy}</p>
+          {!loading && !error && !feedMeta?.has_friends ? (
+            <Link href="/new-game" className="btn-primary text-sm">
+              Send a Joshing Game
+            </Link>
+          ) : null}
         </section>
       ) : (
         <section className="space-y-3 pb-8">
