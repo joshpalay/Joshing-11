@@ -1,4 +1,3 @@
-import { and, desc, eq, gte } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
@@ -13,28 +12,14 @@ export async function POST() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const cutoff = new Date();
-  cutoff.setHours(cutoff.getHours() - 24);
-
-  const [recentTidy] = await db
-    .select({ id: activityItems.id, createdAt: activityItems.createdAt })
-    .from(activityItems)
-    .where(and(
-      eq(activityItems.userId, session.userId),
-      eq(activityItems.type, TIDY_ACTIVITY_TYPE),
-      gte(activityItems.createdAt, cutoff),
-    ))
-    .orderBy(desc(activityItems.createdAt))
-    .limit(1);
-
-  if (recentTidy) {
-    return NextResponse.json(
-      { error: 'rate_limited', message: 'You can tidy your map once every 24 hours.' },
-      { status: 429 },
-    );
+  let result;
+  try {
+    result = await runDomainMergesForUser(session.userId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Could not tidy your map.';
+    console.error('[tidy] runDomainMergesForUser failed', { userId: session.userId, message });
+    return NextResponse.json({ error: 'tidy_failed', message }, { status: 500 });
   }
-
-  const result = await runDomainMergesForUser(session.userId);
 
   await db.insert(activityItems).values({
     userId: session.userId,

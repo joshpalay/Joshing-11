@@ -148,6 +148,7 @@ export async function GET() {
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
         domain_pill: domain,
         game_title: game?.title ?? null,
+        difficulty: question?.calibratedDifficulty ?? question?.llmDifficulty ?? question?.difficultyEstimate ?? null,
       };
     }),
   });

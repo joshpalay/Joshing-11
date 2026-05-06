@@ -181,6 +181,7 @@ export default function DailySummaryPage() {
           +{Math.round(summary.pointsEarned)}
         </p>
         <p style={{ ...monoStyle, marginTop: '12px', color: 'var(--text-muted)' }}>
+          {summary.difficultyMode ? `${summary.difficultyMode.charAt(0).toUpperCase() + summary.difficultyMode.slice(1)} · ` : ''}
           {summary.totalCorrect}/{summary.questions.length} correct
           {summary.totalSkipped > 0 ? ` · ${summary.totalSkipped} skipped` : ''}
         </p>

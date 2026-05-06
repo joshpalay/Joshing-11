@@ -39,6 +39,16 @@ function domainFor(question: JoshingGameView['questions'][number]['question']) {
   return question.canonicalSubcategory || question.broadCategory || question.category || 'General';
 }
 
+function resolvedDifficulty(question: JoshingGameView['questions'][number]['question']): string | null {
+  return question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null;
+}
+
+function difficultyPillClasses(level: string): string {
+  if (level === 'specialist') return 'border-rose-200 bg-rose-50 text-rose-700';
+  if (level === 'moderate') return 'border-amber-200 bg-amber-50 text-amber-700';
+  return 'border-sky-200 bg-sky-50 text-sky-700';
+}
+
 function explanationFor(question: JoshingGameView['questions'][number]['question']) {
   return question.explainerFullWrong
     ?? question.explainerFull
@@ -230,15 +240,25 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                         ? `From ${view.creator.displayName}`
                         : 'From the question bank'}
                     </p>
-                    <span
-                      className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
-                        correct
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : 'border-rose-200 bg-rose-50 text-rose-700'
-                      }`}
-                    >
-                      {resultLabel(response?.isCorrect)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const level = resolvedDifficulty(gameQuestion.question);
+                        return level ? (
+                          <span className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${difficultyPillClasses(level)}`}>
+                            {level.charAt(0).toUpperCase() + level.slice(1)}
+                          </span>
+                        ) : null;
+                      })()}
+                      <span
+                        className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
+                          correct
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-rose-200 bg-rose-50 text-rose-700'
+                        }`}
+                      >
+                        {resultLabel(response?.isCorrect)}
+                      </span>
+                    </div>
                   </div>
                   <p className="mt-3 font-medium leading-snug text-foreground">{gameQuestion.question.questionText}</p>
                   <div className="mt-3 space-y-1 text-sm">

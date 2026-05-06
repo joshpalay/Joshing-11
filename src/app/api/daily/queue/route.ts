@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { getTodaysDailyQueue } from '@/server/db/queries/daily';
+import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { type QueueSlot } from '@/server/daily/types';
 
@@ -11,11 +12,12 @@ function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
-function serializeQueue(queue: NonNullable<Awaited<ReturnType<typeof getTodaysDailyQueue>>>) {
+function serializeQueue(queue: NonNullable<Awaited<ReturnType<typeof getTodaysDailyQueue>>>, difficultyMode: string) {
   return {
     queue_id: queue.id,
     queue_date: queue.queueDate,
     slots: asQueueSlots(queue.slots),
+    difficulty_mode: difficultyMode,
   };
 }
 
@@ -28,12 +30,16 @@ export async function GET() {
   const userId = await requireUserId();
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const queue = await getTodaysDailyQueue(userId);
+  const [queue, prefs] = await Promise.all([
+    getTodaysDailyQueue(userId),
+    getDailyPreferences(userId),
+  ]);
+
   if (!queue) {
     return NextResponse.json({ queue: null, slots: [] });
   }
 
-  return NextResponse.json(serializeQueue(queue));
+  return NextResponse.json(serializeQueue(queue, prefs.difficulty));
 }
 
 export async function POST() {
@@ -52,10 +58,14 @@ export async function POST() {
     throw error;
   }
 
-  const queue = await getTodaysDailyQueue(userId);
+  const [queue, prefs] = await Promise.all([
+    getTodaysDailyQueue(userId),
+    getDailyPreferences(userId),
+  ]);
+
   if (!queue) {
     return NextResponse.json({ error: 'queue_not_created' }, { status: 500 });
   }
 
-  return NextResponse.json(serializeQueue(queue));
+  return NextResponse.json(serializeQueue(queue, prefs.difficulty));
 }
