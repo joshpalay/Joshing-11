@@ -7,6 +7,7 @@ import {
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
 import {
+  getDomainDifficultyOverrides,
   mapAdaptiveLevelToDifficultyHint,
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
@@ -400,6 +401,10 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     domainsForRound = selectDiverseDomains(knowledgeBase, count);
   }
 
+  const domainDifficultyOverrides = preferences.difficulty === 'adaptive'
+    ? await getDomainDifficultyOverrides(userId, domainsForRound).catch(() => undefined)
+    : undefined;
+
   return generateDailyQuestions(
     domainsForRound,
     count,
@@ -408,7 +413,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     [],
     undefined,
     preferences.difficulty,
-    undefined,
+    domainDifficultyOverrides,
     adaptiveLevel,
   );
 }

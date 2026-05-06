@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 
 import { gradeAnswer, selectQuip } from '@/server/grading';
+import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
 import { dailyQueues, db } from '@/server/db';
 import { getCatchupQuestions } from '@/server/db/queries/daily';
@@ -113,6 +114,14 @@ export async function POST(request: NextRequest) {
     .set({ slots: nextSlots })
     .where(eq(dailyQueues.id, catchupItem.queueId));
 
+  await updateDomainDifficultyOnAnswer(
+    session.userId,
+    catchupItem.domain,
+    isCorrect,
+  ).catch((err) => {
+    console.warn('[daily/catchup/answer] updateDomainDifficultyOnAnswer failed', err);
+  });
+
   void createFeedItemsForFriendsFromAnswer(
     session.userId,
     catchupItem.questionId,
@@ -154,6 +163,7 @@ export async function POST(request: NextRequest) {
           wasSkipped: nextItem.wasSkipped,
           expiresAt: nextItem.expiresAt,
           expiresSoon: nextItem.expiresSoon,
+          difficultyEstimate: nextItem.difficultyEstimate,
         }
       : null,
   });
