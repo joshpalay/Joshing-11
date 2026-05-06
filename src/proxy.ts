@@ -21,6 +21,10 @@ async function getAuthenticatedUser(request: NextRequest): Promise<AuthMeRespons
 }
 
 export async function proxy(request: NextRequest) {
+  if (request.method === 'OPTIONS') {
+    return new NextResponse(null, { status: 200 });
+  }
+
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === '/login';
   const isOnboardingPage = pathname === '/onboarding';
