@@ -140,8 +140,12 @@ ${lines.join('\n')}`;
     if (instruction) difficultyHint = `\n\nDifficulty instruction: ${instruction}`;
   }
 
-  return `Generate ${count} trivia question(s) for the following domain(s): ${domains.join(', ')}.
-${calibration}${difficultyHint}
+  const domainSection =
+    domains.length === count && count > 1
+      ? `Generate exactly one trivia question for each of the following ${count} domains:\n${domains.map((d, i) => `${i + 1}. ${d}`).join('\n')}`
+      : `Generate ${count} trivia question(s) for the following domain(s): ${domains.join(', ')}`;
+
+  return `${domainSection}${calibration}${difficultyHint}
 
 Previously generated questions to avoid repeating:
 ${prevBlock}`;
@@ -323,14 +327,52 @@ export async function generateDailyQuestions(
 
 const DECLARED_DOMAIN_WEIGHT = 0.5;
 
-function weightedFilterDomains(knowledgeBase: Awaited<ReturnType<typeof getKnowledgeBase>>): string[] {
-  const filtered = knowledgeBase.filter((d) => {
-    if (d.territoryType === 'demonstrated') return true;
-    return Math.random() < DECLARED_DOMAIN_WEIGHT;
-  });
-  return filtered.length > 0
-    ? filtered.map((d) => d.domain)
-    : knowledgeBase.map((d) => d.domain);
+function selectDiverseDomains(
+  knowledgeBase: Awaited<ReturnType<typeof getKnowledgeBase>>,
+  count: number,
+): string[] {
+  // Group by broad category so we can pick one domain per category
+  const byCategory = new Map<string, (typeof knowledgeBase)[number][]>();
+  for (const d of knowledgeBase) {
+    const cat = d.broadCategory ?? 'other';
+    const arr = byCategory.get(cat) ?? [];
+    arr.push(d);
+    byCategory.set(cat, arr);
+  }
+
+  // Shuffle categories for variety across runs
+  const categories = Array.from(byCategory.values());
+  for (let i = categories.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [categories[i], categories[j]] = [categories[j], categories[i]];
+  }
+
+  const selected: string[] = [];
+
+  // One domain per category, preferring demonstrated; include declared at 50%
+  for (const bucket of categories) {
+    if (selected.length >= count) break;
+    const pool = bucket.filter(
+      (d) => d.territoryType === 'demonstrated' || Math.random() < DECLARED_DOMAIN_WEIGHT,
+    );
+    const eligible = pool.length > 0 ? pool : bucket;
+    const pick = eligible[Math.floor(Math.random() * eligible.length)];
+    selected.push(pick.domain);
+  }
+
+  // Fill remaining slots if there are more slots than categories
+  if (selected.length < count) {
+    const used = new Set(selected);
+    const remaining = knowledgeBase
+      .filter((d) => !used.has(d.domain))
+      .sort(() => Math.random() - 0.5);
+    for (const d of remaining) {
+      if (selected.length >= count) break;
+      selected.push(d.domain);
+    }
+  }
+
+  return selected.length > 0 ? selected : knowledgeBase.slice(0, count).map((d) => d.domain);
 }
 
 export async function generateDailyQuestionsFromKnowledgeBase(
@@ -354,8 +396,8 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     const filtered = preferences.selectedDomains.filter((domain) => allDomains.includes(domain));
     domainsForRound = filtered.length > 0 ? filtered : allDomains;
   } else {
-    // Random mode: apply territory weights (declared=0.5x, demonstrated=1.0x)
-    domainsForRound = weightedFilterDomains(knowledgeBase);
+    // Random mode: pick one domain per category for cross-category variety
+    domainsForRound = selectDiverseDomains(knowledgeBase, count);
   }
 
   return generateDailyQuestions(
