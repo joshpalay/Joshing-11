@@ -11,7 +11,17 @@ type QueueResponse = {
   queue_id: string;
   queue_date: string;
   slots: QueueSlot[];
+  difficulty_mode?: string;
 };
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function difficultyBadges(mode?: string): Array<{ label: string }> | undefined {
+  if (!mode) return undefined;
+  return [{ label: capitalize(mode) }];
+}
 
 type AnswerResponse = {
   isCorrect?: boolean;
@@ -83,6 +93,7 @@ export default function DailyPage() {
         queue_id: body.queue_id,
         queue_date: body.queue_date,
         slots,
+        difficulty_mode: typeof body.difficulty_mode === 'string' ? body.difficulty_mode : undefined,
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load today.');
@@ -154,6 +165,7 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: 'From Joshing',
+          badges: difficultyBadges(queue.difficulty_mode),
         });
         if (slot.submitted_answer) {
           rows.push({ id: `u-${slot.slot_index}`, kind: 'user', text: slot.submitted_answer });
@@ -189,6 +201,7 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: 'From Joshing',
+          badges: difficultyBadges(queue.difficulty_mode),
         });
         break;
       }

@@ -10,6 +10,7 @@ import {
 import { resolveTier } from '@/server/mastery/tiers';
 import { getDeliveredCreatorNotesForQuestions, type DeliveredCreatorNote } from '@/server/creator-notes';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
+import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import type { QueueSlot } from '@/server/daily/types';
 import type { MasteryTier } from '@/types/db';
 
@@ -19,6 +20,7 @@ export type DailySummaryView = {
   totalCorrect: number;
   totalSkipped: number;
   pointsEarned: number;
+  difficultyMode: string | null;
   questions: QuestionRecap[];
   domainGains: DomainGain[];
   newTerritory: string[];
@@ -89,7 +91,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     .map((slot) => slot.generated_question_id)
     .filter((id): id is string => Boolean(id));
 
-  const [questions, todayEvents] = await Promise.all([
+  const [questions, todayEvents, prefs] = await Promise.all([
     generatedIds.length > 0
       ? db
           .select()
@@ -112,6 +114,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
             sql`${masteryEvents.answerId} like ${`daily:${queue.id}:%`}`,
           ))
       : Promise.resolve([]),
+    getDailyPreferences(userId),
   ]);
 
   const questionById = new Map(questions.map((question) => [question.id, question]));
@@ -207,6 +210,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     totalCorrect,
     totalSkipped,
     pointsEarned,
+    difficultyMode: prefs.difficulty,
     questions: recaps,
     domainGains: [...touchedDomains]
       .map((domain) => ({
