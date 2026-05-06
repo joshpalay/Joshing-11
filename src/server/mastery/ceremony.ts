@@ -268,7 +268,7 @@ async function applyMergesForUser(
         .where(and(eq(skippedDailyQuestions.userId, userId), inArray(skippedDailyQuestions.canonicalSubcategory, sourceDomains)));
 
       const declaredSourceRows = await tx
-        .select()
+        .select({ isActive: declaredInterests.isActive })
         .from(declaredInterests)
         .where(and(
           eq(declaredInterests.userId, userId),
