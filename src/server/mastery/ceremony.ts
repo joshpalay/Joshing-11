@@ -100,35 +100,6 @@ function parseSuggestedMerges(raw: unknown): SuggestedMerge[] {
   });
 }
 
-async function suggestDomainMerges(domainNames: string[]): Promise<SuggestedMerge[]> {
-  const client = getAnthropicClient();
-  if (!client || domainNames.length < 2) return [];
-
-  const prompt = `These are trivia domain labels for one user's knowledge map. Identify any groups of 2+ that are so closely related they should be merged into a single broader (but still hyper-specific) label. Do NOT suggest merging different things just because they're in the same broad category. Only merge near-duplicates or refinements of the same narrow topic.
-
-Example merges:
-'Bach WTC Book 1' + 'Bach WTC Book 2' + 'WTC Fugues' -> 'Bach Well-Tempered Clavier'
-'Late Bowie' + 'Bowie 1976-1980' -> 'Berlin-Era Bowie'
-
-Example NON-merges:
-'Tchaikovsky Symphonies' + 'Tchaikovsky Ballets' (different things)
-'Russian Literature' + 'French Literature' (different things)
-
-Respond in JSON: { "merges": [ { "sources": ["...", "..."], "target": "...", "rationale": "..." } ] } If no merges needed: { "merges": [] }
-
-Domain labels:
-${domainNames.map((name) => `- ${name}`).join('\n')}`;
-
-  const response = await client.messages.create({
-    model: ANTHROPIC_MODEL,
-    max_tokens: 900,
-    temperature: 0,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  return parseSuggestedMerges(parseJsonObject(extractTextContent(response.content)));
-}
-
 async function suggestAggressiveDomainMerges(
   domains: Array<{ name: string; questionCount: number; tier: MasteryTier }>,
 ): Promise<SuggestedMerge[]> {
@@ -174,12 +145,20 @@ Propose merges. Respond in JSON only:
 
 If no merges are needed: { "merges": [] }`;
 
-  const response = await client.messages.create({
-    model: ANTHROPIC_MODEL,
-    max_tokens: 1200,
-    temperature: 0,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  let response;
+  try {
+    response = await client.messages.create({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 1200,
+      temperature: 0,
+      messages: [{ role: 'user', content: prompt }],
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[tidy] Anthropic merge suggestion failed', { model: ANTHROPIC_MODEL, status, message });
+    throw new Error(`LLM merge suggestion failed: ${message}`);
+  }
 
   return parseSuggestedMerges(parseJsonObject(extractTextContent(response.content)));
 }
@@ -399,7 +378,26 @@ export async function runDomainMergesForUser(userId: string): Promise<MergeResul
     return { mergesApplied: 0, domainsBefore, domainsAfter: domainsBefore, details: [] };
   }
 
-  const suggestions = await suggestDomainMerges(masteryRows.map((row) => row.canonicalSubcategory));
+  const questionCountRows = await db
+    .select({
+      canonicalSubcategory: masteryEvents.canonicalSubcategory,
+      questionCount: sql<number>`count(distinct ${masteryEvents.questionId})`,
+    })
+    .from(masteryEvents)
+    .where(eq(masteryEvents.userId, userId))
+    .groupBy(masteryEvents.canonicalSubcategory);
+
+  const countByDomain = new Map(
+    questionCountRows.map((row) => [domainKey(row.canonicalSubcategory), Number(row.questionCount)]),
+  );
+
+  const domainsWithContext = masteryRows.map((row) => ({
+    name: row.canonicalSubcategory,
+    questionCount: countByDomain.get(domainKey(row.canonicalSubcategory)) ?? 0,
+    tier: row.tier,
+  }));
+
+  const suggestions = await suggestAggressiveDomainMerges(domainsWithContext);
   if (suggestions.length === 0) {
     return { mergesApplied: 0, domainsBefore, domainsAfter: domainsBefore, details: [] };
   }
