@@ -33,6 +33,7 @@ type FeedApiItem = {
   is_in_bank: boolean;
   domain_pill: string;
   game_title: string | null;
+  difficulty: string | null;
 };
 
 type FeedMeta = {
@@ -416,6 +417,16 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                   <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
                     {item.domain_pill}
                   </span>
+                  {item.difficulty ? (
+                    <span className={[
+                      'rounded-full px-2.5 py-1 text-xs font-medium',
+                      item.difficulty === 'specialist' ? 'bg-rose-100 text-rose-700'
+                      : item.difficulty === 'moderate' ? 'bg-amber-100 text-amber-700'
+                      : 'bg-sky-100 text-sky-700',
+                    ].join(' ')}>
+                      {item.difficulty.charAt(0).toUpperCase() + item.difficulty.slice(1)}
+                    </span>
+                  ) : null}
                   <span className="ml-auto text-xs text-muted-foreground">{formatEventTime(item.source_event_at)}</span>
                 </div>
 

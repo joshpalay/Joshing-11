@@ -4,7 +4,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { GameplayChatThread, type ChatMessage } from '@/components/play/GameplayChat';
-import type { JoshingGameView } from '@/server/db/queries/joshing-game';
+import type { JoshingGameView, QuestionRow } from '@/server/db/queries/joshing-game';
+
+function questionBadges(q: QuestionRow): Array<{ label: string; tone?: 'warning' }> | undefined {
+  const level = q.calibratedDifficulty ?? q.llmDifficulty ?? q.difficultyEstimate ?? null;
+  if (!level) return undefined;
+  const label = level.charAt(0).toUpperCase() + level.slice(1);
+  return [level === 'specialist' ? { label, tone: 'warning' as const } : { label }];
+}
 
 type GradeResponse = {
   isCorrect: boolean;
@@ -39,6 +46,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
         assignmentId: response.questionId,
         questionText: item.question.questionText,
         creatorName: game.creator.displayName,
+        badges: questionBadges(item.question),
       });
       if (response.submittedAnswer) rows.push({ id: `u-${response.id}`, kind: 'user', text: response.submittedAnswer });
       rows.push({
@@ -72,6 +80,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
         assignmentId: next.questionId,
         questionText: next.question.questionText,
         creatorName: game.creator.displayName,
+        badges: questionBadges(next.question),
       });
     }
     return rows;
@@ -148,6 +157,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
               assignmentId: nextQuestion.questionId,
               questionText: nextQuestion.question.questionText,
               creatorName: game.creator.displayName,
+              badges: questionBadges(nextQuestion.question),
             },
           ]);
         } else if (body.viewerStatus === 'complete') {
