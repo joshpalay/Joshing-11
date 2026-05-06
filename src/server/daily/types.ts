@@ -27,6 +27,8 @@ export type QueueSlot = {
   author_note?: string | null;
   domain: string;
   question_text: string;
+  /** LLM-rated objective difficulty for this question, surfaced as a badge in the UI. */
+  difficulty_estimate?: 'accessible' | 'moderate' | 'specialist';
   answered: boolean;
   answer_state?: QueueSlotAnswerState;
   /** Text the player typed; persisted so the summary screen can show it. */

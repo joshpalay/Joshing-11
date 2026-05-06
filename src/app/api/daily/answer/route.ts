@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { gradeAnswer, selectQuip } from '@/server/grading';
+import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
 import {
   dailyQueues,
@@ -133,6 +134,14 @@ export async function POST(request: NextRequest) {
     .update(dailyQueues)
     .set({ slots: nextSlots })
     .where(eq(dailyQueues.id, queue.id));
+
+  await updateDomainDifficultyOnAnswer(
+    session.userId,
+    question.canonicalSubcategory,
+    isCorrect,
+  ).catch((err) => {
+    console.warn('[daily/answer] updateDomainDifficultyOnAnswer failed', err);
+  });
 
   void createFeedItemsForFriendsFromAnswer(
     session.userId,

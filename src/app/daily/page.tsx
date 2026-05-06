@@ -5,7 +5,13 @@ import { useRouter } from 'next/navigation';
 
 import { GameplayChatThread, newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
+import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+
+function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
+  const tier = difficultyEstimateToTierLabel(slot.difficulty_estimate);
+  return tier ? [{ label: tier }] : [];
+}
 
 type QueueResponse = {
   queue_id: string;
@@ -154,6 +160,7 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: 'From Joshing',
+          badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
           rows.push({ id: `u-${slot.slot_index}`, kind: 'user', text: slot.submitted_answer });
@@ -189,6 +196,7 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: 'From Joshing',
+          badges: questionBadges(slot),
         });
         break;
       }

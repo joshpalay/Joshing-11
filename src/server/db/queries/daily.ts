@@ -23,6 +23,13 @@ import {
 } from '@/server/play/catch-up-eligibility';
 import { orderCatchUpItems } from '@/server/play/catch-up-turn-sequencing';
 
+function asQueueSlotDifficulty(
+  value: string | null | undefined,
+): 'accessible' | 'moderate' | 'specialist' | undefined {
+  if (value === 'accessible' || value === 'moderate' || value === 'specialist') return value;
+  return undefined;
+}
+
 export type KnowledgeBaseDomain = {
   domain: string;
   broadCategory: string | null;
@@ -52,6 +59,7 @@ export type CatchupQueueItem = {
   domainDisplayName: string;
   broadCategory: string;
   basePoints: number;
+  difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   submittedAnswer: string | null;
   wasSkipped: boolean;
 };
@@ -228,6 +236,7 @@ export async function getCatchupQuestions(userId: string): Promise<CatchupQuesti
         domainDisplayName: categoryLabel(domain),
         broadCategory: question.broadCategory,
         basePoints: question.basePoints,
+        difficultyEstimate: asQueueSlotDifficulty(question.difficultyEstimate) ?? null,
         submittedAnswer: slot.submitted_answer ?? null,
         wasSkipped: Boolean(slot.skipped),
       } satisfies CatchupQuestion;
@@ -263,6 +272,7 @@ export async function createDailyQueueItem(
     generated_question_id: question.id,
     domain: question.canonicalSubcategory,
     question_text: question.questionText,
+    difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate),
     answered: false,
     difficulty_stepped_up: false,
   };

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
+import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import {
   parseCatchUpAnswerErrorBody,
   userFacingCatchUpSubmitMessage,
@@ -23,6 +24,7 @@ export type CatchupQueueItem = {
   wasSkipped: boolean;
   expiresAt: string;
   expiresSoon?: boolean;
+  difficultyEstimate?: 'accessible' | 'moderate' | 'specialist' | null;
 };
 
 type CatchupAnswerResponse = {
@@ -64,6 +66,8 @@ function formatQuestionSubhead(item: CatchupQueueItem): string {
 
 function questionMessage(item: CatchupQueueItem): ChatMessage {
   const badges: NonNullable<Extract<ChatMessage, { kind: 'question' }>['badges']> = [];
+  const tier = difficultyEstimateToTierLabel(item.difficultyEstimate);
+  if (tier) badges.push({ label: tier });
   if (item.wasSkipped) badges.push({ label: 'you skipped this', tone: 'muted' });
   if (item.expiresSoon) badges.push({ label: 'expires tomorrow', tone: 'warning' });
 

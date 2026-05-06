@@ -1,6 +1,6 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
-import { db, users } from '@/server/db';
+import { db, userDomainDifficulties, users } from '@/server/db';
 
 const MIN_ADAPTIVE_LEVEL = 1.0;
 const MAX_ADAPTIVE_LEVEL = 4.0;
@@ -142,4 +142,133 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
     difficultyLabel: 'expert-level deep cuts',
     promptHint: 'Target roughly a 15% correct rate. Write expert-level deep cuts with specific facts, dates, terminology, or details.',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Per-domain adaptive difficulty
+// ---------------------------------------------------------------------------
+
+export type ServedDifficulty = 'accessible' | 'moderate' | 'specialist';
+
+const DIFFICULTY_LADDER: ServedDifficulty[] = ['accessible', 'moderate', 'specialist'];
+const STREAK_TO_STEP = 2;
+
+/** Difficulty preference key understood by generate-questions.ts. */
+type DifficultyPreference = 'normal' | 'moderate' | 'challenging';
+
+const SERVED_TO_PREFERENCE: Record<ServedDifficulty, DifficultyPreference> = {
+  accessible: 'normal',
+  moderate: 'moderate',
+  specialist: 'challenging',
+};
+
+function seedDifficultyFromAdaptiveLevel(level: number): ServedDifficulty {
+  const normalized = clampAdaptiveLevel(level);
+  if (normalized < 1.5) return 'accessible';
+  if (normalized < 2.5) return 'moderate';
+  return 'specialist';
+}
+
+function stepDifficulty(current: ServedDifficulty, direction: 1 | -1): ServedDifficulty {
+  const idx = DIFFICULTY_LADDER.indexOf(current);
+  const next = Math.min(DIFFICULTY_LADDER.length - 1, Math.max(0, idx + direction));
+  return DIFFICULTY_LADDER[next];
+}
+
+/**
+ * Update per-domain difficulty after a graded answer. Two consecutive correct →
+ * step up; two consecutive incorrect → step down. Streak counter resets when
+ * the level moves so a single wobble doesn't immediately yo-yo.
+ */
+export async function updateDomainDifficultyOnAnswer(
+  userId: string,
+  canonicalSubcategory: string,
+  isCorrect: boolean,
+): Promise<void> {
+  if (!canonicalSubcategory) return;
+
+  const [existing] = await db
+    .select()
+    .from(userDomainDifficulties)
+    .where(and(
+      eq(userDomainDifficulties.userId, userId),
+      eq(userDomainDifficulties.canonicalSubcategory, canonicalSubcategory),
+    ))
+    .limit(1);
+
+  if (!existing) {
+    const seed = seedDifficultyFromAdaptiveLevel(await readCurrentAdaptiveLevel(userId));
+    await db.insert(userDomainDifficulties).values({
+      userId,
+      canonicalSubcategory,
+      servedDifficulty: seed,
+      consecutiveCorrect: isCorrect ? 1 : 0,
+      consecutiveIncorrect: isCorrect ? 0 : 1,
+      lastUpdated: new Date(),
+    });
+    return;
+  }
+
+  let nextCorrect = isCorrect ? existing.consecutiveCorrect + 1 : 0;
+  let nextIncorrect = isCorrect ? 0 : existing.consecutiveIncorrect + 1;
+  let nextDifficulty: ServedDifficulty = existing.servedDifficulty;
+
+  if (isCorrect && nextCorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'specialist') {
+    nextDifficulty = stepDifficulty(existing.servedDifficulty, 1);
+    nextCorrect = 0;
+  } else if (!isCorrect && nextIncorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'accessible') {
+    nextDifficulty = stepDifficulty(existing.servedDifficulty, -1);
+    nextIncorrect = 0;
+  }
+
+  await db
+    .update(userDomainDifficulties)
+    .set({
+      servedDifficulty: nextDifficulty,
+      consecutiveCorrect: nextCorrect,
+      consecutiveIncorrect: nextIncorrect,
+      lastUpdated: new Date(),
+    })
+    .where(eq(userDomainDifficulties.id, existing.id));
+}
+
+/**
+ * For each requested domain, return the user's current per-domain difficulty
+ * mapped to a `difficultyPreference` key the prompt builder understands. Domains
+ * with no row are seeded from the user's global adaptiveLevel so first-contact
+ * still respects overall skill.
+ */
+export async function getDomainDifficultyOverrides(
+  userId: string,
+  domains: string[],
+): Promise<Map<string, DifficultyPreference>> {
+  const overrides = new Map<string, DifficultyPreference>();
+  if (domains.length === 0) return overrides;
+
+  const rows = await db
+    .select({
+      canonicalSubcategory: userDomainDifficulties.canonicalSubcategory,
+      servedDifficulty: userDomainDifficulties.servedDifficulty,
+    })
+    .from(userDomainDifficulties)
+    .where(and(
+      eq(userDomainDifficulties.userId, userId),
+      inArray(userDomainDifficulties.canonicalSubcategory, domains),
+    ));
+
+  const known = new Map<string, ServedDifficulty>();
+  for (const row of rows) {
+    known.set(row.canonicalSubcategory, row.servedDifficulty as ServedDifficulty);
+  }
+
+  const seedLevel = known.size === domains.length
+    ? null
+    : await readCurrentAdaptiveLevel(userId);
+
+  for (const domain of domains) {
+    const served = known.get(domain) ?? seedDifficultyFromAdaptiveLevel(seedLevel ?? MIN_ADAPTIVE_LEVEL);
+    overrides.set(domain, SERVED_TO_PREFERENCE[served]);
+  }
+
+  return overrides;
 }
