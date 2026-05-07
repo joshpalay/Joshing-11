@@ -2,7 +2,7 @@
 
 import { Lock, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
@@ -85,6 +85,14 @@ function LoadingSkeleton() {
 }
 
 export default function QuestionsPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <QuestionsPageContent />
+    </Suspense>
+  );
+}
+
+function QuestionsPageContent() {
   const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<QuestionView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,7 +125,7 @@ export default function QuestionsPage() {
   }, []);
 
   useEffect(() => {
-    void loadQuestions();
+    void Promise.resolve().then(loadQuestions);
   }, [loadQuestions]);
 
   useEffect(() => {
