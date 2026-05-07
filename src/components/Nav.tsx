@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Bell, Brain, Home, Menu, Plus, Rss, User, X } from 'lucide-react';
+import { CreateChooser } from '@/components/CreateChooser';
 
 type ActivitiesResponse = {
   unreadCount?: number;
@@ -35,9 +36,9 @@ export function Nav() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [accountInitials, setAccountInitials] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [createChooserOpen, setCreateChooserOpen] = useState(false);
   const visibleUnreadCount = pathname === '/activities' ? 0 : unreadCount;
   const hidesNewGameShortcut =
-    pathname === '/' ||
     pathname.startsWith('/daily') ||
     pathname === '/replay' ||
     pathname.startsWith('/games/');
@@ -159,14 +160,16 @@ export function Nav() {
         ) : null}
       </nav>
       {showNewGameShortcut ? (
-        <Link
-          href="/new-game"
+        <button
+          type="button"
           className="fixed bottom-20 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg md:hidden"
-          aria-label="New Game"
+          aria-label="Create"
+          onClick={() => setCreateChooserOpen(true)}
         >
           <Plus className="size-6" />
-        </Link>
+        </button>
       ) : null}
+      <CreateChooser open={createChooserOpen} onClose={() => setCreateChooserOpen(false)} />
     </>
   );
 }

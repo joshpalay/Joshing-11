@@ -1,6 +1,7 @@
 'use client';
 
 import { Lock, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
@@ -84,6 +85,7 @@ function LoadingSkeleton() {
 }
 
 export default function QuestionsPage() {
+  const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<QuestionView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +93,9 @@ export default function QuestionsPage() {
   const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
-  const [drawer, setDrawer] = useState<DrawerState>({ mode: 'closed' });
+  const [drawer, setDrawer] = useState<DrawerState>(() => (
+    searchParams.get('create') === '1' ? { mode: 'create' } : { mode: 'closed' }
+  ));
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [cardError, setCardError] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
