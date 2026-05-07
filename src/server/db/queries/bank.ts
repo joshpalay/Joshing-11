@@ -57,7 +57,7 @@ export async function addToBank(params: {
     .set({ sharedToFriendsFeed: true, updatedAt: new Date() })
     .where(eq(questions.id, params.questionId));
 
-  if (question.creatorId !== params.userId) {
+  if (question.creatorId && question.creatorId !== params.userId) {
     const domain = questionDomain(question);
     await Promise.all([
       writeMasteryEvent({

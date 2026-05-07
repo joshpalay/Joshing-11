@@ -202,7 +202,9 @@ export const questions = pgTable(
   'Question',
   {
     id: id(),
-    creatorId: text('creator_id').notNull().references(() => users.id),
+    creatorId: text('creator_id').references(() => users.id),
+    generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id, { onDelete: 'set null' }),
+    source: text('source').$type<'authored' | 'daily_generated'>().notNull().default('authored'),
     sourceQuestionId: text('source_question_id'),
     sourceCreatorId: text('source_creator_id'),
     questionText: text('question_text').notNull(),
@@ -253,6 +255,7 @@ export const questions = pgTable(
     index('Question_canonical_subcategory_idx').on(table.canonicalSubcategory),
     index('Question_source_question_id_idx').on(table.sourceQuestionId),
     index('Question_source_creator_id_idx').on(table.sourceCreatorId),
+    uniqueIndex('Question_generated_question_id_key').on(table.generatedQuestionId),
   ],
 );
 
@@ -299,6 +302,7 @@ export const playerMastery = pgTable(
     tier: masteryTierEnum('tier').notNull().default('establishing'),
     tierReachedAt: timestamp('tier_reached_at', { withTimezone: true }),
     seasonPointsStart: doublePrecision('season_points_start').notNull().default(0),
+    territoryType: text('territory_type').$type<'declared' | 'demonstrated'>().notNull().default('demonstrated'),
     updatedAt: updatedAt(),
   },
   (table) => [

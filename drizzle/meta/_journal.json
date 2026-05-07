@@ -127,6 +127,13 @@
       "when": 1777840400000,
       "tag": "0017_creator_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1777840500000,
+      "tag": "0018_daily_generated_and_player_mastery_territory",
+      "breakpoints": true
     }
   ]
 }
