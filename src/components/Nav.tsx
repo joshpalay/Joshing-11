@@ -36,7 +36,11 @@ export function Nav() {
   const [accountInitials, setAccountInitials] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const visibleUnreadCount = pathname === '/activities' ? 0 : unreadCount;
-  const showNewGameShortcut = pathname !== '/daily' && pathname !== '/daily/setup';
+  const hidesNewGameShortcut =
+    pathname.startsWith('/daily') ||
+    pathname === '/replay' ||
+    pathname.startsWith('/games/');
+  const showNewGameShortcut = !hidesNewGameShortcut;
 
   const loadUnreadCount = useCallback(async () => {
     try {
