@@ -1,36 +1,8 @@
 import Link from 'next/link';
-import { Activity, Brain, Gamepad2, Rss } from 'lucide-react';
 import FeedList from '@/components/FeedList';
 import TodaysFiveCard from '@/components/TodaysFiveCard';
 import { getSession } from '@/server/auth/session';
 import { getCatchupQuestions } from '@/server/db/queries/daily';
-
-const secondaryLinks = [
-  {
-    href: '/feed',
-    label: 'Feed',
-    description: 'See what friends are playing and sending.',
-    Icon: Rss,
-  },
-  {
-    href: '/knowledge',
-    label: 'Knowledge',
-    description: 'Track the areas you are building.',
-    Icon: Brain,
-  },
-  {
-    href: '/activities',
-    label: 'Activities',
-    description: 'Catch up on invites, answers, and friend activity.',
-    Icon: Activity,
-  },
-  {
-    href: '/new-game',
-    label: 'New Game',
-    description: 'Send up to five questions to someone else.',
-    Icon: Gamepad2,
-  },
-];
 
 export default async function Home() {
   const session = await getSession();
@@ -65,28 +37,6 @@ export default async function Home() {
           </div>
           {catchupCount > 0 ? <CatchupCard count={catchupCount} expiringCount={expiringCount} /> : null}
         </div>
-      </section>
-
-      <section className="grid gap-3 py-5 sm:grid-cols-2">
-        {secondaryLinks.map(({ href, label, description, Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className="group rounded-lg border bg-card p-4 text-card-foreground transition hover:border-foreground/25 hover:bg-muted/50"
-          >
-            <div className="flex items-start gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-md bg-muted text-foreground">
-                <Icon className="size-5" aria-hidden="true" />
-              </span>
-              <span>
-                <span className="block text-sm font-semibold">{label}</span>
-                <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                  {description}
-                </span>
-              </span>
-            </div>
-          </Link>
-        ))}
       </section>
     </main>
   );
