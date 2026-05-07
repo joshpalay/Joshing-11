@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Combine, Plus, Repeat2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 
 import { DomainCard } from '@/components/knowledge/DomainCard';
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
 import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
-import { ProgressionLandscape, type ProgressionDomain } from '@/components/knowledge/ProgressionLandscape';
 import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import type { KnowledgeDomain } from '@/server/profile/knowledge-types';
@@ -117,19 +116,6 @@ function toPortraitEntry(domain: DomainMastery): PortraitEntry {
   };
 }
 
-function toProgressionDomain(domain: DomainMastery): ProgressionDomain {
-  return {
-    canonicalSubcategory: domain.displayName,
-    canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
-    broadCategory: domain.broadCategory,
-    currentTier: asTier(domain.tier),
-    correctAnswerCount: domain.questionsCorrect,
-    authoredCount: domain.questionsAnswered,
-    iconKey: domain.iconKey,
-    territoryType: (domain.territoryType as 'declared' | 'demonstrated' | undefined) ?? 'demonstrated',
-  };
-}
-
 function emptyDomain(domain: string): DomainMastery {
   return {
     domain,
@@ -168,7 +154,6 @@ export default function KnowledgePage() {
 }
 
 function KnowledgePageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const highlightedDomainSlug = searchParams.get('domain');
   const tierCrossed = searchParams.get('tier_crossed');
@@ -263,11 +248,6 @@ function KnowledgePageContent() {
 
   const activeDomains = useMemo(() => sortedDomains.map(toKnowledgeDomain), [sortedDomains]);
   const portraitEntries = useMemo(() => sortedDomains.map(toPortraitEntry), [sortedDomains]);
-  const progressionDomains = useMemo(() => sortedDomains.map(toProgressionDomain), [sortedDomains]);
-  const maxCorrectAnswerCount = useMemo(
-    () => Math.max(...progressionDomains.map((domain) => domain.correctAnswerCount), 1),
-    [progressionDomains],
-  );
   const declaredSlots = useMemo(() => {
     if (!data) return [];
     const byKey = new Map(data.pageData.allDomains.map((domain) => [domainKey(domain.domain), domain]));
@@ -514,14 +494,6 @@ function KnowledgePageContent() {
             ) : (
               <div id="portrait-circles-section">
                 <PortraitCircles entries={portraitEntries} />
-                <div style={{ marginTop: 24 }}>
-                  <ProgressionLandscape
-                    domains={progressionDomains}
-                    maxCorrectAnswerCount={maxCorrectAnswerCount}
-                    highlightSlug={activeSlug}
-                    onDomainSelect={(domain) => router.push(`/knowledge/${encodeURIComponent(domain)}`)}
-                  />
-                </div>
                 <div style={sharePortraitWrapStyle}>
                   <button type="button" style={sharePortraitBtnStyle} onClick={() => setShareModalOpen(true)}>
                     Share portrait
