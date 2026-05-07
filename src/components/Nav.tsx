@@ -37,6 +37,7 @@ export function Nav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const visibleUnreadCount = pathname === '/activities' ? 0 : unreadCount;
   const hidesNewGameShortcut =
+    pathname === '/' ||
     pathname.startsWith('/daily') ||
     pathname === '/replay' ||
     pathname.startsWith('/games/');
