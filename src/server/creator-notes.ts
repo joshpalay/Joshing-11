@@ -47,7 +47,7 @@ export async function promptCreatorNoteAfterWrongAnswer(params: {
       .where(eq(questions.id, params.questionId))
       .limit(1);
 
-    if (!row || row.authorUserId === params.recipientUserId) return;
+    if (!row?.authorUserId || row.authorUserId === params.recipientUserId) return;
     if (!row.authorPhoneNumber || row.authorSmsOptIn === 'opted_out') return;
 
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);

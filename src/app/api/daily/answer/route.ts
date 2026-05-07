@@ -8,10 +8,13 @@ import {
   dailyQueues,
   db,
   generatedQuestions,
+  questions,
 } from '@/server/db';
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
+import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
+import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { type QueueSlot } from '@/server/daily/types';
 
 export const dynamic = 'force-dynamic';
@@ -143,11 +146,35 @@ export async function POST(request: NextRequest) {
     console.warn('[daily/answer] updateDomainDifficultyOnAnswer failed', err);
   });
 
-  void createFeedItemsForFriendsFromAnswer(
-    session.userId,
-    question.id,
-    isCorrect ? 'correct' : 'incorrect',
-  );
+  try {
+    const persisted = await persistGeneratedQuestion(question.id);
+    const [persistedQuestion] = await db
+      .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+      .from(questions)
+      .where(eq(questions.id, persisted.questionId))
+      .limit(1);
+    const persistedDomain = persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category;
+
+    if (isCorrect && persistedQuestion?.creatorId && persistedQuestion.creatorId !== session.userId && persistedDomain) {
+      void promoteDeclaredToDemonstrated({
+        userId: persistedQuestion.creatorId,
+        domain: persistedDomain,
+        triggeringFriendId: session.userId,
+        questionId: persisted.questionId,
+      });
+    }
+
+    void createFeedItemsForFriendsFromAnswer(
+      session.userId,
+      persisted.questionId,
+      isCorrect ? 'correct' : 'incorrect',
+    );
+  } catch (error) {
+    console.warn('[daily/answer] failed to persist generated question for feed propagation', {
+      generatedQuestionId: question.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   return NextResponse.json({
     isCorrect,
