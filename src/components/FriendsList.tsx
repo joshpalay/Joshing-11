@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 
 type Friend = {
   id: string;
@@ -43,9 +42,10 @@ export default function FriendsList() {
       {friends.map((friend) => (
         <div key={friend.id} className="flex items-center justify-between rounded-lg border bg-card p-4 text-card-foreground">
           <p className="font-medium">{friend.displayName}</p>
-          <Link href="/new-game" className="text-sm underline-offset-2 hover:underline">
-            Play now
-          </Link>
+          {/*
+            // v11.1: Joshing Game creation disabled at FAB level. Re-enable
+            // when game creation flow is restored.
+          */}
         </div>
       ))}
     </div>

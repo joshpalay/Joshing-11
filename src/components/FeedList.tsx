@@ -379,11 +379,10 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
       {visibleItems.length === 0 ? (
         <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
           <p className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>{emptyCopy}</p>
-          {!loading && !error && !feedMeta?.has_friends ? (
-            <Link href="/new-game" className="btn-primary text-sm">
-              Send a Joshing Game
-            </Link>
-          ) : null}
+          {/*
+            // v11.1: Joshing Game creation disabled at FAB level. Re-enable
+            // when game creation flow is restored.
+          */}
         </section>
       ) : (
         <section className="space-y-3 pb-8">

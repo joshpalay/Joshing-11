@@ -9,6 +9,8 @@ import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
 
+const GAME_CREATION_DISABLED_IN_V11_1: boolean = true;
+
 type CreateJoshingGameBody = {
   title: string;
   recipientIds: string[];
@@ -61,6 +63,16 @@ function validateBody(body: CreateJoshingGameBody, creatorId: string): string | 
 }
 
 export async function POST(request: NextRequest) {
+  // v11.1: Game creation disabled. UI entry points are also disabled,
+  // so this is a defense-in-depth check against direct API calls.
+  // Remove this block when game creation is restored.
+  if (GAME_CREATION_DISABLED_IN_V11_1) {
+    return NextResponse.json(
+      { error: 'Joshing Game creation is disabled in v11.1.' },
+      { status: 403 },
+    );
+  }
+
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
