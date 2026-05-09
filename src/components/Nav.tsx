@@ -3,12 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, Brain, Home, Menu, Plus, Rss, User, X } from 'lucide-react';
+import { Brain, Home, Menu, Pencil, Plus, Rss, User, X } from 'lucide-react';
 import { CreateChooser } from '@/components/CreateChooser';
-
-type ActivitiesResponse = {
-  unreadCount?: number;
-};
 
 type MeResponse = {
   user?: {
@@ -19,8 +15,8 @@ type MeResponse = {
 const navItems = [
   { href: '/', label: 'Home', Icon: Home },
   { href: '/feed', label: 'Friends', Icon: Rss },
+  { href: '/questions', label: 'Questions', Icon: Pencil },
   { href: '/knowledge', label: 'Knowledge', Icon: Brain },
-  { href: '/activities', label: 'Activities', Icon: Bell },
   { href: '/account', label: 'Account', Icon: User },
 ];
 
@@ -33,30 +29,14 @@ function initialsFor(name: string): string {
 
 export function Nav() {
   const pathname = usePathname();
-  const [unreadCount, setUnreadCount] = useState(0);
   const [accountInitials, setAccountInitials] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
-  const visibleUnreadCount = pathname === '/activities' ? 0 : unreadCount;
   const hidesNewGameShortcut =
     pathname.startsWith('/daily') ||
     pathname === '/replay' ||
     pathname.startsWith('/games/');
   const showNewGameShortcut = !hidesNewGameShortcut;
-
-  const loadUnreadCount = useCallback(async () => {
-    try {
-      const response = await fetch('/api/activities', { cache: 'no-store', credentials: 'include' });
-      if (!response.ok) {
-        setUnreadCount(0);
-        return;
-      }
-      const body = await response.json().catch(() => null) as ActivitiesResponse | null;
-      setUnreadCount(body?.unreadCount ?? 0);
-    } catch {
-      setUnreadCount(0);
-    }
-  }, []);
 
   const loadCurrentUser = useCallback(async () => {
     try {
@@ -77,19 +57,12 @@ export function Nav() {
     if (pathname === '/onboarding') return;
 
     const initialTimer = window.setTimeout(() => {
-      void loadUnreadCount();
       void loadCurrentUser();
     }, 0);
-    const timer = window.setInterval(() => {
-      void loadUnreadCount();
-    }, 60_000);
-
     return () => {
       window.clearTimeout(initialTimer);
-      window.clearInterval(timer);
     };
-  }, [loadCurrentUser, loadUnreadCount, pathname]);
-
+  }, [loadCurrentUser, pathname]);
 
   if (pathname === '/onboarding') {
     return null;
@@ -133,7 +106,6 @@ export function Nav() {
           <div id="nav-menu" className="mx-auto mt-3 grid max-w-4xl gap-1">
             {navItems.map(({ href, label, Icon }) => {
               const active = pathname === href;
-              const showUnreadDot = label === 'Activities' && visibleUnreadCount > 0;
               const isAccount = label === 'Account';
 
               return (
@@ -148,9 +120,6 @@ export function Nav() {
                 >
                   <span className="relative grid size-5 place-items-center">
                     {isAccount ? <AccountIcon active={active} /> : <Icon className="size-4" />}
-                    {showUnreadDot ? (
-                      <span className="absolute right-0 top-0 size-2 rounded-full bg-primary" aria-hidden="true" />
-                    ) : null}
                   </span>
                   {label}
                 </Link>
