@@ -26,6 +26,7 @@ export default async function Home() {
         </div>
         <div className="mt-6 w-full space-y-3 md:mt-0 md:max-w-xs">
           <TodaysFiveCard />
+          {catchupCount > 0 ? <CatchupCard count={catchupCount} expiringCount={expiringCount} /> : null}
           <div className="rounded-lg border bg-card p-4 text-card-foreground">
             <p className="mb-3 text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">What&apos;s happening</p>
             <FeedList limit={3} />
@@ -35,7 +36,6 @@ export default async function Home() {
               </Link>
             </div>
           </div>
-          {catchupCount > 0 ? <CatchupCard count={catchupCount} expiringCount={expiringCount} /> : null}
         </div>
       </section>
     </main>
