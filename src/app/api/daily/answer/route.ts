@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
   if (!queue) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
   const slots = asQueueSlots(queue.slots);
-  const slot = slots[parsed.slotIndex];
+  const slot = slots.find((item) => item.slot_index === parsed.slotIndex);
   if (!slot) {
     return NextResponse.json({ error: 'validation', message: 'slot_index out of range' }, { status: 400 });
   }
@@ -103,8 +103,8 @@ export async function POST(request: NextRequest) {
     domain: question.canonicalSubcategory,
   }).catch(() => null);
 
-  const nextSlots = slots.map((item, index) => {
-    if (index !== parsed.slotIndex) return item;
+  const nextSlots = slots.map((item) => {
+    if (item.slot_index !== parsed.slotIndex) return item;
     return {
       ...item,
       answered: true,

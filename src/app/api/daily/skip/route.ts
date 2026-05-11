@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   if (!queue) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
   const slots = asQueueSlots(queue.slots);
-  const slot = slots[parsed.slotIndex];
+  const slot = slots.find((item) => item.slot_index === parsed.slotIndex);
   if (!slot) {
     return NextResponse.json({ error: 'validation', message: 'slot_index out of range' }, { status: 400 });
   }
@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const nextSlots = slots.map((item, index) =>
-    index === parsed.slotIndex ? { ...item, skipped: true } satisfies QueueSlot : item
+  const nextSlots = slots.map((item) =>
+    item.slot_index === parsed.slotIndex ? { ...item, skipped: true } satisfies QueueSlot : item
   );
 
   await db.transaction(async (tx) => {
