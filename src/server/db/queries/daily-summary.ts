@@ -121,12 +121,27 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const pointsByDomain = new Map<string, number>();
   const touchedDomains = new Set<string>();
 
-  for (const slot of slots) {
-    if (slot.domain) touchedDomains.add(slot.domain);
-  }
   for (const event of todayEvents) {
     touchedDomains.add(event.domain);
     pointsByDomain.set(event.domain, (pointsByDomain.get(event.domain) ?? 0) + Number(event.awardedPoints ?? 0));
+  }
+
+  const slotPointsByDomain = new Map<string, number>();
+  for (const slot of slots) {
+    if (!slot.domain) continue;
+    touchedDomains.add(slot.domain);
+
+    const slotPoints = Number(slot.awarded_points ?? 0);
+    if (slotPoints > 0) {
+      slotPointsByDomain.set(slot.domain, (slotPointsByDomain.get(slot.domain) ?? 0) + slotPoints);
+    }
+  }
+
+  for (const [domain, slotPoints] of slotPointsByDomain) {
+    // The queue slot is the source of truth for the visible round total. If the
+    // mastery event write is missing or undercounts a domain, keep the per-domain
+    // recap in sync with the total card instead of showing +0 under a +N total.
+    pointsByDomain.set(domain, Math.max(pointsByDomain.get(domain) ?? 0, slotPoints));
   }
 
   const priorRows = touchedDomains.size > 0
@@ -201,8 +216,8 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const totalSkipped = slots.filter((slot) => slot.skipped).length;
   const totalAnswered = slots.filter((slot) => slot.answered).length;
   const totalCorrect = slots.filter((slot) => slot.answer_state === 'correct').length;
-  const pointsEarned = [...pointsByDomain.values()].reduce((sum, points) => sum + points, 0)
-    || slots.reduce((sum, slot) => sum + Number(slot.awarded_points ?? 0), 0);
+  const pointsEarned = [...pointsByDomain.values()].reduce((sum, points) => sum + points, 0);
+  const gainedDomains = [...touchedDomains].filter((domain) => (pointsByDomain.get(domain) ?? 0) > 0);
 
   return {
     date: dateString,
@@ -212,7 +227,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     pointsEarned,
     difficultyMode: prefs.difficulty,
     questions: recaps,
-    domainGains: [...touchedDomains]
+    domainGains: gainedDomains
       .map((domain) => ({
         domain,
         displayName: displayNameForDomain(domain),
