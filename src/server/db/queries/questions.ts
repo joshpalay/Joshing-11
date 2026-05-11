@@ -47,6 +47,9 @@ export type QuestionView = {
   isInBank?: boolean;
   isOwnAuthored?: boolean;
   authorName?: string;
+  verified: boolean;
+  llmSuggestedAnswer: string | null;
+  critiqueIterations: number;
 };
 
 export type QuestionMutationResult = { ok: boolean; reason?: 'not_found' | 'in_use' };
@@ -154,6 +157,9 @@ export async function toQuestionView(row: QuestionRow): Promise<QuestionView> {
     tags: [],
     asked_count: row.askedCount,
     correct_count: row.correctCount,
+    verified: row.verified,
+    llmSuggestedAnswer: row.llmSuggestedAnswer,
+    critiqueIterations: row.critiqueIterations,
   };
 }
 
@@ -180,6 +186,10 @@ export async function createQuestion(params: {
   explanation: string | null;
   domain: string;
   difficulty: number;
+  creatorNote?: string | null;
+  verified: boolean;
+  llmSuggestedAnswer?: string | null;
+  critiqueIterations: number;
 }): Promise<{ id: string }> {
   const [created] = await db
     .insert(questions)
@@ -189,14 +199,19 @@ export async function createQuestion(params: {
       answerText: params.correctAnswer,
       acceptedAlternatives: params.alternateAnswers,
       factualExplanation: params.explanation,
+      creatorNote: params.creatorNote ?? null,
       category: params.domain as typeof questions.$inferInsert.category,
       categoryOverridden: true,
       difficultyEstimate: numberToDifficulty(params.difficulty),
       llmDifficulty: numberToDifficulty(params.difficulty),
       calibratedDifficulty: numberToDifficulty(params.difficulty),
-      answerSource: 'creator_written',
+      answerSource: params.llmSuggestedAnswer ? (params.verified ? 'llm_suggested' : 'llm_edited') : 'creator_written',
       questionType: 'factual',
       visibility: 'public',
+      verified: params.verified,
+      status: params.verified ? 'verified' : 'unverified',
+      llmSuggestedAnswer: params.llmSuggestedAnswer ?? null,
+      critiqueIterations: params.critiqueIterations,
     })
     .returning({ id: questions.id });
 

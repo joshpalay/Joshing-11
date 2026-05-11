@@ -56,6 +56,9 @@ function readCreatePayload(body: Record<string, unknown> | null) {
   const alternateAnswers = splitAlternates(body?.alternateAnswers ?? body?.accepted_alternatives).slice(0, 5);
   const explanation = typeof body?.explanation === 'string'
     ? body.explanation.trim() || null
+    : null;
+  const creatorNote = typeof body?.creatorNote === 'string'
+    ? body.creatorNote.trim() || null
     : typeof body?.creator_note === 'string'
       ? body.creator_note.trim() || null
       : null;
@@ -71,6 +74,11 @@ function readCreatePayload(body: Record<string, unknown> | null) {
     ? body.difficulty
     : difficultyFromLegacy(body?.difficulty_estimate) ?? (isLegacyPayload ? 3 : null);
   const difficultyValue = difficulty ?? Number.NaN;
+  const verified = typeof body?.verified === 'boolean' ? body.verified : null;
+  const llmSuggestedAnswer = typeof body?.llmSuggestedAnswer === 'string'
+    ? body.llmSuggestedAnswer.trim() || null
+    : null;
+  const critiqueIterations = typeof body?.critiqueIterations === 'number' ? body.critiqueIterations : Number.NaN;
 
   const rawSendToFriendIds = Array.isArray(body?.sendToFriendIds)
     ? (body.sendToFriendIds as unknown[]).filter((id): id is string => typeof id === 'string').slice(0, 20)
@@ -81,11 +89,14 @@ function readCreatePayload(body: Record<string, unknown> | null) {
   if (!correctAnswer || correctAnswer.length > 200) errors.push('correctAnswer');
   if (alternateAnswers.length > 5 || alternateAnswers.some((answer) => answer.length > 200)) errors.push('alternateAnswers');
   if (explanation && explanation.length > 500) errors.push('explanation');
+  if (creatorNote && creatorNote.length > 200) errors.push('creatorNote');
   if (!VALID_DOMAINS.has(domain)) errors.push('domain');
+  if (verified === null) errors.push('verified');
+  if (!Number.isInteger(critiqueIterations) || critiqueIterations < 0) errors.push('critiqueIterations');
   if (!Number.isInteger(difficultyValue) || difficultyValue < 1 || difficultyValue > 5) errors.push('difficulty');
 
   return {
-    value: { text, correctAnswer, alternateAnswers, explanation, domain, difficulty: difficultyValue, sendToFriendIds: rawSendToFriendIds },
+    value: { text, correctAnswer, alternateAnswers, explanation, creatorNote, domain, difficulty: difficultyValue, verified: verified ?? true, llmSuggestedAnswer, critiqueIterations: Number.isInteger(critiqueIterations) ? critiqueIterations : 0, sendToFriendIds: rawSendToFriendIds },
     errors,
   };
 }
@@ -110,6 +121,7 @@ export async function POST(request: NextRequest) {
   const { sendToFriendIds, ...questionFields } = value;
 
   const created = await createQuestion({ authorId: session.userId, ...questionFields });
+  console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: questionFields.verified });
   const kbResult = await openKBDomain({
     userId: session.userId,
     domain: questionFields.domain,

@@ -141,6 +141,13 @@
       "when": 1778508000000,
       "tag": "0019_feed_item_nullable_columns_hotfix",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1778510000000,
+      "tag": "0020_question_critique_verification",
+      "breakpoints": true
     }
   ]
 }

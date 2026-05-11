@@ -235,6 +235,9 @@ export const questions = pgTable(
     explainerFullExpired: text('explainer_full_expired'),
     shortLabel: text('short_label'),
     status: questionStatusEnum('status').notNull().default('verified'),
+    verified: boolean('verified').notNull().default(true),
+    llmSuggestedAnswer: text('llm_suggested_answer'),
+    critiqueIterations: integer('critique_iterations').notNull().default(0),
     visibility: questionVisibilityEnum('visibility').notNull().default('public'),
     publicStatus: publicStatusEnum('public_status').notNull().default('not_scored'),
     publicEligibilityScore: doublePrecision('public_eligibility_score'),
@@ -309,6 +312,22 @@ export const playerMastery = pgTable(
     unique('PLAYER_MASTERY_user_id_canonical_subcategory_key').on(table.userId, table.canonicalSubcategory),
     index('PLAYER_MASTERY_user_id_idx').on(table.userId),
     index('PLAYER_MASTERY_canonical_subcategory_idx').on(table.canonicalSubcategory),
+  ],
+);
+
+
+export const critiqueUsageDaily = pgTable(
+  'CritiqueUsageDaily',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    usageDate: date('usage_date').notNull(),
+    critiqueCount: integer('critique_count').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('CritiqueUsageDaily_user_id_usage_date_key').on(table.userId, table.usageDate),
+    index('CritiqueUsageDaily_user_id_usage_date_idx').on(table.userId, table.usageDate),
   ],
 );
 

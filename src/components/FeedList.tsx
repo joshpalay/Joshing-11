@@ -30,6 +30,7 @@ type FeedApiItem = {
   is_pinned: boolean;
   joshing_game_id: string | null;
   question_text: string | null;
+  verified: boolean;
   is_in_bank: boolean;
   domain_pill: string;
   game_title: string | null;
@@ -370,7 +371,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
             <span className="mt-0.5 text-lg" aria-hidden>✦</span>
             <div>
               <p className="font-medium">Your two-week reflection is ready</p>
-              <p className="mt-1 text-sm text-stone-700">See what you've been up to {'->'}</p>
+              <p className="mt-1 text-sm text-stone-700">See what you&rsquo;ve been up to {'->'}</p>
             </div>
           </div>
         </Link>
@@ -416,6 +417,16 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                   <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
                     {item.domain_pill}
                   </span>
+                  {!item.verified ? (
+                    <button
+                      type="button"
+                      className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground"
+                      title="The author wrote their own answer instead of using the LLM's suggestion. The answer may not be standard."
+                      onClick={() => showToast(item.id, "The author wrote their own answer instead of using the LLM's suggestion. The answer may not be standard.")}
+                    >
+                      ⚠ unverified
+                    </button>
+                  ) : null}
                   {item.difficulty ? (
                     <span className={[
                       'rounded-full px-2.5 py-1 text-xs font-medium',
