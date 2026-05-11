@@ -19,6 +19,11 @@ type QueueResponse = {
   slots: QueueSlot[];
 };
 
+type FailedAnswerResponse = {
+  message?: string;
+  error?: string;
+};
+
 type AnswerResponse = {
   isCorrect?: boolean;
   correct?: boolean;
@@ -32,6 +37,27 @@ type AnswerResponse = {
   quip?: string | null;
   breadcrumb?: string | null;
 };
+
+function answerFailureMessage(body: FailedAnswerResponse | null): string {
+  if (body?.message) return body.message;
+
+  switch (body?.error) {
+    case 'unauthorized':
+      return "Please sign in to answer today's question.";
+    case 'not_found':
+      return "Could not find today's Daily Five queue.";
+    case 'question_not_found':
+      return 'Could not find the question for this Daily Five slot.';
+    case 'validation':
+      return 'Check your answer and try again.';
+    case 'invalid_state':
+      return 'That Daily Five question is already closed.';
+    case 'unexpected':
+      return 'Could not record that answer right now.';
+    default:
+      return 'Could not record that answer.';
+  }
+}
 
 function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
   return slots.find((slot) => !slot.answered && !slot.skipped) ?? null;
@@ -213,7 +239,7 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, skipCurrent]);
+  }, [allDone, currentSlot?.slot_index, queue]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -240,9 +266,14 @@ export default function DailyPage() {
           submitted_answer: submittedAnswer,
         }),
       });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as FailedAnswerResponse | null;
+        throw new Error(answerFailureMessage(body));
+      }
+
       const body = await response.json().catch(() => null) as AnswerResponse | null;
-      if (!response.ok || !body) {
-        throw new Error((body as { message?: string } | null)?.message ?? 'Could not record that answer.');
+      if (!body) {
+        throw new Error('Could not record that answer.');
       }
 
       const isCorrect = Boolean(body.isCorrect ?? body.correct);
