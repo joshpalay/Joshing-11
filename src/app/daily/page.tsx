@@ -179,7 +179,7 @@ export default function DailyPage() {
           kind: 'question',
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
-          creatorName: 'From Joshing',
+          creatorName: null,
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -215,7 +215,7 @@ export default function DailyPage() {
           kind: 'question',
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
-          creatorName: 'From Joshing',
+          creatorName: null,
           badges: questionBadges(slot),
         });
         break;
