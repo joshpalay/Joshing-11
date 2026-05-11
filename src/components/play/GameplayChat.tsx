@@ -551,14 +551,14 @@ function ResultRow({
               <span style={{ color: '#8b1f16', marginRight: '6px' }}>✕</span>
               {wrongHeadline(copyVariant)}
             </p>
-            {consolation ? (
-              <p style={{ marginTop: '6px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                {consolation}
+            {correctAnswer ? (
+              <p style={{ marginTop: '8px', fontSize: '0.9rem', color: 'var(--text)' }}>
+                <span style={{ fontWeight: 600 }}>Answer:</span> {correctAnswer}
               </p>
             ) : null}
-            {correctAnswer ? (
-              <p style={{ marginTop: '10px', fontSize: '0.9rem', color: 'var(--text)' }}>
-                {correctAnswer}
+            {consolation ? (
+              <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                {consolation}
               </p>
             ) : null}
           </>
