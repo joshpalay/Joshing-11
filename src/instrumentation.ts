@@ -84,6 +84,45 @@ export async function register() {
       // log the error itself
     }
 
+    // Migration 0021 adds a partial unique index on FeedDismissedDomain. Some
+    // deployments may still execute an index-only copy of that migration, or may
+    // have migration 0012 recorded without the table actually present. Create the
+    // table and its non-unique indexes first so either migration shape can finish.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "FeedDismissedDomain" (
+          "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "canonicalSubcategory" TEXT NOT NULL,
+          "dismissedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "reinstatedAt" TIMESTAMPTZ
+        )
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "FeedDismissedDomain_userId_idx"
+        ON "FeedDismissedDomain" ("userId")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "FeedDismissedDomain_userId_sub_idx"
+        ON "FeedDismissedDomain" ("userId", "canonicalSubcategory")
+      `);
+      await db.execute(sql`
+        DELETE FROM "FeedDismissedDomain" existing
+        USING "FeedDismissedDomain" newest
+        WHERE existing."userId" = newest."userId"
+          AND existing."canonicalSubcategory" = newest."canonicalSubcategory"
+          AND existing."reinstatedAt" IS NULL
+          AND newest."reinstatedAt" IS NULL
+          AND (
+            existing."dismissedAt" < newest."dismissedAt"
+            OR (existing."dismissedAt" = newest."dismissedAt" AND existing."id" < newest."id")
+          )
+      `);
+    } catch {
+      // Fresh databases may not have the User table yet. In that case migrate()
+      // will create both User and FeedDismissedDomain in normal migration order.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
