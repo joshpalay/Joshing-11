@@ -120,6 +120,19 @@ export async function POST(request: NextRequest) {
 
   const { sendToFriendIds, ...questionFields } = value;
 
+  if (sendToFriendIds.length > 0) {
+    const friends = await getFriends(session.userId);
+    const friendIdSet = new Set(friends.map((friend) => friend.id));
+    const hasInvalidRecipient = sendToFriendIds.some((id) => !friendIdSet.has(id));
+
+    if (hasInvalidRecipient) {
+      return NextResponse.json(
+        { error: 'One or more recipients are not friends.' },
+        { status: 403 },
+      );
+    }
+  }
+
   const created = await createQuestion({ authorId: session.userId, ...questionFields });
   console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: questionFields.verified });
   const kbResult = await openKBDomain({
@@ -131,11 +144,6 @@ export async function POST(request: NextRequest) {
   const question = await getQuestion(created.id, session.userId);
 
   if (sendToFriendIds.length > 0) {
-    // Validate that all recipients are actual friends
-    const friends = await getFriends(session.userId);
-    const friendIdSet = new Set(friends.map((f) => f.id));
-    const validRecipients = sendToFriendIds.filter((id) => friendIdSet.has(id));
-
     const [senderRow] = await db
       .select({ displayName: users.displayName })
       .from(users)
@@ -143,7 +151,7 @@ export async function POST(request: NextRequest) {
       .limit(1);
     const senderName = senderRow?.displayName?.trim() || 'A friend';
 
-    for (const recipientId of validRecipients) {
+    for (const recipientId of sendToFriendIds) {
       const alreadyCorrect = await userAnsweredQuestionCorrectly(recipientId, created.id);
       if (alreadyCorrect) continue;
       const alreadyInFeed = await userHasQuestionInBlockingFeed(recipientId, created.id);
