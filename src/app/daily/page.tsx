@@ -19,6 +19,26 @@ type QueueResponse = {
   slots: QueueSlot[];
 };
 
+type AnswerErrorResponse = {
+  message?: string;
+  error?: string;
+};
+
+const ANSWER_ERROR_MESSAGES: Record<string, string> = {
+  unauthorized: "Please sign in to answer today's question.",
+  not_found: "We could not find today's Daily Five.",
+  question_not_found: 'We could not find that Daily Five question.',
+  validation: 'Please check your answer and try again.',
+  invalid_state: 'That Daily Five question is already closed.',
+  unexpected: 'Something went wrong while recording that answer.',
+};
+
+function answerFailureMessage(body: AnswerErrorResponse | null): string {
+  return body?.message
+    ?? (body?.error ? ANSWER_ERROR_MESSAGES[body.error] : undefined)
+    ?? 'Could not record that answer.';
+}
+
 type AnswerResponse = {
   isCorrect?: boolean;
   correct?: boolean;
@@ -215,7 +235,7 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, skipCurrent]);
+  }, [allDone, currentSlot?.slot_index, queue]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -242,12 +262,17 @@ export default function DailyPage() {
           submitted_answer: submittedAnswer,
         }),
       });
-      const body = await response.json().catch(() => null) as AnswerResponse | null;
-      if (!response.ok || !body) {
-        throw new Error((body as { message?: string } | null)?.message ?? 'Could not record that answer.');
+      const body = await response.json().catch(() => null) as AnswerResponse | AnswerErrorResponse | null;
+      if (!response.ok) {
+        throw new Error(answerFailureMessage(body as AnswerErrorResponse | null));
       }
 
-      const isCorrect = Boolean(body.isCorrect ?? body.correct);
+      if (!body) {
+        throw new Error('Could not record that answer.');
+      }
+
+      const answerBody = body as AnswerResponse;
+      const isCorrect = Boolean(answerBody.isCorrect ?? answerBody.correct);
       setQueue((existing) => existing
         ? {
             ...existing,
@@ -258,11 +283,11 @@ export default function DailyPage() {
                     answered: true,
                     answer_state: isCorrect ? 'correct' : 'incorrect',
                     submitted_answer: submittedAnswer,
-                    awarded_points: body.pointsAwarded ?? body.awarded_points ?? 0,
-                    reveal_canonical_answer: body.correctAnswer ?? body.answer,
-                    reveal_explainer: body.explanation ?? body.explainer,
-                    reveal_breadcrumb: body.breadcrumb ?? null,
-                    reveal_quip: body.consolation ?? body.quip ?? null,
+                    awarded_points: answerBody.pointsAwarded ?? answerBody.awarded_points ?? 0,
+                    reveal_canonical_answer: answerBody.correctAnswer ?? answerBody.answer,
+                    reveal_explainer: answerBody.explanation ?? answerBody.explainer,
+                    reveal_breadcrumb: answerBody.breadcrumb ?? null,
+                    reveal_quip: answerBody.consolation ?? answerBody.quip ?? null,
                   }
                 : slot
             ),
