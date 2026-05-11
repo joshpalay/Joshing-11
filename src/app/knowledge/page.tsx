@@ -368,7 +368,14 @@ function KnowledgePageContent() {
     if (!response.ok) throw new Error(body?.message ?? 'Could not save that question.');
     setSendQuestionOpen(false);
     setWriteQuestionOpen(false);
-    setQuestionToast('Question saved.');
+    if (values.sendToFriendIds.length > 0) {
+      const n = values.sendToFriendIds.length;
+      setQuestionToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
+    } else if (values.shareToFeed) {
+      setQuestionToast('Saved and shared with your friends.');
+    } else {
+      setQuestionToast('Saved to your bank.');
+    }
     window.setTimeout(() => setQuestionToast(null), 2500);
   };
 

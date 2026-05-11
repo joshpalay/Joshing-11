@@ -62,6 +62,10 @@ export type ActivityItemView = Pick<
       domain: string | null;
       result: 'correct' | 'incorrect';
     };
+    authoredSharedQuestion?: {
+      domain: string;
+      recipientCount: number;
+    };
     declaredPromoted?: {
       domain: string;
       questionText: string;
@@ -101,6 +105,7 @@ function isActivityType(value: string): value is ActivityItemType {
     'question_curated',
     'creator_note_received',
     'friend_answered_your_question',
+    'authored_question_shared',
     'declared_promoted',
   ].includes(value);
 }
@@ -463,6 +468,44 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
   );
 }
 
+async function hydrateAuthoredSharedQuestions(items: ActivityItemRow[]) {
+  const relevant = items.filter(
+    (item) => item.type === 'authored_question_shared' && item.referenceType === 'question' && item.referenceId,
+  );
+  if (relevant.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['authoredSharedQuestion']>>();
+  }
+
+  const questionIds = [...new Set(relevant.map((item) => item.referenceId!))];
+  const [questionRows, recipientRows] = await Promise.all([
+    db
+      .select({ id: questions.id, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+      .from(questions)
+      .where(inArray(questions.id, questionIds)),
+    db
+      .select({ questionId: feedItems.questionId, value: count() })
+      .from(feedItems)
+      .where(and(
+        inArray(feedItems.questionId, questionIds),
+        eq(feedItems.sourceType, 'authored_shared'),
+      ))
+      .groupBy(feedItems.questionId),
+  ]);
+
+  const questionById = new Map(questionRows.map((row) => [row.id, row]));
+  const countByQuestionId = new Map(recipientRows.map((row) => [row.questionId, row.value]));
+
+  return new Map(
+    relevant.map((item) => {
+      const question = questionById.get(item.referenceId!);
+      return [item.id, {
+        domain: question ? (question.canonicalSubcategory ?? question.broadCategory ?? question.category) : 'General',
+        recipientCount: Number(countByQuestionId.get(item.referenceId!) ?? 0),
+      }] as const;
+    }),
+  );
+}
+
 async function hydrateDeclaredPromoted(items: ActivityItemRow[]) {
   const relevant = items.filter(
     (item) => item.type === 'declared_promoted' && item.referenceType === 'question' && item.referenceId,
@@ -501,7 +544,7 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     .orderBy(desc(activityItems.createdAt))
     .limit(100);
 
-  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, declaredPromotedById] = await Promise.all([
+  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, authoredSharedQuestionsById, declaredPromotedById] = await Promise.all([
     hydrateActors(rows),
     hydrateGames(rows, userId),
     hydrateMasteryEvents(rows),
@@ -510,6 +553,7 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     hydrateCuratedQuestions(rows),
     hydrateCreatorNotes(rows),
     hydrateFriendAnsweredQuestions(rows),
+    hydrateAuthoredSharedQuestions(rows),
     hydrateDeclaredPromoted(rows),
   ]);
 
@@ -543,6 +587,9 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
           : undefined,
         friendAnsweredQuestion: row.type === 'friend_answered_your_question'
           ? friendAnsweredQuestionsById.get(row.id)
+          : undefined,
+        authoredSharedQuestion: row.type === 'authored_question_shared'
+          ? authoredSharedQuestionsById.get(row.id)
           : undefined,
         declaredPromoted: row.type === 'declared_promoted'
           ? declaredPromotedById.get(row.id)

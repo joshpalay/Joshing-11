@@ -78,6 +78,14 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     return <>{actorName(item)} sent you a note about a question you missed</>;
   }
 
+  if (item.type === 'authored_question_shared') {
+    const shared = item.reference.authoredSharedQuestion;
+    const count = shared?.recipientCount ?? 0;
+    const friendWord = count === 1 ? 'friend' : 'friends';
+    const domain = shared?.domain ?? 'a domain';
+    return <>You shared a question with {count} {friendWord} — {domain}</>;
+  }
+
   if (item.type === 'friend_answered_your_question') {
     const faq = item.reference.friendAnsweredQuestion;
     const domain = faq?.domain;
@@ -191,6 +199,10 @@ function ActivityCta({ item }: { item: ActivityItemView }) {
 
   if (item.type === 'received_direct_question') {
     return <Link href="/feed" className="btn-primary">Answer</Link>;
+  }
+
+  if (item.type === 'authored_question_shared') {
+    return null;
   }
 
   if (item.type === 'declared_promoted') {

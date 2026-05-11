@@ -445,8 +445,12 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
 
                 {/* Attribution line */}
                 <div className="mt-2 flex items-center gap-1.5">
+                  {item.source_type === 'authored_shared' ? <span className="text-sm text-muted-foreground" aria-hidden>✎</span> : null}
                   <p className="text-sm font-medium text-foreground">{item.source_attribution}</p>
                 </div>
+                {item.source_type === 'authored_shared' ? (
+                  <p className="mt-1 text-sm italic text-muted-foreground">Shared with their friends</p>
+                ) : null}
                 {item.personal_message ? (
                   <p className="mt-1 text-sm italic text-muted-foreground">&ldquo;{item.personal_message}&rdquo;</p>
                 ) : null}

@@ -17,6 +17,7 @@ export type QuestionFormValues = {
   llmSuggestedAnswer?: string | null;
   critiqueIterations: number;
   sendToFriendIds: string[];
+  shareToFeed?: boolean;
 };
 
 type CritiqueResult =
@@ -67,6 +68,7 @@ type State = {
   suggestionError: string | null;
   suggesting: boolean;
   specificMode: boolean;
+  shareToFeed: boolean;
   friends: FriendOption[];
   friendsLoading: boolean;
   sendToFriendIds: string[];
@@ -91,6 +93,7 @@ type Action =
   | { type: 'SUBMITTING' }
   | { type: 'DONE' }
   | { type: 'SPECIFIC_MODE'; value: boolean }
+  | { type: 'SHARE_TO_FEED'; value: boolean }
   | { type: 'FRIENDS_LOADING'; value: boolean }
   | { type: 'FRIENDS_LOADED'; friends: FriendOption[] }
   | { type: 'TOGGLE_FRIEND'; id: string };
@@ -123,6 +126,7 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     suggestionError: null,
     suggesting: false,
     specificMode: initialSpecificMode,
+    shareToFeed: initialValues?.shareToFeed ?? false,
     friends: [],
     friendsLoading: false,
     sendToFriendIds: initialValues?.sendToFriendIds ?? [],
@@ -165,7 +169,8 @@ function reducer(state: State, action: Action): State {
     case 'BACK_TO_EDIT': return { ...state, stage: 'ANSWERING' };
     case 'SUBMITTING': return { ...state, stage: 'SUBMITTING', error: null };
     case 'DONE': return { ...state, stage: 'DONE' };
-    case 'SPECIFIC_MODE': return { ...state, specificMode: action.value, sendToFriendIds: [] };
+    case 'SPECIFIC_MODE': return { ...state, specificMode: action.value, shareToFeed: action.value ? false : state.shareToFeed, sendToFriendIds: [] };
+    case 'SHARE_TO_FEED': return { ...state, shareToFeed: action.value, specificMode: action.value ? false : state.specificMode, sendToFriendIds: action.value ? [] : state.sendToFriendIds };
     case 'FRIENDS_LOADING': return { ...state, friendsLoading: action.value };
     case 'FRIENDS_LOADED': return { ...state, friends: action.friends, friendsLoading: false };
     case 'TOGGLE_FRIEND': {
@@ -261,6 +266,10 @@ export function QuestionForm({
     if (on) void loadFriends();
   }
 
+  function toggleShareToFeed(on: boolean) {
+    dispatch({ type: 'SHARE_TO_FEED', value: on });
+  }
+
   async function runCritique() {
     const questionText = state.questionText.trim();
     if (!questionText) return;
@@ -346,7 +355,8 @@ export function QuestionForm({
         verified,
         llmSuggestedAnswer: state.llmSuggestedAnswer,
         critiqueIterations: state.critiqueIterations,
-        sendToFriendIds: state.sendToFriendIds,
+        sendToFriendIds: state.specificMode ? state.sendToFriendIds : [],
+        shareToFeed: state.shareToFeed,
       });
       dispatch({ type: 'DONE' });
     } catch (caught) {
@@ -497,7 +507,8 @@ export function QuestionForm({
             <div className="rounded-md border bg-muted/40 p-4">
               <p className="mb-3 text-xs uppercase tracking-[0.1em] text-muted-foreground">Destinations</p>
               <label className="mb-2 flex cursor-default items-center gap-2 text-sm"><input type="checkbox" checked readOnly disabled className="rounded" /><span className="text-foreground">Save to bank</span></label>
-              <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.specificMode} onChange={(event) => toggleSpecificMode(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Send to specific friends</span></label>
+              <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Share with all friends</span></label>
+              <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.specificMode} onChange={(event) => toggleSpecificMode(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Send to specific friends only</span></label>
               {state.specificMode ? (
                 <div className="mt-1">
                   {state.friendsLoading ? <p className="text-xs text-muted-foreground">Loading friends...</p> : state.friends.length === 0 ? <p className="text-xs text-muted-foreground">No friends found.</p> : (
@@ -510,7 +521,7 @@ export function QuestionForm({
                   )}
                 </div>
               ) : null}
-              <p className="mt-3 text-xs text-muted-foreground">{state.specificMode ? 'Sent directly to the friends you pick.' : 'Saved to your bank.'}</p>
+              <p className="mt-3 text-xs text-muted-foreground">{state.specificMode ? 'Sent directly to the friends you pick.' : state.shareToFeed ? "Your friends will see this in their feed (except friends who've marked this domain as Not my focus)." : 'Saved to your bank only.'}</p>
             </div>
           ) : null}
 

@@ -77,8 +77,7 @@ export async function GET() {
       .then((rows) => rows[0]?.value ?? 0),
   ]);
 
-  // authored_shared is deprecated — filter inert rows until cleanup script removes them
-  const feed = rawFeed.filter((item) => item.sourceType !== 'authored_shared');
+  const feed = rawFeed;
   const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
   const sourceUserIds = [...new Set(feed.map((item) => item.sourceUserId))];
   const gameIds = feed.map((item) => item.joshingGameId).filter((id): id is string => Boolean(id));
@@ -121,10 +120,11 @@ export async function GET() {
         source_attribution = `${sourceName} sent this to you`;
       } else if (item.sourceType === 'friend_answered') {
         source_attribution = friendAnsweredAttribution(item, userById, domain);
+      } else if (item.sourceType === 'authored_shared') {
+        source_attribution = `${sourceName} wrote this`;
       } else if (item.sourceType === 'joshing_game') {
         source_attribution = `${sourceName} sent you a Joshing Game`;
       } else {
-        // legacy thumbs_upped (authored_shared rows are inert and filtered before this)
         source_attribution = thumbsupAttribution(sourceName, item.thumbsUpCount);
       }
 
