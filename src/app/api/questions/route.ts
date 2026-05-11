@@ -1,9 +1,9 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { QUESTION_DOMAIN_KEYS } from '@/lib/game-constants';
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, questions, users } from '@/server/db';
+import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
 import {
   createQuestion,
   getQuestion,
@@ -17,6 +17,7 @@ import {
 } from '@/server/db/queries/feed';
 import { openKBDomain } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
+import { writeActivity } from '@/server/activity/write-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,6 +84,7 @@ function readCreatePayload(body: Record<string, unknown> | null) {
   const rawSendToFriendIds = Array.isArray(body?.sendToFriendIds)
     ? (body.sendToFriendIds as unknown[]).filter((id): id is string => typeof id === 'string').slice(0, 20)
     : [];
+  const shareToFeed = body?.shareToFeed === true;
 
   const errors: string[] = [];
   if (!text || text.length > 300) errors.push('text');
@@ -94,9 +96,10 @@ function readCreatePayload(body: Record<string, unknown> | null) {
   if (verified === null) errors.push('verified');
   if (!Number.isInteger(critiqueIterations) || critiqueIterations < 0) errors.push('critiqueIterations');
   if (!Number.isInteger(difficultyValue) || difficultyValue < 1 || difficultyValue > 5) errors.push('difficulty');
+  if (shareToFeed && rawSendToFriendIds.length > 0) errors.push('shareToFeed');
 
   return {
-    value: { text, correctAnswer, alternateAnswers, explanation, creatorNote, domain, difficulty: difficultyValue, verified: verified ?? true, llmSuggestedAnswer, critiqueIterations: Number.isInteger(critiqueIterations) ? critiqueIterations : 0, sendToFriendIds: rawSendToFriendIds },
+    value: { text, correctAnswer, alternateAnswers, explanation, creatorNote, domain, difficulty: difficultyValue, verified: verified ?? true, llmSuggestedAnswer, critiqueIterations: Number.isInteger(critiqueIterations) ? critiqueIterations : 0, sendToFriendIds: rawSendToFriendIds, shareToFeed },
     errors,
   };
 }
@@ -118,7 +121,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
 
-  const { sendToFriendIds, ...questionFields } = value;
+  const { sendToFriendIds, shareToFeed, ...questionFields } = value;
 
   const created = await createQuestion({ authorId: session.userId, ...questionFields });
   console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: questionFields.verified });
@@ -129,6 +132,71 @@ export async function POST(request: NextRequest) {
     questionId: created.id,
   });
   const question = await getQuestion(created.id, session.userId);
+
+  if (shareToFeed) {
+    try {
+      const friends = await getFriends(session.userId);
+      const concurrency = 5;
+      let sharedCount = 0;
+
+      for (let index = 0; index < friends.length; index += concurrency) {
+        const batch = friends.slice(index, index + concurrency);
+        const results = await Promise.all(batch.map(async (friend) => {
+          const [dismissed] = await db
+            .select({ id: feedDismissedDomains.id })
+            .from(feedDismissedDomains)
+            .where(and(
+              eq(feedDismissedDomains.userId, friend.id),
+              eq(feedDismissedDomains.canonicalSubcategory, questionFields.domain),
+              isNull(feedDismissedDomains.reinstatedAt),
+            ))
+            .limit(1);
+
+          if (dismissed) return false;
+
+          const [existing] = await db
+            .select({ id: feedItems.id })
+            .from(feedItems)
+            .where(and(
+              eq(feedItems.recipientUserId, friend.id),
+              eq(feedItems.questionId, created.id),
+            ))
+            .limit(1);
+
+          if (existing) return false;
+
+          await db.insert(feedItems).values({
+            recipientUserId: friend.id,
+            sourceUserId: session.userId,
+            questionId: created.id,
+            sourceType: 'authored_shared',
+            sourceResult: null,
+            state: 'active',
+            isPinned: false,
+            sourceEventAt: new Date(),
+          });
+          await rollOffOldItems(friend.id);
+          return true;
+        }));
+        sharedCount += results.filter(Boolean).length;
+      }
+
+      await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
+      await writeActivity({
+        userId: session.userId,
+        type: 'authored_question_shared',
+        referenceId: created.id,
+        referenceType: 'question',
+      });
+      console.info('[questions/shareToFeed]', { questionId: created.id, userId: session.userId, recipientCount: sharedCount });
+    } catch (error) {
+      console.error('[questions/shareToFeed] broadcast share failed (suppressed):', {
+        questionId: created.id,
+        userId: session.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   if (sendToFriendIds.length > 0) {
     // Validate that all recipients are actual friends

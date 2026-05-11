@@ -181,6 +181,8 @@ function QuestionsPageContent() {
     if (values.sendToFriendIds.length > 0) {
       const n = values.sendToFriendIds.length;
       setToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
+    } else if (values.shareToFeed) {
+      setToast('Saved and shared with your friends.');
     } else {
       setToast('Saved to your bank.');
     }
