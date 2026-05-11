@@ -293,34 +293,6 @@ function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: stri
   );
 }
 
-function BreadcrumbRow({ text }: { text: string }) {
-  return (
-    <div className="flex justify-start py-0.5">
-      <div
-        style={{
-          maxWidth: '82%',
-          background: 'color-mix(in srgb, var(--surface-2) 64%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--border) 75%, transparent)',
-          borderRadius: 'var(--radius-md)',
-          padding: '8px 12px',
-        }}
-      >
-        <p
-          style={{
-            margin: 0,
-            fontSize: '0.78rem',
-            fontStyle: 'italic',
-            color: 'color-mix(in srgb, var(--text-muted) 78%, var(--text))',
-            lineHeight: 1.35,
-          }}
-        >
-          {text}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function RelationalFeedbackFade({ text }: { text: string }) {
   const [faded, setFaded] = useState(false);
   useEffect(() => {
@@ -606,10 +578,10 @@ function QuipLine({ text }: { text: string }) {
 
 function ResultRow({
   result,
-  questionText,
   correctAnswer,
   consolation,
   breadcrumb,
+  quip,
   copyVariant,
   creatorName,
   relationalFeedbackLine,
@@ -624,6 +596,7 @@ function ResultRow({
   correctAnswer: string | null;
   consolation: string | null;
   breadcrumb: string | null;
+  quip?: string | null;
   copyVariant: number;
   creatorName: string | null;
   relationalFeedbackLine?: string | null;
@@ -694,6 +667,8 @@ function ResultRow({
             ) : null}
           </>
         )}
+        {breadcrumb ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} /> : null}
+        {quip ? <QuipLine text={quip} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
@@ -883,25 +858,23 @@ export function GameplayChatThread({
             return <UserRow key={m.id} text={m.text} />;
           case 'result':
             return (
-              <div key={m.id} className="space-y-2">
-                <ResultRow
-                  result={m.result}
-                  submitted={m.submitted}
-                  questionText={m.questionText}
-                  correctAnswer={m.correctAnswer}
-                  consolation={m.consolation}
-                  breadcrumb={m.breadcrumb}
-                  copyVariant={m.copyVariant}
-                  creatorName={m.creatorName}
-                  relationalFeedbackLine={m.relationalFeedbackLine}
-                  canonicalSubcategory={m.canonicalSubcategory}
-                  reactionPrompt={m.reactionPrompt}
-                  pointsAwarded={m.pointsAwarded}
-                  pointsLabel={m.pointsLabel}
-                />
-                {m.breadcrumb ? <BreadcrumbRow text={m.breadcrumb} /> : null}
-                {m.quip ? <QuipLine text={m.quip} /> : null}
-              </div>
+              <ResultRow
+                key={m.id}
+                result={m.result}
+                submitted={m.submitted}
+                questionText={m.questionText}
+                correctAnswer={m.correctAnswer}
+                consolation={m.consolation}
+                breadcrumb={m.breadcrumb}
+                quip={m.quip}
+                copyVariant={m.copyVariant}
+                creatorName={m.creatorName}
+                relationalFeedbackLine={m.relationalFeedbackLine}
+                canonicalSubcategory={m.canonicalSubcategory}
+                reactionPrompt={m.reactionPrompt}
+                pointsAwarded={m.pointsAwarded}
+                pointsLabel={m.pointsLabel}
+              />
             );
           case 'session_complete':
             return (
