@@ -1,326 +1,705 @@
-# PRD v11.1 — Codebase audit (read-only)
+# PRD v11.1 Audit — Joshing v11.1 Codebase vs PRD + Prompt 9.0–10.4 Expectations
 
-**Repository:** `joshing-v11` (`C:\Users\rpala\Desktop\dev\joshing-11`)  
-**Audit date:** 2026-05-05  
-**Methodology:** Function-body and route logic reviewed per section; statuses use ✅ 🟡 🔴 ⚠️ ❓ as specified.
+Audit date: 2026-05-11  
+Repository: `/workspace/Joshing-11`  
+Methodology: read implementation bodies and route/component wiring, then marked each requirement as:
 
----
+- ✅ COMPLETE — matches PRD behavior, code is real and wired in
+- 🟡 PARTIAL — implemented but missing pieces
+- 🔴 MISSING — no implementation found
+- ⚠️ DIVERGENT — implemented differently than PRD
+- ❓ UNCLEAR — cannot verify by reading/local environment
 
 ## Section 1 — Build Health
 
-| Check | Result |
-|--------|--------|
-| **`npx tsc --noEmit`** | **2 errors** (exit code 2) |
-| **First errors (verbatim)** | `src/app/onboarding/OnboardingFlow.tsx(197,35): error TS2339: Property 'bookComposerFilmmaker' does not exist on type 'WarmupAnswers'.` |
-| | `src/server/knowledge/open-domain.ts(94,33): error TS1360: Type '"declared_promoted"' does not satisfy the expected type 'ActivityItemType'.` |
-| **`npm run build`** | **Failure** — Turbopack: `Module not found: Can't resolve 'html2canvas'` from `./src/components/knowledge/SharePortraitModal.tsx:65` (dependency appears in `package.json` but resolution failed in this environment). |
-| **`npm run dev` starts cleanly** | **Not verified** — automated start on this host failed (`Start-Process` / `npm` Win32 issue); no server log captured. Treat as ❓ **UNCLEAR** for this run. |
-| **`@prisma/client` in `src/`** | **None found** (grep). |
-| **`src/lib/prisma.ts`** | **Does not exist** ✅ |
-| **Files under `src/`** | **237** files (PowerShell recursive file count). |
+### Commands run
 
----
+- `npx tsc --noEmit`
+  - ✅ Success, exit code 0.
+  - npm warning only: `npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.`
+  - Total TypeScript errors: 0.
+- `npm run build`
+  - ⚠️ Failed due to environment/network font fetch, not application TypeScript.
+  - Error excerpt:
+    ```text
+    Turbopack build encountered 1 warnings:
+    [next]/internal/font/google/montserrat_a93acac.module.css
+    Error while requesting resource
+    There was an issue establishing a connection while requesting https://fonts.googleapis.com/css2?family=Montserrat:wght@100..900&display=swap
+
+    > Build error occurred
+    Error: Turbopack build failed with 1 errors:
+    [next]/internal/font/google/montserrat_a93acac.module.css
+    next/font: error:
+    Failed to fetch `Montserrat` from Google Fonts.
+    ```
+- `npm run dev`
+  - 🟡 Starts cleanly enough to reach `✓ Ready in 2.9s`, but emits a startup warning/error from instrumentation migration because the local database connection is refused.
+  - Warning excerpt:
+    ```text
+    [instrumentation] DB migration failed — server will start but schema may be out of date: Error: Failed query: CREATE SCHEMA IF NOT EXISTS "drizzle"
+    [cause]: AggregateError ... code: 'ECONNREFUSED'
+    ✓ Ready in 2.9s
+    ```
+- Search `src/` for `@prisma/client` imports:
+  - ✅ None found.
+- Confirm `src/lib/prisma.ts` does not exist:
+  - ✅ It does not exist.
+- Total file count under `src/`:
+  - 246 files.
 
 ## Section 2 — Prompt 9.0: Broadcast Share Rollback
 
-| Item | Status | Evidence / notes |
-|------|--------|------------------|
-| 2.1 QuestionForm: "Share with friends" toggle absent | ✅ | Destinations block is only locked "Save to bank" + toggle "Send to specific friends" (`QuestionForm.tsx`; no broadcast toggle). |
-| 2.1 "Save to bank" locked default | ✅ | Checkbox `checked readOnly disabled`. |
-| 2.1 "Send to specific friends" toggleable | ✅ | `specificMode` + friend picker. |
-| 2.1 Helper text references broadcast | ✅ | Text is either “Sent directly…” or “Saved to your bank.” — no broadcast. |
-| 2.1 Toast "Saved and shared with your friends." | ✅ | `questions/page.tsx` uses `setToast('Saved to your bank.')`. |
-| 2.2 POST `/api/questions`: `shareToFeed` branch removed | ✅ | `readCreatePayload` / POST have no `shareToFeed`; only `sendToFriendIds`. |
-| 2.2 `authored_shared` creation loop removed | ✅ | POST creates `direct_sent` feed rows only when `sendToFriendIds.length > 0`. |
-| 2.2 Specific-friend branch intact | ✅ | Validates friends, inserts pinned `direct_sent` items, SMS, `sharedToFriendsFeed`. |
-| 2.2 `shareToFeed` removed from body schema | ✅ | Not read from body. |
-| 2.3 FeedList: `authored_shared` variant removed | ✅ | No ✎ / "wrote this" branch; styles handle `direct_sent`, `friend_answered`, `joshing_game`, legacy `thumbs_upped`. |
-| 2.4 `getFeedForUser`: `authored_shared` handled | ✅ | `/api/feed/route.ts` filters `sourceType !== 'authored_shared'` before mapping. |
-| 2.5 Thumbs-down copy: removed / restored | ✅ | Strings match spec (`FeedList.tsx`). |
-| 2.5 4-second behavior | ✅ | `setTimeout(..., 4000)` for remove + undo fade. |
-| 2.6 Cleanup script exists | ✅ | `scripts/cleanup-authored-shared-feed-items.ts` |
-| 2.6 `--dry-run` / `--apply` | ✅ | Defaults to dry-run unless `--apply`. |
+### 2.1 `QuestionForm` destinations panel (`src/components/QuestionForm.tsx`)
 
----
+- ✅ `"Share with friends"` broadcast toggle absent.
+- ✅ `"Save to bank"` remains as locked-on default: rendered as checked, read-only, disabled.
+- ✅ `"Send to specific friends"` remains toggleable via `state.specificMode`.
+- ✅ Helper text does not reference broadcast share; it says either `Sent directly to the friends you pick.` or `Saved to your bank.`
+- ✅ Toast copy `Saved and shared with your friends.` is absent.
+
+### 2.2 Question creation API (`src/app/api/questions/route.ts` POST)
+
+- ✅ `shareToFeed` branch removed; no `shareToFeed` references in route.
+- ✅ `authored_shared` `FeedItem` creation loop removed from route.
+- ✅ Specific-friend send branch intact and validates against actual friends before inserting `direct_sent` feed items.
+- ✅ `shareToFeed` removed from request-body parsing/schema.
+
+### 2.3 `FeedList` (`src/components/FeedList.tsx`)
+
+- ✅ `authored_shared` visual variant removed: no `✎`, no `wrote this` attribution, and card rendering only special-cases `direct_sent`, `friend_answered`, `joshing_game`, and legacy fallback attribution.
+
+### 2.4 Feed query (`src/server/db/queries/feed.ts` / `src/app/api/feed/route.ts`)
+
+- ✅ `authored_shared` rows are handled inertly at API response level: `/api/feed` filters them out after `getFeedForUser` returns raw/collapsed rows.
+- 🟡 `getFeedForUser` itself does not filter `authored_shared`; filtering is done in the API route. This is likely acceptable for the current feed surface, but any direct server-side caller of `getFeedForUser` would still receive legacy rows.
+
+### 2.5 Thumbs-down inline confirmation
+
+- ✅ `Removed from your feed. Won’t pass to your friends.` copy present. Note: uses curly apostrophe `Won’t`, not ASCII `Won't`.
+- ✅ `Restored. This may pass to your friends.` copy present.
+- ✅ 4-second display/removal behavior implemented via `setTimeout(..., 4000)` for both removed and restored states.
+
+### 2.6 Cleanup script
+
+- ✅ `scripts/cleanup-authored-shared-feed-items.ts` exists.
+- ✅ Has both apply and non-apply behavior; `--apply` mutates, absence of `--apply` does dry-run behavior.
+- 🟡 The script does not expose an explicit `--dry-run` flag in code; it defaults to dry-run by virtue of `const APPLY = args.includes('--apply')`.
 
 ## Section 3 — Prompt 9.1: Categorizer Fix
 
-| Item | Status | Evidence / notes |
-|------|--------|------------------|
-| 3.1 Granularity prompt section + GOOD/BAD + forbid facets | ✅ | `generate-questions.ts` `SYSTEM_PROMPT` includes `GRANULARITY RULES`, lists GOOD/BAD, forbids facet qualifiers. |
-| 3.2 `reconcileProposedDomain` | ✅ | `src/lib/questions/categorization.ts` — loads KB via `getKnowledgeBase`, Haiku `claude-haiku-4-5`, 3s timeout + fallback, logs `[reconcile]`, returns `{ canonicalDomain, reconciled }`. |
-| 3.3 Reconciliation in question **creation** | 🔴 | `createQuestion` in `questions.ts` inserts with `category` only; **no** `reconcileProposedDomain` call. Authored domains are coarse enum from form, not LLM facets. |
-| 3.3 Reconciliation in Daily Five generation | ✅ | `generate-questions.ts` calls `reconcileProposedDomain` before insert. |
-| 3.3 `[reconcile]` log | ✅ | Present on success paths. |
-| 3.4 Daily Five facet-narrowing | 🟡 | Prompt mandates matching domain; **no** runtime assert if LLM returns mismatched `canonical_subcategory`. |
+### 3.1 Granularity prompt
 
----
+- ✅ Daily generation categorization prompt contains explicit `GRANULARITY RULES` section.
+- ✅ Prompt lists GOOD vs BAD label examples.
+- ✅ Prompt forbids facet-level qualifiers including themes, characters, structure, technique, form, and style.
+- 🟡 The strongest granularity prompt is in `src/server/daily/generate-questions.ts`. Question authoring currently appears to use user-selected broad domains from `QuestionForm`, not a full LLM categorization prompt with reconciliation after creation.
+
+### 3.2 Reconciliation function
+
+- ✅ `reconcileProposedDomain` exists in `src/lib/questions/categorization.ts`.
+- ✅ Fetches existing user domains before the LLM call via `getKnowledgeBase(userId)`.
+- ✅ Uses a Haiku-style fast model constant: `claude-haiku-4-5`.
+- ✅ Has a 3-second timeout with graceful fallback.
+- ✅ Returns `{ canonicalDomain, reconciled }`.
+
+### 3.3 Wiring
+
+- 🔴 Question creation flow does not call `reconcileProposedDomain`; it calls `openKBDomain` with the submitted `domain` value after creating the question.
+- ✅ Daily Five generation calls `reconcileProposedDomain` before inserting generated questions.
+- ✅ `[reconcile]` log lines emitted for reconciled, non-reconciled, and fallback/error cases.
+
+### 3.4 Daily Five generator
+
+- 🟡 Prompt strongly instructs no facet-narrowing and reconciles proposed domains, but this cannot be fully verified without LLM output/runtime data. The code does not include a deterministic post-generation validator that rejects facet-y domains.
 
 ## Section 4 — Prompt 9.2: Domain Backfill
 
-| Item | Status | Evidence / notes |
-|------|--------|------------------|
-| 4.1 `runAggressiveDomainBackfillForUser` in `ceremony.ts` | ✅ | Exists; uses `suggestAggressiveDomainMerges` with aggressive facet-to-parent rules; `applyMergesForUser` transactional. |
-| 4.2 `src/app/api/admin/backfill-domains/route.ts` | ✅ | POST; auth via `CRON_SECRET` / `VERCEL_CRON_SECRET` / `cron_secret` / `x-cron-secret` / `Authorization: Bearer` (⚠️ header name is not strictly `CRON_SECRET` only — broader). |
-| 4.2 `userId` + `dryRun` | ✅ | Optional JSON body. |
-| 4.3 `scripts/backfill-domains.ts` | ✅ | Top comment run sequence; `--dry-run` default; `--apply`; `--user-id=`. |
-| 4.4 Production backfill run | ❓ | **UNCLEAR** without DB — suggest sample query on `PLAYER_MASTERY.canonical_subcategory` for facet patterns. |
+### 4.1 `runAggressiveDomainBackfillForUser`
 
----
+- ✅ Function exists in `src/server/mastery/ceremony.ts`.
+- ✅ Contains an aggressive merge prompt explicitly enforcing facet-into-parent merges.
+- ✅ Reuses transactional merge machinery for applying merges.
+
+### 4.2 Manual trigger endpoint
+
+- ✅ `src/app/api/admin/backfill-domains/route.ts` exists.
+- 🟡 Requires CRON secret only if a secret exists. If neither `CRON_SECRET` nor `VERCEL_CRON_SECRET` is configured, `isAuthorized` returns `true`. That is operationally convenient but not a strict PRD “requires secret” implementation.
+- ✅ Supports `userId` in POST body for single-user mode.
+- ✅ Supports `dryRun` in POST body.
+
+### 4.3 CLI script
+
+- ✅ `scripts/backfill-domains.ts` exists.
+- ✅ Supports `--apply` and defaults to dry-run.
+- ✅ Supports `--user-id=...`.
+- 🟡 Does not explicitly parse `--dry-run`; dry-run is default unless `--apply` is present.
+- ✅ Has run-sequence comment block at top.
+
+### 4.4 Production state
+
+- ❓ UNCLEAR. There is no database access in this audit. Recommended manual check:
+  ```sql
+  select user_id, count(distinct canonical_subcategory)
+  from "PLAYER_MASTERY"
+  group by user_id
+  order by count desc;
+
+  select canonical_subcategory
+  from "PLAYER_MASTERY"
+  where canonical_subcategory ilike '%themes%'
+     or canonical_subcategory ilike '%characters%'
+     or canonical_subcategory ilike '%structure%'
+     or canonical_subcategory ilike '%symbolism%'
+     or canonical_subcategory ilike '% – %'
+     or canonical_subcategory ilike '% & %'
+  limit 100;
+  ```
 
 ## Section 5 — Prompt 10.1: Feed Redesign (Friend-Answered Propagation)
 
-| Item | Status | Evidence / notes |
-|------|--------|------------------|
-| 5.1 `feed_items.source_result` enum | ⚠️ | Column `sourceResult: text` — not DB enum `correct|incorrect` (behavior still uses those strings). |
-| 5.1 `source_user_id` FK | ✅ | `sourceUserId` references `users`. |
-| 5.1 `dismissed_domains` table | ⚠️ | Implemented as **`FeedDismissedDomain`** (`feedDismissedDomains`) with `canonicalSubcategory`, `dismissedAt`, `reinstatedAt`. |
-| 5.1 Unique (userId, domain) where `reinstatedAt` null | 🔴 | Only indexes on `(userId)` and `(userId, canonicalSubcategory)` — **no** partial unique constraint in schema. |
-| 5.1 `questions.surface_priority_score` | ✅ | `surfacePriorityScore` default 0. |
-| 5.2 `propagateFriendAnswerToFeeds` file | ⚠️ | Logic lives as **`createFeedItemsForFriendsFromAnswer`** in `src/server/feed/create-feed-items-for-answer.ts` (same responsibilities). |
-| 5.2 Skips friends already correct | ✅ | `userAnsweredQuestionCorrectly`. |
-| 5.2 Skips dismissed domain | ✅ | Queries `feedDismissedDomains`. |
-| 5.2 Idempotency same source+friend+question | ✅ | Existing `feedItems` row check. |
-| 5.2 Thumbs-down before propagate | ✅ | `questionFeedback` + `questionRatings` down. |
-| 5.2 try/catch no break parent | ✅ | Outer function catches/logs. |
-| 5.2 Activity for author | ✅ | `writeActivity` `friend_answered_your_question` for prior answerers. |
-| 5.3 Wiring: daily answer | ✅ | Calls `createFeedItemsForFriendsFromAnswer` — see **5.3b** below. |
-| 5.3 Wiring: feed answer | ✅ | `void createFeedItemsForFriendsFromAnswer(...)`. |
-| 5.3 Wiring: joshing answer | ✅ | Same. |
-| 5.3 Wiring: catchup answer | ✅ | Same. |
-| **5.3b Daily/catchup propagation correctness** | 🔴 | Passes **`generatedQuestions.id`** into propagation; `feedItems.questionId` **FKs to `Question`**. Inserts will **fail** (caught/logged) — friends do **not** receive feed items from Daily Five / catch-up answers in practice. |
-| 5.4 Thumbs-down `/questions/[id]/rating` | ✅ | `setRating` on `down` rolls off propagated items + own feed items (`ratings.ts`). |
-| 5.4 Feed thumbs-down (`/api/feed/.../thumbsdown`) | ✅ | `questionFeedback` + dismiss item + roll off propagated. |
-| 5.4 Inline confirmation regression | ✅ | Still in `FeedList.tsx`. |
-| 5.5 Thumbs-up priority | ✅ | `thumbsup` route increments `surfacePriorityScore`. |
-| 5.5 Un-thumbs-up decrement | ✅ | `setRating` deletes or switches from `up` decrements score. |
-| 5.5 Thumbs-up does not create friend FeedItems | ✅ | No insert loop in thumbsup route. |
-| 5.6 Feed query ordering | 🟡 | Pinned block first (by `sourceEventAt` desc), then non-pinned sorted by **`surfacePriorityScore` then `sourceEventAt`** — not a single SQL `ORDER BY isPinned, score, time`. |
-| 5.6 Filter dismissed domains | ✅ | `filterItem` + `getDismissedDomains`. |
-| 5.6 Hydration sourceUser, sourceResult, collapse | ✅ | `/api/feed` builds attribution, `friend_results`, etc. "Own answer state" on feed card is implicit via card state; **reaction state** present via post-answer `QuestionReactionPrompt`. |
-| 5.6 Multi-friend collapse | ✅ | `collapseFriendAnsweredItems` in `feed.ts`. |
-| 5.6 Limit 25 non-pinned + pinned | ✅ | `slice(0, 25)` on filtered non-pinned; all pinned included. |
-| 5.7 dismiss-domain POST/DELETE/GET | 🟡 | POST+DELETE on `/api/feed/dismiss-domain`; **GET list** on **`/api/feed/dismissed-domains`** (⚠️ path split vs single resource). |
-| 5.8 Card variants | 🟡 | Question cards share `direct_sent` + default styling; `friend_answered` uses API attribution (not three totally separate components). **No** `authored_shared`. |
-| 5.8 Friend attribution copy | ✅ | API `resultVerb` / multi-friend strings align with spec intent. |
-| 5.8 Pre/post actions | 🟡 | Answer / Skip / Dismiss / Not my focus / thumbs — **post-answer** comparison line uses `comparisonCopy`; order of explanation vs quip vs breadcrumb in feed card: explanation, then quip, then breadcrumb (**⚠️ order** vs PRD 10.4 chat order). |
-| 5.8 "Not my focus" toast | ✅ | `Got it. No more ${domain} questions.` |
-| 5.9 Knowledge: Hidden / dismissed domains | 🟡 | Section titled “FOCUSED FEED… DOMAINS YOU'VE HIDDEN…” (not literally “Hidden Domains”); lists + Re-open via DELETE. |
-| 5.9 Re-open toast "Re-opened" | 🔴 | `reinstateDomain` removes locally **no** success toast. |
-| 5.10 Empty feed states | ✅ | Matches four cases in `emptyCopy` (`FeedList.tsx`). |
-| 5.11 `friend_answered_your_question` in union | ✅ | `write-activity.ts` `ActivityItemType`. |
-| 5.11 `/activities` copy | ✅ | `ActivityCopy` renders domain + correct/incorrect phrasing. |
-| 5.11 `isCorrect` from metadata | ⚠️ | **Hydrated from `masteryEvents`**, not `ActivityItem.metadata` (schema has no JSON metadata on `ActivityItem`). |
+### 5.1 Schema additions
 
----
+- 🟡 `feed_items.sourceResult` column exists as text and nullable, but not as a database enum constrained to `correct | incorrect`.
+- ✅ `feed_items.sourceUserId` exists and references `User.id`.
+- 🟡 `FeedDismissedDomain` table exists with `id`, `userId`, `canonicalSubcategory`, `dismissedAt`, and `reinstatedAt`; PRD asked for a `domain` field name, but canonical subcategory is semantically equivalent.
+- 🔴 No partial unique constraint on `(userId, domain)` where `reinstatedAt IS NULL`; only indexes exist. Duplicate active dismissals are prevented by application check, not schema.
+- ✅ `questions.surfacePriorityScore` exists as double precision, not null, default 0.
+
+### 5.2 Propagation function
+
+- ⚠️ DIVERGENT: expected file/function `src/server/feed/propagate-friend-answer.ts` / `propagateFriendAnswerToFeeds` is absent.
+- ✅ Equivalent-ish function `createFeedItemsForFriendsFromAnswer` exists in `src/server/feed/create-feed-items-for-answer.ts`.
+- ✅ Skips friends who have correctly answered the question via `userAnsweredQuestionCorrectly`.
+- ✅ Skips friends who dismissed the domain.
+- ✅ Skips idempotent duplicates for same recipient/question/source user.
+- ✅ Checks answering user's thumbs-down via both `QuestionFeedback` and `QuestionRating` before propagating.
+- ✅ Wraps in try/catch and suppresses propagation errors.
+- 🟡 Writes `ActivityItem` for previous answerers, not specifically “question author when applicable.” It selects previous answerers from `masteryEvents`, so an author who did not answer their own question may not be notified.
+
+### 5.3 Wiring into answer endpoints
+
+- ⚠️ All four answer endpoints call `createFeedItemsForFriendsFromAnswer`, not the expected `propagateFriendAnswerToFeeds` symbol.
+- ✅ `src/app/api/daily/answer/route.ts` calls propagation-equivalent function.
+- ✅ `src/app/api/feed/[feedItemId]/answer/route.ts` calls propagation-equivalent function.
+- ✅ `src/app/api/joshing-games/[id]/answer/route.ts` calls propagation-equivalent function.
+- ✅ `src/app/api/daily/catchup/answer/route.ts` calls propagation-equivalent function.
+
+### 5.4 Thumbs-down updates
+
+- ✅ On thumbs-down via question rating, soft-deletes feed items where `sourceUserId = currentUser` and `questionId = this question`.
+- ✅ Also soft-deletes current user's own feed items for the question.
+- ✅ Inline confirmation copy still present in `FeedList`.
+- 🟡 Feed item `/thumbsdown` route was not deeply audited in this pass, but question-rating path implements the PRD behavior.
+
+### 5.5 Thumbs-up updates
+
+- ✅ Increments `questions.surfacePriorityScore` on thumbs-up.
+- ✅ Decrements on un-thumbs-up or switching away from up.
+- ✅ Does not create friend FeedItems in `setRating`.
+
+### 5.6 Feed query updates
+
+- 🟡 Orders pinned separately from non-pinned, and non-pinned by `surfacePriorityScore DESC`, then `sourceEventAt DESC`. Pinned are ordered by `sourceEventAt DESC`, not `surface_priority_score DESC` inside pinned.
+- ✅ Filters out items where question domain is dismissed for current user.
+- 🟡 Hydrates source result/source user/answer-ish state/reaction-ish state partially. API returns `source_result`, `source_friend_display_name`, `friend_results`, `is_in_bank`, but does not visibly hydrate current user's prior answer result for already answered feed items beyond local `state` and answer submission response.
+- ✅ Multi-friend collapse logic present, returning primary source and `friendResults`/additional endorsers.
+- ✅ Limits to all pinned + 25 non-pinned after filtering.
+
+### 5.7 Dismiss-domain endpoints
+
+- ⚠️ DIVERGENT route split:
+  - `POST /api/feed/dismiss-domain` exists.
+  - `DELETE /api/feed/dismiss-domain` exists.
+  - `GET` does **not** exist on that route; instead `GET /api/feed/dismissed-domains` lists dismissed domains.
+- ✅ POST soft-deletes existing feed items in that domain.
+- ✅ DELETE reopens a domain by setting `reinstatedAt`.
+
+### 5.8 `FeedList` component
+
+- ✅ Direct-send and friend-answered variants exist; no authored-shared variant.
+- 🟡 Three card variants include `direct_sent`, `friend_answered`, and `joshing_game`, not strictly three question card variants.
+- ✅ Friend-answered attribution copy renders as `[Friend] got this right — [Domain]` / `[Friend] couldn't get this — [Domain]` from API.
+- ✅ Multi-friend collapsed copy renders with ` · ` between friends.
+- 🟡 Pre-answer actions are present but labels differ from PRD: primary button says `Send` rather than `Answer`; skip/dismiss are icon-only buttons; `Not my focus` is labeled.
+- ✅ Post-answer state shows user result plus friend comparison for friend-answered items.
+- 🟡 `Not my focus` calls dismiss-domain endpoint and creates toast string `Got it. No more [Domain] questions.`, but because the local item is immediately removed from `items`, the toast may not be visible on that removed card.
+
+### 5.9 Knowledge page Hidden Domains section
+
+- ✅ `src/app/knowledge/page.tsx` contains a Hidden Domains section.
+- ✅ Lists dismissed domains with Re-open buttons.
+- ✅ Re-open calls DELETE endpoint and removes optimistically.
+
+### 5.10 Empty Feed states
+
+- ✅ No friends: `When your friends play, their best questions will show up here.`
+- ✅ Friends but no items: `Quiet today. Check back when your friends have played.`
+- ✅ All handled: `You're caught up.`
+- ✅ All dismissed/focused: `You've focused your Feed. You can re-open domains from your Knowledge page.`
+
+### 5.11 ActivityItem rendering
+
+- ✅ `friend_answered_your_question` added to `ActivityItemType` union.
+- ✅ Renders in `/activities` with right/couldn't-get-it copy.
+- 🟡 Hydrates result by looking for a positive `masteryEvents` row for the actor/question; it does not read metadata from `ActivityItem` because `ActivityItem` schema has no metadata column.
 
 ## Section 6 — Prompt 10.2: Authorship Opens Territory
 
-| Item | Status | Evidence / notes |
-|------|--------|------------------|
-| 6.1 `PlayerMastery.territoryType` | 🔴 | **Not on `PLAYER_MASTERY`**. `territoryType` exists on **`DeclaredInterest`** (`declaredInterests.territoryType` default `'declared'`). |
-| 6.2 `openKBDomain` | ✅ | `src/server/knowledge/open-domain.ts` — idempotent `alreadyExisted`, sets `declared` vs `demonstrated` by `via`. |
-| 6.3 `promoteDeclaredToDemonstrated` | 🟡 | Exists with mastery event + activity insert — **but** activity type is not in TS union (**tsc error**); **`promoteDeclaredToDemonstrated` is never called** from answer routes. |
-| 6.4 Questions POST + `openKBDomain` | 🟡 | Calls `addKBDomainAsDeclared` → `openKBDomain(..., via: 'authorship')` with **form `domain` (category enum)**. |
-| 6.4 Toast "declared territory" | 🔴 | Only “Saved to your bank.” |
-| 6.5 Promotion on answer endpoints | ⚠️ | Uses **`upgradeKBDomainToDemonstrated`** in `daily.ts` (updates `DeclaredInterest` only) from **`feed/[id]/answer`** and **`joshing-game`** submit — **not** `promoteDeclaredToDemonstrated`; **no** `declared_promoted` activity / mastery event in normal flow; **daily** path: N/A for author credit; uses `question.category` which may **not** match string domain row if canonical differs. |
-| 6.6 Daily Five declared weight | 🟡 | **`DECLARED_DOMAIN_WEIGHT = 0.5` hardcoded** in `generate-questions.ts`; **no** `process.env.DAILY_FIVE_DECLARED_WEIGHT` / `DEMONSTRATED_WEIGHT`. |
-| 6.7 DomainCircle declared styling | 🔴 | **`PortraitCircles.tsx`** has **no** declared/demonstrated/outline distinction (grep). |
-| 6.7 Domain detail declared explanation | 🟡 | Badge “Declared Interest” only (`knowledge/[domain]/page.tsx`) — **not** full PRD narrative. |
-| 6.8 Ceremony Beat 2 three cases | 🔴 | `compute-beats.ts` `computeBeat2` still **skips all `declaredDomains`** when building “discovered” — no distinct authored-declared / promoted copy. |
-| 6.9 Activity `declared_promoted` | 🔴 | **Not** in `ActivityItemType`; insert type-asserted in `open-domain.ts` (**compile error**). |
+### 6.1 Schema
 
----
+- ✅ `PLAYER_MASTERY.territoryType` exists.
+- ✅ Values are typed in TS as `declared | demonstrated`, not null, default `demonstrated`.
+- 🟡 Existing-row backfill cannot be verified from schema alone. Default applies to future inserts; migration history not fully audited here.
+
+### 6.2 Centralized `openKBDomain`
+
+- ✅ `src/server/knowledge/open-domain.ts` exists.
+- ✅ `openKBDomain` exists with signature accepting `userId`, `domain`, `via`, optional `broadCategory`, optional `questionId`.
+- ✅ Idempotent: returns `alreadyExisted: true` when a PlayerMastery row exists.
+- ✅ Sets territory type as `declared` for `via='authorship'`, `demonstrated` otherwise.
+
+### 6.3 `promoteDeclaredToDemonstrated`
+
+- ✅ Exists in same file.
+- ✅ Updates `territoryType` to `demonstrated`.
+- ✅ Writes `MasteryEvent` with `sourceType='declared_promoted'`.
+- ✅ Writes `ActivityItem` with `type='declared_promoted'`.
+
+### 6.4 Authorship wiring
+
+- ✅ Question POST calls `openKBDomain` after question creation.
+- ✅ Passes `via='authorship'`.
+- 🟡 Toast/helper text in `QuestionForm` does not visibly mention “declared territory.” API returns `declaredTerritoryOpened`, but UI copy was not found using that language.
+
+### 6.5 Promotion wiring
+
+- ✅ Feed answer route calls `promoteDeclaredToDemonstrated` when correct and author differs from answerer.
+- ✅ Joshing game answer route calls it when correct and author differs from answerer.
+- ✅ Daily/catchup answer routes call it when correct and author differs from answerer; for generated dailies this usually no-ops because creator/source creator is null or not a human author.
+
+### 6.6 Daily Five weighting
+
+- 🟡 Daily generator includes declared at 50% probability and demonstrated at full eligibility, but as hardcoded `DECLARED_DOMAIN_WEIGHT = 0.5`.
+- 🔴 Env vars `DAILY_FIVE_DECLARED_WEIGHT` and `DAILY_FIVE_DEMONSTRATED_WEIGHT` were not found.
+
+### 6.7 Visual treatment
+
+- ✅ `DomainCircle` renders declared territory differently with muted/transparent fill.
+- 🟡 Domain detail page appears to carry territory type data, but explicit explanatory copy for declared status was not fully verified in this pass.
+
+### 6.8 Ceremony Beat 2 update
+
+- 🟡 `src/server/ceremony/compute-beats.ts` contains logic for declared, promoted, and friend-mediated concepts, but it still references `DeclaredInterest` heavily as well as PlayerMastery-like events. Needs product review to confirm three exact PRD copy cases.
+
+### 6.9 ActivityItem type
+
+- ✅ `declared_promoted` added to `ActivityItemType` union.
+- ✅ Renders in `/activities` with “proven territory” copy and a map link.
 
 ## Section 7 — Prompt 10.3: Onboarding Cultural Anchor
 
-| Item | Status | Evidence / notes |
-|------|--------|------------------|
-| 7.1 User schema columns | ✅ | `birthYear`, `grewUpCountry`, `grewUpRegion` on `User`. |
-| 7.2 `proposeInterests` + cultural anchor | ✅ | `interests.ts` accepts `culturalAnchor`, `buildCulturalAnchorPrompt`, 10–14 candidates in prompt rules. |
-| 7.3 propose-interests API validation + save before LLM | ✅ | Validates anchor; `updateUser` with anchor fields **before** `proposeInterests`. |
-| **7.3 Client wiring** | 🔴 | `OnboardingFlow.generateProposals` sends **`demographicContext`**, not **`culturalAnchor`**. Server ignores it → **anchor never saved at propose time**; LLM never receives cultural signal from onboarding. |
-| 7.4 Cultural step UI | 🟡 | Step `'background'` between welcome and warm-up with year input + country `<select>` + US states — **not** a searchable country control; birth year max **2010** in UI vs API **currentYear − 13** (2013 for 2026). |
-| 7.5 Warmup three fields | ✅ | `WARMUP_FIELDS`: deepDive, hourLongTopic, anythingElse optional. |
-| 7.5 Validation to continue | 🔴 | `canGenerate` references **`warmupAnswers.bookComposerFilmmaker`** (removed field) — **always false**; **TS2339**. Users cannot pass warm-up gate without fix. |
-| 7.6 `countries.ts` / `us-regions.ts` | ✅ | Present with ISO list / states. |
-| 7.7 Existing users | ✅ | `src/proxy.ts` gates incomplete onboarding; complete users skip `/onboarding`. |
+### 7.1 Schema
 
----
+- ✅ `User.birthYear` exists.
+- ✅ `User.grewUpCountry` exists.
+- ✅ `User.grewUpRegion` exists.
+
+### 7.2 LLM proposal update
+
+- ✅ `proposeInterests` accepts `culturalAnchor`.
+- ✅ LLM prompt includes culturally anchored instructions and examples.
+- ✅ Prompt asks for exactly 10 to 14 candidate interests; fallback/padding slices to max 14 and pads when fewer than 10.
+
+### 7.3 propose-interests API
+
+- ✅ Accepts `culturalAnchor` in request body.
+- ✅ Validates birth year between 1920 and current year minus 13.
+- ✅ Validates grew-up country against ISO codes (also allows `OTHER`, which is divergent from strict ISO-only wording).
+- ✅ Saves anchor to `User` table before calling LLM.
+
+### 7.4 OnboardingFlow component
+
+- ✅ Cultural-anchor step exists between welcome and warmup.
+- ✅ Year picker/input exists for birth year.
+- 🟡 Country selector exists, but is a native select rather than a clearly searchable list.
+- ✅ US region selector appears when country is US.
+- ✅ Required validation blocks continue until birth year/country/US region are valid.
+
+### 7.5 Warmup step revision
+
+- ✅ Warmup fields trimmed to `deepDive`, `hourLongTopic`, and `anythingElse`.
+- ✅ First two are required; third optional.
+- ✅ Validation requires both required fields before proposal.
+
+### 7.6 Country/region data
+
+- ✅ `src/lib/onboarding/countries.ts` exists with country/ISO data.
+- ✅ `src/lib/onboarding/us-regions.ts` exists with US state/region codes.
+
+### 7.7 Existing users not affected
+
+- ✅ Onboarding page/server logic still keys off `onboardingComplete`; existing onboarded users skip onboarding/cultural anchor.
 
 ## Section 8 — Prompt 10.4: Joshing Commentary
 
-| Item | Status | Evidence / notes |
-|------|--------|------------------|
-| 8.1 Schema `quip` on answer tables | 🔴 | **No** `quip` on `JoshingGameResponse` or dedicated `daily_answers` table; daily state is JSON in `DailyQueue.slots` (`reveal_quip` / `quip` fields in slot type — **not** normalized column). |
-| 8.2 `select-quip.ts` + six banks | 🔴 | **`selectQuip`** lives in **`src/server/grading.ts`** — inline arrays, not separate file/banks; **no `{name}` substitution**; word caps **not** enforced in code or tests. |
-| 8.3 Endpoints call + persist + return | 🟡 | Daily/feed return `quip` in JSON; slot stores `quip` for daily; **joshing** returns `quip` from `selectQuip` **without persisting** to `JoshingGameResponse`; **catchup** returns `quip: grade.consolation` (**not** `selectQuip`). |
-| 8.4 GameplayChat quip | 🟡 | Renders `text-sm text-muted-foreground italic` under bubble — **no** 150ms delay; **order**: result block → **quip** → domain exclusion / reaction; **breadcrumb** is **after** `ResultRow` (sibling), i.e. **result → quip → breadcrumb** (⚠️ vs spec **result → breadcrumb → quip**). |
-| 8.5 `select-interpretive-line.ts` | 🔴 | **Does not exist** — logic **inlined** in `daily/summary/page.tsx` `interpretiveLine()` (~7 cases + null). |
-| 8.6 Summary session close | 🟡 | `InterpretiveLine` uses **300ms** delay + opacity transition; placed after `MasteryMoment` block, not strictly directly under score line only. |
-| 8.7 Tests | 🔴 | **`src/server/grading/select-quip.test.ts`** **missing**. |
+### 8.1 Schema
 
----
+- 🟡 No separate `daily_answers` table found in `src/server/db/schema.ts`. Daily answer data appears to be recorded through queue/mastery paths; schema requirement cannot map 1:1.
+- ✅ `joshing_game_responses.quip` exists.
+- ✅ `feed_items.quip` exists for feed answer storage.
 
-## Section 9 — PRD v11.1 Cross-Cutting
+### 8.2 `selectQuip`
 
-| Item | Status | Notes |
-|------|--------|------|
-| 9.1 Killed: broadcast toggle | ✅ | Absent. |
-| 9.1 Killed: `authored_shared` FeedList | ✅ | Filtered + cleanup script. |
-| 9.1 Spider graph on Knowledge | ✅ | **No** spider graph; portrait + progression views only. |
-| 9.1 Streak on Knowledge | ✅ | No 🔥 streak UI found on `knowledge/page.tsx`. |
-| 9.1 "Your Declared Interests" dedicated section | 🟡 | Interests managed via modals / `declaredInterests` API — **no** standalone titled section like PRD wording; interest modal copy references “declared interests”. |
-| 9.2 "Grow your map" | ✅ | Two buttons (send / write). |
-| 9.2 "Manage interests" in Account | ✅ | Link to `/knowledge?interests=manage`. |
-| 9.2 Hidden domains section | 🟡 | Present under different labeling (see 5.9). |
-| 9.3 Circle sizing | ✅ | `circle-sizing.ts` tier-anchored ranges; used from portrait circles. |
-| 9.4 Joshing POST friends | ✅ | `joshing-games/route.ts` validates recipients ∈ `getFriends()`. |
-| 9.4 `/api/users` friends only | ✅ | `getFriends` only. |
-| 9.4 `/api/questions/send` friend validation | 🔴 | **No** `getFriends` check — only recipient user exists + rate limits. |
-| 9.5 SMS `friend_answered_question` | 🔴 | Enum value in schema **only** — **no** `sendSms(..., 'friend_answered_question')` in `src/`. |
-| 9.6 OTP `000000` | ⚠️ | `otp-store.ts` accepts `000000` unconditionally. |
-| 9.6 `/feed` = FeedList | ✅ | `feed/page.tsx` imports `FeedList`. |
-| 9.6 Vercel cron | ✅ | `vercel.json`: daily-assignments `0 6 * * *`, biweekly-ceremony `0 8 * * *`. |
-| 9.6 `env-check.ts` Twilio | ✅ | Requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID`. |
+- ✅ `src/server/grading/select-quip.ts` exists.
+- ✅ All 6 quip banks present.
+- 🟡 ≤8 words is enforced by tests, not runtime assertions.
+- ✅ `{name}` substitution works.
+- 🟡 Edge cases: friendResult null is handled, joshing_game is treated like feed, partial/correct branch covered by tests. Multi-recipient joshing uses most recent other response, not a richer multi-recipient selection model.
 
----
+### 8.3 Wiring into answer endpoints
+
+- ✅ Daily answer calls `selectQuip` and returns `quip`; persistence is not clearly tied to a `daily_answers.quip` row because no such table exists.
+- ✅ Feed answer calls `selectQuip`, persists `feedItems.quip`, returns `quip`.
+- ✅ Joshing answer calls `selectQuip`, persists `joshingGameResponses.quip`, returns `quip`.
+- ✅ Catchup answer calls `selectQuip` and returns `quip`; persistence mapping is same caveat as daily.
+
+### 8.4 Chat thread rendering
+
+- ✅ `GameplayChat.tsx` renders quip below result bubble.
+- ✅ Style uses muted, italic, small text and 150ms delay.
+- ✅ Order appears result → breadcrumb/context → quip in the message body.
+
+### 8.5 Interpretive line
+
+- ⚠️ DIVERGENT: expected `src/server/daily/select-interpretive-line.ts` does not exist.
+- 🟡 Equivalent logic is implemented client-side inside `/daily/summary/page.tsx`, with priority cases for tier crossing, new domain, 5/5, 0/5, 3+ in a row, all wrong in domain, fallback null.
+
+### 8.6 Session close render
+
+- ✅ `/daily/summary` renders interpretive line below score/growth recap area.
+- ✅ Uses 300ms delay.
+- ✅ Returns null gracefully when no match.
+- ⚠️ Logic lives client-side, not server-side as requested.
+
+### 8.7 Tests
+
+- ✅ `src/server/grading/select-quip.test.ts` exists.
+- ✅ Tests verify ≤8 word constraint.
+- ✅ Tests cover daily/feed/joshing/null-friend/name-substitution/partial-like contexts.
+
+## Section 9 — PRD v11.1 Cross-Cutting Conformance
+
+### 9.1 Killed concepts
+
+- ✅ `Share with friends` broadcast toggle absent from `QuestionForm`.
+- ✅ `authored_shared` visual variant absent from `FeedList`.
+- ⚠️ `SpiderGraph` component still exists in `src/components/knowledge/SpiderGraph.tsx`; no evidence it is active as a Knowledge page view option in current page, but the killed concept is not fully removed from codebase.
+- ✅ Streak surfacing (`🔥 N day streak`) was not found on Knowledge page.
+- 🟡 A `DeclaredInterest` model and interest-management UI still exist. A dedicated `Your Declared Interests` page section was not clearly found on `/knowledge`, but the older concept remains in schema/code.
+
+### 9.2 Required new surfaces
+
+- ✅ `Grow your map` section exists on Knowledge page with add/swap/tidy-style controls.
+- 🔴 `Manage interests` link in Account was not found in `src/app/account/page.tsx`.
+- ✅ Hidden Domains section exists on Knowledge page.
+
+### 9.3 Circle sizing
+
+- 🟡 Domain circles use tier-based sizing through landscape/overview code and visibly distinguish tiers, but sizing logic is not fully centralized in `DomainCircle` (it receives a `diameter` prop). Need product/code cleanup if strict centralization is required.
+
+### 9.4 Friend graph enforcement
+
+- ✅ `/api/joshing-games` POST validates recipients are friends.
+- ✅ `/api/users` returns friends only.
+- ✅ `/api/questions/send` validates recipient is a friend.
+
+### 9.5 SMS triggers per §8.11
+
+- 🟡 `SmsMessageType` enum includes `friend_answered_question`, but no concrete sender for friend-answered propagation was verified.
+- 🟡 Default opt-in model is user-level `smsOptIn` default `not_asked`; per-trigger opt-in/default-off preference was not found.
+
+### 9.6 Production blockers from prior audit
+
+- ⚠️ OTP still accepts hardcoded `000000` in `verifyOtp` without an environment guard.
+- ✅ `/feed` renders `FeedList`, not `FriendsList`.
+- 🟡 Vercel cron schedules exist for daily assignments at `0 6 * * *` and biweekly ceremony at `0 8 * * *`; correctness vs PRD schedule needs spec confirmation.
+- ✅ `env-check.ts` requires `TWILIO_MESSAGING_SERVICE_SID` along with other Twilio vars.
 
 ## Section 10 — Schema Snapshot
 
-**Drizzle models in `schema.ts` (32 `pgTable` exports):**  
-`User`, `UserSession`, `OtpCode`, `Question`, `QuestionAudienceTag`, `UserQuestionBank`, `PLAYER_MASTERY`, `MASTERY_EVENTS`, `QuestionReaction`, `CreatorNote`, `GradeDispute`, `SmsLog`, `GeneratedQuestion`, `QuestionFeedback`, `QuestionRating`, `DailyQueue`, `DailyPreference`, `SkippedDailyQuestion`, `USER_DOMAIN_DIFFICULTY`, `USER_DOMAIN_EXCLUSIONS`, `PROFILE_DOMAIN_VISIBILITY`, `DeclaredInterest`, `Friendship`, `JoshingGame`, `FeedItem`, `JoshingGameRecipient`, `JoshingGameQuestion`, `JoshingGameResponse`, `BiweeklyCeremony`, `ActivityItem`, `FeedDismissedDomain`, `FriendInvitation`.
+### Tables in `src/server/db/schema.ts`
 
-**Required v11.1 additions (PRD checklist):**
+- `users` (`User`): 23 columns
+- `userSessions` (`UserSession`): 5 columns
+- `otpCodes` (`OtpCode`): 5 columns
+- `questions` (`Question`): 48 columns
+- `questionAudienceTags` (`QuestionAudienceTag`): 5 columns
+- `userQuestionBank` (`UserQuestionBank`): 6 columns
+- `playerMastery` (`PLAYER_MASTERY`): 10 columns
+- `critiqueUsageDaily` (`CritiqueUsageDaily`): 5 columns
+- `masteryEvents` (`MASTERY_EVENTS`): 14 columns
+- `questionReactions` (`QuestionReaction`): 10 columns
+- `creatorNotes` (`CreatorNote`): 11 columns
+- `gradeDisputes` (`GradeDispute`): 9 columns
+- `smsLogs` (`SmsLog`): 5 columns
+- `generatedQuestions` (`GeneratedQuestion`): 12 columns
+- `questionFeedback` (`QuestionFeedback`): 6 columns
+- `questionRatings` (`QuestionRating`): 5 columns
+- `dailyQueues` (`DailyQueue`): 5 columns
+- `dailyPreferences` (`DailyPreference`): 9 columns
+- `skippedDailyQuestions` (`SkippedDailyQuestion`): 7 columns
+- `userDomainDifficulties` (`USER_DOMAIN_DIFFICULTY`): 7 columns
+- `userDomainExclusions` (`USER_DOMAIN_EXCLUSIONS`): 4 columns
+- `profileDomainVisibility` (`PROFILE_DOMAIN_VISIBILITY`): 7 columns
+- `declaredInterests` (`DeclaredInterest`): 7 columns
+- `friendships` (`Friendship`): 10 columns
+- `joshingGames` (`JoshingGame`): 5 columns
+- `feedItems` (`FeedItem`): 14 columns
+- `joshingGameRecipients` (`JoshingGameRecipient`): 4 columns
+- `joshingGameQuestions` (`JoshingGameQuestion`): 4 columns
+- `joshingGameResponses` (`JoshingGameResponse`): 12 columns
+- `biweeklyCeremonies` (`BiweeklyCeremony`): 8 columns
+- `activityItems` (`ActivityItem`): 9 columns
+- `feedDismissedDomains` (`FeedDismissedDomain`): 5 columns
+- `friendInvitations` (`FriendInvitation`): 10 columns
 
-| Requirement | Status |
-|-------------|--------|
-| `User.birthYear`, `grewUpCountry`, `grewUpRegion` | **PRESENT** |
-| `FeedItem.source_result`, `source_user_id` | **PRESENT** (as `sourceResult` text, `sourceUserId`) |
-| `Question.surface_priority_score` | **PRESENT** |
-| `dismissed_domains` | **MISSING** as named table — **`FeedDismissedDomain`** implements role |
-| `PLAYER_MASTERY.territoryType` | **MISSING** — territory on **`DeclaredInterest`** instead |
-| `quip` on persistent answer rows | **MISSING** (daily in-queue JSON only; joshing row has no `quip`) |
+### Required v11.1 schema additions
 
-**Extra / legacy (not exhaustive):** e.g. `QuestionAudienceTag`, `USER_DOMAIN_DIFFICULTY`, `USER_DOMAIN_EXCLUSIONS`, `PROFILE_DOMAIN_VISIBILITY`, `GradeDispute`, `SkippedDailyQuestion`, etc.
+- ✅ `User.birthYear`, `grewUpCountry`, `grewUpRegion`: PRESENT.
+- 🟡 `feed_items.source_result`, `source_user_id`: PRESENT as camelCase schema fields/DB columns `sourceResult`, `sourceUserId`; `sourceResult` is unconstrained text.
+- ✅ `questions.surface_priority_score`: PRESENT.
+- 🟡 `dismissed_domains`: PRESENT as `FeedDismissedDomain`; no partial unique active-dismissal constraint.
+- ✅ `PlayerMastery.territoryType`: PRESENT.
+- 🟡 `daily_answers.quip` and equivalents: no daily answers table; `FeedItem.quip` and `JoshingGameResponse.quip` are PRESENT.
 
----
+### Required v11.0 schema already in place
 
-## Section 11 — Route Inventory (high level)
+- ✅ `DeclaredInterest`: PRESENT.
+- ✅ `Friendship`: PRESENT.
+- ✅ `FeedItem`: PRESENT.
+- ✅ `JoshingGame*`: PRESENT (`JoshingGame`, recipients, questions, responses).
+- ✅ `BiweeklyCeremony`: PRESENT.
+- ✅ `ActivityItem`: PRESENT.
+- ✅ `FriendInvitation`: PRESENT.
+- ✅ `QuestionRating`: PRESENT.
+- ✅ `CreatorNote`: PRESENT.
 
-**Page:** `/feed` → `FeedList` ✅ (`src/app/feed/page.tsx`).
+### Extra tables not clearly in v11.0/v11.1 list
 
-**API routes** — every `src/app/api/**/route.ts` exports at least the methods found by static scan (abbreviated list; full set is grep-complete in workspace):
+- `UserSession`, `OtpCode`, `QuestionAudienceTag`, `UserQuestionBank`, `CritiqueUsageDaily`, `MASTERY_EVENTS`, `QuestionReaction`, `GradeDispute`, `SmsLog`, `GeneratedQuestion`, `QuestionFeedback`, `DailyQueue`, `DailyPreference`, `SkippedDailyQuestion`, `USER_DOMAIN_DIFFICULTY`, `USER_DOMAIN_EXCLUSIONS`, `PROFILE_DOMAIN_VISIBILITY`.
 
-- Auth: `auth/request-otp` POST; `auth/verify-otp` POST; `auth/me` GET; `auth/logout` POST  
-- Account: `account` GET/PATCH; `account/logout` POST; `account/adaptive-level` GET  
-- Onboarding: `onboarding/propose-interests` POST; `onboarding/save-interests` POST; `onboarding/canonicalize` POST  
-- Daily: `daily/queue` GET/POST; `daily/status` GET; `daily/answer` POST; `daily/skip` POST; `daily/summary` GET; `daily/reset` POST; `daily/preferences` GET/PATCH; `daily/feedback` POST; `daily/catchup` GET; `daily/catchup/answer` POST; `daily/catchup/dismiss` POST  
-- Feed: `feed` GET; `feed/[feedItemId]/answer` POST; `feed/[feedItemId]/state` PATCH; `feed/[feedItemId]/thumbsup` POST; `feed/[feedItemId]/thumbsdown` POST/DELETE; `feed/dismiss-domain` POST/DELETE; `feed/dismissed-domains` GET  
-- Questions: `questions` GET/POST; `questions/[id]` GET/PATCH/DELETE; `questions/[id]/rating` GET/POST; `questions/send` POST; `questions/suggest` POST; `questions/suggest-answer` POST  
-- Joshing: `joshing-games` POST; `joshing-games/[id]` GET; `joshing-games/[id]/answer` POST  
-- Knowledge: `knowledge` GET; `knowledge/[domain]` GET/PATCH; `knowledge/tidy` POST  
-- Social: `users` GET; `reactions` GET/POST; `reactions/[id]/reply` POST; `declared-interests` GET/PATCH; `friend_invitations` (if present — not in grep snippet; verify if added)  
-- … plus `activities`, `bank`, `archive`, `ceremony/*`, `creator-notes/*`, `cron/*`, `replay/*`, `share/*`, etc.
+## Section 11 — Route Inventory
 
-**Expected wiring:** `createFeedItemsForFriendsFromAnswer` + `selectQuip` on answer routes — **see Sections 5 and 8** for gaps (daily ID mismatch, catchup quip, joshing persist).
+### API routes and HTTP methods
 
----
+- `src/app/api/account/adaptive-level/route.ts`: GET
+- `src/app/api/account/logout/route.ts`: POST
+- `src/app/api/account/route.ts`: GET, PATCH
+- `src/app/api/activities/read/route.ts`: POST
+- `src/app/api/activities/route.ts`: GET
+- `src/app/api/admin/backfill-domains/route.ts`: POST
+- `src/app/api/archive/route.ts`: GET
+- `src/app/api/auth/logout/route.ts`: POST
+- `src/app/api/auth/me/route.ts`: GET
+- `src/app/api/auth/request-otp/route.ts`: POST
+- `src/app/api/auth/verify-otp/route.ts`: POST
+- `src/app/api/bank/check/route.ts`: POST
+- `src/app/api/bank/route.ts`: GET, POST, DELETE
+- `src/app/api/ceremony/[ceremonyId]/route.ts`: GET
+- `src/app/api/ceremony/[ceremonyId]/share-token/route.ts`: POST
+- `src/app/api/ceremony/[ceremonyId]/viewed/route.ts`: POST
+- `src/app/api/ceremony/banner/route.ts`: GET
+- `src/app/api/creator-notes/[id]/delivered/route.ts`: POST
+- `src/app/api/creator-notes/route.ts`: POST
+- `src/app/api/cron/biweekly-ceremony/route.ts`: GET
+- `src/app/api/cron/daily-assignments/route.ts`: GET
+- `src/app/api/daily/answer/route.ts`: POST
+- `src/app/api/daily/catchup/answer/route.ts`: POST
+- `src/app/api/daily/catchup/dismiss/route.ts`: POST
+- `src/app/api/daily/catchup/route.ts`: GET
+- `src/app/api/daily/feedback/route.ts`: POST
+- `src/app/api/daily/preferences/route.ts`: GET, PATCH
+- `src/app/api/daily/queue/route.ts`: GET, POST
+- `src/app/api/daily/reset/route.ts`: POST
+- `src/app/api/daily/skip/route.ts`: POST
+- `src/app/api/daily/status/route.ts`: GET
+- `src/app/api/daily/summary/route.ts`: GET
+- `src/app/api/declared-interests/route.ts`: GET, PATCH
+- `src/app/api/feed/[feedItemId]/answer/route.ts`: POST
+- `src/app/api/feed/[feedItemId]/state/route.ts`: PATCH
+- `src/app/api/feed/[feedItemId]/thumbsdown/route.ts`: POST, DELETE
+- `src/app/api/feed/[feedItemId]/thumbsup/route.ts`: POST
+- `src/app/api/feed/dismiss-domain/route.ts`: POST, DELETE
+- `src/app/api/feed/dismissed-domains/route.ts`: GET
+- `src/app/api/feed/route.ts`: GET
+- `src/app/api/joshing-games/[id]/answer/route.ts`: POST
+- `src/app/api/joshing-games/[id]/route.ts`: GET
+- `src/app/api/joshing-games/route.ts`: POST
+- `src/app/api/knowledge/[domain]/route.ts`: GET, PATCH
+- `src/app/api/knowledge/route.ts`: GET
+- `src/app/api/knowledge/tidy/route.ts`: POST
+- `src/app/api/onboarding/canonicalize/route.ts`: POST
+- `src/app/api/onboarding/propose-interests/route.ts`: POST
+- `src/app/api/onboarding/save-interests/route.ts`: POST
+- `src/app/api/questions/[id]/rating/route.ts`: GET, POST
+- `src/app/api/questions/[id]/route.ts`: GET, PATCH, DELETE
+- `src/app/api/questions/critique/route.ts`: POST
+- `src/app/api/questions/route.ts`: GET, POST
+- `src/app/api/questions/send/route.ts`: POST
+- `src/app/api/questions/suggest-answer/route.ts`: POST
+- `src/app/api/questions/suggest/route.ts`: POST
+- `src/app/api/reactions/[id]/reply/route.ts`: POST
+- `src/app/api/reactions/route.ts`: POST, GET
+- `src/app/api/replay/grade/route.ts`: POST
+- `src/app/api/replay/missed/route.ts`: GET
+- `src/app/api/share/ceremony/[token]/route.ts`: GET
+- `src/app/api/users/route.ts`: GET
 
-## Section 12 — End-to-End Flows (code trace)
+### New/modified route checks
 
-| Journey | Verdict | blocking / notes |
-|---------|---------|------------------|
-| 12.1 New user onboarding 10.3 | **BROKEN AT warm-up → suggestions** | `canGenerate` / wrong payload key `demographicContext`; tsc error `bookComposerFilmmaker`. |
-| 12.2 Authorship opens declared | **PARTIAL** | `openKBDomain` fires; toast does not mention declared territory; UI doesn’t show outlined declared circles. |
-| 12.3 Friend-answered propagation | **PARTIAL** | Works for **canonical `Question`** IDs; **broken for Daily/catchup** generated IDs. |
-| 12.4 Declared → demonstrated + activity | **BROKEN / PARTIAL** | `upgradeKBDomainToDemonstrated` only; no `declared_promoted` activity union / events as specified. |
-| 12.5 Quip E2E | **PARTIAL** | Returned on several paths; ordering and persistence incomplete; catchup uses consolation. |
-| 12.6 Interpretive line | **COMPLETE** (logic) | In `daily/summary/page.tsx`; no shared module. |
-| 12.7 Domain reconciliation 9.1 | **PARTIAL** | Daily generation ✅; authored creation ❌; onboarding interest generation currently broken. |
-| 12.8 Hidden domains | **PARTIAL** | POST + Knowledge re-open ✅; no “Re-opened” toast; GET on alternate path. |
+- ⚠️ `/api/feed/dismiss-domain`: POST and DELETE present; GET split to `/api/feed/dismissed-domains`.
+- ⚠️ `/api/daily/answer`, `/api/feed/[feedItemId]/answer`, `/api/joshing-games/[id]/answer`: call `createFeedItemsForFriendsFromAnswer` + `selectQuip`, not expected `propagateFriendAnswerToFeeds` symbol.
+- ✅ `/api/questions` POST calls `openKBDomain`.
+- ✅ `/api/questions/[id]/rating` updated for thumbs up/down priority/roll-off behavior.
+- ✅ `/api/onboarding/propose-interests` accepts cultural anchor.
+- ✅ `/feed` renders `FeedList`, not `FriendsList`.
 
----
+## Section 12 — End-to-End Flow Verification (read-only)
 
-## Section 13 — TODO / markers (`src/`)
+### 12.1 New user onboarding (10.3)
 
-| Category | File | Line | Text |
-|----------|------|------|------|
-| Friend / profile | `server/db/queries/joshing-game.ts` | 506 | `TODO Phase 8: replace with getFriends() when friend system is built.` |
-| Friend / activity | `server/mastery/write-mastery-event.ts` | 57 | `TODO Phase 8: write friend_mastery activity...` |
-| Legacy group | `server/sms.ts` | 155 | `TODO v11.0: group member lookup needs new data source` |
-| Legacy group | `server/mastery/season-snapshot.ts` | 32 | `TODO v11.0: "GroupMember" raw SQL table...` |
-| Legacy group | `lib/games/winner.ts` | 40–42 | `TODO v11.0: group member/group/game_id...` |
-| Profile porting | `server/profile/*.ts`, `lib/knowledge-card.ts` | multiple | `TODO Phase 8: port to Drizzle when friend profiles are built` |
+🟡 PARTIAL/LIKELY COMPLETE: `/login → SMS OTP → /onboarding → welcome → cultural anchor → warmup → review → confirmation → /` is present by reading routes and component state. Caveats: OTP accepts universal `000000`; country selector is not obviously searchable; runtime DB persistence not verified.
 
-_No matches for `TODO R1/R2/R3`, `TODO v11.1`, `FIXME`, `XXX`, or `HACK` in the scanned grep set._
+### 12.2 Authored question opens declared territory (10.2)
 
----
+🟡 PARTIAL: QuestionForm → POST `/api/questions` → `openKBDomain({ via:'authorship' })` creates declared `PlayerMastery` row. Knowledge circle can render declared as muted. Missing/partial: user-facing toast/helper does not clearly mention “declared territory.”
+
+### 12.3 Friend-answered Feed propagation (10.1)
+
+🟡 PARTIAL: Answer endpoints call propagation-equivalent `createFeedItemsForFriendsFromAnswer`; new friend feed items can be returned and rendered with friend-answered attribution; subsequent answers propagate onward. Divergence: expected function name/file absent; activity notifications target previous answerers, not strictly question authors; no runtime DB verification.
+
+### 12.4 Declared → demonstrated promotion (10.2 + 10.1)
+
+🟡 PARTIAL/LIKELY COMPLETE: Authorship opens declared PlayerMastery; friend correct answer calls promotion from feed/joshing/daily routes; promotion writes MasteryEvent and ActivityItem; knowledge map can display demonstrated fill. Runtime DB verification not performed.
+
+### 12.5 Quip rendering (10.4)
+
+🟡 PARTIAL: Answer endpoints call `selectQuip`; feed/joshing persist quips and return them; `GameplayChat` renders quip. Caveat: daily/catchup persistence does not map to a `daily_answers.quip` table because none exists.
+
+### 12.6 Session close interpretive line (10.4)
+
+⚠️ DIVERGENT BUT FUNCTIONAL: `/daily/summary` computes priority interpretive line client-side and renders with 300ms delay. Expected server module `src/server/daily/select-interpretive-line.ts` is missing.
+
+### 12.7 Domain reconciliation (9.1)
+
+🟡 PARTIAL: Daily generation has granularity prompt + reconciliation against existing domains. Authored question creation does not reconcile proposed facet-level domains, and authored domain input is broad/category-driven rather than LLM-proposed canonical domain.
+
+### 12.8 Hidden domains flow (10.1)
+
+🟡 PARTIAL/LIKELY COMPLETE: Feed `Not my focus` calls POST, server dismisses active domain feed items, Knowledge page lists hidden domains, Re-open calls DELETE. Caveat: local toast after removing all matching cards may disappear with the removed item.
+
+## Section 13 — TODO Markers
+
+### Friend system/profile/knowledge-card TODOs
+
+- `src/lib/knowledge-card.ts:9` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/lib/knowledge-card.ts:15` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/lib/knowledge-card.ts:21` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/lib/knowledge-card.ts:27` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/lib/knowledge-card.ts:33` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/server/profile/portrait.ts:38` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/server/profile/portrait.ts:44` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/server/profile/portrait.ts:50` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/server/profile/knowledge.ts:23` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/server/profile/knowledge.ts:29` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/server/profile/knowledge.ts:36` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/server/profile/knowledge.ts:42` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/server/profile/friend.ts:2` — `// TODO Phase 8: port to Drizzle when friend profiles are built`
+- `src/server/mastery/write-mastery-event.ts:57` — `// TODO Phase 8: write friend_mastery activity for each friend when`
+- `src/server/db/queries/joshing-game.ts:511` — `// TODO Phase 8: replace with getFriends() when friend system is built.`
+
+### Drizzle/Prisma migration TODOs
+
+- `src/lib/games/winner.ts:10` — `// PrismaClient removed - TODO R2: rewire to Drizzle db client`
+- `src/server/daily/mastery.ts:52` — `// TODO R2: complex mastery query — needs full Drizzle rewrite`
+- `src/server/mastery/awards.ts:14` — `// TODO R2: replace Prisma transaction/client shapes with Drizzle equivalents.`
+- `src/server/mastery/season-snapshot.ts:10` — `// TODO R2: replace Prisma transaction/client shapes with Drizzle equivalents.`
+
+### v11.0 legacy/group TODOs
+
+- `src/lib/games/winner.ts:40` — `// TODO v11.0: group member lookup needs new data source`
+- `src/lib/games/winner.ts:41` — `// TODO v11.0: group lookup needs new data source`
+- `src/lib/games/winner.ts:42` — `// TODO v11.0: answer.game_id winner scoping - needs new data source`
+- `src/server/sms.ts:155` — `// TODO v11.0: group member lookup needs new data source`
+- `src/server/mastery/season-snapshot.ts:32` — `// TODO v11.0: "GroupMember" raw SQL table - needs new data source`
+
+No `FIXME`, `XXX`, or `HACK` matches were found in `src/` by the requested patterns.
 
 ## Section 14 — Top Risks
 
-**Top 5 MISSING (v11.1):**
+### Top 5 v11.1 requirements missing entirely
 
-1. Onboarding → `propose-interests` **cultural anchor payload** + **`canGenerate` bug** — onboarding effectively blocked / anchor never persisted.  
-2. **Daily/catchup friend feed propagation** (wrong `questionId` vs FK).  
-3. **`promoteDeclaredToDemonstrated` / `declared_promoted` activity** — not wired; type broken.  
-4. **PRD quip module** (`select-quip.ts`, banks, `{name}`, tests, persistence on joshing rows).  
-5. **Friend validation on `/api/questions/send`**, **SMS `friend_answered_question`**, **partial unique on dismissed domains**.
+1. 🔴 Expected `propagateFriendAnswerToFeeds` file/function is missing; equivalent exists under a different name.
+2. 🔴 Expected server module `src/server/daily/select-interpretive-line.ts` is missing.
+3. 🔴 `DAILY_FIVE_DECLARED_WEIGHT` and `DAILY_FIVE_DEMONSTRATED_WEIGHT` env vars are missing.
+4. 🔴 `GET /api/feed/dismiss-domain` is missing; GET is split to `/api/feed/dismissed-domains`.
+5. 🔴 `Manage interests` link in Account was not found.
 
-**Top 5 PARTIAL / DIVERGENT (most concerning):**
+### Top 5 partial/divergent concerns
 
-1. **Territory model** on `DeclaredInterest` vs **PRD `PlayerMastery.territoryType`**.  
-2. **Ceremony Beat 2** still excludes declared territory story.  
-3. **GameplayChat** bubble order vs PRD (breadcrumb vs quip).  
-4. **Dismiss-domain GET** split across two routes.  
-5. **Promotion** uses `question.category` not canonical domain string — silent mismatches.
+1. ⚠️ OTP accepts universal `000000` without an environment guard.
+2. 🟡 `FeedDismissedDomain` lacks a partial unique constraint for active dismissals.
+3. 🟡 Activity notification for friend-answer propagation targets previous answerers, not specifically authors.
+4. 🟡 Authored question creation opens broad selected domains but does not run reconciliation/facet consolidation.
+5. 🟡 Daily/catchup quip persistence lacks a direct `daily_answers.quip` schema mapping.
 
-**Top 5 “prompt sequence short-circuited” signals:**
+### Top 5 incomplete/short-circuited prompt sequence areas
 
-1. Onboarding client/server contract drift (`demographicContext`).  
-2. `bookComposerFilmmaker` leftover vs `deepDive` rename.  
-3. `declared_promoted` half-added (runtime try/catch hides failure).  
-4. `createFeedItemsForFriendsFromAnswer` named differently and Daily IDs never validated against FK.  
-5. Quip work folded into `grading.ts` without test enforcement.
+1. Prompt 10.1 renamed/implemented propagation as `createFeedItemsForFriendsFromAnswer`, leaving expected API/file absent.
+2. Prompt 10.4 interpretive-line logic was implemented client-side instead of server-side module.
+3. Prompt 10.2 daily weighting was hardcoded rather than env-configurable.
+4. Prompt 10.1 hidden domain GET route was split, not implemented on expected route.
+5. Prompt 9.1 reconciliation was wired into Daily Five but not authored question creation.
 
-**Top 5 production vs PRD intent risks:**
+### Top 5 production behavior risks vs PRD intent
 
-1. **Feed propagation volume** from every answer (correct + incorrect) — may exceed intended “signal” cadence.  
-2. **OTP master code** `000000` in production.  
-3. **Declared weight** not tunable via env (hardcoded 0.5).  
-4. **Domain dismiss** mismatch when `canonicalSubcategory` null on questions.  
-5. **html2canvas** / build fragility blocking deploy.
-
----
+1. Universal OTP could allow unauthorized access if production users know/guess the bypass.
+2. Propagation chain volume may grow quickly because each answer can propagate onward to all friends who have not answered correctly.
+3. Quip repetition likely because banks are small and random without per-user/session dedupe.
+4. Domain dismissal toast may not be visible because matching cards are removed immediately.
+5. Activity “friend answered your question” may miss authors who never answered their own authored question.
 
 ## Section 15 — Verdict
 
-**Conformance estimate:** Roughly **55–65%** of v11.1 *intent* is reflected in working code paths: friend graph, feed UX, propagation for real `Question` rows, dismiss domains, thumbs routing, granular prompts + merge backfill, and account/knowledge entry points are largely present. **Onboarding 10.3**, **Daily propagation**, **declared promotion + ceremony/activity**, and **commentary/quip spec** are the largest deltas.
+Rough PRD v11.1 conformance estimate: **72%**. The core social/feed model is substantially present: friend graph enforcement, feed items with source users/results, friend-answer propagation-equivalent logic, hidden domains, declared/demonstrated territory, cultural-anchor onboarding, and quips are all real code paths. However, several prompt-specified names/routes/modules are missing or divergent, schema constraints are softer than specified, and a few UX copy/surface requirements are incomplete.
 
-**Alpha blockers:** TypeScript **does not pass**; **production build failed** in this audit (`html2canvas` resolution). New-user onboarding **cannot reach interest proposals** until **`WarmupAnswers` gate** and **API body shape** are fixed. Daily Five **does not propagate** to friends’ feeds due to **FK**. Together these mean you cannot honestly run a 3–5 user alpha **using the PRD’s full journey**.
+Alpha-testing blockers right now: the largest functional blocker is **authentication safety**: universal OTP `000000` remains live. A second blocker is environmental: local/prod builds depending on Google font fetch can fail in restricted build environments. For PRD-valid social alpha, testers may also observe missing “declared territory” explanatory copy, hidden-domain toast oddities, and friend-answer activity notifications that do not always reach the question author.
 
-**Smallest fix set for a credible alpha of the *social model*:** (1) fix onboarding `canGenerate` + send `culturalAnchor` to match `propose-interests`; (2) fix Daily/catchup propagation to use a real `Question` id or relax FK with a deliberate design; (3) repair `ActivityItemType` + either wire `promoteDeclaredToDemonstrated` or drop dead code; (4) restore `tsc` clean + `next build` (dependencies).  
+Smallest fixes to reach alpha-testable v11.1 social validation with 3–5 real users: guard or remove universal OTP in production; alias or rename propagation to the expected `propagateFriendAnswerToFeeds` and ensure author notifications are written; add the missing Account “Manage interests” link; add env-configurable Daily Five weights; add the `GET /api/feed/dismiss-domain` alias or update PRD/client expectations; and add visible declared-territory copy on successful question creation.
 
-**What is solid:** Feed list UX (empty states, dismiss domain, thumbs-down confirmation, friend-answered attribution), `createFeedItemsForFriendsFromAnswer` for **non-daily** surfaces, SMS enum extension scaffolding, Drizzle schema breadth, reconciliation + aggressive backfill machinery, weighted declared sampling (conceptually), and `/feed` page wiring.
-
----
+What is working well: the friend graph enforcement is solid in the main routes; broadcast share rollback is largely complete; the feed redesign has real schema, query, UI, and propagation behavior; onboarding cultural anchor is well represented end-to-end; and quip rendering is implemented with tests. These areas should be stabilized, not rewritten wholesale.
 
 ## Section 16 — Recommended Next Actions
 
-1. **[Critical — small]** Fix `OnboardingFlow.tsx`: `canGenerate` → use `deepDive` + `hourLongTopic`; POST body → `{ culturalAnchor: { birthYear, grewUpCountry, grewUpRegion } }` per API. *(Prompt 10.3 + hotfix)*  
-2. **[Critical — medium]** Daily/catchup propagation: resolve **Question FK** (e.g. ensure `FeedItem.questionId` references a persisted `Question`, or migrate schema to allow generated IDs intentionally). *(Prompt 10.1)*  
-3. **[Critical — small]** Extend `ActivityItemType` with `'declared_promoted'` **or** remove broken insert; call **`promoteDeclaredToDemonstrated`** from feed/joshing answer paths if PRD events are required. *(Prompt 10.2)*  
+### Critical fixes (blocking alpha testing)
 
-4. **[Important — medium]** `/api/questions/send`: validate `recipientUserId` ∈ friends. *(PRD § friend graph)*  
-5. **[Important — small]** Add partial unique index on active dismiss rows; align `GET` listing with PRD path or document split.  
-6. **[Important — medium]** Extract `select-quip` to module, add `{name}` + ≤8-word guard + tests; align catchup with `selectQuip`. *(10.4)*  
-7. **[Important — small]** GameplayChat order + optional 150ms quip delay per PRD.
+1. **Guard universal OTP** — small — production safety work. Require an explicit env flag for `000000` or remove it outside development/test.
+2. **Normalize propagation API and author notification behavior** — medium — Prompt 10.1 follow-up. Add expected `propagateFriendAnswerToFeeds` wrapper/export and ensure question authors get `friend_answered_your_question` activity when applicable.
+3. **Make build robust to font fetch failures** — small/medium — production hardening. Self-host Montserrat or configure a local fallback so `next build` does not depend on Google Fonts network access.
 
-8. **[Nice — medium]** Env-loaded `DAILY_FIVE_DECLARED_WEIGHT` / `DEMONSTRATED_WEIGHT`.  
-9. **[Nice — large]** Ceremony Beat 2 narratives for declared vs demonstrated.  
-10. **[Nice — medium]** Visual declared territory on portrait + domain detail copy.  
-11. **[Nice — small]** OTP dev gate (`NODE_ENV` / allowlist) instead of bare `000000`.
+### Important fixes (degrade alpha experience but not blocking)
 
----
+1. **Add Account “Manage interests” link** — small — PRD v11.1 surface follow-up.
+2. **Add env-configurable Daily Five weights** — small — Prompt 10.2 follow-up. Support `DAILY_FIVE_DECLARED_WEIGHT` and `DAILY_FIVE_DEMONSTRATED_WEIGHT` with sane defaults.
+3. **Add `GET /api/feed/dismiss-domain` or formally update route contract** — small — Prompt 10.1 follow-up.
+4. **Add visible declared-territory success/helper copy** — small — Prompt 10.2 UX follow-up.
+5. **Add partial unique active-dismissal constraint** — medium — schema migration follow-up.
 
-*End of audit — generated from static analysis of the repo at audit time.*
+### Nice-to-haves (post-alpha)
+
+1. **Move interpretive-line logic into `src/server/daily/select-interpretive-line.ts`** — small/medium — Prompt 10.4 conformance cleanup.
+2. **Deduplicate/rotate quips per user/session** — medium — commentary quality improvement.
+3. **Fully remove dead `SpiderGraph` if killed concept should not exist anywhere** — small — PRD cleanup.
+4. **Add deterministic facet-domain validator after LLM output** — medium — Prompt 9.1 robustness.
+5. **Replace remaining TODO R2/v11.0 legacy stubs** — medium/large — technical debt cleanup.
