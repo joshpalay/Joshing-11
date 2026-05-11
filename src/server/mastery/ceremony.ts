@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 
 import {
@@ -15,7 +17,7 @@ import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 import { effectiveTier, resolveTier } from '@/server/mastery/tiers';
 import type { MasteryTier } from '@/types/db';
 
-type DbClient = any;
+type DbClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 type MasteryMovementInput = {
   userId: string;
@@ -126,6 +128,7 @@ async function upsertMergedPlayerMastery(
     await tx
       .insert(playerMastery)
       .values({
+        id: randomUUID(),
         userId: values.userId,
         canonicalSubcategory: values.canonicalSubcategory,
         broadCategory: values.broadCategory,
@@ -163,19 +166,19 @@ async function upsertMergedPlayerMastery(
       "season_points_start",
       "updated_at"
     ) values (
-      gen_random_uuid()::text,
+      ${randomUUID()},
       ${values.userId},
       ${values.canonicalSubcategory},
       ${values.broadCategory},
       ${values.totalPoints},
-      ${values.tier}::"MasteryTier",
+      ${values.tier}::"public"."MasteryTier",
       null,
       ${values.seasonPointsStart},
       ${values.updatedAt}
     ) on conflict ("user_id", "canonical_subcategory") do update set
       "broad_category" = ${values.broadCategory},
       "total_points" = ${values.totalPoints},
-      "tier" = ${values.tier}::"MasteryTier",
+      "tier" = ${values.tier}::"public"."MasteryTier",
       "updated_at" = ${values.updatedAt}
   `);
 }
