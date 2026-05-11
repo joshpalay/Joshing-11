@@ -24,6 +24,19 @@ export async function register() {
       // Table or columns may not exist yet — that's fine, migrate() will create them
     }
 
+    // PlayerMastery.territory_type was introduced after the base table. Preview
+    // databases can have the migration recorded without the column present, which
+    // makes Drizzle selects fail with Postgres 42703 before app code can recover.
+    // Add it idempotently before migrate() so answer routes remain usable.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "PLAYER_MASTERY"
+          ADD COLUMN IF NOT EXISTS "territory_type" text DEFAULT 'demonstrated' NOT NULL
+      `);
+    } catch {
+      // PLAYER_MASTERY may not exist yet — migrate() handles initial creation.
+    }
+
     // Several FeedItem columns were introduced after the original table. In preview
     // databases with partially-recorded migrations, Drizzle can believe these
     // migrations already ran while the nullable columns are still absent, causing

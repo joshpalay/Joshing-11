@@ -61,7 +61,12 @@ async function writeTierCrossingActivityForFriends(_params: {
 export async function writeMasteryEvent(params: WriteMasteryEventParams): Promise<MasteryEventWriteResult> {
   const [existingMastery, authorCredit] = await Promise.all([
     db
-      .select()
+      .select({
+        broadCategory: playerMastery.broadCategory,
+        totalPoints: playerMastery.totalPoints,
+        tier: playerMastery.tier,
+        tierReachedAt: playerMastery.tierReachedAt,
+      })
       .from(playerMastery)
       .where(and(
         eq(playerMastery.userId, params.userId),
