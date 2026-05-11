@@ -388,7 +388,6 @@ async function _legacyInsertDeclared(
       userId,
       domain,
       broadCategory: broadCategory ?? null,
-      territoryType: 'declared',
     })
     .onConflictDoNothing({
       target: [declaredInterests.userId, declaredInterests.domain],
@@ -401,14 +400,6 @@ async function _legacyInsertDeclared(
  * called. Scheduled for removal in v11.2.
  */
 export async function upgradeKBDomainToDemonstrated(userId: string, domain: string): Promise<void> {
-  const existing = await getKBDomainEntry(userId, domain);
-  if (existing && existing.territoryType === 'declared') {
-    await db
-      .update(declaredInterests)
-      .set({ territoryType: 'demonstrated' })
-      .where(and(
-        eq(declaredInterests.userId, userId),
-        eq(declaredInterests.domain, domain),
-      ));
-  }
+  const { openKBDomain } = await import('@/server/knowledge/open-domain');
+  await openKBDomain({ userId, domain, via: 'answered_correctly' });
 }
