@@ -14,6 +14,7 @@ import {
 import { getKnowledgeBase, getRecentDailyQuestionTexts } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
+import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { resolveDailyBasePoints } from './types';
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
@@ -184,11 +185,14 @@ function parseQuestions(raw: string): LlmQuestion[] {
     if (!canonical || !broad || !questionText || !answer || !explainer || !difficulty) {
       continue;
     }
+    if (isGenericCanonicalAnswer(answer)) {
+      continue;
+    }
     result.push({
       canonical_subcategory: canonical,
       broad_category: broad,
       question_text: questionText,
-      answer,
+      answer: normalizeCanonicalAnswerLabel(answer),
       explainer,
       difficulty_estimate: difficulty,
     });

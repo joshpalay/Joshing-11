@@ -16,6 +16,8 @@ import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-i
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { type QueueSlot } from '@/server/daily/types';
+import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
+import { suggestAnswer } from '@/lib/llm';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +35,39 @@ function dailyAnswerErrorResponse(status: number, error: DailyAnswerErrorCode, m
 
 function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
+}
+
+async function resolveCanonicalAnswer(question: typeof generatedQuestions.$inferSelect): Promise<string> {
+  const currentAnswer = normalizeCanonicalAnswerLabel(question.answer);
+  if (!isGenericCanonicalAnswer(currentAnswer)) return currentAnswer;
+
+  const suggestion = await suggestAnswer(question.questionText).catch((error) => {
+    console.warn('[daily/answer] failed to repair generic canonical answer', {
+      generatedQuestionId: question.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  });
+  const repairedAnswer = suggestion?.suggested_answer
+    ? normalizeCanonicalAnswerLabel(suggestion.suggested_answer)
+    : null;
+
+  if (!repairedAnswer || isGenericCanonicalAnswer(repairedAnswer)) {
+    return currentAnswer;
+  }
+
+  await db
+    .update(generatedQuestions)
+    .set({ answer: repairedAnswer })
+    .where(eq(generatedQuestions.id, question.id))
+    .catch((error) => {
+      console.warn('[daily/answer] failed to persist repaired canonical answer', {
+        generatedQuestionId: question.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+  return repairedAnswer;
 }
 
 function parseBody(value: unknown): { queueId: string; slotIndex: number; submittedAnswer: string } | null {
@@ -99,9 +134,11 @@ export async function POST(request: NextRequest) {
       return dailyAnswerErrorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
     }
 
+    const canonicalAnswer = await resolveCanonicalAnswer(question);
+
     const grade = await gradeAnswer(
       parsed.submittedAnswer,
-      question.answer,
+      canonicalAnswer,
       [],
       question.questionText,
       'factual',
@@ -113,7 +150,7 @@ export async function POST(request: NextRequest) {
     const breadcrumb = await generateBreadcrumb({
       questionId: question.id,
       questionText: question.questionText,
-      correctAnswer: question.answer,
+      correctAnswer: canonicalAnswer,
       submittedAnswer: parsed.submittedAnswer,
       isCorrect,
       domain: question.canonicalSubcategory,
@@ -127,7 +164,7 @@ export async function POST(request: NextRequest) {
         answer_state: answerState,
         submitted_answer: parsed.submittedAnswer,
         awarded_points: pointsAwarded,
-        reveal_canonical_answer: question.answer,
+        reveal_canonical_answer: canonicalAnswer,
         reveal_explainer: question.explainer,
         reveal_breadcrumb: breadcrumb,
         reveal_quip: grade.consolation,
@@ -204,10 +241,10 @@ export async function POST(request: NextRequest) {
       answerState,
       breadcrumb,
       masteryDelta,
-      correctAnswer: question.answer,
+      correctAnswer: canonicalAnswer,
       consolation: grade.consolation,
       correct: isCorrect,
-      answer: question.answer,
+      answer: canonicalAnswer,
       explainer: question.explainer,
       awarded_points: pointsAwarded,
       mastery_delta: masteryDelta,
