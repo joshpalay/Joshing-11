@@ -35,6 +35,24 @@ type AnswerResponse = {
   mastery_delta?: unknown | null;
 };
 
+type FailedAnswerResponse = {
+  message?: string;
+  error?: string;
+};
+
+const ANSWER_ERROR_MESSAGES: Record<string, string> = {
+  unauthorized: "Please sign in to answer today's question.",
+  validation: 'Check your answer and try again.',
+  not_found: 'We could not find that Daily Five queue.',
+  invalid_state: 'That question is already closed.',
+  question_not_found: 'We could not find that Daily Five question.',
+  unexpected: 'Could not record that answer.',
+};
+
+function answerFailureMessage(body: FailedAnswerResponse | null): string {
+  return body?.message ?? (body?.error ? ANSWER_ERROR_MESSAGES[body.error] : undefined) ?? 'Could not record that answer.';
+}
+
 function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
   return slots.find((slot) => !slot.answered && !slot.skipped) ?? null;
 }
@@ -215,7 +233,7 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, skipCurrent]);
+  }, [allDone, currentSlot?.slot_index, queue]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -242,9 +260,14 @@ export default function DailyPage() {
           submitted_answer: submittedAnswer,
         }),
       });
+      if (!response.ok) {
+        const failedBody = await response.json().catch(() => null) as FailedAnswerResponse | null;
+        throw new Error(answerFailureMessage(failedBody));
+      }
+
       const body = await response.json().catch(() => null) as AnswerResponse | null;
-      if (!response.ok || !body) {
-        throw new Error((body as { message?: string } | null)?.message ?? 'Could not record that answer.');
+      if (!body) {
+        throw new Error('Could not record that answer.');
       }
 
       const isCorrect = Boolean(body.isCorrect ?? body.correct);
