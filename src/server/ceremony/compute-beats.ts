@@ -131,14 +131,13 @@ async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive:
       )),
     readCorrectQuestionIds(userId, cycleStart, cycleEndExclusive),
     db
-      .select({ domain: declaredInterests.domain })
-      .from(declaredInterests)
+      .select({ domain: playerMastery.canonicalSubcategory })
+      .from(playerMastery)
       .where(and(
-        eq(declaredInterests.userId, userId),
-        eq(declaredInterests.isActive, true),
-        sql`${declaredInterests.territoryType} = 'declared'`,
-        gte(declaredInterests.declaredAt, cycleStart),
-        lt(declaredInterests.declaredAt, cycleEndExclusive),
+        eq(playerMastery.userId, userId),
+        eq(playerMastery.territoryType, 'declared'),
+        gte(playerMastery.updatedAt, cycleStart),
+        lt(playerMastery.updatedAt, cycleEndExclusive),
       )),
     db
       .select({ domain: masteryEvents.canonicalSubcategory })
