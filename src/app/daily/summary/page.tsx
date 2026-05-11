@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ThumbsDown, ThumbsUp } from 'lucide-react';
-import { type CSSProperties, useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { AddToBankAction } from '@/components/AddToBankAction';
@@ -278,6 +278,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
       ) : null}
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
         <DailyQuestionFeedbackButtons questionId={question.questionId} />
+        <DomainExclusionAffordance domain={question.domain} domainDisplayName={question.domainDisplayName} />
         <SendQuestionAction
           question={{ id: question.questionId, text: question.questionText, domain: question.domainDisplayName }}
           label=""
@@ -294,6 +295,89 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
         ) : null}
       </div>
     </article>
+  );
+}
+
+
+type ExclusionState =
+  | { kind: 'idle' }
+  | { kind: 'confirmed' }
+  | { kind: 'undone' };
+
+function DomainExclusionAffordance({
+  domain,
+  domainDisplayName,
+}: {
+  domain: string;
+  domainDisplayName: string;
+}) {
+  const [state, setState] = useState<ExclusionState>({ kind: 'idle' });
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleExclude = useCallback(async () => {
+    setState({ kind: 'confirmed' });
+    undoTimerRef.current = setTimeout(() => {
+      undoTimerRef.current = null;
+    }, 5000);
+    try {
+      await fetch('/api/users/domain-exclusions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ canonical_subcategory: domain }),
+      });
+    } catch {
+      // Optimistic UI is acceptable here; the next summary load will reflect persisted state.
+    }
+  }, [domain]);
+
+  const handleUndo = useCallback(async () => {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    setState({ kind: 'undone' });
+    try {
+      await fetch(`/api/users/domain-exclusions/${encodeURIComponent(domain)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+    } catch {
+      // Fire-and-forget; the affordance returns on reload if persistence failed.
+    }
+  }, [domain]);
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
+  if (state.kind === 'undone') return null;
+
+  if (state.kind === 'confirmed') {
+    return (
+      <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <span>{domainDisplayName} won&apos;t appear in your daily queue anymore.</span>
+        <button
+          type="button"
+          onClick={handleUndo}
+          className="font-medium uppercase tracking-[0.08em] underline underline-offset-4"
+        >
+          Undo
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleExclude}
+      className="inline-flex min-h-9 items-center rounded-md border px-3 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground transition hover:bg-muted hover:text-foreground"
+    >
+      Don&apos;t show questions like this
+    </button>
   );
 }
 

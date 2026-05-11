@@ -3,7 +3,7 @@
  */
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
 import { CANNED_REACTIONS, type ReactionKey } from '@/lib/reactions';
@@ -450,109 +450,6 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   );
 }
 
-type ExclusionState =
-  | { kind: 'idle' }
-  | { kind: 'confirmed' }
-  | { kind: 'undone' };
-
-function DomainExclusionAffordance({ canonicalSubcategory }: { canonicalSubcategory: string }) {
-  const [state, setState] = useState<ExclusionState>({ kind: 'idle' });
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleExclude = useCallback(async () => {
-    setState({ kind: 'confirmed' });
-    undoTimerRef.current = setTimeout(() => {
-      undoTimerRef.current = null;
-    }, 5000);
-    try {
-      await fetch('/api/users/domain-exclusions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_subcategory: canonicalSubcategory }),
-      });
-    } catch {
-      // fire-and-forget; optimistic UI is acceptable here
-    }
-  }, [canonicalSubcategory]);
-
-  const handleUndo = useCallback(async () => {
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current);
-      undoTimerRef.current = null;
-    }
-    setState({ kind: 'undone' });
-    try {
-      await fetch(`/api/users/domain-exclusions/${encodeURIComponent(canonicalSubcategory)}`, {
-        method: 'DELETE',
-      });
-    } catch {
-      // fire-and-forget
-    }
-  }, [canonicalSubcategory]);
-
-  useEffect(() => {
-    return () => {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    };
-  }, []);
-
-  if (state.kind === 'undone') return null;
-
-  if (state.kind === 'confirmed') {
-    return (
-      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-        <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-          Got it — {canonicalSubcategory} won&apos;t appear in your daily queue anymore.
-        </p>
-        <button
-          type="button"
-          onClick={handleUndo}
-          style={{
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.6rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--text-muted)',
-            textDecoration: 'underline',
-            textUnderlineOffset: '2px',
-          }}
-        >
-          Undo
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ marginTop: '10px' }}>
-      <button
-        type="button"
-        onClick={handleExclude}
-        style={{
-          background: 'none',
-          border: 'none',
-          padding: 0,
-          cursor: 'pointer',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '0.6rem',
-          textTransform: 'uppercase',
-          letterSpacing: '0.06em',
-          color: 'var(--text-muted)',
-          textDecoration: 'underline',
-          textUnderlineOffset: '2px',
-          opacity: 0.75,
-        }}
-      >
-        Remove this topic from my rotation
-      </button>
-    </div>
-  );
-}
-
 function QuipLine({ text }: { text: string }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -585,7 +482,6 @@ function ResultRow({
   copyVariant,
   creatorName,
   relationalFeedbackLine,
-  canonicalSubcategory,
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
@@ -676,9 +572,6 @@ function ResultRow({
           </p>
         ) : null}
       </div>
-      {canonicalSubcategory ? (
-        <DomainExclusionAffordance canonicalSubcategory={canonicalSubcategory} />
-      ) : null}
       {reactionPrompt ? <QuestionReactionPrompt prompt={reactionPrompt} /> : null}
     </div>
   );

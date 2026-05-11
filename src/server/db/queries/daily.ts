@@ -8,6 +8,7 @@ import {
   generatedQuestions,
   masteryEvents,
   playerMastery,
+  userDomainExclusions,
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
@@ -71,6 +72,20 @@ function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
+async function getExcludedKnowledgeDomains(userId: string): Promise<Set<string>> {
+  try {
+    const rows = await db
+      .select({ domain: userDomainExclusions.canonicalSubcategory })
+      .from(userDomainExclusions)
+      .where(eq(userDomainExclusions.userId, userId));
+
+    return new Set(rows.map((row) => normalizeDomain(row.domain).toLowerCase()).filter(Boolean));
+  } catch (error) {
+    if (pgErrorCode(error) === '42P01') return new Set();
+    throw error;
+  }
+}
+
 async function getPlayerMasteryKnowledgeRows(userId: string) {
   try {
     return await db
@@ -103,9 +118,10 @@ async function getPlayerMasteryKnowledgeRows(userId: string) {
 }
 
 export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
-  const [masteryRows, declaredRows] = await Promise.all([
+  const [masteryRows, declaredRows, excludedDomains] = await Promise.all([
     getPlayerMasteryKnowledgeRows(userId),
     getActiveDeclaredInterests(userId),
+    getExcludedKnowledgeDomains(userId),
   ]);
 
   const domainsByKey = new Map<string, KnowledgeBaseDomain>();
@@ -113,7 +129,9 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
   for (const row of masteryRows) {
     const domain = normalizeDomain(row.domain);
     if (!domain) continue;
-    domainsByKey.set(domain.toLowerCase(), {
+    const key = domain.toLowerCase();
+    if (excludedDomains.has(key)) continue;
+    domainsByKey.set(key, {
       domain,
       broadCategory: row.broadCategory,
       source: row.territoryType === 'declared' ? 'declared' : 'friend_mediated',
@@ -127,6 +145,7 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
     const domain = normalizeDomain(row.domain);
     if (!domain) continue;
     const key = domain.toLowerCase();
+    if (excludedDomains.has(key)) continue;
     const existing = domainsByKey.get(key);
     domainsByKey.set(key, {
       domain: existing?.domain ?? domain,
