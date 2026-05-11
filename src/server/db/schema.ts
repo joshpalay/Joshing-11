@@ -786,6 +786,9 @@ export const feedDismissedDomains = pgTable(
   (table) => [
     index('FeedDismissedDomain_userId_idx').on(table.userId),
     index('FeedDismissedDomain_userId_sub_idx').on(table.userId, table.canonicalSubcategory),
+    uniqueIndex('feed_dismissed_domains_active_unique')
+      .on(table.userId, table.canonicalSubcategory)
+      .where(sql`${table.reinstatedAt} IS NULL`),
   ],
 );
 
