@@ -90,6 +90,7 @@ function DailySetupContent() {
   const [sortMode, setSortMode] = useState<DomainSortMode>('category');
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(new Set());
   const [adaptiveLabel, setAdaptiveLabel] = useState<string | null>(null);
+  const [hasUnstartedQueue, setHasUnstartedQueue] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,7 +113,13 @@ function DailySetupContent() {
         }
 
         const status = await statusResponse.json();
-        if (status.queue_id) {
+        const questionsAnswered =
+          typeof status.questionsAnswered === 'number'
+            ? status.questionsAnswered
+            : typeof status.answered === 'number'
+              ? status.answered
+              : 0;
+        if (status.queue_id && (status.complete || status.isComplete || questionsAnswered > 0)) {
           router.replace(status.complete || status.isComplete ? '/daily/summary' : '/daily');
           return;
         }
@@ -122,6 +129,7 @@ function DailySetupContent() {
 
         const requestedDomain = searchParams.get('domain')?.trim();
         const requestedCustom = searchParams.get('domainMode') === 'custom' && requestedDomain;
+        setHasUnstartedQueue(Boolean(status.queue_id));
         setDomains(body.domains ?? []);
         setDifficulty(body.preferences?.difficulty ?? 'adaptive');
         setDomainMode(requestedCustom ? 'custom' : body.preferences?.domainMode ?? 'random');
@@ -182,6 +190,18 @@ function DailySetupContent() {
         throw new Error(body?.message ?? 'Could not save your setup.');
       }
 
+      if (hasUnstartedQueue) {
+        const resetResponse = await fetch('/api/daily/reset', {
+          method: 'POST',
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!resetResponse.ok) {
+          const body = await resetResponse.json().catch(() => null);
+          throw new Error(body?.message ?? 'Could not refresh your setup.');
+        }
+      }
+
       const queueResponse = await fetch('/api/daily/queue', {
         method: 'POST',
         credentials: 'include',
@@ -197,7 +217,7 @@ function DailySetupContent() {
       setError(caught instanceof Error ? caught.message : 'Could not start your round.');
       setSubmitting(false);
     }
-  }, [canStart, difficulty, domainMode, router, selectedDomains]);
+  }, [canStart, difficulty, domainMode, hasUnstartedQueue, router, selectedDomains]);
 
   if (loading) {
     return (

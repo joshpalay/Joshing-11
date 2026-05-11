@@ -93,7 +93,8 @@ export default function TodaysFiveCard() {
   const effectiveStatus = status ?? FALLBACK_STATUS;
   const answered = Math.max(0, Math.min(effectiveStatus.questionsAnswered, 5));
   const isComplete = effectiveStatus.isComplete || effectiveStatus.questionsRemaining <= 0;
-  const playHref = !effectiveStatus.queueId ? '/daily/setup' : isComplete ? '/daily/summary' : '/daily';
+  const hasStartedRound = Boolean(effectiveStatus.queueId) && answered > 0;
+  const playHref = isComplete ? '/daily/summary' : hasStartedRound ? '/daily' : '/daily/setup';
   const subtext = useMemo(() => {
     if (isComplete) {
       return `Done for today. Next round in ${formatCountdown(effectiveStatus.nextRoundAt, nowMs)}.`;
