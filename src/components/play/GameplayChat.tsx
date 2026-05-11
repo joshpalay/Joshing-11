@@ -142,37 +142,17 @@ function QuestionRow({
 
   return (
     <div className="flex flex-col gap-0.5">
-      {subhead || badges.length > 0 ? (
+      {subhead ? (
         <div className="flex flex-wrap items-center gap-1.5 pb-1 pl-0.5">
-          {subhead ? (
-            <p
-              style={{
-                ...monoStyle,
-                fontSize: '0.58rem',
-                color: 'var(--text-muted)',
-              }}
-            >
-              {subhead}
-            </p>
-          ) : null}
-          {badges.map((badge) => (
-            <span
-              key={badge.label}
-              style={{
-                ...monoStyle,
-                borderRadius: '999px',
-                border: '1px solid var(--border)',
-                background: badge.tone === 'warning'
-                  ? 'color-mix(in srgb, #b45309 12%, var(--surface))'
-                  : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
-                color: badge.tone === 'warning' ? '#b45309' : 'var(--text-muted)',
-                fontSize: '0.52rem',
-                padding: '2px 6px',
-              }}
-            >
-              {badge.label}
-            </span>
-          ))}
+          <p
+            style={{
+              ...monoStyle,
+              fontSize: '0.58rem',
+              color: 'var(--text-muted)',
+            }}
+          >
+            {subhead}
+          </p>
         </div>
       ) : null}
       {creatorName ? (
@@ -202,6 +182,28 @@ function QuestionRow({
       >
         <p style={{ margin: 0 }}>{questionText}</p>
       </div>
+      {badges.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 pl-0.5">
+          {badges.map((badge) => (
+            <span
+              key={badge.label}
+              style={{
+                ...monoStyle,
+                borderRadius: '999px',
+                border: '1px solid var(--border)',
+                background: badge.tone === 'warning'
+                  ? 'color-mix(in srgb, #b45309 12%, var(--surface))'
+                  : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                color: badge.tone === 'warning' ? '#b45309' : 'var(--text-muted)',
+                fontSize: '0.52rem',
+                padding: '2px 6px',
+              }}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {onDismiss ? (
         dismissed ? (
           <p
