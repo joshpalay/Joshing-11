@@ -66,6 +66,9 @@ function initialValues(question: QuestionView): QuestionFormValues {
     explanation: question.explanation,
     domain: question.domain,
     difficulty: question.difficulty,
+    verified: question.verified,
+    llmSuggestedAnswer: question.llmSuggestedAnswer,
+    critiqueIterations: question.critiqueIterations,
     sendToFriendIds: [],
   };
 }

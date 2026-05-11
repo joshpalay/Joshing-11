@@ -144,6 +144,7 @@ export async function GET() {
         state: item.state,
         is_pinned: item.isPinned,
         question_text: question?.questionText ?? null,
+        verified: question?.verified ?? true,
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
         domain_pill: domain,

@@ -30,6 +30,7 @@ type ArchiveItem = {
   myRating: 'up' | 'down' | null;
   canUseQuestionActions?: boolean;
   creatorNote: { authorName: string; noteText: string } | null;
+  verified: boolean;
 };
 
 type ArchiveFacet = {
@@ -114,6 +115,7 @@ export default function ArchivePage() {
   const [source, setSource] = useState<ArchiveSource | ''>('');
   const [domain, setDomain] = useState('');
   const [result, setResult] = useState<ArchiveResult | ''>('');
+  const [showOnlyVerified, setShowOnlyVerified] = useState(false);
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<ArchiveItem[]>([]);
   const [domains, setDomains] = useState<ArchiveFacet[]>([]);
@@ -173,13 +175,14 @@ export default function ArchivePage() {
 
   const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return items;
-    return items.filter((item) => (
-      item.questionText.toLowerCase().includes(query)
-      || item.correctAnswer.toLowerCase().includes(query)
-      || item.domainDisplayName.toLowerCase().includes(query)
-    ));
-  }, [items, search]);
+    return items
+      .filter((item) => !showOnlyVerified || item.verified)
+      .filter((item) => !query || (
+        item.questionText.toLowerCase().includes(query)
+        || item.correctAnswer.toLowerCase().includes(query)
+        || item.domainDisplayName.toLowerCase().includes(query)
+      ));
+  }, [items, search, showOnlyVerified]);
 
   const activeFilters = useMemo(() => {
     const chips: Array<{ key: string; label: string; clear: () => void }> = [];
@@ -192,8 +195,9 @@ export default function ArchivePage() {
       });
     }
     if (result) chips.push({ key: 'result', label: resultOptions.find((option) => option.value === result)?.label ?? result, clear: () => setResult('') });
+    if (showOnlyVerified) chips.push({ key: 'verified', label: 'Only verified', clear: () => setShowOnlyVerified(false) });
     return chips;
-  }, [domain, domains, result, source]);
+  }, [domain, domains, result, source, showOnlyVerified]);
 
   const hasServerFilters = Boolean(source || domain || result);
   const isFilteredEmpty = !loading && items.length === 0 && hasServerFilters;
@@ -255,6 +259,16 @@ export default function ArchivePage() {
           </label>
         </div>
 
+        <label className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={showOnlyVerified}
+            onChange={(event) => setShowOnlyVerified(event.target.checked)}
+            className="rounded"
+          />
+          <span>Show only verified</span>
+        </label>
+
         <label className="relative mt-3 block">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -285,6 +299,7 @@ export default function ArchivePage() {
                 setSource('');
                 setDomain('');
                 setResult('');
+                setShowOnlyVerified(false);
               }}
             >
               Clear all
@@ -383,6 +398,9 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
         >
           {item.domainDisplayName}
         </Link>
+        {!item.verified ? (
+          <span className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground" title="The author wrote their own answer instead of using the LLM's suggestion. The answer may not be standard.">⚠ unverified</span>
+        ) : null}
         {item.pointsAwarded !== null ? (
           <span className="font-mono font-semibold text-foreground">+{Math.round(item.pointsAwarded)} pts</span>
         ) : null}
