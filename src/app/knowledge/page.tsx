@@ -195,14 +195,19 @@ function KnowledgePageContent() {
     let active = true;
     setView(readSavedView());
     setLoading(true);
-    Promise.all([
-      loadKnowledge(),
-      fetch('/api/feed/dismissed-domains', { cache: 'no-store', credentials: 'include' })
-        .then((r) => r.json().catch(() => null))
-        .then((body: { domains?: string[] } | null) => {
-          if (active && body?.domains) setDismissedDomains(body.domains);
-        }),
-    ])
+    setError(null);
+
+    const loadDismissedDomains = async () => {
+      try {
+        const response = await fetch('/api/feed/dismissed-domains', { cache: 'no-store', credentials: 'include' });
+        const body = await response.json().catch(() => null) as { domains?: string[] } | null;
+        if (active && response.ok && body?.domains) setDismissedDomains(body.domains);
+      } catch {
+        if (active) setDismissedDomains([]);
+      }
+    };
+
+    Promise.all([loadKnowledge(), loadDismissedDomains()])
       .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : 'Could not load your Knowledge Map.');
       })
