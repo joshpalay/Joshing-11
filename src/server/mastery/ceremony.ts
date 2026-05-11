@@ -11,6 +11,7 @@ import {
   skippedDailyQuestions,
 } from '@/server/db';
 import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, parseJsonObject } from '@/lib/llm';
+import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 import { effectiveTier, resolveTier } from '@/server/mastery/tiers';
 import type { MasteryTier } from '@/types/db';
 
@@ -107,6 +108,76 @@ function broadCategoryFor(rows: Array<{ canonicalSubcategory: string; broadCateg
     counts.set(row.broadCategory, (counts.get(row.broadCategory) ?? 0) + 1);
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+}
+
+async function upsertMergedPlayerMastery(
+  tx: DbClient,
+  values: {
+    userId: string;
+    canonicalSubcategory: string;
+    broadCategory: string | null;
+    totalPoints: number;
+    tier: MasteryTier;
+    seasonPointsStart: number;
+    updatedAt: Date;
+  },
+): Promise<void> {
+  try {
+    await tx
+      .insert(playerMastery)
+      .values({
+        userId: values.userId,
+        canonicalSubcategory: values.canonicalSubcategory,
+        broadCategory: values.broadCategory,
+        totalPoints: values.totalPoints,
+        tier: values.tier,
+        tierReachedAt: null,
+        seasonPointsStart: values.seasonPointsStart,
+        updatedAt: values.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [playerMastery.userId, playerMastery.canonicalSubcategory],
+        set: {
+          broadCategory: values.broadCategory,
+          totalPoints: values.totalPoints,
+          tier: values.tier,
+          updatedAt: values.updatedAt,
+        },
+      });
+    return;
+  } catch (error) {
+    if (pgErrorCode(error) !== '42703' || !pgErrorMessage(error)?.includes('territory_type')) {
+      throw error;
+    }
+  }
+
+  await tx.execute(sql`
+    insert into "PLAYER_MASTERY" (
+      "id",
+      "user_id",
+      "canonical_subcategory",
+      "broad_category",
+      "total_points",
+      "tier",
+      "tier_reached_at",
+      "season_points_start",
+      "updated_at"
+    ) values (
+      gen_random_uuid()::text,
+      ${values.userId},
+      ${values.canonicalSubcategory},
+      ${values.broadCategory},
+      ${values.totalPoints},
+      ${values.tier}::"MasteryTier",
+      null,
+      ${values.seasonPointsStart},
+      ${values.updatedAt}
+    ) on conflict ("user_id", "canonical_subcategory") do update set
+      "broad_category" = ${values.broadCategory},
+      "total_points" = ${values.totalPoints},
+      "tier" = ${values.tier}::"MasteryTier",
+      "updated_at" = ${values.updatedAt}
+  `);
 }
 
 function parseSuggestedMerges(raw: unknown): SuggestedMerge[] {
@@ -241,27 +312,15 @@ async function applyMergesForUser(
       const updatedAt = latestDate(rowsToTotal.map((row) => ({ updatedAt: row.updatedAt }))) ?? new Date();
       const broadCategory = broadCategoryFor(rowsToTotal, target);
 
-      await tx
-        .insert(playerMastery)
-        .values({
-          userId,
-          canonicalSubcategory: target,
-          broadCategory,
-          totalPoints,
-          tier,
-          tierReachedAt: null,
-          seasonPointsStart: rowsToTotal.reduce((sum, row) => sum + Number(row.seasonPointsStart ?? 0), 0),
-          updatedAt,
-        })
-        .onConflictDoUpdate({
-          target: [playerMastery.userId, playerMastery.canonicalSubcategory],
-          set: {
-            broadCategory,
-            totalPoints,
-            tier,
-            updatedAt,
-          },
-        });
+      await upsertMergedPlayerMastery(tx, {
+        userId,
+        canonicalSubcategory: target,
+        broadCategory,
+        totalPoints,
+        tier,
+        seasonPointsStart: rowsToTotal.reduce((sum, row) => sum + Number(row.seasonPointsStart ?? 0), 0),
+        updatedAt,
+      });
 
       if (sourceDomainsToDelete.length > 0) {
         await tx
