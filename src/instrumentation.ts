@@ -24,14 +24,21 @@ export async function register() {
       // Table or columns may not exist yet — that's fine, migrate() will create them
     }
 
-    // Migration 0012 adds "sourceResult" to FeedItem but the final statement
-    // (ALTER TYPE ... ADD VALUE) can fail in some PostgreSQL environments, leaving
-    // the migration unrecorded and the column absent on every subsequent startup.
-    // Pre-apply the column so the feed query never hits a missing-column error.
+    // Several FeedItem columns were introduced after the original table. In preview
+    // databases with partially-recorded migrations, Drizzle can believe these
+    // migrations already ran while the nullable columns are still absent, causing
+    // feed reads to fail before migrate() gets another chance to reconcile them.
+    // Pre-apply these additive columns idempotently so GET /api/feed remains safe.
     try {
-      await db.execute(sql`ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "sourceResult" TEXT`);
+      await db.execute(sql`
+        ALTER TABLE "FeedItem"
+          ADD COLUMN IF NOT EXISTS "personalMessage" text,
+          ADD COLUMN IF NOT EXISTS "sourceResult" text,
+          ADD COLUMN IF NOT EXISTS "submittedAnswer" text,
+          ADD COLUMN IF NOT EXISTS "quip" text
+      `);
     } catch {
-      // Column already exists or FeedItem table not yet created — migrate() handles both
+      // FeedItem table may not exist yet — migrate() handles initial creation.
     }
 
     // If the Category enum type already exists but migration 0000 isn't recorded,

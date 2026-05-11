@@ -134,6 +134,13 @@
       "when": 1777840500000,
       "tag": "0018_daily_generated_and_player_mastery_territory",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778508000000,
+      "tag": "0019_feed_item_nullable_columns_hotfix",
+      "breakpoints": true
     }
   ]
 }
