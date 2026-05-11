@@ -16,6 +16,7 @@ import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
+import { pgErrorCode } from '@/server/db/pg-error';
 import type { MasteryTier } from '@/types/db';
 
 export type DomainMastery = {
@@ -124,6 +125,52 @@ type AnswerStats = {
   firstActivityAt?: Date | null;
 };
 
+type PlayerMasteryRow = typeof playerMastery.$inferSelect;
+
+async function getPlayerMasteryRows(userId: string, orderByPoints = false): Promise<PlayerMasteryRow[]> {
+  try {
+    if (orderByPoints) {
+      return await db
+        .select()
+        .from(playerMastery)
+        .where(eq(playerMastery.userId, userId))
+        .orderBy(desc(playerMastery.totalPoints));
+    }
+
+    return await db
+      .select()
+      .from(playerMastery)
+      .where(eq(playerMastery.userId, userId));
+  } catch (error) {
+    if (pgErrorCode(error) !== '42703') throw error;
+
+    const selectWithoutTerritoryType = {
+      id: playerMastery.id,
+      userId: playerMastery.userId,
+      canonicalSubcategory: playerMastery.canonicalSubcategory,
+      broadCategory: playerMastery.broadCategory,
+      totalPoints: playerMastery.totalPoints,
+      tier: playerMastery.tier,
+      tierReachedAt: playerMastery.tierReachedAt,
+      seasonPointsStart: playerMastery.seasonPointsStart,
+      updatedAt: playerMastery.updatedAt,
+    };
+
+    const rows = orderByPoints
+      ? await db
+        .select(selectWithoutTerritoryType)
+        .from(playerMastery)
+        .where(eq(playerMastery.userId, userId))
+        .orderBy(desc(playerMastery.totalPoints))
+      : await db
+        .select(selectWithoutTerritoryType)
+        .from(playerMastery)
+        .where(eq(playerMastery.userId, userId));
+
+    return rows.map((row) => ({ ...row, territoryType: 'demonstrated' as const }));
+  }
+}
+
 const TIER_ORDER: MasteryTier[] = ['establishing', 'familiar', 'solid', 'mastery'];
 const STREAK_TIME_ZONE = 'America/New_York';
 const FRIEND_MEDIATED_CONTEXTS = ['feed', 'joshing_game'];
@@ -218,11 +265,7 @@ function toDomainMasteryRow(
 export async function getUserMasteryOverview(userId: string): Promise<MasteryOverview> {
   const [declaredRows, masteryRows, eventRows, recentRows] = await Promise.all([
     getActiveDeclaredInterests(userId),
-    db
-      .select()
-      .from(playerMastery)
-      .where(eq(playerMastery.userId, userId))
-      .orderBy(desc(playerMastery.totalPoints)),
+    getPlayerMasteryRows(userId, true),
     db
       .select({
         canonicalSubcategory: masteryEvents.canonicalSubcategory,
@@ -340,11 +383,7 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
 export async function getKnowledgePageData(userId: string): Promise<KnowledgePageData> {
   const [declaredRows, masteryRows, eventRows] = await Promise.all([
     getActiveDeclaredInterests(userId),
-    db
-      .select()
-      .from(playerMastery)
-      .where(eq(playerMastery.userId, userId))
-      .orderBy(desc(playerMastery.totalPoints)),
+    getPlayerMasteryRows(userId, true),
     db
       .select({
         canonicalSubcategory: masteryEvents.canonicalSubcategory,
@@ -460,10 +499,7 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
 
   const [declaredRows, masteryRows, eventRows, visibilityRows, responseRows, queueRows] = await Promise.all([
     getActiveDeclaredInterests(userId),
-    db
-      .select()
-      .from(playerMastery)
-      .where(eq(playerMastery.userId, userId)),
+    getPlayerMasteryRows(userId),
     db
       .select({
         event: {
