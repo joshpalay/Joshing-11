@@ -43,6 +43,31 @@ type SuggestedMerge = {
   rationale: string;
 };
 
+type PlayerMasteryMergeRow = Pick<
+  typeof playerMastery.$inferSelect,
+  | 'id'
+  | 'userId'
+  | 'canonicalSubcategory'
+  | 'broadCategory'
+  | 'totalPoints'
+  | 'tier'
+  | 'tierReachedAt'
+  | 'seasonPointsStart'
+  | 'updatedAt'
+>;
+
+const playerMasteryMergeColumns = {
+  id: playerMastery.id,
+  userId: playerMastery.userId,
+  canonicalSubcategory: playerMastery.canonicalSubcategory,
+  broadCategory: playerMastery.broadCategory,
+  totalPoints: playerMastery.totalPoints,
+  tier: playerMastery.tier,
+  tierReachedAt: playerMastery.tierReachedAt,
+  seasonPointsStart: playerMastery.seasonPointsStart,
+  updatedAt: playerMastery.updatedAt,
+};
+
 const TIER_RANK: Record<MasteryTier, number> = {
   establishing: 0,
   familiar: 1,
@@ -166,7 +191,7 @@ If no merges are needed: { "merges": [] }`;
 // Shared transaction logic used by both runDomainMergesForUser and runAggressiveDomainBackfillForUser.
 async function applyMergesForUser(
   userId: string,
-  masteryRows: (typeof playerMastery.$inferSelect)[],
+  masteryRows: PlayerMasteryMergeRow[],
   suggestions: SuggestedMerge[],
   verbose = false,
 ): Promise<MergeResult['details']> {
@@ -180,7 +205,7 @@ async function applyMergesForUser(
       const targetKey = domainKey(target);
       const sourceRows = suggestion.sources
         .map((source) => byKey.get(domainKey(source)))
-        .filter((row): row is typeof playerMastery.$inferSelect => Boolean(row))
+        .filter((row): row is PlayerMasteryMergeRow => Boolean(row))
         .filter((row) => !consumedSourceKeys.has(domainKey(row.canonicalSubcategory)));
 
       const uniqueSourceRows = [...new Map(sourceRows.map((row) => [domainKey(row.canonicalSubcategory), row])).values()];
@@ -368,7 +393,7 @@ async function applyMergesForUser(
 
 export async function runDomainMergesForUser(userId: string): Promise<MergeResult> {
   const masteryRows = await db
-    .select()
+    .select(playerMasteryMergeColumns)
     .from(playerMastery)
     .where(eq(playerMastery.userId, userId))
     .orderBy(desc(playerMastery.totalPoints));
@@ -424,7 +449,7 @@ export async function runAggressiveDomainBackfillForUser(
   const { dryRun = false } = options;
 
   const masteryRows = await db
-    .select()
+    .select(playerMasteryMergeColumns)
     .from(playerMastery)
     .where(eq(playerMastery.userId, userId))
     .orderBy(desc(playerMastery.totalPoints));
