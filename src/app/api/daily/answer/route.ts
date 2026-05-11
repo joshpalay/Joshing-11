@@ -119,24 +119,29 @@ export async function POST(request: NextRequest) {
     } satisfies QueueSlot;
   });
 
-  const masteryDelta = await writeMasteryEvent({
-    userId: session.userId,
-    questionId: question.id,
-    domain: question.canonicalSubcategory,
-    answerState: isCorrect ? 'first_correct' : 'incorrect',
-    pointsAwarded,
-    sourceType: 'daily',
-    sourceId: `${queue.id}:${parsed.slotIndex}`,
-    broadCategory: question.broadCategory,
-    eventQuestionId: null,
-    basePoints: question.basePoints,
-    weight: 1,
-  });
-
   await db
     .update(dailyQueues)
     .set({ slots: nextSlots })
     .where(eq(dailyQueues.id, queue.id));
+
+  let masteryDelta = null;
+  try {
+    masteryDelta = await writeMasteryEvent({
+      userId: session.userId,
+      questionId: question.id,
+      domain: question.canonicalSubcategory,
+      answerState: isCorrect ? 'first_correct' : 'incorrect',
+      pointsAwarded,
+      sourceType: 'daily',
+      sourceId: `${queue.id}:${parsed.slotIndex}`,
+      broadCategory: question.broadCategory,
+      eventQuestionId: null,
+      basePoints: question.basePoints,
+      weight: 1,
+    });
+  } catch (error) {
+    console.warn('[daily/answer] writeMasteryEvent failed', error);
+  }
 
   await updateDomainDifficultyOnAnswer(
     session.userId,

@@ -31,6 +31,8 @@ type AnswerResponse = {
   consolation?: string | null;
   quip?: string | null;
   breadcrumb?: string | null;
+  masteryDelta?: unknown | null;
+  mastery_delta?: unknown | null;
 };
 
 function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
