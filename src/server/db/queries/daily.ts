@@ -10,6 +10,8 @@ import {
   playerMastery,
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
+import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { pgErrorCode } from '@/server/db/pg-error';
 import { categoryLabel } from '@/lib/questions-types';
 import { asQueueSlots, dailyQueueItemId } from '@/server/daily/catchup';
 import type { QueueSlot } from '@/server/daily/types';
@@ -69,33 +71,74 @@ function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
-  const rows = await db
-    .select({
-      domain: playerMastery.canonicalSubcategory,
-      broadCategory: playerMastery.broadCategory,
-      territoryType: playerMastery.territoryType,
-      totalPoints: playerMastery.totalPoints,
-      tier: playerMastery.tier,
-    })
-    .from(playerMastery)
-    .where(eq(playerMastery.userId, userId))
-    .orderBy(asc(playerMastery.canonicalSubcategory));
+async function getPlayerMasteryKnowledgeRows(userId: string) {
+  try {
+    return await db
+      .select({
+        domain: playerMastery.canonicalSubcategory,
+        broadCategory: playerMastery.broadCategory,
+        territoryType: playerMastery.territoryType,
+        totalPoints: playerMastery.totalPoints,
+        tier: playerMastery.tier,
+      })
+      .from(playerMastery)
+      .where(eq(playerMastery.userId, userId))
+      .orderBy(asc(playerMastery.canonicalSubcategory));
+  } catch (error) {
+    if (pgErrorCode(error) !== '42703') throw error;
 
-  return rows
-    .map((row): KnowledgeBaseDomain | null => {
-      const domain = normalizeDomain(row.domain);
-      if (!domain) return null;
-      return {
-        domain,
-        broadCategory: row.broadCategory,
-        source: row.territoryType === 'declared' ? 'declared' : 'friend_mediated',
-        territoryType: row.territoryType,
-        totalPoints: row.totalPoints,
-        tier: row.tier,
-      };
-    })
-    .filter((row): row is KnowledgeBaseDomain => Boolean(row));
+    const rows = await db
+      .select({
+        domain: playerMastery.canonicalSubcategory,
+        broadCategory: playerMastery.broadCategory,
+        totalPoints: playerMastery.totalPoints,
+        tier: playerMastery.tier,
+      })
+      .from(playerMastery)
+      .where(eq(playerMastery.userId, userId))
+      .orderBy(asc(playerMastery.canonicalSubcategory));
+
+    return rows.map((row) => ({ ...row, territoryType: 'demonstrated' as const }));
+  }
+}
+
+export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
+  const [masteryRows, declaredRows] = await Promise.all([
+    getPlayerMasteryKnowledgeRows(userId),
+    getActiveDeclaredInterests(userId),
+  ]);
+
+  const domainsByKey = new Map<string, KnowledgeBaseDomain>();
+
+  for (const row of masteryRows) {
+    const domain = normalizeDomain(row.domain);
+    if (!domain) continue;
+    domainsByKey.set(domain.toLowerCase(), {
+      domain,
+      broadCategory: row.broadCategory,
+      source: row.territoryType === 'declared' ? 'declared' : 'friend_mediated',
+      territoryType: row.territoryType,
+      totalPoints: row.totalPoints,
+      tier: row.tier,
+    });
+  }
+
+  for (const row of declaredRows) {
+    const domain = normalizeDomain(row.domain);
+    if (!domain) continue;
+    const key = domain.toLowerCase();
+    const existing = domainsByKey.get(key);
+    domainsByKey.set(key, {
+      domain: existing?.domain ?? domain,
+      broadCategory: existing?.broadCategory ?? row.broadCategory,
+      source: existing?.source ?? 'declared',
+      territoryType: existing?.territoryType ?? row.territoryType,
+      totalPoints: existing?.totalPoints ?? 0,
+      tier: existing?.tier ?? 'establishing',
+    });
+  }
+
+  return [...domainsByKey.values()].sort((a, b) => a.domain.localeCompare(b.domain));
 }
 
 export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow | null> {
