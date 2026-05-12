@@ -6,7 +6,9 @@
  */
 
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { validateBreadcrumbContext } from '@/lib/breadcrumb-validation';
+import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 
 type Props = {
   onClose: () => void;
@@ -38,6 +40,8 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
   const [questionText, setQuestionText] = useState('');
   const [answerText, setAnswerText] = useState('');
   const [breadcrumbContext, setBreadcrumbContext] = useState('');
+  const [category, setCategory] = useState('other');
+  const [canonicalSubcategory, setCanonicalSubcategory] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -60,8 +64,9 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
     const qt = questionText.trim();
     const at = answerText.trim();
     const bc = breadcrumbContext.trim();
-    if (!qt || !at || !bc) {
-      setError('Question, answer, and context are required.');
+    const canonical = normalizeCanonicalSubcategory(canonicalSubcategory);
+    if (!qt || !at || !bc || !canonical) {
+      setError('Question, answer, context, and a specific area are required.');
       return;
     }
     const bcErr = validateBreadcrumbContext(bc);
@@ -82,6 +87,12 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
           breadcrumb_context: bc,
           short_label: shortLabel.trim() || null,
           answer_source: 'creator_written',
+          category,
+          canonicalSubcategory: canonical,
+          domain: canonical,
+          difficulty: 3,
+          verified: true,
+          critiqueIterations: 0,
         }),
       });
       if (!res.ok) {
@@ -208,6 +219,36 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
               placeholder="e.g. Snorlax"
               style={inputStyle}
             />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label htmlFor="qqm-category" style={{ ...monoStyle, display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                Broad category
+              </label>
+              <select
+                id="qqm-category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                style={inputStyle}
+              >
+                {CATEGORIES.map((item) => <option key={item} value={item}>{categoryLabel(item)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="qqm-specific-area" style={{ ...monoStyle, display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                Specific area
+              </label>
+              <input
+                id="qqm-specific-area"
+                type="text"
+                required
+                value={canonicalSubcategory}
+                onChange={(e) => setCanonicalSubcategory(e.target.value)}
+                placeholder="e.g. The Waste Land"
+                style={inputStyle}
+              />
+            </div>
           </div>
 
           <div>
