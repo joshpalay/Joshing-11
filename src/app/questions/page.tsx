@@ -16,6 +16,24 @@ type DrawerState =
   | { mode: 'create' }
   | { mode: 'edit'; question: QuestionView };
 
+type QuestionsApiResponse = {
+  questions?: QuestionView[] | null;
+  message?: string;
+  error?: string;
+};
+
+const NO_QUESTIONS_PATTERNS = [
+  /no questions/i,
+  /not found/i,
+  /empty/i,
+];
+
+function isNoQuestionsResponse(response: Response, body: QuestionsApiResponse | null): boolean {
+  const apiMessage = body?.message ?? body?.error ?? '';
+  return response.status === 204
+    || response.status === 404
+    || NO_QUESTIONS_PATTERNS.some((pattern) => pattern.test(apiMessage));
+}
 
 const DIFFICULTY_COPY: Record<number, string> = {
   1: 'Accessible',
@@ -117,8 +135,12 @@ function QuestionsPageContent() {
     setError(null);
     try {
       const response = await fetch('/api/questions', { cache: 'no-store', credentials: 'include' });
-      const body = await response.json().catch(() => null) as { questions?: QuestionView[]; message?: string } | null;
-      if (!response.ok || !Array.isArray(body?.questions)) throw new Error(body?.message ?? 'Could not load your questions.');
+      const body = await response.json().catch(() => null) as QuestionsApiResponse | null;
+      if (isNoQuestionsResponse(response, body)) {
+        setQuestions([]);
+        return;
+      }
+      if (!response.ok || !Array.isArray(body?.questions)) throw new Error(body?.message ?? body?.error ?? 'Could not load your questions.');
       setQuestions(body.questions);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load your questions.');
@@ -308,7 +330,10 @@ function QuestionsPageContent() {
 
       {questions.length === 0 ? (
         <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-          <h2 className="font-serif text-2xl font-semibold">You haven&apos;t written any questions yet.</h2>
+          <h2 className="font-serif text-2xl font-semibold">No questions yet.</h2>
+          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+            Your question bank is empty. Write a question or save one from a friend to build your bank.
+          </p>
           <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create' })}>
             Write a question
           </button>
