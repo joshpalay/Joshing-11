@@ -24,6 +24,30 @@ export async function register() {
       // Table or columns may not exist yet — that's fine, migrate() will create them
     }
 
+    // Domain-merge mastery events were introduced after the base table in
+    // drizzle/0009_domain_merge_events.sql. Some preview/production databases
+    // can have that migration recorded without the enum value or metadata column
+    // present, which makes the domain cleanup audit insert in ceremony.ts fail.
+    // Add both pieces idempotently before migrate() so the backfill can proceed.
+    try {
+      await db.execute(sql`
+        ALTER TYPE "public"."MasterySourceType" ADD VALUE IF NOT EXISTS 'curator_credit'
+      `);
+      await db.execute(sql`
+        ALTER TYPE "public"."MasterySourceType" ADD VALUE IF NOT EXISTS 'domain_merged'
+      `);
+      await db.execute(sql`
+        ALTER TYPE "public"."MasterySourceType" ADD VALUE IF NOT EXISTS 'declared_promoted'
+      `);
+      await db.execute(sql`
+        ALTER TABLE "MASTERY_EVENTS"
+          ADD COLUMN IF NOT EXISTS "metadata" jsonb
+      `);
+    } catch {
+      // MASTERY_EVENTS or MasterySourceType may not exist yet — migrate() handles
+      // initial creation and the additive migration will add these schema pieces.
+    }
+
     // PlayerMastery.territory_type was introduced after the base table. Preview
     // databases can have the migration recorded without the column present, which
     // makes Drizzle selects fail with Postgres 42703 before app code can recover.
