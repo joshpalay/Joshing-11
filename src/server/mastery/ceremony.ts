@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
 
 import {
   db,
@@ -181,6 +181,59 @@ async function upsertMergedPlayerMastery(
       "tier" = ${values.tier}::"public"."MasteryTier",
       "updated_at" = ${values.updatedAt}
   `);
+}
+
+type DomainVisibility = 'public' | 'friends' | 'private';
+
+function mostRestrictiveVisibility(rows: Array<{ visibility: DomainVisibility }>): DomainVisibility {
+  if (rows.some((row) => row.visibility === 'private')) return 'private';
+  if (rows.some((row) => row.visibility === 'friends')) return 'friends';
+  return 'public';
+}
+
+export async function consolidateProfileDomainVisibility(
+  tx: DbClient,
+  values: {
+    userId: string;
+    sourceDomains: string[];
+    target: string;
+    updatedAt?: Date;
+  },
+): Promise<void> {
+  const target = normalizeDomain(values.target);
+  const domainsToConsolidate = [...new Set([...values.sourceDomains, target].map(normalizeDomain).filter(Boolean))];
+  const existingRows = await tx
+    .select({ visibility: profileDomainVisibility.visibility })
+    .from(profileDomainVisibility)
+    .where(and(
+      eq(profileDomainVisibility.userId, values.userId),
+      or(
+        inArray(profileDomainVisibility.domain, domainsToConsolidate),
+        inArray(profileDomainVisibility.canonicalSubcategory, domainsToConsolidate),
+      ),
+    ));
+  const visibility = mostRestrictiveVisibility(existingRows);
+
+  await tx
+    .delete(profileDomainVisibility)
+    .where(and(
+      eq(profileDomainVisibility.userId, values.userId),
+      or(
+        inArray(profileDomainVisibility.domain, domainsToConsolidate),
+        inArray(profileDomainVisibility.canonicalSubcategory, domainsToConsolidate),
+      ),
+    ));
+
+  await tx
+    .insert(profileDomainVisibility)
+    .values({
+      userId: values.userId,
+      canonicalSubcategory: target,
+      domain: target,
+      visibility,
+      isVisible: visibility !== 'private',
+      updatedAt: values.updatedAt ?? new Date(),
+    });
 }
 
 function parseSuggestedMerges(raw: unknown): SuggestedMerge[] {
@@ -387,29 +440,11 @@ async function applyMergesForUser(
         }
       }
 
-      await tx
-        .insert(profileDomainVisibility)
-        .values({
-          userId,
-          canonicalSubcategory: target,
-          domain: target,
-          visibility: 'public',
-          isVisible: true,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [profileDomainVisibility.userId, profileDomainVisibility.domain],
-          set: {
-            canonicalSubcategory: target,
-            updatedAt: new Date(),
-          },
-        });
-
-      if (sourceDomainsToDelete.length > 0) {
-        await tx
-          .delete(profileDomainVisibility)
-          .where(and(eq(profileDomainVisibility.userId, userId), inArray(profileDomainVisibility.domain, sourceDomainsToDelete)));
-      }
+      await consolidateProfileDomainVisibility(tx, {
+        userId,
+        sourceDomains,
+        target,
+      });
 
       await tx.insert(masteryEvents).values({
         userId,
