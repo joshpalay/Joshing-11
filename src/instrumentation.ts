@@ -51,6 +51,48 @@ export async function register() {
       // UserQuestionBank may not exist yet — migrate() handles initial creation.
     }
 
+    // Question generated-question provenance columns and constraints were added
+    // in migration 0018. If that migration is recorded without these additive
+    // pieces present, "my questions" reads can fail before migrate() repairs them.
+    // Add the columns, foreign key, and unique index idempotently before migrate().
+    try {
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "generated_question_id" text,
+          ADD COLUMN IF NOT EXISTS "source" text DEFAULT 'authored' NOT NULL
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          question_table regclass := to_regclass('public."Question"');
+          generated_question_table regclass := to_regclass('public."GeneratedQuestion"');
+        BEGIN
+          IF question_table IS NOT NULL
+            AND generated_question_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM pg_constraint
+              WHERE conname = 'Question_generated_question_id_GeneratedQuestion_id_fk'
+                AND conrelid = question_table
+            )
+          THEN
+            ALTER TABLE "Question"
+              ADD CONSTRAINT "Question_generated_question_id_GeneratedQuestion_id_fk"
+              FOREIGN KEY ("generated_question_id")
+              REFERENCES "GeneratedQuestion"("id")
+              ON DELETE set null;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "Question_generated_question_id_key"
+        ON "Question" USING btree ("generated_question_id")
+      `);
+    } catch {
+      // Question or GeneratedQuestion may not exist yet — migrate() handles
+      // initial creation and the 0018 migration will add these schema pieces.
+    }
+
     // Several FeedItem columns were introduced after the original table. In preview
     // databases with partially-recorded migrations, Drizzle can believe these
     // migrations already ran while the nullable columns are still absent, causing
