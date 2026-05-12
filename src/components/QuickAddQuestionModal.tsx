@@ -2,13 +2,11 @@
 
 /**
  * QuickAddQuestionModal — lightweight modal for capturing a question from the homepage.
- * Posts to POST /api/questions. No LLM suggestion; just question, answer, context, and optional short label.
+ * Posts to POST /api/questions. The server classifies category/domain through the LLM.
  */
 
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
-import { normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { validateBreadcrumbContext } from '@/lib/breadcrumb-validation';
-import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 
 type Props = {
   onClose: () => void;
@@ -40,8 +38,6 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
   const [questionText, setQuestionText] = useState('');
   const [answerText, setAnswerText] = useState('');
   const [breadcrumbContext, setBreadcrumbContext] = useState('');
-  const [category, setCategory] = useState('other');
-  const [canonicalSubcategory, setCanonicalSubcategory] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -64,9 +60,8 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
     const qt = questionText.trim();
     const at = answerText.trim();
     const bc = breadcrumbContext.trim();
-    const canonical = normalizeCanonicalSubcategory(canonicalSubcategory);
-    if (!qt || !at || !bc || !canonical) {
-      setError('Question, answer, context, and a specific area are required.');
+    if (!qt || !at || !bc) {
+      setError('Question, answer, and context are required.');
       return;
     }
     const bcErr = validateBreadcrumbContext(bc);
@@ -87,9 +82,6 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
           breadcrumb_context: bc,
           short_label: shortLabel.trim() || null,
           answer_source: 'creator_written',
-          category,
-          canonicalSubcategory: canonical,
-          domain: canonical,
           difficulty: 3,
           verified: true,
           critiqueIterations: 0,
@@ -221,34 +213,11 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div>
-              <label htmlFor="qqm-category" style={{ ...monoStyle, display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                Broad category
-              </label>
-              <select
-                id="qqm-category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                style={inputStyle}
-              >
-                {CATEGORIES.map((item) => <option key={item} value={item}>{categoryLabel(item)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="qqm-specific-area" style={{ ...monoStyle, display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                Specific area
-              </label>
-              <input
-                id="qqm-specific-area"
-                type="text"
-                required
-                value={canonicalSubcategory}
-                onChange={(e) => setCanonicalSubcategory(e.target.value)}
-                placeholder="e.g. The Waste Land"
-                style={inputStyle}
-              />
-            </div>
+          <div style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'color-mix(in srgb, var(--muted, #f5f5f5) 55%, var(--bg))' }}>
+            <p style={{ ...monoStyle, color: 'var(--text-muted)', marginBottom: '4px' }}>AI classification</p>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+              Joshing will read the question and answer when you save, then choose the category and specific area automatically.
+            </p>
           </div>
 
           <div>

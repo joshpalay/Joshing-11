@@ -3,9 +3,15 @@ import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 export type BroadQuestionCategory = (typeof CATEGORIES)[number];
 
 const CATEGORY_VALUES = new Set<string>(CATEGORIES);
-const CATEGORY_LABEL_TO_VALUE = new Map<string, BroadQuestionCategory>(
-  CATEGORIES.map((category) => [categoryLabel(category).toLowerCase(), category]),
-);
+const CATEGORY_LABEL_TO_VALUE = new Map<string, BroadQuestionCategory>([
+  ...CATEGORIES.map((category) => [categoryLabel(category).toLowerCase(), category] as const),
+  ['film & television', 'film_tv'],
+  ['film and television', 'film_tv'],
+  ['film television', 'film_tv'],
+  ['tv', 'film_tv'],
+  ['television', 'film_tv'],
+  ['sports', 'sport'],
+]);
 
 export function isBroadQuestionCategory(value: string): value is BroadQuestionCategory {
   return CATEGORY_VALUES.has(value);

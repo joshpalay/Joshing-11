@@ -1,6 +1,8 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { broadCategoryDisplayName, normalizeBroadQuestionCategory, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
+import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
 import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
 import {
@@ -40,14 +42,25 @@ export async function POST(request: NextRequest) {
   }
 
   const { sendToFriendIds, shareToFeed, ...rawQuestionFields } = value;
+  const categorization = await categorizeQuestion(rawQuestionFields.text, rawQuestionFields.correctAnswer);
+  const category = normalizeBroadQuestionCategory(categorization.broad_category) ?? 'other';
+  const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
+  const questionFields = {
+    ...rawQuestionFields,
+    category,
+    broadCategory: broadCategoryDisplayName(category),
+    canonicalSubcategory,
+    subcategory: canonicalSubcategory,
+    domain: canonicalSubcategory,
+  };
   const difficultyAssessment = await assessQuestionDifficulty({
-    questionText: rawQuestionFields.text,
-    correctAnswer: rawQuestionFields.correctAnswer,
-    broadCategory: rawQuestionFields.broadCategory,
-    canonicalSubcategory: rawQuestionFields.canonicalSubcategory,
-    explanation: rawQuestionFields.explanation,
+    questionText: questionFields.text,
+    correctAnswer: questionFields.correctAnswer,
+    broadCategory: questionFields.broadCategory,
+    canonicalSubcategory: questionFields.canonicalSubcategory,
+    explanation: questionFields.explanation,
   });
-  const questionFields = { ...rawQuestionFields, difficulty: difficultyAssessment.difficulty };
+  const categorizedQuestionFields = { ...questionFields, difficulty: difficultyAssessment.difficulty };
 
   if (sendToFriendIds.length > 0) {
     const friends = await getFriends(session.userId);
@@ -62,13 +75,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const created = await createQuestion({ authorId: session.userId, ...questionFields });
-  console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: questionFields.verified, difficultyTier: difficultyAssessment.tier });
+  const created = await createQuestion({ authorId: session.userId, ...categorizedQuestionFields });
+  console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: categorizedQuestionFields.verified, category: categorizedQuestionFields.category, canonicalSubcategory: categorizedQuestionFields.canonicalSubcategory, difficultyTier: difficultyAssessment.tier });
   const kbResult = await openKBDomain({
     userId: session.userId,
-    domain: questionFields.canonicalSubcategory,
+    domain: categorizedQuestionFields.canonicalSubcategory,
     via: 'authorship',
-    broadCategory: questionFields.broadCategory,
+    broadCategory: categorizedQuestionFields.broadCategory,
     questionId: created.id,
   });
   const question = await getQuestion(created.id, session.userId);
@@ -87,7 +100,7 @@ export async function POST(request: NextRequest) {
             .from(feedDismissedDomains)
             .where(and(
               eq(feedDismissedDomains.userId, friend.id),
-              eq(feedDismissedDomains.canonicalSubcategory, questionFields.canonicalSubcategory),
+              eq(feedDismissedDomains.canonicalSubcategory, categorizedQuestionFields.canonicalSubcategory),
               isNull(feedDismissedDomains.reinstatedAt),
             ))
             .limit(1);
@@ -188,7 +201,7 @@ export async function POST(request: NextRequest) {
       ...created,
       question,
       ...(question ?? {}),
-      openedDomain: kbResult.opened ? questionFields.canonicalSubcategory : null,
+      openedDomain: kbResult.opened ? categorizedQuestionFields.canonicalSubcategory : null,
     },
     { status: 201 },
   );
