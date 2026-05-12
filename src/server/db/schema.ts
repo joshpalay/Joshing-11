@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   date,
   doublePrecision,
   index,
@@ -606,8 +607,12 @@ export const profileDomainVisibility = pgTable(
       table.userId,
       table.canonicalSubcategory,
     ),
-    unique('PROFILE_DOMAIN_VISIBILITY_user_id_domain_key').on(table.userId, table.domain),
+    uniqueIndex('PROFILE_DOMAIN_VISIBILITY_user_id_domain_key').on(table.userId, table.domain),
     index('PROFILE_DOMAIN_VISIBILITY_user_id_idx').on(table.userId),
+    check(
+      'PROFILE_DOMAIN_VISIBILITY_visibility_check',
+      sql`${table.visibility} IN ('public', 'friends', 'private')`,
+    ),
   ],
 );
 

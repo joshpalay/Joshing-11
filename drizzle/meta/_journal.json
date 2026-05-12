@@ -162,6 +162,13 @@
       "when": 1778538800000,
       "tag": "0022_player_mastery_territory_type_hotfix",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1778540000000,
+      "tag": "0023_profile_domain_visibility_runtime_hotfix",
+      "breakpoints": true
     }
   ]
 }
