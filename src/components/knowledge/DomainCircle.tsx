@@ -1,4 +1,6 @@
 import { DOMAIN_ICON_COMPONENTS, DomainInitialIcon } from '@/components/icons/domain-icons';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import type { MasteryTier } from '@/types/db';
 import type { CSSProperties } from 'react';
 
@@ -21,6 +23,7 @@ type DomainCircleProps = {
   /** Whether to render the tier label below the domain name. Defaults to true. */
   showTierLabel?: boolean;
   territoryType?: 'declared' | 'demonstrated';
+  broadCategory?: string | null;
   onTap?: () => void;
 };
 
@@ -35,11 +38,18 @@ export function DomainCircle({
   isGhost = false,
   showTierLabel = true,
   territoryType,
+  broadCategory,
   onTap,
 }: DomainCircleProps) {
   const iconSize = Math.round(diameter * 0.4);
   const Icon = (DOMAIN_ICON_COMPONENTS as Record<string, (typeof DOMAIN_ICON_COMPONENTS)[keyof typeof DOMAIN_ICON_COMPONENTS] | undefined>)[iconKey];
   const yourQsCount = Math.min(showYourQs, 5);
+  const normalizedCategory = normalizeBroadCategory(broadCategory) ?? null;
+  const domainColor = normalizedCategory ? getPortraitDomainColor(normalizedCategory) : null;
+  const circleBackground = domainColor
+    ? `radial-gradient(circle at 38% 38%, ${domainColor.light.replace('0.12', '0.22')}, ${domainColor.light})`
+    : territoryType === 'declared' ? 'rgba(245, 240, 232, 0.3)' : '#f5f0e8';
+  const circleBorder = highlighted ? '#1a1208' : domainColor?.primary ?? '#d4cfc7';
 
   if (isGhost) {
     return (
@@ -82,8 +92,8 @@ export function DomainCircle({
           width: `${diameter}px`,
           height: `${diameter}px`,
           borderRadius: '999px',
-          border: `1px solid ${highlighted ? '#1a1208' : '#d4cfc7'}`,
-          background: territoryType === 'declared' ? 'rgba(245, 240, 232, 0.3)' : '#f5f0e8',
+          border: `1px solid ${circleBorder}`,
+          background: circleBackground,
           margin: '0 auto',
           display: 'grid',
           placeItems: 'center',

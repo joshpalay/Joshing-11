@@ -238,7 +238,7 @@ function KnowledgePageContent() {
       .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
   }, [data, declaredKeys]);
 
-  const topCardDomains = useMemo(() => sortedDomains.filter((domain) => domain.points > 0).slice(0, 8), [sortedDomains]);
+  const topCardDomains = useMemo(() => sortedDomains.filter((domain) => domain.points > 0).slice(0, 5), [sortedDomains]);
   const yourMind = data ? displayMind(sortedDomains, data.pageData.declaredInterests) : '';
   const displayName = 'You';
   const hasAnything = sortedDomains.length > 0;
@@ -420,6 +420,7 @@ function KnowledgePageContent() {
               currentTier: asTier(domain.tier),
               lifetimePoints: domain.points,
               iconKey: domain.iconKey,
+              broadCategory: domain.broadCategory,
             }))}
             overflowCount={Math.max(0, sortedDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
             tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${sortedDomains.length} territories`}
