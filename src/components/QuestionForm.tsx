@@ -3,8 +3,6 @@
 import { Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useReducer, useRef } from 'react';
 
-import { normalizeCanonicalSubcategory } from '@/lib/question-categorization';
-import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 
 export type QuestionFormValues = {
   text: string;
@@ -12,8 +10,8 @@ export type QuestionFormValues = {
   alternateAnswers: string[];
   explanation: string | null;
   creatorNote?: string | null;
-  category: string;
-  canonicalSubcategory: string;
+  category?: string;
+  canonicalSubcategory?: string;
   domain?: string;
   difficulty?: number;
   verified: boolean;
@@ -61,8 +59,8 @@ type State = {
   alternateText: string;
   explanation: string;
   creatorNote: string;
-  category: string;
-  canonicalSubcategory: string;
+  category?: string;
+  canonicalSubcategory?: string;
   domain?: string;
   critiqueResult: CritiqueResult | null;
   critiqueIterations: number;
@@ -80,7 +78,7 @@ type State = {
 
 type Action =
   | { type: 'RESET'; state: State }
-  | { type: 'FIELD'; field: 'questionText' | 'userAnswer' | 'alternateText' | 'explanation' | 'creatorNote' | 'category' | 'canonicalSubcategory'; value: string }
+  | { type: 'FIELD'; field: 'questionText' | 'userAnswer' | 'alternateText' | 'explanation' | 'creatorNote'; value: string }
   | { type: 'ERROR'; value: string | null }
   | { type: 'START_CRITIQUE'; text: string }
   | { type: 'CRITIQUE_RESULT'; response: CritiqueResponse }
@@ -198,10 +196,6 @@ function validate(state: State): string | null {
   if (alternateAnswers.some((answer) => answer.length > 200)) return 'Alternate answers must be 200 characters or fewer.';
   if (state.explanation.length > 500) return 'Explanation must be 500 characters or fewer.';
   if (state.creatorNote.length > 200) return 'Creator note must be 200 characters or fewer.';
-  if (!CATEGORIES.includes(state.category as (typeof CATEGORIES)[number])) return 'Choose a valid broad category.';
-  const canonicalSubcategory = normalizeCanonicalSubcategory(state.canonicalSubcategory);
-  if (!canonicalSubcategory) return 'Enter a specific area.';
-  if (CATEGORIES.includes(canonicalSubcategory as (typeof CATEGORIES)[number])) return 'Specific area must be more precise than the broad category.';
   if (state.sendToFriendIds.length > 20) return 'You can send to at most 20 friends at once.';
   return null;
 }
@@ -346,9 +340,6 @@ export function QuestionForm({
         alternateAnswers,
         explanation: state.explanation.trim() || null,
         creatorNote: state.creatorNote.trim() || null,
-        category: state.category,
-        canonicalSubcategory: normalizeCanonicalSubcategory(state.canonicalSubcategory),
-        domain: normalizeCanonicalSubcategory(state.canonicalSubcategory),
         verified,
         llmSuggestedAnswer: state.llmSuggestedAnswer,
         critiqueIterations: state.critiqueIterations,
@@ -464,22 +455,9 @@ export function QuestionForm({
             <p className="mt-1 text-right text-xs text-muted-foreground">{state.explanation.length}/500</p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="broad-category" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Broad category</label>
-              <select id="broad-category" value={state.category} onChange={(event) => dispatch({ type: 'FIELD', field: 'category', value: event.target.value })} disabled={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'} className="h-11 w-full rounded-md border bg-background px-3 outline-none focus:border-primary">
-                {CATEGORIES.map((category) => <option key={category} value={category}>{categoryLabel(category)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="canonical-subcategory" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Specific area</label>
-              <input id="canonical-subcategory" value={state.canonicalSubcategory} onChange={(event) => dispatch({ type: 'FIELD', field: 'canonicalSubcategory', value: event.target.value })} readOnly={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'} className="h-11 w-full rounded-md border bg-background px-3 outline-none focus:border-primary" placeholder="The Waste Land" />
-              <p className="mt-1 text-xs text-muted-foreground">Use a precise domain like T. S. Eliot, The Waste Land, or Modernist Poetry.</p>
-            </div>
-            <div className="rounded-md border bg-muted/30 p-3 sm:col-span-2">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Difficulty</p>
-              <p className="mt-1 text-sm text-muted-foreground">Joshing will rate this with the LLM after you save, using the domain-relative Establishing → Solid → Skilled → Master scale.</p>
-            </div>
+          <div className="rounded-md border bg-muted/30 p-3">
+            <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">AI classification</p>
+            <p className="mt-1 text-sm text-muted-foreground">Joshing will read the question and answer when you save, then use the LLM to choose the broad category, precise domain, and difficulty.</p>
           </div>
 
           {state.stage === 'REVIEWING' && state.llmSuggestedAnswer && !answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (

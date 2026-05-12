@@ -279,7 +279,7 @@ export async function createQuestion(params: {
     broadCategory: params.broadCategory,
     subcategory: params.subcategory,
     canonicalSubcategory: params.canonicalSubcategory,
-    categoryOverridden: true,
+    categoryOverridden: false,
     difficultyEstimate: difficulty,
     llmDifficulty: difficulty,
     calibratedDifficulty: difficulty,
@@ -335,7 +335,7 @@ export async function createQuestion(params: {
         ${params.broadCategory},
         ${params.subcategory},
         ${params.canonicalSubcategory},
-        true,
+        false,
         ${params.creatorNote ?? null},
         ${difficulty}::"DifficultyEstimate",
         ${difficulty}::"DifficultyEstimate",
@@ -416,7 +416,7 @@ export async function updateQuestion(params: {
   if (params.explanation !== undefined) values.factualExplanation = params.explanation || null;
   if (params.category !== undefined) {
     values.category = params.category as typeof questions.$inferInsert.category;
-    values.categoryOverridden = true;
+    values.categoryOverridden = false;
   }
   if (params.broadCategory !== undefined) values.broadCategory = params.broadCategory;
   if (params.subcategory !== undefined) values.subcategory = params.subcategory;

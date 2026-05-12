@@ -1,7 +1,8 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { broadCategoryDisplayName, isBroadQuestionCategory, normalizeBroadQuestionCategory, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
+import { broadCategoryDisplayName, normalizeBroadQuestionCategory, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
+import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
 import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { db, questions } from '@/server/db';
@@ -58,28 +59,6 @@ function validatePatchPayload(body: Record<string, unknown> | null) {
     values.explanation = typeof body.explanation === 'string' ? body.explanation.trim() : '';
     if (values.explanation.length > 500) errors.push('explanation');
   }
-  const rawBroadCategory = body?.category ?? body?.broadCategory;
-  if (rawBroadCategory !== undefined) {
-    const category = typeof rawBroadCategory === 'string' ? normalizeBroadQuestionCategory(rawBroadCategory) : null;
-    if (!category) {
-      errors.push('category');
-    } else {
-      values.category = category;
-      values.broadCategory = broadCategoryDisplayName(category);
-    }
-  }
-  const rawCanonicalSubcategory = body?.canonicalSubcategory ?? body?.canonical_subcategory ?? body?.domain;
-  if (rawCanonicalSubcategory !== undefined) {
-    const canonicalSubcategory = typeof rawCanonicalSubcategory === 'string'
-      ? normalizeCanonicalSubcategory(rawCanonicalSubcategory)
-      : '';
-    if (!canonicalSubcategory || isBroadQuestionCategory(canonicalSubcategory)) {
-      errors.push('canonicalSubcategory');
-    } else {
-      values.canonicalSubcategory = canonicalSubcategory;
-      values.subcategory = canonicalSubcategory;
-    }
-  }
   return { values, errors };
 }
 
@@ -126,6 +105,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   if (existing.usedInGamesCount > 0) {
     return NextResponse.json({ error: 'Question has been used in a game and cannot be edited.' }, { status: 409 });
+  }
+
+  const shouldRecategorize = values.text !== undefined || values.correctAnswer !== undefined;
+  if (shouldRecategorize) {
+    const categorization = await categorizeQuestion(
+      values.text ?? existing.text,
+      values.correctAnswer ?? existing.correctAnswer,
+    );
+    const category = normalizeBroadQuestionCategory(categorization.broad_category) ?? 'other';
+    const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
+    values.category = category;
+    values.broadCategory = broadCategoryDisplayName(category);
+    values.canonicalSubcategory = canonicalSubcategory;
+    values.subcategory = canonicalSubcategory;
   }
 
   const shouldReassessDifficulty = values.text !== undefined
