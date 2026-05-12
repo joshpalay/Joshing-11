@@ -674,7 +674,6 @@ export async function applyMergesForUser(
         sourceType: 'domain_merged',
         questionId: null,
         answeredByUserId: userId,
-        answerId: `domain_merged:${userId}:${Date.now()}:${applied.length}`,
         basePoints: 0,
         weight: 0,
         awardedPoints: 0,

@@ -44,7 +44,7 @@ Open `.env.local` and fill in:
 **3. Run database migrations** *(once schema is ready — Phase 1.2)*
 
 ```bash
-npx prisma migrate dev
+npm run db:migrate
 ```
 
 **4. Start the dev server**
@@ -61,5 +61,5 @@ Open [http://localhost:3000](http://localhost:3000).
 npm run build      # production build
 npm run lint       # ESLint
 npm run format     # Prettier
-npx prisma studio  # browse the database
+npx prisma studio  # browse the database (read-only; Drizzle migrations are authoritative)
 ```
