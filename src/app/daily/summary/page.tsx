@@ -9,7 +9,7 @@ import { AddToBankAction } from '@/components/AddToBankAction';
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay';
 import MasteryMoment from '@/components/review/MasteryMoment';
 import { cn } from '@/lib/utils';
-import type { DailySummaryView, QuestionRecap, TierCrossing } from '@/server/db/queries/daily-summary';
+import type { DailySummaryView, QuestionRecap } from '@/server/db/queries/daily-summary';
 
 type FeedbackSignal = 'thumbs_up' | 'thumbs_down';
 
@@ -187,15 +187,6 @@ export default function DailySummaryPage() {
         </p>
       </section>
 
-      <section className="mt-6">
-        <h2 style={titleStyle}>Round Recap</h2>
-        <div className="mt-3 space-y-3">
-          {summary.questions.map((question) => (
-            <QuestionCard key={question.questionId} question={question} />
-          ))}
-        </div>
-      </section>
-
       <section className="card mt-4 px-5 py-4">
         <h2 style={titleStyle}>Your Growth Recap</h2>
         <CategoryGainsDisplay
@@ -212,6 +203,15 @@ export default function DailySummaryPage() {
       ) : null}
 
       {line ? <InterpretiveLine text={line} /> : null}
+
+      <section className="mt-6">
+        <h2 style={titleStyle}>Round Recap</h2>
+        <div className="mt-3 space-y-3">
+          {summary.questions.map((question) => (
+            <QuestionCard key={question.questionId} question={question} />
+          ))}
+        </div>
+      </section>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <Link className="btn-primary sm:flex-1" href="/knowledge">See your knowledge map</Link>
@@ -435,13 +435,5 @@ function DailyQuestionFeedbackButtons({ questionId }: { questionId: string }) {
         <ThumbsDown className="size-4" />
       </button>
     </div>
-  );
-}
-
-function TierLabel({ crossing }: { crossing: TierCrossing }) {
-  return (
-    <p style={{ ...monoStyle, fontSize: '0.52rem', color: 'var(--success)' }}>
-      ↑ Now {formatTier(crossing.toTier)}
-    </p>
   );
 }

@@ -223,6 +223,21 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         </p>
       </section>
 
+      <section className="card mt-4 px-5 py-4">
+        <h2 style={titleStyle}>Your Growth Recap</h2>
+        <CategoryGainsDisplay
+          gameItems={growthCircleItems}
+          emptyMessage="No mastery movement was recorded for this game."
+        />
+      </section>
+
+      {firstTierCrossing ? (
+        <MasteryMoment
+          subcategory={firstTierCrossing.canonical_subcategory}
+          newTier={firstTierCrossing.tier_after}
+        />
+      ) : null}
+
       {viewerHasPlayed ? (
         <section className="mt-6">
           <h2 style={titleStyle}>Round Recap</h2>
@@ -302,21 +317,6 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
             })}
           </div>
         </section>
-      ) : null}
-
-      <section className="card mt-4 px-5 py-4">
-        <h2 style={titleStyle}>Your Growth Recap</h2>
-        <CategoryGainsDisplay
-          gameItems={growthCircleItems}
-          emptyMessage="No mastery movement was recorded for this game."
-        />
-      </section>
-
-      {firstTierCrossing ? (
-        <MasteryMoment
-          subcategory={firstTierCrossing.canonical_subcategory}
-          newTier={firstTierCrossing.tier_after}
-        />
       ) : null}
 
       <section className="card mt-4 px-5 py-4">
