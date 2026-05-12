@@ -197,9 +197,12 @@ export function PortraitDomainCircle({
 export function PortraitCircles({ entries }: PortraitCirclesProps) {
   const [sortMode, setSortMode] = useState<SortMode>('domain');
 
-  const validEntries = entries.filter((e) => e.broadCategory && e.broadCategory !== 'Other');
+  const validEntries = useMemo(
+    () => entries.filter((e) => e.broadCategory && e.broadCategory !== 'Other'),
+    [entries],
+  );
   const isSparse = validEntries.length < SPARSE_THRESHOLD;
-  const sections = buildSections(validEntries, sortMode);
+  const sections = useMemo(() => buildSections(validEntries, sortMode), [validEntries, sortMode]);
 
   const maxPointsByTier = useMemo(() => {
     const result: Record<string, number> = { establishing: 1, familiar: 1, solid: 1, mastery: 1 };
@@ -221,7 +224,7 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
             style={sortMode === mode ? activeToggleStyle : inactiveToggleStyle}
             aria-pressed={sortMode === mode}
           >
-            {mode === 'domain' ? 'By Domain' : 'By Mastery'}
+            {mode === 'domain' ? 'Domain' : 'Mastery'}
           </button>
         ))}
       </div>
