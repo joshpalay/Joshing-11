@@ -2,6 +2,7 @@
 
 import { useState, useMemo, type CSSProperties } from 'react';
 import { getDomainCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 
 type PortraitTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 type SortMode = 'domain' | 'mastery';
@@ -79,9 +80,11 @@ function buildSections(entries: PortraitEntry[], sortMode: SortMode): Section[] 
   if (sortMode === 'domain') {
     const domainMap = new Map<string, PortraitEntry[]>();
     for (const e of entries) {
-      const list = domainMap.get(e.broadCategory) ?? [];
-      list.push(e);
-      domainMap.set(e.broadCategory, list);
+      const broadCategory = normalizeBroadCategory(e.broadCategory) ?? 'Other';
+      const normalizedEntry = { ...e, broadCategory };
+      const list = domainMap.get(broadCategory) ?? [];
+      list.push(normalizedEntry);
+      domainMap.set(broadCategory, list);
     }
     return Array.from(domainMap.entries())
       .map(([domain, cats]) => ({
@@ -121,7 +124,8 @@ export function PortraitDomainCircle({
   circleScale?: number;
   selected?: boolean;
 }) {
-  const dc = getPortraitDomainColor(entry.broadCategory);
+  const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'Other';
+  const dc = getPortraitDomainColor(broadCategory);
   const size = Math.round(getDomainCircleSize(entry.tier as CircleSizingTier, entry.totalMasteryPoints, maxPointsForTier) * circleScale);
   const opacity = forceFullOpacity ? 1 : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier);
   const labelOpacity = 0.5 + (entry.totalMasteryPoints / Math.max(maxPointsForTier, 1)) * 0.5;
@@ -198,7 +202,9 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
   const [sortMode, setSortMode] = useState<SortMode>('domain');
 
   const validEntries = useMemo(
-    () => entries.filter((e) => e.broadCategory && e.broadCategory !== 'Other'),
+    () => entries
+      .map((entry) => ({ ...entry, broadCategory: normalizeBroadCategory(entry.broadCategory) ?? 'Other' }))
+      .filter((e) => e.broadCategory && e.broadCategory !== 'Other'),
     [entries],
   );
   const isSparse = validEntries.length < SPARSE_THRESHOLD;

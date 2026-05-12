@@ -7,6 +7,7 @@ import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/Port
 import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
 import type { KnowledgeOverview } from '@/server/profile/knowledge-types';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 
 type KnowledgeOverviewClientProps = {
   overview: KnowledgeOverview;
@@ -90,7 +91,7 @@ export function KnowledgeOverviewClient({
         (portraitData as { categories: Array<{ canonical_subcategory: string; broad_category: string; declared_score: number; proven_score: number; authored_answered_count: number }> }).categories
       ).map((cat) => ({
         canonicalSubcategory: cat.canonical_subcategory,
-        broadCategory: cat.broad_category,
+        broadCategory: normalizeBroadCategory(cat.broad_category) ?? 'Other',
         totalMasteryPoints: (cat.declared_score ?? 0) + (cat.proven_score ?? 0),
         tier: (masteryMap.get(cat.canonical_subcategory) ?? 'establishing') as PortraitEntry['tier'],
         authoredAnsweredCount: cat.authored_answered_count ?? 0,

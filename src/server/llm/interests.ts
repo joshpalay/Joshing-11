@@ -211,7 +211,7 @@ Rules:
 - Bad domains: "Music", "Books", "Movies", "History", "General Trivia".
 - Distribute across the warm-up answers. Include at least one candidate per non-empty warm-up field if possible.
 - Each rationale must briefly tie the candidate to a specific warm-up answer or demographic context.
-- broadCategory is stable and broad, such as Classical Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Other.
+- broadCategory is a stable top-level bucket, such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Other. It must not be an author/work/movement-specific territory; for example, James Joyce, Irish Modernism, novels, poetry, and fiction all use Literature.
 - Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}`;
 
   const userMessage = `Warm-up answers:
