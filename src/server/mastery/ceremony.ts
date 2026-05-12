@@ -3,11 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
 
 import {
+  dailyPreferences,
   db,
   declaredInterests,
+  feedDismissedDomains,
   generatedQuestions,
   masteryEvents,
   playerMastery,
+  userDomainDifficulties,
+  userDomainExclusions,
   profileDomainVisibility,
   questions,
   skippedDailyQuestions,
@@ -248,6 +252,182 @@ export async function consolidateProfileDomainVisibility(
     });
 }
 
+function mergeDomainList(domains: string[], sourceDomains: string[], target: string): string[] {
+  const sourceKeys = new Set(sourceDomains.map(domainKey));
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const rawDomain of domains) {
+    if (typeof rawDomain !== 'string') continue;
+    const normalized = normalizeDomain(rawDomain);
+    if (!normalized) continue;
+    const nextDomain = sourceKeys.has(domainKey(normalized)) ? target : normalized;
+    const nextKey = domainKey(nextDomain);
+    if (seen.has(nextKey)) continue;
+    seen.add(nextKey);
+    merged.push(nextDomain);
+  }
+
+  return merged;
+}
+
+async function consolidateDailyPreferenceDomains(
+  tx: DbClient,
+  values: { userId: string; sourceDomains: string[]; target: string },
+): Promise<void> {
+  const [preference] = await tx
+    .select({ id: dailyPreferences.id, selectedDomains: dailyPreferences.selectedDomains })
+    .from(dailyPreferences)
+    .where(eq(dailyPreferences.userId, values.userId));
+
+  if (!preference) return;
+
+  const selectedDomains = mergeDomainList(preference.selectedDomains ?? [], values.sourceDomains, values.target);
+  const before = (preference.selectedDomains ?? []).filter((domain): domain is string => typeof domain === 'string');
+  const changed = selectedDomains.length !== before.length
+    || selectedDomains.some((domain, index) => domain !== before[index]);
+
+  if (!changed) return;
+
+  await tx
+    .update(dailyPreferences)
+    .set({ selectedDomains, updatedAt: new Date() })
+    .where(eq(dailyPreferences.id, preference.id));
+}
+
+type DomainDifficultyRow = Pick<
+  typeof userDomainDifficulties.$inferSelect,
+  'canonicalSubcategory' | 'servedDifficulty' | 'consecutiveCorrect' | 'consecutiveIncorrect' | 'lastUpdated'
+>;
+
+function mostRecentDomainDifficulty(rows: DomainDifficultyRow[]): DomainDifficultyRow {
+  return [...rows].sort((a, b) => {
+    const bTime = b.lastUpdated?.getTime?.() ?? 0;
+    const aTime = a.lastUpdated?.getTime?.() ?? 0;
+    return bTime - aTime;
+  })[0];
+}
+
+async function consolidateUserDomainDifficulties(
+  tx: DbClient,
+  values: { userId: string; sourceDomains: string[]; sourceDomainsToDelete: string[]; target: string },
+): Promise<void> {
+  const domainsToConsolidate = [...new Set([...values.sourceDomains, values.target].map(normalizeDomain).filter(Boolean))];
+  const rows = await tx
+    .select({
+      canonicalSubcategory: userDomainDifficulties.canonicalSubcategory,
+      servedDifficulty: userDomainDifficulties.servedDifficulty,
+      consecutiveCorrect: userDomainDifficulties.consecutiveCorrect,
+      consecutiveIncorrect: userDomainDifficulties.consecutiveIncorrect,
+      lastUpdated: userDomainDifficulties.lastUpdated,
+    })
+    .from(userDomainDifficulties)
+    .where(and(
+      eq(userDomainDifficulties.userId, values.userId),
+      inArray(userDomainDifficulties.canonicalSubcategory, domainsToConsolidate),
+    ));
+
+  if (rows.length > 0) {
+    // Treat the most recently updated row as the user's current adaptive preference.
+    // Streak counters are kept from that same row so we do not fabricate a cross-domain
+    // consecutive streak while still carrying forward the latest calibration.
+    const selected = mostRecentDomainDifficulty(rows);
+    await tx
+      .insert(userDomainDifficulties)
+      .values({
+        userId: values.userId,
+        canonicalSubcategory: values.target,
+        servedDifficulty: selected.servedDifficulty,
+        consecutiveCorrect: selected.consecutiveCorrect,
+        consecutiveIncorrect: selected.consecutiveIncorrect,
+        lastUpdated: selected.lastUpdated ?? new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [userDomainDifficulties.userId, userDomainDifficulties.canonicalSubcategory],
+        set: {
+          servedDifficulty: selected.servedDifficulty,
+          consecutiveCorrect: selected.consecutiveCorrect,
+          consecutiveIncorrect: selected.consecutiveIncorrect,
+          lastUpdated: selected.lastUpdated ?? new Date(),
+        },
+      });
+  }
+
+  if (values.sourceDomainsToDelete.length > 0) {
+    await tx
+      .delete(userDomainDifficulties)
+      .where(and(
+        eq(userDomainDifficulties.userId, values.userId),
+        inArray(userDomainDifficulties.canonicalSubcategory, values.sourceDomainsToDelete),
+      ));
+  }
+}
+
+async function consolidateUserDomainExclusions(
+  tx: DbClient,
+  values: { userId: string; sourceDomains: string[]; sourceDomainsToDelete: string[]; target: string },
+): Promise<void> {
+  const rows = await tx
+    .select({ excludedAt: userDomainExclusions.excludedAt })
+    .from(userDomainExclusions)
+    .where(and(
+      eq(userDomainExclusions.userId, values.userId),
+      inArray(userDomainExclusions.canonicalSubcategory, values.sourceDomains),
+    ));
+
+  if (rows.length > 0) {
+    const earliestExcludedAt = rows.reduce<Date | null>((earliest, row) => {
+      if (!row.excludedAt) return earliest;
+      return !earliest || row.excludedAt < earliest ? row.excludedAt : earliest;
+    }, null) ?? new Date();
+
+    await tx
+      .insert(userDomainExclusions)
+      .values({
+        userId: values.userId,
+        canonicalSubcategory: values.target,
+        excludedAt: earliestExcludedAt,
+      })
+      .onConflictDoNothing({
+        target: [userDomainExclusions.userId, userDomainExclusions.canonicalSubcategory],
+      });
+  }
+
+  if (values.sourceDomainsToDelete.length > 0) {
+    await tx
+      .delete(userDomainExclusions)
+      .where(and(
+        eq(userDomainExclusions.userId, values.userId),
+        inArray(userDomainExclusions.canonicalSubcategory, values.sourceDomainsToDelete),
+      ));
+  }
+}
+
+async function consolidateFeedDismissedDomains(
+  tx: DbClient,
+  values: { userId: string; sourceDomainsToDelete: string[]; target: string },
+): Promise<void> {
+  if (values.sourceDomainsToDelete.length === 0) return;
+
+  await tx.execute(sql`
+    insert into "FeedDismissedDomain" ("id", "userId", "canonicalSubcategory", "dismissedAt", "reinstatedAt")
+    select ${randomUUID()}, ${values.userId}, ${values.target}, min("dismissedAt"), null
+    from "FeedDismissedDomain"
+    where "userId" = ${values.userId}
+      and "canonicalSubcategory" in (${sql.join(values.sourceDomainsToDelete.map((domain) => sql`${domain}`), sql`, `)})
+      and "reinstatedAt" is null
+    having count(*) > 0
+    on conflict do nothing
+  `);
+
+  await tx
+    .delete(feedDismissedDomains)
+    .where(and(
+      eq(feedDismissedDomains.userId, values.userId),
+      inArray(feedDismissedDomains.canonicalSubcategory, values.sourceDomainsToDelete),
+    ));
+}
+
 function parseSuggestedMerges(raw: unknown): SuggestedMerge[] {
   const record = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
   if (!record || !Array.isArray(record.merges)) return [];
@@ -459,6 +639,32 @@ export async function applyMergesForUser(
       await consolidateProfileDomainVisibility(tx, {
         userId,
         sourceDomains,
+        target,
+      });
+
+      await consolidateDailyPreferenceDomains(tx, {
+        userId,
+        sourceDomains,
+        target,
+      });
+
+      await consolidateUserDomainDifficulties(tx, {
+        userId,
+        sourceDomains,
+        sourceDomainsToDelete,
+        target,
+      });
+
+      await consolidateUserDomainExclusions(tx, {
+        userId,
+        sourceDomains,
+        sourceDomainsToDelete,
+        target,
+      });
+
+      await consolidateFeedDismissedDomains(tx, {
+        userId,
+        sourceDomainsToDelete,
         target,
       });
 
