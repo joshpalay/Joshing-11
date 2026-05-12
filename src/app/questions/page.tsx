@@ -35,11 +35,11 @@ function isNoQuestionsResponse(response: Response, body: QuestionsApiResponse | 
 }
 
 const DIFFICULTY_COPY: Record<number, string> = {
-  1: 'Accessible',
-  2: 'Accessible → Moderate',
-  3: 'Moderate',
-  4: 'Moderate → Specialist',
-  5: 'Specialist',
+  1: 'Establishing',
+  2: 'Establishing → Solid',
+  3: 'Solid',
+  4: 'Skilled',
+  5: 'Master',
 };
 
 const DOMAIN_COLORS: Record<string, string> = {
@@ -367,10 +367,10 @@ function QuestionsPageContent() {
                   >
                     {question.domainDisplayName}
                   </span>
-                  <span className="font-mono text-xs text-muted-foreground" aria-label={`Difficulty ${question.difficulty} of 5 (${DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'})`}>
+                  <span className="font-mono text-xs text-muted-foreground" aria-label={`LLM-rated difficulty: ${DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'}`}>
                     {difficultyDots(question.difficulty)}
                     {' · '}
-                    {question.difficulty}/5 {DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'}
+                    {DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'}
                   </span>
                   <span className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                     {isOwnAuthored ? 'Written by you' : `From ${question.authorName ?? 'a friend'}`}
