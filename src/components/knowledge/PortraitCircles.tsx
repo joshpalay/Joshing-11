@@ -1,112 +1,171 @@
-'use client';
+'use client'
 
-import { useState, useMemo, type CSSProperties } from 'react';
-import { getDomainCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
-import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { useState, useMemo, type CSSProperties } from 'react'
+import {
+  getDomainCircleSize,
+  type CircleSizingTier,
+} from '@/lib/knowledge/circle-sizing'
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
 
-type PortraitTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
-type SortMode = 'domain' | 'mastery';
+type PortraitTier = 'establishing' | 'familiar' | 'solid' | 'mastery'
+type SortMode = 'domain' | 'mastery'
 
 export type PortraitEntry = {
-  canonicalSubcategory: string;
-  broadCategory: string;
-  totalMasteryPoints: number;
-  tier: PortraitTier;
-  authoredAnsweredCount: number;
-};
+  canonicalSubcategory: string
+  broadCategory: string
+  totalMasteryPoints: number
+  tier: PortraitTier
+  authoredAnsweredCount: number
+}
 
 type PortraitCirclesProps = {
-  entries: PortraitEntry[];
-};
+  entries: PortraitEntry[]
+}
 
-const TIER_ORDER: PortraitTier[] = ['mastery', 'solid', 'familiar', 'establishing'];
+const TIER_ORDER: PortraitTier[] = [
+  'mastery',
+  'solid',
+  'familiar',
+  'establishing',
+]
 
 const TIER_DISPLAY: Record<PortraitTier, string> = {
   establishing: 'Establishing',
   familiar: 'Familiar',
   solid: 'Solid',
   mastery: 'Mastery',
-};
+}
 
 type DomainColor = {
-  primary: string;
-  light: string;
-  text: string;
-};
+  primary: string
+  light: string
+  text: string
+}
 
 const DOMAIN_COLORS: Record<string, DomainColor> = {
-  Literature:              { primary: '#c0392b', light: 'rgba(192,57,43,0.12)',   text: '#8b1a0e' },
-  Music:                   { primary: '#1a6b8a', light: 'rgba(26,107,138,0.12)',  text: '#0e4060' },
-  'Film & Television':     { primary: '#6b3fa0', light: 'rgba(107,63,160,0.12)', text: '#3d1f6b' },
-  'Architecture & Design': { primary: '#b07d2e', light: 'rgba(176,125,46,0.12)', text: '#7a5010' },
-  'Food & Cuisine':        { primary: '#2e8b57', light: 'rgba(46,139,87,0.12)',  text: '#0e5c30' },
-  Technology:              { primary: '#3a6b8a', light: 'rgba(58,107,138,0.12)', text: '#1a3f5c' },
-  Sports:                  { primary: '#c06b1a', light: 'rgba(192,107,26,0.12)', text: '#8b3e0e' },
-  History:                 { primary: '#5a6b7a', light: 'rgba(90,107,122,0.12)', text: '#2a3f50' },
-  Science:                 { primary: '#5a7a2e', light: 'rgba(90,122,46,0.12)',  text: '#2a4a0e' },
-  Philosophy:              { primary: '#7a5a8a', light: 'rgba(122,90,138,0.12)', text: '#4a2a5c' },
-  'Pop Culture':           { primary: '#8a2a4a', light: 'rgba(138,42,74,0.12)',  text: '#5c0e2a' },
-  Language:                { primary: '#4a7a5a', light: 'rgba(74,122,90,0.12)',  text: '#1e4e30' },
-};
+  Literature: {
+    primary: '#c0392b',
+    light: 'rgba(192,57,43,0.12)',
+    text: '#8b1a0e',
+  },
+  Music: {
+    primary: '#1a6b8a',
+    light: 'rgba(26,107,138,0.12)',
+    text: '#0e4060',
+  },
+  'Film & Television': {
+    primary: '#6b3fa0',
+    light: 'rgba(107,63,160,0.12)',
+    text: '#3d1f6b',
+  },
+  'Architecture & Design': {
+    primary: '#b07d2e',
+    light: 'rgba(176,125,46,0.12)',
+    text: '#7a5010',
+  },
+  'Food & Cuisine': {
+    primary: '#2e8b57',
+    light: 'rgba(46,139,87,0.12)',
+    text: '#0e5c30',
+  },
+  Technology: {
+    primary: '#3a6b8a',
+    light: 'rgba(58,107,138,0.12)',
+    text: '#1a3f5c',
+  },
+  Sports: {
+    primary: '#c06b1a',
+    light: 'rgba(192,107,26,0.12)',
+    text: '#8b3e0e',
+  },
+  History: {
+    primary: '#5a6b7a',
+    light: 'rgba(90,107,122,0.12)',
+    text: '#2a3f50',
+  },
+  Science: {
+    primary: '#5a7a2e',
+    light: 'rgba(90,122,46,0.12)',
+    text: '#2a4a0e',
+  },
+  Philosophy: {
+    primary: '#7a5a8a',
+    light: 'rgba(122,90,138,0.12)',
+    text: '#4a2a5c',
+  },
+  'Pop Culture': {
+    primary: '#8a2a4a',
+    light: 'rgba(138,42,74,0.12)',
+    text: '#5c0e2a',
+  },
+  Language: {
+    primary: '#4a7a5a',
+    light: 'rgba(74,122,90,0.12)',
+    text: '#1e4e30',
+  },
+}
 
 function hashColor(str: string): DomainColor {
-  let h = 0;
+  let h = 0
   for (let i = 0; i < str.length; i++) {
-    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0
   }
-  const hue = Math.abs(h) % 360;
+  const hue = Math.abs(h) % 360
   return {
     primary: `hsl(${hue},45%,35%)`,
     light: `hsla(${hue},45%,35%,0.12)`,
     text: `hsl(${hue},45%,25%)`,
-  };
+  }
 }
 
 export function getPortraitDomainColor(domain: string): DomainColor {
-  return DOMAIN_COLORS[domain] ?? hashColor(domain);
+  return DOMAIN_COLORS[domain] ?? hashColor(domain)
 }
 
-const SPARSE_THRESHOLD = 5;
-const MIN_OPACITY = 0.22;
+const SPARSE_THRESHOLD = 5
+const MIN_OPACITY = 0.22
 
 export function getPortraitCircleOpacity(pts: number, maxPts: number): number {
-  const n = pts / Math.max(maxPts, 1);
-  return MIN_OPACITY + n * (1 - MIN_OPACITY);
+  const n = pts / Math.max(maxPts, 1)
+  return MIN_OPACITY + n * (1 - MIN_OPACITY)
 }
 
-type Section = { label: string; color: string; entries: PortraitEntry[] };
+type Section = { label: string; color: string; entries: PortraitEntry[] }
 
-function buildSections(entries: PortraitEntry[], sortMode: SortMode): Section[] {
+function buildSections(
+  entries: PortraitEntry[],
+  sortMode: SortMode
+): Section[] {
   if (sortMode === 'domain') {
-    const domainMap = new Map<string, PortraitEntry[]>();
+    const domainMap = new Map<string, PortraitEntry[]>()
     for (const e of entries) {
-      const broadCategory = normalizeBroadCategory(e.broadCategory) ?? 'Other';
-      const normalizedEntry = { ...e, broadCategory };
-      const list = domainMap.get(broadCategory) ?? [];
-      list.push(normalizedEntry);
-      domainMap.set(broadCategory, list);
+      const broadCategory = normalizeBroadCategory(e.broadCategory) ?? 'Other'
+      const normalizedEntry = { ...e, broadCategory }
+      const list = domainMap.get(broadCategory) ?? []
+      list.push(normalizedEntry)
+      domainMap.set(broadCategory, list)
     }
     return Array.from(domainMap.entries())
       .map(([domain, cats]) => ({
         label: domain,
         color: getPortraitDomainColor(domain).primary,
-        entries: [...cats].sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints),
+        entries: [...cats].sort(
+          (a, b) => b.totalMasteryPoints - a.totalMasteryPoints
+        ),
       }))
       .sort((a, b) => {
-        const sumA = a.entries.reduce((s, e) => s + e.totalMasteryPoints, 0);
-        const sumB = b.entries.reduce((s, e) => s + e.totalMasteryPoints, 0);
-        return sumB - sumA;
-      });
+        const sumA = a.entries.reduce((s, e) => s + e.totalMasteryPoints, 0)
+        const sumB = b.entries.reduce((s, e) => s + e.totalMasteryPoints, 0)
+        return sumB - sumA
+      })
   }
-  return TIER_ORDER
-    .map((tier) => ({
-      label: TIER_DISPLAY[tier],
-      color: '#6b5535',
-      entries: entries
-        .filter((e) => e.tier === tier)
-        .sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints),
-    }))
-    .filter((s) => s.entries.length > 0);
+  return TIER_ORDER.map((tier) => ({
+    label: TIER_DISPLAY[tier],
+    color: '#6b5535',
+    entries: entries
+      .filter((e) => e.tier === tier)
+      .sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints),
+  })).filter((s) => s.entries.length > 0)
 }
 
 export function PortraitDomainCircle({
@@ -116,69 +175,105 @@ export function PortraitDomainCircle({
   showCount = true,
   circleScale = 1,
   selected = false,
+  circleSlotSize,
 }: {
-  entry: PortraitEntry;
-  maxPointsForTier: number;
-  forceFullOpacity?: boolean;
-  showCount?: boolean;
-  circleScale?: number;
-  selected?: boolean;
+  entry: PortraitEntry
+  maxPointsForTier: number
+  forceFullOpacity?: boolean
+  showCount?: boolean
+  circleScale?: number
+  selected?: boolean
+  circleSlotSize?: number
 }) {
-  const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'Other';
-  const dc = getPortraitDomainColor(broadCategory);
-  const size = Math.round(getDomainCircleSize(entry.tier as CircleSizingTier, entry.totalMasteryPoints, maxPointsForTier) * circleScale);
-  const opacity = forceFullOpacity ? 1 : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier);
-  const labelOpacity = 0.5 + (entry.totalMasteryPoints / Math.max(maxPointsForTier, 1)) * 0.5;
+  const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'Other'
+  const dc = getPortraitDomainColor(broadCategory)
+  const size = Math.round(
+    getDomainCircleSize(
+      entry.tier as CircleSizingTier,
+      entry.totalMasteryPoints,
+      maxPointsForTier
+    ) * circleScale
+  )
+  const opacity = forceFullOpacity
+    ? 1
+    : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier)
+  const labelOpacity =
+    0.5 + (entry.totalMasteryPoints / Math.max(maxPointsForTier, 1)) * 0.5
   const showMasteryCount =
     showCount &&
-    entry.tier !== 'establishing' && entry.authoredAnsweredCount > 0;
+    entry.tier !== 'establishing' &&
+    entry.authoredAnsweredCount > 0
+  const resolvedCircleSlotSize = Math.max(circleSlotSize ?? size, size)
 
   return (
-    <div style={circleItemStyle}>
-      <div style={{ position: 'relative', width: size, height: size }}>
-        <div
-          style={{
-            width: size,
-            height: size,
-            borderRadius: '50%',
-            background: `radial-gradient(circle at 38% 38%, ${dc.light.replace('0.12', '0.22')}, ${dc.light})`,
-            opacity,
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {showMasteryCount && (
-            <span
-              style={{
-                fontSize: size > 52 ? 13 : 10,
-                color: dc.primary,
-                fontFamily: 'Georgia, "Times New Roman", serif',
-                fontWeight: 'bold',
-                lineHeight: 1,
-              }}
-            >
-              {entry.authoredAnsweredCount}
-            </span>
-          )}
-        </div>
-        {selected && (
+    <div
+      style={{
+        ...circleItemStyle,
+        width: Math.max(90, resolvedCircleSlotSize + 8),
+      }}
+    >
+      <div
+        style={{
+          ...portraitCircleSlotStyle,
+          width: resolvedCircleSlotSize,
+          height: resolvedCircleSlotSize,
+        }}
+      >
+        <div style={{ position: 'relative', width: size, height: size }}>
           <div
-            aria-hidden
             style={{
-              position: 'absolute',
-              inset: -4,
+              width: size,
+              height: size,
               borderRadius: '50%',
-              border: `2px solid ${dc.primary}`,
-              display: 'grid',
-              placeItems: 'center',
-              pointerEvents: 'none',
+              background: `radial-gradient(circle at 38% 38%, ${dc.light.replace('0.12', '0.22')}, ${dc.light})`,
+              opacity,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            <span style={{ position: 'absolute', right: -2, bottom: -2, fontSize: 12, color: dc.primary }}>✓</span>
+            {showMasteryCount && (
+              <span
+                style={{
+                  fontSize: size > 52 ? 13 : 10,
+                  color: dc.primary,
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontWeight: 'bold',
+                  lineHeight: 1,
+                }}
+              >
+                {entry.authoredAnsweredCount}
+              </span>
+            )}
           </div>
-        )}
+          {selected && (
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                inset: -4,
+                borderRadius: '50%',
+                border: `2px solid ${dc.primary}`,
+                display: 'grid',
+                placeItems: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  right: -2,
+                  bottom: -2,
+                  fontSize: 12,
+                  color: dc.primary,
+                }}
+              >
+                ✓
+              </span>
+            </div>
+          )}
+        </div>
       </div>
       <span
         style={{
@@ -195,29 +290,55 @@ export function PortraitDomainCircle({
         {entry.canonicalSubcategory}
       </span>
     </div>
-  );
+  )
+}
+
+function getPortraitEntryCircleSize(
+  entry: PortraitEntry,
+  maxPointsForTier: number
+): number {
+  return Math.round(
+    getDomainCircleSize(
+      entry.tier as CircleSizingTier,
+      entry.totalMasteryPoints,
+      maxPointsForTier
+    )
+  )
 }
 
 export function PortraitCircles({ entries }: PortraitCirclesProps) {
-  const [sortMode, setSortMode] = useState<SortMode>('domain');
+  const [sortMode, setSortMode] = useState<SortMode>('domain')
 
   const validEntries = useMemo(
-    () => entries
-      .map((entry) => ({ ...entry, broadCategory: normalizeBroadCategory(entry.broadCategory) ?? 'Other' }))
-      .filter((e) => e.broadCategory && e.broadCategory !== 'Other'),
-    [entries],
-  );
-  const isSparse = validEntries.length < SPARSE_THRESHOLD;
-  const sections = useMemo(() => buildSections(validEntries, sortMode), [validEntries, sortMode]);
+    () =>
+      entries
+        .map((entry) => ({
+          ...entry,
+          broadCategory: normalizeBroadCategory(entry.broadCategory) ?? 'Other',
+        }))
+        .filter((e) => e.broadCategory && e.broadCategory !== 'Other'),
+    [entries]
+  )
+  const isSparse = validEntries.length < SPARSE_THRESHOLD
+  const sections = useMemo(
+    () => buildSections(validEntries, sortMode),
+    [validEntries, sortMode]
+  )
 
   const maxPointsByTier = useMemo(() => {
-    const result: Record<string, number> = { establishing: 1, familiar: 1, solid: 1, mastery: 1 };
-    for (const e of validEntries) {
-      if (e.totalMasteryPoints > (result[e.tier] ?? 1)) result[e.tier] = e.totalMasteryPoints;
+    const result: Record<string, number> = {
+      establishing: 1,
+      familiar: 1,
+      solid: 1,
+      mastery: 1,
     }
-    return result;
-  }, [validEntries]);
-  const allDomains = [...new Set(validEntries.map((e) => e.broadCategory))];
+    for (const e of validEntries) {
+      if (e.totalMasteryPoints > (result[e.tier] ?? 1))
+        result[e.tier] = e.totalMasteryPoints
+    }
+    return result
+  }, [validEntries])
+  const allDomains = [...new Set(validEntries.map((e) => e.broadCategory))]
 
   return (
     <div>
@@ -238,7 +359,7 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
       {sortMode === 'domain' ? (
         <div style={legendStyle}>
           {allDomains.map((domain) => {
-            const dc = getPortraitDomainColor(domain);
+            const dc = getPortraitDomainColor(domain)
             return (
               <div key={domain} style={legendItemStyle}>
                 <div
@@ -251,9 +372,11 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
                     flexShrink: 0,
                   }}
                 />
-                <span style={{ fontSize: 9.5, color: dc.text, opacity: 0.85 }}>{domain}</span>
+                <span style={{ fontSize: 9.5, color: dc.text, opacity: 0.85 }}>
+                  {domain}
+                </span>
               </div>
-            );
+            )
           })}
         </div>
       ) : (
@@ -270,7 +393,9 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontSize: 9.5, color: '#8b7355' }}>{TIER_DISPLAY[tier]}</span>
+              <span style={{ fontSize: 9.5, color: '#8b7355' }}>
+                {TIER_DISPLAY[tier]}
+              </span>
             </div>
           ))}
           <span
@@ -288,33 +413,51 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
       )}
 
       <p style={explainerStyle}>
-        Numbers inside circles = questions you&apos;ve written that others have answered
+        Numbers inside circles = questions you&apos;ve written that others have
+        answered
       </p>
 
       <div>
-        {sections.map(({ label, color, entries: sectionEntries }) => (
-          <div key={label} style={{ marginTop: 24 }}>
-            <div
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.18em',
-                textTransform: 'uppercase',
-                color,
-                marginBottom: 14,
-                paddingBottom: 6,
-                borderBottom: `1px solid ${color}33`,
-                fontFamily: 'Georgia, "Times New Roman", serif',
-              }}
-            >
-              {label}
+        {sections.map(({ label, color, entries: sectionEntries }) => {
+          const circleSlotSize = Math.max(
+            ...sectionEntries.map((entry) =>
+              getPortraitEntryCircleSize(
+                entry,
+                maxPointsByTier[entry.tier] ?? 1
+              )
+            ),
+            0
+          )
+
+          return (
+            <div key={label} style={{ marginTop: 24 }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.18em',
+                  textTransform: 'uppercase',
+                  color,
+                  marginBottom: 14,
+                  paddingBottom: 6,
+                  borderBottom: `1px solid ${color}33`,
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                }}
+              >
+                {label}
+              </div>
+              <div style={circlesRowStyle}>
+                {sectionEntries.map((entry) => (
+                  <PortraitDomainCircle
+                    key={entry.canonicalSubcategory}
+                    entry={entry}
+                    maxPointsForTier={maxPointsByTier[entry.tier] ?? 1}
+                    circleSlotSize={circleSlotSize}
+                  />
+                ))}
+              </div>
             </div>
-            <div style={circlesRowStyle}>
-              {sectionEntries.map((entry) => (
-                <PortraitDomainCircle key={entry.canonicalSubcategory} entry={entry} maxPointsForTier={maxPointsByTier[entry.tier] ?? 1} />
-              ))}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {isSparse && validEntries.length > 0 && (
@@ -323,7 +466,7 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
         </p>
       )}
     </div>
-  );
+  )
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -334,21 +477,27 @@ const circleItemStyle: CSSProperties = {
   alignItems: 'center',
   gap: 7,
   padding: '4px 2px',
-};
+}
+
+const portraitCircleSlotStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+}
 
 const circlesRowStyle: CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
   gap: 14,
-  alignItems: 'flex-end',
-};
+  alignItems: 'flex-start',
+}
 
 const toggleWrapStyle: CSSProperties = {
   display: 'flex',
   justifyContent: 'center',
   gap: 8,
   marginBottom: '0.65rem',
-};
+}
 
 const activeToggleStyle: CSSProperties = {
   minHeight: 34,
@@ -360,7 +509,7 @@ const activeToggleStyle: CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
   fontSize: 14,
-};
+}
 
 const inactiveToggleStyle: CSSProperties = {
   minHeight: 34,
@@ -372,7 +521,7 @@ const inactiveToggleStyle: CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
   fontSize: 14,
-};
+}
 
 const legendStyle: CSSProperties = {
   display: 'flex',
@@ -380,13 +529,13 @@ const legendStyle: CSSProperties = {
   gap: '6px 10px',
   alignItems: 'center',
   marginBottom: '0.5rem',
-};
+}
 
 const legendItemStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 5,
-};
+}
 
 const sparsePromptStyle: CSSProperties = {
   marginTop: 24,
@@ -395,7 +544,7 @@ const sparsePromptStyle: CSSProperties = {
   fontStyle: 'italic',
   fontFamily: 'Georgia, "Times New Roman", serif',
   textAlign: 'center',
-};
+}
 
 const explainerStyle: CSSProperties = {
   margin: '6px 0 0',
@@ -403,4 +552,4 @@ const explainerStyle: CSSProperties = {
   color: '#b0a090',
   fontStyle: 'italic',
   fontFamily: 'Georgia, "Times New Roman", serif',
-};
+}
