@@ -37,6 +37,20 @@ export async function register() {
       // PLAYER_MASTERY may not exist yet — migrate() handles initial creation.
     }
 
+    // UserQuestionBank provenance columns were added after the original table. If
+    // a preview/production database has the migration marked as applied without
+    // these additive columns present, Drizzle selects fail with Postgres 42703.
+    // Add them idempotently before migrate() so question-bank reads stay safe.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "UserQuestionBank"
+          ADD COLUMN IF NOT EXISTS "added_from_context_type" text,
+          ADD COLUMN IF NOT EXISTS "added_from_context_id" text
+      `);
+    } catch {
+      // UserQuestionBank may not exist yet — migrate() handles initial creation.
+    }
+
     // Several FeedItem columns were introduced after the original table. In preview
     // databases with partially-recorded migrations, Drizzle can believe these
     // migrations already ran while the nullable columns are still absent, causing
