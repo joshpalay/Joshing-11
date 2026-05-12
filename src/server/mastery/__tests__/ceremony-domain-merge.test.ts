@@ -8,11 +8,17 @@ const state = vi.hoisted(() => ({
   questions: [] as Row[],
   generatedQuestions: [] as Row[],
   skippedDailyQuestions: [] as Row[],
+  profileDomainVisibility: [] as Row[],
   sourceDomains: [] as string[],
+  targetDomain: '' as string,
 }));
 
 function isSourceDomain(value: unknown) {
   return typeof value === 'string' && state.sourceDomains.includes(value);
+}
+
+function isMergedDomain(value: unknown) {
+  return isSourceDomain(value) || (typeof value === 'string' && value === state.targetDomain);
 }
 
 vi.mock('@/server/db', async () => {
@@ -44,7 +50,11 @@ vi.mock('@/server/db', async () => {
             }];
           }
           if (kind === 'declaredInterests') return [];
-          if (kind === 'profileDomainVisibility') return [];
+          if (kind === 'profileDomainVisibility') {
+            return state.profileDomainVisibility.filter(
+              (row) => isMergedDomain(row.domain) || isMergedDomain(row.canonicalSubcategory),
+            );
+          }
           return [];
         }),
       })),
@@ -63,6 +73,7 @@ vi.mock('@/server/db', async () => {
           }
         }
         if (kind === 'masteryEvents') state.masteryEvents.push({ ...values });
+        if (kind === 'profileDomainVisibility') state.profileDomainVisibility.push({ ...values });
         return { onConflictDoUpdate: vi.fn(async () => undefined) };
       }),
     })),
@@ -71,6 +82,11 @@ vi.mock('@/server/db', async () => {
         const kind = tableKind(table);
         if (kind === 'playerMastery') {
           state.playerMastery = state.playerMastery.filter((row) => !isSourceDomain(row.canonicalSubcategory));
+        }
+        if (kind === 'profileDomainVisibility') {
+          state.profileDomainVisibility = state.profileDomainVisibility.filter(
+            (row) => !isMergedDomain(row.domain) && !isMergedDomain(row.canonicalSubcategory),
+          );
         }
       }),
     })),
@@ -112,7 +128,9 @@ describe('applyMergesForUser', () => {
     state.questions = [];
     state.generatedQuestions = [];
     state.skippedDailyQuestions = [];
+    state.profileDomainVisibility = [];
     state.sourceDomains = ['Ulysses – Structure & Symbolism'];
+    state.targetDomain = 'Ulysses';
     vi.clearAllMocks();
   });
 
@@ -170,5 +188,53 @@ describe('applyMergesForUser', () => {
     expect(state.questions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses', broadCategory: 'Literature' })]);
     expect(state.generatedQuestions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses', broadCategory: 'Literature' })]);
     expect(state.skippedDailyQuestions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses' })]);
+  });
+
+  it('keeps the tidied target private when any source visibility is private', async () => {
+    const sourceRow = {
+      id: 'mastery-source',
+      userId: 'user-1',
+      canonicalSubcategory: 'Ulysses – Structure & Symbolism',
+      broadCategory: 'Literature',
+      totalPoints: 42,
+      tier: 'solid' as const,
+      tierReachedAt: null,
+      seasonPointsStart: 7,
+      updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+    };
+
+    state.playerMastery = [{ ...sourceRow }];
+    state.profileDomainVisibility = [
+      {
+        userId: 'user-1',
+        canonicalSubcategory: 'Ulysses – Structure & Symbolism',
+        domain: 'Ulysses – Structure & Symbolism',
+        visibility: 'private',
+        isVisible: false,
+      },
+      {
+        userId: 'user-1',
+        canonicalSubcategory: 'Ulysses',
+        domain: 'Ulysses',
+        visibility: 'public',
+        isVisible: true,
+      },
+    ];
+
+    await applyMergesForUser('user-1', [sourceRow], [{
+      sources: ['Ulysses – Structure & Symbolism'],
+      target: 'Ulysses',
+      rationale: 'Facet should roll up to parent work.',
+    }]);
+
+    expect(state.profileDomainVisibility).toEqual([
+      expect.objectContaining({
+        userId: 'user-1',
+        canonicalSubcategory: 'Ulysses',
+        domain: 'Ulysses',
+        visibility: 'private',
+        isVisible: false,
+      }),
+    ]);
   });
 });

@@ -185,10 +185,22 @@ async function upsertMergedPlayerMastery(
 
 type DomainVisibility = 'public' | 'friends' | 'private';
 
+const DOMAIN_VISIBILITY_RANK: Record<DomainVisibility, number> = {
+  public: 0,
+  friends: 1,
+  private: 2,
+};
+
 function mostRestrictiveVisibility(rows: Array<{ visibility: DomainVisibility }>): DomainVisibility {
-  if (rows.some((row) => row.visibility === 'private')) return 'private';
-  if (rows.some((row) => row.visibility === 'friends')) return 'friends';
-  return 'public';
+  return rows.reduce<DomainVisibility>((mostRestrictive, row) => (
+    DOMAIN_VISIBILITY_RANK[row.visibility] > DOMAIN_VISIBILITY_RANK[mostRestrictive]
+      ? row.visibility
+      : mostRestrictive
+  ), 'public');
+}
+
+function isProfileDomainVisible(visibility: DomainVisibility): boolean {
+  return visibility !== 'private';
 }
 
 export async function consolidateProfileDomainVisibility(
@@ -231,7 +243,7 @@ export async function consolidateProfileDomainVisibility(
       canonicalSubcategory: target,
       domain: target,
       visibility,
-      isVisible: visibility !== 'private',
+      isVisible: isProfileDomainVisible(visibility),
       updatedAt: values.updatedAt ?? new Date(),
     });
 }
