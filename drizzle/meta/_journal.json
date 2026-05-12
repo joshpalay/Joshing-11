@@ -169,6 +169,13 @@
       "when": 1778540000000,
       "tag": "0023_profile_domain_visibility_runtime_hotfix",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1778616500000,
+      "tag": "0024_question_surface_priority_runtime_hotfix",
+      "breakpoints": true
     }
   ]
 }
