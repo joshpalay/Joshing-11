@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { broadCategoryDisplayName, isBroadQuestionCategory, normalizeBroadQuestionCategory, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { getSession } from '@/server/auth/session';
+import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { db, questions } from '@/server/db';
 import {
   deleteQuestion,
@@ -79,13 +80,6 @@ function validatePatchPayload(body: Record<string, unknown> | null) {
       values.subcategory = canonicalSubcategory;
     }
   }
-  if (body?.difficulty !== undefined) {
-    values.difficulty = typeof body.difficulty === 'number' ? body.difficulty : Number.NaN;
-    if (!Number.isInteger(values.difficulty) || values.difficulty < 1 || values.difficulty > 5) {
-      errors.push('difficulty');
-    }
-  }
-
   return { values, errors };
 }
 
@@ -127,6 +121,29 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const { values, errors } = validatePatchPayload(body);
   if (errors.length > 0) return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
+
+  const existing = await getQuestion(id, session.userId);
+  if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (existing.usedInGamesCount > 0) {
+    return NextResponse.json({ error: 'Question has been used in a game and cannot be edited.' }, { status: 409 });
+  }
+
+  const shouldReassessDifficulty = values.text !== undefined
+    || values.correctAnswer !== undefined
+    || values.explanation !== undefined
+    || values.category !== undefined
+    || values.canonicalSubcategory !== undefined;
+
+  if (shouldReassessDifficulty) {
+    const difficultyAssessment = await assessQuestionDifficulty({
+      questionText: values.text ?? existing.text,
+      correctAnswer: values.correctAnswer ?? existing.correctAnswer,
+      broadCategory: values.broadCategory ?? existing.broadCategory,
+      canonicalSubcategory: values.canonicalSubcategory ?? existing.canonicalSubcategory ?? existing.domain,
+      explanation: values.explanation ?? existing.explanation,
+    });
+    values.difficulty = difficultyAssessment.difficulty;
+  }
 
   const result = await updateQuestion({ questionId: id, userId: session.userId, ...values });
   if (!result.ok && result.reason === 'in_use') {

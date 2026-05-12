@@ -8,7 +8,6 @@ describe('create question payload categorization', () => {
     text: 'Which 1922 poem opens with April as the cruelest month?',
     correctAnswer: 'The Waste Land',
     verified: true,
-    difficulty: 3,
     critiqueIterations: 0,
   };
 
@@ -49,6 +48,18 @@ describe('create question payload categorization', () => {
     });
 
     expect(result.errors).toContain('canonicalSubcategory');
+  });
+
+
+  it('does not require a user-supplied difficulty', () => {
+    const result = readCreateQuestionPayload({
+      ...basePayload,
+      category: 'literature',
+      canonicalSubcategory: 'The Waste Land',
+    });
+
+    expect(result.errors).toEqual([]);
+    expect('difficulty' in result.value).toBe(false);
   });
 
   it('does not require friends when sharing to feed', () => {

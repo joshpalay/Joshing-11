@@ -18,6 +18,7 @@ import { openKBDomain } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
 import { writeActivity } from '@/server/activity/write-activity';
 import { readCreateQuestionPayload } from '@/server/questions/create-payload';
+import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
 
-  const { sendToFriendIds, shareToFeed, ...questionFields } = value;
+  const { sendToFriendIds, shareToFeed, ...rawQuestionFields } = value;
+  const difficultyAssessment = await assessQuestionDifficulty({
+    questionText: rawQuestionFields.text,
+    correctAnswer: rawQuestionFields.correctAnswer,
+    broadCategory: rawQuestionFields.broadCategory,
+    canonicalSubcategory: rawQuestionFields.canonicalSubcategory,
+    explanation: rawQuestionFields.explanation,
+  });
+  const questionFields = { ...rawQuestionFields, difficulty: difficultyAssessment.difficulty };
 
   if (sendToFriendIds.length > 0) {
     const friends = await getFriends(session.userId);
@@ -54,7 +63,7 @@ export async function POST(request: NextRequest) {
   }
 
   const created = await createQuestion({ authorId: session.userId, ...questionFields });
-  console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: questionFields.verified });
+  console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: questionFields.verified, difficultyTier: difficultyAssessment.tier });
   const kbResult = await openKBDomain({
     userId: session.userId,
     domain: questionFields.canonicalSubcategory,

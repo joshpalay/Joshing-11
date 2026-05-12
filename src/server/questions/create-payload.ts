@@ -13,12 +13,6 @@ function splitAlternates(value: unknown): string[] {
   return [];
 }
 
-function difficultyFromLegacy(value: unknown): number | null {
-  if (value === 'accessible') return 1;
-  if (value === 'moderate') return 3;
-  if (value === 'specialist') return 5;
-  return null;
-}
 
 export function readCreateQuestionPayload(body: Record<string, unknown> | null) {
   const text = typeof body?.text === 'string'
@@ -58,10 +52,6 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
   const canonicalSubcategory = normalizeCanonicalSubcategory(rawCanonicalSubcategory);
   const broadCategory = normalizeBroadQuestionCategory(rawBroadCategory) ?? '';
   const broadCategoryLabel = broadCategory ? broadCategoryDisplayName(broadCategory) : null;
-  const difficulty = typeof body?.difficulty === 'number'
-    ? body.difficulty
-    : difficultyFromLegacy(body?.difficulty_estimate) ?? (isLegacyPayload ? 3 : null);
-  const difficultyValue = difficulty ?? Number.NaN;
   const verified = typeof body?.verified === 'boolean' ? body.verified : null;
   const llmSuggestedAnswer = typeof body?.llmSuggestedAnswer === 'string'
     ? body.llmSuggestedAnswer.trim() || null
@@ -84,7 +74,6 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
   if (canonicalSubcategory && isBroadQuestionCategory(canonicalSubcategory)) errors.push('canonicalSubcategory');
   if (verified === null) errors.push('verified');
   if (!Number.isInteger(critiqueIterations) || critiqueIterations < 0) errors.push('critiqueIterations');
-  if (!Number.isInteger(difficultyValue) || difficultyValue < 1 || difficultyValue > 5) errors.push('difficulty');
   if (shareToFeed && rawSendToFriendIds.length > 0) errors.push('shareToFeed');
 
   return {
@@ -99,7 +88,6 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
       canonicalSubcategory,
       subcategory: canonicalSubcategory,
       domain: canonicalSubcategory,
-      difficulty: difficultyValue,
       verified: verified ?? true,
       llmSuggestedAnswer,
       critiqueIterations: Number.isInteger(critiqueIterations) ? critiqueIterations : 0,

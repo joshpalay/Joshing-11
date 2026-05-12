@@ -15,7 +15,7 @@ export type QuestionFormValues = {
   category: string;
   canonicalSubcategory: string;
   domain?: string;
-  difficulty: number;
+  difficulty?: number;
   verified: boolean;
   llmSuggestedAnswer?: string | null;
   critiqueIterations: number;
@@ -64,7 +64,6 @@ type State = {
   category: string;
   canonicalSubcategory: string;
   domain?: string;
-  difficulty: number;
   critiqueResult: CritiqueResult | null;
   critiqueIterations: number;
   remainingCritiquesToday: number | null;
@@ -82,7 +81,6 @@ type State = {
 type Action =
   | { type: 'RESET'; state: State }
   | { type: 'FIELD'; field: 'questionText' | 'userAnswer' | 'alternateText' | 'explanation' | 'creatorNote' | 'category' | 'canonicalSubcategory'; value: string }
-  | { type: 'DIFFICULTY'; value: number }
   | { type: 'ERROR'; value: string | null }
   | { type: 'START_CRITIQUE'; text: string }
   | { type: 'CRITIQUE_RESULT'; response: CritiqueResponse }
@@ -103,14 +101,6 @@ type Action =
   | { type: 'FRIENDS_LOADED'; friends: FriendOption[] }
   | { type: 'TOGGLE_FRIEND'; id: string };
 
-const DIFFICULTY_SCALE: Record<number, { label: string; hint: string }> = {
-  1: { label: 'Accessible', hint: 'Most players should be able to get this one.' },
-  2: { label: 'Accessible → Moderate', hint: 'Leans approachable but needs some recall.' },
-  3: { label: 'Moderate', hint: 'Balanced challenge with topic familiarity.' },
-  4: { label: 'Moderate → Specialist', hint: 'Leans advanced and rewards deeper knowledge.' },
-  5: { label: 'Specialist', hint: 'Best for enthusiasts or experts in the domain.' },
-};
-
 function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecificMode = false): State {
   return {
     stage: 'WRITING',
@@ -123,7 +113,6 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     creatorNote: initialValues?.creatorNote ?? '',
     category: initialValues?.category ?? 'other',
     canonicalSubcategory: initialValues?.canonicalSubcategory ?? initialValues?.domain ?? '',
-    difficulty: initialValues?.difficulty ?? 3,
     critiqueResult: null,
     critiqueIterations: initialValues?.critiqueIterations ?? 0,
     remainingCritiquesToday: null,
@@ -143,7 +132,6 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'RESET': return action.state;
     case 'FIELD': return { ...state, [action.field]: action.value, error: null };
-    case 'DIFFICULTY': return { ...state, difficulty: action.value };
     case 'ERROR': return { ...state, error: action.value };
     case 'START_CRITIQUE': return { ...state, stage: 'CRITIQUING', lastCritiquedText: action.text, error: null };
     case 'CRITIQUE_RESULT': {
@@ -214,7 +202,6 @@ function validate(state: State): string | null {
   const canonicalSubcategory = normalizeCanonicalSubcategory(state.canonicalSubcategory);
   if (!canonicalSubcategory) return 'Enter a specific area.';
   if (CATEGORIES.includes(canonicalSubcategory as (typeof CATEGORIES)[number])) return 'Specific area must be more precise than the broad category.';
-  if (!Number.isInteger(state.difficulty) || state.difficulty < 1 || state.difficulty > 5) return 'Choose a difficulty from 1 to 5.';
   if (state.sendToFriendIds.length > 20) return 'You can send to at most 20 friends at once.';
   return null;
 }
@@ -362,7 +349,6 @@ export function QuestionForm({
         category: state.category,
         canonicalSubcategory: normalizeCanonicalSubcategory(state.canonicalSubcategory),
         domain: normalizeCanonicalSubcategory(state.canonicalSubcategory),
-        difficulty: state.difficulty,
         verified,
         llmSuggestedAnswer: state.llmSuggestedAnswer,
         critiqueIterations: state.critiqueIterations,
@@ -490,12 +476,9 @@ export function QuestionForm({
               <input id="canonical-subcategory" value={state.canonicalSubcategory} onChange={(event) => dispatch({ type: 'FIELD', field: 'canonicalSubcategory', value: event.target.value })} readOnly={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'} className="h-11 w-full rounded-md border bg-background px-3 outline-none focus:border-primary" placeholder="The Waste Land" />
               <p className="mt-1 text-xs text-muted-foreground">Use a precise domain like T. S. Eliot, The Waste Land, or Modernist Poetry.</p>
             </div>
-            <div>
-              <label htmlFor="difficulty" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Difficulty</label>
-              <select id="difficulty" value={state.difficulty} onChange={(event) => dispatch({ type: 'DIFFICULTY', value: Number(event.target.value) })} disabled={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'} className="h-11 w-full rounded-md border bg-background px-3 outline-none focus:border-primary">
-                {[1, 2, 3, 4, 5].map((difficulty) => <option key={difficulty} value={difficulty}>{difficulty} · {DIFFICULTY_SCALE[difficulty].label}</option>)}
-              </select>
-              <p className="mt-1 text-xs text-muted-foreground">Rank {state.difficulty}/5 — {DIFFICULTY_SCALE[state.difficulty].label}. {DIFFICULTY_SCALE[state.difficulty].hint}</p>
+            <div className="rounded-md border bg-muted/30 p-3 sm:col-span-2">
+              <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Difficulty</p>
+              <p className="mt-1 text-sm text-muted-foreground">Joshing will rate this with the LLM after you save, using the domain-relative Establishing → Solid → Skilled → Master scale.</p>
             </div>
           </div>
 
