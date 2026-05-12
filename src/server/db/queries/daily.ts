@@ -23,7 +23,10 @@ import {
   isCatchUpSlotEligible,
   queueAgeInDays,
 } from '@/server/play/catch-up-eligibility';
-import { orderCatchUpItems } from '@/server/play/catch-up-turn-sequencing';
+import {
+  dedupeCatchUpItems,
+  orderCatchUpItems,
+} from '@/server/play/catch-up-turn-sequencing';
 
 function asQueueSlotDifficulty(
   value: string | null | undefined,
@@ -248,7 +251,7 @@ export async function getCatchupQuestions(userId: string): Promise<CatchupQuesti
     })
     .filter((question): question is CatchupQuestion => Boolean(question));
 
-  return orderCatchUpItems(mapped);
+  return dedupeCatchUpItems(orderCatchUpItems(mapped));
 }
 
 export async function createDailyQueueItem(
