@@ -35,9 +35,9 @@ const TIER_LABEL: Record<MasteryTier, string> = {
 
 const TIER_POINTS: Record<MasteryTier, number> = {
   establishing: 0,
-  familiar: 50,
-  solid: 200,
-  mastery: 500,
+  familiar: 100,
+  solid: 1000,
+  mastery: 2000,
 };
 
 function formatRange(start: string, end: string): string {
