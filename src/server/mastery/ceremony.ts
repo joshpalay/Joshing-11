@@ -248,7 +248,7 @@ function parseSuggestedMerges(raw: unknown): SuggestedMerge[] {
       : [];
     const target = typeof merge.target === 'string' ? normalizeDomain(merge.target) : '';
     const rationale = typeof merge.rationale === 'string' ? merge.rationale.trim() : '';
-    return sources.length >= 2 && target ? [{ sources, target, rationale }] : [];
+    return sources.length >= 1 && target ? [{ sources, target, rationale }] : [];
   });
 }
 
@@ -316,7 +316,7 @@ If no merges are needed: { "merges": [] }`;
 }
 
 // Shared transaction logic used by both runDomainMergesForUser and runAggressiveDomainBackfillForUser.
-async function applyMergesForUser(
+export async function applyMergesForUser(
   userId: string,
   masteryRows: PlayerMasteryMergeRow[],
   suggestions: SuggestedMerge[],
@@ -336,7 +336,11 @@ async function applyMergesForUser(
         .filter((row) => !consumedSourceKeys.has(domainKey(row.canonicalSubcategory)));
 
       const uniqueSourceRows = [...new Map(sourceRows.map((row) => [domainKey(row.canonicalSubcategory), row])).values()];
-      if (uniqueSourceRows.length < 2) continue;
+      const onlySourceKey = uniqueSourceRows.length === 1
+        ? domainKey(uniqueSourceRows[0].canonicalSubcategory)
+        : null;
+      const isApplicableMerge = uniqueSourceRows.length >= 2 || (onlySourceKey !== null && onlySourceKey !== targetKey);
+      if (!isApplicableMerge) continue;
 
       const existingTarget = byKey.get(targetKey);
       const rowsToTotal = existingTarget && !uniqueSourceRows.some((row) => row.id === existingTarget.id)
