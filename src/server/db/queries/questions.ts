@@ -1,4 +1,4 @@
-import { and, countDistinct, eq, isNull, sql } from 'drizzle-orm';
+import { and, countDistinct, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 
 import {
   db,
@@ -9,6 +9,7 @@ import {
   userQuestionBank,
 } from '@/server/db';
 import { categoryLabel } from '@/lib/questions-types';
+import { pgErrorCode } from '@/server/db/pg-error';
 
 export type QuestionView = {
   id: string;
@@ -56,6 +57,60 @@ export type QuestionMutationResult = { ok: boolean; reason?: 'not_found' | 'in_u
 
 type QuestionRow = typeof questions.$inferSelect;
 
+const questionTableColumns = getTableColumns(questions);
+const questionViewColumns = {
+  id: questionTableColumns.id,
+  creatorId: questionTableColumns.creatorId,
+  generatedQuestionId: questionTableColumns.generatedQuestionId,
+  source: questionTableColumns.source,
+  sourceQuestionId: questionTableColumns.sourceQuestionId,
+  sourceCreatorId: questionTableColumns.sourceCreatorId,
+  questionText: questionTableColumns.questionText,
+  breadcrumbContext: questionTableColumns.breadcrumbContext,
+  answerText: questionTableColumns.answerText,
+  factualExplanation: questionTableColumns.factualExplanation,
+  acceptedAlternatives: questionTableColumns.acceptedAlternatives,
+  answerSource: questionTableColumns.answerSource,
+  questionType: questionTableColumns.questionType,
+  minimumRequired: questionTableColumns.minimumRequired,
+  category: questionTableColumns.category,
+  broadCategory: questionTableColumns.broadCategory,
+  subcategory: questionTableColumns.subcategory,
+  canonicalSubcategory: questionTableColumns.canonicalSubcategory,
+  categoryOverridden: questionTableColumns.categoryOverridden,
+  creatorNote: questionTableColumns.creatorNote,
+  difficultyEstimate: questionTableColumns.difficultyEstimate,
+  llmDifficulty: questionTableColumns.llmDifficulty,
+  calibratedDifficulty: questionTableColumns.calibratedDifficulty,
+  correctRate: questionTableColumns.correctRate,
+  explainerBrief: questionTableColumns.explainerBrief,
+  explainerFull: questionTableColumns.explainerFull,
+  explainerBriefCorrect: questionTableColumns.explainerBriefCorrect,
+  explainerFullCorrect: questionTableColumns.explainerFullCorrect,
+  explainerBriefWrong: questionTableColumns.explainerBriefWrong,
+  explainerFullWrong: questionTableColumns.explainerFullWrong,
+  explainerBriefExpired: questionTableColumns.explainerBriefExpired,
+  explainerFullExpired: questionTableColumns.explainerFullExpired,
+  shortLabel: questionTableColumns.shortLabel,
+  status: questionTableColumns.status,
+  visibility: questionTableColumns.visibility,
+  publicStatus: questionTableColumns.publicStatus,
+  publicEligibilityScore: questionTableColumns.publicEligibilityScore,
+  publicEligibilityReason: questionTableColumns.publicEligibilityReason,
+  sharedToFriendsFeed: questionTableColumns.sharedToFriendsFeed,
+  askedCount: questionTableColumns.askedCount,
+  correctCount: questionTableColumns.correctCount,
+  surfacePriorityScore: questionTableColumns.surfacePriorityScore,
+  createdAt: questionTableColumns.createdAt,
+  updatedAt: questionTableColumns.updatedAt,
+  deletedAt: questionTableColumns.deletedAt,
+};
+
+export const bankQuestionSelectColumns = questionViewColumns;
+
+type QuestionViewRow = Omit<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations'>
+  & Partial<Pick<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations'>>;
+
 function difficultyToNumber(value: QuestionRow['difficultyEstimate']): number {
   if (value === 'accessible') return 1;
   if (value === 'specialist') return 5;
@@ -68,7 +123,7 @@ function numberToDifficulty(value: number): 'accessible' | 'moderate' | 'special
   return 'moderate';
 }
 
-function explanationFor(row: QuestionRow): string | null {
+function explanationFor(row: QuestionViewRow): string | null {
   return row.factualExplanation
     ?? row.explainerFullWrong
     ?? row.explainerFull
@@ -117,7 +172,7 @@ async function readQuestionStats(questionId: string) {
   };
 }
 
-export async function toQuestionView(row: QuestionRow): Promise<QuestionView> {
+export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView> {
   const stats = await readQuestionStats(row.id);
   const domain = row.category;
   const createdAt = toIso(row.createdAt) ?? new Date().toISOString();
@@ -157,9 +212,9 @@ export async function toQuestionView(row: QuestionRow): Promise<QuestionView> {
     tags: [],
     asked_count: row.askedCount,
     correct_count: row.correctCount,
-    verified: row.verified,
-    llmSuggestedAnswer: row.llmSuggestedAnswer,
-    critiqueIterations: row.critiqueIterations,
+    verified: row.verified ?? true,
+    llmSuggestedAnswer: row.llmSuggestedAnswer ?? null,
+    critiqueIterations: row.critiqueIterations ?? 0,
   };
 }
 
@@ -170,7 +225,7 @@ export async function getQuestionsForUser(userId: string): Promise<QuestionView[
 
 export async function getQuestion(questionId: string, userId: string): Promise<QuestionView | null> {
   const [row] = await db
-    .select()
+    .select(questionViewColumns)
     .from(questions)
     .where(and(eq(questions.id, questionId), eq(questions.creatorId, userId), isNull(questions.deletedAt)))
     .limit(1);
@@ -191,29 +246,49 @@ export async function createQuestion(params: {
   llmSuggestedAnswer?: string | null;
   critiqueIterations: number;
 }): Promise<{ id: string }> {
-  const [created] = await db
-    .insert(questions)
-    .values({
-      creatorId: params.authorId,
-      questionText: params.text,
-      answerText: params.correctAnswer,
-      acceptedAlternatives: params.alternateAnswers,
-      factualExplanation: params.explanation,
-      creatorNote: params.creatorNote ?? null,
-      category: params.domain as typeof questions.$inferInsert.category,
-      categoryOverridden: true,
-      difficultyEstimate: numberToDifficulty(params.difficulty),
-      llmDifficulty: numberToDifficulty(params.difficulty),
-      calibratedDifficulty: numberToDifficulty(params.difficulty),
-      answerSource: params.llmSuggestedAnswer ? (params.verified ? 'llm_suggested' : 'llm_edited') : 'creator_written',
-      questionType: 'factual',
-      visibility: 'public',
+  const difficulty = numberToDifficulty(params.difficulty);
+  const baseValues = {
+    creatorId: params.authorId,
+    questionText: params.text,
+    answerText: params.correctAnswer,
+    acceptedAlternatives: params.alternateAnswers,
+    factualExplanation: params.explanation,
+    creatorNote: params.creatorNote ?? null,
+    category: params.domain as typeof questions.$inferInsert.category,
+    categoryOverridden: true,
+    difficultyEstimate: difficulty,
+    llmDifficulty: difficulty,
+    calibratedDifficulty: difficulty,
+    answerSource: params.llmSuggestedAnswer ? (params.verified ? 'llm_suggested' : 'llm_edited') : 'creator_written',
+    questionType: 'factual',
+    visibility: 'public',
+    status: params.verified ? 'verified' : 'unverified',
+  } satisfies Partial<typeof questions.$inferInsert>;
+
+  const createWithValues = async (values: typeof questions.$inferInsert) => {
+    const [created] = await db
+      .insert(questions)
+      .values(values)
+      .returning({ id: questions.id });
+    return created;
+  };
+
+  let created: { id: string };
+  try {
+    created = await createWithValues({
+      ...baseValues,
       verified: params.verified,
-      status: params.verified ? 'verified' : 'unverified',
       llmSuggestedAnswer: params.llmSuggestedAnswer ?? null,
       critiqueIterations: params.critiqueIterations,
-    })
-    .returning({ id: questions.id });
+    } as typeof questions.$inferInsert);
+  } catch (error) {
+    if (pgErrorCode(error) !== '42703') throw error;
+    console.warn('[questions/create] verification columns unavailable; saving legacy-compatible question', {
+      userId: params.authorId,
+      domain: params.domain,
+    });
+    created = await createWithValues(baseValues as typeof questions.$inferInsert);
+  }
 
   await db
     .insert(userQuestionBank)
