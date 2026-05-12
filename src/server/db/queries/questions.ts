@@ -57,6 +57,16 @@ export type QuestionMutationResult = { ok: boolean; reason?: 'not_found' | 'in_u
 
 type QuestionRow = typeof questions.$inferSelect;
 
+let ensureQuestionSurfacePriorityColumnPromise: Promise<void> | null = null;
+
+function ensureQuestionSurfacePriorityColumn(): Promise<void> {
+  ensureQuestionSurfacePriorityColumnPromise ??= db.execute(sql`
+    ALTER TABLE "Question"
+      ADD COLUMN IF NOT EXISTS "surface_priority_score" DOUBLE PRECISION NOT NULL DEFAULT 0
+  `).then(() => undefined);
+  return ensureQuestionSurfacePriorityColumnPromise;
+}
+
 const questionTableColumns = getTableColumns(questions);
 const questionViewColumns = {
   id: questionTableColumns.id,
@@ -245,6 +255,8 @@ export async function createQuestion(params: {
   llmSuggestedAnswer?: string | null;
   critiqueIterations: number;
 }): Promise<{ id: string }> {
+  await ensureQuestionSurfacePriorityColumn();
+
   const difficulty = numberToDifficulty(params.difficulty);
   const baseValues = {
     creatorId: params.authorId,
