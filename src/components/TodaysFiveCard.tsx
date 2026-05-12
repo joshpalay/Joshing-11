@@ -141,7 +141,7 @@ export default function TodaysFiveCard() {
   }
 
   return (
-    <div className="bg-card text-card-foreground mt-6 w-full rounded-lg border p-4 md:mt-0 md:max-w-xs">
+    <div className="bg-card text-card-foreground w-full rounded-lg border p-4">
       <div className="flex items-start gap-3">
         <span className="bg-muted text-foreground grid size-10 shrink-0 place-items-center rounded-md">
           {isComplete ? (
