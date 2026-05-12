@@ -11,6 +11,7 @@ export interface KnowledgeDomainCircle {
   currentTier: MasteryTier;
   lifetimePoints: number;
   iconKey: string;
+  broadCategory?: string | null;
 }
 
 export interface KnowledgeCardProps {
@@ -39,6 +40,8 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
   const [copyLabel, setCopyLabel] = useState('Copy');
   const [shareLabel, setShareLabel] = useState('Share');
   const sorted = useMemo(() => [...props.domains].sort((a, b) => b.lifetimePoints - a.lifetimePoints), [props.domains]);
+  const visibleDomains = sorted.slice(0, 5);
+  const totalOverflowCount = props.overflowCount + Math.max(0, sorted.length - visibleDomains.length);
   const maxPoints = sorted[0]?.lifetimePoints ?? 1;
 
   const onCopy = async () => {
@@ -70,7 +73,7 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
 
       <div style={{ borderTop: '1px solid #e8e2d6', padding: '24px 20px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-end', columnGap: 16, rowGap: 20 }}>
-          {sorted.map((domain) => {
+          {visibleDomains.map((domain) => {
             const diameter = getCircleDiameter(domain.lifetimePoints, maxPoints, typeof window !== 'undefined' ? window.innerWidth < 400 : false);
             return (
               <DomainCircle
@@ -79,13 +82,14 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
                 diameter={diameter}
                 iconKey={domain.iconKey}
                 canonicalSubcategory={domain.canonicalSubcategory}
+                broadCategory={domain.broadCategory}
                 currentTier={domain.currentTier}
                 highlighted={props.highlightedSlug === domain.canonicalSubcategorySlug}
               />
             );
           })}
         </div>
-        {props.overflowCount > 0 && <p style={{ marginTop: 14, fontSize: 11, color: '#8a8070', textAlign: 'center' }}>+{props.overflowCount} more territories</p>}
+        {totalOverflowCount > 0 && <p style={{ marginTop: 14, fontSize: 11, color: '#8a8070', textAlign: 'center' }}>+{totalOverflowCount} more territories</p>}
       </div>
 
       <div style={{ borderTop: '1px solid #e8e2d6', padding: 20 }}>
