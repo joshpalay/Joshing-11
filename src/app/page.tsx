@@ -11,9 +11,9 @@ export default async function Home() {
   const expiringCount = catchupItems.filter((item) => item.expiresSoon).length
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-6 pb-24 md:py-10">
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-24 md:py-10">
       <section className="space-y-6 border-b pb-6">
-        <div className="max-w-2xl">
+        <div className="w-full">
           <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
             Joshing
           </p>
@@ -25,7 +25,7 @@ export default async function Home() {
             and how your map keeps changing.
           </p>
         </div>
-        <div className="w-full max-w-2xl space-y-3">
+        <div className="w-full space-y-3">
           <TodaysFiveCard />
           {catchupCount > 0 ? (
             <CatchupCard count={catchupCount} expiringCount={expiringCount} />
