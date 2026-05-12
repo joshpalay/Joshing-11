@@ -12,7 +12,7 @@ export default async function Home() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-6 pb-24 md:py-10">
-      <section className="border-b pb-6 md:flex md:items-end md:justify-between md:gap-8">
+      <section className="space-y-6 border-b pb-6">
         <div className="max-w-2xl">
           <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
             Joshing
@@ -25,7 +25,7 @@ export default async function Home() {
             and how your map keeps changing.
           </p>
         </div>
-        <div className="mt-6 w-full space-y-3 md:mt-0 md:max-w-xs">
+        <div className="w-full max-w-2xl space-y-3">
           <TodaysFiveCard />
           {catchupCount > 0 ? (
             <CatchupCard count={catchupCount} expiringCount={expiringCount} />
