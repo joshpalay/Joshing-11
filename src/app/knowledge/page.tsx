@@ -6,12 +6,10 @@ import { useSearchParams } from 'next/navigation';
 import { Combine, Plus, Repeat2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 
-import { DomainCard } from '@/components/knowledge/DomainCard';
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
 import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
 import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
-import type { KnowledgeDomain } from '@/server/profile/knowledge-types';
 import type { MasteryTier } from '@/types/db';
 
 type DomainMastery = {
@@ -61,17 +59,6 @@ type TidyResult = {
   details: Array<{ sources: string[]; target: string; rationale: string }>;
 };
 
-type KnowledgeView = 'classic' | 'progression';
-
-const KNOWLEDGE_VIEW_KEY = 'joshing_knowledge_view';
-
-function readSavedView(): KnowledgeView {
-  if (typeof window === 'undefined') return 'progression';
-  const raw = localStorage.getItem(KNOWLEDGE_VIEW_KEY);
-  if (raw === 'classic' || raw === 'progression') return raw;
-  return 'progression';
-}
-
 function asTier(value: string): MasteryTier {
   if (value === 'familiar' || value === 'solid' || value === 'mastery') return value;
   return 'establishing';
@@ -91,19 +78,6 @@ function displayMind(domains: DomainMastery[], declaredInterests: string[]): str
   if (top.length === 1) return `Your mind is building around ${top[0]}.`;
   if (declaredInterests.length > 0) return `Your mind is ready to explore ${declaredInterests.slice(0, 3).join(', ')}.`;
   return 'Your mind will take shape as you play and write questions.';
-}
-
-function toKnowledgeDomain(domain: DomainMastery): KnowledgeDomain {
-  return {
-    name: domain.displayName,
-    tier: asTier(domain.tier),
-    progressWithinTier: domain.tierProgress / 100,
-    masteryPoints: domain.points,
-    declaredQuestionCount: domain.isDeclaredInterest ? Math.max(1, domain.questionsAnswered) : domain.questionsAnswered,
-    provenCorrectCount: domain.questionsCorrect,
-    isVisibleOnProfile: true,
-    broadCategory: domain.broadCategory,
-  };
 }
 
 function toPortraitEntry(domain: DomainMastery): PortraitEntry {
@@ -162,9 +136,7 @@ function KnowledgePageContent() {
   const [data, setData] = useState<KnowledgeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<KnowledgeView>('progression');
   const [activeSlug, setActiveSlug] = useState<string | null>(highlightedDomainSlug);
-  const [isFading, setIsFading] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [interestModal, setInterestModal] = useState<InterestModalState | null>(null);
   const [selectedInterest, setSelectedInterest] = useState<ProposedInterest | null>(null);
@@ -193,7 +165,6 @@ function KnowledgePageContent() {
 
   useEffect(() => {
     let active = true;
-    setView(readSavedView());
     setLoading(true);
     setError(null);
 
@@ -251,7 +222,6 @@ function KnowledgePageContent() {
     [data],
   );
 
-  const activeDomains = useMemo(() => sortedDomains.map(toKnowledgeDomain), [sortedDomains]);
   const portraitEntries = useMemo(() => sortedDomains.map(toPortraitEntry), [sortedDomains]);
   const declaredSlots = useMemo(() => {
     if (!data) return [];
@@ -271,16 +241,6 @@ function KnowledgePageContent() {
   const yourMind = data ? displayMind(sortedDomains, data.pageData.declaredInterests) : '';
   const displayName = 'You';
   const hasAnything = sortedDomains.length > 0;
-
-  const onToggleView = (nextView: KnowledgeView) => {
-    if (nextView === view) return;
-    setIsFading(true);
-    window.setTimeout(() => {
-      setView(nextView);
-      localStorage.setItem(KNOWLEDGE_VIEW_KEY, nextView);
-      setIsFading(false);
-    }, 150);
-  };
 
   const openInterestModal = (slotIndex: number, currentDomain: string | null) => {
     setInterestModal({ slotIndex, currentDomain });
@@ -480,39 +440,13 @@ function KnowledgePageContent() {
             <p style={knowledgeSubtitleStyle}>SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;</p>
           </div>
 
-          <div style={toggleRowStyle} aria-label="Knowledge view toggle">
-            <div style={toggleWrapStyle}>
-              <button type="button" onClick={() => onToggleView('classic')} style={view === 'classic' ? activeToggleStyle : inactiveToggleStyle} aria-pressed={view === 'classic'}>
-                Classic
-              </button>
-              <button type="button" onClick={() => onToggleView('progression')} style={view === 'progression' ? activeToggleStyle : inactiveToggleStyle} aria-pressed={view === 'progression'}>
-                Progression
+          <div id="portrait-circles-section">
+            <PortraitCircles entries={portraitEntries} />
+            <div style={sharePortraitWrapStyle}>
+              <button type="button" style={sharePortraitBtnStyle} onClick={() => setShareModalOpen(true)}>
+                Share portrait
               </button>
             </div>
-          </div>
-
-          <div style={{ ...contentShellStyle, opacity: isFading ? 0 : 1 }}>
-            {view === 'classic' ? (
-              <div style={cardStackStyle}>
-                {activeDomains.map((domain) => (
-                  <div key={domain.name} id={`knowledge-domain-${toCanonicalDomainSlug(domain.name)}`}>
-                    <DomainCard
-                      domain={domain}
-                      highlighted={activeSlug === toCanonicalDomainSlug(domain.name)}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div id="portrait-circles-section">
-                <PortraitCircles entries={portraitEntries} />
-                <div style={sharePortraitWrapStyle}>
-                  <button type="button" style={sharePortraitBtnStyle} onClick={() => setShareModalOpen(true)}>
-                    Share portrait
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </section>
       )}
@@ -815,51 +749,6 @@ const knowledgeSubtitleStyle: CSSProperties = {
   color: '#8a8070',
   letterSpacing: '0.06em',
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-};
-
-const toggleRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  margin: '0.75rem 0',
-};
-
-const toggleWrapStyle: CSSProperties = {
-  display: 'flex',
-  gap: 8,
-};
-
-const activeToggleStyle: CSSProperties = {
-  minHeight: 34,
-  padding: '0 14px',
-  borderRadius: 999,
-  border: 'none',
-  background: '#1a1208',
-  color: '#f5f0e8',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  fontSize: 14,
-};
-
-const inactiveToggleStyle: CSSProperties = {
-  minHeight: 34,
-  padding: '0 12px',
-  borderRadius: 999,
-  border: 'none',
-  background: 'transparent',
-  color: '#8a8070',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  fontSize: 14,
-};
-
-const contentShellStyle: CSSProperties = {
-  transition: 'opacity 150ms ease',
-};
-
-const cardStackStyle: CSSProperties = {
-  display: 'grid',
-  gap: '0.6rem',
 };
 
 const emptyStyle: CSSProperties = {
