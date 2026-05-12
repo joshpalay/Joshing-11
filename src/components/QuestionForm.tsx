@@ -3,6 +3,7 @@
 import { Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useReducer, useRef } from 'react';
 
+import { normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 
 export type QuestionFormValues = {
@@ -11,7 +12,9 @@ export type QuestionFormValues = {
   alternateAnswers: string[];
   explanation: string | null;
   creatorNote?: string | null;
-  domain: string;
+  category: string;
+  canonicalSubcategory: string;
+  domain?: string;
   difficulty: number;
   verified: boolean;
   llmSuggestedAnswer?: string | null;
@@ -58,7 +61,9 @@ type State = {
   alternateText: string;
   explanation: string;
   creatorNote: string;
-  domain: string;
+  category: string;
+  canonicalSubcategory: string;
+  domain?: string;
   difficulty: number;
   critiqueResult: CritiqueResult | null;
   critiqueIterations: number;
@@ -76,7 +81,7 @@ type State = {
 
 type Action =
   | { type: 'RESET'; state: State }
-  | { type: 'FIELD'; field: 'questionText' | 'userAnswer' | 'alternateText' | 'explanation' | 'creatorNote' | 'domain'; value: string }
+  | { type: 'FIELD'; field: 'questionText' | 'userAnswer' | 'alternateText' | 'explanation' | 'creatorNote' | 'category' | 'canonicalSubcategory'; value: string }
   | { type: 'DIFFICULTY'; value: number }
   | { type: 'ERROR'; value: string | null }
   | { type: 'START_CRITIQUE'; text: string }
@@ -116,7 +121,8 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     alternateText: (initialValues?.alternateAnswers ?? []).join(', '),
     explanation: initialValues?.explanation ?? '',
     creatorNote: initialValues?.creatorNote ?? '',
-    domain: initialValues?.domain ?? 'other',
+    category: initialValues?.category ?? 'other',
+    canonicalSubcategory: initialValues?.canonicalSubcategory ?? initialValues?.domain ?? '',
     difficulty: initialValues?.difficulty ?? 3,
     critiqueResult: null,
     critiqueIterations: initialValues?.critiqueIterations ?? 0,
@@ -204,7 +210,10 @@ function validate(state: State): string | null {
   if (alternateAnswers.some((answer) => answer.length > 200)) return 'Alternate answers must be 200 characters or fewer.';
   if (state.explanation.length > 500) return 'Explanation must be 500 characters or fewer.';
   if (state.creatorNote.length > 200) return 'Creator note must be 200 characters or fewer.';
-  if (!CATEGORIES.includes(state.domain as (typeof CATEGORIES)[number])) return 'Choose a valid domain.';
+  if (!CATEGORIES.includes(state.category as (typeof CATEGORIES)[number])) return 'Choose a valid broad category.';
+  const canonicalSubcategory = normalizeCanonicalSubcategory(state.canonicalSubcategory);
+  if (!canonicalSubcategory) return 'Enter a specific area.';
+  if (CATEGORIES.includes(canonicalSubcategory as (typeof CATEGORIES)[number])) return 'Specific area must be more precise than the broad category.';
   if (!Number.isInteger(state.difficulty) || state.difficulty < 1 || state.difficulty > 5) return 'Choose a difficulty from 1 to 5.';
   if (state.sendToFriendIds.length > 20) return 'You can send to at most 20 friends at once.';
   return null;
@@ -350,7 +359,9 @@ export function QuestionForm({
         alternateAnswers,
         explanation: state.explanation.trim() || null,
         creatorNote: state.creatorNote.trim() || null,
-        domain: state.domain,
+        category: state.category,
+        canonicalSubcategory: normalizeCanonicalSubcategory(state.canonicalSubcategory),
+        domain: normalizeCanonicalSubcategory(state.canonicalSubcategory),
         difficulty: state.difficulty,
         verified,
         llmSuggestedAnswer: state.llmSuggestedAnswer,
@@ -469,10 +480,15 @@ export function QuestionForm({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="domain" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Domain</label>
-              <select id="domain" value={state.domain} onChange={(event) => dispatch({ type: 'FIELD', field: 'domain', value: event.target.value })} disabled={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'} className="h-11 w-full rounded-md border bg-background px-3 outline-none focus:border-primary">
+              <label htmlFor="broad-category" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Broad category</label>
+              <select id="broad-category" value={state.category} onChange={(event) => dispatch({ type: 'FIELD', field: 'category', value: event.target.value })} disabled={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'} className="h-11 w-full rounded-md border bg-background px-3 outline-none focus:border-primary">
                 {CATEGORIES.map((category) => <option key={category} value={category}>{categoryLabel(category)}</option>)}
               </select>
+            </div>
+            <div>
+              <label htmlFor="canonical-subcategory" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Specific area</label>
+              <input id="canonical-subcategory" value={state.canonicalSubcategory} onChange={(event) => dispatch({ type: 'FIELD', field: 'canonicalSubcategory', value: event.target.value })} readOnly={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'} className="h-11 w-full rounded-md border bg-background px-3 outline-none focus:border-primary" placeholder="The Waste Land" />
+              <p className="mt-1 text-xs text-muted-foreground">Use a precise domain like T. S. Eliot, The Waste Land, or Modernist Poetry.</p>
             </div>
             <div>
               <label htmlFor="difficulty" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Difficulty</label>

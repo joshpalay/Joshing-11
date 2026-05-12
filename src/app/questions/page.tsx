@@ -6,7 +6,6 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
-import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
@@ -82,6 +81,8 @@ function initialValues(question: QuestionView): QuestionFormValues {
     correctAnswer: question.correctAnswer,
     alternateAnswers: question.alternateAnswers,
     explanation: question.explanation,
+    category: question.category,
+    canonicalSubcategory: question.canonicalSubcategory ?? question.domain,
     domain: question.domain,
     difficulty: question.difficulty,
     verified: question.verified,
@@ -159,10 +160,11 @@ function QuestionsPageContent() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const availableDomains = useMemo(() => {
-    const seen = new Set(questions.map((question) => question.domain));
-    return CATEGORIES.filter((category) => seen.has(category));
-  }, [questions]);
+  const availableDomains = useMemo(() => (
+    [...new Map(questions.map((question) => [question.domain, question.domainDisplayName] as const)).entries()]
+      .map(([domain, label]) => ({ domain, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  ), [questions]);
 
   const filteredQuestions = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -302,8 +304,8 @@ function QuestionsPageContent() {
           aria-label="Filter by domain"
         >
           <option value="all">All domains</option>
-          {availableDomains.map((domain) => (
-            <option key={domain} value={domain}>{categoryLabel(domain)}</option>
+          {availableDomains.map((item) => (
+            <option key={item.domain} value={item.domain}>{item.label}</option>
           ))}
         </select>
         <select
@@ -350,7 +352,7 @@ function QuestionsPageContent() {
           {filteredQuestions.map((question) => {
             const isOwnAuthored = question.isOwnAuthored ?? true;
             const inUse = question.usedInGamesCount > 0;
-            const color = DOMAIN_COLORS[question.domain] ?? '#64748b';
+            const color = DOMAIN_COLORS[question.category] ?? '#64748b';
             const deleting = removingId === question.id;
 
             return (

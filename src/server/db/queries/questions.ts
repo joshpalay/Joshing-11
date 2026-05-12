@@ -8,7 +8,7 @@ import {
   questions,
   userQuestionBank,
 } from '@/server/db';
-import { categoryLabel } from '@/lib/questions-types';
+import { broadCategoryDisplayName } from '@/lib/question-categorization';
 import { pgErrorCode } from '@/server/db/pg-error';
 
 export type QuestionView = {
@@ -19,6 +19,9 @@ export type QuestionView = {
   explanation: string | null;
   domain: string;
   domainDisplayName: string;
+  broadCategory: string | null;
+  canonicalSubcategory: string | null;
+  subcategory: string | null;
   difficulty: number;
   timesAnswered: number;
   timesCorrect: number;
@@ -183,7 +186,7 @@ async function readQuestionStats(questionId: string) {
 
 export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView> {
   const stats = await readQuestionStats(row.id);
-  const domain = row.category;
+  const domain = row.canonicalSubcategory ?? row.category;
   const createdAt = toIso(row.createdAt) ?? new Date().toISOString();
   const updatedAt = toIso(row.updatedAt) ?? createdAt;
 
@@ -194,7 +197,10 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
     alternateAnswers: row.acceptedAlternatives ?? [],
     explanation: explanationFor(row),
     domain,
-    domainDisplayName: categoryLabel(domain),
+    domainDisplayName: row.canonicalSubcategory ?? broadCategoryDisplayName(domain),
+    broadCategory: row.broadCategory,
+    canonicalSubcategory: row.canonicalSubcategory,
+    subcategory: row.subcategory,
     difficulty: difficultyToNumber(row.difficultyEstimate),
     timesAnswered: stats.timesAnswered,
     timesCorrect: stats.timesCorrect,
@@ -248,7 +254,11 @@ export async function createQuestion(params: {
   correctAnswer: string;
   alternateAnswers: string[];
   explanation: string | null;
-  domain: string;
+  category: string;
+  broadCategory: string | null;
+  subcategory: string;
+  canonicalSubcategory: string;
+  domain?: string;
   difficulty: number;
   creatorNote?: string | null;
   verified: boolean;
@@ -265,7 +275,10 @@ export async function createQuestion(params: {
     acceptedAlternatives: params.alternateAnswers,
     factualExplanation: params.explanation,
     creatorNote: params.creatorNote ?? null,
-    category: params.domain as typeof questions.$inferInsert.category,
+    category: params.category as typeof questions.$inferInsert.category,
+    broadCategory: params.broadCategory,
+    subcategory: params.subcategory,
+    canonicalSubcategory: params.canonicalSubcategory,
     categoryOverridden: true,
     difficultyEstimate: difficulty,
     llmDifficulty: difficulty,
@@ -299,6 +312,9 @@ export async function createQuestion(params: {
         "answer_source",
         "question_type",
         "category",
+        "broad_category",
+        "subcategory",
+        "canonical_subcategory",
         "category_overridden",
         "creator_note",
         "difficulty_estimate",
@@ -315,7 +331,10 @@ export async function createQuestion(params: {
         ${params.alternateAnswers}::text[],
         ${answerSource}::"AnswerSource",
         'factual'::"QuestionType",
-        ${params.domain}::"Category",
+        ${params.category}::"Category",
+        ${params.broadCategory},
+        ${params.subcategory},
+        ${params.canonicalSubcategory},
         true,
         ${params.creatorNote ?? null},
         ${difficulty}::"DifficultyEstimate",
@@ -343,7 +362,8 @@ export async function createQuestion(params: {
     if (pgErrorCode(error) !== '42703') throw error;
     console.warn('[questions/create] current question columns unavailable; retrying legacy-compatible question insert', {
       userId: params.authorId,
-      domain: params.domain,
+      category: params.category,
+      canonicalSubcategory: params.canonicalSubcategory,
     });
     try {
       created = await createWithValues(baseValues as typeof questions.$inferInsert);
@@ -351,7 +371,8 @@ export async function createQuestion(params: {
       if (pgErrorCode(fallbackError) !== '42703') throw fallbackError;
       console.warn('[questions/create] drizzle insert still references unavailable columns; saving with raw legacy-compatible insert', {
         userId: params.authorId,
-        domain: params.domain,
+        category: params.category,
+      canonicalSubcategory: params.canonicalSubcategory,
       });
       created = await createWithLegacyColumns();
     }
@@ -378,7 +399,10 @@ export async function updateQuestion(params: {
   correctAnswer?: string;
   alternateAnswers?: string[];
   explanation?: string;
-  domain?: string;
+  category?: string;
+  broadCategory?: string | null;
+  subcategory?: string;
+  canonicalSubcategory?: string;
   difficulty?: number;
 }): Promise<QuestionMutationResult> {
   const existing = await getQuestion(params.questionId, params.userId);
@@ -390,10 +414,13 @@ export async function updateQuestion(params: {
   if (params.correctAnswer !== undefined) values.answerText = params.correctAnswer;
   if (params.alternateAnswers !== undefined) values.acceptedAlternatives = params.alternateAnswers;
   if (params.explanation !== undefined) values.factualExplanation = params.explanation || null;
-  if (params.domain !== undefined) {
-    values.category = params.domain as typeof questions.$inferInsert.category;
+  if (params.category !== undefined) {
+    values.category = params.category as typeof questions.$inferInsert.category;
     values.categoryOverridden = true;
   }
+  if (params.broadCategory !== undefined) values.broadCategory = params.broadCategory;
+  if (params.subcategory !== undefined) values.subcategory = params.subcategory;
+  if (params.canonicalSubcategory !== undefined) values.canonicalSubcategory = params.canonicalSubcategory;
   if (params.difficulty !== undefined) {
     const difficulty = numberToDifficulty(params.difficulty);
     values.difficultyEstimate = difficulty;

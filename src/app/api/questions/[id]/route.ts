@@ -1,7 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { QUESTION_DOMAIN_KEYS } from '@/lib/game-constants';
+import { broadCategoryDisplayName, isBroadQuestionCategory, normalizeBroadQuestionCategory, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { getSession } from '@/server/auth/session';
 import { db, questions } from '@/server/db';
 import {
@@ -13,8 +13,6 @@ import {
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
-
-const VALID_DOMAINS = new Set<string>(QUESTION_DOMAIN_KEYS);
 
 function splitAlternates(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
@@ -33,7 +31,10 @@ function validatePatchPayload(body: Record<string, unknown> | null) {
     correctAnswer?: string;
     alternateAnswers?: string[];
     explanation?: string;
-    domain?: string;
+    category?: string;
+    broadCategory?: string | null;
+    subcategory?: string;
+    canonicalSubcategory?: string;
     difficulty?: number;
   } = {};
   const errors: string[] = [];
@@ -56,9 +57,27 @@ function validatePatchPayload(body: Record<string, unknown> | null) {
     values.explanation = typeof body.explanation === 'string' ? body.explanation.trim() : '';
     if (values.explanation.length > 500) errors.push('explanation');
   }
-  if (body?.domain !== undefined) {
-    values.domain = typeof body.domain === 'string' ? body.domain : '';
-    if (!VALID_DOMAINS.has(values.domain)) errors.push('domain');
+  const rawBroadCategory = body?.category ?? body?.broadCategory;
+  if (rawBroadCategory !== undefined) {
+    const category = typeof rawBroadCategory === 'string' ? normalizeBroadQuestionCategory(rawBroadCategory) : null;
+    if (!category) {
+      errors.push('category');
+    } else {
+      values.category = category;
+      values.broadCategory = broadCategoryDisplayName(category);
+    }
+  }
+  const rawCanonicalSubcategory = body?.canonicalSubcategory ?? body?.canonical_subcategory ?? body?.domain;
+  if (rawCanonicalSubcategory !== undefined) {
+    const canonicalSubcategory = typeof rawCanonicalSubcategory === 'string'
+      ? normalizeCanonicalSubcategory(rawCanonicalSubcategory)
+      : '';
+    if (!canonicalSubcategory || isBroadQuestionCategory(canonicalSubcategory)) {
+      errors.push('canonicalSubcategory');
+    } else {
+      values.canonicalSubcategory = canonicalSubcategory;
+      values.subcategory = canonicalSubcategory;
+    }
   }
   if (body?.difficulty !== undefined) {
     values.difficulty = typeof body.difficulty === 'number' ? body.difficulty : Number.NaN;
