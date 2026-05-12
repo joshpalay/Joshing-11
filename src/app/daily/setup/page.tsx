@@ -41,9 +41,9 @@ const DIFFICULTIES: { value: Difficulty; label: string; copy: string }[] = [
 ];
 
 const TIER_NEXT_POINTS = {
-  establishing: 500,
-  familiar: 1500,
-  solid: 3500,
+  establishing: 100,
+  familiar: 1000,
+  solid: 2000,
   mastery: Number.POSITIVE_INFINITY,
 };
 

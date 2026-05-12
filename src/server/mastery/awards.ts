@@ -9,7 +9,7 @@
 
 import { invalidateMultitudesCacheForUser } from '@/server/profile/multitudes';
 import type { AnswerState, DifficultyEstimate, MasteryTier } from '@/types/db';
-import { effectiveTier } from '@/server/mastery/tiers';
+import { effectiveTier, TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
 
 // TODO R2: replace Prisma transaction/client shapes with Drizzle equivalents.
 type DbClient = any;
@@ -265,7 +265,7 @@ async function applyMasteryAward(
   const upgradedTier = effectiveTier(nextPoints, authorCreditInDomain, authorCreditDistinctQuestionCount);
   const tierCrossed = upgradedTier !== previousTier;
   if (
-    nextPoints >= 3500 &&
+    nextPoints >= TIER_THRESHOLD_POINTS.mastery &&
     upgradedTier === 'solid' &&
     authorCreditInDomain / nextPoints < 0.2
   ) {

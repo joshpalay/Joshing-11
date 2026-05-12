@@ -10,16 +10,16 @@ import { getMasteryTierThresholds } from '@/server/mastery/tiers';
 describe('tier progress', () => {
   it('progressWithinCurrentTier is half at midpoint of establishing band', () => {
     expect(progressWithinCurrentTier(0)).toBe(0);
-    expect(progressWithinCurrentTier(250)).toBeCloseTo(0.5, 5);
-    expect(progressWithinCurrentTier(500)).toBe(0);
-    expect(progressWithinCurrentTier(1000)).toBeCloseTo(0.5, 5);
+    expect(progressWithinCurrentTier(50)).toBeCloseTo(0.5, 5);
+    expect(progressWithinCurrentTier(100)).toBe(0);
+    expect(progressWithinCurrentTier(550)).toBeCloseTo(0.5, 5);
   });
 
   it('getMasteryTierProgress reports points to next tier', () => {
-    const p = getMasteryTierProgress(250);
+    const p = getMasteryTierProgress(50);
     expect(p.tier).toBe('establishing');
     expect(p.nextTier).toBe('familiar');
-    expect(p.pointsToNext).toBe(250);
+    expect(p.pointsToNext).toBe(50);
     expect(p.barFillRatio).toBeCloseTo(0.5, 5);
   });
 
@@ -33,10 +33,10 @@ describe('tier progress', () => {
 
   it('portrait bars use band width for current tier', () => {
     const t = getMasteryTierThresholds();
-    expect(getTierBandWidthForPortraitBars('establishing', t)).toBe(500);
-    expect(getTierBandWidthForPortraitBars('familiar', t)).toBe(1000);
-    expect(getTierBandWidthForPortraitBars('solid', t)).toBe(2000);
-    expect(getTierBandWidthForPortraitBars('mastery', t)).toBe(2000);
-    expect(portraitScoreBarRatio(250, 'establishing', t)).toBeCloseTo(0.5, 5);
+    expect(getTierBandWidthForPortraitBars('establishing', t)).toBe(100);
+    expect(getTierBandWidthForPortraitBars('familiar', t)).toBe(900);
+    expect(getTierBandWidthForPortraitBars('solid', t)).toBe(1000);
+    expect(getTierBandWidthForPortraitBars('mastery', t)).toBe(1000);
+    expect(portraitScoreBarRatio(50, 'establishing', t)).toBeCloseTo(0.5, 5);
   });
 });

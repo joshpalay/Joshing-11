@@ -3,9 +3,9 @@ import type { MasteryTier } from '@/types/db';
 /** PRD §8.32 — minimum points to enter each tier (establishing is default below familiar). */
 export const TIER_THRESHOLD_POINTS: Record<MasteryTier, number> = {
   establishing: 0,
-  familiar: 500,
-  solid: 1500,
-  mastery: 3500,
+  familiar: 100,
+  solid: 1000,
+  mastery: 2000,
 };
 
 /**
