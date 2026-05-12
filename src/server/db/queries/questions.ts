@@ -100,7 +100,6 @@ const questionViewColumns = {
   sharedToFriendsFeed: questionTableColumns.sharedToFriendsFeed,
   askedCount: questionTableColumns.askedCount,
   correctCount: questionTableColumns.correctCount,
-  surfacePriorityScore: questionTableColumns.surfacePriorityScore,
   createdAt: questionTableColumns.createdAt,
   updatedAt: questionTableColumns.updatedAt,
   deletedAt: questionTableColumns.deletedAt,
@@ -108,8 +107,8 @@ const questionViewColumns = {
 
 export const bankQuestionSelectColumns = questionViewColumns;
 
-type QuestionViewRow = Omit<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations'>
-  & Partial<Pick<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations'>>;
+type QuestionViewRow = Omit<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>
+  & Partial<Pick<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>>;
 
 function difficultyToNumber(value: QuestionRow['difficultyEstimate']): number {
   if (value === 'accessible') return 1;
@@ -273,6 +272,53 @@ export async function createQuestion(params: {
     return created;
   };
 
+  const createWithLegacyColumns = async () => {
+    const answerSource = params.llmSuggestedAnswer
+      ? (params.verified ? 'llm_suggested' : 'llm_edited')
+      : 'creator_written';
+    const status = params.verified ? 'verified' : 'unverified';
+    const rows = await db.execute<{ id: string }>(sql`
+      INSERT INTO "Question" (
+        "creator_id",
+        "question_text",
+        "answer_text",
+        "factual_explanation",
+        "accepted_alternatives",
+        "answer_source",
+        "question_type",
+        "category",
+        "category_overridden",
+        "creator_note",
+        "difficulty_estimate",
+        "llm_difficulty",
+        "calibrated_difficulty",
+        "status",
+        "visibility"
+      )
+      VALUES (
+        ${params.authorId},
+        ${params.text},
+        ${params.correctAnswer},
+        ${params.explanation},
+        ${params.alternateAnswers}::text[],
+        ${answerSource}::"AnswerSource",
+        'factual'::"QuestionType",
+        ${params.domain}::"Category",
+        true,
+        ${params.creatorNote ?? null},
+        ${difficulty}::"DifficultyEstimate",
+        ${difficulty}::"DifficultyEstimate",
+        ${difficulty}::"DifficultyEstimate",
+        ${status}::"QuestionStatus",
+        'public'::"QuestionVisibility"
+      )
+      RETURNING "id"
+    `);
+    const created = Array.isArray(rows) ? rows[0] : rows.rows?.[0];
+    if (!created) throw new Error('Failed to create legacy-compatible question');
+    return created;
+  };
+
   let created: { id: string };
   try {
     created = await createWithValues({
@@ -283,11 +329,20 @@ export async function createQuestion(params: {
     } as typeof questions.$inferInsert);
   } catch (error) {
     if (pgErrorCode(error) !== '42703') throw error;
-    console.warn('[questions/create] verification columns unavailable; saving legacy-compatible question', {
+    console.warn('[questions/create] current question columns unavailable; retrying legacy-compatible question insert', {
       userId: params.authorId,
       domain: params.domain,
     });
-    created = await createWithValues(baseValues as typeof questions.$inferInsert);
+    try {
+      created = await createWithValues(baseValues as typeof questions.$inferInsert);
+    } catch (fallbackError) {
+      if (pgErrorCode(fallbackError) !== '42703') throw fallbackError;
+      console.warn('[questions/create] drizzle insert still references unavailable columns; saving with raw legacy-compatible insert', {
+        userId: params.authorId,
+        domain: params.domain,
+      });
+      created = await createWithLegacyColumns();
+    }
   }
 
   await db
