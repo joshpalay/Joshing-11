@@ -16,6 +16,7 @@ import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { pgErrorCode } from '@/server/db/pg-error';
 import type { MasteryTier } from '@/types/db';
 
@@ -253,7 +254,7 @@ function toDomainMasteryRow(
     questionsCorrect,
     correctRate: questionsAnswered > 0 ? percent((questionsCorrect / questionsAnswered) * 100) : 0,
     lastActivityAt: toIso(stats?.lastActivityAt),
-    broadCategory: knowledgeDomain.broadCategory ?? row?.broadCategory ?? null,
+    broadCategory: normalizeBroadCategory(knowledgeDomain.broadCategory ?? row?.broadCategory),
     iconKey: toCanonicalDomainSlug(domain),
     isDeclared: knowledgeDomain.isDeclared,
     isDeclaredInterest: knowledgeDomain.isDeclared,

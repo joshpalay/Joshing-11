@@ -10,6 +10,7 @@ import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
 import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
 import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import type { MasteryTier } from '@/types/db';
 
 type DomainMastery = {
@@ -83,7 +84,7 @@ function displayMind(domains: DomainMastery[], declaredInterests: string[]): str
 function toPortraitEntry(domain: DomainMastery): PortraitEntry {
   return {
     canonicalSubcategory: domain.displayName,
-    broadCategory: domain.broadCategory ?? 'Other',
+    broadCategory: normalizeBroadCategory(domain.broadCategory) ?? 'Other',
     totalMasteryPoints: Math.max(domain.points, domain.isDeclaredInterest ? 1 : 0),
     tier: asTier(domain.tier),
     authoredAnsweredCount: domain.questionsAnswered,

@@ -3,6 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db, masteryEvents, playerMastery } from '@/server/db';
 import { effectiveTier } from '@/server/mastery/tiers';
 import type { AnswerState, MasteryTier } from '@/types/db';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 
 type MasteryEventSourceType = 'daily' | 'feed' | 'joshing_game' | 'catchup' | 'author_credit' | 'curator_credit';
 
@@ -48,12 +49,13 @@ async function readAuthorCredit(userId: string, domain: string) {
   };
 }
 
-async function writeTierCrossingActivityForFriends(_params: {
+async function writeTierCrossingActivityForFriends(params: {
   userId: string;
   domain: string;
   previousTier: MasteryTier;
   newTier: MasteryTier;
 }) {
+  void params;
   // TODO Phase 8: write friend_mastery activity for each friend when
   // friend system is built. Friends list: getFriends(userId).
 }
@@ -77,6 +79,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
   ]);
 
   const existing = existingMastery[0];
+  const broadCategory = normalizeBroadCategory(params.broadCategory ?? existing?.broadCategory);
   const previousTier: MasteryTier = existing?.tier ?? 'establishing';
   const nextTotalPoints = (existing?.totalPoints ?? 0) + params.pointsAwarded;
   const nextTier = params.pointsAwarded > 0
@@ -125,7 +128,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
         .values({
           userId: params.userId,
           canonicalSubcategory: params.domain,
-          broadCategory: params.broadCategory ?? existing?.broadCategory ?? null,
+          broadCategory,
           totalPoints: params.pointsAwarded,
           tier: nextTier,
           tierReachedAt: tierChanged ? new Date() : null,
@@ -135,7 +138,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
         .onConflictDoUpdate({
           target: [playerMastery.userId, playerMastery.canonicalSubcategory],
           set: {
-            broadCategory: params.broadCategory ?? existing?.broadCategory ?? null,
+            broadCategory,
             totalPoints: nextTotalPoints,
             tier: nextTier,
             tierReachedAt: tierChanged ? new Date() : existing?.tierReachedAt ?? null,

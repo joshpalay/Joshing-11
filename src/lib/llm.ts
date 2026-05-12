@@ -369,7 +369,7 @@ Rules:
 - The subcategory must be as specific as the question demands.
 - Never normalize upward to a broad field if a narrower label is justified.
 - Use title case for both labels.
-- broad_category should be a stable domain (e.g., "Classical Music", "Literature", "World History", "Film & Television", "Science", "Philosophy", "Language", "Sports", "Pop Culture", "Other").
+- broad_category must be a stable top-level bucket, not an author/work/movement-specific territory (e.g., use "Literature" for James Joyce, Irish Modernism, novels, poetry, or fiction; use "Music", "History", "Film & Television", "Science", "Philosophy", "Language", "Sports", "Pop Culture", "Other").
 - subcategory should be narrow and portrait-friendly.
 - The subcategory must always be narrower than the broad_category. Never return the broad_category value itself as the subcategory (e.g. if broad_category is "Pop Culture", the subcategory must be something more specific than "Pop Culture"; if broad_category is "Music", the subcategory must be more specific than "Music").
 - For music, film, TV, or pop culture questions: name the specific artist, franchise, era, or cultural moment — not the genre or medium (e.g. "Late-Career David Bowie", "MCU Phase 3", "Drag Race Seasons 1–5", "Early 2010s Internet Memes", "Survivor Original Era").
