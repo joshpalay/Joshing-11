@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { getSession } from '@/server/auth/session'
+import { logTelemetry } from '@/server/telemetry'
 import { ignorePendingFriendshipRequest } from '@/server/friends/friendships'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +25,11 @@ export async function POST(
       { status: 404 }
     )
   }
+
+  logTelemetry('friend_request_ignored', {
+    friendship_id: friendship.id,
+    user_id: session.userId,
+  })
 
   return NextResponse.json({ ok: true, friendship: { id: friendship.id, status: friendship.status } })
 }

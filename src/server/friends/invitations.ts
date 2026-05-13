@@ -4,6 +4,7 @@ import { and, desc, eq, gt, isNull, or } from 'drizzle-orm'
 
 import { db, friendInvitations, users } from '@/server/db'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
+import { hashTelemetryValue, logTelemetry } from '@/server/telemetry'
 
 export const INVITATION_ACCEPTANCE_ERROR_MESSAGE =
   'This invitation could not be accepted.'
@@ -113,6 +114,10 @@ export async function getFriendInvitationLandingByToken(
     .limit(1)
 
   if (!row || row.cancelledAt) {
+    logTelemetry('friend_invite_link_opened', {
+      status: 'invalid',
+      invite_hash: hashTelemetryValue(normalizedToken),
+    })
     return { status: 'invalid', inviterName: 'Someone', suggestedInterests: [] }
   }
 
@@ -120,12 +125,28 @@ export async function getFriendInvitationLandingByToken(
   const suggestedInterests = parseLandingInterests(row.preSeededInterests)
 
   if (row.acceptedAt) {
+    logTelemetry('friend_invite_link_opened', {
+      status: 'accepted',
+      invite_hash: hashTelemetryValue(normalizedToken),
+      suggested_interest_count: 0,
+    })
     return { status: 'accepted', inviterName, suggestedInterests: [] }
   }
 
   if (row.expiresAt <= now) {
+    logTelemetry('friend_invite_link_opened', {
+      status: 'expired',
+      invite_hash: hashTelemetryValue(normalizedToken),
+      suggested_interest_count: 0,
+    })
     return { status: 'expired', inviterName, suggestedInterests: [] }
   }
+
+  logTelemetry('friend_invite_link_opened', {
+    status: 'valid',
+    invite_hash: hashTelemetryValue(normalizedToken),
+    suggested_interest_count: suggestedInterests.length,
+  })
 
   return { status: 'valid', inviterName, suggestedInterests }
 }
@@ -375,6 +396,11 @@ export async function acceptFriendInvitation({
   }
 
   if (invitation.inviteePhone !== verifiedPhone) {
+    logTelemetry('friend_invite_phone_mismatch_rejected', {
+      invitation_id: invitation.id,
+      inviter_user_id: invitation.inviterUserId,
+      invitee_user_id: inviteeUserId,
+    })
     return { accepted: false, reason: 'phone_mismatch' }
   }
 
@@ -411,6 +437,13 @@ export async function acceptFriendInvitation({
   if (!claimedInvitation) {
     return { accepted: false, reason: 'claim_failed' }
   }
+
+  logTelemetry('friend_invite_accepted', {
+    invitation_id: invitation.id,
+    inviter_user_id: invitation.inviterUserId,
+    invitee_user_id: inviteeUserId,
+    suggested_interest_count: parseInvitationInterests(invitation.preSeededInterests).length,
+  })
 
   return { accepted: true }
 }

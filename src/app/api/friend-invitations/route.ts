@@ -11,6 +11,7 @@ import {
   type OutgoingFriendInvitation,
 } from '@/server/friends/invitations'
 import { createOrReusePendingFriendshipRequest } from '@/server/friends/friendships'
+import { logTelemetry } from '@/server/telemetry'
 
 export const dynamic = 'force-dynamic'
 
@@ -326,6 +327,14 @@ export async function POST(request: Request) {
           suggestedInterests,
         })
 
+      logTelemetry('friend_request_existing_user_created', {
+        inviter_user_id: session.userId,
+        invitee_user_id: existingUser.id,
+        friendship_id: friendshipRequest.id,
+        state,
+        suggested_interest_count: suggestedInterests.length,
+      })
+
       return NextResponse.json({
         ok: true,
         type: 'friendship_request',
@@ -358,6 +367,12 @@ export async function POST(request: Request) {
     const message = buildFriendInvitationMessage({
       inviteUrl,
       suggestedInterests,
+    })
+
+    logTelemetry('add_friend_invite_created', {
+      inviter_user_id: session.userId,
+      invitation_id: invitation.id,
+      suggested_interest_count: suggestedInterests.length,
     })
 
     if (invitation.personalMessage !== message) {
