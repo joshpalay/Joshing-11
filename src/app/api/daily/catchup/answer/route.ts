@@ -146,6 +146,7 @@ export async function POST(request: NextRequest) {
       session.userId,
       persisted.questionId,
       isCorrect ? 'correct' : 'incorrect',
+      `catchup:${catchupItem.dailyQueueItemId}:${session.userId}`,
     );
   } catch (error) {
     console.warn('[daily/catchup/answer] failed to persist generated question for feed propagation', {

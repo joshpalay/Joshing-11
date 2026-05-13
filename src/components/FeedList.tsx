@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Send, SkipForward, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { Send, SkipForward, X } from 'lucide-react';
 
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
@@ -16,7 +16,7 @@ type FriendResult = {
 
 type FeedApiItem = {
   id: string;
-  kind: 'question' | 'joshing_game';
+  kind: 'question';
   question_id: string | null;
   source_type: string;
   source_user_id: string;
@@ -28,12 +28,10 @@ type FeedApiItem = {
   personal_message: string | null;
   state: string;
   is_pinned: boolean;
-  joshing_game_id: string | null;
   question_text: string | null;
   verified: boolean;
   is_in_bank: boolean;
-  domain_pill: string;
-  game_title: string | null;
+  domain_pill: string | null;
   difficulty: string | null;
 };
 
@@ -62,8 +60,6 @@ type AnswerResponse = {
   answer?: string;
   correctAnswer?: string;
   explanation?: string | null;
-  awarded_points?: number;
-  pointsAwarded?: number;
   quip?: string | null;
   consolation?: string | null;
   breadcrumb?: string | null;
@@ -73,22 +69,8 @@ type ResultState = {
   correct: boolean;
   answer: string;
   explanation: string | null;
-  points: number;
   quip: string | null;
   breadcrumb: string | null;
-};
-
-type JoshingGameFeedView = {
-  game: { id: string; title: string };
-  creator: { displayName: string };
-  questions: Array<{ questionId: string }>;
-  recipients: Array<{ userId: string; displayName: string; completedAt: string | null; score: number | null }>;
-  responses: Array<{ userId: string; questionId: string; isCorrect: boolean | null }>;
-  viewerStatus: 'not_started' | 'in_progress' | 'complete';
-};
-
-type FeedListProps = {
-  limit?: number;
 };
 
 function formatEventTime(value: string) {
@@ -103,70 +85,14 @@ function comparisonCopy(playerCorrect: boolean, friendResults: FriendResult[] | 
   const friendCorrect = primaryFriend?.result === 'correct';
 
   if (playerCorrect && friendCorrect) return 'You both had it.';
-  if (playerCorrect && !friendCorrect) return `You got it. ${friendName} couldn't.`;
-  if (!playerCorrect && friendCorrect) return `${friendName} had it. You'll get it next time.`;
-  return 'Neither of you got it. Good question.';
+  if (playerCorrect && !friendCorrect) return `You found a connection ${friendName} missed.`;
+  if (!playerCorrect && friendCorrect) return `${friendName} recognized this one. You might next time.`;
+  return 'This one is still waiting for common ground.';
 }
 
-function JoshingGameCard({ item, viewerId }: { item: FeedApiItem; viewerId: string | null }) {
-  const [game, setGame] = useState<JoshingGameFeedView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!item.joshing_game_id) return;
-    fetch(`/api/joshing-games/${item.joshing_game_id}`, { cache: 'no-store', credentials: 'include' })
-      .then(async (response) => {
-        const body = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(body?.message ?? 'Could not load this game.');
-        setGame(body);
-      })
-      .catch((caught) => setError(caught instanceof Error ? caught.message : 'Could not load this game.'));
-  }, [item.joshing_game_id]);
-
-  const questionCount = game?.questions.length ?? 0;
-  const href = game?.viewerStatus === 'complete'
-    ? `/games/${game.game.id}/summary`
-    : `/games/${game?.game.id ?? item.joshing_game_id}`;
-  const cta = game?.viewerStatus === 'complete' ? 'See results' : 'Play';
-
-  return (
-    <article className="rounded-lg border bg-card p-4 text-card-foreground">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">Pinned</span>
-        <span className="text-xs text-muted-foreground">{formatEventTime(item.source_event_at)}</span>
-      </div>
-      <h2 className="font-serif text-xl font-semibold">🎯 {game?.game.title ?? item.game_title ?? 'Joshing Game'}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">From {game?.creator.displayName ?? item.source_friend_display_name}</p>
-
-      <div className="mt-4 space-y-2">
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        {!game && !error ? <p className="text-sm text-muted-foreground">Loading game...</p> : null}
-        {game?.recipients.map((recipient) => {
-          const answered = game.responses.filter((r) => r.userId === recipient.userId);
-          const score = recipient.score ?? answered.filter((r) => r.isCorrect).length;
-          const label = recipient.completedAt
-            ? `✅ ${score}/${questionCount}`
-            : answered.length > 0
-              ? '⏳ Playing...'
-              : '— Not started';
-          return (
-            <div key={recipient.userId} className="flex items-center justify-between gap-3 text-sm">
-              <span>{recipient.userId === viewerId ? 'You' : recipient.displayName}</span>
-              <span className="text-muted-foreground">{label}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-5 flex items-center justify-between gap-3">
-        <Link href={href} className="btn-primary">
-          {cta}
-        </Link>
-        <span className="text-sm text-muted-foreground">{questionCount || ''} {questionCount === 1 ? 'question' : 'questions'}</span>
-      </div>
-    </article>
-  );
-}
+type FeedListProps = {
+  limit?: number;
+};
 
 type QuestionCardState = 'unanswered' | 'answered' | 'reacted';
 
@@ -178,8 +104,6 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
   const [results, setResults] = useState<Record<string, ResultState>>({});
   const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({});
   const [toasts, setToasts] = useState<Record<string, string>>({});
-  const [thumbsDownState, setThumbsDownState] = useState<Record<string, 'removed' | 'restored'>>({});
-  const thumbsDownTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -208,7 +132,10 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
   }, []);
 
   useEffect(() => {
-    void loadFeed();
+    const timer = window.setTimeout(() => {
+      void loadFeed();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadFeed]);
 
   const visibleItems = useMemo(() => items.slice(0, limit), [items, limit]);
@@ -216,13 +143,13 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
   const emptyCopy = useMemo(() => {
     if (loading) return 'Loading your Feed...';
     if (error) return error;
-    if (!feedMeta?.has_friends) return "When your friends play, their questions will show up here.";
+    if (!feedMeta?.has_friends) return "When friends recognize each other’s questions, those moments will appear here.";
     // pre_filter_active_count > 0 means items exist in active/skipped state but are hidden by domain filters
     if (feedMeta.has_dismissed_domains && feedMeta.pre_filter_active_count > 0) {
       return "You've focused your Feed. You can re-open domains from your Knowledge page.";
     }
-    if (feedMeta.total_item_count > 0) return "You're caught up.";
-    return "Quiet today. Check back when your friends have played.";
+    if (feedMeta.total_item_count > 0) return "You're caught up. Answer questions to reveal more common ground.";
+    return "Answer questions to reveal common ground.";
   }, [error, feedMeta, loading]);
 
   const showToast = useCallback((itemId: string, message: string) => {
@@ -301,7 +228,6 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
           correct: Boolean(body.correct ?? body.isCorrect),
           answer: body.answer ?? body.correctAnswer ?? '',
           explanation: body.explanation ?? null,
-          points: body.awarded_points ?? body.pointsAwarded ?? 0,
           quip: body.quip ?? body.consolation ?? null,
           breadcrumb: body.breadcrumb ?? null,
         },
@@ -313,52 +239,6 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
       setBusyId(null);
     }
   }, [answers]);
-
-  const thumbsup = useCallback(async (itemId: string) => {
-    setBusyId(itemId);
-    try {
-      await fetch(`/api/feed/${itemId}/thumbsup`, { method: 'POST', credentials: 'include' });
-    } finally {
-      setBusyId(null);
-    }
-  }, []);
-
-  const thumbsdown = useCallback(async (itemId: string) => {
-    const current = thumbsDownState[itemId];
-    setBusyId(itemId);
-    try {
-      if (current === 'removed') {
-        // Undo: restore the item
-        const response = await fetch(`/api/feed/${itemId}/thumbsdown`, { method: 'DELETE', credentials: 'include' });
-        if (response.ok) {
-          if (thumbsDownTimers.current[itemId]) {
-            clearTimeout(thumbsDownTimers.current[itemId]);
-            delete thumbsDownTimers.current[itemId];
-          }
-          setThumbsDownState((s) => ({ ...s, [itemId]: 'restored' }));
-          // Auto-fade restored message after 4s
-          thumbsDownTimers.current[itemId] = setTimeout(() => {
-            setThumbsDownState((s) => { const next = { ...s }; delete next[itemId]; return next; });
-            delete thumbsDownTimers.current[itemId];
-          }, 4000);
-        }
-      } else {
-        // First tap: dismiss and show confirmation
-        const response = await fetch(`/api/feed/${itemId}/thumbsdown`, { method: 'POST', credentials: 'include' });
-        if (response.ok) {
-          setThumbsDownState((s) => ({ ...s, [itemId]: 'removed' }));
-          // Auto-remove from list after 4s
-          thumbsDownTimers.current[itemId] = setTimeout(() => {
-            removeItem(itemId);
-            setThumbsDownState((s) => { const next = { ...s }; delete next[itemId]; return next; });
-            delete thumbsDownTimers.current[itemId];
-          }, 4000);
-        }
-      }
-    } finally {
-      setBusyId(null);
-    }
-  }, [removeItem, thumbsDownState]);
 
   return (
     <>
@@ -392,31 +272,22 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
             const cardState = cardStates[item.id] ?? (item.state === 'answered' ? 'answered' : 'unanswered');
             const toast = toasts[item.id];
 
-            if (item.kind === 'joshing_game') {
-              return <JoshingGameCard key={item.id} item={item} viewerId={viewerId} />;
-            }
-
-            const thumbsDownMsg = thumbsDownState[item.id];
 
             return (
               <article
                 key={item.id}
-                className={[
-                  'rounded-lg border bg-card p-4 text-card-foreground',
-                  item.source_type === 'direct_sent' ? 'border-l-4 border-l-primary shadow-sm' : '',
-                ].join(' ')}
+                className="rounded-lg border bg-card p-4 text-card-foreground"
               >
                 {/* Header row */}
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  {item.source_type === 'direct_sent' ? (
-                    <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">Sent to you</span>
-                  ) : null}
                   {item.is_pinned ? (
                     <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">Pinned</span>
                   ) : null}
-                  <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
-                    {item.domain_pill}
-                  </span>
+                  {item.domain_pill ? (
+                    <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+                      {item.domain_pill}
+                    </span>
+                  ) : null}
                   {!item.verified ? (
                     <button
                       type="button"
@@ -445,12 +316,8 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
 
                 {/* Attribution line */}
                 <div className="mt-2 flex items-center gap-1.5">
-                  {item.source_type === 'authored_shared' ? <span className="text-sm text-muted-foreground" aria-hidden>✎</span> : null}
                   <p className="text-sm font-medium text-foreground">{item.source_attribution}</p>
                 </div>
-                {item.source_type === 'authored_shared' ? (
-                  <p className="mt-1 text-sm italic text-muted-foreground">Shared with their friends</p>
-                ) : null}
                 {item.personal_message ? (
                   <p className="mt-1 text-sm italic text-muted-foreground">&ldquo;{item.personal_message}&rdquo;</p>
                 ) : null}
@@ -460,14 +327,6 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                   <p className="mt-2 text-sm text-muted-foreground">{toast}</p>
                 ) : null}
 
-                {/* Thumbs-down inline confirmation */}
-                {thumbsDownMsg ? (
-                  <p className="mt-2 text-xs italic text-muted-foreground">
-                    {thumbsDownMsg === 'removed'
-                      ? "Removed from your feed. Won’t pass to your friends."
-                      : 'Restored. This may pass to your friends.'}
-                  </p>
-                ) : null}
 
                 {/* State 2 — Answered */}
                 {cardState === 'answered' && result ? (
@@ -476,7 +335,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                     <p className="font-medium">
                       {item.source_type === 'friend_answered'
                         ? comparisonCopy(result.correct, item.friend_results)
-                        : result.correct ? `Correct. +${result.points}` : 'Not quite.'}
+                        : result.correct ? 'This one connected.' : 'Not quite.'}
                     </p>
                     {!result.correct ? <p className="mt-1">Answer: {result.answer}</p> : null}
                     {result.explanation ? <p className="mt-1 text-muted-foreground">{result.explanation}</p> : null}
@@ -485,29 +344,9 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
 
                     {/* Post-answer actions */}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm"
-                        type="button"
-                        onClick={() => void thumbsup(item.id)}
-                        disabled={busyId === item.id}
-                        title="Great question"
-                      >
-                        <ThumbsUp className="size-4" />
-                        Great question
-                      </button>
-                      <button
-                        className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground"
-                        type="button"
-                        onClick={() => void thumbsdown(item.id)}
-                        disabled={busyId === item.id}
-                        title="Not a fair question"
-                      >
-                        <ThumbsDown className="size-4" />
-                        Not fair
-                      </button>
                       {item.question_id ? (
                         <SendQuestionAction
-                          question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill }}
+                          question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill ?? '' }}
                           label="Send to friend"
                           className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted"
                         />
@@ -577,15 +416,15 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                       <button
                         className="inline-flex h-11 items-center gap-1.5 rounded-md border px-3 text-sm text-muted-foreground"
                         type="button"
-                        onClick={() => void dismissDomain(item.id, item.domain_pill)}
-                        disabled={busyId === item.id}
-                        title={`Not my focus: ${item.domain_pill}`}
+                        onClick={() => item.domain_pill ? void dismissDomain(item.id, item.domain_pill) : undefined}
+                        disabled={busyId === item.id || !item.domain_pill}
+                        title={item.domain_pill ? `Not my focus: ${item.domain_pill}` : 'No category to focus'}
                       >
                         Not my focus
                       </button>
                       {item.question_id ? (
                         <SendQuestionAction
-                          question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill }}
+                          question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill ?? '' }}
                           label=""
                           className="inline-flex h-11 w-11 items-center justify-center rounded-md border hover:bg-muted"
                         />

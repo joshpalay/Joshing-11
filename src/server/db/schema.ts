@@ -684,6 +684,7 @@ export const feedItems = pgTable(
     sourceEventAt: timestamp('sourceEventAt', { withTimezone: true }).notNull().defaultNow(),
     personalMessage: text('personalMessage'),
     submittedAnswer: text('submittedAnswer'),
+    sourceAnswerId: text('sourceAnswerId'),
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
     quip: text('quip'),
@@ -692,6 +693,7 @@ export const feedItems = pgTable(
   (table) => [
     index('FeedItem_recipientUserId_state_idx').on(table.recipientUserId, table.state, table.sourceEventAt.desc()),
     index('FeedItem_recipientUserId_pinned_idx').on(table.recipientUserId, table.isPinned).where(sql`"isPinned" = TRUE`),
+    uniqueIndex('FeedItem_recipientUserId_sourceAnswerId_key').on(table.recipientUserId, table.sourceAnswerId).where(sql`"sourceAnswerId" IS NOT NULL`),
   ],
 );
 

@@ -204,6 +204,13 @@
       "when": 1778616900000,
       "tag": "0028_remove_other_question_category",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1778714100000,
+      "tag": "0029_correct_answer_social_feed",
+      "breakpoints": true
     }
   ]
 }

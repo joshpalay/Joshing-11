@@ -1,10 +1,10 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
-import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
+import { db, feedItems, questions, users } from '@/server/db';
 import {
   createQuestion,
   getQuestion,
@@ -18,7 +18,6 @@ import {
 } from '@/server/db/queries/feed';
 import { openKBDomain } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
-import { writeActivity } from '@/server/activity/write-activity';
 import { readCreateQuestionPayload } from '@/server/questions/create-payload';
 import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 
@@ -87,68 +86,11 @@ export async function POST(request: NextRequest) {
   const question = await getQuestion(created.id, session.userId);
 
   if (shareToFeed) {
-    try {
-      const friends = await getFriends(session.userId);
-      const concurrency = 5;
-      let sharedCount = 0;
-
-      for (let index = 0; index < friends.length; index += concurrency) {
-        const batch = friends.slice(index, index + concurrency);
-        const results = await Promise.all(batch.map(async (friend) => {
-          const [dismissed] = await db
-            .select({ id: feedDismissedDomains.id })
-            .from(feedDismissedDomains)
-            .where(and(
-              eq(feedDismissedDomains.userId, friend.id),
-              eq(feedDismissedDomains.canonicalSubcategory, categorizedQuestionFields.canonicalSubcategory),
-              isNull(feedDismissedDomains.reinstatedAt),
-            ))
-            .limit(1);
-
-          if (dismissed) return false;
-
-          const [existing] = await db
-            .select({ id: feedItems.id })
-            .from(feedItems)
-            .where(and(
-              eq(feedItems.recipientUserId, friend.id),
-              eq(feedItems.questionId, created.id),
-            ))
-            .limit(1);
-
-          if (existing) return false;
-
-          await db.insert(feedItems).values({
-            recipientUserId: friend.id,
-            sourceUserId: session.userId,
-            questionId: created.id,
-            sourceType: 'authored_shared',
-            sourceResult: null,
-            state: 'active',
-            isPinned: false,
-            sourceEventAt: new Date(),
-          });
-          await rollOffOldItems(friend.id);
-          return true;
-        }));
-        sharedCount += results.filter(Boolean).length;
-      }
-
-      await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
-      await writeActivity({
-        userId: session.userId,
-        type: 'authored_question_shared',
-        referenceId: created.id,
-        referenceType: 'question',
-      });
-      console.info('[questions/shareToFeed]', { questionId: created.id, userId: session.userId, recipientCount: sharedCount });
-    } catch (error) {
-      console.error('[questions/shareToFeed] broadcast share failed (suppressed):', {
-        questionId: created.id,
-        userId: session.userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    console.info('[questions/shareToFeed]', {
+      questionId: created.id,
+      userId: session.userId,
+      skipped: 'created questions are managed in Questions until a non-author answers correctly',
+    });
   }
 
   if (sendToFriendIds.length > 0) {
