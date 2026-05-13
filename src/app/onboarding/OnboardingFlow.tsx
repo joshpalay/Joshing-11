@@ -26,12 +26,11 @@ type SelectedInterest = {
   broadCategory: string;
 };
 
-export type PreSeededInterest = ProposedInterest & {
-  inviterName?: string | null;
-};
+export type PreSeededInterest = ProposedInterest;
 
 type OnboardingFlowProps = {
   preSeededInterests: PreSeededInterest[];
+  inviterName?: string | null;
 };
 
 type CanonicalSuggestion = {
@@ -160,7 +159,7 @@ function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowProps) {
+export default function OnboardingFlow({ preSeededInterests, inviterName }: OnboardingFlowProps) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<CurrentStep>('welcome');
   const [birthYear, setBirthYear] = useState('');
@@ -168,6 +167,7 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
   const [grewUpRegion, setGrewUpRegion] = useState('');
   const [warmupAnswers, setWarmupAnswers] = useState<WarmupAnswers>({});
   const [proposedInterests, setProposedInterests] = useState<ProposedInterest[] | null>(null);
+  const [inviteInterests, setInviteInterests] = useState<PreSeededInterest[]>(() => preSeededInterests);
   const [selectedInterests, setSelectedInterests] = useState<SelectedInterest[]>(
     () => preSeededInterests.flatMap((interest) => {
       const selected = toSelected(interest);
@@ -187,7 +187,7 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showDailySetup = useMemo(() => isBeforeNoonEastern(), []);
 
-  const inviterName = preSeededInterests.find((interest) => interest.inviterName)?.inviterName ?? 'A friend';
+  const displayInviterName = inviterName?.trim() ? inviterName.trim() : 'A friend';
 
   const parsedBirthYear = parseInt(birthYear, 10);
   const maxBirthYear = new Date().getFullYear() - 13;
@@ -203,14 +203,14 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
 
   const reviewInterests = useMemo(
     () => [
-      ...preSeededInterests,
+      ...inviteInterests,
       ...(proposedInterests ?? []).filter(
-        (interest) => !preSeededInterests.some(
+        (interest) => !inviteInterests.some(
           (seeded) => selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) === selectedKey(toSelected(interest) ?? { domain: '', broadCategory: '' }),
         ),
       ),
     ],
-    [preSeededInterests, proposedInterests],
+    [inviteInterests, proposedInterests],
   );
 
   useEffect(() => {
@@ -225,12 +225,14 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
 
   useEffect(() => {
     const rawInput = normalizeDomain(customInput);
-    setCanonicalSuggestion(null);
-    setCustomChoice(null);
+    const resetTimer = window.setTimeout(() => {
+      setCanonicalSuggestion(null);
+      setCustomChoice(null);
+      if (!showComposer || rawInput.length <= 3) setIsCanonicalizing(false);
+    }, 0);
 
     if (!showComposer || rawInput.length <= 3) {
-      setIsCanonicalizing(false);
-      return;
+      return () => window.clearTimeout(resetTimer);
     }
 
     const controller = new AbortController();
@@ -264,6 +266,7 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
 
     return () => {
       controller.abort();
+      window.clearTimeout(resetTimer);
       window.clearTimeout(timer);
     };
   }, [customInput, showComposer]);
@@ -298,6 +301,11 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
     if (!selected || nextDomain.length < 2) return;
 
     const edited = { ...interest, domain: nextDomain };
+    setInviteInterests((current) => current.map((item) => (
+      selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) === selectedKey(selected)
+        ? edited
+        : item
+    )));
     setProposedInterests((current) => current?.map((item) => (
       selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) === selectedKey(selected)
         ? edited
@@ -455,18 +463,18 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                 <p>It takes about two minutes.</p>
               </div>
 
-              {preSeededInterests.length > 0 ? (
+              {inviteInterests.length > 0 ? (
                 <div className="rounded-lg border bg-card p-4 text-sm leading-6 shadow-sm">
                   <p className="font-medium">
-                    {inviterName} thought you&apos;d like questions about:
+                    {displayInviterName} thought you might like:
                   </p>
                   <ul className="mt-2 space-y-1 text-muted-foreground">
-                    {preSeededInterests.slice(0, 3).map((interest) => (
+                    {inviteInterests.slice(0, 3).map((interest) => (
                       <li key={interest.domain}>- {interest.domain}</li>
                     ))}
                   </ul>
                   <p className="mt-3 text-muted-foreground">
-                    We&apos;ll add these in - you can change them later.
+                    They&apos;re preselected, but you can edit, remove, or skip them before anything is saved.
                   </p>
                 </div>
               ) : null}
@@ -630,7 +638,7 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                   const selected = isSelected(selectedInterests, interest);
                   const normalized = toSelected(interest);
                   const atCap = selectedInterests.length >= 5 && !selected;
-                  const fromInvite = preSeededInterests.some((seeded) => selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) === selectedKey(normalized ?? { domain: '', broadCategory: '' }));
+                  const fromInvite = inviteInterests.some((seeded) => selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) === selectedKey(normalized ?? { domain: '', broadCategory: '' }));
                   const key = `${interest.domain}-${interest.broadCategory}`;
                   const editing = normalized ? editingKey === selectedKey(normalized) : false;
 
@@ -683,7 +691,7 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                             ) : null}
                             {fromInvite ? (
                               <span className={`mt-3 inline-flex rounded-sm border px-2 py-1 text-[11px] font-semibold uppercase ${selected ? 'border-background/30 text-background/80' : 'text-muted-foreground'}`}>
-                                From {inviterName}
+                                From {displayInviterName}
                               </span>
                             ) : null}
                           </button>
