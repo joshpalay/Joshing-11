@@ -257,6 +257,46 @@ describe('POST /api/friend-invitations', () => {
     )
   })
 
+  it('creates Josh-to-Jaime invite with normalized phone, saved interest strings, token, expiry, and invite URL', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'user-josh' })
+    mockInvitation({
+      id: 'inv-jaime',
+      token: 'jaime-token',
+      inviteeDisplayName: 'Jaime',
+      inviteePhone: '+17345550002',
+      expiresAt,
+    })
+
+    const response = await POST(
+      jsonRequest({
+        inviteeDisplayName: ' Jaime ',
+        phone: '(734) 555-0002',
+        suggestedInterests: [' Sondheim ', 'Jazz', '  Poetry  '],
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(createFriendInvitationMock).toHaveBeenCalledWith({
+      inviterUserId: 'user-josh',
+      inviteePhone: '+17345550002',
+      inviteeDisplayName: 'Jaime',
+      preSeededInterests: ['Sondheim', 'Jazz', 'Poetry'],
+    })
+    expect(body).toEqual(
+      expect.objectContaining({
+        id: 'inv-jaime',
+        inviteeDisplayName: 'Jaime',
+        inviteePhone: '+17345550002',
+        suggestedInterests: ['Sondheim', 'Jazz', 'Poetry'],
+        expiresAt: expiresAt.toISOString(),
+      })
+    )
+    expect(body.inviteUrl).toBe('https://joshing.example/invite/jaime-token')
+    expect(body.inviteUrl).toContain('/invite/jaime-token')
+    expect(body.message).toContain('https://joshing.example/invite/jaime-token')
+  })
+
   it('fails safely when the normalized phone belongs to the inviter', async () => {
     state.existingUser = { id: 'user-inviter' }
 

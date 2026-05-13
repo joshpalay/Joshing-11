@@ -66,9 +66,9 @@ const { dbMock, state } = vi.hoisted(() => {
           where: vi.fn(() => ({
             returning: vi.fn(async () => {
               if (claimOnly) {
-                return state.updateReturnsClaim
-                  ? [{ id: state.invitation?.id ?? 'inv-1' }]
-                  : []
+                if (!state.updateReturnsClaim || !state.invitation) return []
+                state.invitation = { ...state.invitation, ...values }
+                return [{ id: state.invitation.id }]
               }
 
               if (!state.invitation) return []
@@ -208,6 +208,12 @@ describe('acceptFriendInvitation', () => {
     })
 
     expect(result).toEqual({ accepted: true })
+    expect(state.invitation).toEqual(
+      expect.objectContaining({
+        acceptedAt: now,
+        inviteeUserId: 'user-invitee',
+      })
+    )
     expect(dbMock.transaction).toHaveBeenCalledTimes(1)
     expect(state.friendshipValues).toEqual([
       expect.objectContaining({
@@ -221,6 +227,64 @@ describe('acceptFriendInvitation', () => {
         removedByUserId: null,
       }),
     ])
+  })
+
+  it("accepts Jaime's 000000-verified matching phone once and rejects wrong-phone or reused claims without duplicate friendship rows", async () => {
+    setInvitation({
+      inviterUserId: 'user-josh',
+      inviteeDisplayName: 'Jaime',
+      inviteePhone: '+17345550002',
+      token: 'jaime-token',
+    })
+
+    await expect(
+      acceptFriendInvitation({
+        token: 'jaime-token',
+        inviteeUserId: 'user-jaime-wrong-phone',
+        verifiedPhone: '+17345559999',
+        now,
+      })
+    ).resolves.toEqual({ accepted: false, reason: 'phone_mismatch' })
+    expect(state.friendshipValues).toHaveLength(0)
+
+    await expect(
+      acceptFriendInvitation({
+        token: 'jaime-token',
+        inviteeUserId: 'user-jaime',
+        verifiedPhone: '+17345550002',
+        now,
+      })
+    ).resolves.toEqual({ accepted: true })
+    expect(state.invitation).toEqual(
+      expect.objectContaining({
+        acceptedAt: now,
+        inviteeUserId: 'user-jaime',
+      })
+    )
+    expect(state.friendshipValues).toEqual([
+      expect.objectContaining({
+        userAId: 'user-jaime',
+        userBId: 'user-josh',
+        status: 'active',
+        requestedByUserId: 'user-josh',
+        formedVia: 'invitation',
+        formedAt: now,
+      }),
+    ])
+
+    await expect(
+      acceptFriendInvitation({
+        token: 'jaime-token',
+        inviteeUserId: 'user-jaime',
+        verifiedPhone: '+17345550002',
+        now,
+      })
+    ).resolves.toEqual({ accepted: false, reason: 'accepted' })
+    expect(
+      state.friendshipValues.filter(
+        (friendship) => (friendship as { status?: string }).status === 'active'
+      )
+    ).toHaveLength(1)
   })
 
   it('rejects a valid token when the verified phone does not match the invitation phone', async () => {

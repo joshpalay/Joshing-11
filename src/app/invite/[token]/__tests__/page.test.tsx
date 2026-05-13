@@ -37,6 +37,7 @@ describe('/invite/[token] landing QA states', () => {
     expect(html).toContain('Jazz')
     expect(html).toContain('Poetry')
     expect(html).toContain('href="/login?invitationToken=valid-token"')
+    expect(html).not.toContain('href="/login"')
     expect(html).not.toMatch(/leaderboard|ranking|score|points?|percent|%/i)
   })
 

@@ -92,6 +92,64 @@ describe('POST /api/onboarding/save-interests', () => {
     )
   })
 
+  it('saves only Jaime-confirmed invite interests across accept, remove, edit, and skip choices', async () => {
+    const choices = [
+      {
+        label: 'accepting all',
+        interests: [
+          { domain: 'Sondheim', broadCategory: 'Theater' },
+          { domain: 'Jazz', broadCategory: 'Music' },
+          { domain: 'Poetry', broadCategory: 'Literature' },
+        ],
+        expected: [
+          { label: 'Sondheim', broadCategory: 'Theater' },
+          { label: 'Jazz', broadCategory: 'Music' },
+          { label: 'Poetry', broadCategory: 'Literature' },
+        ],
+      },
+      {
+        label: 'removing one',
+        interests: [
+          { domain: 'Sondheim', broadCategory: 'Theater' },
+          { domain: 'Poetry', broadCategory: 'Literature' },
+        ],
+        expected: [
+          { label: 'Sondheim', broadCategory: 'Theater' },
+          { label: 'Poetry', broadCategory: 'Literature' },
+        ],
+      },
+      {
+        label: 'editing one',
+        interests: [{ domain: 'Stephen Sondheim', broadCategory: 'Theater' }],
+        expected: [{ label: 'Stephen Sondheim', broadCategory: 'Theater' }],
+      },
+      { label: 'skipping all', interests: [], expected: [] },
+    ]
+
+    for (const choice of choices) {
+      vi.clearAllMocks()
+      getSessionMock.mockResolvedValue({ userId: 'user-jaime' })
+      saveDeclaredInterestsMock.mockResolvedValue(undefined)
+      markOnboardingCompleteMock.mockResolvedValue(undefined)
+
+      const response = await POST(
+        jsonRequest(choice.interests, {
+          inviteInterestCount: 3,
+          inviteSelectedCount: choice.interests.length,
+        })
+      )
+
+      expect(response.status, choice.label).toBe(200)
+      expect(saveDeclaredInterestsMock, choice.label).toHaveBeenCalledWith(
+        'user-jaime',
+        choice.expected
+      )
+      expect(markOnboardingCompleteMock, choice.label).toHaveBeenCalledWith(
+        'user-jaime'
+      )
+    }
+  })
+
   it('enforces the max interest cap', async () => {
     const response = await POST(
       jsonRequest([
