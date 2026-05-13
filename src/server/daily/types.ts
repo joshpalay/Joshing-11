@@ -54,6 +54,10 @@ export type QueueSlot = {
   reveal_quip?: string | null;
   /** Per-answer commentary quip from selectQuip(). */
   quip?: string | null;
+  /** Optional appeal state after a player asks the app to recheck a wrong grade. */
+  recheck_status?: 'accepted' | 'rejected' | 'needs_human';
+  /** Short player-facing explanation from the recheck reviewer. */
+  recheck_reason?: string | null;
 };
 
 /**
