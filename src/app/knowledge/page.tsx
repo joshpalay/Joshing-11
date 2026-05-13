@@ -9,6 +9,7 @@ import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
 import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
 import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
+import { AskFriendForDomain } from '@/components/knowledge/AskFriendForDomain';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import type { MasteryTier } from '@/types/db';
@@ -133,6 +134,8 @@ function KnowledgePageContent() {
   const highlightedDomainSlug = searchParams.get('domain');
   const tierCrossed = searchParams.get('tier_crossed');
   const manageInterestsParam = searchParams.get('interests');
+  const emptyDomainParam = searchParams.get('emptyDomain')?.trim() || searchParams.get('askDomain')?.trim() || '';
+  const emptyQuestionDomain = emptyDomainParam || null;
 
   const [data, setData] = useState<KnowledgeResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -154,6 +157,7 @@ function KnowledgePageContent() {
   const [sendQuestionOpen, setSendQuestionOpen] = useState(false);
   const [writeQuestionOpen, setWriteQuestionOpen] = useState(false);
   const [questionToast, setQuestionToast] = useState<string | null>(null);
+  const [askFriendDomain, setAskFriendDomain] = useState<string | null>(null);
 
   const loadKnowledge = async () => {
     const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
@@ -453,6 +457,23 @@ function KnowledgePageContent() {
         </section>
       )}
 
+
+      {emptyQuestionDomain ? (
+        <section style={emptyQuestionStateStyle} aria-label={`No ${emptyQuestionDomain} questions yet`}>
+          <p style={knowledgeEyebrowStyle}>No matching public questions</p>
+          <h2 style={emptyQuestionHeadingStyle}>We don’t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
+          <p style={growMapBodyStyle}>Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
+          <div style={growMapActionsStyle}>
+            <button type="button" style={growMapPrimaryBtnStyle} onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
+              Ask a friend
+            </button>
+            <button type="button" style={growMapSecondaryBtnStyle} onClick={() => setWriteQuestionOpen(true)}>
+              Write one myself
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <section style={growMapSectionStyle}>
         <h2 style={growMapHeadingStyle}>Grow your map</h2>
         <p style={growMapBodyStyle}>Your map grows in two directions.</p>
@@ -501,6 +522,10 @@ function KnowledgePageContent() {
       {shareModalOpen && (
         <SharePortraitModal entries={portraitEntries} playerDisplayName={displayName} onClose={() => setShareModalOpen(false)} />
       )}
+
+      {askFriendDomain ? (
+        <AskFriendForDomain key={askFriendDomain} domain={askFriendDomain} onClose={() => setAskFriendDomain(null)} />
+      ) : null}
 
       {interestModal ? (
         <div style={{ ...modalOverlayStyle, zIndex: 55 }}>
@@ -582,7 +607,7 @@ function KnowledgePageContent() {
             <div style={modalHeaderStyle}>
               <div>
                 <h2 style={modalTitleStyle}>Tidy up your map?</h2>
-                <p style={modalCopyStyle}>We'll look for domains in your map that could be combined. This is automatic and based on what you've answered.</p>
+                <p style={modalCopyStyle}>We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
               </div>
               <button type="button" style={iconButtonStyle} onClick={() => setTidyConfirmOpen(false)} aria-label="Close" disabled={tidying}>
                 <X className="size-4" />
@@ -1032,6 +1057,21 @@ const modalPrimaryStyle: CSSProperties = {
   color: '#f5f0e8',
   padding: '0 16px',
   cursor: 'pointer',
+};
+
+const emptyQuestionStateStyle: CSSProperties = {
+  background: '#fff7e8',
+  border: '1px solid #d9b56c',
+  padding: '1.25rem 0.95rem',
+};
+
+const emptyQuestionHeadingStyle: CSSProperties = {
+  margin: '0.4rem 0 0',
+  fontSize: '1.25rem',
+  lineHeight: 1.35,
+  color: '#1a1208',
+  fontFamily: 'var(--font-literata), serif',
+  fontWeight: 600,
 };
 
 const growMapSectionStyle: CSSProperties = {
