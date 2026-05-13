@@ -8,6 +8,7 @@ import { COUNTRIES } from '@/lib/onboarding/countries'
 import { US_STATES } from '@/lib/onboarding/us-regions'
 
 type CurrentStep =
+  | 'invite-suggestions'
   | 'welcome'
   | 'background'
   | 'warmup'
@@ -138,7 +139,7 @@ function Spinner({ small = false }: { small?: boolean }) {
 
 function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
   const activeIndex =
-    currentStep === 'welcome'
+    currentStep === 'welcome' || currentStep === 'invite-suggestions'
       ? -1
       : currentStep === 'complete'
         ? STEP_DOTS.length
@@ -189,7 +190,9 @@ export default function OnboardingFlow({
   inviterName,
 }: OnboardingFlowProps) {
   const router = useRouter()
-  const [currentStep, setCurrentStep] = useState<CurrentStep>('welcome')
+  const [currentStep, setCurrentStep] = useState<CurrentStep>(() =>
+    preSeededInterests.length > 0 ? 'invite-suggestions' : 'welcome'
+  )
   const [birthYear, setBirthYear] = useState('')
   const [grewUpCountry, setGrewUpCountry] = useState('')
   const [grewUpRegion, setGrewUpRegion] = useState('')
@@ -448,42 +451,37 @@ export default function OnboardingFlow({
     }
   }
 
-  async function skipInviteInterests() {
-    if (inviteInterests.length === 0) return
-
+  function keepInviteInterests() {
     setError(null)
-    setIsLoading(true)
+    setSelectedInterests(
+      inviteInterests
+        .flatMap((interest) => {
+          const selected = toSelected(interest)
+          return selected ? [selected] : []
+        })
+        .slice(0, 5)
+    )
+    setCurrentStep('background')
+  }
 
-    try {
-      const response = await fetch('/api/onboarding/save-interests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          interests: [],
-          telemetry: {
-            inviteInterestCount: inviteInterests.length,
-            inviteSelectedCount: 0,
-          },
-        }),
-      })
-      const data = await response.json().catch(() => ({}))
+  function reviewInviteInterests() {
+    setError(null)
+    setSelectedInterests(
+      inviteInterests
+        .flatMap((interest) => {
+          const selected = toSelected(interest)
+          return selected ? [selected] : []
+        })
+        .slice(0, 5)
+    )
+    setCurrentStep('review')
+  }
 
-      if (!response.ok || data?.ok !== true) {
-        setError(
-          data?.message ?? data?.error ?? 'Unable to skip invited interests.'
-        )
-        return
-      }
-
-      setSelectedInterests([])
-      setInviteInterests([])
-      setCurrentStep('complete')
-      router.refresh()
-    } catch {
-      setError('Unable to skip invited interests.')
-    } finally {
-      setIsLoading(false)
-    }
+  function skipInviteInterests() {
+    setError(null)
+    setSelectedInterests([])
+    setInviteInterests([])
+    setCurrentStep('background')
   }
 
   async function saveInterests() {
@@ -588,6 +586,60 @@ export default function OnboardingFlow({
         <ProgressDots currentStep={currentStep} />
 
         <div className="mt-9 flex flex-1 flex-col">
+          {currentStep === 'invite-suggestions' ? (
+            <div className="flex flex-1 flex-col justify-center gap-8">
+              <StepHeader
+                title={`${displayInviterName} suggested these for you.`}
+                subtitle="Keep the ones that fit. You can edit or skip them."
+              />
+
+              <ul className="space-y-3">
+                {inviteInterests.map((interest) => (
+                  <li
+                    key={`${interest.domain}-${interest.broadCategory}`}
+                    className="bg-card rounded-lg border p-4"
+                  >
+                    <span className="block text-xl font-semibold tracking-normal">
+                      {interest.domain}
+                    </span>
+                    <span className="text-muted-foreground mt-1 block text-xs font-medium uppercase">
+                      {interest.broadCategory}
+                    </span>
+                    {interest.rationale ? (
+                      <span className="text-muted-foreground mt-3 block text-sm leading-6 italic">
+                        {interest.rationale}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  className="btn-primary h-12 w-full"
+                  onClick={keepInviteInterests}
+                >
+                  Keep all
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost h-12 w-full"
+                  onClick={reviewInviteInterests}
+                >
+                  Choose/edit
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost h-12 w-full"
+                  onClick={skipInviteInterests}
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {currentStep === 'welcome' ? (
             <div className="flex flex-1 flex-col justify-center gap-8">
               <StepHeader
@@ -605,37 +657,6 @@ export default function OnboardingFlow({
                 </p>
                 <p>It takes about two minutes.</p>
               </div>
-
-              {inviteInterests.length > 0 ? (
-                <div className="bg-card rounded-lg border p-4 text-sm leading-6 shadow-sm">
-                  <p className="font-medium">
-                    {displayInviterName} left a few ideas for you:
-                  </p>
-                  <ul className="text-muted-foreground mt-2 space-y-1">
-                    {inviteInterests.slice(0, 3).map((interest) => (
-                      <li
-                        key={interest.domain}
-                        className="border-primary/10 bg-primary/5 text-foreground inline-flex rounded-full border px-3 py-1"
-                      >
-                        {interest.domain}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-muted-foreground mt-3">
-                    They&apos;re just a starting point — keep, edit, or ignore
-                    them before anything is saved.
-                  </p>
-                  {error ? <ErrorPanel message={error} /> : null}
-                  <button
-                    type="button"
-                    className="btn-ghost mt-3 h-11 w-full"
-                    onClick={skipInviteInterests}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Skipping…' : 'Skip these ideas'}
-                  </button>
-                </div>
-              ) : null}
 
               <button
                 type="button"
