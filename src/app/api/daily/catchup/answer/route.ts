@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    void createFeedItemsForFriendsFromAnswer(
+    await createFeedItemsForFriendsFromAnswer(
       session.userId,
       persisted.questionId,
       isCorrect ? 'correct' : 'incorrect',

@@ -34,7 +34,7 @@ async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<Collapsed
   // Collect all source user IDs we need display names for
   const sourceUserIds = new Set<string>();
   friendAnsweredByQuestion.forEach((group) => {
-    if (group.length > 1) group.forEach((item) => sourceUserIds.add(item.sourceUserId));
+    group.forEach((item) => sourceUserIds.add(item.sourceUserId));
   });
 
   const nameById = new Map<string, string>();
@@ -52,7 +52,7 @@ async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<Collapsed
   const hiddenIds = new Set<string>();
   const collapsedById = new Map<string, CollapsedFeedItem>();
 
-  friendAnsweredByQuestion.forEach((group, _questionId) => {
+  friendAnsweredByQuestion.forEach((group) => {
     if (group.length <= 1) return;
     const sorted = [...group].sort((a, b) => b.sourceEventAt.getTime() - a.sourceEventAt.getTime());
     const [mostRecent, ...older] = sorted;
