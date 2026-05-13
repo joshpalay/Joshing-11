@@ -368,6 +368,42 @@ export default function OnboardingFlow({ preSeededInterests, inviterName }: Onbo
     }
   }
 
+  async function skipInviteInterests() {
+    if (inviteInterests.length === 0) return;
+
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/onboarding/save-interests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          interests: [],
+          telemetry: {
+            inviteInterestCount: inviteInterests.length,
+            inviteSelectedCount: 0,
+          },
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || data?.ok !== true) {
+        setError(data?.message ?? data?.error ?? 'Unable to skip invited interests.');
+        return;
+      }
+
+      setSelectedInterests([]);
+      setInviteInterests([]);
+      setCurrentStep('complete');
+      router.refresh();
+    } catch {
+      setError('Unable to skip invited interests.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function saveInterests() {
     const cleanSelected = selectedInterests
       .flatMap((interest) => {
@@ -489,6 +525,15 @@ export default function OnboardingFlow({ preSeededInterests, inviterName }: Onbo
                   <p className="mt-3 text-muted-foreground">
                     They&apos;re preselected, but you can edit, remove, or skip them before anything is saved.
                   </p>
+                  {error ? <ErrorPanel message={error} /> : null}
+                  <button
+                    type="button"
+                    className="btn-ghost mt-3 h-11 w-full"
+                    onClick={skipInviteInterests}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Skipping...' : 'Skip invited interests'}
+                  </button>
                 </div>
               ) : null}
 

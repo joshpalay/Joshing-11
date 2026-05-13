@@ -238,6 +238,19 @@ describe('acceptFriendInvitation', () => {
     expect(state.friendshipValues).toEqual([])
   })
 
+  it('rejects invalid or missing tokens without claiming an invitation', async () => {
+    await expect(
+      acceptFriendInvitation({
+        token: 'not-a-real-token',
+        inviteeUserId: 'user-invitee',
+        verifiedPhone: matchingPhone,
+        now,
+      })
+    ).resolves.toEqual({ accepted: false, reason: 'missing' })
+    expect(dbMock.transaction).not.toHaveBeenCalled()
+    expect(state.friendshipValues).toEqual([])
+  })
+
   it('rejects expired invitations', async () => {
     setInvitation({ expiresAt: new Date('2026-05-12T12:00:00.000Z') })
 

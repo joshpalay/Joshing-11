@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getSessionMock, markOnboardingCompleteMock, saveDeclaredInterestsMock } = vi.hoisted(() => ({
+const {
+  getSessionMock,
+  markOnboardingCompleteMock,
+  saveDeclaredInterestsMock,
+} = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   markOnboardingCompleteMock: vi.fn(),
   saveDeclaredInterestsMock: vi.fn(),
@@ -17,11 +21,11 @@ vi.mock('@/server/db/queries/users', () => ({
 
 import { POST } from '@/app/api/onboarding/save-interests/route'
 
-function jsonRequest(interests: unknown) {
+function jsonRequest(interests: unknown, telemetry?: unknown) {
   return new Request('https://joshing.example/api/onboarding/save-interests', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ interests }),
+    body: JSON.stringify({ interests, telemetry }),
   })
 }
 
@@ -34,10 +38,12 @@ describe('POST /api/onboarding/save-interests', () => {
   })
 
   it('accept all saves selected invited interests', async () => {
-    const response = await POST(jsonRequest([
-      { domain: 'Sondheim', broadCategory: 'Theater' },
-      { domain: 'Jazz', broadCategory: 'Music' },
-    ]))
+    const response = await POST(
+      jsonRequest([
+        { domain: 'Sondheim', broadCategory: 'Theater' },
+        { domain: 'Jazz', broadCategory: 'Music' },
+      ])
+    )
 
     expect(response.status).toBe(200)
     expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [
@@ -48,9 +54,9 @@ describe('POST /api/onboarding/save-interests', () => {
   })
 
   it('partial selection saves only selected interests', async () => {
-    const response = await POST(jsonRequest([
-      { domain: 'Sondheim', broadCategory: 'Theater' },
-    ]))
+    const response = await POST(
+      jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }])
+    )
 
     expect(response.status).toBe(200)
     expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [
@@ -58,22 +64,52 @@ describe('POST /api/onboarding/save-interests', () => {
     ])
   })
 
-  it('skip saves none of the invited interests unless the user adds others', async () => {
-    const response = await POST(jsonRequest([
-      { domain: 'Italian Renaissance painting', broadCategory: 'Art' },
-    ]))
+  it('skip saves none of the invited interests and completes onboarding only after explicit skip telemetry', async () => {
+    const response = await POST(
+      jsonRequest([], { inviteInterestCount: 3, inviteSelectedCount: 0 })
+    )
+
+    expect(response.status).toBe(200)
+    expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [])
+    expect(markOnboardingCompleteMock).toHaveBeenCalledWith('user-invitee')
+  })
+
+  it('edited interests save correctly without retaining the original invite labels', async () => {
+    const response = await POST(
+      jsonRequest(
+        [{ domain: 'Stephen Sondheim musicals', broadCategory: 'Theater' }],
+        { inviteInterestCount: 1, inviteSelectedCount: 1 }
+      )
+    )
 
     expect(response.status).toBe(200)
     expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [
-      { label: 'Italian Renaissance painting', broadCategory: 'Art' },
+      { label: 'Stephen Sondheim musicals', broadCategory: 'Theater' },
     ])
     expect(saveDeclaredInterestsMock).not.toHaveBeenCalledWith(
       'user-invitee',
-      expect.arrayContaining([{ label: 'Sondheim', broadCategory: 'Theater' }]),
+      expect.arrayContaining([{ label: 'Sondheim', broadCategory: 'Theater' }])
     )
   })
 
-  it('does not silently save rejected interests from an empty selection', async () => {
+  it('enforces the max interest cap', async () => {
+    const response = await POST(
+      jsonRequest([
+        { domain: 'One', broadCategory: 'Other' },
+        { domain: 'Two', broadCategory: 'Other' },
+        { domain: 'Three', broadCategory: 'Other' },
+        { domain: 'Four', broadCategory: 'Other' },
+        { domain: 'Five', broadCategory: 'Other' },
+        { domain: 'Six', broadCategory: 'Other' },
+      ])
+    )
+
+    expect(response.status).toBe(400)
+    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
+    expect(markOnboardingCompleteMock).not.toHaveBeenCalled()
+  })
+
+  it('does not silently save rejected interests from an empty non-invite selection', async () => {
     const response = await POST(jsonRequest([]))
     const body = await response.json()
 

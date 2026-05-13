@@ -47,7 +47,7 @@ function parseOnboardingTelemetry(value: unknown) {
 }
 
 function parseInterests(value: unknown): DeclaredInterestInput[] | null {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 5) return null;
+  if (!Array.isArray(value) || value.length > 5) return null;
 
   const interests = value.map(parseInterest);
   if (interests.some((interest) => !interest)) return null;
@@ -65,9 +65,16 @@ export async function POST(request: Request) {
   const interests = parseInterests(body?.interests);
   const telemetry = parseOnboardingTelemetry(body?.telemetry);
 
-  if (!interests) {
+  const isInviteSkip = Boolean(
+    interests &&
+    interests.length === 0 &&
+    telemetry.inviteInterestCount > 0 &&
+    telemetry.inviteSelectedCount === 0
+  );
+
+  if (!interests || (interests.length === 0 && !isInviteSkip)) {
     return NextResponse.json(
-      { error: 'invalid_request', message: 'Save 1 to 5 interests. Domains must be 2 to 100 characters.' },
+      { error: 'invalid_request', message: 'Save 1 to 5 interests, or skip invite suggestions. Domains must be 2 to 100 characters.' },
       { status: 400 },
     );
   }
