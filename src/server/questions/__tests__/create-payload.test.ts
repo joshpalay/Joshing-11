@@ -11,51 +11,52 @@ describe('create question payload categorization', () => {
     critiqueIterations: 0,
   };
 
-  it('persists a broad enum category plus a specific canonical subcategory', () => {
+  it('ignores user-supplied broad and specific categories', () => {
     const result = readCreateQuestionPayload({
       ...basePayload,
       category: 'literature',
+      broadCategory: 'Literature',
       canonicalSubcategory: '  The   Waste Land  ',
+      subcategory: 'Modernist Poetry',
+      domain: 'TS Eliot',
     });
 
     expect(result.errors).toEqual([]);
-    expect(result.value.category).toBe('literature');
-    expect(result.value.broadCategory).toBe('Literature');
-    expect(result.value.canonicalSubcategory).toBe('The Waste Land');
-    expect(result.value.subcategory).toBe('The Waste Land');
-    expect(result.value.domain).toBe('The Waste Land');
+    expect('category' in result.value).toBe(false);
+    expect('broadCategory' in result.value).toBe(false);
+    expect('canonicalSubcategory' in result.value).toBe(false);
+    expect('subcategory' in result.value).toBe(false);
+    expect('domain' in result.value).toBe(false);
   });
 
-  it('accepts domain as the backwards-compatible specific area field', () => {
+  it('accepts question text and answer without category fields', () => {
     const result = readCreateQuestionPayload({
       ...basePayload,
-      broadCategory: 'Literature',
-      domain: 'TS Eliot',
       shareToFeed: true,
     });
 
     expect(result.errors).toEqual([]);
-    expect(result.value.category).toBe('literature');
-    expect(result.value.canonicalSubcategory).toBe('T. S. Eliot');
+    expect(result.value.text).toBe(basePayload.text);
+    expect(result.value.correctAnswer).toBe(basePayload.correctAnswer);
     expect(result.value.shareToFeed).toBe(true);
   });
 
-  it('rejects broad-only authored question payloads', () => {
+  it('does not reject broad-only authored question payloads because LLM categorization owns the domain', () => {
     const result = readCreateQuestionPayload({
       ...basePayload,
       category: 'literature',
       domain: 'literature',
     });
 
-    expect(result.errors).toContain('canonicalSubcategory');
+    expect(result.errors).toEqual([]);
+    expect('category' in result.value).toBe(false);
+    expect('domain' in result.value).toBe(false);
   });
 
-
-  it('does not require a user-supplied difficulty', () => {
+  it('does not accept a user-supplied difficulty', () => {
     const result = readCreateQuestionPayload({
       ...basePayload,
-      category: 'literature',
-      canonicalSubcategory: 'The Waste Land',
+      difficulty: 5,
     });
 
     expect(result.errors).toEqual([]);
@@ -65,8 +66,6 @@ describe('create question payload categorization', () => {
   it('does not require friends when sharing to feed', () => {
     const result = readCreateQuestionPayload({
       ...basePayload,
-      category: 'literature',
-      canonicalSubcategory: 'The Waste Land',
       shareToFeed: true,
     });
 

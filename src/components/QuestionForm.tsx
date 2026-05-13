@@ -10,10 +10,6 @@ export type QuestionFormValues = {
   alternateAnswers: string[];
   explanation: string | null;
   creatorNote?: string | null;
-  category?: string;
-  canonicalSubcategory?: string;
-  domain?: string;
-  difficulty?: number;
   verified: boolean;
   llmSuggestedAnswer?: string | null;
   critiqueIterations: number;
@@ -59,9 +55,6 @@ type State = {
   alternateText: string;
   explanation: string;
   creatorNote: string;
-  category?: string;
-  canonicalSubcategory?: string;
-  domain?: string;
   critiqueResult: CritiqueResult | null;
   critiqueIterations: number;
   remainingCritiquesToday: number | null;
@@ -109,8 +102,6 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     alternateText: (initialValues?.alternateAnswers ?? []).join(', '),
     explanation: initialValues?.explanation ?? '',
     creatorNote: initialValues?.creatorNote ?? '',
-    category: initialValues?.category ?? 'other',
-    canonicalSubcategory: initialValues?.canonicalSubcategory ?? initialValues?.domain ?? '',
     critiqueResult: null,
     critiqueIterations: initialValues?.critiqueIterations ?? 0,
     remainingCritiquesToday: null,
