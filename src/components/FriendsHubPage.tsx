@@ -20,7 +20,7 @@ export default function FriendsHubPage() {
             Friends
           </h1>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
-            Invite your people, respond to requests, and keep your circle close.
+            Invite your people, answer warm notes, and keep your circle close.
           </p>
         </div>
         <button

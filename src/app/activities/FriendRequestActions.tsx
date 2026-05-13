@@ -5,7 +5,11 @@ import { useState } from 'react'
 
 type Action = 'accept' | 'ignore'
 
-export function FriendRequestActions({ friendshipId }: { friendshipId: string }) {
+export function FriendRequestActions({
+  friendshipId,
+}: {
+  friendshipId: string
+}) {
   const router = useRouter()
   const [pendingAction, setPendingAction] = useState<Action | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -17,12 +21,15 @@ export function FriendRequestActions({ friendshipId }: { friendshipId: string })
     setError(null)
 
     try {
-      const response = await fetch(`/api/friend-requests/${friendshipId}/${action}`, {
-        method: 'POST',
-      })
+      const response = await fetch(
+        `/api/friend-requests/${friendshipId}/${action}`,
+        {
+          method: 'POST',
+        }
+      )
 
       if (!response.ok) {
-        setError('Could not update this request.')
+        setError('Could not update this note.')
         return
       }
 
@@ -41,7 +48,7 @@ export function FriendRequestActions({ friendshipId }: { friendshipId: string })
           disabled={Boolean(pendingAction)}
           onClick={() => void submit('accept')}
         >
-          {pendingAction === 'accept' ? 'Accepting…' : 'Accept'}
+          {pendingAction === 'accept' ? 'Joining…' : 'Accept'}
         </button>
         <button
           type="button"
@@ -49,10 +56,12 @@ export function FriendRequestActions({ friendshipId }: { friendshipId: string })
           disabled={Boolean(pendingAction)}
           onClick={() => void submit('ignore')}
         >
-          {pendingAction === 'ignore' ? 'Ignoring…' : 'Ignore'}
+          {pendingAction === 'ignore' ? 'Setting aside…' : 'Not now'}
         </button>
       </div>
-      {error ? <p className="max-w-40 text-right text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="text-destructive max-w-40 text-right text-xs">{error}</p>
+      ) : null}
     </div>
   )
 }

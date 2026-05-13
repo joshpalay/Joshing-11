@@ -14,7 +14,7 @@ function inviteLoginHref(token: string) {
 function InviteShell({ children }: { children: ReactNode }) {
   return (
     <main className="bg-background text-foreground flex min-h-screen items-center justify-center px-4 py-10">
-      <section className="bg-card w-full max-w-sm rounded-lg border p-5 shadow-sm">
+      <section className="bg-card w-full max-w-sm rounded-2xl border p-5 shadow-sm">
         {children}
       </section>
     </main>
@@ -31,30 +31,30 @@ export default async function InvitePage({ params }: InvitePageProps) {
         <div className="space-y-5">
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-              Friend invite
+              A note from a friend
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-normal">
-              {invitation.inviterName} invited you to Joshing.
+              {invitation.inviterName} thought of you for Joshing.
             </h1>
           </div>
 
           {invitation.suggestedInterests.length > 0 ? (
             <div className="bg-background/60 space-y-3 rounded-lg border p-4">
               <p className="text-sm leading-6 font-medium">
-                They thought you might like questions about:
+                They left a few ideas for your first corner:
               </p>
               <div className="flex flex-wrap gap-2">
                 {invitation.suggestedInterests.map((interest) => (
                   <span
                     key={interest.label}
-                    className="bg-card text-foreground rounded-full border px-3 py-1 text-sm shadow-sm"
+                    className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm shadow-sm"
                   >
                     {interest.label}
                   </span>
                 ))}
               </div>
               <p className="text-muted-foreground text-sm">
-                You can change these.
+                You can keep, edit, or ignore these before anything is saved.
               </p>
             </div>
           ) : null}
@@ -63,7 +63,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
             href={inviteLoginHref(token)}
             className="bg-primary text-primary-foreground inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium"
           >
-            Continue
+            See the note
           </Link>
         </div>
       </InviteShell>

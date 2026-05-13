@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { getSession } from '@/server/auth/session'
 import { logTelemetry } from '@/server/telemetry'
+import { rememberIgnoredFriendRequest } from '@/app/api/friend-invitations/route'
 import { ignorePendingFriendshipRequest } from '@/server/friends/friendships'
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +12,8 @@ export async function POST(
   { params }: { params: Promise<{ friendshipId: string }> }
 ) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (!session)
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const { friendshipId } = await params
   const friendship = await ignorePendingFriendshipRequest({
@@ -26,10 +28,16 @@ export async function POST(
     )
   }
 
+  rememberIgnoredFriendRequest(friendship.requestedByUserId, session.userId)
+
   logTelemetry('friend_request_ignored', {
     friendship_id: friendship.id,
+    requester_user_id: friendship.requestedByUserId,
     user_id: session.userId,
   })
 
-  return NextResponse.json({ ok: true, friendship: { id: friendship.id, status: friendship.status } })
+  return NextResponse.json({
+    ok: true,
+    friendship: { id: friendship.id, status: friendship.status },
+  })
 }

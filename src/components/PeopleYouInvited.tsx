@@ -24,10 +24,10 @@ type InvitationsResponse = {
 }
 
 const STATUS_COPY: Record<InviteStatus, string> = {
-  pending: 'Pending',
+  pending: 'Ready to share',
   accepted: 'Accepted',
-  expired: 'Expired',
-  cancelled: 'Cancelled',
+  expired: 'Needs fresh note',
+  cancelled: 'Set aside',
 }
 
 function buildSmsHref(phone: string, message: string) {
@@ -49,7 +49,9 @@ function friendlyDate(value: string) {
 function statusDetail(invite: OutgoingInvite) {
   if (invite.status === 'pending') {
     const expires = friendlyDate(invite.expiresAt)
-    return expires ? `Expires ${expires}` : 'Invite is ready to send again.'
+    return expires
+      ? `Link rests after ${expires}`
+      : 'Your note is ready to share.'
   }
 
   if (invite.status === 'accepted') {
@@ -59,11 +61,11 @@ function statusDetail(invite: OutgoingInvite) {
 
   if (invite.status === 'expired') {
     const expired = friendlyDate(invite.expiresAt)
-    return expired ? `Expired ${expired}` : 'This invite link expired.'
+    return expired ? `Link rested ${expired}` : 'This link needs a fresh note.'
   }
 
   const cancelled = invite.cancelledAt ? friendlyDate(invite.cancelledAt) : null
-  return cancelled ? `Cancelled ${cancelled}` : 'This invite was cancelled.'
+  return cancelled ? `Set aside ${cancelled}` : 'This note was set aside.'
 }
 
 export default function PeopleYouInvited() {
@@ -144,13 +146,13 @@ export default function PeopleYouInvited() {
       } | null
 
       if (!response.ok) {
-        throw new Error(body?.message ?? 'Could not cancel invite.')
+        throw new Error(body?.message ?? 'Could not set this aside.')
       }
 
       await loadInvites()
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : 'Could not cancel invite.'
+        caught instanceof Error ? caught.message : 'Could not set this aside.'
       )
     } finally {
       setCancellingId(null)
@@ -173,7 +175,9 @@ export default function PeopleYouInvited() {
   if (loading) {
     return (
       <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 shadow-sm">
-        <h2 className="font-serif text-xl font-semibold">People you invited</h2>
+        <h2 className="font-serif text-xl font-semibold">
+          People you thought of
+        </h2>
         <p className="text-muted-foreground mt-2 text-sm">Loading invites…</p>
       </section>
     )
@@ -186,10 +190,10 @@ export default function PeopleYouInvited() {
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-            Invitations
+            Notes sent
           </p>
           <h2 className="mt-1 font-serif text-xl font-semibold">
-            People you invited
+            People you thought of
           </h2>
         </div>
         <button
@@ -236,7 +240,7 @@ export default function PeopleYouInvited() {
                   {invite.suggestedInterests.map((interest) => (
                     <span
                       key={interest}
-                      className="bg-muted text-foreground rounded-full px-3 py-1 text-sm"
+                      className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm"
                     >
                       {interest}
                     </span>
@@ -244,7 +248,7 @@ export default function PeopleYouInvited() {
                 </div>
               ) : (
                 <p className="bg-muted text-muted-foreground mt-3 rounded-lg px-3 py-2 text-sm">
-                  No suggested interests on this invite.
+                  No ideas attached to this note.
                 </p>
               )}
 
@@ -254,8 +258,8 @@ export default function PeopleYouInvited() {
 
               {invite.status === 'accepted' ? (
                 <p className="bg-muted text-muted-foreground mt-3 rounded-lg px-3 py-2 text-sm">
-                  They accepted your invitation and can now become part of your
-                  friend circle.
+                  They accepted your note — now you can trade questions more
+                  easily.
                 </p>
               ) : null}
 
@@ -266,7 +270,7 @@ export default function PeopleYouInvited() {
                     className="btn-ghost min-h-11 w-full rounded-full"
                     onClick={() => createNewInvite(invite)}
                   >
-                    Create new invite
+                    Write a fresh note
                   </button>
                 </div>
               ) : null}
@@ -296,8 +300,8 @@ export default function PeopleYouInvited() {
                     disabled={cancellingId === invite.id}
                   >
                     {cancellingId === invite.id
-                      ? 'Cancelling…'
-                      : 'Cancel invite'}
+                      ? 'Setting aside…'
+                      : 'Set aside'}
                   </button>
                 </div>
               ) : null}
