@@ -76,6 +76,10 @@ export default function AccountPage() {
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -104,7 +108,8 @@ export default function AccountPage() {
   }, [router]);
 
   useEffect(() => {
-    void loadProfile();
+    const timer = window.setTimeout(() => void loadProfile(), 0);
+    return () => window.clearTimeout(timer);
   }, [loadProfile]);
 
   useEffect(() => {
@@ -115,6 +120,7 @@ export default function AccountPage() {
 
   const changed = profile ? displayName.trim() !== profile.displayName : false;
   const initials = useMemo(() => initialsFor(profile?.displayName ?? displayName), [displayName, profile]);
+  const canDeleteAccount = deleteConfirmation === 'DELETE';
 
   async function saveDisplayName() {
     if (!profile) return;
@@ -147,6 +153,31 @@ export default function AccountPage() {
       setSaveError(caught instanceof Error ? caught.message : 'Could not update your name.');
     } finally {
       setSaving(false);
+    }
+  }
+
+
+  async function confirmDeleteAccount() {
+    if (!canDeleteAccount) return;
+
+    setDeletingAccount(true);
+    setDeleteError(null);
+
+    try {
+      const response = await fetch('/api/account', {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const body = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok && response.status !== 401) {
+        throw new Error(body?.error ?? 'Could not delete your account.');
+      }
+
+      router.push('/login');
+    } catch (caught) {
+      setDeleteError(caught instanceof Error ? caught.message : 'Could not delete your account.');
+      setDeletingAccount(false);
     }
   }
 
@@ -270,6 +301,31 @@ export default function AccountPage() {
           <p className="mt-1 text-xs text-muted-foreground">To change your number, contact support.</p>
         </div>
 
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <button
+            className="min-h-10 rounded-md border border-destructive px-4 text-sm font-medium text-destructive hover:bg-destructive/10"
+            type="button"
+            onClick={() => {
+              setConfirmingLogout(true);
+              setConfirmingDelete(false);
+              setDeleteError(null);
+            }}
+          >
+            Log out
+          </button>
+          <button
+            className="min-h-10 rounded-md bg-destructive px-4 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
+            type="button"
+            onClick={() => {
+              setConfirmingDelete(true);
+              setConfirmingLogout(false);
+              setLogoutError(null);
+            }}
+          >
+            Delete account
+          </button>
+        </div>
+
         {confirmingLogout ? (
           <div className="mt-5 rounded-lg border border-destructive/30 p-3">
             <p className="text-sm font-medium">Are you sure you want to log out?</p>
@@ -289,15 +345,54 @@ export default function AccountPage() {
             </div>
             {logoutError ? <p className="mt-2 text-sm text-destructive">{logoutError}</p> : null}
           </div>
-        ) : (
-          <button
-            className="mt-5 min-h-10 rounded-md border border-destructive px-4 text-sm font-medium text-destructive hover:bg-destructive/10"
-            type="button"
-            onClick={() => setConfirmingLogout(true)}
-          >
-            Log out
-          </button>
-        )}
+        ) : null}
+
+        {confirmingDelete ? (
+          <div className="mt-5 rounded-lg border border-destructive bg-destructive/5 p-3">
+            <p className="text-sm font-semibold text-destructive">Delete your account permanently?</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              This removes your account, sessions, stats, authored questions, games, and friend connections. This cannot be undone.
+            </p>
+            <label className="mt-3 block text-xs font-medium" htmlFor="delete-confirmation">
+              Type DELETE to confirm.
+            </label>
+            <input
+              id="delete-confirmation"
+              value={deleteConfirmation}
+              onChange={(event) => {
+                setDeleteConfirmation(event.target.value);
+                setDeleteError(null);
+              }}
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-destructive"
+              autoComplete="off"
+              disabled={deletingAccount}
+            />
+            <div className="mt-3 flex gap-2">
+              <button
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={() => void confirmDeleteAccount()}
+                disabled={!canDeleteAccount || deletingAccount}
+              >
+                {deletingAccount ? <Loader2 className="size-4 animate-spin" /> : null}
+                Permanently delete account
+              </button>
+              <button
+                className="rounded-md border px-3 text-sm"
+                type="button"
+                onClick={() => {
+                  setConfirmingDelete(false);
+                  setDeleteConfirmation('');
+                  setDeleteError(null);
+                }}
+                disabled={deletingAccount}
+              >
+                Cancel
+              </button>
+            </div>
+            {deleteError ? <p className="mt-2 text-sm text-destructive">{deleteError}</p> : null}
+          </div>
+        ) : null}
       </section>
 
       {toast ? (
