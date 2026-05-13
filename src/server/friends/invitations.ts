@@ -200,6 +200,7 @@ export async function markInvitationAccepted({
         eq(friendInvitations.id, invitationId),
         isNull(friendInvitations.acceptedAt),
         isNull(friendInvitations.cancelledAt),
+        gt(friendInvitations.expiresAt, now),
         eq(friendInvitations.inviteePhone, verifiedPhone),
         or(
           eq(friendInvitations.inviteeUserId, inviteeUserId),
@@ -237,7 +238,7 @@ export async function acceptFriendInvitation({
     return { accepted: false, reason: 'cancelled' }
   }
 
-  if (invitation.expiresAt < now) {
+  if (invitation.expiresAt <= now) {
     return { accepted: false, reason: 'expired' }
   }
 
@@ -258,6 +259,7 @@ export async function acceptFriendInvitation({
           eq(friendInvitations.id, invitation.id),
           isNull(friendInvitations.acceptedAt),
           isNull(friendInvitations.cancelledAt),
+          gt(friendInvitations.expiresAt, now),
           eq(friendInvitations.inviteePhone, verifiedPhone),
           or(
             eq(friendInvitations.inviteeUserId, inviteeUserId),

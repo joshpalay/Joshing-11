@@ -225,6 +225,21 @@ describe('acceptFriendInvitation', () => {
     expect(state.friendshipValues).toEqual([])
   })
 
+  it('rejects invitations at the exact expiration instant', async () => {
+    setInvitation({ expiresAt: now })
+
+    await expect(
+      acceptFriendInvitation({
+        token: 'expired-token',
+        inviteeUserId: 'user-invitee',
+        verifiedPhone: matchingPhone,
+        now,
+      })
+    ).resolves.toEqual({ accepted: false, reason: 'expired' })
+    expect(dbMock.transaction).not.toHaveBeenCalled()
+    expect(state.friendshipValues).toEqual([])
+  })
+
   it('rejects already accepted invitations', async () => {
     setInvitation({ acceptedAt: new Date('2026-05-13T11:00:00.000Z') })
 
