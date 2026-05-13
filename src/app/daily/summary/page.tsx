@@ -375,19 +375,25 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
   }, [])
 
   return (
-    <article className="card relative p-5">
-      <div className="flex items-start justify-between gap-3 pr-11">
-        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          JOSHING BOT · {question.domainDisplayName.toUpperCase()}
-        </p>
+    <article
+      className={cn(
+        'card relative p-5',
+        question.isSkipped
+          ? 'border-stone-200 bg-stone-50'
+          : question.isCorrect
+            ? 'border-emerald-200 bg-emerald-50'
+            : 'border-rose-200 bg-rose-50'
+      )}
+    >
+      <div className="flex flex-wrap items-start gap-2 pr-11">
         <span
           className={cn(
             'rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase',
             question.isSkipped
-              ? 'border-stone-200 bg-stone-50 text-stone-600'
+              ? 'border-stone-300 bg-stone-100 text-stone-700'
               : question.isCorrect
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-rose-200 bg-rose-50 text-rose-700'
+                ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                : 'border-rose-300 bg-rose-100 text-rose-800'
           )}
         >
           {question.isSkipped
@@ -396,6 +402,9 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
               ? 'CORRECT'
               : 'WRONG'}
         </span>
+        <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
+          JOSHING BOT · {question.domainDisplayName.toUpperCase()}
+        </p>
       </div>
 
       <button
