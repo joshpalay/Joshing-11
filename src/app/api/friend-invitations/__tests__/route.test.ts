@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  cancelFriendInvitationMock,
   createFriendInvitationMock,
   dbMock,
   getSessionMock,
@@ -42,6 +43,7 @@ const {
   }
 
   return {
+    cancelFriendInvitationMock: vi.fn(),
     createFriendInvitationMock: vi.fn(),
     dbMock,
     getSessionMock: vi.fn(),
@@ -90,7 +92,9 @@ vi.mock('@/server/db', () => ({
 }))
 
 vi.mock('@/server/friends/invitations', () => ({
+  cancelFriendInvitation: cancelFriendInvitationMock,
   createFriendInvitation: createFriendInvitationMock,
+  listOutgoingFriendInvitations: vi.fn(async () => []),
 }))
 
 vi.mock('@/server/sms', () => ({
