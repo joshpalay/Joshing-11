@@ -19,10 +19,10 @@ describe('OnboardingFlow invited-interest copy', () => {
       />
     )
 
-    expect(html).toContain('Alex Inviter thought you might like:')
+    expect(html).toContain('Alex Inviter left a few ideas for you:')
     expect(html).toContain('Sondheim')
     expect(html).toContain(
-      'They&#x27;re preselected, but you can edit, remove, or skip them before anything is saved.'
+      'They&#x27;re just a starting point — keep, edit, or ignore them before anything is saved.'
     )
   })
 
@@ -36,7 +36,7 @@ describe('OnboardingFlow invited-interest copy', () => {
       />
     )
 
-    expect(html).toContain('A friend thought you might like:')
+    expect(html).toContain('A friend left a few ideas for you:')
   })
 
   it('still renders regular onboarding with no invite', () => {
@@ -45,7 +45,7 @@ describe('OnboardingFlow invited-interest copy', () => {
     )
 
     expect(html).toContain('The trivia you wish you were asked.')
-    expect(html).not.toContain('thought you might like:')
+    expect(html).not.toContain('left a few ideas for you:')
   })
 })
 
@@ -63,8 +63,8 @@ describe('OnboardingFlow Add Friend regression copy', () => {
       <OnboardingFlow preSeededInterests={[]} />
     )
 
-    expect(invitedHtml).toContain('Skip invited interests')
-    expect(regularHtml).not.toContain('Skip invited interests')
+    expect(invitedHtml).toContain('Skip these ideas')
+    expect(regularHtml).not.toContain('Skip these ideas')
     expect(regularHtml).toContain('The trivia you wish you were asked.')
   })
 })

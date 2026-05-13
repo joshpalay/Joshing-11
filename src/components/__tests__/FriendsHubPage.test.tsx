@@ -33,9 +33,9 @@ describe('Friends page QA surface', () => {
   it('renders request, invite, active friend, and empty-state sections from the initial loading shell', () => {
     const html = renderToStaticMarkup(<FriendsList />)
 
-    expect(html).toContain('Incoming friend requests')
+    expect(html).toContain('Invitations from friends')
     expect(html).toContain('Loading requests')
-    expect(html).toContain('People you invited')
+    expect(html).toContain('People you thought of')
     expect(html).toContain('Loading invites')
     expect(html).toContain('Active friends')
     expect(html).toContain('Loading friends')

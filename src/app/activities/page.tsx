@@ -1,209 +1,286 @@
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
-import { CreatorNoteReadButton } from '@/app/activities/CreatorNoteReadButton';
-import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
-import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
-import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
-import { creatorNoteSubmittedAnswerText } from '@/lib/creator-note-submitted-answer';
-import { getSession } from '@/server/auth/session';
-import { getActivitiesForUser, type ActivityItemView } from '@/server/db/queries/activity';
+import { CreatorNoteReadButton } from '@/app/activities/CreatorNoteReadButton'
+import { FriendRequestActions } from '@/app/activities/FriendRequestActions'
+import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead'
+import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton'
+import { creatorNoteSubmittedAnswerText } from '@/lib/creator-note-submitted-answer'
+import { getSession } from '@/server/auth/session'
+import {
+  getActivitiesForUser,
+  type ActivityItemView,
+} from '@/server/db/queries/activity'
 
 function formatActivityTime(value: Date) {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(value);
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+  }).format(value)
 }
 
 function actorName(item: ActivityItemView) {
-  return item.actor?.displayName ?? 'Someone';
+  return item.actor?.displayName ?? 'Someone'
 }
 
 function isUnread(item: ActivityItemView) {
-  if (item.type === 'reaction_received') return !item.reference.reaction?.repliedAt;
-  return !item.read;
+  if (item.type === 'reaction_received')
+    return !item.reference.reaction?.repliedAt
+  return !item.read
 }
 
 function ActivityCopy({ item }: { item: ActivityItemView }) {
-  const game = item.reference.game;
-  const title = game?.title ?? 'a Joshing Game';
-  const masteryEvent = item.reference.masteryEvent;
+  const game = item.reference.game
+  const title = game?.title ?? 'a Joshing Game'
+  const masteryEvent = item.reference.masteryEvent
 
   if (item.type === 'received_joshing_game') {
     if (game?.viewerStatus === 'complete') {
       return (
         <>
-          {actorName(item)} sent you {title} <span className="text-muted-foreground">· You got {game.viewerScore}/{game.totalQuestions}</span>
+          {actorName(item)} sent you {title}{' '}
+          <span className="text-muted-foreground">
+            · You got {game.viewerScore}/{game.totalQuestions}
+          </span>
         </>
-      );
+      )
     }
 
-    return <>{actorName(item)} sent you a Joshing Game: {title}</>;
+    return (
+      <>
+        {actorName(item)} sent you a Joshing Game: {title}
+      </>
+    )
   }
 
   if (item.type === 'joshing_game_progress') {
-    return <>{actorName(item)} played {title} <span className="text-muted-foreground">· {game?.completedCount ?? 0} of {game?.totalRecipients ?? 0} have played</span></>;
+    return (
+      <>
+        {actorName(item)} played {title}{' '}
+        <span className="text-muted-foreground">
+          · {game?.completedCount ?? 0} of {game?.totalRecipients ?? 0} have
+          played
+        </span>
+      </>
+    )
   }
 
   if (item.type === 'joshing_game_result') {
-    return <>Everyone played {title}</>;
+    return <>Everyone played {title}</>
   }
 
   if (item.type === 'friend_mastery') {
-    return <>{actorName(item)} reached {masteryEvent?.tier ?? 'a new tier'} in {masteryEvent?.domain ?? 'a domain'}</>;
+    return (
+      <>
+        {actorName(item)} reached {masteryEvent?.tier ?? 'a new tier'} in{' '}
+        {masteryEvent?.domain ?? 'a domain'}
+      </>
+    )
   }
 
   if (item.type === 'ceremony_ready') {
-    return <>Your two-week reflection is ready</>;
+    return <>Your two-week reflection is ready</>
   }
 
   if (item.type === 'friend_request') {
-    return <>{actorName(item)} wants to add you on Joshing.</>;
+    return <>{actorName(item)} thought of you for Joshing.</>
   }
 
   if (item.type === 'friend_request_accepted') {
-    return <>You and {actorName(item)} are now friends</>;
+    return <>You and {actorName(item)} are now friends</>
   }
 
   if (item.type === 'reaction_received') {
-    return <>{actorName(item)} reacted to your question</>;
+    return <>{actorName(item)} reacted to your question</>
   }
 
   if (item.type === 'received_direct_question') {
-    return <>{actorName(item)} sent you a question</>;
+    return <>{actorName(item)} sent you a question</>
   }
 
   if (item.type === 'question_curated') {
-    return <>{actorName(item)} saved your question</>;
+    return <>{actorName(item)} saved your question</>
   }
 
   if (item.type === 'creator_note_received') {
-    return <>{actorName(item)} sent you a note about a question you missed</>;
+    return <>{actorName(item)} sent you a note about a question you missed</>
   }
 
   if (item.type === 'authored_question_shared') {
-    const shared = item.reference.authoredSharedQuestion;
-    const count = shared?.recipientCount ?? 0;
-    const friendWord = count === 1 ? 'friend' : 'friends';
-    const domain = shared?.domain ?? 'a domain';
-    return <>You shared a question with {count} {friendWord} — {domain}</>;
+    const shared = item.reference.authoredSharedQuestion
+    const count = shared?.recipientCount ?? 0
+    const friendWord = count === 1 ? 'friend' : 'friends'
+    const domain = shared?.domain ?? 'a domain'
+    return (
+      <>
+        You shared a question with {count} {friendWord} — {domain}
+      </>
+    )
   }
 
   if (item.type === 'friend_answered_your_question') {
-    const faq = item.reference.friendAnsweredQuestion;
-    const domain = faq?.domain;
-    const domainText = domain ? ` ${domain}` : '';
-    return faq?.result === 'correct'
-      ? <>{actorName(item)} got your{domainText} question right</>
-      : <>{actorName(item)} answered your{domainText} question — couldn&apos;t get it</>;
+    const faq = item.reference.friendAnsweredQuestion
+    const domain = faq?.domain
+    const domainText = domain ? ` ${domain}` : ''
+    return faq?.result === 'correct' ? (
+      <>
+        {actorName(item)} got your{domainText} question right
+      </>
+    ) : (
+      <>
+        {actorName(item)} answered your{domainText} question — couldn&apos;t get
+        it
+      </>
+    )
   }
 
   if (item.type === 'declared_promoted') {
-    const dp = item.reference.declaredPromoted;
-    const domain = dp?.domain;
-    return domain
-      ? <>{actorName(item)} answered your {domain} question — that domain is now proven territory on your map</>
-      : <>{actorName(item)} answered your question — a domain is now proven territory on your map</>;
+    const dp = item.reference.declaredPromoted
+    const domain = dp?.domain
+    return domain ? (
+      <>
+        {actorName(item)} answered your {domain} question — that domain is now
+        proven territory on your map
+      </>
+    ) : (
+      <>
+        {actorName(item)} answered your question — a domain is now proven
+        territory on your map
+      </>
+    )
   }
 
-  return <>Something happened on Joshing</>;
+  return <>Something happened on Joshing</>
 }
 
 export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
   if (item.type === 'creator_note_received') {
-    const note = item.reference.creatorNote;
-    if (!note) return null;
+    const note = item.reference.creatorNote
+    if (!note) return null
     return (
       <CreatorNoteReadButton noteId={note.id}>
-        <div className="rounded-md border bg-background p-3 text-sm leading-6">
-          <p><span className="font-medium text-foreground">Question:</span> {note.questionText}</p>
-          <p className="mt-1 text-muted-foreground">
-            <span className="font-medium text-foreground">Answer:</span> {note.correctAnswer}
+        <div className="bg-background rounded-md border p-3 text-sm leading-6">
+          <p>
+            <span className="text-foreground font-medium">Question:</span>{' '}
+            {note.questionText}
           </p>
-          <p className="mt-1 text-muted-foreground">
-            <span className="font-medium text-foreground">You said:</span>{' '}
+          <p className="text-muted-foreground mt-1">
+            <span className="text-foreground font-medium">Answer:</span>{' '}
+            {note.correctAnswer}
+          </p>
+          <p className="text-muted-foreground mt-1">
+            <span className="text-foreground font-medium">You said:</span>{' '}
             {creatorNoteSubmittedAnswerText(note.submittedAnswer, 'Your')}
           </p>
-          <blockquote className="mt-3 border-l-4 border-primary/40 bg-muted/50 px-3 py-2 text-foreground">
+          <blockquote className="border-primary/40 bg-muted/50 text-foreground mt-3 border-l-4 px-3 py-2">
             {note.noteText}
           </blockquote>
         </div>
       </CreatorNoteReadButton>
-    );
+    )
   }
 
   if (item.type === 'received_direct_question') {
-    const directQuestion = item.reference.directQuestion;
-    if (!directQuestion) return null;
+    const directQuestion = item.reference.directQuestion
+    if (!directQuestion) return null
 
     return (
-      <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+      <div className="text-muted-foreground mt-1 space-y-1 text-sm">
         {directQuestion.personalMessage ? (
-          <p className="italic">&ldquo;{directQuestion.personalMessage}&rdquo;</p>
+          <p className="italic">
+            &ldquo;{directQuestion.personalMessage}&rdquo;
+          </p>
         ) : null}
         <p className="line-clamp-2">{directQuestion.questionText}</p>
       </div>
-    );
+    )
   }
 
   if (item.type === 'question_curated') {
-    const curatedQuestion = item.reference.curatedQuestion;
-    if (!curatedQuestion) return null;
-    return <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{curatedQuestion.questionText}</p>;
+    const curatedQuestion = item.reference.curatedQuestion
+    if (!curatedQuestion) return null
+    return (
+      <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+        {curatedQuestion.questionText}
+      </p>
+    )
   }
 
   if (item.type === 'friend_request') {
-    const interests = item.reference.friendshipRequest?.suggestedInterests ?? [];
-    if (interests.length === 0) return null;
+    const interests = item.reference.friendshipRequest?.suggestedInterests ?? []
+    if (interests.length === 0) return null
 
-    const label = interests.length === 1
-      ? interests[0]
-      : interests.length === 2
-        ? `${interests[0]} and ${interests[1]}`
-        : `${interests[0]}, ${interests[1]}, and ${interests[2]}`;
+    const label =
+      interests.length === 1
+        ? interests[0]
+        : interests.length === 2
+          ? `${interests[0]} and ${interests[1]}`
+          : `${interests[0]}, ${interests[1]}, and ${interests[2]}`
 
     return (
-      <p className="mt-1 text-sm text-muted-foreground">
-        They thought you might like questions about {label}.
+      <p className="text-muted-foreground mt-1 text-sm">
+        They left a few ideas: {label}. Keep, edit, or ignore them.
       </p>
-    );
+    )
   }
 
-  if (item.type !== 'reaction_received') return null;
-  const reaction = item.reference.reaction;
-  if (!reaction) return null;
+  if (item.type !== 'reaction_received') return null
+  const reaction = item.reference.reaction
+  if (!reaction) return null
 
   return (
-    <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+    <div className="text-muted-foreground mt-1 space-y-1 text-sm">
       <p>
-        {reaction.reactionEmoji ? `${reaction.reactionEmoji} ` : ''}{reaction.reactionLabel}
+        {reaction.reactionEmoji ? `${reaction.reactionEmoji} ` : ''}
+        {reaction.reactionLabel}
         {reaction.customMessage ? ` - ${reaction.customMessage}` : ''}
       </p>
       <p className="line-clamp-2 italic">{reaction.questionText}</p>
     </div>
-  );
+  )
 }
 
 function ActivityCta({ item }: { item: ActivityItemView }) {
-  if (!item.referenceId) return null;
+  if (!item.referenceId) return null
 
   if (item.type === 'received_joshing_game') {
-    const complete = item.reference.game?.viewerStatus === 'complete';
+    const complete = item.reference.game?.viewerStatus === 'complete'
     return (
-      <Link href={complete ? `/games/${item.referenceId}/summary` : `/games/${item.referenceId}`} className="btn-primary">
+      <Link
+        href={
+          complete
+            ? `/games/${item.referenceId}/summary`
+            : `/games/${item.referenceId}`
+        }
+        className="btn-primary"
+      >
         {complete ? 'See results' : 'Play'}
       </Link>
-    );
+    )
   }
 
   if (item.type === 'joshing_game_progress') {
-    return <Link href={`/games/${item.referenceId}/summary`} className="btn-primary">See so far</Link>;
+    return (
+      <Link href={`/games/${item.referenceId}/summary`} className="btn-primary">
+        See so far
+      </Link>
+    )
   }
 
   if (item.type === 'joshing_game_result') {
-    return <Link href={`/games/${item.referenceId}/summary`} className="btn-primary">See results</Link>;
+    return (
+      <Link href={`/games/${item.referenceId}/summary`} className="btn-primary">
+        See results
+      </Link>
+    )
   }
 
   if (item.type === 'ceremony_ready') {
-    return <Link href={`/ceremony/${item.referenceId}`} className="btn-primary">See it now</Link>;
+    return (
+      <Link href={`/ceremony/${item.referenceId}`} className="btn-primary">
+        See it now
+      </Link>
+    )
   }
 
   if (item.type === 'reaction_received') {
@@ -212,52 +289,70 @@ function ActivityCta({ item }: { item: ActivityItemView }) {
         reactionId={item.reference.reaction?.id ?? item.referenceId}
         replied={Boolean(item.reference.reaction?.repliedAt)}
       />
-    );
+    )
   }
 
   if (item.type === 'received_direct_question') {
-    return <Link href="/feed" className="btn-primary">Answer</Link>;
+    return (
+      <Link href="/feed" className="btn-primary">
+        Answer
+      </Link>
+    )
   }
 
   if (item.type === 'friend_request') {
-    const request = item.reference.friendshipRequest;
-    if (!request || request.status !== 'pending' || request.requestedByUserId === item.userId) {
-      return null;
+    const request = item.reference.friendshipRequest
+    if (
+      !request ||
+      request.status !== 'pending' ||
+      request.requestedByUserId === item.userId
+    ) {
+      return null
     }
 
-    return <FriendRequestActions friendshipId={request.id} />;
+    return <FriendRequestActions friendshipId={request.id} />
   }
 
   if (item.type === 'authored_question_shared') {
-    return null;
+    return null
   }
 
   if (item.type === 'declared_promoted') {
-    const domain = item.reference.declaredPromoted?.domain;
-    const href = domain ? `/knowledge/${encodeURIComponent(domain)}` : '/knowledge';
-    return <Link href={href} className="btn-primary">See your map</Link>;
+    const domain = item.reference.declaredPromoted?.domain
+    const href = domain
+      ? `/knowledge/${encodeURIComponent(domain)}`
+      : '/knowledge'
+    return (
+      <Link href={href} className="btn-primary">
+        See your map
+      </Link>
+    )
   }
 
-  return null;
+  return null
 }
 
 export default async function ActivitiesPage() {
-  const session = await getSession();
-  if (!session) redirect('/login');
+  const session = await getSession()
+  if (!session) redirect('/login')
 
-  const items = await getActivitiesForUser(session.userId);
+  const items = await getActivitiesForUser(session.userId)
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5">
       <MarkActivitiesRead />
       <header className="mb-5 border-b pb-4">
-        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Activities</p>
-        <h1 className="font-serif text-2xl font-semibold text-foreground">What happened lately</h1>
+        <p className="text-muted-foreground text-xs tracking-[0.1em] uppercase">
+          Notes
+        </p>
+        <h1 className="text-foreground font-serif text-2xl font-semibold">
+          Recent notes
+        </h1>
       </header>
 
       {items.length === 0 ? (
         <section className="flex flex-1 items-center justify-center py-16 text-center">
-          <p className="max-w-sm text-sm text-muted-foreground">
+          <p className="text-muted-foreground max-w-sm text-sm">
             Nothing here yet. Play some questions and send a Joshing Game.
           </p>
         </section>
@@ -266,9 +361,16 @@ export default async function ActivitiesPage() {
           {items.map((item) => (
             <article
               key={item.id}
+              id={
+                item.type === 'friend_request'
+                  ? `friendship-${item.referenceId}`
+                  : undefined
+              }
               className={[
-                'rounded-lg border bg-card p-4 text-card-foreground transition',
-                isUnread(item) ? 'border-l-[3px] border-l-primary' : 'border-l-transparent opacity-75',
+                'bg-card text-card-foreground rounded-lg border p-4 transition',
+                isUnread(item)
+                  ? 'border-l-primary border-l-[3px]'
+                  : 'border-l-transparent opacity-75',
               ].join(' ')}
             >
               <div className="flex items-start justify-between gap-4">
@@ -277,7 +379,9 @@ export default async function ActivitiesPage() {
                     <ActivityCopy item={item} />
                   </p>
                   <ActivitySubcopy item={item} />
-                  <p className="mt-1 text-xs text-muted-foreground">{formatActivityTime(item.createdAt)}</p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {formatActivityTime(item.createdAt)}
+                  </p>
                 </div>
                 <ActivityCta item={item} />
               </div>
@@ -286,5 +390,5 @@ export default async function ActivitiesPage() {
         </section>
       )}
     </main>
-  );
+  )
 }

@@ -110,6 +110,7 @@ import {
   POST,
   buildFriendInvitationMessage,
   validateCreateFriendInvitationBody,
+  resetFriendInvitationRateLimitForTests,
 } from '@/app/api/friend-invitations/route'
 import { sendSms } from '@/server/sms'
 
@@ -138,6 +139,7 @@ function mockInvitation(overrides: Record<string, unknown> = {}) {
 describe('POST /api/friend-invitations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetFriendInvitationRateLimitForTests()
     getSessionMock.mockResolvedValue({ userId: 'user-inviter' })
     state.existingUser = null
     state.existingFriendship = null
@@ -166,7 +168,7 @@ describe('POST /api/friend-invitations', () => {
         id: 'inv-1',
         inviteUrl: 'https://joshing.example/invite/token-1',
         message:
-          'Hey — come play Joshing with me. No app to download — just tap this: https://joshing.example/invite/token-1',
+          'Hey — I thought you’d like this corner of Joshing. No app to download — just tap this: https://joshing.example/invite/token-1',
         inviteeDisplayName: 'Sara',
         inviteePhone: '+17345551234',
         suggestedInterests: [],
@@ -194,7 +196,7 @@ describe('POST /api/friend-invitations', () => {
       })
     )
     expect(body.message).toBe(
-      'Hey — come play Joshing with me. I added something I think you might like: Sondheim. No app to download — just tap this: https://joshing.example/invite/token-1'
+      'Hey — I thought you’d like this corner of Joshing. I added a few ideas that made me think of you — Sondheim. Keep, edit, or ignore them. No app to download — just tap this: https://joshing.example/invite/token-1'
     )
   })
 
@@ -218,7 +220,7 @@ describe('POST /api/friend-invitations', () => {
       })
     )
     expect(body.message).toBe(
-      'Hey — come play Joshing with me. I added a couple areas I think you might like: Sondheim and Mrs. Dalloway. No app to download — just tap this: https://joshing.example/invite/token-1'
+      'Hey — I thought you’d like this corner of Joshing. I added a few ideas that made me think of you — Sondheim and Mrs. Dalloway. Keep, edit, or ignore them. No app to download — just tap this: https://joshing.example/invite/token-1'
     )
   })
 
@@ -251,7 +253,7 @@ describe('POST /api/friend-invitations', () => {
       })
     )
     expect(body.message).toBe(
-      'Hey — come play Joshing with me. I added a few areas I think you might like: Sondheim, Mrs. Dalloway, and 1980s Saturday morning cartoons. No app to download — just tap this: https://joshing.example/invite/token-1'
+      'Hey — I thought you’d like this corner of Joshing. I added a few ideas that made me think of you — Sondheim, Mrs. Dalloway, and 1980s Saturday morning cartoons. Keep, edit, or ignore them. No app to download — just tap this: https://joshing.example/invite/token-1'
     )
   })
 
@@ -293,7 +295,9 @@ describe('POST /api/friend-invitations', () => {
         type: 'friendship_request',
         state: 'created',
         invitationId: null,
-        inviteUrl: null,
+        inviteUrl: 'https://joshing.example/activities#friendship-friendship-1',
+        message:
+          'Hey — I thought you’d like this corner of Joshing. I added a few areas I think overlap with your world — Poetry. Keep, edit, or ignore them. Tap this when you have a minute: https://joshing.example/activities#friendship-friendship-1',
         suggestedInterests: ['Poetry'],
       })
     )
@@ -431,26 +435,30 @@ describe('POST /api/friend-invitations', () => {
 })
 
 describe('friend invitation validation and message QA contract', () => {
+  beforeEach(() => {
+    resetFriendInvitationRateLimitForTests()
+  })
+
   it.each([
     {
       interests: [],
       expected:
-        'Hey — come play Joshing with me. No app to download — just tap this: https://joshing.example/invite/token-1',
+        'Hey — I thought you’d like this corner of Joshing. No app to download — just tap this: https://joshing.example/invite/token-1',
     },
     {
       interests: ['Jazz'],
       expected:
-        'Hey — come play Joshing with me. I added something I think you might like: Jazz. No app to download — just tap this: https://joshing.example/invite/token-1',
+        'Hey — I thought you’d like this corner of Joshing. I added a few ideas that made me think of you — Jazz. Keep, edit, or ignore them. No app to download — just tap this: https://joshing.example/invite/token-1',
     },
     {
       interests: ['Jazz', 'Poetry'],
       expected:
-        'Hey — come play Joshing with me. I added a couple areas I think you might like: Jazz and Poetry. No app to download — just tap this: https://joshing.example/invite/token-1',
+        'Hey — I thought you’d like this corner of Joshing. I added a few ideas that made me think of you — Jazz and Poetry. Keep, edit, or ignore them. No app to download — just tap this: https://joshing.example/invite/token-1',
     },
     {
       interests: ['Jazz', 'Poetry', 'Film'],
       expected:
-        'Hey — come play Joshing with me. I added a few areas I think you might like: Jazz, Poetry, and Film. No app to download — just tap this: https://joshing.example/invite/token-1',
+        'Hey — I thought you’d like this corner of Joshing. I added a few ideas that made me think of you — Jazz, Poetry, and Film. Keep, edit, or ignore them. No app to download — just tap this: https://joshing.example/invite/token-1',
     },
   ])(
     'formats copy for $interests.length suggested interests without leaderboard or score language',

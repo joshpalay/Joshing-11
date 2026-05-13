@@ -20,9 +20,7 @@ describe('Knowledge-page Ask a friend integration', () => {
     )
 
     expect(html).toContain('Ask a friend about Italian Renaissance painting')
-    expect(html).toContain(
-      'Suggested interests start with Italian Renaissance painting'
-    )
+    expect(html).toContain('Start with Italian Renaissance painting')
     expect(html).toContain('Existing friend')
     expect(html).toContain('New friend')
     expect(html).not.toMatch(/leaderboard|ranking|score|points?|percent|%/i)

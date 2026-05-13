@@ -55,8 +55,8 @@ export function buildDomainAskMessage(
   domain: string,
   inviteUrl?: string | null
 ) {
-  const base = `Josh is going deep on ${domain} — and thinks you might be the one to stump them.`
-  const ask = `If you have a good ${domain} question, send one their way in Joshing.`
+  const base = `I thought of you for this corner of Joshing: ${domain}.`
+  const ask = `If a good question comes to mind, send it their way. No pressure.`
   return inviteUrl ? `${base} ${ask} ${inviteUrl}` : `${base} ${ask}`
 }
 
@@ -220,8 +220,8 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
               Ask a friend about {domain}
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              Suggested interests start with {domain}. Add up to two more if
-              they fit; they can keep, edit, or ignore them.
+              Start with {domain}, then add up to two more ideas if they feel
+              right. They can keep, edit, or ignore them.
             </p>
           </div>
           <button
@@ -241,11 +241,11 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                 For {handoffName}
               </p>
               <p className="text-muted-foreground mt-2 text-sm leading-6">
-                This is a lightweight ask — no pressure, no forced interest, and
-                no empty round.
+                You send this yourself — Joshing won’t text them for you. Keep
+                it light and personal.
               </p>
               <label className="mt-4 block text-sm font-medium">
-                Message
+                Message you can send
                 <textarea
                   ref={messageRef}
                   className="bg-background focus:border-foreground mt-2 min-h-32 w-full rounded-xl border p-3 text-sm leading-6 outline-none"
@@ -309,7 +309,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                   </p>
                 ) : friends.length === 0 ? (
                   <p className="text-muted-foreground p-4 text-sm">
-                    No active friends yet. Enter a name and phone instead.
+                    No friends here yet. Enter a name and phone instead.
                   </p>
                 ) : (
                   friends.map((friend) => (
@@ -322,7 +322,8 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                       <span className="font-medium">{friend.displayName}</span>
                       {friend.declaredInterests?.length ? (
                         <span className="text-muted-foreground mt-1 block text-xs">
-                          Into {friend.declaredInterests.slice(0, 3).join(', ')}
+                          Has shared{' '}
+                          {friend.declaredInterests.slice(0, 3).join(', ')}
                         </span>
                       ) : null}
                     </button>
@@ -356,15 +357,15 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                 </div>
 
                 <div className="bg-card space-y-3 rounded-xl border p-4">
-                  <p className="text-sm font-medium">Suggested interests</p>
+                  <p className="text-sm font-medium">A few ideas</p>
                   {interests.map((interest, index) => (
                     <label
                       key={index}
                       className="text-muted-foreground block text-xs font-medium tracking-[0.08em] uppercase"
                     >
                       {index === 0
-                        ? 'Prefilled from your search'
-                        : `Optional interest ${index + 1}`}
+                        ? 'First idea'
+                        : `Optional idea ${index + 1}`}
                       <input
                         className="bg-background text-foreground focus:border-foreground disabled:bg-muted mt-2 h-11 w-full rounded-lg border px-3 text-sm tracking-normal normal-case outline-none"
                         value={interest}
@@ -374,7 +375,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                         }
                         placeholder={
                           index === 1
-                            ? 'Another thing they know'
+                            ? 'Another idea, if useful'
                             : 'One more, if useful'
                         }
                       />
@@ -394,7 +395,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                     className="btn-primary min-h-12 flex-1 rounded-full"
                     disabled={submitting}
                   >
-                    {submitting ? 'Creating ask…' : 'Create ask'}
+                    {submitting ? 'Warming it up…' : 'Make the note'}
                   </button>
                   <button
                     type="button"

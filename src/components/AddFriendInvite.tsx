@@ -12,6 +12,10 @@ const ERROR_COPY: Record<string, string> = {
   invalid_phone: 'Use a US mobile number.',
   too_many_suggested_interests: 'Choose up to three.',
   missing_invitee_display_name: 'Add their name first.',
+  invalid_invitee_display_name: 'Use a shorter, real display name.',
+  invalid_suggested_interests: 'Keep each idea short and friendly.',
+  invite_cooldown:
+    'Give this invite a little breathing room before trying again.',
 }
 
 type Step = 'identity' | 'interests' | 'handoff'
@@ -226,12 +230,12 @@ export default function AddFriendInvite() {
 
   if (!expanded) {
     return (
-      <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 shadow-sm">
+      <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-sm">
         <p className="text-foreground text-sm font-medium">
           Bring a friend into Joshing.
         </p>
         <p className="text-muted-foreground mt-1 text-sm leading-6">
-          Send a warm invite with a few things you think they might enjoy.
+          Send a warm note with just a few ideas they can keep, edit, or ignore.
         </p>
         <button
           type="button"
@@ -248,7 +252,7 @@ export default function AddFriendInvite() {
   }
 
   return (
-    <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 shadow-sm">
+    <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-sm">
       {step === 'identity' ? (
         <form className="space-y-5" onSubmit={goToInterests}>
           <div>
@@ -256,7 +260,7 @@ export default function AddFriendInvite() {
               Add friend
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
-              Who are you bringing in?
+              Who came to mind?
             </h2>
           </div>
 
@@ -273,6 +277,8 @@ export default function AddFriendInvite() {
                 }}
                 autoComplete="name"
                 placeholder="Their name"
+                maxLength={60}
+                enterKeyHint="next"
               />
             </label>
             <label className="text-foreground block text-sm font-medium">
@@ -287,6 +293,7 @@ export default function AddFriendInvite() {
                 autoComplete="tel"
                 inputMode="tel"
                 placeholder="(555) 123-4567"
+                enterKeyHint="next"
               />
             </label>
           </div>
@@ -295,16 +302,16 @@ export default function AddFriendInvite() {
             <p className="text-destructive text-sm font-medium">{error}</p>
           ) : null}
 
-          <div className="flex items-center gap-3">
+          <div className="space-y-3">
             <button
               type="submit"
-              className="btn-primary min-h-12 flex-1 rounded-full"
+              className="btn-primary min-h-12 w-full rounded-full"
             >
               Next
             </button>
             <button
               type="button"
-              className="text-muted-foreground px-3 text-sm"
+              className="text-muted-foreground w-full py-2 text-sm"
               onClick={resetFlow}
             >
               Cancel
@@ -320,11 +327,11 @@ export default function AddFriendInvite() {
               For {trimmedName}
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
-              What might they like?
+              A few ideas, lightly held
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              Add up to three areas you think they’d enjoy. They can keep, edit,
-              or ignore these.
+              Add up to three areas that made you think of them. Just a few
+              ideas — they can keep, edit, or ignore these.
             </p>
           </div>
 
@@ -334,14 +341,16 @@ export default function AddFriendInvite() {
                 key={placeholder}
                 className="text-foreground block text-sm font-medium"
               >
-                Interest {index + 1}
+                Idea {index + 1}
                 <input
-                  className="bg-background focus:border-foreground focus:ring-ring mt-2 h-12 w-full rounded-xl border px-3 text-base transition outline-none focus:ring-2"
+                  className="bg-background focus:border-foreground focus:ring-ring mt-2 h-12 w-full rounded-full border px-4 text-base transition outline-none focus:ring-2"
                   value={interests[index] ?? ''}
                   onChange={(event) =>
                     updateInterest(index, event.target.value)
                   }
                   placeholder={placeholder}
+                  maxLength={60}
+                  enterKeyHint={index === 2 ? 'done' : 'next'}
                 />
               </label>
             ))}
@@ -357,7 +366,7 @@ export default function AddFriendInvite() {
               className="btn-primary min-h-12 w-full rounded-full"
               disabled={submitting}
             >
-              {submitting ? 'Creating invite…' : 'Create invite'}
+              {submitting ? 'Warming it up…' : 'Make the note'}
             </button>
             <button
               type="button"
@@ -375,16 +384,17 @@ export default function AddFriendInvite() {
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
               {result.type === 'friendship_request'
-                ? 'Friend request'
+                ? 'Warm note ready'
                 : 'Invite ready'}
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
               {result.type === 'friendship_request'
-                ? `Request sent to ${result.inviteeDisplayName}.`
-                : `Send it to ${result.inviteeDisplayName}.`}
+                ? `Send this to ${result.inviteeDisplayName}.`
+                : `Send this to ${result.inviteeDisplayName}.`}
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              {result.inviteePhone}
+              You’ll send the message yourself — Joshing won’t text them for
+              you.
             </p>
           </div>
 
@@ -393,7 +403,7 @@ export default function AddFriendInvite() {
               {result.suggestedInterests.map((interest) => (
                 <span
                   key={interest}
-                  className="bg-muted text-foreground rounded-full px-3 py-1 text-sm"
+                  className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm shadow-sm"
                 >
                   {interest}
                 </span>
@@ -401,68 +411,52 @@ export default function AddFriendInvite() {
             </div>
           ) : (
             <p className="bg-muted text-muted-foreground rounded-xl px-3 py-2 text-sm">
-              No suggested interests this time — just a simple invitation.
+              No ideas attached this time — just a simple invitation.
             </p>
           )}
 
-          {result.type === 'friend_invitation' ? (
-            <>
-              <label className="text-foreground block text-sm font-medium">
-                Message
-                <textarea
-                  ref={messageRef}
-                  className="bg-background focus:border-foreground focus:ring-ring mt-2 min-h-36 w-full rounded-xl border p-3 text-base leading-6 transition outline-none focus:ring-2"
-                  value={messageText}
-                  onChange={(event) => setMessageText(event.target.value)}
-                />
-              </label>
+          <label className="text-foreground block text-sm font-medium">
+            Message you can send
+            <textarea
+              ref={messageRef}
+              className="bg-background focus:border-foreground focus:ring-ring mt-2 min-h-36 w-full rounded-xl border p-3 text-base leading-6 transition outline-none focus:ring-2"
+              value={messageText}
+              onChange={(event) => setMessageText(event.target.value)}
+            />
+          </label>
 
-              {!messageText.includes(result.inviteUrl ?? '') ? (
-                <p className="text-destructive text-sm">
-                  Generated message includes link — keep it in the message so
-                  they can join.
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="bg-muted text-muted-foreground rounded-xl px-3 py-2 text-sm">
-              They’ll see your request in Joshing.
+          {!messageText.includes(result.inviteUrl ?? '') ? (
+            <p className="text-destructive text-sm">
+              Keep the link in your note so they have somewhere to land.
             </p>
-          )}
+          ) : null}
 
           <div className="space-y-3">
-            {result.type === 'friend_invitation' ? (
-              <>
-                <button
-                  type="button"
-                  className="btn-primary min-h-12 w-full rounded-full"
-                  onClick={copyMessage}
-                >
-                  {copyLabel}
-                </button>
-                {smsHref ? (
-                  <a
-                    className="btn-ghost min-h-12 w-full rounded-full"
-                    href={smsHref}
-                    onClick={() =>
-                      sendTelemetry('add_friend_sms_handoff_opened', {
-                        invitation_id: result.invitationId ?? result.id,
-                        suggested_interest_count: result.suggestedInterests.length,
-                      })
-                    }
-                  >
-                    Open Messages
-                  </a>
-                ) : null}
-              </>
+            <button
+              type="button"
+              className="btn-primary min-h-12 w-full rounded-full"
+              onClick={copyMessage}
+            >
+              {copyLabel}
+            </button>
+            {smsHref ? (
+              <a
+                className="btn-ghost min-h-12 w-full rounded-full"
+                href={smsHref}
+                onClick={() =>
+                  sendTelemetry('add_friend_sms_handoff_opened', {
+                    invitation_id: result.invitationId ?? result.id,
+                    suggested_interest_count: result.suggestedInterests.length,
+                    invite_type: result.type,
+                  })
+                }
+              >
+                Open Messages
+              </a>
             ) : null}
             <button
               type="button"
-              className={
-                result.type === 'friend_invitation'
-                  ? 'text-muted-foreground w-full py-2 text-sm'
-                  : 'btn-primary min-h-12 w-full rounded-full'
-              }
+              className="text-muted-foreground w-full py-2 text-sm"
               onClick={resetFlow}
             >
               Done

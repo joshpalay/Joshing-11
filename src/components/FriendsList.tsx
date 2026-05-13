@@ -41,7 +41,9 @@ function openAddFriend() {
 
 export default function FriendsList() {
   const [friends, setFriends] = useState<Friend[]>([])
-  const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([])
+  const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>(
+    []
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingRequest, setPendingRequest] = useState<string | null>(null)
@@ -70,7 +72,9 @@ export default function FriendsList() {
       setFriends(body.friends)
       setIncomingRequests(body.incomingRequests)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not load friends.')
+      setError(
+        caught instanceof Error ? caught.message : 'Could not load friends.'
+      )
     } finally {
       setLoading(false)
     }
@@ -85,11 +89,16 @@ export default function FriendsList() {
     setError(null)
 
     try {
-      const response = await fetch(`/api/friend-requests/${requestId}/${action}`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      const body = (await response.json().catch(() => null)) as { message?: string } | null
+      const response = await fetch(
+        `/api/friend-requests/${requestId}/${action}`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        }
+      )
+      const body = (await response.json().catch(() => null)) as {
+        message?: string
+      } | null
 
       if (!response.ok) {
         throw new Error(body?.message ?? 'Could not update this request.')
@@ -97,7 +106,11 @@ export default function FriendsList() {
 
       await loadFriends()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not update this request.')
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not update this request.'
+      )
     } finally {
       setPendingRequest(null)
     }
@@ -114,7 +127,8 @@ export default function FriendsList() {
             Joshing gets better when your people are here.
           </h2>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
-            Invite someone you already trade facts, recommendations, and inside jokes with.
+            Invite someone you already trade facts, recommendations, and inside
+            jokes with.
           </p>
           <button
             type="button"
@@ -133,7 +147,7 @@ export default function FriendsList() {
               Requests
             </p>
             <h2 className="mt-1 font-serif text-xl font-semibold">
-              Incoming friend requests
+              Invitations from friends
             </h2>
           </div>
           <button
@@ -150,16 +164,21 @@ export default function FriendsList() {
         ) : incomingRequests.length > 0 ? (
           <div className="space-y-3">
             {incomingRequests.map((request) => (
-              <article key={request.id} className="bg-background rounded-xl border p-3">
+              <article
+                key={request.id}
+                className="bg-background rounded-xl border p-3"
+              >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h3 className="text-foreground font-medium">{request.requesterName}</h3>
+                    <h3 className="text-foreground font-medium">
+                      {request.requesterName}
+                    </h3>
                     {request.suggestedInterests.length > 0 ? (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {request.suggestedInterests.map((interest) => (
                           <span
                             key={interest}
-                            className="bg-muted text-foreground rounded-full px-3 py-1 text-sm"
+                            className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm"
                           >
                             {interest}
                           </span>
@@ -167,7 +186,7 @@ export default function FriendsList() {
                       </div>
                     ) : (
                       <p className="text-muted-foreground mt-1 text-sm">
-                        No suggested interests yet — just a friendly hello.
+                        No ideas attached — just a friendly hello.
                       </p>
                     )}
                   </div>
@@ -179,7 +198,9 @@ export default function FriendsList() {
                       disabled={Boolean(pendingRequest)}
                       onClick={() => void updateRequest(request.id, 'accept')}
                     >
-                      {pendingRequest === `${request.id}:accept` ? 'Accepting…' : 'Accept'}
+                      {pendingRequest === `${request.id}:accept`
+                        ? 'Accepting…'
+                        : 'Accept'}
                     </button>
                     <button
                       type="button"
@@ -187,7 +208,9 @@ export default function FriendsList() {
                       disabled={Boolean(pendingRequest)}
                       onClick={() => void updateRequest(request.id, 'ignore')}
                     >
-                      {pendingRequest === `${request.id}:ignore` ? 'Ignoring…' : 'Ignore'}
+                      {pendingRequest === `${request.id}:ignore`
+                        ? 'Setting aside…'
+                        : 'Not now'}
                     </button>
                   </div>
                 </div>
@@ -195,7 +218,7 @@ export default function FriendsList() {
             ))}
           </div>
         ) : (
-          <p className="text-muted-foreground rounded-xl bg-muted px-3 py-2 text-sm">
+          <p className="text-muted-foreground bg-muted rounded-xl px-3 py-2 text-sm">
             No incoming requests right now.
           </p>
         )}
@@ -208,10 +231,14 @@ export default function FriendsList() {
           <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
             Friends
           </p>
-          <h2 className="mt-1 font-serif text-xl font-semibold">Active friends</h2>
+          <h2 className="mt-1 font-serif text-xl font-semibold">
+            Active friends
+          </h2>
         </div>
 
-        {error ? <p className="text-destructive mb-3 text-sm font-medium">{error}</p> : null}
+        {error ? (
+          <p className="text-destructive mb-3 text-sm font-medium">{error}</p>
+        ) : null}
 
         {loading ? (
           <p className="text-muted-foreground text-sm">Loading friends…</p>
@@ -225,11 +252,13 @@ export default function FriendsList() {
                 <Link
                   key={friend.id}
                   href={`/users/${friend.id}`}
-                  className="bg-background block rounded-xl border p-3 transition hover:border-foreground/30 hover:shadow-sm"
+                  className="bg-background hover:border-foreground/30 block rounded-xl border p-3 transition hover:shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-foreground font-medium">{friend.displayName}</h3>
+                      <h3 className="text-foreground font-medium">
+                        {friend.displayName}
+                      </h3>
                       {interests ? (
                         <p className="text-muted-foreground mt-1 text-sm leading-6">
                           Into {interests}
@@ -251,8 +280,10 @@ export default function FriendsList() {
             })}
           </div>
         ) : (
-          <div className="rounded-xl bg-muted px-3 py-2">
-            <p className="text-muted-foreground text-sm">No active friends yet.</p>
+          <div className="bg-muted rounded-xl px-3 py-2">
+            <p className="text-muted-foreground text-sm">
+              No active friends yet.
+            </p>
           </div>
         )}
       </section>

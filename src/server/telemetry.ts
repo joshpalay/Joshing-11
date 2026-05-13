@@ -3,6 +3,8 @@ import { createHash } from 'crypto'
 export type TelemetryEventName =
   | 'add_friend_started'
   | 'add_friend_invite_created'
+  | 'add_friend_invite_cancelled'
+  | 'add_friend_invite_rate_limited'
   | 'add_friend_message_copied'
   | 'add_friend_sms_handoff_opened'
   | 'friend_invite_link_opened'
@@ -13,6 +15,7 @@ export type TelemetryEventName =
   | 'friend_onboarding_interests_partial'
   | 'friend_onboarding_interests_skipped'
   | 'friend_request_existing_user_created'
+  | 'friend_request_reinvite_after_ignore_limited'
   | 'friend_request_accepted'
   | 'friend_request_ignored'
 

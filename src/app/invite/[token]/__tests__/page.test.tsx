@@ -33,7 +33,7 @@ describe('/invite/[token] landing QA states', () => {
     expect(getFriendInvitationLandingByTokenMock).toHaveBeenCalledWith(
       'valid-token'
     )
-    expect(html).toContain('Alex Inviter invited you to Joshing.')
+    expect(html).toContain('Alex Inviter thought of you for Joshing.')
     expect(html).toContain('Jazz')
     expect(html).toContain('Poetry')
     expect(html).toContain('href="/login?invitationToken=valid-token"')

@@ -15,9 +15,132 @@ import { logTelemetry } from '@/server/telemetry'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_INVITEE_DISPLAY_NAME_LENGTH = 80
+const MAX_INVITEE_DISPLAY_NAME_LENGTH = 60
 const MAX_SUGGESTED_INTERESTS = 3
-const MAX_SUGGESTED_INTEREST_LENGTH = 80
+const MAX_SUGGESTED_INTEREST_LENGTH = 60
+const INVITES_PER_USER_WINDOW = 12
+const INVITES_PER_PHONE_WINDOW = 4
+const INVITE_WINDOW_MS = 1000 * 60 * 60
+const SAME_PHONE_COOLDOWN_MS = 1000 * 60 * 10
+const CANCELLED_PHONE_COOLDOWN_MS = 1000 * 60 * 20
+const IGNORED_PHONE_COOLDOWN_MS = 1000 * 60 * 60 * 24
+
+const inviteAttemptsByUser = new Map<string, number[]>()
+const inviteAttemptsByPhone = new Map<string, number[]>()
+const recentInviteByUserPhone = new Map<string, number>()
+const cancelledInviteCooldowns = new Map<string, number>()
+const ignoredRequestCooldowns = new Map<string, number>()
+
+const ABUSIVE_WORDS = ['fuck', 'shit', 'bitch', 'cunt', 'slur']
+const SPAMMY_PATTERN = /(https?:\/\/|www\.|<[^>]+>|script|javascript:)/i
+const CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f-\u009f]/
+
+function pruneWindow(values: number[], nowMs: number, windowMs: number) {
+  return values.filter((value) => nowMs - value < windowMs)
+}
+
+function rateLimitKey(userId: string, phone: string) {
+  return `${userId}:${phone}`
+}
+
+function checkInviteRateLimit(userId: string, phone: string, now = new Date()) {
+  const nowMs = now.getTime()
+  const userAttempts = pruneWindow(
+    inviteAttemptsByUser.get(userId) ?? [],
+    nowMs,
+    INVITE_WINDOW_MS
+  )
+  const phoneAttempts = pruneWindow(
+    inviteAttemptsByPhone.get(phone) ?? [],
+    nowMs,
+    INVITE_WINDOW_MS
+  )
+  const userPhoneKey = rateLimitKey(userId, phone)
+  const lastSamePhoneAttempt = recentInviteByUserPhone.get(userPhoneKey) ?? 0
+  const cancelledUntil = cancelledInviteCooldowns.get(userPhoneKey) ?? 0
+  const ignoredUntil = ignoredRequestCooldowns.get(userPhoneKey) ?? 0
+
+  if (userAttempts.length >= INVITES_PER_USER_WINDOW) return 'user_window'
+  if (phoneAttempts.length >= INVITES_PER_PHONE_WINDOW) return 'phone_window'
+  if (nowMs - lastSamePhoneAttempt < SAME_PHONE_COOLDOWN_MS) {
+    return 'same_phone_cooldown'
+  }
+  if (cancelledUntil > nowMs) return 'cancelled_cooldown'
+  if (ignoredUntil > nowMs) return 'ignored_cooldown'
+
+  return null
+}
+
+function recordInviteAttempt(userId: string, phone: string, now = new Date()) {
+  const nowMs = now.getTime()
+  const userAttempts = pruneWindow(
+    inviteAttemptsByUser.get(userId) ?? [],
+    nowMs,
+    INVITE_WINDOW_MS
+  )
+  const phoneAttempts = pruneWindow(
+    inviteAttemptsByPhone.get(phone) ?? [],
+    nowMs,
+    INVITE_WINDOW_MS
+  )
+
+  userAttempts.push(nowMs)
+  phoneAttempts.push(nowMs)
+  inviteAttemptsByUser.set(userId, userAttempts)
+  inviteAttemptsByPhone.set(phone, phoneAttempts)
+  recentInviteByUserPhone.set(rateLimitKey(userId, phone), nowMs)
+}
+
+function rememberCancelledInvite(
+  userId: string,
+  phone: string,
+  now = new Date()
+) {
+  cancelledInviteCooldowns.set(
+    rateLimitKey(userId, phone),
+    now.getTime() + CANCELLED_PHONE_COOLDOWN_MS
+  )
+}
+
+export function rememberIgnoredFriendRequest(
+  requesterUserId: string,
+  inviteeUserId: string,
+  now = new Date()
+) {
+  ignoredRequestCooldowns.set(
+    rateLimitKey(requesterUserId, inviteeUserId),
+    now.getTime() + IGNORED_PHONE_COOLDOWN_MS
+  )
+}
+
+export function resetFriendInvitationRateLimitForTests() {
+  inviteAttemptsByUser.clear()
+  inviteAttemptsByPhone.clear()
+  recentInviteByUserPhone.clear()
+  cancelledInviteCooldowns.clear()
+  ignoredRequestCooldowns.clear()
+}
+
+function containsAbusiveText(value: string) {
+  const lower = value.toLocaleLowerCase('en-US')
+  return ABUSIVE_WORDS.some((word) => lower.includes(word))
+}
+
+function hasGiantUnicodeSpam(value: string) {
+  const symbols = Array.from(value).filter((char) =>
+    /[^\p{L}\p{N}\p{P}\p{Zs}]/u.test(char)
+  )
+  return symbols.length > 6 || /(.)\1{8,}/u.test(value)
+}
+
+function textLooksUnsafe(value: string) {
+  return (
+    CONTROL_CHAR_PATTERN.test(value) ||
+    SPAMMY_PATTERN.test(value) ||
+    containsAbusiveText(value) ||
+    hasGiantUnicodeSpam(value)
+  )
+}
 
 type CreateFriendInvitationBody = {
   inviteeDisplayName: string
@@ -70,12 +193,15 @@ export function validateCreateFriendInvitationBody(
     }
   }
 
-  if (inviteeDisplayName.length > MAX_INVITEE_DISPLAY_NAME_LENGTH) {
+  if (
+    inviteeDisplayName.length > MAX_INVITEE_DISPLAY_NAME_LENGTH ||
+    textLooksUnsafe(inviteeDisplayName)
+  ) {
     return {
       ok: false,
       status: 400,
       error: 'invalid_invitee_display_name',
-      message: `inviteeDisplayName must be ${MAX_INVITEE_DISPLAY_NAME_LENGTH} characters or fewer.`,
+      message: `Use a real display name, ${MAX_INVITEE_DISPLAY_NAME_LENGTH} characters or fewer.`,
     }
   }
 
@@ -110,12 +236,15 @@ export function validateCreateFriendInvitationBody(
     const normalizedInterest = normalizeText(interest)
     if (!normalizedInterest) continue
 
-    if (normalizedInterest.length > MAX_SUGGESTED_INTEREST_LENGTH) {
+    if (
+      normalizedInterest.length > MAX_SUGGESTED_INTEREST_LENGTH ||
+      textLooksUnsafe(normalizedInterest)
+    ) {
       return {
         ok: false,
         status: 400,
         error: 'invalid_suggested_interests',
-        message: `Each suggested interest must be ${MAX_SUGGESTED_INTEREST_LENGTH} characters or fewer.`,
+        message: `Each idea should be a short, friendly phrase (${MAX_SUGGESTED_INTEREST_LENGTH} characters or fewer).`,
       }
     }
 
@@ -145,6 +274,17 @@ export function validateCreateFriendInvitationBody(
   }
 }
 
+function interestPhrase(suggestedInterests: string[]) {
+  if (suggestedInterests.length === 1) return suggestedInterests[0]
+  if (suggestedInterests.length === 2) {
+    return `${suggestedInterests[0]} and ${suggestedInterests[1]}`
+  }
+  if (suggestedInterests.length === 3) {
+    return `${suggestedInterests[0]}, ${suggestedInterests[1]}, and ${suggestedInterests[2]}`
+  }
+  return null
+}
+
 export function buildFriendInvitationMessage({
   inviteUrl,
   suggestedInterests,
@@ -152,19 +292,27 @@ export function buildFriendInvitationMessage({
   inviteUrl: string
   suggestedInterests: string[]
 }): string {
-  if (suggestedInterests.length === 1) {
-    return `Hey — come play Joshing with me. I added something I think you might like: ${suggestedInterests[0]}. No app to download — just tap this: ${inviteUrl}`
-  }
+  const ideas = interestPhrase(suggestedInterests)
+  const ideaCopy = ideas
+    ? ` I added a few ideas that made me think of you — ${ideas}. Keep, edit, or ignore them.`
+    : ''
 
-  if (suggestedInterests.length === 2) {
-    return `Hey — come play Joshing with me. I added a couple areas I think you might like: ${suggestedInterests[0]} and ${suggestedInterests[1]}. No app to download — just tap this: ${inviteUrl}`
-  }
+  return `Hey — I thought you’d like this corner of Joshing.${ideaCopy} No app to download — just tap this: ${inviteUrl}`
+}
 
-  if (suggestedInterests.length === 3) {
-    return `Hey — come play Joshing with me. I added a few areas I think you might like: ${suggestedInterests[0]}, ${suggestedInterests[1]}, and ${suggestedInterests[2]}. No app to download — just tap this: ${inviteUrl}`
-  }
+export function buildExistingUserFriendInvitationMessage({
+  inviteUrl,
+  suggestedInterests,
+}: {
+  inviteUrl: string
+  suggestedInterests: string[]
+}): string {
+  const ideas = interestPhrase(suggestedInterests)
+  const ideaCopy = ideas
+    ? ` I added a few areas I think overlap with your world — ${ideas}. Keep, edit, or ignore them.`
+    : ''
 
-  return `Hey — come play Joshing with me. No app to download — just tap this: ${inviteUrl}`
+  return `Hey — I thought you’d like this corner of Joshing.${ideaCopy} Tap this when you have a minute: ${inviteUrl}`
 }
 
 function maskPhoneNumber(phone: string): string {
@@ -279,6 +427,12 @@ export async function DELETE(request: Request) {
       )
     }
 
+    rememberCancelledInvite(session.userId, invitation.inviteePhone)
+    logTelemetry('add_friend_invite_cancelled', {
+      inviter_user_id: session.userId,
+      invitation_id: invitation.id,
+    })
+
     return NextResponse.json({
       ok: true,
       invitationId: invitation.id,
@@ -310,6 +464,23 @@ export async function POST(request: Request) {
 
   try {
     const { inviteeDisplayName, phone, suggestedInterests } = parsed.value
+    const rateLimitReason = checkInviteRateLimit(session.userId, phone)
+    if (rateLimitReason) {
+      logTelemetry('add_friend_invite_rate_limited', {
+        inviter_user_id: session.userId,
+        invitee_phone_hash: phone.slice(-4),
+        reason: rateLimitReason,
+      })
+      return NextResponse.json(
+        {
+          error: 'invite_cooldown',
+          message:
+            'Give this invite a little breathing room before trying again.',
+        },
+        { status: 429 }
+      )
+    }
+
     const existingUser = await getUserByPhone(phone)
 
     if (existingUser) {
@@ -320,12 +491,40 @@ export async function POST(request: Request) {
         )
       }
 
+      const ignoredCooldownReason = checkInviteRateLimit(
+        session.userId,
+        existingUser.id
+      )
+      if (ignoredCooldownReason === 'ignored_cooldown') {
+        logTelemetry('friend_request_reinvite_after_ignore_limited', {
+          inviter_user_id: session.userId,
+          invitee_user_id: existingUser.id,
+        })
+        return NextResponse.json(
+          {
+            error: 'invite_cooldown',
+            message:
+              'Give this invite a little breathing room before trying again.',
+          },
+          { status: 429 }
+        )
+      }
+
       const { friendship: friendshipRequest, state } =
         await createOrReusePendingFriendshipRequest({
           inviterUserId: session.userId,
           inviteeUserId: existingUser.id,
           suggestedInterests,
         })
+
+      const inviteUrl = `${getBaseUrl(request)}/activities#friendship-${encodeURIComponent(friendshipRequest.id)}`
+      const message = buildExistingUserFriendInvitationMessage({
+        inviteUrl,
+        suggestedInterests,
+      })
+
+      recordInviteAttempt(session.userId, phone)
+      recordInviteAttempt(session.userId, existingUser.id)
 
       logTelemetry('friend_request_existing_user_created', {
         inviter_user_id: session.userId,
@@ -341,8 +540,8 @@ export async function POST(request: Request) {
         state,
         id: friendshipRequest.id,
         invitationId: null,
-        inviteUrl: null,
-        message: null,
+        inviteUrl,
+        message,
         inviteeDisplayName,
         inviteePhone: phone,
         suggestedInterests,
@@ -368,6 +567,8 @@ export async function POST(request: Request) {
       inviteUrl,
       suggestedInterests,
     })
+
+    recordInviteAttempt(session.userId, phone)
 
     logTelemetry('add_friend_invite_created', {
       inviter_user_id: session.userId,
