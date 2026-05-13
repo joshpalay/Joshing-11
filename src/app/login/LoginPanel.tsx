@@ -6,6 +6,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
 
+function sendTelemetry(event: string) {
+  void fetch('/api/telemetry', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ event }),
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.length === 10) return `+1${digits}`;
@@ -34,6 +44,8 @@ export default function LoginPanel() {
       setError('Use a US phone number.');
       return;
     }
+
+    if (invitationToken) sendTelemetry('friend_invite_auth_started');
 
     setLoading(true);
     try {

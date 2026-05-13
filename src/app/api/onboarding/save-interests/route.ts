@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
+import { logTelemetry } from '@/server/telemetry';
 import {
   type DeclaredInterestInput,
   markOnboardingComplete,
@@ -9,6 +10,7 @@ import {
 
 type SaveInterestsBody = {
   interests?: unknown;
+  telemetry?: unknown;
 };
 
 function parseInterest(value: unknown): DeclaredInterestInput | null {
@@ -24,6 +26,24 @@ function parseInterest(value: unknown): DeclaredInterestInput | null {
       ? record.broadCategory.trim().slice(0, 80)
       : null,
   };
+}
+
+function parseOnboardingTelemetry(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { inviteInterestCount: 0, inviteSelectedCount: 0 };
+  }
+
+  const record = value as Record<string, unknown>;
+  const inviteInterestCount =
+    typeof record.inviteInterestCount === 'number' && Number.isFinite(record.inviteInterestCount)
+      ? Math.max(0, Math.min(5, Math.trunc(record.inviteInterestCount)))
+      : 0;
+  const inviteSelectedCount =
+    typeof record.inviteSelectedCount === 'number' && Number.isFinite(record.inviteSelectedCount)
+      ? Math.max(0, Math.min(inviteInterestCount, Math.trunc(record.inviteSelectedCount)))
+      : 0;
+
+  return { inviteInterestCount, inviteSelectedCount };
 }
 
 function parseInterests(value: unknown): DeclaredInterestInput[] | null {
@@ -43,6 +63,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as SaveInterestsBody | null;
   const interests = parseInterests(body?.interests);
+  const telemetry = parseOnboardingTelemetry(body?.telemetry);
 
   if (!interests) {
     return NextResponse.json(
@@ -54,6 +75,21 @@ export async function POST(request: Request) {
   try {
     await saveDeclaredInterests(session.userId, interests);
     await markOnboardingComplete(session.userId);
+
+    if (telemetry.inviteInterestCount > 0) {
+      const event = telemetry.inviteSelectedCount === 0
+        ? 'friend_onboarding_interests_skipped'
+        : telemetry.inviteSelectedCount >= telemetry.inviteInterestCount
+          ? 'friend_onboarding_interests_accepted_all'
+          : 'friend_onboarding_interests_partial';
+
+      logTelemetry(event, {
+        user_id: session.userId,
+        invite_interest_count: telemetry.inviteInterestCount,
+        invite_interest_selected_count: telemetry.inviteSelectedCount,
+        saved_interest_count: interests.length,
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

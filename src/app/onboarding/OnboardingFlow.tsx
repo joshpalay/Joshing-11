@@ -376,6 +376,13 @@ export default function OnboardingFlow({ preSeededInterests, inviterName }: Onbo
       })
       .slice(0, 5);
 
+    const inviteSelectedCount = inviteInterests.filter((interest) => {
+      const selected = toSelected(interest);
+      return selected
+        ? cleanSelected.some((item) => selectedKey(item) === selectedKey(selected))
+        : false;
+    }).length;
+
     if (cleanSelected.length === 0) {
       setError('Pick at least 1 to continue.');
       return;
@@ -388,7 +395,13 @@ export default function OnboardingFlow({ preSeededInterests, inviterName }: Onbo
       const response = await fetch('/api/onboarding/save-interests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ interests: cleanSelected }),
+        body: JSON.stringify({
+          interests: cleanSelected,
+          telemetry: {
+            inviteInterestCount: inviteInterests.length,
+            inviteSelectedCount,
+          },
+        }),
       });
       const data = await response.json().catch(() => ({}));
 

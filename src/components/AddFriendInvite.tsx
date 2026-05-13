@@ -20,6 +20,7 @@ type InviteResult = {
   ok: boolean
   type: 'friend_invitation' | 'friendship_request'
   id: string
+  invitationId?: string | null
   inviteUrl: string | null
   message: string | null
   inviteeDisplayName: string
@@ -38,6 +39,16 @@ function normalizeInterestList(interests: string[]) {
 
 function buildSmsHref(phone: string, message: string) {
   return `sms:${encodeURIComponent(phone)}?body=${encodeURIComponent(message)}`
+}
+
+function sendTelemetry(event: string, metadata: Record<string, unknown> = {}) {
+  void fetch('/api/telemetry', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ event, metadata }),
+    keepalive: true,
+  }).catch(() => undefined)
 }
 
 function looksLikeUsMobileNumber(phone: string) {
@@ -75,6 +86,7 @@ export default function AddFriendInvite() {
         }>
       ).detail
 
+      sendTelemetry('add_friend_started', { source: 'custom_event' })
       setExpanded(true)
       setStep('identity')
       setName(detail?.inviteeDisplayName ?? '')
@@ -191,10 +203,19 @@ export default function AddFriendInvite() {
     try {
       await navigator.clipboard.writeText(messageText)
       setCopyLabel('Copied ✓')
+      sendTelemetry('add_friend_message_copied', {
+        invitation_id: result?.invitationId ?? result?.id ?? null,
+        suggested_interest_count: result?.suggestedInterests.length ?? 0,
+      })
       window.setTimeout(() => setCopyLabel('Copy message'), 2000)
     } catch {
       if (navigator.share) {
         await navigator.share({ text: messageText })
+        sendTelemetry('add_friend_message_copied', {
+          invitation_id: result?.invitationId ?? result?.id ?? null,
+          suggested_interest_count: result?.suggestedInterests.length ?? 0,
+          fallback: 'share',
+        })
         return
       }
       messageRef.current?.focus()
@@ -215,7 +236,10 @@ export default function AddFriendInvite() {
         <button
           type="button"
           className="btn-primary mt-4 min-h-12 w-full rounded-full"
-          onClick={() => setExpanded(true)}
+          onClick={() => {
+            sendTelemetry('add_friend_started', { source: 'inline_card' })
+            setExpanded(true)
+          }}
         >
           Add friend
         </button>
@@ -420,6 +444,12 @@ export default function AddFriendInvite() {
                   <a
                     className="btn-ghost min-h-12 w-full rounded-full"
                     href={smsHref}
+                    onClick={() =>
+                      sendTelemetry('add_friend_sms_handoff_opened', {
+                        invitation_id: result.invitationId ?? result.id,
+                        suggested_interest_count: result.suggestedInterests.length,
+                      })
+                    }
                   >
                     Open Messages
                   </a>
