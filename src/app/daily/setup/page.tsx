@@ -129,8 +129,17 @@ function DailySetupContent() {
 
         const requestedDomain = searchParams.get('domain')?.trim();
         const requestedCustom = searchParams.get('domainMode') === 'custom' && requestedDomain;
+        const availableDomains = body.domains ?? [];
+        if (
+          requestedCustom &&
+          !availableDomains.some((domain) => domain.domain.toLocaleLowerCase('en-US') === requestedDomain.toLocaleLowerCase('en-US'))
+        ) {
+          router.replace(`/knowledge?emptyDomain=${encodeURIComponent(requestedDomain)}`);
+          return;
+        }
+
         setHasUnstartedQueue(Boolean(status.queue_id));
-        setDomains(body.domains ?? []);
+        setDomains(availableDomains);
         setDifficulty(body.preferences?.difficulty ?? 'adaptive');
         setDomainMode(requestedCustom ? 'custom' : body.preferences?.domainMode ?? 'random');
         setSelectedDomains(new Set(requestedCustom ? [requestedDomain] : body.preferences?.selectedDomains ?? []));
@@ -209,6 +218,11 @@ function DailySetupContent() {
       });
       const queueBody = await queueResponse.json().catch(() => null);
       if (!queueResponse.ok) {
+        if (domainMode === 'custom' && selectedDomains.size > 0) {
+          const [domain] = Array.from(selectedDomains);
+          router.push(`/knowledge?emptyDomain=${encodeURIComponent(domain)}`);
+          return;
+        }
         throw new Error(queueBody?.message ?? 'Could not build your round.');
       }
 
