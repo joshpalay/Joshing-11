@@ -1,53 +1,261 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
+import Link from 'next/link'
+import PeopleYouInvited from '@/components/PeopleYouInvited'
+import { useCallback, useEffect, useState } from 'react'
 
 type Friend = {
-  id: string;
-  displayName: string;
-};
+  id: string
+  displayName: string
+  declaredInterests: string[]
+  sharedInterests: string[]
+}
+
+type IncomingRequest = {
+  id: string
+  requesterId: string
+  requesterName: string
+  suggestedInterests: string[]
+  createdAt: string
+}
+
+type FriendsHubResponse = {
+  ok: boolean
+  friends: Friend[]
+  incomingRequests: IncomingRequest[]
+}
+
+type RequestAction = 'accept' | 'ignore'
+
+function previewInterests(interests: string[]) {
+  if (interests.length === 0) return null
+  const visible = interests.slice(0, 3).join(', ')
+  const remainder = interests.length - 3
+  return remainder > 0 ? `${visible}, +${remainder} more` : visible
+}
+
+function openAddFriend() {
+  window.dispatchEvent(new CustomEvent('friend-invitations:create-new'))
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 
 export default function FriendsList() {
-  const [friends, setFriends] = useState<Friend[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [friends, setFriends] = useState<Friend[]>([])
+  const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [pendingRequest, setPendingRequest] = useState<string | null>(null)
+
+  const loadFriends = useCallback(async () => {
+    setError(null)
+
+    try {
+      const response = await fetch('/api/friends', {
+        cache: 'no-store',
+        credentials: 'include',
+      })
+      const body = (await response.json().catch(() => null)) as
+        | FriendsHubResponse
+        | { message?: string }
+        | null
+
+      if (!response.ok || !body || !('friends' in body)) {
+        throw new Error(
+          body && 'message' in body && body.message
+            ? body.message
+            : 'Could not load friends.'
+        )
+      }
+
+      setFriends(body.friends)
+      setIncomingRequests(body.incomingRequests)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not load friends.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    fetch('/api/users', { cache: 'no-store', credentials: 'include' })
-      .then(async (response) => {
-        const body = await response.json().catch(() => null);
-        if (!response.ok || !Array.isArray(body)) {
-          throw new Error(body?.message ?? 'Could not load friends.');
-        }
-        setFriends(body);
-      })
-      .catch((caught) => {
-        setError(caught instanceof Error ? caught.message : 'Could not load friends.');
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    queueMicrotask(() => void loadFriends())
+  }, [loadFriends])
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading friends...</p>;
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (friends.length === 0) {
-    return (
-      <div className="rounded-lg border bg-card p-4 text-card-foreground">
-        <p className="text-sm text-muted-foreground">No friends yet.</p>
-      </div>
-    );
+  async function updateRequest(requestId: string, action: RequestAction) {
+    setPendingRequest(`${requestId}:${action}`)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/friend-requests/${requestId}/${action}`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const body = (await response.json().catch(() => null)) as { message?: string } | null
+
+      if (!response.ok) {
+        throw new Error(body?.message ?? 'Could not update this request.')
+      }
+
+      await loadFriends()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not update this request.')
+    } finally {
+      setPendingRequest(null)
+    }
   }
 
+  const hasNoRelationships =
+    !loading && !error && friends.length === 0 && incomingRequests.length === 0
+
   return (
-    <div className="space-y-2">
-      {friends.map((friend) => (
-        <div key={friend.id} className="flex items-center justify-between rounded-lg border bg-card p-4 text-card-foreground">
-          <p className="font-medium">{friend.displayName}</p>
-          {/*
-            // v11.1: Joshing Game creation disabled at FAB level. Re-enable
-            // when game creation flow is restored.
-          */}
+    <div className="space-y-5">
+      {hasNoRelationships ? (
+        <section className="bg-card text-card-foreground rounded-2xl border p-5 text-center shadow-sm">
+          <h2 className="font-serif text-2xl font-semibold">
+            Joshing gets better when your people are here.
+          </h2>
+          <p className="text-muted-foreground mt-2 text-sm leading-6">
+            Invite someone you already trade facts, recommendations, and inside jokes with.
+          </p>
+          <button
+            type="button"
+            className="btn-primary mt-4 min-h-12 w-full rounded-full sm:w-auto sm:px-6"
+            onClick={openAddFriend}
+          >
+            Add friend
+          </button>
+        </section>
+      ) : null}
+
+      <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+              Requests
+            </p>
+            <h2 className="mt-1 font-serif text-xl font-semibold">
+              Incoming friend requests
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="text-muted-foreground text-sm font-medium underline-offset-4 hover:underline"
+            onClick={() => void loadFriends()}
+          >
+            Refresh
+          </button>
         </div>
-      ))}
+
+        {loading ? (
+          <p className="text-muted-foreground text-sm">Loading requests…</p>
+        ) : incomingRequests.length > 0 ? (
+          <div className="space-y-3">
+            {incomingRequests.map((request) => (
+              <article key={request.id} className="bg-background rounded-xl border p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-foreground font-medium">{request.requesterName}</h3>
+                    {request.suggestedInterests.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {request.suggestedInterests.map((interest) => (
+                          <span
+                            key={interest}
+                            className="bg-muted text-foreground rounded-full px-3 py-1 text-sm"
+                          >
+                            {interest}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground mt-1 text-sm">
+                        No suggested interests yet — just a friendly hello.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:min-w-48">
+                    <button
+                      type="button"
+                      className="btn-primary min-h-11 rounded-full"
+                      disabled={Boolean(pendingRequest)}
+                      onClick={() => void updateRequest(request.id, 'accept')}
+                    >
+                      {pendingRequest === `${request.id}:accept` ? 'Accepting…' : 'Accept'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost min-h-11 rounded-full"
+                      disabled={Boolean(pendingRequest)}
+                      onClick={() => void updateRequest(request.id, 'ignore')}
+                    >
+                      {pendingRequest === `${request.id}:ignore` ? 'Ignoring…' : 'Ignore'}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground rounded-xl bg-muted px-3 py-2 text-sm">
+            No incoming requests right now.
+          </p>
+        )}
+      </section>
+
+      <PeopleYouInvited />
+
+      <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+        <div className="mb-4">
+          <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+            Friends
+          </p>
+          <h2 className="mt-1 font-serif text-xl font-semibold">Active friends</h2>
+        </div>
+
+        {error ? <p className="text-destructive mb-3 text-sm font-medium">{error}</p> : null}
+
+        {loading ? (
+          <p className="text-muted-foreground text-sm">Loading friends…</p>
+        ) : friends.length > 0 ? (
+          <div className="space-y-3">
+            {friends.map((friend) => {
+              const interests = previewInterests(friend.declaredInterests)
+              const sharedInterest = friend.sharedInterests[0]
+
+              return (
+                <Link
+                  key={friend.id}
+                  href={`/users/${friend.id}`}
+                  className="bg-background block rounded-xl border p-3 transition hover:border-foreground/30 hover:shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-foreground font-medium">{friend.displayName}</h3>
+                      {interests ? (
+                        <p className="text-muted-foreground mt-1 text-sm leading-6">
+                          Into {interests}
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground mt-1 text-sm leading-6">
+                          Interests will appear here as they declare them.
+                        </p>
+                      )}
+                    </div>
+                    {sharedInterest ? (
+                      <span className="bg-muted text-foreground shrink-0 rounded-full px-3 py-1 text-xs font-medium">
+                        Shared: {sharedInterest}
+                      </span>
+                    ) : null}
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="rounded-xl bg-muted px-3 py-2">
+            <p className="text-muted-foreground text-sm">No active friends yet.</p>
+          </div>
+        )}
+      </section>
     </div>
-  );
+  )
 }

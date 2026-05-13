@@ -1,9 +1,45 @@
-import { and, asc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, or } from 'drizzle-orm';
 
-import { db, friendships, users } from '@/server/db';
+import { db, declaredInterests, friendships, users } from '@/server/db';
 
 export type User = typeof users.$inferSelect;
 export type Friendship = typeof friendships.$inferSelect;
+
+export type FriendHubFriend = {
+  id: string
+  displayName: string
+  declaredInterests: string[]
+  sharedInterests: string[]
+}
+
+export type IncomingFriendRequest = {
+  id: string
+  requesterId: string
+  requesterName: string
+  suggestedInterests: string[]
+  createdAt: Date
+}
+
+export type FriendsHub = {
+  friends: FriendHubFriend[]
+  incomingRequests: IncomingFriendRequest[]
+}
+
+function displayName(name: string | null, fallback: string): string {
+  return name?.trim() || fallback
+}
+
+function normalizeSuggestedInterests(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || !('suggestedInterests' in value)) return []
+
+  const suggestedInterests = (value as { suggestedInterests?: unknown }).suggestedInterests
+  if (!Array.isArray(suggestedInterests)) return []
+
+  return suggestedInterests
+    .filter((interest): interest is string => typeof interest === 'string')
+    .map((interest) => interest.trim())
+    .filter(Boolean)
+}
 
 export async function getFriends(userId: string): Promise<User[]> {
   const rows = await db
@@ -23,6 +59,89 @@ export async function getFriends(userId: string): Promise<User[]> {
     .from(users)
     .where(inArray(users.id, friendIds))
     .orderBy(asc(users.displayName), asc(users.phoneNumber));
+}
+
+export async function getFriendsHub(userId: string): Promise<FriendsHub> {
+  const activeFriendships = await db
+    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
+    .from(friendships)
+    .where(and(
+      eq(friendships.status, 'active'),
+      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+    ))
+
+  const friendIds = activeFriendships.map((friendship) => (
+    friendship.userAId === userId ? friendship.userBId : friendship.userAId
+  ))
+
+  const friendRows = friendIds.length === 0
+    ? []
+    : await db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        phoneNumber: users.phoneNumber,
+      })
+      .from(users)
+      .where(inArray(users.id, friendIds))
+      .orderBy(asc(users.displayName), asc(users.phoneNumber))
+
+  const interestRows = friendIds.length === 0
+    ? []
+    : await db
+      .select({ userId: declaredInterests.userId, domain: declaredInterests.domain })
+      .from(declaredInterests)
+      .where(and(
+        eq(declaredInterests.isActive, true),
+        inArray(declaredInterests.userId, [userId, ...friendIds]),
+      ))
+      .orderBy(asc(declaredInterests.domain))
+
+  const interestsByUser = new Map<string, string[]>()
+  for (const row of interestRows) {
+    const current = interestsByUser.get(row.userId) ?? []
+    current.push(row.domain)
+    interestsByUser.set(row.userId, current)
+  }
+
+  const viewerInterests = new Set(interestsByUser.get(userId) ?? [])
+
+  const incomingRows = await db
+    .select({
+      id: friendships.id,
+      requesterId: users.id,
+      requesterDisplayName: users.displayName,
+      requesterPhoneNumber: users.phoneNumber,
+      requestContext: friendships.requestContext,
+      createdAt: friendships.createdAt,
+    })
+    .from(friendships)
+    .innerJoin(users, eq(users.id, friendships.requestedByUserId))
+    .where(and(
+      eq(friendships.status, 'pending'),
+      ne(friendships.requestedByUserId, userId),
+      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+    ))
+    .orderBy(asc(friendships.createdAt))
+
+  return {
+    friends: friendRows.map((friend) => {
+      const friendInterests = interestsByUser.get(friend.id) ?? []
+      return {
+        id: friend.id,
+        displayName: displayName(friend.displayName, friend.phoneNumber),
+        declaredInterests: friendInterests,
+        sharedInterests: friendInterests.filter((interest) => viewerInterests.has(interest)),
+      }
+    }),
+    incomingRequests: incomingRows.map((request) => ({
+      id: request.id,
+      requesterId: request.requesterId,
+      requesterName: displayName(request.requesterDisplayName, request.requesterPhoneNumber),
+      suggestedInterests: normalizeSuggestedInterests(request.requestContext),
+      createdAt: request.createdAt,
+    })),
+  }
 }
 
 export async function getFriendship(userAId: string, userBId: string): Promise<Friendship | null> {
