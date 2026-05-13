@@ -27,7 +27,7 @@ type Props = {
   onClose: () => void
 }
 
-function normalizeInterestList(values: string[]) {
+export function normalizeInterestList(values: string[]) {
   const seen = new Set<string>()
   const result: string[] = []
 
@@ -51,7 +51,10 @@ function looksLikeUsPhone(phone: string) {
   )
 }
 
-function buildDomainAskMessage(domain: string, inviteUrl?: string | null) {
+export function buildDomainAskMessage(
+  domain: string,
+  inviteUrl?: string | null
+) {
   const base = `Josh is going deep on ${domain} — and thinks you might be the one to stump them.`
   const ask = `If you have a good ${domain} question, send one their way in Joshing.`
   return inviteUrl ? `${base} ${ask} ${inviteUrl}` : `${base} ${ask}`

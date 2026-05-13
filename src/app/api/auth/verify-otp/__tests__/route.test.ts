@@ -87,6 +87,23 @@ describe('/api/auth/verify-otp invitation handling', () => {
     expect(createSessionMock).toHaveBeenCalledWith('user-1')
   })
 
+  it('continues to reject non-000000 OTP codes before invitation acceptance', async () => {
+    const response = await POST(
+      jsonRequest({
+        phone: '+15551234567',
+        code: '123456',
+        invitationToken: 'invite-token',
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(401)
+    expect(body).toEqual(expect.objectContaining({ error: 'invalid_code' }))
+    expect(verifyOtpMock).toHaveBeenCalledWith('+15551234567', '123456')
+    expect(acceptFriendInvitationMock).not.toHaveBeenCalled()
+    expect(createSessionMock).not.toHaveBeenCalled()
+  })
+
   it('accepts an invitation only after OTP verification and passes the verified phone to invitation acceptance', async () => {
     const response = await POST(
       jsonRequest({
