@@ -145,7 +145,19 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     ) {
       await tx.execute(sql`delete from "QuestionReaction" where "answerer_id" = ${userId} or "creator_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
     }
-    await tx.execute(sql`delete from "CreatorNote" where "authorUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
+    const creatorNoteTableResult = await tx.execute<{ exists: boolean }>(sql`
+      select exists (
+        select 1
+        from information_schema.tables
+        where table_schema = 'public'
+          and table_name = 'CreatorNote'
+      ) as "exists"
+    `);
+
+    if (creatorNoteTableResult.rows[0]?.exists) {
+      await tx.execute(sql`delete from "CreatorNote" where "authorUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
+    }
+
     await tx.execute(sql`delete from "GradeDispute" where "creator_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
 
     await tx.execute(sql`delete from "JoshingGameResponse" where "userId" = ${userId} or "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
