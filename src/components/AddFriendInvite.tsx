@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useRef, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 
 const INTEREST_PLACEHOLDERS = [
   'Sondheim',
@@ -64,6 +64,36 @@ export default function AddFriendInvite() {
   const smsHref = result?.message
     ? buildSmsHref(result.inviteePhone, messageText)
     : null
+
+  useEffect(() => {
+    function prefillInvite(event: Event) {
+      const detail = (
+        event as CustomEvent<{
+          inviteeDisplayName?: string
+          phone?: string
+          suggestedInterests?: string[]
+        }>
+      ).detail
+
+      setExpanded(true)
+      setStep('identity')
+      setName(detail?.inviteeDisplayName ?? '')
+      setPhone(detail?.phone ?? '')
+      setInterests([
+        detail?.suggestedInterests?.[0] ?? '',
+        detail?.suggestedInterests?.[1] ?? '',
+        detail?.suggestedInterests?.[2] ?? '',
+      ])
+      setResult(null)
+      setMessageText('')
+      setError(null)
+      setCopyLabel('Copy message')
+    }
+
+    window.addEventListener('friend-invitations:create-new', prefillInvite)
+    return () =>
+      window.removeEventListener('friend-invitations:create-new', prefillInvite)
+  }, [])
 
   function resetFlow() {
     setExpanded(false)
@@ -143,6 +173,7 @@ export default function AddFriendInvite() {
       setResult(body)
       setMessageText(body.message ?? '')
       setStep('handoff')
+      window.dispatchEvent(new Event('friend-invitations:refresh'))
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -319,7 +350,9 @@ export default function AddFriendInvite() {
         <div className="space-y-5">
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-              {result.type === 'friendship_request' ? 'Friend request' : 'Invite ready'}
+              {result.type === 'friendship_request'
+                ? 'Friend request'
+                : 'Invite ready'}
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
               {result.type === 'friendship_request'
@@ -362,8 +395,8 @@ export default function AddFriendInvite() {
 
               {!messageText.includes(result.inviteUrl ?? '') ? (
                 <p className="text-destructive text-sm">
-                  Generated message includes link — keep it in the message so they
-                  can join.
+                  Generated message includes link — keep it in the message so
+                  they can join.
                 </p>
               ) : null}
             </>
@@ -395,7 +428,11 @@ export default function AddFriendInvite() {
             ) : null}
             <button
               type="button"
-              className={result.type === 'friend_invitation' ? 'text-muted-foreground w-full py-2 text-sm' : 'btn-primary min-h-12 w-full rounded-full'}
+              className={
+                result.type === 'friend_invitation'
+                  ? 'text-muted-foreground w-full py-2 text-sm'
+                  : 'btn-primary min-h-12 w-full rounded-full'
+              }
               onClick={resetFlow}
             >
               Done

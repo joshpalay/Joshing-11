@@ -12,6 +12,17 @@ const DEFAULT_INVITATION_TTL_MS = 1000 * 60 * 60 * 24 * 14
 
 export type FriendInvitation = typeof friendInvitations.$inferSelect
 
+export type OutgoingFriendInvitationStatus =
+  | 'pending'
+  | 'accepted'
+  | 'expired'
+  | 'cancelled'
+
+export type OutgoingFriendInvitation = FriendInvitation & {
+  status: OutgoingFriendInvitationStatus
+  suggestedInterests: string[]
+}
+
 export type FriendInvitationLanding = {
   status: 'valid' | 'expired' | 'accepted' | 'invalid'
   inviterName: string
@@ -47,11 +58,11 @@ function displayInviterName(value: string | null | undefined) {
   return normalized ? normalized.slice(0, 80) : 'Someone'
 }
 
-function parseLandingInterests(value: unknown): { label: string }[] {
+export function parseInvitationInterests(value: unknown): string[] {
   if (!Array.isArray(value)) return []
 
   const seen = new Set<string>()
-  const interests: { label: string }[] = []
+  const interests: string[] = []
 
   for (const item of value) {
     const rawLabel =
@@ -68,11 +79,15 @@ function parseLandingInterests(value: unknown): { label: string }[] {
     if (seen.has(key)) continue
 
     seen.add(key)
-    interests.push({ label: label.slice(0, 80) })
+    interests.push(label.slice(0, 80))
     if (interests.length === 3) break
   }
 
   return interests
+}
+
+function parseLandingInterests(value: unknown): { label: string }[] {
+  return parseInvitationInterests(value).map((label) => ({ label }))
 }
 
 export async function getFriendInvitationLandingByToken(
@@ -235,6 +250,39 @@ export async function getPendingInvitationForPhone({
   return invitation ?? null
 }
 
+export function getOutgoingFriendInvitationStatus(
+  invitation: Pick<
+    FriendInvitation,
+    'acceptedAt' | 'cancelledAt' | 'expiresAt'
+  >,
+  now = new Date()
+): OutgoingFriendInvitationStatus {
+  if (invitation.cancelledAt) return 'cancelled'
+  if (invitation.acceptedAt) return 'accepted'
+  if (invitation.expiresAt <= now) return 'expired'
+  return 'pending'
+}
+
+export async function listOutgoingFriendInvitations({
+  inviterUserId,
+  now = new Date(),
+}: {
+  inviterUserId: string
+  now?: Date
+}): Promise<OutgoingFriendInvitation[]> {
+  const invitations = await db
+    .select()
+    .from(friendInvitations)
+    .where(eq(friendInvitations.inviterUserId, inviterUserId))
+    .orderBy(desc(friendInvitations.sentAt))
+
+  return invitations.map((invitation) => ({
+    ...invitation,
+    status: getOutgoingFriendInvitationStatus(invitation, now),
+    suggestedInterests: parseInvitationInterests(invitation.preSeededInterests),
+  }))
+}
+
 export async function cancelFriendInvitation({
   invitationId,
   inviterUserId,
@@ -252,7 +300,8 @@ export async function cancelFriendInvitation({
         eq(friendInvitations.id, invitationId),
         eq(friendInvitations.inviterUserId, inviterUserId),
         isNull(friendInvitations.acceptedAt),
-        isNull(friendInvitations.cancelledAt)
+        isNull(friendInvitations.cancelledAt),
+        gt(friendInvitations.expiresAt, now)
       )
     )
     .returning()

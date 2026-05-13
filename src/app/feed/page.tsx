@@ -1,5 +1,6 @@
 import AddFriendInvite from '@/components/AddFriendInvite'
 import FeedList from '@/components/FeedList'
+import PeopleYouInvited from '@/components/PeopleYouInvited'
 
 export default function FeedPage() {
   return (
@@ -14,6 +15,7 @@ export default function FeedPage() {
       </header>
 
       <AddFriendInvite />
+      <PeopleYouInvited />
       <FeedList />
     </main>
   )
