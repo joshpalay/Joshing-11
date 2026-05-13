@@ -1,11 +1,11 @@
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { isUsPhoneNumber, normalizePhone } from '@/server/auth';
 import { getSession } from '@/server/auth/session';
-import { db, friendInvitations, friendships, users } from '@/server/db';
+import { db, friendInvitations, users } from '@/server/db';
 import { createFriendInvitation } from '@/server/friends/invitations';
-import { friendshipPair } from '@/server/friends/friendships';
+import { createOrReusePendingFriendshipRequest } from '@/server/friends/friendships';
 
 export const dynamic = 'force-dynamic';
 
@@ -166,44 +166,6 @@ async function getUserByPhone(phone: string) {
   return user ?? null;
 }
 
-async function createOrReusePendingFriendshipRequest({
-  inviterUserId,
-  inviteeUserId,
-}: {
-  inviterUserId: string;
-  inviteeUserId: string;
-}) {
-  const pair = friendshipPair(inviterUserId, inviteeUserId);
-
-  const [existingFriendship] = await db
-    .select()
-    .from(friendships)
-    .where(and(eq(friendships.userAId, pair.userAId), eq(friendships.userBId, pair.userBId)))
-    .limit(1);
-
-  if (existingFriendship) return existingFriendship;
-
-  // The current Friendship schema has no column for Add Friend request context,
-  // so suggested interests are intentionally persisted only on FriendInvitation
-  // rows until a friendship-request context column exists.
-  const [friendship] = await db
-    .insert(friendships)
-    .values({
-      ...pair,
-      status: 'pending',
-      requestedByUserId: inviterUserId,
-      formedVia: 'direct_request',
-      formedAt: null,
-      removedAt: null,
-      removedByUserId: null,
-    })
-    .returning();
-
-  if (!friendship) throw new Error('Friendship request could not be created');
-
-  return friendship;
-}
-
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -228,14 +190,16 @@ export async function POST(request: Request) {
         );
       }
 
-      const friendshipRequest = await createOrReusePendingFriendshipRequest({
+      const { friendship: friendshipRequest, state } = await createOrReusePendingFriendshipRequest({
         inviterUserId: session.userId,
         inviteeUserId: existingUser.id,
+        suggestedInterests,
       });
 
       return NextResponse.json({
         ok: true,
         type: 'friendship_request',
+        state,
         id: friendshipRequest.id,
         invitationId: null,
         inviteUrl: null,
@@ -247,6 +211,7 @@ export async function POST(request: Request) {
         friendshipRequest: {
           id: friendshipRequest.id,
           status: friendshipRequest.status,
+          state,
           inviteeUserId: existingUser.id,
         },
       });

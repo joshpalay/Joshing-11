@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { CreatorNoteReadButton } from '@/app/activities/CreatorNoteReadButton';
+import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
 import { creatorNoteSubmittedAnswerText } from '@/lib/creator-note-submitted-answer';
@@ -55,7 +56,7 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
   }
 
   if (item.type === 'friend_request') {
-    return <>{actorName(item)} wants to be friends on Joshing</>;
+    return <>{actorName(item)} wants to add you on Joshing.</>;
   }
 
   if (item.type === 'friend_request_accepted') {
@@ -149,6 +150,23 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
     return <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{curatedQuestion.questionText}</p>;
   }
 
+  if (item.type === 'friend_request') {
+    const interests = item.reference.friendshipRequest?.suggestedInterests ?? [];
+    if (interests.length === 0) return null;
+
+    const label = interests.length === 1
+      ? interests[0]
+      : interests.length === 2
+        ? `${interests[0]} and ${interests[1]}`
+        : `${interests[0]}, ${interests[1]}, and ${interests[2]}`;
+
+    return (
+      <p className="mt-1 text-sm text-muted-foreground">
+        They thought you might like questions about {label}.
+      </p>
+    );
+  }
+
   if (item.type !== 'reaction_received') return null;
   const reaction = item.reference.reaction;
   if (!reaction) return null;
@@ -199,6 +217,15 @@ function ActivityCta({ item }: { item: ActivityItemView }) {
 
   if (item.type === 'received_direct_question') {
     return <Link href="/feed" className="btn-primary">Answer</Link>;
+  }
+
+  if (item.type === 'friend_request') {
+    const request = item.reference.friendshipRequest;
+    if (!request || request.status !== 'pending' || request.requestedByUserId === item.userId) {
+      return null;
+    }
+
+    return <FriendRequestActions friendshipId={request.id} />;
   }
 
   if (item.type === 'authored_question_shared') {

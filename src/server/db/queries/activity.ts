@@ -5,6 +5,7 @@ import {
   creatorNotes,
   db,
   feedItems,
+  friendships,
   joshingGameQuestions,
   joshingGameRecipients,
   joshingGameResponses,
@@ -70,6 +71,12 @@ export type ActivityItemView = Pick<
       domain: string;
       questionText: string;
     };
+    friendshipRequest?: {
+      id: string;
+      status: string;
+      requestedByUserId: string;
+      suggestedInterests: string[];
+    };
     creatorNote?: {
       id: string;
       questionText: string;
@@ -108,6 +115,52 @@ function isActivityType(value: string): value is ActivityItemType {
     'authored_question_shared',
     'declared_promoted',
   ].includes(value);
+}
+
+
+function parseFriendshipRequestInterests(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  const interests = (value as { suggestedInterests?: unknown }).suggestedInterests;
+  if (!Array.isArray(interests)) return [];
+
+  return interests
+    .filter((interest): interest is string => typeof interest === 'string' && interest.trim().length > 0)
+    .map((interest) => interest.trim())
+    .slice(0, 3);
+}
+
+async function hydrateFriendshipRequests(items: ActivityItemRow[]) {
+  const friendshipIds = [
+    ...new Set(
+      items
+        .filter((item) => item.referenceType === 'friendship')
+        .map((item) => item.referenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (friendshipIds.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['friendshipRequest']>>();
+  }
+
+  const rows = await db
+    .select({
+      id: friendships.id,
+      status: friendships.status,
+      requestedByUserId: friendships.requestedByUserId,
+      requestContext: friendships.requestContext,
+    })
+    .from(friendships)
+    .where(inArray(friendships.id, friendshipIds));
+
+  return new Map(rows.map((row) => [
+    row.id,
+    {
+      id: row.id,
+      status: row.status,
+      requestedByUserId: row.requestedByUserId,
+      suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
+    },
+  ]));
 }
 
 async function hydrateActors(items: ActivityItemRow[]) {
@@ -544,8 +597,9 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     .orderBy(desc(activityItems.createdAt))
     .limit(100);
 
-  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, authoredSharedQuestionsById, declaredPromotedById] = await Promise.all([
+  const [actorsById, friendshipRequestsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, authoredSharedQuestionsById, declaredPromotedById] = await Promise.all([
     hydrateActors(rows),
+    hydrateFriendshipRequests(rows),
     hydrateGames(rows, userId),
     hydrateMasteryEvents(rows),
     hydrateReactions(rows),
@@ -570,6 +624,9 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
       createdAt: row.createdAt,
       actor: row.actorUserId ? actorsById.get(row.actorUserId) ?? null : null,
       reference: {
+        friendshipRequest: row.referenceType === 'friendship' && row.referenceId
+          ? friendshipRequestsById.get(row.referenceId)
+          : undefined,
         game: row.referenceType === 'joshing_game' && row.referenceId
           ? gamesById.get(row.referenceId)
           : undefined,
