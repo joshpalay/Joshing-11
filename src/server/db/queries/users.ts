@@ -17,6 +17,11 @@ export type PreSeededInterest = {
   broadCategory?: string | null;
 };
 
+export type PreSeededInterestsForUser = {
+  interests: PreSeededInterest[];
+  inviterName: string | null;
+};
+
 function normalizeDeclaredInterest(interest: DeclaredInterestInput): DeclaredInterestInput | null {
   const label = interest.label.trim().replace(/\s+/g, ' ');
   if (!label) return null;
@@ -167,13 +172,25 @@ export async function getUserOnboardingProfile(userId: string) {
   return user ?? null;
 }
 
-export async function getPreSeededInterestsForUser(userId: string): Promise<PreSeededInterest[]> {
+function normalizeInviterName(value: string | null | undefined) {
+  const normalized = value?.trim().replace(/\s+/g, ' ');
+  return normalized ? normalized.slice(0, 80) : null;
+}
+
+export async function getPreSeededInterestsForUser(userId: string): Promise<PreSeededInterestsForUser> {
   const [invitation] = await db
-    .select({ preSeededInterests: friendInvitations.preSeededInterests })
+    .select({
+      preSeededInterests: friendInvitations.preSeededInterests,
+      inviterName: users.displayName,
+    })
     .from(friendInvitations)
+    .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
     .where(and(eq(friendInvitations.inviteeUserId, userId), isNotNull(friendInvitations.acceptedAt)))
     .orderBy(desc(friendInvitations.acceptedAt))
     .limit(1);
 
-  return parsePreSeededInterests(invitation?.preSeededInterests);
+  return {
+    interests: parsePreSeededInterests(invitation?.preSeededInterests),
+    inviterName: normalizeInviterName(invitation?.inviterName),
+  };
 }
