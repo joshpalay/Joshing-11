@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto'
 
 import { and, desc, eq, gt, isNull, or } from 'drizzle-orm'
 
-import { db, friendInvitations } from '@/server/db'
+import { db, friendInvitations, users } from '@/server/db'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
 
 export const INVITATION_ACCEPTANCE_ERROR_MESSAGE =
@@ -11,6 +11,12 @@ export const INVITATION_ACCEPTANCE_ERROR_MESSAGE =
 const DEFAULT_INVITATION_TTL_MS = 1000 * 60 * 60 * 24 * 14
 
 export type FriendInvitation = typeof friendInvitations.$inferSelect
+
+export type FriendInvitationLanding = {
+  status: 'valid' | 'expired' | 'accepted' | 'invalid'
+  inviterName: string
+  suggestedInterests: { label: string }[]
+}
 
 export type CreateFriendInvitationInput = {
   inviterUserId: string
@@ -35,6 +41,79 @@ export type AcceptFriendInvitationResult =
         | 'phone_mismatch'
         | 'claim_failed'
     }
+
+function displayInviterName(value: string | null | undefined) {
+  const normalized = value?.trim().replace(/\s+/g, ' ')
+  return normalized ? normalized.slice(0, 80) : 'Someone'
+}
+
+function parseLandingInterests(value: unknown): { label: string }[] {
+  if (!Array.isArray(value)) return []
+
+  const seen = new Set<string>()
+  const interests: { label: string }[] = []
+
+  for (const item of value) {
+    const rawLabel =
+      typeof item === 'string'
+        ? item
+        : item && typeof item === 'object' && !Array.isArray(item)
+          ? (item as Record<string, unknown>).label
+          : null
+    const label =
+      typeof rawLabel === 'string' ? rawLabel.trim().replace(/\s+/g, ' ') : ''
+    if (!label) continue
+
+    const key = label.toLocaleLowerCase('en-US')
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    interests.push({ label: label.slice(0, 80) })
+    if (interests.length === 3) break
+  }
+
+  return interests
+}
+
+export async function getFriendInvitationLandingByToken(
+  token: string,
+  now = new Date()
+): Promise<FriendInvitationLanding> {
+  const normalizedToken = token.trim()
+  if (!normalizedToken) {
+    return { status: 'invalid', inviterName: 'Someone', suggestedInterests: [] }
+  }
+
+  const [row] = await db
+    .select({
+      acceptedAt: friendInvitations.acceptedAt,
+      cancelledAt: friendInvitations.cancelledAt,
+      expiresAt: friendInvitations.expiresAt,
+      preSeededInterests: friendInvitations.preSeededInterests,
+      inviterName: users.displayName,
+    })
+    .from(friendInvitations)
+    .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
+    .where(eq(friendInvitations.token, normalizedToken))
+    .limit(1)
+
+  if (!row || row.cancelledAt) {
+    return { status: 'invalid', inviterName: 'Someone', suggestedInterests: [] }
+  }
+
+  const inviterName = displayInviterName(row.inviterName)
+  const suggestedInterests = parseLandingInterests(row.preSeededInterests)
+
+  if (row.acceptedAt) {
+    return { status: 'accepted', inviterName, suggestedInterests: [] }
+  }
+
+  if (row.expiresAt <= now) {
+    return { status: 'expired', inviterName, suggestedInterests: [] }
+  }
+
+  return { status: 'valid', inviterName, suggestedInterests }
+}
 
 function normalizeRequiredText(value: string, fieldName: string) {
   const normalized = value.trim().replace(/\s+/g, ' ')
