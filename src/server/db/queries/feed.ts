@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
+import { isMainFeedSourceVisible } from '@/server/feed/visibility';
 import { pgErrorCode } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
@@ -24,7 +25,7 @@ async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<Collapsed
   const friendAnsweredByQuestion = new Map<string, FeedItem[]>();
 
   for (const item of items) {
-    if (item.sourceType === 'friend_answered' && item.questionId) {
+    if (isMainFeedSourceVisible(item.sourceType, item.sourceResult) && item.questionId) {
       const group = friendAnsweredByQuestion.get(item.questionId) ?? [];
       group.push(item);
       friendAnsweredByQuestion.set(item.questionId, group);
@@ -72,7 +73,7 @@ async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<Collapsed
     .map((item) => {
       if (collapsedById.has(item.id)) return collapsedById.get(item.id)!;
       // Single friend_answered item — wrap in friendResults for consistent display
-      if (item.sourceType === 'friend_answered') {
+      if (isMainFeedSourceVisible(item.sourceType, item.sourceResult)) {
         return {
           ...item,
           friendResults: [{
@@ -202,6 +203,8 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
       .where(and(
         eq(feedItems.recipientUserId, userId),
         eq(feedItems.isPinned, true),
+        eq(feedItems.sourceType, 'friend_answered'),
+        eq(feedItems.sourceResult, 'correct'),
         inArray(feedItems.state, VISIBLE_FEED_STATES),
       ))
       .orderBy(desc(feedItems.sourceEventAt)),
@@ -211,6 +214,8 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
       .where(and(
         eq(feedItems.recipientUserId, userId),
         eq(feedItems.isPinned, false),
+        eq(feedItems.sourceType, 'friend_answered'),
+        eq(feedItems.sourceResult, 'correct'),
         inArray(feedItems.state, VISIBLE_FEED_STATES),
       ))
       .orderBy(desc(feedItems.sourceEventAt))
@@ -226,13 +231,14 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
 
   const scoreRows = allQuestionIds.length > 0
     ? await db
-        .select({ id: questions.id, score: questions.surfacePriorityScore, canonicalSubcategory: questions.canonicalSubcategory })
+        .select({ id: questions.id, score: questions.surfacePriorityScore, canonicalSubcategory: questions.canonicalSubcategory, visibility: questions.visibility, deletedAt: questions.deletedAt })
         .from(questions)
         .where(inArray(questions.id, allQuestionIds))
     : [];
 
   const scoreByQuestionId = new Map(scoreRows.map((r) => [r.id, r.score ?? 0]));
   const domainByQuestionId = new Map(scoreRows.map((r) => [r.id, r.canonicalSubcategory]));
+  const visibleQuestionIds = new Set(scoreRows.filter((r) => r.visibility === 'public' && !r.deletedAt).map((r) => r.id));
 
   // Sort non-pinned by surface_priority_score DESC then sourceEventAt DESC
   const nonPinned = [...nonPinnedRaw].sort((a, b) => {
@@ -243,7 +249,9 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
   });
 
   const filterItem = (item: FeedItem) => {
-    if (!item.questionId || dismissedSet.size === 0) return true;
+    if (!isMainFeedSourceVisible(item.sourceType, item.sourceResult)) return false;
+    if (!item.questionId || !visibleQuestionIds.has(item.questionId)) return false;
+    if (dismissedSet.size === 0) return true;
     const domain = domainByQuestionId.get(item.questionId);
     return !domain || !dismissedSet.has(domain);
   };

@@ -162,6 +162,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     session.userId,
     question.id,
     isCorrect ? 'correct' : 'incorrect',
+    `feed:${feedItemId}:${session.userId}`,
   );
 
   if (!isCorrect) {

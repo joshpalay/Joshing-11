@@ -4,14 +4,16 @@ import { db, feedDismissedDomains, feedItems, masteryEvents, questionFeedback, q
 import { writeActivity } from '@/server/activity/write-activity';
 import { getFriends } from '@/server/db/queries/friends';
 import { rollOffOldItems, userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
+import { isCorrectAnswerFeedEligible } from '@/server/feed/visibility';
 
 export async function createFeedItemsForFriendsFromAnswer(
   userId: string,
   questionId: string,
   result: 'correct' | 'incorrect',
+  sourceAnswerId?: string,
 ): Promise<void> {
   try {
-    await _createFeedItemsForFriendsFromAnswer(userId, questionId, result);
+    await _createFeedItemsForFriendsFromAnswer(userId, questionId, result, sourceAnswerId);
   } catch (error) {
     console.error('[createFeedItemsForFriendsFromAnswer] propagation error (suppressed):', {
       userId,
@@ -25,7 +27,10 @@ async function _createFeedItemsForFriendsFromAnswer(
   userId: string,
   questionId: string,
   result: 'correct' | 'incorrect',
+  sourceAnswerId?: string,
 ): Promise<void> {
+  if (result !== 'correct') return;
+
   // Don't propagate if the answering user thumbed this question down via either signal path
   const [thumbsDown] = await db
     .select({ id: questionFeedback.id })
@@ -50,12 +55,17 @@ async function _createFeedItemsForFriendsFromAnswer(
   if (thumbsDown || ratingDown) return;
 
   const [question] = await db
-    .select({ canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })
+    .select({ creatorId: questions.creatorId, visibility: questions.visibility, deletedAt: questions.deletedAt, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })
     .from(questions)
     .where(eq(questions.id, questionId))
     .limit(1);
 
-  if (!question) return;
+  if (!isCorrectAnswerFeedEligible({
+    answerIsCorrect: result === 'correct',
+    answererUserId: userId,
+    question,
+    hasVisibleSocialContext: true,
+  })) return;
 
   const domain = question.canonicalSubcategory ?? question.broadCategory;
   if (!domain) return;
@@ -93,6 +103,19 @@ async function _createFeedItemsForFriendsFromAnswer(
 
     if (existing) continue;
 
+    if (sourceAnswerId) {
+      const [answerEvent] = await db
+        .select({ id: feedItems.id })
+        .from(feedItems)
+        .where(and(
+          eq(feedItems.recipientUserId, friend.id),
+          eq(feedItems.sourceAnswerId, sourceAnswerId),
+        ))
+        .limit(1);
+
+      if (answerEvent) continue;
+    }
+
     await db.insert(feedItems).values({
       recipientUserId: friend.id,
       questionId,
@@ -100,6 +123,7 @@ async function _createFeedItemsForFriendsFromAnswer(
       sourceUserId: userId,
       sourceResult: result,
       sourceEventAt: new Date(),
+      sourceAnswerId,
       state: 'active',
       isPinned: false,
     });

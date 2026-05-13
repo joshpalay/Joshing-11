@@ -226,6 +226,7 @@ export async function POST(request: NextRequest) {
         session.userId,
         persisted.questionId,
         isCorrect ? 'correct' : 'incorrect',
+        `daily:${question.id}:${session.userId}`,
       );
     } catch (error) {
       console.warn('[daily/answer] failed to persist generated question for feed propagation', {

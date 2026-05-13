@@ -125,6 +125,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       session.userId,
       parsed.questionId,
       grade.isCorrect ? 'correct' : 'incorrect',
+      `joshing_game:${id}:${parsed.questionId}:${session.userId}`,
     );
 
     if (!grade.isCorrect) {
