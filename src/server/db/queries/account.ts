@@ -121,7 +121,30 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     await tx.execute(sql`delete from "ActivityItem" where "userId" = ${userId}`);
     await tx.execute(sql`update "ActivityItem" set "actorUserId" = null where "actorUserId" = ${userId}`);
 
-    await tx.execute(sql`delete from "QuestionReaction" where "senderUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
+    const questionReactionColumnsResult = await tx.execute<{ column_name: string }>(sql`
+      select column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'QuestionReaction'
+        and column_name in ('senderUserId', 'recipientUserId', 'questionId', 'answerer_id', 'creator_id', 'question_id')
+    `);
+    const questionReactionColumnNames = new Set(
+      questionReactionColumnsResult.rows.map((row) => row.column_name),
+    );
+
+    if (
+      questionReactionColumnNames.has('senderUserId')
+      && questionReactionColumnNames.has('recipientUserId')
+      && questionReactionColumnNames.has('questionId')
+    ) {
+      await tx.execute(sql`delete from "QuestionReaction" where "senderUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
+    } else if (
+      questionReactionColumnNames.has('answerer_id')
+      && questionReactionColumnNames.has('creator_id')
+      && questionReactionColumnNames.has('question_id')
+    ) {
+      await tx.execute(sql`delete from "QuestionReaction" where "answerer_id" = ${userId} or "creator_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
+    }
     await tx.execute(sql`delete from "CreatorNote" where "authorUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
     await tx.execute(sql`delete from "GradeDispute" where "creator_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
 
