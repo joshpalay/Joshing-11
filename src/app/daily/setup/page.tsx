@@ -256,7 +256,7 @@ function DailySetupContent() {
         <p className="mb-3 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
           Difficulty
         </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="flex flex-wrap gap-3">
           {DIFFICULTIES.map((item) => {
             const active = difficulty === item.value;
             return (
@@ -264,7 +264,7 @@ function DailySetupContent() {
                 key={item.value}
                 type="button"
                 onClick={() => setDifficulty(item.value)}
-                className={`min-h-11 rounded-full border px-3 text-xs font-medium uppercase tracking-[0.08em] transition ${
+                className={`min-h-11 whitespace-nowrap rounded-full border px-5 text-xs font-medium uppercase tracking-[0.08em] transition ${
                   active ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'
                 }`}
                 aria-pressed={active}
