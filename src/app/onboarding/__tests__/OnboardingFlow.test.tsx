@@ -26,6 +26,24 @@ describe('OnboardingFlow invited-interest copy', () => {
     )
   })
 
+  it("renders Josh as Jaime's inviter with all three suggested interests", () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow
+        inviterName="Josh"
+        preSeededInterests={[
+          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
+          { domain: 'Jazz', broadCategory: 'Music', rationale: null },
+          { domain: 'Poetry', broadCategory: 'Literature', rationale: null },
+        ]}
+      />
+    )
+
+    expect(html).toContain('Josh left a few ideas for you:')
+    expect(html).toContain('Sondheim')
+    expect(html).toContain('Jazz')
+    expect(html).toContain('Poetry')
+  })
+
   it('uses friend fallback when inviter name is unavailable', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow

@@ -27,6 +27,14 @@ export function readInvitationToken(searchParams: URLSearchParams) {
   return searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token');
 }
 
+export function buildVerifyOtpRequestBody(
+  phone: string,
+  code: string,
+  searchParams: URLSearchParams
+) {
+  return { phone, code, invitationToken: readInvitationToken(searchParams) };
+}
+
 export default function LoginPanel() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -87,7 +95,7 @@ export default function LoginPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ phone, code: trimmedCode, invitationToken }),
+        body: JSON.stringify(buildVerifyOtpRequestBody(phone, trimmedCode, searchParams)),
       });
       const data = await response.json().catch(() => ({}));
 
