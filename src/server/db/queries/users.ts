@@ -45,7 +45,7 @@ function normalizeDeclaredInterests(interests: DeclaredInterestInput[]): Declare
   return normalized;
 }
 
-function parsePreSeededInterests(value: unknown): PreSeededInterest[] {
+export function parsePreSeededInterests(value: unknown): PreSeededInterest[] {
   if (!Array.isArray(value)) return [];
 
   return value.flatMap((item) => {
