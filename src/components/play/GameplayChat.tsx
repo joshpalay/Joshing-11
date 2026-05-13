@@ -15,6 +15,12 @@ export type ReactionPromptData = {
   contextId: string | null;
 };
 
+export type RecheckActionResult = { accepted: boolean; message: string };
+
+export type RecheckAction = {
+  onSubmit: () => Promise<RecheckActionResult>;
+};
+
 export type ChatMessage =
   | { id: string; kind: 'system'; text: string }
   | {
@@ -54,6 +60,7 @@ export type ChatMessage =
       reactionPrompt?: ReactionPromptData | null;
       pointsAwarded?: number | null;
       pointsLabel?: string | null;
+      recheckAction?: RecheckAction | null;
     }
   | {
       id: string;
@@ -485,6 +492,7 @@ function ResultRow({
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
+  recheckAction,
 }: {
   result: 'correct' | 'wrong' | 'expired';
   submitted: string;
@@ -500,10 +508,27 @@ function ResultRow({
   reactionPrompt?: ReactionPromptData | null;
   pointsAwarded?: number | null;
   pointsLabel?: string | null;
+  recheckAction?: RecheckAction | null;
 }) {
+  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
+  const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
   const expired = result === 'expired';
   const correct = result === 'correct';
   const copy = CORRECT_COPY[copyVariant % 4];
+  const requestRecheck = useCallback(async () => {
+    if (!recheckAction || recheckState === 'submitting') return;
+    setRecheckState('submitting');
+    setRecheckMessage(null);
+    try {
+      const outcome = await recheckAction.onSubmit();
+      setRecheckState('done');
+      setRecheckMessage(outcome.message);
+    } catch {
+      setRecheckState('error');
+      setRecheckMessage('Could not recheck that answer.');
+    }
+  }, [recheckAction, recheckState]);
+
   const resultToneStyle: CSSProperties = expired
     ? {
       background: 'var(--surface-2)',
@@ -560,6 +585,34 @@ function ResultRow({
               <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                 {consolation}
               </p>
+            ) : null}
+            {recheckAction ? (
+              <div style={{ marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => void requestRecheck()}
+                  disabled={recheckState === 'submitting' || recheckState === 'done'}
+                  style={{
+                    borderRadius: '999px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                    color: 'var(--text)',
+                    cursor: recheckState === 'submitting' || recheckState === 'done' ? 'default' : 'pointer',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.58rem',
+                    letterSpacing: '0.06em',
+                    padding: '6px 10px',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {recheckState === 'submitting' ? 'Rechecking...' : 'Recheck my answer'}
+                </button>
+                {recheckMessage ? (
+                  <p style={{ marginTop: '6px', fontSize: '0.78rem', color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)', lineHeight: 1.35 }}>
+                    {recheckMessage}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
           </>
         )}
@@ -767,6 +820,7 @@ export function GameplayChatThread({
                 reactionPrompt={m.reactionPrompt}
                 pointsAwarded={m.pointsAwarded}
                 pointsLabel={m.pointsLabel}
+                recheckAction={m.recheckAction}
               />
             );
           case 'session_complete':
