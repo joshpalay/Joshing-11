@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       original,
       suggested: original,
-      broadCategory: 'Other',
+      broadCategory: 'General Knowledge',
       explanation: null,
     });
   }

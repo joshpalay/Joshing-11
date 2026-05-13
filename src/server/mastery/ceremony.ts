@@ -595,7 +595,7 @@ export async function applyMergesForUser(
 
       await tx
         .update(generatedQuestions)
-        .set({ canonicalSubcategory: target, broadCategory: broadCategory ?? 'Other' })
+        .set({ canonicalSubcategory: target, broadCategory: broadCategory ?? 'General Knowledge' })
         .where(and(eq(generatedQuestions.userId, userId), inArray(generatedQuestions.canonicalSubcategory, sourceDomains)));
 
       await tx

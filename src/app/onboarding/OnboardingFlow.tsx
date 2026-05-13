@@ -100,7 +100,7 @@ function toSelected(interest: ProposedInterest): SelectedInterest | null {
   return {
     domain,
     broadCategory:
-      normalizeDomain(interest.broadCategory || 'Other') || 'Other',
+      normalizeDomain(interest.broadCategory || 'General Knowledge') || 'General Knowledge',
   }
 }
 
@@ -306,7 +306,7 @@ export default function OnboardingFlow({
         setCanonicalSuggestion({
           original: data.original ?? rawInput,
           suggested: data.suggested,
-          broadCategory: data.broadCategory ?? 'Other',
+          broadCategory: data.broadCategory ?? 'General Knowledge',
           explanation: data.explanation ?? null,
         })
       } catch (fetchError) {
@@ -550,7 +550,7 @@ export default function OnboardingFlow({
       customChoice === 'suggested' && canonicalSuggestion
         ? canonicalSuggestion.suggested
         : rawInput
-    const broadCategory = canonicalSuggestion?.broadCategory ?? 'Other'
+    const broadCategory = canonicalSuggestion?.broadCategory ?? 'General Knowledge'
     const selected = toSelected({ domain: chosenDomain, broadCategory })
 
     if (!selected || selectedInterests.length >= 5) return

@@ -8,6 +8,9 @@ const BROAD_CATEGORY_ALIASES: Record<string, string> = {
   'world history': 'History',
   'pop culture & television': 'Film & Television',
   'pop culture and television': 'Film & Television',
+  'other': 'General Knowledge',
+  'general': 'General Knowledge',
+  'potpourri': 'General Knowledge',
 };
 
 const STABLE_BROAD_CATEGORIES = new Set([
@@ -23,7 +26,7 @@ const STABLE_BROAD_CATEGORIES = new Set([
   'Philosophy',
   'Pop Culture',
   'Language',
-  'Other',
+  'General Knowledge',
 ]);
 
 const LITERATURE_BROAD_CATEGORY_PATTERNS = [

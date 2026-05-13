@@ -229,7 +229,7 @@ export function ProgressionLandscape({
                 const cellDomains = tierCategoryDomains.get(tier)?.get(category) ?? [];
                 return (
                   <div key={`${category}-${tier}`} style={{ ...cellStyle, borderRight: colIdx < 3 ? '1px solid #e8e2d6' : undefined }}>
-                    <div style={categoryLabelStyle}>{colIdx === 0 ? (category || 'Other') : ''}</div>
+                    <div style={categoryLabelStyle}>{colIdx === 0 ? (category || 'General Knowledge') : ''}</div>
                     {cellDomains.map((domain) => {
                       const isGhost = domain.correctAnswerCount === 0;
                       const diameter = getCircleDiameter(domain.correctAnswerCount, tier, maxPerTier[tier], isMobile);

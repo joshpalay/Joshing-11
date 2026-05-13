@@ -52,7 +52,7 @@ const DOMAIN_COLORS: Record<string, string> = {
   philosophy: '#6d28d9',
   pop_culture: '#db2777',
   language: '#0369a1',
-  other: '#64748b',
+  general_knowledge: '#64748b',
 };
 
 function relativeTime(value: string | null): string {

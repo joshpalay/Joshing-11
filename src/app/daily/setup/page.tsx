@@ -59,7 +59,7 @@ function masteryDistance(domain: DomainRow): number {
 function groupByCategory(domains: DomainRow[]) {
   const groups = new Map<string, DomainRow[]>();
   for (const domain of domains) {
-    const category = domain.broadCategory ?? 'Other';
+    const category = domain.broadCategory ?? 'General Knowledge';
     groups.set(category, [...(groups.get(category) ?? []), domain]);
   }
   return Array.from(groups.entries())

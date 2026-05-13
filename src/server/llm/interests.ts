@@ -4,6 +4,7 @@ import {
   getAnthropicClient,
   parseJsonObject,
 } from '@/lib/llm';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 
 export type WarmupAnswers = {
   deepDive?: string;
@@ -111,7 +112,7 @@ function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; ans
 
       return {
         domain,
-        broadCategory: FALLBACK_CATEGORIES[index % FALLBACK_CATEGORIES.length] ?? 'Other',
+        broadCategory: FALLBACK_CATEGORIES[index % FALLBACK_CATEGORIES.length] ?? 'General Knowledge',
         rationale: `Based on your answer for ${WARMUP_LABELS[field]}.`,
       };
     })
@@ -164,7 +165,7 @@ function normalizeInterest(value: unknown): ProposedInterest | null {
 
   return {
     domain: domain.slice(0, 100),
-    broadCategory: broadCategory.slice(0, 80),
+    broadCategory: (normalizeBroadCategory(broadCategory) ?? 'General Knowledge').slice(0, 80),
     rationale: rationale.slice(0, 180),
   };
 }
@@ -211,7 +212,8 @@ Rules:
 - Bad domains: "Music", "Books", "Movies", "History", "General Trivia".
 - Distribute across the warm-up answers. Include at least one candidate per non-empty warm-up field if possible.
 - Each rationale must briefly tie the candidate to a specific warm-up answer or demographic context.
-- broadCategory is a stable top-level bucket, such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Other. It must not be an author/work/movement-specific territory; for example, James Joyce, Irish Modernism, novels, poetry, and fiction all use Literature.
+- broadCategory is a stable top-level bucket, such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, General Knowledge. It must not be an author/work/movement-specific territory; for example, James Joyce, Irish Modernism, novels, poetry, and fiction all use Literature.
+- Never return "Other" as a broadCategory. Use "General Knowledge" only when no more precise top-level bucket applies.
 - Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}`;
 
   const userMessage = `Warm-up answers:
@@ -267,7 +269,7 @@ export async function canonicalizeInterest(rawInput: string): Promise<Canonicali
   const cleanInput = rawInput.trim().replace(/\s+/g, ' ').slice(0, 100);
   const fallback: CanonicalizedInterest = {
     suggested: cleanInput,
-    broadCategory: 'Other',
+    broadCategory: 'General Knowledge',
     explanation: 'Kept your original wording because a suggestion was not available.',
   };
 
@@ -279,6 +281,7 @@ export async function canonicalizeInterest(rawInput: string): Promise<Canonicali
   const systemPrompt = `The user wants to add this as a declared trivia interest.
 Suggest a more hyper-specific version that would generate good trivia questions. If the input is already specific enough, return it unchanged.
 Avoid broad categories like "Music", "Literature", "History". Prefer forms like "Late Tchaikovsky", "Russian 19th-Century Novels", "Weimar-Era Cinema".
+Never return "Other" as broadCategory; use "General Knowledge" only when no precise top-level bucket applies.
 Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation": "..." }`;
 
   const response = await client.messages.create({
@@ -301,7 +304,7 @@ Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation
 
   return {
     suggested: suggested.slice(0, 100),
-    broadCategory: broadCategory.slice(0, 80),
+    broadCategory: (normalizeBroadCategory(broadCategory) ?? 'General Knowledge').slice(0, 80),
     explanation: explanation.slice(0, 180),
   };
 }

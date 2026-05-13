@@ -2,6 +2,8 @@ import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 
 export type BroadQuestionCategory = (typeof CATEGORIES)[number];
 
+export const DEFAULT_BROAD_QUESTION_CATEGORY: BroadQuestionCategory = 'general_knowledge';
+
 const CATEGORY_VALUES = new Set<string>(CATEGORIES);
 const CATEGORY_LABEL_TO_VALUE = new Map<string, BroadQuestionCategory>([
   ...CATEGORIES.map((category) => [categoryLabel(category).toLowerCase(), category] as const),
@@ -11,6 +13,10 @@ const CATEGORY_LABEL_TO_VALUE = new Map<string, BroadQuestionCategory>([
   ['tv', 'film_tv'],
   ['television', 'film_tv'],
   ['sports', 'sport'],
+  ['general', 'general_knowledge'],
+  ['general knowledge', 'general_knowledge'],
+  ['potpourri', 'general_knowledge'],
+  ['other', 'general_knowledge'],
 ]);
 
 export function isBroadQuestionCategory(value: string): value is BroadQuestionCategory {
@@ -34,4 +40,9 @@ export function normalizeCanonicalSubcategory(value: string): string {
 
 export function broadCategoryDisplayName(category: string): string {
   return isBroadQuestionCategory(category) ? categoryLabel(category) : category;
+}
+
+export function normalizeBroadQuestionCategoryOrDefault(value: string | null | undefined): BroadQuestionCategory {
+  if (typeof value !== 'string') return DEFAULT_BROAD_QUESTION_CATEGORY;
+  return normalizeBroadQuestionCategory(value) ?? DEFAULT_BROAD_QUESTION_CATEGORY;
 }

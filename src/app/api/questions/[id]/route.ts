@@ -1,7 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { broadCategoryDisplayName, normalizeBroadQuestionCategory, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
+import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
 import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
@@ -113,7 +113,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       values.text ?? existing.text,
       values.correctAnswer ?? existing.correctAnswer,
     );
-    const category = normalizeBroadQuestionCategory(categorization.broad_category) ?? 'other';
+    const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
     const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
     values.category = category;
     values.broadCategory = broadCategoryDisplayName(category);

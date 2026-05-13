@@ -24,7 +24,7 @@ export default async function OnboardingPage() {
   const seeded = await getPreSeededInterestsForUser(session.userId);
   const preSeededInterests: PreSeededInterest[] = seeded.interests.map((interest) => ({
     domain: interest.label,
-    broadCategory: interest.broadCategory ?? 'Other',
+    broadCategory: interest.broadCategory ?? 'General Knowledge',
     rationale: interest.description ?? null,
   }));
 

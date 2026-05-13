@@ -113,7 +113,7 @@ export type SharePortraitCardProps = {
 export const SharePortraitCard = forwardRef<HTMLDivElement, SharePortraitCardProps>(
   function SharePortraitCard({ entries, playerDisplayName }, ref) {
     const valid = entries
-      .filter((e) => e.totalMasteryPoints > 0 && e.broadCategory && e.broadCategory !== 'Other' && e.broadCategory !== 'other')
+      .filter((e) => e.totalMasteryPoints > 0 && e.broadCategory && e.broadCategory !== 'General Knowledge' && e.broadCategory !== 'general_knowledge' && e.broadCategory !== 'other')
       .sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints);
 
     const maxPoints = valid.length > 0 ? valid[0].totalMasteryPoints : 1;

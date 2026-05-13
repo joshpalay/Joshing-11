@@ -139,7 +139,7 @@ function buildSections(
   if (sortMode === 'domain') {
     const domainMap = new Map<string, PortraitEntry[]>()
     for (const e of entries) {
-      const broadCategory = normalizeBroadCategory(e.broadCategory) ?? 'Other'
+      const broadCategory = normalizeBroadCategory(e.broadCategory) ?? 'General Knowledge'
       const normalizedEntry = { ...e, broadCategory }
       const list = domainMap.get(broadCategory) ?? []
       list.push(normalizedEntry)
@@ -185,7 +185,7 @@ export function PortraitDomainCircle({
   selected?: boolean
   circleSlotSize?: number
 }) {
-  const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'Other'
+  const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge'
   const dc = getPortraitDomainColor(broadCategory)
   const size = Math.round(
     getDomainCircleSize(
@@ -314,9 +314,9 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
       entries
         .map((entry) => ({
           ...entry,
-          broadCategory: normalizeBroadCategory(entry.broadCategory) ?? 'Other',
+          broadCategory: normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge',
         }))
-        .filter((e) => e.broadCategory && e.broadCategory !== 'Other'),
+        .filter((e) => e.broadCategory && e.broadCategory !== 'General Knowledge'),
     [entries]
   )
   const isSparse = validEntries.length < SPARSE_THRESHOLD

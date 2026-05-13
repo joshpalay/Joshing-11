@@ -339,7 +339,7 @@ function selectDiverseDomains(
   // Group by broad category so we can pick one domain per category
   const byCategory = new Map<string, (typeof knowledgeBase)[number][]>();
   for (const d of knowledgeBase) {
-    const cat = d.broadCategory ?? 'other';
+    const cat = d.broadCategory ?? 'General Knowledge';
     const arr = byCategory.get(cat) ?? [];
     arr.push(d);
     byCategory.set(cat, arr);

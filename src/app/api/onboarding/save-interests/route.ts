@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { logTelemetry } from '@/server/telemetry';
 import {
   type DeclaredInterestInput,
@@ -20,11 +21,13 @@ function parseInterest(value: unknown): DeclaredInterestInput | null {
   const domain = typeof record.domain === 'string' ? record.domain.trim().replace(/\s+/g, ' ') : '';
   if (domain.length < 2 || domain.length > 100) return null;
 
+  const broadCategory = typeof record.broadCategory === 'string' && record.broadCategory.trim()
+    ? normalizeBroadCategory(record.broadCategory)
+    : null;
+
   return {
     label: domain,
-    broadCategory: typeof record.broadCategory === 'string' && record.broadCategory.trim()
-      ? record.broadCategory.trim().slice(0, 80)
-      : null,
+    broadCategory: broadCategory ? broadCategory.slice(0, 80) : null,
   };
 }
 

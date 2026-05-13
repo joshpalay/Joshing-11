@@ -37,7 +37,7 @@ export const CATEGORIES = [
   'philosophy',
   'pop_culture',
   'language',
-  'other',
+  'general_knowledge',
 ] as const;
 
 export const VISIBILITIES = ['private', 'public'] as const;
@@ -51,5 +51,7 @@ export function categoryLabel(cat: string): string {
     ? 'Film & TV'
     : cat === 'pop_culture'
       ? 'Pop Culture'
-      : cat.charAt(0).toUpperCase() + cat.slice(1).replace('_', ' ');
+      : cat === 'general_knowledge'
+        ? 'General Knowledge'
+        : cat.charAt(0).toUpperCase() + cat.slice(1).replace('_', ' ');
 }

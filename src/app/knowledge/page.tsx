@@ -85,7 +85,7 @@ function displayMind(domains: DomainMastery[], declaredInterests: string[]): str
 function toPortraitEntry(domain: DomainMastery): PortraitEntry {
   return {
     canonicalSubcategory: domain.displayName,
-    broadCategory: normalizeBroadCategory(domain.broadCategory) ?? 'Other',
+    broadCategory: normalizeBroadCategory(domain.broadCategory) ?? 'General Knowledge',
     totalMasteryPoints: Math.max(domain.points, domain.isDeclaredInterest ? 1 : 0),
     tier: asTier(domain.tier),
     authoredAnsweredCount: domain.questionsAnswered,

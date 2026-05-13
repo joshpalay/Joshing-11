@@ -31,7 +31,7 @@ export const categoryEnum = pgEnum('Category', [
   'philosophy',
   'pop_culture',
   'language',
-  'other',
+  'general_knowledge',
 ]);
 
 export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public']);
@@ -216,7 +216,7 @@ export const questions = pgTable(
     answerSource: answerSourceEnum('answer_source'),
     questionType: questionTypeEnum('question_type').notNull().default('factual'),
     minimumRequired: integer('minimum_required'),
-    category: categoryEnum('category').notNull().default('other'),
+    category: categoryEnum('category').notNull().default('general_knowledge'),
     broadCategory: text('broad_category'),
     subcategory: text('subcategory'),
     canonicalSubcategory: text('canonical_subcategory'),
