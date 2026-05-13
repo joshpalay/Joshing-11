@@ -1,0 +1,232 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const {
+  createFriendInvitationMock,
+  dbMock,
+  getSessionMock,
+  sendSmsMock,
+  state,
+} = vi.hoisted(() => {
+  const state = {
+    existingUser: null as { id: string } | null,
+    updateValues: undefined as Record<string, unknown> | undefined,
+  }
+
+  const dbMock = {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(async () => (state.existingUser ? [state.existingUser] : [])),
+        })),
+      })),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn((values: Record<string, unknown>) => {
+        state.updateValues = values
+        return { where: vi.fn(async () => undefined) }
+      }),
+    })),
+    insert: vi.fn(() => ({
+      values: vi.fn(() => ({
+        returning: vi.fn(async () => [
+          {
+            id: 'friendship-1',
+            status: 'pending',
+          },
+        ]),
+      })),
+    })),
+  }
+
+  return {
+    createFriendInvitationMock: vi.fn(),
+    dbMock,
+    getSessionMock: vi.fn(),
+    sendSmsMock: vi.fn(),
+    state,
+  }
+})
+
+vi.mock('@/server/auth', () => ({
+  normalizePhone: (phone: string) => {
+    const digits = phone.replace(/\D/g, '')
+    if (digits.length === 10) return `+1${digits}`
+    if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`
+    return phone.startsWith('+') ? phone : `+${digits}`
+  },
+  isUsPhoneNumber: (phone: string) => /^\+1\d{10}$/.test(
+    phone.replace(/\D/g, '').length === 10
+      ? `+1${phone.replace(/\D/g, '')}`
+      : phone.replace(/\D/g, '').length === 11 && phone.replace(/\D/g, '').startsWith('1')
+        ? `+${phone.replace(/\D/g, '')}`
+        : phone.startsWith('+')
+          ? phone
+          : `+${phone.replace(/\D/g, '')}`
+  ),
+}))
+
+vi.mock('@/server/auth/session', () => ({
+  getSession: getSessionMock,
+}))
+
+vi.mock('@/server/db', () => ({
+  db: dbMock,
+  friendInvitations: { id: 'friendInvitations.id' },
+  friendships: {
+    id: 'friendships.id',
+    userAId: 'friendships.userAId',
+    userBId: 'friendships.userBId',
+  },
+  users: {
+    id: 'users.id',
+    phoneNumber: 'users.phoneNumber',
+  },
+}))
+
+vi.mock('@/server/friends/invitations', () => ({
+  createFriendInvitation: createFriendInvitationMock,
+}))
+
+vi.mock('@/server/sms', () => ({
+  sendSms: sendSmsMock,
+}))
+
+import { POST } from '@/app/api/friend-invitations/route'
+import { sendSms } from '@/server/sms'
+
+const expiresAt = new Date('2026-05-20T12:00:00.000Z')
+
+function jsonRequest(body: unknown) {
+  return new Request('https://joshing.example/api/friend-invitations', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+function mockInvitation(overrides: Record<string, unknown> = {}) {
+  createFriendInvitationMock.mockResolvedValueOnce({
+    id: 'inv-1',
+    token: 'token-1',
+    inviteeDisplayName: 'Sara',
+    inviteePhone: '+17345551234',
+    personalMessage: null,
+    expiresAt,
+    ...overrides,
+  })
+}
+
+describe('POST /api/friend-invitations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getSessionMock.mockResolvedValue({ userId: 'user-inviter' })
+    state.existingUser = null
+    state.updateValues = undefined
+    process.env.NEXT_PUBLIC_APP_URL = 'https://joshing.example'
+  })
+
+  it('creates invite with 0 interests and returns copyable message', async () => {
+    mockInvitation()
+
+    const response = await POST(jsonRequest({ inviteeDisplayName: ' Sara ', phone: '7345551234' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(createFriendInvitationMock).toHaveBeenCalledWith({
+      inviterUserId: 'user-inviter',
+      inviteePhone: '+17345551234',
+      inviteeDisplayName: 'Sara',
+      preSeededInterests: [],
+    })
+    expect(body).toEqual(expect.objectContaining({
+      id: 'inv-1',
+      inviteUrl: 'https://joshing.example/invite/token-1',
+      message: 'Hey — come play Joshing with me. No app to download — just tap this: https://joshing.example/invite/token-1',
+      inviteeDisplayName: 'Sara',
+      inviteePhone: '+17345551234',
+      suggestedInterests: [],
+      expiresAt: expiresAt.toISOString(),
+    }))
+  })
+
+  it('creates invite with 1 interest', async () => {
+    mockInvitation()
+
+    const response = await POST(jsonRequest({
+      inviteeDisplayName: 'Sara',
+      phone: '7345551234',
+      suggestedInterests: [' Sondheim '],
+    }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(createFriendInvitationMock).toHaveBeenCalledWith(expect.objectContaining({
+      preSeededInterests: ['Sondheim'],
+    }))
+    expect(body.message).toBe('Hey — come play Joshing with me. I added something I think you might like: Sondheim. No app to download — just tap this: https://joshing.example/invite/token-1')
+  })
+
+  it('creates invite with 3 trimmed and deduped interests', async () => {
+    mockInvitation()
+
+    const response = await POST(jsonRequest({
+      inviteeDisplayName: 'Sara',
+      phone: '7345551234',
+      suggestedInterests: ['Sondheim', 'Mrs. Dalloway', '1980s Saturday morning cartoons', 'sondheim', '  '],
+    }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(createFriendInvitationMock).toHaveBeenCalledWith(expect.objectContaining({
+      preSeededInterests: ['Sondheim', 'Mrs. Dalloway', '1980s Saturday morning cartoons'],
+    }))
+    expect(body.message).toBe('Hey — come play Joshing with me. I added a few areas I think you might like: Sondheim, Mrs. Dalloway, and 1980s Saturday morning cartoons. No app to download — just tap this: https://joshing.example/invite/token-1')
+  })
+
+  it('rejects 4 interests', async () => {
+    const response = await POST(jsonRequest({
+      inviteeDisplayName: 'Sara',
+      phone: '7345551234',
+      suggestedInterests: ['A', 'B', 'C', 'D'],
+    }))
+
+    expect(response.status).toBe(400)
+    expect(createFriendInvitationMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid phone', async () => {
+    const response = await POST(jsonRequest({ inviteeDisplayName: 'Sara', phone: '123' }))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual(expect.objectContaining({ error: 'invalid_phone' }))
+    expect(createFriendInvitationMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects missing name', async () => {
+    const response = await POST(jsonRequest({ phone: '7345551234' }))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual(expect.objectContaining({ error: 'missing_invitee_display_name' }))
+    expect(createFriendInvitationMock).not.toHaveBeenCalled()
+  })
+
+  it('prevents duplicate active pending invites by returning the reused invitation', async () => {
+    mockInvitation({ id: 'inv-existing', token: 'existing-token' })
+
+    const response = await POST(jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.id).toBe('inv-existing')
+    expect(body.inviteUrl).toBe('https://joshing.example/invite/existing-token')
+  })
+
+  it('does not call Twilio/sendSms', async () => {
+    mockInvitation()
+
+    await POST(jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' }))
+
+    expect(sendSms).not.toHaveBeenCalled()
+    expect(sendSmsMock).not.toHaveBeenCalled()
+  })
+})
