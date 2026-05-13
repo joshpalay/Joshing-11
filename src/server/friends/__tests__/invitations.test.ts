@@ -22,18 +22,38 @@ const { dbMock, state } = vi.hoisted(() => {
     friendshipValues: [] as unknown[],
     invitationValues: undefined as Record<string, unknown> | undefined,
     updateValues: undefined as Record<string, unknown> | undefined,
+    inviterName: 'Alex Inviter' as string | null,
   }
 
-  function makeSelectBuilder() {
+  function makeSelectBuilder(selection?: Record<string, unknown>) {
+    const isLandingSelect = Boolean(selection && 'inviterName' in selection)
+    const rows = () => {
+      if (!state.invitation) return []
+      if (!isLandingSelect) return [state.invitation]
+
+      return [
+        {
+          acceptedAt: state.invitation.acceptedAt,
+          cancelledAt: state.invitation.cancelledAt,
+          expiresAt: state.invitation.expiresAt,
+          preSeededInterests: state.invitation.preSeededInterests,
+          inviterName: state.inviterName,
+        },
+      ]
+    }
     const limited = {
-      limit: vi.fn(async () => (state.invitation ? [state.invitation] : [])),
+      limit: vi.fn(async () => rows()),
+    }
+    const whereable = {
+      where: vi.fn(() => ({
+        ...limited,
+        orderBy: vi.fn(() => limited),
+      })),
     }
     return {
       from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          ...limited,
-          orderBy: vi.fn(() => limited),
-        })),
+        ...whereable,
+        leftJoin: vi.fn(() => whereable),
       })),
     }
   }
@@ -93,7 +113,9 @@ const { dbMock, state } = vi.hoisted(() => {
   }
 
   const dbMock = {
-    select: vi.fn(() => makeSelectBuilder()),
+    select: vi.fn((selection?: Record<string, unknown>) =>
+      makeSelectBuilder(selection)
+    ),
     update: vi.fn(() => makeUpdateBuilder()),
     insert: vi.fn(() => makeInsertBuilder()),
     transaction: vi.fn(async (callback: (tx: typeof tx) => unknown) =>
@@ -107,6 +129,10 @@ const { dbMock, state } = vi.hoisted(() => {
 
 vi.mock('@/server/db', () => ({
   db: dbMock,
+  users: {
+    id: 'users.id',
+    displayName: 'users.displayName',
+  },
   friendInvitations: {
     id: 'friendInvitations.id',
     token: 'friendInvitations.token',
@@ -134,6 +160,7 @@ import {
   acceptFriendInvitation,
   cancelFriendInvitation,
   createFriendInvitation,
+  getFriendInvitationLandingByToken,
   getInvitationByToken,
   getPendingInvitationForPhone,
 } from '@/server/friends/invitations'
@@ -292,6 +319,75 @@ describe('friend invitation helpers', () => {
     state.friendshipValues = []
     state.invitationValues = undefined
     state.updateValues = undefined
+    state.inviterName = 'Alex Inviter'
+  })
+
+  it('returns a safe valid landing state with inviter display name and suggested interest chips', async () => {
+    setInvitation({
+      preSeededInterests: [
+        ' Jazz ',
+        { label: 'Poetry' },
+        'jazz',
+        'Film',
+        'Extra ignored',
+      ],
+    })
+
+    await expect(
+      getFriendInvitationLandingByToken('valid-token', now)
+    ).resolves.toEqual({
+      status: 'valid',
+      inviterName: 'Alex Inviter',
+      suggestedInterests: [
+        { label: 'Jazz' },
+        { label: 'Poetry' },
+        { label: 'Film' },
+      ],
+    })
+  })
+
+  it('returns an expired landing state without suggested interests', async () => {
+    setInvitation({
+      expiresAt: new Date('2026-05-12T12:00:00.000Z'),
+      preSeededInterests: ['Jazz'],
+    })
+
+    await expect(
+      getFriendInvitationLandingByToken('expired-token', now)
+    ).resolves.toEqual({
+      status: 'expired',
+      inviterName: 'Alex Inviter',
+      suggestedInterests: [],
+    })
+  })
+
+  it('returns an already accepted landing state that can route safely to login', async () => {
+    setInvitation({ acceptedAt: new Date('2026-05-13T11:00:00.000Z') })
+
+    await expect(
+      getFriendInvitationLandingByToken('accepted-token', now)
+    ).resolves.toEqual({
+      status: 'accepted',
+      inviterName: 'Alex Inviter',
+      suggestedInterests: [],
+    })
+  })
+
+  it('returns a generic invalid landing state for missing, cancelled, or blank tokens', async () => {
+    await expect(getFriendInvitationLandingByToken('', now)).resolves.toEqual({
+      status: 'invalid',
+      inviterName: 'Someone',
+      suggestedInterests: [],
+    })
+
+    setInvitation({ cancelledAt: new Date('2026-05-13T11:00:00.000Z') })
+    await expect(
+      getFriendInvitationLandingByToken('cancelled-token', now)
+    ).resolves.toEqual({
+      status: 'invalid',
+      inviterName: 'Someone',
+      suggestedInterests: [],
+    })
   })
 
   it('creates an Add Friend invitation with invitee display name, phone, and suggested interests', async () => {
