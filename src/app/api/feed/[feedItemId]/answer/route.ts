@@ -158,7 +158,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   // Propagate this answer to the answering user's friends' Feeds
-  void createFeedItemsForFriendsFromAnswer(
+  await createFeedItemsForFriendsFromAnswer(
     session.userId,
     question.id,
     isCorrect ? 'correct' : 'incorrect',

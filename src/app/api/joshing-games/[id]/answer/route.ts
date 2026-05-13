@@ -121,7 +121,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
-    void createFeedItemsForFriendsFromAnswer(
+    await createFeedItemsForFriendsFromAnswer(
       session.userId,
       parsed.questionId,
       grade.isCorrect ? 'correct' : 'incorrect',
