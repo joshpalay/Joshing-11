@@ -9,14 +9,22 @@ const {
 } = vi.hoisted(() => {
   const state = {
     existingUser: null as { id: string } | null,
+    existingFriendship: null as Record<string, unknown> | null,
+    insertedFriendship: { id: 'friendship-1', status: 'pending' } as Record<string, unknown>,
     updateValues: undefined as Record<string, unknown> | undefined,
   }
 
   const dbMock = {
-    select: vi.fn(() => ({
+    select: vi.fn((selection?: Record<string, unknown>) => ({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
-          limit: vi.fn(async () => (state.existingUser ? [state.existingUser] : [])),
+          limit: vi.fn(async () => {
+            if (selection && Object.values(selection).includes('users.id')) {
+              return state.existingUser ? [state.existingUser] : []
+            }
+
+            return state.existingFriendship ? [state.existingFriendship] : []
+          }),
         })),
       })),
     })),
@@ -28,12 +36,7 @@ const {
     })),
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
-        returning: vi.fn(async () => [
-          {
-            id: 'friendship-1',
-            status: 'pending',
-          },
-        ]),
+        returning: vi.fn(async () => [state.insertedFriendship]),
       })),
     })),
   }
@@ -71,11 +74,14 @@ vi.mock('@/server/auth/session', () => ({
 
 vi.mock('@/server/db', () => ({
   db: dbMock,
+  activityItems: { id: 'activityItems.id' },
   friendInvitations: { id: 'friendInvitations.id' },
   friendships: {
     id: 'friendships.id',
     userAId: 'friendships.userAId',
     userBId: 'friendships.userBId',
+    status: 'friendships.status',
+    requestedByUserId: 'friendships.requestedByUserId',
   },
   users: {
     id: 'users.id',
@@ -121,6 +127,8 @@ describe('POST /api/friend-invitations', () => {
     vi.clearAllMocks()
     getSessionMock.mockResolvedValue({ userId: 'user-inviter' })
     state.existingUser = null
+    state.existingFriendship = null
+    state.insertedFriendship = { id: 'friendship-1', status: 'pending' }
     state.updateValues = undefined
     process.env.NEXT_PUBLIC_APP_URL = 'https://joshing.example'
   })
@@ -181,6 +189,89 @@ describe('POST /api/friend-invitations', () => {
       preSeededInterests: ['Sondheim', 'Mrs. Dalloway', '1980s Saturday morning cartoons'],
     }))
     expect(body.message).toBe('Hey — come play Joshing with me. I added a few areas I think you might like: Sondheim, Mrs. Dalloway, and 1980s Saturday morning cartoons. No app to download — just tap this: https://joshing.example/invite/token-1')
+  })
+
+
+  it('creates a pending friendship request for an existing user instead of a signup invite', async () => {
+    state.existingUser = { id: 'user-invitee' }
+
+    const response = await POST(jsonRequest({
+      inviteeDisplayName: 'Sara',
+      phone: '7345551234',
+      suggestedInterests: ['Poetry'],
+    }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(createFriendInvitationMock).not.toHaveBeenCalled()
+    expect(dbMock.insert).toHaveBeenCalled()
+    expect(body).toEqual(expect.objectContaining({
+      type: 'friendship_request',
+      state: 'created',
+      invitationId: null,
+      inviteUrl: null,
+      suggestedInterests: ['Poetry'],
+    }))
+    expect(body.friendshipRequest).toEqual(expect.objectContaining({
+      id: 'friendship-1',
+      status: 'pending',
+      state: 'created',
+      inviteeUserId: 'user-invitee',
+    }))
+  })
+
+  it('returns already-friends state without creating a duplicate friendship request', async () => {
+    state.existingUser = { id: 'user-invitee' }
+    state.existingFriendship = {
+      id: 'friendship-active',
+      status: 'active',
+      requestedByUserId: 'user-inviter',
+    }
+
+    const response = await POST(jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(createFriendInvitationMock).not.toHaveBeenCalled()
+    expect(dbMock.insert).not.toHaveBeenCalled()
+    expect(body.state).toBe('already_friends')
+    expect(body.friendshipRequest).toEqual(expect.objectContaining({
+      id: 'friendship-active',
+      status: 'active',
+      state: 'already_friends',
+    }))
+  })
+
+  it('prevents duplicate pending requests by returning the existing pending state', async () => {
+    state.existingUser = { id: 'user-invitee' }
+    state.existingFriendship = {
+      id: 'friendship-pending',
+      status: 'pending',
+      requestedByUserId: 'user-inviter',
+    }
+
+    const response = await POST(jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(dbMock.insert).not.toHaveBeenCalled()
+    expect(body.state).toBe('pending_existing')
+  })
+
+  it('handles reverse pending requests without creating a duplicate friendship request', async () => {
+    state.existingUser = { id: 'user-invitee' }
+    state.existingFriendship = {
+      id: 'friendship-reverse',
+      status: 'pending',
+      requestedByUserId: 'user-invitee',
+    }
+
+    const response = await POST(jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(dbMock.insert).not.toHaveBeenCalled()
+    expect(body.state).toBe('reverse_pending')
   })
 
   it('rejects 4 interests', async () => {

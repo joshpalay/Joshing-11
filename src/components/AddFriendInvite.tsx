@@ -141,10 +141,7 @@ export default function AddFriendInvite() {
       }
 
       setResult(body)
-      setMessageText(
-        body.message ??
-          'They are already on Joshing, so your friend request is waiting for them in the app.'
-      )
+      setMessageText(body.message ?? '')
       setStep('handoff')
     } catch (caught) {
       setError(
@@ -322,10 +319,12 @@ export default function AddFriendInvite() {
         <div className="space-y-5">
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-              Invite ready
+              {result.type === 'friendship_request' ? 'Friend request' : 'Invite ready'}
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
-              Send it to {result.inviteeDisplayName}.
+              {result.type === 'friendship_request'
+                ? `Request sent to ${result.inviteeDisplayName}.`
+                : `Send it to ${result.inviteeDisplayName}.`}
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
               {result.inviteePhone}
@@ -349,43 +348,54 @@ export default function AddFriendInvite() {
             </p>
           )}
 
-          <label className="text-foreground block text-sm font-medium">
-            Message
-            <textarea
-              ref={messageRef}
-              className="bg-background focus:border-foreground focus:ring-ring mt-2 min-h-36 w-full rounded-xl border p-3 text-base leading-6 transition outline-none focus:ring-2"
-              value={messageText}
-              onChange={(event) => setMessageText(event.target.value)}
-            />
-          </label>
+          {result.type === 'friend_invitation' ? (
+            <>
+              <label className="text-foreground block text-sm font-medium">
+                Message
+                <textarea
+                  ref={messageRef}
+                  className="bg-background focus:border-foreground focus:ring-ring mt-2 min-h-36 w-full rounded-xl border p-3 text-base leading-6 transition outline-none focus:ring-2"
+                  value={messageText}
+                  onChange={(event) => setMessageText(event.target.value)}
+                />
+              </label>
 
-          {result.type === 'friend_invitation' &&
-          !messageText.includes(result.inviteUrl ?? '') ? (
-            <p className="text-destructive text-sm">
-              Generated message includes link — keep it in the message so they
-              can join.
+              {!messageText.includes(result.inviteUrl ?? '') ? (
+                <p className="text-destructive text-sm">
+                  Generated message includes link — keep it in the message so they
+                  can join.
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="bg-muted text-muted-foreground rounded-xl px-3 py-2 text-sm">
+              They’ll see your request in Joshing.
             </p>
-          ) : null}
+          )}
 
           <div className="space-y-3">
-            <button
-              type="button"
-              className="btn-primary min-h-12 w-full rounded-full"
-              onClick={copyMessage}
-            >
-              {copyLabel}
-            </button>
-            {smsHref ? (
-              <a
-                className="btn-ghost min-h-12 w-full rounded-full"
-                href={smsHref}
-              >
-                Open Messages
-              </a>
+            {result.type === 'friend_invitation' ? (
+              <>
+                <button
+                  type="button"
+                  className="btn-primary min-h-12 w-full rounded-full"
+                  onClick={copyMessage}
+                >
+                  {copyLabel}
+                </button>
+                {smsHref ? (
+                  <a
+                    className="btn-ghost min-h-12 w-full rounded-full"
+                    href={smsHref}
+                  >
+                    Open Messages
+                  </a>
+                ) : null}
+              </>
             ) : null}
             <button
               type="button"
-              className="text-muted-foreground w-full py-2 text-sm"
+              className={result.type === 'friend_invitation' ? 'text-muted-foreground w-full py-2 text-sm' : 'btn-primary min-h-12 w-full rounded-full'}
               onClick={resetFlow}
             >
               Done

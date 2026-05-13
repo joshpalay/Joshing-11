@@ -649,6 +649,7 @@ export const friendships = pgTable(
     formedAt: timestamp('formedAt', { withTimezone: true }),
     removedAt: timestamp('removedAt', { withTimezone: true }),
     removedByUserId: text('removedByUserId').references(() => users.id),
+    requestContext: jsonb('requestContext').$type<{ suggestedInterests?: string[] }>(),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
