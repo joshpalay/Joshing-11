@@ -27,6 +27,7 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === '/login';
+  const isInvitePage = pathname.startsWith('/invite/');
   const isOnboardingPage = pathname === '/onboarding';
   const isAllowedOnboardingPath =
     isOnboardingPage ||
@@ -37,7 +38,7 @@ export async function proxy(request: NextRequest) {
   const user = await getAuthenticatedUser(request);
 
   if (!user) {
-    if (isLoginPage) return NextResponse.next();
+    if (isLoginPage || isInvitePage) return NextResponse.next();
 
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';

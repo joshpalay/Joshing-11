@@ -23,11 +23,14 @@ function normalizePhone(phone: string): string {
   return phone.startsWith('+') ? phone : `+${digits}`;
 }
 
+export function readInvitationToken(searchParams: URLSearchParams) {
+  return searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token');
+}
+
 export default function LoginPanel() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const invitationToken =
-    searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token');
+  const invitationToken = readInvitationToken(searchParams);
 
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
