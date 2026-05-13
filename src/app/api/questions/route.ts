@@ -1,7 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { broadCategoryDisplayName, normalizeBroadQuestionCategory, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
+import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
 import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
   const { sendToFriendIds, shareToFeed, ...rawQuestionFields } = value;
   const categorization = await categorizeQuestion(rawQuestionFields.text, rawQuestionFields.correctAnswer);
-  const category = normalizeBroadQuestionCategory(categorization.broad_category) ?? 'other';
+  const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
   const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
   const questionFields = {
     ...rawQuestionFields,

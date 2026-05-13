@@ -30,7 +30,7 @@ enum Category {
   philosophy
   pop_culture
   language
-  other
+  general_knowledge
 }
 
 enum QuestionVisibility {
@@ -312,7 +312,7 @@ model Question {
   answer_source             AnswerSource?
   question_type             QuestionType        @default(factual)
   minimum_required          Int?
-  category                  Category            @default(other)
+  category                  Category            @default(general_knowledge)
   broad_category            String?
   subcategory               String?
   canonical_subcategory     String?

@@ -64,6 +64,17 @@ describe('POST /api/onboarding/save-interests', () => {
     ])
   })
 
+  it('normalizes legacy Other broad categories to General Knowledge', async () => {
+    const response = await POST(
+      jsonRequest([{ domain: 'Puzzle Potpourri', broadCategory: 'Other' }])
+    )
+
+    expect(response.status).toBe(200)
+    expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [
+      { label: 'Puzzle Potpourri', broadCategory: 'General Knowledge' },
+    ])
+  })
+
   it('skip saves none of the invited interests and completes onboarding only after explicit skip telemetry', async () => {
     const response = await POST(
       jsonRequest([], { inviteInterestCount: 3, inviteSelectedCount: 0 })

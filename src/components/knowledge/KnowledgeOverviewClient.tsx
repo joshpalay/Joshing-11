@@ -91,7 +91,7 @@ export function KnowledgeOverviewClient({
         (portraitData as { categories: Array<{ canonical_subcategory: string; broad_category: string; declared_score: number; proven_score: number; authored_answered_count: number }> }).categories
       ).map((cat) => ({
         canonicalSubcategory: cat.canonical_subcategory,
-        broadCategory: normalizeBroadCategory(cat.broad_category) ?? 'Other',
+        broadCategory: normalizeBroadCategory(cat.broad_category) ?? 'General Knowledge',
         totalMasteryPoints: (cat.declared_score ?? 0) + (cat.proven_score ?? 0),
         tier: (masteryMap.get(cat.canonical_subcategory) ?? 'establishing') as PortraitEntry['tier'],
         authoredAnsweredCount: cat.authored_answered_count ?? 0,

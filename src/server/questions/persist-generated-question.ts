@@ -46,7 +46,7 @@ export async function persistGeneratedQuestion(generatedQuestionId: string): Pro
         acceptedAlternatives: [],
         answerSource: 'llm_suggested',
         questionType: 'factual',
-        category: 'other',
+        category: 'general_knowledge',
         broadCategory: generated.broadCategory,
         canonicalSubcategory: generated.canonicalSubcategory || generated.broadCategory,
         categoryOverridden: true,

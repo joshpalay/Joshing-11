@@ -35,7 +35,7 @@ export function sortCategoriesByTierThenActivity(
 export function groupCategoriesByBroadCategory(sortedCategories: CategoryRow[]): Array<[string, CategoryRow[]]> {
   const groups = new Map<string, CategoryRow[]>();
   for (const item of sortedCategories) {
-    const key = item.broad_category || 'Other';
+    const key = item.broad_category || 'General Knowledge';
     const current = groups.get(key) ?? [];
     current.push(item);
     groups.set(key, current);

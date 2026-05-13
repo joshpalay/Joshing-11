@@ -167,7 +167,7 @@ async function resolveQuestionIdForSend(questionId: string, senderUserId: string
       questionText: generated.questionText,
       answerText: generated.answer,
       factualExplanation: generated.explainer,
-      category: 'other',
+      category: 'general_knowledge',
       broadCategory: generated.broadCategory,
       canonicalSubcategory: generated.canonicalSubcategory,
       difficultyEstimate: generated.difficultyEstimate === 'accessible' || generated.difficultyEstimate === 'moderate' || generated.difficultyEstimate === 'specialist'
