@@ -29,6 +29,10 @@ type CreateQuestionResponse = {
   feedShare?: {
     requested: boolean;
     createdCount: number;
+    friendCount?: number;
+    sharedRecipientIds?: string[];
+    skippedDismissedDomainRecipientIds?: string[];
+    skippedExistingFeedRecipientIds?: string[];
   };
 };
 
@@ -203,6 +207,8 @@ function QuestionsPageContent() {
     } else if (body.feedShare?.createdCount && body.feedShare.createdCount > 0) {
       const n = body.feedShare.createdCount;
       setToast(`Saved and shared with ${n} ${n === 1 ? 'friend' : 'friends'}.`);
+    } else if (body.feedShare?.requested && body.feedShare.createdCount === 0) {
+      setToast('No friends received this because they already had it or filtered that domain.');
     } else {
       setToast('Saved to your bank.');
     }

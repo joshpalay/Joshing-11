@@ -63,6 +63,18 @@ type TidyResult = {
   details: Array<{ sources: string[]; target: string; rationale: string }>;
 };
 
+type CreateQuestionResponse = {
+  message?: string;
+  feedShare?: {
+    requested: boolean;
+    createdCount: number;
+    friendCount?: number;
+    sharedRecipientIds?: string[];
+    skippedDismissedDomainRecipientIds?: string[];
+    skippedExistingFeedRecipientIds?: string[];
+  };
+};
+
 function asTier(value: string): MasteryTier {
   if (value === 'familiar' || value === 'solid' || value === 'mastery') return value;
   return 'establishing';
@@ -337,7 +349,7 @@ function KnowledgePageContent() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(values),
     });
-    const body = await response.json().catch(() => null) as { message?: string; feedShare?: { requested: boolean; createdCount: number } } | null;
+    const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
     if (!response.ok) throw new Error(body?.message ?? 'Could not save that question.');
     setSendQuestionOpen(false);
     setWriteQuestionOpen(false);
@@ -347,6 +359,8 @@ function KnowledgePageContent() {
     } else if (body?.feedShare?.createdCount && body.feedShare.createdCount > 0) {
       const n = body.feedShare.createdCount;
       setQuestionToast(`Saved and shared with ${n} ${n === 1 ? 'friend' : 'friends'}.`);
+    } else if (body?.feedShare?.requested && body.feedShare.createdCount === 0) {
+      setQuestionToast('No friends received this because they already had it or filtered that domain.');
     } else {
       setQuestionToast('Saved to your bank.');
     }
