@@ -1,7 +1,7 @@
 import { and, count, desc, eq, inArray, isNull, lt, ne, notInArray, or, sql } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
-import { AUTHORED_SHARED_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
+import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import { pgErrorCode } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
@@ -21,8 +21,9 @@ export type CollapsedFeedItem = FeedItem & {
 const VISIBLE_FEED_STATES = ['active', 'skipped'] as const;
 const BLOCKING_FEED_STATES = ['active', 'skipped', 'dismissed'] as const;
 
-const visibleFeedSourcePredicate = or(
+export const visibleFeedSourcePredicate = or(
   eq(feedItems.sourceType, AUTHORED_SHARED_FEED_SOURCE_TYPE),
+  eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
   and(
     eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
     eq(feedItems.sourceResult, 'correct'),

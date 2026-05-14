@@ -2,6 +2,7 @@ import type { questions } from '@/server/db';
 
 export const SOCIAL_FEED_SOURCE_TYPE = 'friend_answered' as const;
 export const AUTHORED_SHARED_FEED_SOURCE_TYPE = 'authored_shared' as const;
+export const DIRECT_SENT_FEED_SOURCE_TYPE = 'direct_sent' as const;
 
 const SUPPRESSED_CATEGORY_LABELS = new Set(['other', 'uncategorized', 'unknown', 'general', 'general knowledge']);
 
@@ -26,6 +27,7 @@ export function isCorrectAnswerFeedEligible(input: FeedEventEligibilityInput): b
 
 export function isMainFeedSourceVisible(sourceType: string, sourceResult: string | null): boolean {
   if (sourceType === AUTHORED_SHARED_FEED_SOURCE_TYPE) return true;
+  if (sourceType === DIRECT_SENT_FEED_SOURCE_TYPE) return true;
   return sourceType === SOCIAL_FEED_SOURCE_TYPE && sourceResult === 'correct';
 }
 
