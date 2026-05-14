@@ -43,7 +43,7 @@ export function FeedCard({
         <div className="space-y-2">
           {category ? (
             <p className="text-[0.68rem] font-semibold tracking-[0.18em] text-stone-500 uppercase">
-              {category}
+              {category.toUpperCase()}
             </p>
           ) : null}
           <p className="text-foreground font-serif text-xl leading-8 sm:text-2xl sm:leading-9">

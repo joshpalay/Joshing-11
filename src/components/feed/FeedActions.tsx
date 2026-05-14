@@ -1,7 +1,14 @@
 'use client'
 
 import { Flag, MoreHorizontal, X } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react'
 
 import { AddToBankAction } from '@/components/AddToBankAction'
 import { SendQuestionAction } from '@/components/SendQuestionAction'
@@ -59,6 +66,7 @@ function MenuButton({
   return (
     <button
       type="button"
+      role="menuitem"
       disabled={disabled}
       onClick={onClick}
       className="text-foreground hover:bg-muted flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-50"
@@ -81,12 +89,33 @@ export function FeedOverflowMenu({
 }: FeedOverflowMenuProps) {
   const [open, setOpen] = useState(false)
   const visibleCategory = visibleFeedCategory(category)
+  const menuId = useId()
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const firstMenuItem = menuRef.current?.querySelector<HTMLElement>(
+      'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    )
+    firstMenuItem?.focus()
+  }, [open])
+
+  const closeMenu = () => {
+    setOpen(false)
+  }
 
   const wrapAction = (action?: () => void) => {
     if (!action) return undefined
     return () => {
       action()
-      setOpen(false)
+      closeMenu()
+    }
+  }
+
+  const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeMenu()
     }
   }
 
@@ -95,7 +124,9 @@ export function FeedOverflowMenu({
       <button
         type="button"
         aria-label="More Feed actions"
+        aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         className="flex size-9 items-center justify-center rounded-lg border border-stone-300 bg-white/70 text-stone-700 transition hover:bg-white disabled:opacity-50"
@@ -108,9 +139,16 @@ export function FeedOverflowMenu({
             className="absolute inset-0 cursor-default sm:hidden"
             type="button"
             aria-label="Close Feed actions"
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           />
-          <div className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl sm:shadow-xl">
+          <div
+            id={menuId}
+            ref={menuRef}
+            role="menu"
+            aria-label="More Feed actions"
+            onKeyDown={handleMenuKeyDown}
+            className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl sm:shadow-xl"
+          >
             <div className="flex items-center justify-between px-3 py-2 sm:hidden">
               <p className="text-foreground text-sm font-medium">
                 More actions
@@ -118,7 +156,7 @@ export function FeedOverflowMenu({
               <button
                 type="button"
                 aria-label="Close menu"
-                onClick={() => setOpen(false)}
+                onClick={closeMenu}
                 className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
               >
                 <X className="size-4" />
@@ -157,6 +195,7 @@ export function FeedOverflowMenu({
             ) : null}
             <button
               type="button"
+              role="menuitem"
               disabled={disabled}
               onClick={wrapAction(onReport)}
               className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-10 w-full items-center gap-2 rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
@@ -189,6 +228,7 @@ export function UnansweredFeedActions({
         type="button"
         onClick={onAnswer}
         disabled={disabled}
+        aria-label="Answer this Feed question"
         className="bg-stone-950 text-white hover:bg-stone-800"
       >
         Answer
@@ -204,6 +244,7 @@ export type AnswerFormProps = {
   onSubmit: () => void
   onCancel: () => void
   disabled?: boolean
+  loading?: boolean
 }
 
 export function AnswerForm({
@@ -212,7 +253,10 @@ export function AnswerForm({
   onSubmit,
   onCancel,
   disabled = false,
+  loading = false,
 }: AnswerFormProps) {
+  const answerInputId = useId()
+
   return (
     <form
       className="flex flex-col gap-3 sm:flex-row"
@@ -221,26 +265,37 @@ export function AnswerForm({
         onSubmit()
       }}
     >
-      <input
-        className="min-h-11 flex-1 rounded-lg border border-stone-300 bg-white px-3 text-base outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Your answer..."
-        disabled={disabled}
-      />
-      <div className="flex items-center gap-2">
+      <div className="flex flex-1 flex-col gap-1.5">
+        <label
+          htmlFor={answerInputId}
+          className="text-sm font-medium text-stone-800"
+        >
+          Your answer
+        </label>
+        <input
+          id={answerInputId}
+          aria-label="Your answer"
+          className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-base outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:opacity-60"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Your answer..."
+          disabled={disabled || loading}
+        />
+      </div>
+      <div className="flex items-end gap-2">
         <Button
           type="submit"
-          disabled={disabled || !value.trim()}
+          disabled={disabled || loading || !value.trim()}
+          aria-disabled={disabled || loading || !value.trim()}
           className="bg-stone-950 text-white hover:bg-stone-800"
         >
-          Submit answer
+          {loading ? 'Submitting...' : 'Submit answer'}
         </Button>
         <button
           type="button"
           onClick={onCancel}
-          disabled={disabled}
-          className="px-2 text-sm font-medium text-sky-700 hover:underline disabled:opacity-50"
+          disabled={disabled || loading}
+          className="px-2 pb-2 text-sm font-medium text-sky-700 hover:underline disabled:opacity-50"
         >
           Cancel
         </button>
