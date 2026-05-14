@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
     questionId: created.id,
   });
   const question = await getQuestion(created.id, session.userId);
+  const feedShare = { requested: shareToFeed, createdCount: 0 };
 
   if (shareToFeed) {
     const friends = await getFriends(session.userId);
@@ -123,6 +124,8 @@ export async function POST(request: NextRequest) {
       await rollOffOldItems(friend.id);
       sharedCount += 1;
     }
+
+    feedShare.createdCount = sharedCount;
 
     if (sharedCount > 0) {
       await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
@@ -188,6 +191,7 @@ export async function POST(request: NextRequest) {
       question,
       ...(question ?? {}),
       openedDomain: kbResult.opened ? categorizedQuestionFields.canonicalSubcategory : null,
+      feedShare,
     },
     { status: 201 },
   );

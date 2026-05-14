@@ -163,6 +163,7 @@ describe('POST /api/questions shareToFeed', () => {
 
     expect(response.status).toBe(201)
     expect(body.id).toBe('question-1')
+    expect(body.feedShare).toEqual({ requested: true, createdCount: 2 })
     expect(getFriendsMock).toHaveBeenCalledWith('creator-1')
     expect(state.feedInsertValues).toEqual([
       expect.objectContaining({
@@ -193,6 +194,8 @@ describe('POST /api/questions shareToFeed', () => {
 
     expect(response.status).toBe(201)
     expect(createQuestionMock).toHaveBeenCalled()
+    const body = await response.json()
+    expect(body.feedShare).toEqual({ requested: true, createdCount: 1 })
     expect(state.feedInsertValues).toHaveLength(1)
     expect(state.feedInsertValues[0]).toEqual(expect.objectContaining({ recipientUserId: 'friend-1' }))
   })
@@ -209,6 +212,8 @@ describe('POST /api/questions shareToFeed', () => {
     const response = await POST(questionRequest({ shareToFeed: true }))
 
     expect(response.status).toBe(201)
+    const body = await response.json()
+    expect(body.feedShare).toEqual({ requested: true, createdCount: 1 })
     expect(userHasQuestionInBlockingFeedMock).toHaveBeenCalledWith('friend-1', 'question-1')
     expect(userHasQuestionInBlockingFeedMock).toHaveBeenCalledWith('friend-2', 'question-1')
     expect(userHasQuestionInBlockingFeedMock).not.toHaveBeenCalledWith('friend-3', 'question-1')
@@ -217,5 +222,17 @@ describe('POST /api/questions shareToFeed', () => {
     ])
     expect(rollOffOldItemsMock).toHaveBeenCalledTimes(1)
     expect(rollOffOldItemsMock).toHaveBeenCalledWith('friend-1')
+  })
+
+  it('reports zero created rows when all-friends sharing has no eligible recipients', async () => {
+    getFriendsMock.mockResolvedValue([])
+
+    const response = await POST(questionRequest({ shareToFeed: true }))
+    const body = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(body.feedShare).toEqual({ requested: true, createdCount: 0 })
+    expect(state.feedInsertValues).toEqual([])
+    expect(state.questionUpdateValues).toEqual([])
   })
 })

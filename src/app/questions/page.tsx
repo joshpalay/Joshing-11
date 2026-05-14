@@ -22,6 +22,16 @@ type QuestionsApiResponse = {
   error?: string;
 };
 
+type CreateQuestionResponse = {
+  question?: QuestionView;
+  id?: string;
+  error?: string;
+  feedShare?: {
+    requested: boolean;
+    createdCount: number;
+  };
+};
+
 const NO_QUESTIONS_PATTERNS = [
   /no questions/i,
   /not found/i,
@@ -183,15 +193,16 @@ function QuestionsPageContent() {
       credentials: 'include',
       body: JSON.stringify(values),
     });
-    const body = await response.json().catch(() => null) as { question?: QuestionView; id?: string; error?: string } | null;
+    const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
     if (!response.ok || !body?.question) throw new Error(body?.error ?? 'Could not save that question.');
     setQuestions((current) => [body.question!, ...current]);
     setDrawer({ mode: 'closed' });
     if (values.sendToFriendIds.length > 0) {
       const n = values.sendToFriendIds.length;
       setToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
-    } else if (values.shareToFeed) {
-      setToast('Saved and shared with your friends.');
+    } else if (body.feedShare?.createdCount && body.feedShare.createdCount > 0) {
+      const n = body.feedShare.createdCount;
+      setToast(`Saved and shared with ${n} ${n === 1 ? 'friend' : 'friends'}.`);
     } else {
       setToast('Saved to your bank.');
     }
