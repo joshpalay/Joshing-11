@@ -5,9 +5,17 @@ import { getSession } from '@/server/auth/session';
 import { db, feedItems, friendships, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem } from '@/server/db/queries/feed';
-import { socialFeedDomainLabel } from '@/server/feed/visibility';
+import { AUTHORED_SHARED_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE, socialFeedDomainLabel } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
+
+const visibleFeedSourcePredicate = or(
+  eq(feedItems.sourceType, AUTHORED_SHARED_FEED_SOURCE_TYPE),
+  and(
+    eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
+    eq(feedItems.sourceResult, 'correct'),
+  ),
+);
 
 function displayName(name: string | null, fallback = 'A friend') {
   return name?.trim() || fallback;
@@ -56,8 +64,7 @@ export async function GET() {
       .from(feedItems)
       .where(and(
         eq(feedItems.recipientUserId, session.userId),
-        eq(feedItems.sourceType, 'friend_answered'),
-        eq(feedItems.sourceResult, 'correct'),
+        visibleFeedSourcePredicate,
       ))
       .then((rows) => rows[0]?.value ?? 0),
     db
@@ -65,8 +72,7 @@ export async function GET() {
       .from(feedItems)
       .where(and(
         eq(feedItems.recipientUserId, session.userId),
-        eq(feedItems.sourceType, 'friend_answered'),
-        eq(feedItems.sourceResult, 'correct'),
+        visibleFeedSourcePredicate,
         inArray(feedItems.state, ['active', 'skipped']),
       ))
       .then((rows) => rows[0]?.value ?? 0),
