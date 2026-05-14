@@ -1,8 +1,6 @@
 'use client';
 
-import { Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useReducer, useRef } from 'react';
-
 
 export type QuestionFormValues = {
   text: string;
@@ -80,8 +78,8 @@ type Action =
   | { type: 'EDIT_RECHECK' }
   | { type: 'ANSWERING' }
   | { type: 'START_SUGGESTION' }
-  | { type: 'SUGGESTION_RESULT'; suggestion: SuggestionResponse }
-  | { type: 'SUGGESTION_ERROR'; value: string | null }
+  | { type: 'SUGGESTION_RESULT'; questionText: string; suggestion: SuggestionResponse }
+  | { type: 'SUGGESTION_ERROR'; questionText?: string; value: string | null }
   | { type: 'REVIEW' }
   | { type: 'BACK_TO_EDIT' }
   | { type: 'SUBMITTING' }
@@ -138,16 +136,26 @@ function reducer(state: State, action: Action): State {
     case 'EDIT_RECHECK': return { ...state, stage: 'WRITING', critiqueResult: null };
     case 'ANSWERING': return { ...state, stage: 'ANSWERING' };
     case 'START_SUGGESTION': return { ...state, suggesting: true, suggestionError: null };
-    case 'SUGGESTION_RESULT': return {
-      ...state,
-      suggesting: false,
-      suggestionError: null,
-      userAnswer: action.suggestion.correctAnswer,
-      llmSuggestedAnswer: action.suggestion.correctAnswer,
-      explanation: state.explanation.trim() ? state.explanation : action.suggestion.explanation,
-      alternateText: state.alternateText.trim() || action.suggestion.alternateAnswers.length === 0 ? state.alternateText : action.suggestion.alternateAnswers.join(', '),
-    };
-    case 'SUGGESTION_ERROR': return { ...state, suggesting: false, suggestionError: action.value };
+    case 'SUGGESTION_RESULT': {
+      if (state.questionText.trim() !== action.questionText) {
+        return { ...state, suggesting: false };
+      }
+      return {
+        ...state,
+        suggesting: false,
+        suggestionError: null,
+        userAnswer: action.suggestion.correctAnswer,
+        llmSuggestedAnswer: action.suggestion.correctAnswer,
+        explanation: state.explanation.trim() ? state.explanation : action.suggestion.explanation,
+        alternateText: state.alternateText.trim() || action.suggestion.alternateAnswers.length === 0 ? state.alternateText : action.suggestion.alternateAnswers.join(', '),
+      };
+    }
+    case 'SUGGESTION_ERROR': {
+      if (action.questionText && state.questionText.trim() !== action.questionText) {
+        return { ...state, suggesting: false };
+      }
+      return { ...state, suggesting: false, suggestionError: action.value };
+    }
     case 'REVIEW': return { ...state, stage: 'REVIEWING', error: null };
     case 'BACK_TO_EDIT': return { ...state, stage: 'ANSWERING' };
     case 'SUBMITTING': return { ...state, stage: 'SUBMITTING', error: null };
@@ -210,8 +218,10 @@ export function QuestionForm({
 }: Props) {
   const [state, dispatch] = useReducer(reducer, undefined, () => initialState(initialValues, initialSpecificMode));
   const questionRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastSuggestionQuestionTextRef = useRef<string | null>(initialValues?.llmSuggestedAnswer ? (initialValues.text ?? '').trim() : null);
 
   useEffect(() => {
+    lastSuggestionQuestionTextRef.current = initialValues?.llmSuggestedAnswer ? (initialValues.text ?? '').trim() : null;
     dispatch({ type: 'RESET', state: initialState(initialValues, initialSpecificMode) });
   }, [initialValues, initialSpecificMode]);
 
@@ -292,6 +302,7 @@ export function QuestionForm({
       dispatch({ type: 'SUGGESTION_ERROR', value: 'Write the question first.' });
       return;
     }
+    lastSuggestionQuestionTextRef.current = questionText;
     dispatch({ type: 'START_SUGGESTION' });
     try {
       const response = await fetch('/api/questions/suggest', {
@@ -302,11 +313,28 @@ export function QuestionForm({
       });
       const body = await response.json().catch(() => null) as SuggestionResponse | null;
       if (!response.ok || !body?.correctAnswer) throw new Error('Suggestion unavailable');
-      dispatch({ type: 'SUGGESTION_RESULT', suggestion: body });
+      dispatch({ type: 'SUGGESTION_RESULT', questionText, suggestion: body });
     } catch {
-      dispatch({ type: 'SUGGESTION_ERROR', value: 'Suggestion unavailable' });
+      dispatch({ type: 'SUGGESTION_ERROR', questionText, value: 'Suggestion unavailable' });
     }
   }
+
+  useEffect(() => {
+    const questionText = state.questionText.trim();
+    if (
+      mode !== 'create'
+      || state.stage !== 'ANSWERING'
+      || !questionText
+      || state.suggesting
+      || lastSuggestionQuestionTextRef.current === questionText
+    ) {
+      return;
+    }
+
+    lastSuggestionQuestionTextRef.current = questionText;
+    void requestSuggestion();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, state.stage, state.questionText, state.suggesting, state.llmSuggestedAnswer]);
 
   function review() {
     const validationError = validate(state);
@@ -409,12 +437,9 @@ export function QuestionForm({
 
       {canShowAnswering ? (
         <>
-          {state.stage !== 'REVIEWING' && state.stage !== 'SUBMITTING' ? (
+          {state.stage !== 'REVIEWING' && state.stage !== 'SUBMITTING' && (counter || state.suggesting || state.suggestionError) ? (
             <div className="flex flex-wrap items-center gap-3">
-              <button type="button" onClick={() => void requestSuggestion()} disabled={state.suggesting || !state.questionText.trim()} className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50">
-                <Sparkles className={state.suggesting ? 'size-4 animate-pulse' : 'size-4'} />
-                {state.suggesting ? 'Suggesting...' : 'Suggest answer'}
-              </button>
+              {state.suggesting ? <span className="text-sm text-muted-foreground">Suggesting answer...</span> : null}
               {counter ? <span className="text-xs text-muted-foreground">{counter}</span> : null}
               {state.suggestionError ? <span className="text-sm text-destructive">{state.suggestionError}</span> : null}
             </div>
