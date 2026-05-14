@@ -75,6 +75,25 @@ describe('create question payload categorization', () => {
     expect('llm_difficulty' in result.value).toBe(false);
   });
 
+  it('accepts legacy and form-style share-with-friends flags', () => {
+    const payloads = [
+      { shareWithFriends: true },
+      { share_with_friends: 'true' },
+      { share_to_feed: '1' },
+      { sharedToFriendsFeed: 'on' },
+    ];
+
+    for (const payload of payloads) {
+      const result = readCreateQuestionPayload({
+        ...basePayload,
+        ...payload,
+      });
+
+      expect(result.errors).toEqual([]);
+      expect(result.value.shareToFeed).toBe(true);
+    }
+  });
+
   it('does not require friends when sharing to feed', () => {
     const result = readCreateQuestionPayload({
       ...basePayload,

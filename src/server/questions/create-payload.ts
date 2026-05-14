@@ -1,3 +1,11 @@
+function readBoolean(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value !== 'string') return false;
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+}
+
 function splitAlternates(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value
@@ -41,7 +49,11 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
   const rawSendToFriendIds = Array.isArray(body?.sendToFriendIds)
     ? (body.sendToFriendIds as unknown[]).filter((id): id is string => typeof id === 'string').slice(0, 20)
     : [];
-  const shareToFeed = body?.shareToFeed === true;
+  const shareToFeed = readBoolean(body?.shareToFeed)
+    || readBoolean(body?.shareWithFriends)
+    || readBoolean(body?.share_with_friends)
+    || readBoolean(body?.share_to_feed)
+    || readBoolean(body?.sharedToFriendsFeed);
 
   const errors: string[] = [];
   if (!text || text.length > 300) errors.push('text');

@@ -199,6 +199,33 @@ describe('POST /api/questions shareToFeed', () => {
     expect(state.questionUpdateValues).toContainEqual({ sharedToFriendsFeed: true })
   })
 
+  it('creates feed rows for legacy share-with-friends payload flags', async () => {
+    getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }])
+
+    const response = await POST(questionRequest({ share_with_friends: 'true' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(body.feedShare).toEqual({
+      requested: true,
+      createdCount: 1,
+      friendCount: 1,
+      sharedRecipientIds: ['friend-1'],
+      skippedDismissedDomainRecipientIds: [],
+      skippedExistingFeedRecipientIds: [],
+    })
+    expect(state.feedInsertValues).toEqual([
+      expect.objectContaining({
+        recipientUserId: 'friend-1',
+        questionId: 'question-1',
+        sourceType: 'authored_shared',
+        sourceUserId: 'creator-1',
+        state: 'active',
+      }),
+    ])
+    expect(state.questionUpdateValues).toContainEqual({ sharedToFriendsFeed: true })
+  })
+
   it('shares to friends before non-critical knowledge-domain opening can fail', async () => {
     const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }])
