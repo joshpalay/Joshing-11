@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, lt, ne, notInArray, or, sql } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
-import { AUTHORED_SHARED_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE, isMainFeedSourceVisible } from '@/server/feed/visibility';
+import { AUTHORED_SHARED_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import { pgErrorCode } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
@@ -204,81 +204,121 @@ export async function reinstateDomain(userId: string, canonicalSubcategory: stri
     ));
 }
 
-type FeedForUserOptions = {
-  limit?: number;
-  offset?: number;
+export type FeedCursor = {
+  sourceEventAt: Date;
+  id: string;
 };
 
-export async function getFeedForUser(userId: string, options: FeedForUserOptions = {}): Promise<CollapsedFeedItem[]> {
-  const dismissedDomains = await getDismissedDomains(userId);
-  const dismissedSet = new Set(dismissedDomains);
-  const limit = options.limit;
-  const offset = options.offset ?? 0;
+type FeedForUserOptions = {
+  limit?: number;
+  cursor?: FeedCursor | null;
+};
 
-  const [pinned, nonPinnedRaw] = await Promise.all([
+export type PaginatedFeedResult = {
+  items: CollapsedFeedItem[];
+  nextCursor: FeedCursor | null;
+  hasMore: boolean;
+  totalCount: number;
+};
+
+const DEFAULT_FEED_LIMIT = 20;
+const MAX_FEED_LIMIT = 50;
+
+function normalizeFeedLimit(limit: number | undefined): number {
+  if (!Number.isFinite(limit)) return DEFAULT_FEED_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit!), 1), MAX_FEED_LIMIT);
+}
+
+function feedCursorPredicate(cursor: FeedCursor | null | undefined) {
+  if (!cursor) return undefined;
+
+  return or(
+    lt(feedItems.sourceEventAt, cursor.sourceEventAt),
+    and(
+      eq(feedItems.sourceEventAt, cursor.sourceEventAt),
+      lt(feedItems.id, cursor.id),
+    ),
+  );
+}
+
+function visibleQuestionPredicate(dismissedDomains: string[]) {
+  const predicates = [
+    eq(questions.visibility, 'public'),
+    isNull(questions.deletedAt),
+  ];
+
+  if (dismissedDomains.length > 0) {
+    predicates.push(or(
+      isNull(questions.canonicalSubcategory),
+      notInArray(questions.canonicalSubcategory, dismissedDomains),
+    )!);
+  }
+
+  return and(...predicates);
+}
+
+async function fetchVisibleFeedItems(
+  userId: string,
+  dismissedDomains: string[],
+  options: { limit: number; cursor?: FeedCursor | null; pinned?: boolean },
+): Promise<FeedItem[]> {
+  const cursorPredicate = options.pinned ? undefined : feedCursorPredicate(options.cursor);
+
+  const rows = await db
+    .select({ item: feedItems })
+    .from(feedItems)
+    .innerJoin(questions, eq(feedItems.questionId, questions.id))
+    .where(and(
+      eq(feedItems.recipientUserId, userId),
+      eq(feedItems.isPinned, options.pinned ?? false),
+      visibleFeedSourcePredicate,
+      inArray(feedItems.state, VISIBLE_FEED_STATES),
+      visibleQuestionPredicate(dismissedDomains),
+      cursorPredicate,
+    ))
+    .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
+    .limit(options.limit);
+
+  return rows.map((row) => row.item);
+}
+
+export async function getFeedForUser(userId: string, options: FeedForUserOptions = {}): Promise<PaginatedFeedResult> {
+  const dismissedDomains = await getDismissedDomains(userId);
+  const limit = normalizeFeedLimit(options.limit);
+  const isFirstPage = !options.cursor;
+
+  // Pinned items are deliberately returned only on the first page, ahead of the chronological feed.
+  const [pinned, nonPinnedRaw, countRows] = await Promise.all([
+    isFirstPage
+      ? fetchVisibleFeedItems(userId, dismissedDomains, { limit, pinned: true })
+      : Promise.resolve([]),
+    fetchVisibleFeedItems(userId, dismissedDomains, { limit: limit + 1, cursor: options.cursor, pinned: false }),
     db
-      .select()
+      .select({ value: count() })
       .from(feedItems)
+      .innerJoin(questions, eq(feedItems.questionId, questions.id))
       .where(and(
         eq(feedItems.recipientUserId, userId),
-        eq(feedItems.isPinned, true),
         visibleFeedSourcePredicate,
         inArray(feedItems.state, VISIBLE_FEED_STATES),
-      ))
-      .orderBy(desc(feedItems.sourceEventAt)),
-    db
-      .select()
-      .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        eq(feedItems.isPinned, false),
-        visibleFeedSourcePredicate,
-        inArray(feedItems.state, VISIBLE_FEED_STATES),
-      ))
-      .orderBy(desc(feedItems.sourceEventAt)),
+        visibleQuestionPredicate(dismissedDomains),
+      )),
   ]);
 
-  // Fetch surface_priority_score for all question IDs so we can sort by it
-  const allQuestionIds = [...new Set(
-    [...pinned, ...nonPinnedRaw]
-      .map((item) => item.questionId)
-      .filter((id): id is string => Boolean(id)),
-  )];
-
-  const scoreRows = allQuestionIds.length > 0
-    ? await db
-        .select({ id: questions.id, score: questions.surfacePriorityScore, canonicalSubcategory: questions.canonicalSubcategory, visibility: questions.visibility, deletedAt: questions.deletedAt })
-        .from(questions)
-        .where(inArray(questions.id, allQuestionIds))
-    : [];
-
-  const scoreByQuestionId = new Map(scoreRows.map((r) => [r.id, r.score ?? 0]));
-  const domainByQuestionId = new Map(scoreRows.map((r) => [r.id, r.canonicalSubcategory]));
-  const visibleQuestionIds = new Set(scoreRows.filter((r) => r.visibility === 'public' && !r.deletedAt).map((r) => r.id));
-
-  // Sort non-pinned by surface_priority_score DESC then sourceEventAt DESC
-  const nonPinned = [...nonPinnedRaw].sort((a, b) => {
-    const scoreA = a.questionId ? (scoreByQuestionId.get(a.questionId) ?? 0) : 0;
-    const scoreB = b.questionId ? (scoreByQuestionId.get(b.questionId) ?? 0) : 0;
-    if (scoreB !== scoreA) return scoreB - scoreA;
-    return b.sourceEventAt.getTime() - a.sourceEventAt.getTime();
-  });
-
-  const filterItem = (item: FeedItem) => {
-    if (!isMainFeedSourceVisible(item.sourceType, item.sourceResult)) return false;
-    if (!item.questionId || !visibleQuestionIds.has(item.questionId)) return false;
-    if (dismissedSet.size === 0) return true;
-    const domain = domainByQuestionId.get(item.questionId);
-    return !domain || !dismissedSet.has(domain);
-  };
-
-  const filteredNonPinned = nonPinned.filter(filterItem);
-  const all = [...pinned.filter(filterItem), ...filteredNonPinned];
-  const afterThumbsUp = await collapseThumbsUpItems(all);
+  const nonPinnedPage = nonPinnedRaw.slice(0, limit);
+  const pageItems = [...pinned, ...nonPinnedPage];
+  const afterThumbsUp = await collapseThumbsUpItems(pageItems);
   const collapsed = await collapseFriendAnsweredItems(afterThumbsUp);
+  const lastNonPinned = nonPinnedPage.at(-1) ?? null;
 
-  if (typeof limit !== 'number') return collapsed;
-  return collapsed.slice(offset, offset + limit);
+  return {
+    items: collapsed,
+    nextCursor: lastNonPinned
+      ? { sourceEventAt: lastNonPinned.sourceEventAt, id: lastNonPinned.id }
+      : null,
+    hasMore: nonPinnedRaw.length > limit,
+    totalCount: countRows[0]?.value ?? 0,
+  };
 }
 
 export async function createFeedItem(data: NewFeedItem): Promise<FeedItem> {

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, friendships, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem } from '@/server/db/queries/feed';
+import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem, type FeedCursor } from '@/server/db/queries/feed';
 import { AUTHORED_SHARED_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE, socialFeedDomainLabel } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
@@ -17,21 +17,52 @@ const visibleFeedSourcePredicate = or(
   ),
 );
 
-const DEFAULT_PAGE_LIMIT = 25;
+const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
 
-function parsePagination(request: NextRequest) {
+type ParsedPagination =
+  | { limit: number; cursor: FeedCursor | null }
+  | { error: string };
+
+function encodeCursor(cursor: FeedCursor | null): string | null {
+  if (!cursor) return null;
+
+  return Buffer.from(JSON.stringify({
+    source_event_at: cursor.sourceEventAt.toISOString(),
+    id: cursor.id,
+  })).toString('base64url');
+}
+
+function decodeCursor(value: string): FeedCursor | null {
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as {
+      source_event_at?: unknown;
+      id?: unknown;
+    };
+    if (typeof parsed.source_event_at !== 'string' || typeof parsed.id !== 'string') return null;
+
+    const sourceEventAt = new Date(parsed.source_event_at);
+    if (Number.isNaN(sourceEventAt.getTime()) || parsed.id.trim().length === 0) return null;
+
+    return { sourceEventAt, id: parsed.id };
+  } catch {
+    return null;
+  }
+}
+
+function parsePagination(request: NextRequest): ParsedPagination {
   const limitParam = request.nextUrl.searchParams.get('limit');
-  const offsetParam = request.nextUrl.searchParams.get('offset');
+  const cursorParam = request.nextUrl.searchParams.get('cursor');
   const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : DEFAULT_PAGE_LIMIT;
-  const parsedOffset = offsetParam ? Number.parseInt(offsetParam, 10) : 0;
 
   const limit = Number.isFinite(parsedLimit)
     ? Math.min(Math.max(parsedLimit, 1), MAX_PAGE_LIMIT)
     : DEFAULT_PAGE_LIMIT;
-  const offset = Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0;
+  const cursor = cursorParam ? decodeCursor(cursorParam) : null;
 
-  return { limit, offset };
+  if (cursorParam && !cursor) return { error: 'invalid_cursor' };
+
+  return { limit, cursor };
 }
 
 function displayName(name: string | null, fallback = 'A friend') {
@@ -69,10 +100,13 @@ export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const { limit, offset } = parsePagination(request);
+  const pagination = parsePagination(request);
+  if ('error' in pagination) return NextResponse.json({ error: pagination.error }, { status: 400 });
 
-  const [allVisibleFeed, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
-    getFeedForUser(session.userId),
+  const { limit, cursor } = pagination;
+
+  const [feedPage, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
+    getFeedForUser(session.userId, { limit, cursor }),
     db
       .select({ value: count() })
       .from(friendships)
@@ -101,8 +135,9 @@ export async function GET(request: NextRequest) {
       .then((rows) => rows[0]?.value ?? 0),
   ]);
 
-  const activeItemCount = allVisibleFeed.length;
-  const feed = allVisibleFeed.slice(offset, offset + limit);
+  const activeItemCount = feedPage.totalCount;
+  const feed = feedPage.items;
+  const nextCursor = encodeCursor(feedPage.nextCursor);
   const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
 
   const [questionRows, bankedById] = await Promise.all([
@@ -132,9 +167,12 @@ export async function GET(request: NextRequest) {
       pre_filter_active_count: preFilterActiveCount,
       page_item_count: feed.length,
       limit,
-      offset,
-      has_more: offset + feed.length < activeItemCount,
+      cursor: cursor ? encodeCursor(cursor) : null,
+      next_cursor: nextCursor,
+      has_more: feedPage.hasMore,
     },
+    next_cursor: nextCursor,
+    has_more: feedPage.hasMore,
     items: feed.map((item) => {
       const question = item.questionId ? questionById.get(item.questionId) : undefined;
       const sourceUser = userById.get(item.sourceUserId);
