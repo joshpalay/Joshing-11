@@ -23,6 +23,10 @@ import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 
 export const dynamic = 'force-dynamic';
 
+function shouldIncludeShareRecipientDiagnostics() {
+  return process.env.NODE_ENV !== 'production' || process.env.SHARE_TO_FEED_DEBUG_RECIPIENT_IDS === 'true';
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -142,16 +146,18 @@ export async function POST(request: NextRequest) {
       await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
     }
 
+    const includeRecipientDiagnostics = shouldIncludeShareRecipientDiagnostics();
     console.info('[questions/shareToFeed]', {
       questionId: created.id,
       userId: session.userId,
+      requested: true,
       friendCount: friends.length,
       sharedCount,
-      sharedRecipientIds,
+      ...(includeRecipientDiagnostics ? { sharedRecipientIds } : {}),
       skippedDismissedDomainCount: skippedDismissedDomainRecipientIds.length,
-      skippedDismissedDomainRecipientIds,
+      ...(includeRecipientDiagnostics ? { skippedDismissedDomainRecipientIds } : {}),
       skippedExistingFeedCount: skippedExistingFeedRecipientIds.length,
-      skippedExistingFeedRecipientIds,
+      ...(includeRecipientDiagnostics ? { skippedExistingFeedRecipientIds } : {}),
     });
   }
 
