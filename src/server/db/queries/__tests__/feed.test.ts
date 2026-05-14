@@ -206,6 +206,108 @@ describe('getFeedForUser feed visibility', () => {
     expect(result.totalCount).toBe(1);
   });
 
+
+  it('excludes incorrect friend_answered items from the public social Feed', async () => {
+    state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
+    state.feedRows = [{
+      id: 'feed-friend-wrong',
+      recipientUserId: 'recipient-1',
+      questionId: 'question-1',
+      sourceType: 'friend_answered',
+      sourceUserId: 'friend-1',
+      sourceResult: 'incorrect',
+      sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+      personalMessage: null,
+      state: 'active',
+      isPinned: false,
+      joshingGameId: null,
+    }];
+
+    const result = await getFeedForUser('recipient-1');
+
+    expect(result.items).toEqual([]);
+    expect(result.totalCount).toBe(0);
+  });
+
+  it('applies the sent-to-me URL filter', async () => {
+    state.questionRows = [
+      { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+      { id: 'question-2', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-direct-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-1',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+      {
+        id: 'feed-friend-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-2',
+        sourceType: 'friend_answered',
+        sourceUserId: 'friend-1',
+        sourceResult: 'correct',
+        sourceEventAt: new Date('2026-05-14T12:01:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+    ];
+
+    const result = await getFeedForUser('recipient-1', { filter: 'sent-to-me' });
+
+    expect(result.items).toEqual([expect.objectContaining({ id: 'feed-direct-1' })]);
+    expect(result.totalCount).toBe(1);
+  });
+
+  it('prioritizes unanswered direct-sent cards on the first page', async () => {
+    state.questionRows = [
+      { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+      { id: 'question-2', visibility: 'public', deletedAt: null, canonicalSubcategory: 'History' },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-friend-newer',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-2',
+        sourceType: 'authored_shared',
+        sourceUserId: 'friend-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T13:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+      {
+        id: 'feed-direct-priority',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-1',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: true,
+        joshingGameId: null,
+      },
+    ];
+
+    const result = await getFeedForUser('recipient-1', { limit: 1 });
+
+    expect(result.items[0]).toEqual(expect.objectContaining({ id: 'feed-direct-priority' }));
+  });
+
   it('applies the from-friends URL filter', async () => {
     state.questionRows = [
       { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },

@@ -246,6 +246,8 @@ export async function GET(request: NextRequest) {
             ? directSentAttribution(sourceName, domain)
             : friendAnsweredAttribution(item, userById, domain, authorName),
         friend_results: item.friendResults ?? null,
+        endorsement_count: item.thumbsUpCount ?? null,
+        additional_endorsers: item.additionalEndorsers ?? null,
         source_event_at: item.sourceEventAt,
         personal_message: item.personalMessage,
         state: item.state,

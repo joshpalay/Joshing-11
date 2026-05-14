@@ -48,6 +48,8 @@ type FeedApiItem = {
   source_attribution: string
   source_result: 'correct' | 'incorrect' | null
   friend_results: FriendResult[] | null
+  endorsement_count?: number | null
+  additional_endorsers?: Array<{ userId: string; displayName: string }> | null
   source_event_at: string
   personal_message: string | null
   state: string
@@ -201,6 +203,7 @@ function baseTypedFields(item: FeedApiItem, answered = false) {
     category: item.domain_pill,
     question: item.question_text ?? 'Untitled question',
     personalMessage: item.personal_message,
+    isInBank: item.is_in_bank,
   }
 }
 
@@ -243,6 +246,8 @@ function toTypedFeedItem(item: FeedApiItem) {
       type: 'friend_liked' as const,
       friendName: item.source_friend_display_name,
       friendHref: item.source_profile_href ?? profileHref(item.source_user_id),
+      endorsementCount: item.endorsement_count,
+      additionalEndorsers: item.additional_endorsers,
     } satisfies FriendLikedFeedItem
   }
 

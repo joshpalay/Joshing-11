@@ -1,11 +1,16 @@
-export { AnswerForm, FeedOverflowMenu, UnansweredFeedActions } from './FeedActions'
+export {
+  AnswerForm,
+  FeedOverflowMenu,
+  UnansweredFeedActions,
+  getFeedOverflowMenuLabels,
+} from './FeedActions'
 export { AnsweredByYouCard } from './AnsweredByYouCard'
 export { DirectSentCard } from './DirectSentCard'
 export { FeedCard } from './FeedCard'
 export { FriendAddedCard } from './FriendAddedCard'
 export { FriendAnsweredCard } from './FriendAnsweredCard'
 export { FriendLikedCard } from './FriendLikedCard'
-export { mockTypedFeedItems } from './mock-feed-items'
+export { feedCardPreviewFixtures, mockTypedFeedItems } from './mock-feed-items'
 export { visibleFeedCategory } from './category'
 export type {
   AnsweredByYouFeedItem,
