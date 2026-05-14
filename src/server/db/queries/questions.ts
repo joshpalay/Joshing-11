@@ -201,7 +201,7 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
     broadCategory: row.broadCategory,
     canonicalSubcategory: row.canonicalSubcategory,
     subcategory: row.subcategory,
-    difficulty: difficultyToNumber(row.difficultyEstimate),
+    difficulty: difficultyToNumber(row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate),
     timesAnswered: stats.timesAnswered,
     timesCorrect: stats.timesCorrect,
     correctRate: stats.correctRate,

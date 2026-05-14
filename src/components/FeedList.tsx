@@ -7,6 +7,7 @@ import { Send, SkipForward, X } from 'lucide-react';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { QuestionReactionPrompt } from '@/components/play/GameplayChat';
+import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy';
 
 type FriendResult = {
   userId: string;
@@ -305,7 +306,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
                       : item.difficulty === 'moderate' ? 'bg-amber-100 text-amber-700'
                       : 'bg-sky-100 text-sky-700',
                     ].join(' ')}>
-                      {item.difficulty.charAt(0).toUpperCase() + item.difficulty.slice(1)}
+                      {difficultyCopyFromEstimate(item.difficulty) ?? 'Unrated'}
                     </span>
                   ) : null}
                   <span className="ml-auto text-xs text-muted-foreground">{formatEventTime(item.source_event_at)}</span>
