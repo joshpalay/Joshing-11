@@ -7,6 +7,7 @@ import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons'
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay';
+import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy';
 import MasteryMoment from '@/components/review/MasteryMoment';
 import { getSession } from '@/server/auth/session';
 import { getDeliveredCreatorNotesForQuestions } from '@/server/creator-notes';
@@ -260,7 +261,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                         const level = resolvedDifficulty(gameQuestion.question);
                         return level ? (
                           <span className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${difficultyPillClasses(level)}`}>
-                            {level.charAt(0).toUpperCase() + level.slice(1)}
+                            {difficultyCopyFromEstimate(level) ?? 'Unrated'}
                           </span>
                         ) : null;
                       })()}

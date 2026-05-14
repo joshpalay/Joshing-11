@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
+import { difficultyCopyFromValue } from '@/lib/questions/difficulty-copy';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import type { QuestionView } from '@/server/db/queries/questions';
 
@@ -34,14 +35,6 @@ function isNoQuestionsResponse(response: Response, body: QuestionsApiResponse | 
     || NO_QUESTIONS_PATTERNS.some((pattern) => pattern.test(apiMessage));
 }
 
-const DIFFICULTY_COPY: Record<number, string> = {
-  1: 'Establishing',
-  2: 'Establishing → Solid',
-  3: 'Solid',
-  4: 'Skilled',
-  5: 'Master',
-};
-
 const DOMAIN_COLORS: Record<string, string> = {
   music: '#7c3aed',
   literature: '#0f766e',
@@ -69,10 +62,6 @@ function relativeTime(value: string | null): string {
   if (days === 1) return 'yesterday';
   if (days < 30) return `${days}d ago`;
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
-}
-
-function difficultyDots(value: number) {
-  return Array.from({ length: 5 }, (_, index) => index < value ? '●' : '○').join(' ');
 }
 
 function initialValues(question: QuestionView): QuestionFormValues {
@@ -350,6 +339,7 @@ function QuestionsPageContent() {
             const inUse = question.usedInGamesCount > 0;
             const color = DOMAIN_COLORS[question.category] ?? '#64748b';
             const deleting = removingId === question.id;
+            const difficultyLabel = difficultyCopyFromValue(question.difficulty) ?? 'Unrated';
 
             return (
               <article
@@ -363,10 +353,8 @@ function QuestionsPageContent() {
                   >
                     {question.domainDisplayName}
                   </span>
-                  <span className="font-mono text-xs text-muted-foreground" aria-label={`LLM-rated difficulty: ${DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'}`}>
-                    {difficultyDots(question.difficulty)}
-                    {' · '}
-                    {DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'}
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground" aria-label={`LLM-rated difficulty: ${difficultyLabel}`}>
+                    {difficultyLabel}
                   </span>
                   <span className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                     {isOwnAuthored ? 'Written by you' : `From ${question.authorName ?? 'a friend'}`}

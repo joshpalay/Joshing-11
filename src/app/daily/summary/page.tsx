@@ -24,6 +24,20 @@ import type {
 
 type FeedbackSignal = 'thumbs_up' | 'thumbs_down'
 
+
+const DAILY_DIFFICULTY_LABELS: Record<string, string> = {
+  normal: 'Establishing',
+  moderate: 'Solid',
+  challenging: 'Skilled',
+  ridiculous: 'Master',
+  adaptive: 'Adaptive',
+}
+
+function dailyDifficultyLabel(value: string | null | undefined): string | null {
+  if (!value) return null
+  return DAILY_DIFFICULTY_LABELS[value] ?? value
+}
+
 const monoStyle: CSSProperties = {
   fontFamily: 'var(--font-mono)',
   fontSize: '0.62rem',
@@ -228,8 +242,8 @@ export default function DailySummaryPage() {
             color: 'var(--text-muted)',
           }}
         >
-          {summary.difficultyMode
-            ? `${summary.difficultyMode.charAt(0).toUpperCase() + summary.difficultyMode.slice(1)} · `
+          {dailyDifficultyLabel(summary.difficultyMode)
+            ? `${dailyDifficultyLabel(summary.difficultyMode)} · `
             : ''}
           {summary.totalCorrect}/{summary.questions.length} correct
           {summary.totalSkipped > 0 ? ` · ${summary.totalSkipped} skipped` : ''}
