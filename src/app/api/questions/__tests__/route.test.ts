@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   assessQuestionDifficultyMock,
@@ -152,6 +152,11 @@ describe('POST /api/questions shareToFeed', () => {
     userHasQuestionInBlockingFeedMock.mockResolvedValue(false)
   })
 
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
   it('creates authored_shared feed rows for active friends when shareToFeed is true', async () => {
     getFriendsMock.mockResolvedValue([
       { id: 'friend-1', displayName: 'Friend One' },
@@ -234,5 +239,64 @@ describe('POST /api/questions shareToFeed', () => {
     expect(body.feedShare).toEqual({ requested: true, createdCount: 0 })
     expect(state.feedInsertValues).toEqual([])
     expect(state.questionUpdateValues).toEqual([])
+  })
+
+  it('redacts share-to-feed recipient ids from production responses and logs', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    getFriendsMock.mockResolvedValue([
+      { id: 'friend-1', displayName: 'Friend One' },
+      { id: 'friend-2', displayName: 'Friend Two' },
+      { id: 'friend-3', displayName: 'Friend Three' },
+    ])
+    state.dismissedRows = [{ userId: 'friend-3' }]
+    userHasQuestionInBlockingFeedMock.mockImplementation(async (userId: string) => userId === 'friend-2')
+
+    const response = await POST(questionRequest({ shareToFeed: true }))
+    const body = await response.json()
+    const shareLogCall = consoleInfoMock.mock.calls.find(([label]) => label === '[questions/shareToFeed]')
+
+    expect(response.status).toBe(201)
+    expect(body.feedShare).toEqual({ requested: true, createdCount: 1 })
+    expect(JSON.stringify(body)).not.toContain('friend-1')
+    expect(JSON.stringify(body)).not.toContain('friend-2')
+    expect(JSON.stringify(body)).not.toContain('friend-3')
+    expect(shareLogCall).toBeDefined()
+    expect(shareLogCall?.[1]).toEqual({
+      questionId: 'question-1',
+      userId: 'creator-1',
+      requested: true,
+      friendCount: 3,
+      sharedCount: 1,
+      skippedDismissedDomainCount: 1,
+      skippedExistingFeedCount: 1,
+    })
+    expect(JSON.stringify(shareLogCall)).not.toContain('friend-1')
+    expect(JSON.stringify(shareLogCall)).not.toContain('friend-2')
+    expect(JSON.stringify(shareLogCall)).not.toContain('friend-3')
+  })
+
+  it('includes share-to-feed recipient ids when production diagnostics debug mode is enabled', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('SHARE_TO_FEED_DEBUG_RECIPIENT_IDS', 'true')
+    const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    getFriendsMock.mockResolvedValue([
+      { id: 'friend-1', displayName: 'Friend One' },
+      { id: 'friend-2', displayName: 'Friend Two' },
+      { id: 'friend-3', displayName: 'Friend Three' },
+    ])
+    state.dismissedRows = [{ userId: 'friend-3' }]
+    userHasQuestionInBlockingFeedMock.mockImplementation(async (userId: string) => userId === 'friend-2')
+
+    const response = await POST(questionRequest({ shareToFeed: true }))
+    const shareLogCall = consoleInfoMock.mock.calls.find(([label]) => label === '[questions/shareToFeed]')
+
+    expect(response.status).toBe(201)
+    expect(shareLogCall?.[1]).toEqual(expect.objectContaining({
+      requested: true,
+      sharedRecipientIds: ['friend-1'],
+      skippedDismissedDomainRecipientIds: ['friend-3'],
+      skippedExistingFeedRecipientIds: ['friend-2'],
+    }))
   })
 })
