@@ -134,6 +134,27 @@ export async function register() {
       // FeedItem table may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0028 adds the Category.general_knowledge enum value and migration
+    // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
+    // migrations in one transaction, but Postgres requires a newly-added enum value
+    // to be committed before it can be used. Pre-apply the enum addition and data
+    // change outside the migrator transaction so production startup cannot get
+    // stuck on `unsafe use of new value "general_knowledge"`.
+    try {
+      await db.execute(sql`
+        ALTER TYPE "public"."Category" ADD VALUE IF NOT EXISTS 'general_knowledge'
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Question" ALTER COLUMN "category" SET DEFAULT 'general_knowledge'
+      `);
+      await db.execute(sql`
+        UPDATE "Question" SET "category" = 'general_knowledge' WHERE "category" = 'other'
+      `);
+    } catch {
+      // Fresh databases may not have Category or Question yet. In that case the
+      // normal migration sequence will create the base schema first.
+    }
+
     // If the Category enum type already exists but migration 0000 isn't recorded,
     // the migrator fails at the very first CREATE TYPE statement and aborts — leaving
     // all subsequent migrations (0006 recipientUserId, 0014 territory_type, etc.)

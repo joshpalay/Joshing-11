@@ -1,3 +1,4 @@
-ALTER TYPE "public"."Category" ADD VALUE IF NOT EXISTS 'general_knowledge';--> statement-breakpoint
-ALTER TABLE "Question" ALTER COLUMN "category" SET DEFAULT 'general_knowledge';--> statement-breakpoint
-UPDATE "Question" SET "category" = 'general_knowledge' WHERE "category" = 'other';
+-- Add the replacement Category enum value separately from the default/data
+-- migration that consumes it. The app startup preflight also commits this enum
+-- addition before Drizzle's transaction when multiple migrations are pending.
+ALTER TYPE "public"."Category" ADD VALUE IF NOT EXISTS 'general_knowledge';
