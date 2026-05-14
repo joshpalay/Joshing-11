@@ -14,6 +14,7 @@ export type FeedCardBaseItem = {
   question: string
   category?: string | null
   personalMessage?: string | null
+  isInBank?: boolean
 }
 
 export type DirectSentFeedItem = FeedCardBaseItem & {
@@ -40,6 +41,8 @@ export type FriendLikedFeedItem = FeedCardBaseItem & {
   type: 'friend_liked'
   friendName: string
   friendHref?: string | null
+  endorsementCount?: number | null
+  additionalEndorsers?: Array<{ userId: string; displayName: string }> | null
 }
 
 export type AnsweredByYouFeedItem = FeedCardBaseItem & {

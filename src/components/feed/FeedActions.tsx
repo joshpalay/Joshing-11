@@ -26,6 +26,27 @@ export type FeedOverflowMenuProps = {
   children?: ReactNode
 }
 
+export function getFeedOverflowMenuLabels({
+  sourceName,
+  category,
+  hasQuestion,
+  isInBank = false,
+}: {
+  sourceName: string
+  category?: string | null
+  hasQuestion: boolean
+  isInBank?: boolean
+}) {
+  const visibleCategory = visibleFeedCategory(category)
+  return [
+    ...(visibleCategory ? ['Hide this category'] : []),
+    `Hide questions from ${sourceName || 'this person'}`,
+    ...(hasQuestion && !isInBank ? ['Add to bank'] : []),
+    ...(hasQuestion ? ['Send to friend'] : []),
+    'Report',
+  ]
+}
+
 function MenuButton({
   children,
   disabled,

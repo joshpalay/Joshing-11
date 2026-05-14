@@ -22,6 +22,31 @@ function PersonName({ href, name }: { href?: string | null; name: string }) {
   )
 }
 
+function endorsementCopy(item: FriendLikedFeedItem) {
+  const count = item.endorsementCount ?? 1
+  if (count <= 1) {
+    return (
+      <p>
+        <PersonName href={item.friendHref} name={item.friendName} /> liked this
+        question.
+      </p>
+    )
+  }
+
+  const names = item.additionalEndorsers
+    ?.map((endorser) => endorser.displayName)
+    .filter(Boolean)
+  const suffix = names?.length ? ` with ${names.join(', ')}` : ''
+
+  return (
+    <p>
+      <PersonName href={item.friendHref} name={item.friendName} /> and{' '}
+      {count - 1} {count - 1 === 1 ? 'friend' : 'friends'} liked this question
+      {suffix}.
+    </p>
+  )
+}
+
 export function FriendLikedCard({
   item,
   actions,
@@ -34,12 +59,7 @@ export function FriendLikedCard({
       eyebrow={<span>Friend liked</span>}
       actions={actions}
     >
-      {children ?? (
-        <p>
-          <PersonName href={item.friendHref} name={item.friendName} /> liked
-          this question.
-        </p>
-      )}
+      {children ?? endorsementCopy(item)}
     </FeedCard>
   )
 }
