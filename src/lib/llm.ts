@@ -66,7 +66,9 @@ const GENERIC_SUBCATEGORY_NORMALIZED = new Set([
   'language',
   'other',
   'general knowledge',
+  'general',
   'trivia',
+  'potpourri',
 ]);
 const VALID_SUGGESTION_TYPES = ['factual', 'personal', 'ambiguous', 'factual_uncertain'] as const;
 const VALID_DIFFICULTY_ESTIMATES = ['accessible', 'moderate', 'specialist'] as const;
@@ -168,6 +170,99 @@ function isTooGenericSubcategory(subcategory: string, broadCategory: string): bo
   return GENERIC_SUBCATEGORY_NORMALIZED.has(normalizedSubcategory);
 }
 
+const QUESTION_WORDS_NORMALIZED = new Set([
+  'what',
+  'which',
+  'who',
+  'whom',
+  'whose',
+  'where',
+  'when',
+  'why',
+  'how',
+  'name',
+  'identify',
+  'in',
+]);
+
+function tidySubcategoryCandidate(value: string): string | null {
+  const withoutPrefix = value
+    .replace(/^[\s"'“”‘’`]*(?:the\s+answer\s+is|answer|it\s+is|it's|its|this\s+is)\s*:?\s*/i, '')
+    .replace(/[\s"'“”‘’`]+$/g, '')
+    .replace(/^[\s"'“”‘’`]+/g, '')
+    .trim();
+  const firstClause = withoutPrefix.split(/(?:\s+[-–—]\s+|[.!?;]|\n)/)[0]?.trim() ?? '';
+  const normalized = firstClause.replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+
+  const words = normalized.split(/\s+/);
+  if (words.length > 8 || normalized.length > 80) return null;
+  if (QUESTION_WORDS_NORMALIZED.has(normalizeCategoryLabel(normalized))) return null;
+  return normalized;
+}
+
+function subcategoryCandidateIsAllowed(candidate: string, broadCategory: string): boolean {
+  return !isTooGenericSubcategory(candidate, broadCategory);
+}
+
+function quotedCandidates(value: string): string[] {
+  const candidates: string[] = [];
+  for (const match of value.matchAll(/["“”'‘’]([^"“”'‘’]{2,80})["“”'‘’]/g)) {
+    if (match[1]) candidates.push(match[1]);
+  }
+  return candidates;
+}
+
+function capitalizedPhraseCandidates(value: string): string[] {
+  const candidates: string[] = [];
+  const phrasePattern = /\b(?:[A-Z][A-Za-z0-9]*(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,})(?:[-\s]+(?:[A-Z][A-Za-z0-9]*(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,}|of|the|and|for|in|to|a|an))*\b/g;
+  for (const match of value.matchAll(phrasePattern)) {
+    const phrase = match[0]?.trim();
+    if (phrase) candidates.push(phrase);
+  }
+  return candidates;
+}
+
+function deterministicSubcategoryFallback(
+  questionText: string,
+  answerText: string,
+  broadCategory: string
+): string {
+  const candidateSources = [
+    answerText,
+    ...quotedCandidates(answerText),
+    ...quotedCandidates(questionText),
+    ...capitalizedPhraseCandidates(answerText),
+    ...capitalizedPhraseCandidates(questionText),
+  ];
+
+  for (const candidate of candidateSources) {
+    const tidied = tidySubcategoryCandidate(candidate);
+    if (tidied && subcategoryCandidateIsAllowed(tidied, broadCategory)) {
+      return tidied;
+    }
+  }
+
+  return subcategoryCandidateIsAllowed('Specific Question Topic', broadCategory)
+    ? 'Specific Question Topic'
+    : 'Question-Specific Knowledge';
+}
+
+function finalizeCategorization(
+  result: CategoryResult,
+  questionText: string,
+  answerText: string
+): CategoryResult {
+  if (!isTooGenericSubcategory(result.subcategory, result.broad_category)) {
+    return result;
+  }
+
+  return {
+    ...result,
+    subcategory: deterministicSubcategoryFallback(questionText, answerText, result.broad_category),
+  };
+}
+
 function asIntegerOrNull(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isInteger(value)) return null;
   return value >= 0 ? value : null;
@@ -248,8 +343,12 @@ function fallbackGrading(): GradingResponse {
   return { result: 'wrong', confidence: 0, reason: 'llm_error', consolation: null };
 }
 
-function fallbackCategorization(): CategoryResult {
-  return { subcategory: 'Potpourri', broad_category: 'General Knowledge', confidence: 0 };
+function fallbackCategorization(questionText = '', answerText = ''): CategoryResult {
+  return finalizeCategorization(
+    { subcategory: 'General Knowledge', broad_category: 'General Knowledge', confidence: 0 },
+    questionText,
+    answerText
+  );
 }
 
 function fallbackExplainer(canonicalAnswer: string): ExplainerResult {
@@ -400,7 +499,7 @@ Categorize this question. Return JSON only.`;
   try {
     const client = getAnthropicClient();
     if (!client) {
-      return fallbackCategorization();
+      return fallbackCategorization(questionText, answerText);
     }
 
     const response = await client.messages.create({
@@ -415,14 +514,14 @@ Categorize this question. Return JSON only.`;
     const parsed = parseJsonObject(text);
     if (!parsed) {
       logFallback('categorizeQuestion', 'invalid_json', { responseLength: text.length });
-      return fallbackCategorization();
+      return fallbackCategorization(questionText, answerText);
     }
 
     let subcategory = asTrimmedString(parsed.subcategory);
     const broadCategory = asTrimmedString(parsed.broad_category);
     if (!subcategory || !broadCategory) {
       logFallback('categorizeQuestion', 'missing_required_fields');
-      return fallbackCategorization();
+      return fallbackCategorization(questionText, answerText);
     }
 
     if (isTooGenericSubcategory(subcategory, broadCategory)) {
@@ -464,10 +563,14 @@ Return JSON only.`;
     }
 
     const confidence = clampConfidence(parsed.confidence, 0.8);
-    return { subcategory, broad_category: broadCategory, confidence };
+    return finalizeCategorization(
+      { subcategory, broad_category: broadCategory, confidence },
+      questionText,
+      answerText
+    );
   } catch (error) {
     logFallback('categorizeQuestion', 'request_failed', summarizeError(error));
-    return fallbackCategorization();
+    return fallbackCategorization(questionText, answerText);
   }
 }
 
