@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Send, SkipForward, X } from 'lucide-react';
 
@@ -93,11 +93,16 @@ function comparisonCopy(playerCorrect: boolean, friendResults: FriendResult[] | 
 
 type FeedListProps = {
   limit?: number;
+  pageSize?: number;
+  infinite?: boolean;
 };
 
 type QuestionCardState = 'unanswered' | 'answered' | 'reacted';
 
-export default function FeedList({ limit = 25 }: FeedListProps) {
+export default function FeedList({ limit, pageSize, infinite = false }: FeedListProps) {
+  const itemsPerPage = pageSize ?? limit ?? 25;
+  const [visibleCount, setVisibleCount] = useState(itemsPerPage);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [items, setItems] = useState<FeedApiItem[]>([]);
   const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
@@ -139,7 +144,30 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
     return () => window.clearTimeout(timer);
   }, [loadFeed]);
 
-  const visibleItems = useMemo(() => items.slice(0, limit), [items, limit]);
+  const visibleLimit = infinite ? visibleCount : itemsPerPage;
+  const visibleItems = useMemo(() => items.slice(0, visibleLimit), [items, visibleLimit]);
+  const hasMoreItems = visibleItems.length < items.length;
+
+  useEffect(() => {
+    if (!infinite || !hasMoreItems) return;
+
+    const loadMoreNode = loadMoreRef.current;
+    if (!loadMoreNode) return;
+
+    if (!('IntersectionObserver' in window)) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((current) => Math.min(current + itemsPerPage, items.length));
+        }
+      },
+      { rootMargin: '320px 0px' },
+    );
+
+    observer.observe(loadMoreNode);
+    return () => observer.disconnect();
+  }, [hasMoreItems, infinite, items.length, itemsPerPage]);
 
   const emptyCopy = useMemo(() => {
     if (loading) return 'Loading your Feed...';
@@ -449,6 +477,11 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
           })}
         </section>
       )}
+      {infinite && hasMoreItems ? (
+        <div ref={loadMoreRef} className="py-4 text-center" aria-live="polite">
+          <p className="text-muted-foreground text-sm">Loading more Feed...</p>
+        </div>
+      ) : null}
     </>
   );
 }
