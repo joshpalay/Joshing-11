@@ -172,7 +172,7 @@ describe('Feed answered states', () => {
       />
     )
 
-    expect(rendered).toContain('This answer is still unverified.')
+    expect(rendered).toContain('LLM answer — unverified.')
     expect(rendered).toContain('Explanation is pending verification')
   })
 })
