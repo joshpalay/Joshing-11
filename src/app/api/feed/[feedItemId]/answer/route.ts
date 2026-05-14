@@ -142,6 +142,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .set({
         state: 'answered',
         submittedAnswer: parsed.submittedAnswer,
+        answerResult: isCorrect ? 'correct' : 'incorrect',
+        pointsAwarded: pointsAwarded,
+        masteryDelta: masteryDelta as Record<string, unknown>,
         quip,
       })
       .where(eq(feedItems.id, feedItemId));
@@ -157,13 +160,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  // Propagate this answer to the answering user's friends' Feeds
-  await createFeedItemsForFriendsFromAnswer(
-    session.userId,
-    question.id,
-    isCorrect ? 'correct' : 'incorrect',
-    `feed:${feedItemId}:${session.userId}`,
-  );
+  // Only correct Feed answers are eligible to become public/social friend Feed cards.
+  // Incorrect answers persist privately on this viewer's Feed item as answered_by_you.
+  if (isCorrect) {
+    await createFeedItemsForFriendsFromAnswer(
+      session.userId,
+      question.id,
+      'correct',
+      `feed:${feedItemId}:${session.userId}`,
+    );
+  }
 
   if (!isCorrect) {
     void promptCreatorNoteAfterWrongAnswer({

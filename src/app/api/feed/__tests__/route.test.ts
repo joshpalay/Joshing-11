@@ -21,6 +21,7 @@ const { checkBankedQuestionsMock, dbMock, getDismissedDomainsMock, getFeedForUse
           return thenable([{
             id: 'question-1',
             questionText: 'What is the direct question?',
+            answerText: 'Prince',
             creatorId: 'sender-1',
             verified: true,
             explainerBrief: 'A brief explanation.',
@@ -66,6 +67,7 @@ vi.mock('@/server/db', () => ({
   feedItems: {
     recipientUserId: 'feedItems.recipientUserId',
     state: 'feedItems.state',
+    sourceType: 'feedItems.sourceType',
   },
   friendships: {
     status: 'friendships.status',
@@ -99,6 +101,10 @@ describe('GET /api/feed', () => {
         personalMessage: 'Try this one.',
         state: 'active',
         isPinned: true,
+        submittedAnswer: null,
+        answerResult: null,
+        pointsAwarded: null,
+        masteryDelta: null,
       }],
       nextCursor: null,
       hasMore: false,
@@ -114,6 +120,8 @@ describe('GET /api/feed', () => {
     expect(body.items).toEqual([
       expect.objectContaining({
         id: 'feed-direct-1',
+        card_type: 'direct_sent',
+        type: 'direct_sent',
         source_type: 'direct_sent',
         state: 'active',
         is_pinned: true,
@@ -123,5 +131,62 @@ describe('GET /api/feed', () => {
       }),
     ]);
     expect(body.meta.active_item_count).toBe(1);
+    expect(body.meta.filter).toBe('all');
+    expect(getFeedForUserMock).toHaveBeenCalledWith('recipient-1', {
+      limit: 20,
+      cursor: null,
+      filter: 'all',
+    });
+  });
+
+  it('returns answered Feed items as durable answered_by_you cards', async () => {
+    getFeedForUserMock.mockResolvedValueOnce({
+      items: [{
+        id: 'feed-answered-1',
+        questionId: 'question-1',
+        joshingGameId: null,
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: 'Try this one.',
+        submittedAnswer: 'Morris Day',
+        answerResult: 'incorrect',
+        pointsAwarded: 0,
+        masteryDelta: { domain: 'Music', points: 0 },
+        state: 'answered',
+        isPinned: true,
+      }],
+      nextCursor: null,
+      hasMore: false,
+      totalCount: 1,
+    });
+
+    const response = await GET(new Request('https://joshing.example/api/feed?filter=sent-to-me') as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.items[0]).toEqual(expect.objectContaining({
+      card_type: 'answered_by_you',
+      type: 'answered_by_you',
+      state: 'answered',
+      answer_result: 'incorrect',
+      is_correct: false,
+      submitted_answer: 'Morris Day',
+      correct_answer: 'Prince',
+      awarded_points: 0,
+      mastery_delta: { domain: 'Music', points: 0 },
+    }));
+    expect(getFeedForUserMock).toHaveBeenCalledWith('recipient-1', {
+      limit: 20,
+      cursor: null,
+      filter: 'sent-to-me',
+    });
+  });
+
+  it('rejects unsupported Feed filters', async () => {
+    const response = await GET(new Request('https://joshing.example/api/feed?filter=hidden-categories') as never);
+    await expect(response.json()).resolves.toEqual({ error: 'invalid_filter' });
+    expect(response.status).toBe(400);
   });
 });

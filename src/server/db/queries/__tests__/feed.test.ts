@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { dbMock, state } = vi.hoisted(() => {
   type Predicate =
@@ -141,6 +141,11 @@ vi.mock('@/server/db/pg-error', () => ({ pgErrorCode: vi.fn(() => null) }));
 import { getFeedForUser } from '@/server/db/queries/feed';
 
 describe('getFeedForUser feed visibility', () => {
+  beforeEach(() => {
+    state.feedRows = [];
+    state.questionRows = [];
+  });
+
   it('returns an active pinned direct_sent feed item', async () => {
     const sourceEventAt = new Date('2026-05-14T12:00:00.000Z');
     state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
@@ -168,6 +173,76 @@ describe('getFeedForUser feed visibility', () => {
         isPinned: true,
       }),
     ]);
+    expect(result.totalCount).toBe(1);
+  });
+
+  it('keeps answered direct_sent items visible without pinned priority', async () => {
+    const sourceEventAt = new Date('2026-05-14T12:00:00.000Z');
+    state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
+    state.feedRows = [{
+      id: 'feed-answered-1',
+      recipientUserId: 'recipient-1',
+      questionId: 'question-1',
+      sourceType: 'direct_sent',
+      sourceUserId: 'sender-1',
+      sourceResult: null,
+      sourceEventAt,
+      personalMessage: 'Try this one.',
+      state: 'answered',
+      isPinned: true,
+      joshingGameId: null,
+    }];
+
+    const result = await getFeedForUser('recipient-1');
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'feed-answered-1',
+        sourceType: 'direct_sent',
+        state: 'answered',
+        isPinned: true,
+      }),
+    ]);
+    expect(result.totalCount).toBe(1);
+  });
+
+  it('applies the from-friends URL filter', async () => {
+    state.questionRows = [
+      { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+      { id: 'question-2', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-direct-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-1',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+      {
+        id: 'feed-friend-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-2',
+        sourceType: 'friend_answered',
+        sourceUserId: 'friend-1',
+        sourceResult: 'correct',
+        sourceEventAt: new Date('2026-05-14T12:01:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+    ];
+
+    const result = await getFeedForUser('recipient-1', { filter: 'from-friends' });
+
+    expect(result.items).toEqual([expect.objectContaining({ id: 'feed-friend-1' })]);
     expect(result.totalCount).toBe(1);
   });
 });

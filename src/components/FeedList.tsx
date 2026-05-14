@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import {
   AnsweredByYouCard,
   AnswerForm,
@@ -27,6 +28,18 @@ type FeedApiItem = {
   id: string
   kind: 'question'
   question_id: string | null
+  card_type:
+    | 'direct_sent'
+    | 'friend_answered'
+    | 'friend_added'
+    | 'friend_liked'
+    | 'answered_by_you'
+  type?:
+    | 'direct_sent'
+    | 'friend_answered'
+    | 'friend_added'
+    | 'friend_liked'
+    | 'answered_by_you'
   source_type: string
   source_user_id: string
   source_friend_display_name: string
@@ -42,6 +55,14 @@ type FeedApiItem = {
   is_in_bank: boolean
   domain_pill: string | null
   difficulty: string | null
+  explanation: string | null
+  answer_result: 'correct' | 'incorrect' | null
+  is_correct: boolean | null
+  correct_answer: string | null
+  submitted_answer: string | null
+  awarded_points: number | null
+  mastery_delta: unknown | null
+  unverified_answer: boolean
 }
 
 type FeedMeta = {
@@ -55,7 +76,10 @@ type FeedMeta = {
   cursor?: string | null
   next_cursor?: string | null
   has_more?: boolean
+  filter?: FeedFilter
 }
+
+type FeedFilter = 'all' | 'sent-to-me' | 'from-friends'
 
 type FeedResponse = {
   viewer_user_id: string
@@ -99,13 +123,14 @@ function formatEventTime(value: string) {
 }
 
 function comparisonCopy(
-  playerCorrect: boolean,
+  playerCorrect: boolean | null,
   friendResults: FriendResult[] | null
 ): string {
   const primaryFriend = friendResults?.[0]
   const friendName = primaryFriend?.displayName ?? 'They'
   const friendCorrect = primaryFriend?.result === 'correct'
 
+  if (playerCorrect === null) return 'You have already answered this question.'
   if (playerCorrect && friendCorrect) return 'You both had it.'
   if (playerCorrect && !friendCorrect)
     return `You found a connection ${friendName} missed.`
@@ -144,7 +169,7 @@ function friendAnsweredSummary(item: FeedApiItem) {
 function toTypedFeedItem(item: FeedApiItem) {
   const base = baseTypedFields(item)
 
-  if (item.source_type === 'direct_sent') {
+  if (item.card_type === 'direct_sent') {
     return {
       ...base,
       type: 'direct_sent' as const,
@@ -152,7 +177,7 @@ function toTypedFeedItem(item: FeedApiItem) {
     } satisfies DirectSentFeedItem
   }
 
-  if (item.source_type === 'authored_shared') {
+  if (item.card_type === 'friend_added') {
     return {
       ...base,
       type: 'friend_added' as const,
@@ -160,7 +185,7 @@ function toTypedFeedItem(item: FeedApiItem) {
     } satisfies FriendAddedFeedItem
   }
 
-  if (item.source_type === 'thumbs_upped') {
+  if (item.card_type === 'friend_liked') {
     return {
       ...base,
       type: 'friend_liked' as const,
@@ -187,10 +212,11 @@ function toAnsweredByYouItem(
   return {
     ...baseTypedFields(item),
     type: 'answered_by_you',
-    resultLabel: 'Answered by you',
+    resultLabel:
+      item.is_correct === false ? 'Answered by you · Not quite' : 'Answered by you',
     answerSummary: result
       ? comparisonCopy(result.correct, item.friend_results)
-      : 'You have already answered this question.',
+      : comparisonCopy(item.is_correct, item.friend_results),
   }
 }
 
@@ -205,6 +231,13 @@ export default function FeedList({
   pageSize = 20,
   infinite = false,
 }: FeedListProps) {
+  const searchParams = useSearchParams()
+  const feedFilterParam =
+    searchParams.get('filter') ?? searchParams.get('feed_filter') ?? 'all'
+  const feedFilter: FeedFilter =
+    feedFilterParam === 'sent-to-me' || feedFilterParam === 'from-friends'
+      ? feedFilterParam
+      : 'all'
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const [items, setItems] = useState<FeedApiItem[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -231,7 +264,10 @@ export default function FeedList({
       setError(null)
 
       try {
-        const search = new URLSearchParams({ limit: String(pageSize) })
+        const search = new URLSearchParams({
+          limit: String(pageSize),
+          filter: feedFilter,
+        })
         if (cursor) search.set('cursor', cursor)
 
         const response = await fetch(`/api/feed?${search.toString()}`, {
@@ -278,7 +314,7 @@ export default function FeedList({
         setLoadingMore(false)
       }
     },
-    [pageSize]
+    [feedFilter, pageSize]
   )
 
   useEffect(() => {
@@ -514,23 +550,35 @@ export default function FeedList({
                 />
               ) : null
 
-            const answeredDetails = result ? (
+            const answeredDetails = result || cardState === 'answered' ? (
               <div className="rounded-xl bg-white/60 p-3 text-sm leading-6 text-stone-700">
                 <p className="font-medium text-stone-900">
-                  {comparisonCopy(result.correct, item.friend_results)}
+                  {comparisonCopy(result?.correct ?? item.is_correct, item.friend_results)}
                 </p>
-                {!result.correct && result.answer ? (
-                  <p className="mt-1">Answer: {result.answer}</p>
+                {item.submitted_answer || answers[item.id] ? (
+                  <p className="mt-1">Your answer: {item.submitted_answer || answers[item.id]}</p>
                 ) : null}
-                {result.explanation ? (
-                  <p className="text-muted-foreground mt-1">
-                    {result.explanation}
+                {(result?.answer || item.correct_answer) &&
+                (result?.correct === false || item.is_correct === false) ? (
+                  <p className="mt-1">
+                    Answer: {result?.answer || item.correct_answer}
                   </p>
                 ) : null}
-                {result.quip ? (
+                {typeof item.awarded_points === 'number' ? (
+                  <p className="mt-1">Points: +{item.awarded_points}</p>
+                ) : null}
+                {item.unverified_answer ? (
+                  <p className="text-muted-foreground mt-1">This answer is still unverified.</p>
+                ) : null}
+                {result?.explanation || item.explanation ? (
+                  <p className="text-muted-foreground mt-1">
+                    {result?.explanation || item.explanation}
+                  </p>
+                ) : null}
+                {result?.quip ? (
                   <p className="text-muted-foreground mt-1">{result.quip}</p>
                 ) : null}
-                {result.breadcrumb ? (
+                {result?.breadcrumb ? (
                   <p className="text-muted-foreground mt-2 italic">
                     {result.breadcrumb}
                   </p>

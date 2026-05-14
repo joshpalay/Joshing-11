@@ -35,6 +35,8 @@ vi.mock('@/server/db', () => ({
   feedItems: {
     id: 'feedItems.id',
     questionId: 'feedItems.questionId',
+    sourceType: 'feedItems.sourceType',
+    sourceResult: 'feedItems.sourceResult',
     recipientUserId: 'feedItems.recipientUserId',
     state: 'feedItems.state',
     submittedAnswer: 'feedItems.submittedAnswer',
@@ -178,10 +180,12 @@ describe('Feed submitted answers for creator notes', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(feedUpdateSetCalls).toContainEqual({
+    expect(feedUpdateSetCalls).toContainEqual(expect.objectContaining({
       state: 'answered',
       submittedAnswer: 'Morris Day',
-    });
+      answerResult: 'incorrect',
+      pointsAwarded: 0,
+    }));
   });
 
   it('returns the saved Feed submitted answer for creator-note context', async () => {
