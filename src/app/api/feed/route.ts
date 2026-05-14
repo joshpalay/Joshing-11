@@ -135,8 +135,31 @@ export async function GET(request: NextRequest) {
 
   const activeItemCount = feedPage.totalCount;
   const feed = feedPage.items;
+  const pageItemCount = feed.length;
   const nextCursor = encodeCursor(feedPage.nextCursor);
   const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
+  const verboseFeedDebug = process.env.FEED_DEBUG_VERBOSE === 'true';
+
+  console.info('[feed/get]', {
+    userId: session.userId,
+    limit,
+    cursorPresent: Boolean(cursor),
+    friendCount,
+    dismissedDomainCount: dismissedDomains.length,
+    totalItemCount,
+    preFilterActiveCount,
+    activeItemCount,
+    pageItemCount,
+    hasMore: feedPage.hasMore,
+    ...(verboseFeedDebug
+      ? {
+          items: feed.map((item) => ({
+            id: item.id,
+            sourceType: item.sourceType,
+          })),
+        }
+      : {}),
+  });
 
   const [questionRows, bankedById] = await Promise.all([
     questionIds.length
@@ -163,7 +186,7 @@ export async function GET(request: NextRequest) {
       total_item_count: totalItemCount,
       active_item_count: activeItemCount,
       pre_filter_active_count: preFilterActiveCount,
-      page_item_count: feed.length,
+      page_item_count: pageItemCount,
       limit,
       cursor: cursor ? encodeCursor(cursor) : null,
       next_cursor: nextCursor,
