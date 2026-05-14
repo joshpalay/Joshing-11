@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import Link from 'next/link'
 
 import { FeedCard } from './FeedCard'
 import type { FriendAnsweredFeedItem } from './types'
@@ -7,6 +8,18 @@ type FriendAnsweredCardProps = {
   item: FriendAnsweredFeedItem
   actions?: ReactNode
   children?: ReactNode
+}
+
+function PersonName({ href, name }: { href?: string | null; name: string }) {
+  if (!href) return <>{name}</>
+  return (
+    <Link
+      href={href}
+      className="font-medium underline-offset-2 hover:underline"
+    >
+      {name}
+    </Link>
+  )
 }
 
 export function FriendAnsweredCard({
@@ -23,11 +36,15 @@ export function FriendAnsweredCard({
       eyebrow={<span>Friend answered</span>}
       actions={actions}
     >
-      {children ?? (
-        <p>
-          {item.answerSummary ?? `${item.friendName} answered this question.`}
-        </p>
-      )}
+      {children ??
+        (item.answerSummary ? (
+          <p>{item.answerSummary}</p>
+        ) : (
+          <p>
+            <PersonName href={item.friendHref} name={item.friendName} />{' '}
+            answered this question.
+          </p>
+        ))}
     </FeedCard>
   )
 }

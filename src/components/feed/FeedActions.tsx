@@ -1,19 +1,166 @@
 'use client'
 
-import { MoreHorizontal } from 'lucide-react'
+import { Flag, MoreHorizontal, X } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 
+import { AddToBankAction } from '@/components/AddToBankAction'
+import { SendQuestionAction } from '@/components/SendQuestionAction'
 import { Button } from '@/components/ui/button'
+import { visibleFeedCategory } from './category'
+
+export type FeedOverflowQuestion = {
+  id: string
+  text: string
+  domain?: string | null
+}
+
+export type FeedOverflowMenuProps = {
+  sourceName: string
+  category?: string | null
+  question?: FeedOverflowQuestion | null
+  isInBank?: boolean
+  disabled?: boolean
+  onHideCategory?: () => void
+  onHidePerson?: () => void
+  onReport?: () => void
+  children?: ReactNode
+}
+
+function MenuButton({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: ReactNode
+  disabled?: boolean
+  onClick?: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="text-foreground hover:bg-muted flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {children}
+    </button>
+  )
+}
+
+export function FeedOverflowMenu({
+  sourceName,
+  category,
+  question,
+  isInBank = false,
+  disabled = false,
+  onHideCategory,
+  onHidePerson,
+  onReport,
+  children,
+}: FeedOverflowMenuProps) {
+  const [open, setOpen] = useState(false)
+  const visibleCategory = visibleFeedCategory(category)
+
+  const wrapAction = (action?: () => void) => {
+    if (!action) return undefined
+    return () => {
+      action()
+      setOpen(false)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="More Feed actions"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        className="flex size-9 items-center justify-center rounded-lg border border-stone-300 bg-white/70 text-stone-700 transition hover:bg-white disabled:opacity-50"
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+      {open ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:block sm:bg-transparent sm:p-0">
+          <button
+            className="absolute inset-0 cursor-default sm:hidden"
+            type="button"
+            aria-label="Close Feed actions"
+            onClick={() => setOpen(false)}
+          />
+          <div className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl sm:shadow-xl">
+            <div className="flex items-center justify-between px-3 py-2 sm:hidden">
+              <p className="text-foreground text-sm font-medium">
+                More actions
+              </p>
+              <button
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setOpen(false)}
+                className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            {visibleCategory ? (
+              <MenuButton
+                disabled={disabled}
+                onClick={wrapAction(onHideCategory)}
+              >
+                Hide this category
+              </MenuButton>
+            ) : null}
+            <MenuButton disabled={disabled} onClick={wrapAction(onHidePerson)}>
+              Hide questions from {sourceName || 'this person'}
+            </MenuButton>
+            {question && !isInBank ? (
+              <AddToBankAction
+                questionId={question.id}
+                initialInBank={false}
+                contextType="feed"
+                label="Add to bank"
+                className="hover:bg-muted flex min-h-10 w-full justify-start rounded-xl border-0 px-3 text-left text-sm"
+              />
+            ) : null}
+            {question ? (
+              <SendQuestionAction
+                question={{
+                  id: question.id,
+                  text: question.text,
+                  domain: question.domain ?? '',
+                }}
+                label="Send to friend"
+                className="text-foreground hover:bg-muted flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm transition"
+              />
+            ) : null}
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={wrapAction(onReport)}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-10 w-full items-center gap-2 rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
+            >
+              <Flag className="size-4" />
+              Report
+            </button>
+            {children}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 export type UnansweredFeedActionsProps = {
   onAnswer: () => void
   disabled?: boolean
-  onDismiss?: () => void
+  overflow: ReactNode
 }
 
 export function UnansweredFeedActions({
   onAnswer,
   disabled = false,
-  onDismiss,
+  overflow,
 }: UnansweredFeedActionsProps) {
   return (
     <div className="flex items-center gap-2">
@@ -25,29 +172,7 @@ export function UnansweredFeedActions({
       >
         Answer
       </Button>
-      <div className="relative">
-        <details className="group">
-          <summary className="flex size-8 cursor-pointer list-none items-center justify-center rounded-lg border border-stone-300 bg-white/70 text-stone-700 transition hover:bg-white [&::-webkit-details-marker]:hidden">
-            <MoreHorizontal className="size-4" aria-label="More options" />
-          </summary>
-          <div className="absolute right-0 z-10 mt-2 min-w-32 rounded-lg border border-stone-200 bg-white p-2 shadow-lg">
-            {onDismiss ? (
-              <button
-                type="button"
-                onClick={onDismiss}
-                disabled={disabled}
-                className="w-full rounded-md px-2 py-1.5 text-left text-sm font-medium text-sky-700 hover:bg-sky-50 disabled:opacity-50"
-              >
-                Dismiss
-              </button>
-            ) : (
-              <p className="text-muted-foreground px-2 py-1.5 text-sm">
-                More soon
-              </p>
-            )}
-          </div>
-        </details>
-      </div>
+      {overflow}
     </div>
   )
 }
