@@ -9,6 +9,7 @@ import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
 import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
 import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
+import { RecentlyExpanding, type ExpandingDomain } from '@/components/knowledge/RecentlyExpanding';
 import { AskFriendForDomain } from '@/components/knowledge/AskFriendForDomain';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
@@ -40,6 +41,7 @@ type KnowledgeResponse = {
   pageData: {
     allDomains: DomainMastery[];
     declaredInterests: string[];
+    expandingDomains: ExpandingDomain[];
   };
 };
 
@@ -170,9 +172,6 @@ function KnowledgePageContent() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError(null);
-
     const loadDismissedDomains = async () => {
       try {
         const response = await fetch('/api/feed/dismissed-domains', { cache: 'no-store', credentials: 'include' });
@@ -183,6 +182,7 @@ function KnowledgePageContent() {
       }
     };
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial page hydration is fetched client-side for this route.
     Promise.all([loadKnowledge(), loadDismissedDomains()])
       .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : 'Could not load your Knowledge Map.');
@@ -207,19 +207,22 @@ function KnowledgePageContent() {
     const url = new URL(window.location.href);
     url.searchParams.delete('interests');
     window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
-    setManageInterestsOpen(true);
+    window.setTimeout(() => setManageInterestsOpen(true), 0);
   }, [manageInterestsParam]);
 
   useEffect(() => {
     if (!highlightedDomainSlug) return;
-    setActiveSlug(highlightedDomainSlug);
+    const activateTimer = window.setTimeout(() => setActiveSlug(highlightedDomainSlug), 0);
     const timer = window.setTimeout(() => {
       const url = new URL(window.location.href);
       url.searchParams.delete('domain');
       window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
       setActiveSlug(null);
     }, 900);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(activateTimer);
+      window.clearTimeout(timer);
+    };
   }, [highlightedDomainSlug]);
 
   const sortedDomains = useMemo(
@@ -243,6 +246,11 @@ function KnowledgePageContent() {
   }, [data, declaredKeys]);
 
   const topCardDomains = useMemo(() => sortedDomains.filter((domain) => domain.points > 0).slice(0, 5), [sortedDomains]);
+  const expandingDomains = data?.pageData.expandingDomains ?? [];
+  const showShareNotice = (message: string) => {
+    setQuestionToast(message);
+    window.setTimeout(() => setQuestionToast(null), 2200);
+  };
   const yourMind = data ? displayMind(sortedDomains, data.pageData.declaredInterests) : '';
   const displayName = 'You';
   const hasAnything = sortedDomains.length > 0;
@@ -457,6 +465,7 @@ function KnowledgePageContent() {
         </section>
       )}
 
+      <RecentlyExpanding domains={expandingDomains} playerDisplayName={displayName} onNotice={showShareNotice} />
 
       {emptyQuestionDomain ? (
         <section style={emptyQuestionStateStyle} aria-label={`No ${emptyQuestionDomain} questions yet`}>
@@ -492,7 +501,7 @@ function KnowledgePageContent() {
       {dismissedDomains.length > 0 && (
         <section style={sectionStyle} aria-label="Dismissed domains">
           <p style={knowledgeEyebrowStyle}>FOCUSED FEED</p>
-          <p style={knowledgeSubtitleStyle}>DOMAINS YOU'VE HIDDEN FROM YOUR FEED — RE-OPEN ANY TIME</p>
+          <p style={knowledgeSubtitleStyle}>DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — RE-OPEN ANY TIME</p>
           <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {dismissedDomains.map((domain) => (
               <div key={domain} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
