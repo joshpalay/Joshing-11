@@ -624,7 +624,7 @@ export default function FeedList({
   const filterOptions: Array<{ value: FeedFilter; label: string }> = [
     { value: 'all', label: 'All' },
     { value: 'sent-to-me', label: 'Sent to me' },
-    { value: 'from-friends', label: 'From friends' },
+    { value: 'from-friends', label: 'From friends only' },
   ]
 
   return (
@@ -733,6 +733,7 @@ export default function FeedList({
                     }))
                   }
                   disabled={isBusy}
+                  loading={isBusy}
                 />
               ) : cardState === 'unanswered' ? (
                 <UnansweredFeedActions
