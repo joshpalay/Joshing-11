@@ -81,14 +81,6 @@ export async function POST(request: NextRequest) {
 
   const created = await createQuestion({ authorId: session.userId, ...categorizedQuestionFields });
   console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: categorizedQuestionFields.verified, category: categorizedQuestionFields.category, canonicalSubcategory: categorizedQuestionFields.canonicalSubcategory, difficultyTier: difficultyAssessment.tier });
-  const kbResult = await openKBDomain({
-    userId: session.userId,
-    domain: categorizedQuestionFields.canonicalSubcategory,
-    via: 'authorship',
-    broadCategory: categorizedQuestionFields.broadCategory,
-    questionId: created.id,
-  });
-  const question = await getQuestion(created.id, session.userId);
   const feedShare = {
     requested: shareToFeed,
     createdCount: 0,
@@ -218,12 +210,32 @@ export async function POST(request: NextRequest) {
     await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
   }
 
+  let openedDomain: string | null = null;
+  try {
+    const kbResult = await openKBDomain({
+      userId: session.userId,
+      domain: categorizedQuestionFields.canonicalSubcategory,
+      via: 'authorship',
+      broadCategory: categorizedQuestionFields.broadCategory,
+      questionId: created.id,
+    });
+    openedDomain = kbResult.opened ? categorizedQuestionFields.canonicalSubcategory : null;
+  } catch (error) {
+    console.error('[questions/create] openKBDomain failed after question save/share; continuing response', {
+      questionId: created.id,
+      userId: session.userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const question = await getQuestion(created.id, session.userId);
+
   return NextResponse.json(
     {
       ...created,
       question,
       ...(question ?? {}),
-      openedDomain: kbResult.opened ? categorizedQuestionFields.canonicalSubcategory : null,
+      openedDomain,
       feedShare,
     },
     { status: 201 },
