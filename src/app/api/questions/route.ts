@@ -107,11 +107,21 @@ export async function POST(request: NextRequest) {
     }
 
     let sharedCount = 0;
+    const sharedRecipientIds: string[] = [];
+    const skippedDismissedDomainRecipientIds: string[] = [];
+    const skippedExistingFeedRecipientIds: string[] = [];
+
     for (const friend of friends) {
-      if (dismissedRecipientIds.has(friend.id)) continue;
+      if (dismissedRecipientIds.has(friend.id)) {
+        skippedDismissedDomainRecipientIds.push(friend.id);
+        continue;
+      }
 
       const alreadyInFeed = await userHasQuestionInBlockingFeed(friend.id, created.id);
-      if (alreadyInFeed) continue;
+      if (alreadyInFeed) {
+        skippedExistingFeedRecipientIds.push(friend.id);
+        continue;
+      }
 
       await db.insert(feedItems).values({
         recipientUserId: friend.id,
@@ -122,6 +132,7 @@ export async function POST(request: NextRequest) {
         state: 'active',
       });
       await rollOffOldItems(friend.id);
+      sharedRecipientIds.push(friend.id);
       sharedCount += 1;
     }
 
@@ -136,7 +147,11 @@ export async function POST(request: NextRequest) {
       userId: session.userId,
       friendCount: friends.length,
       sharedCount,
-      skippedDismissedDomainCount: dismissedRecipientIds.size,
+      sharedRecipientIds,
+      skippedDismissedDomainCount: skippedDismissedDomainRecipientIds.length,
+      skippedDismissedDomainRecipientIds,
+      skippedExistingFeedCount: skippedExistingFeedRecipientIds.length,
+      skippedExistingFeedRecipientIds,
     });
   }
 

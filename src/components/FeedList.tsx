@@ -42,6 +42,10 @@ type FeedMeta = {
   total_item_count: number;
   active_item_count: number;
   pre_filter_active_count: number;
+  page_item_count?: number;
+  limit?: number;
+  offset?: number;
+  has_more?: boolean;
 };
 
 type FeedResponse = {
@@ -114,7 +118,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/feed', { cache: 'no-store', credentials: 'include' });
+      const response = await fetch(`/api/feed?limit=${encodeURIComponent(String(limit))}`, { cache: 'no-store', credentials: 'include' });
       const body = await response.json().catch(() => null) as FeedResponse | { message?: string } | null;
       if (!response.ok || !body || !('items' in body)) {
         throw new Error((body as { message?: string } | null)?.message ?? 'Could not load your Feed.');
@@ -130,7 +134,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [limit]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -152,6 +156,22 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
     if (feedMeta.total_item_count > 0) return "You're caught up. Answer questions to reveal more common ground.";
     return "Answer questions to reveal common ground.";
   }, [error, feedMeta, loading]);
+
+  const emptyDiagnostics = useMemo(() => {
+    if (process.env.NODE_ENV === 'production' || !feedMeta) return null;
+
+    return [
+      `has_friends=${String(feedMeta.has_friends)}`,
+      `has_dismissed_domains=${String(feedMeta.has_dismissed_domains)}`,
+      `total_item_count=${feedMeta.total_item_count}`,
+      `pre_filter_active_count=${feedMeta.pre_filter_active_count}`,
+      `active_item_count=${feedMeta.active_item_count}`,
+      `page_item_count=${feedMeta.page_item_count ?? items.length}`,
+      `limit=${feedMeta.limit ?? limit}`,
+      `offset=${feedMeta.offset ?? 0}`,
+      `has_more=${String(feedMeta.has_more ?? false)}`,
+    ].join(' · ');
+  }, [feedMeta, items.length, limit]);
 
   const showToast = useCallback((itemId: string, message: string) => {
     setToasts((t) => ({ ...t, [itemId]: message }));
@@ -261,6 +281,11 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
       {visibleItems.length === 0 ? (
         <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
           <p className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>{emptyCopy}</p>
+          {emptyDiagnostics ? (
+            <p className="max-w-xl break-words rounded bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
+              {emptyDiagnostics}
+            </p>
+          ) : null}
           {/*
             // v11.1: Joshing Game creation disabled at FAB level. Re-enable
             // when game creation flow is restored.
