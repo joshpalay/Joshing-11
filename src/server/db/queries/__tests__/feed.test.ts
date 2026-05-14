@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { dbMock, state } = vi.hoisted(() => {
   type Predicate =
@@ -22,6 +22,8 @@ const { dbMock, state } = vi.hoisted(() => {
     state: string;
     isPinned: boolean;
     joshingGameId: string | null;
+    submittedAnswer?: string | null;
+    quip?: string | null;
   };
 
   type QuestionRow = {
@@ -141,6 +143,11 @@ vi.mock('@/server/db/pg-error', () => ({ pgErrorCode: vi.fn(() => null) }));
 import { getFeedForUser } from '@/server/db/queries/feed';
 
 describe('getFeedForUser feed visibility', () => {
+  beforeEach(() => {
+    state.feedRows = [];
+    state.questionRows = [];
+  });
+
   it('returns an active pinned direct_sent feed item', async () => {
     const sourceEventAt = new Date('2026-05-14T12:00:00.000Z');
     state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
@@ -168,6 +175,100 @@ describe('getFeedForUser feed visibility', () => {
         isPinned: true,
       }),
     ]);
+    expect(result.totalCount).toBe(1);
+  });
+
+  it('keeps answered direct_sent items visible even if they were pinned before answer', async () => {
+    const sourceEventAt = new Date('2026-05-14T12:00:00.000Z');
+    state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
+    state.feedRows = [{
+      id: 'feed-answered-1',
+      recipientUserId: 'recipient-1',
+      questionId: 'question-1',
+      sourceType: 'direct_sent',
+      sourceUserId: 'sender-1',
+      sourceResult: null,
+      sourceEventAt,
+      personalMessage: 'Try this one.',
+      state: 'answered',
+      isPinned: true,
+      joshingGameId: null,
+      submittedAnswer: 'wrong guess',
+      quip: 'Not quite.',
+    }];
+
+    const result = await getFeedForUser('recipient-1');
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'feed-answered-1',
+        sourceType: 'direct_sent',
+        state: 'answered',
+        isPinned: true,
+      }),
+    ]);
+    expect(result.totalCount).toBe(1);
+  });
+
+  it('filters out incorrect public friend_answered items', async () => {
+    state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
+    state.feedRows = [{
+      id: 'feed-wrong-friend-1',
+      recipientUserId: 'recipient-1',
+      questionId: 'question-1',
+      sourceType: 'friend_answered',
+      sourceUserId: 'friend-1',
+      sourceResult: 'incorrect',
+      sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+      personalMessage: null,
+      state: 'active',
+      isPinned: false,
+      joshingGameId: null,
+    }];
+
+    const result = await getFeedForUser('recipient-1');
+
+    expect(result.items).toEqual([]);
+    expect(result.totalCount).toBe(0);
+  });
+
+  it('applies the sent-to-me Feed filter', async () => {
+    state.questionRows = [
+      { id: 'question-direct', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+      { id: 'question-friend', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-direct-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-direct',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+      {
+        id: 'feed-friend-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-friend',
+        sourceType: 'authored_shared',
+        sourceUserId: 'friend-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T11:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+    ];
+
+    const result = await getFeedForUser('recipient-1', { filter: 'sent-to-me' });
+
+    expect(result.items.map((item) => item.id)).toEqual(['feed-direct-1']);
     expect(result.totalCount).toBe(1);
   });
 });

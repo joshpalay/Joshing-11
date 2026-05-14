@@ -2,10 +2,10 @@ import { and, count, eq, inArray, or } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, friendships, questions, users } from '@/server/db';
+import { db, feedItems, friendships, masteryEvents, playerMastery, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem, type FeedCursor } from '@/server/db/queries/feed';
-import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE, socialFeedDomainLabel, visibleFeedSourcePredicate } from '@/server/feed/visibility';
+import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem, type FeedCursor, type FeedFilter } from '@/server/db/queries/feed';
+import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE, THUMBS_UPPED_FEED_SOURCE_TYPE, socialFeedDomainLabel, visibleFeedSourcePredicate } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +15,22 @@ const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
 
 type ParsedPagination =
-  | { limit: number; cursor: FeedCursor | null }
+  | { limit: number; cursor: FeedCursor | null; filter: FeedFilter }
   | { error: string };
+
+type FeedCardType = 'direct_sent' | 'friend_answered' | 'friend_added' | 'friend_liked' | 'answered_by_you';
+
+type AnsweredResult = {
+  correct: boolean | null;
+  answer_state: string | null;
+  correct_answer: string | null;
+  submitted_answer: string | null;
+  awarded_points: number | null;
+  base_points: number | null;
+  explanation: string | null;
+  quip: string | null;
+  unverified_answer: boolean;
+};
 
 function encodeCursor(cursor: FeedCursor | null): string | null {
   if (!cursor) return null;
@@ -47,6 +61,7 @@ function decodeCursor(value: string): FeedCursor | null {
 function parsePagination(request: NextRequest): ParsedPagination {
   const limitParam = request.nextUrl.searchParams.get('limit');
   const cursorParam = request.nextUrl.searchParams.get('cursor');
+  const filterParam = request.nextUrl.searchParams.get('filter') ?? 'all';
   const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : DEFAULT_PAGE_LIMIT;
 
   const limit = Number.isFinite(parsedLimit)
@@ -55,8 +70,9 @@ function parsePagination(request: NextRequest): ParsedPagination {
   const cursor = cursorParam ? decodeCursor(cursorParam) : null;
 
   if (cursorParam && !cursor) return { error: 'invalid_cursor' };
+  if (!['all', 'sent-to-me', 'from-friends'].includes(filterParam)) return { error: 'invalid_filter' };
 
-  return { limit, cursor };
+  return { limit, cursor, filter: filterParam as FeedFilter };
 }
 
 function displayName(name: string | null, fallback = 'A friend') {
@@ -69,6 +85,45 @@ function authoredSharedAttribution(sourceName: string, domain: string | null): s
 
 function directSentAttribution(sourceName: string, domain: string | null): string {
   return domain ? `${sourceName} sent you a question — ${domain}` : `${sourceName} sent you a question`;
+}
+
+function cardTypeForItem(item: CollapsedFeedItem): FeedCardType {
+  if (item.state === 'answered') return 'answered_by_you';
+  if (item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE) return 'direct_sent';
+  if (item.sourceType === SOCIAL_FEED_SOURCE_TYPE && item.sourceResult === 'correct') return 'friend_answered';
+  if (item.sourceType === AUTHORED_SHARED_FEED_SOURCE_TYPE) return 'friend_added';
+  if (item.sourceType === THUMBS_UPPED_FEED_SOURCE_TYPE) return 'friend_liked';
+  return 'friend_answered';
+}
+
+function answerIdForFeedItem(item: CollapsedFeedItem, viewerUserId: string): string | null {
+  if (item.state !== 'answered' || !item.questionId) return null;
+  return `feed:${item.id}:${item.questionId}:${viewerUserId}`;
+}
+
+function answeredResultForItem(params: {
+  item: CollapsedFeedItem;
+  answerEvent: { answerState: string | null; awardedPoints: number; basePoints: number } | undefined;
+  question: { answerText?: string | null; explainerFull?: string | null; explainerBrief?: string | null; factualExplanation?: string | null; verified?: boolean | null } | undefined;
+}): AnsweredResult | null {
+  const { item, answerEvent, question } = params;
+  if (item.state !== 'answered') return null;
+
+  return {
+    correct: answerEvent?.answerState ? answerEvent.answerState !== 'incorrect' : null,
+    answer_state: answerEvent?.answerState ?? null,
+    correct_answer: question?.answerText ?? null,
+    submitted_answer: item.submittedAnswer ?? null,
+    awarded_points: typeof answerEvent?.awardedPoints === 'number' ? answerEvent.awardedPoints : null,
+    base_points: typeof answerEvent?.basePoints === 'number' ? answerEvent.basePoints : null,
+    explanation: question?.explainerFull ?? question?.explainerBrief ?? question?.factualExplanation ?? null,
+    quip: item.quip ?? null,
+    unverified_answer: question?.verified === false,
+  };
+}
+
+function friendLikedAttribution(sourceName: string, domain: string | null): string {
+  return domain ? `${sourceName} liked a question — ${domain}` : `${sourceName} liked a question`;
 }
 
 function friendAnsweredAttribution(
@@ -101,10 +156,10 @@ export async function GET(request: NextRequest) {
   const pagination = parsePagination(request);
   if ('error' in pagination) return NextResponse.json({ error: pagination.error }, { status: 400 });
 
-  const { limit, cursor } = pagination;
+  const { limit, cursor, filter } = pagination;
 
   const [feedPage, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
-    getFeedForUser(session.userId, { limit, cursor }),
+    getFeedForUser(session.userId, { limit, cursor, filter }),
     db
       .select({ value: count() })
       .from(friendships)
@@ -143,6 +198,7 @@ export async function GET(request: NextRequest) {
   console.info('[feed/get]', {
     userId: session.userId,
     limit,
+    filter,
     cursorPresent: Boolean(cursor),
     friendCount,
     dismissedDomainCount: dismissedDomains.length,
@@ -168,6 +224,25 @@ export async function GET(request: NextRequest) {
     checkBankedQuestions(session.userId, questionIds),
   ]);
 
+  const answerIdsByFeedItemId = new Map(
+    feed
+      .map((item) => [item.id, answerIdForFeedItem(item, session.userId)] as const)
+      .filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
+  );
+  const answerIds = [...answerIdsByFeedItemId.values()];
+  const answerEventRows = answerIds.length
+    ? await db
+      .select({
+        answerId: masteryEvents.answerId,
+        answerState: masteryEvents.answerState,
+        awardedPoints: masteryEvents.awardedPoints,
+        basePoints: masteryEvents.basePoints,
+      })
+      .from(masteryEvents)
+      .where(inArray(masteryEvents.answerId, answerIds))
+    : [];
+  const answerEventByAnswerId = new Map(answerEventRows.map((event) => [event.answerId, event]));
+
   const questionById = new Map(questionRows.map((q) => [q.id, q]));
   const userIds = [...new Set([
     ...feed.map((item) => item.sourceUserId),
@@ -177,6 +252,18 @@ export async function GET(request: NextRequest) {
     ? await db.select({ id: users.id, displayName: users.displayName }).from(users).where(inArray(users.id, userIds))
     : [];
   const userById = new Map(userRows.map((u) => [u.id, u]));
+  const masteryDomains = [...new Set(questionRows.map((question) => question.canonicalSubcategory ?? question.broadCategory ?? question.category).filter((domain): domain is string => Boolean(domain)))];
+  const masteryRows = masteryDomains.length
+    ? await db
+      .select({
+        canonicalSubcategory: playerMastery.canonicalSubcategory,
+        totalPoints: playerMastery.totalPoints,
+        tier: playerMastery.tier,
+      })
+      .from(playerMastery)
+      .where(and(eq(playerMastery.userId, session.userId), inArray(playerMastery.canonicalSubcategory, masteryDomains)))
+    : [];
+  const masteryByDomain = new Map(masteryRows.map((row) => [row.canonicalSubcategory, row]));
 
   return NextResponse.json({
     viewer_user_id: session.userId,
@@ -188,6 +275,7 @@ export async function GET(request: NextRequest) {
       pre_filter_active_count: preFilterActiveCount,
       page_item_count: pageItemCount,
       limit,
+      filter,
       cursor: cursor ? encodeCursor(cursor) : null,
       next_cursor: nextCursor,
       has_more: feedPage.hasMore,
@@ -200,10 +288,21 @@ export async function GET(request: NextRequest) {
       const sourceName = displayName(sourceUser?.displayName ?? null);
       const authorName = displayName(question?.creatorId ? userById.get(question.creatorId)?.displayName ?? null : null, 'the author');
       const domain = socialFeedDomainLabel(question);
+      const rawDomain = question?.canonicalSubcategory ?? question?.broadCategory ?? question?.category ?? null;
+      const answerId = answerIdsByFeedItemId.get(item.id) ?? null;
+      const answeredResult = answeredResultForItem({
+        item,
+        answerEvent: answerId ? answerEventByAnswerId.get(answerId) : undefined,
+        question,
+      });
+      const cardType = cardTypeForItem(item);
+      const masteryProgress = rawDomain ? masteryByDomain.get(rawDomain) : undefined;
 
       return {
         id: item.id,
         kind: 'question',
+        card_type: cardType,
+        type: cardType,
         question_id: item.questionId,
         joshing_game_id: item.joshingGameId,
         source_type: item.sourceType,
@@ -214,12 +313,14 @@ export async function GET(request: NextRequest) {
           ? authoredSharedAttribution(sourceName, domain)
           : item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE
             ? directSentAttribution(sourceName, domain)
-            : friendAnsweredAttribution(item, userById, domain, authorName),
+            : item.sourceType === THUMBS_UPPED_FEED_SOURCE_TYPE
+              ? friendLikedAttribution(sourceName, domain)
+              : friendAnsweredAttribution(item, userById, domain, authorName),
         friend_results: item.friendResults ?? null,
         source_event_at: item.sourceEventAt,
         personal_message: item.personalMessage,
         state: item.state,
-        is_pinned: item.isPinned,
+        is_pinned: item.state === 'answered' ? false : item.isPinned,
         question_text: question?.questionText ?? null,
         verified: question?.verified ?? true,
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
@@ -227,6 +328,20 @@ export async function GET(request: NextRequest) {
         domain_pill: domain,
         game_title: null,
         difficulty: question?.calibratedDifficulty ?? question?.llmDifficulty ?? question?.difficultyEstimate ?? null,
+        answered_by_you: answeredResult,
+        answer_result: answeredResult,
+        original_source: {
+          source_type: item.sourceType,
+          source_user_id: item.sourceUserId,
+          source_result: item.sourceResult ?? null,
+          source_event_at: item.sourceEventAt,
+          personal_message: item.personalMessage,
+        },
+        mastery_progress: masteryProgress ? {
+          domain: masteryProgress.canonicalSubcategory,
+          total_points: masteryProgress.totalPoints,
+          tier: masteryProgress.tier,
+        } : null,
       };
     }),
   });

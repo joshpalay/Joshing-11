@@ -157,13 +157,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  // Propagate this answer to the answering user's friends' Feeds
-  await createFeedItemsForFriendsFromAnswer(
-    session.userId,
-    question.id,
-    isCorrect ? 'correct' : 'incorrect',
-    `feed:${feedItemId}:${session.userId}`,
-  );
+  // Only correct answers may create public/social friend Feed cards.
+  // Wrong answers persist privately on this FeedItem as answered_by_you.
+  if (isCorrect) {
+    await createFeedItemsForFriendsFromAnswer(
+      session.userId,
+      question.id,
+      'correct',
+      `feed:${feedItemId}:${session.userId}`,
+    );
+  }
 
   if (!isCorrect) {
     void promptCreatorNoteAfterWrongAnswer({

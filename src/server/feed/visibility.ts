@@ -5,10 +5,12 @@ import type { feedItems, questions } from '@/server/db';
 export const SOCIAL_FEED_SOURCE_TYPE = 'friend_answered' as const;
 export const AUTHORED_SHARED_FEED_SOURCE_TYPE = 'authored_shared' as const;
 export const DIRECT_SENT_FEED_SOURCE_TYPE = 'direct_sent' as const;
+export const THUMBS_UPPED_FEED_SOURCE_TYPE = 'thumbs_upped' as const;
 
 export const ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES = [
   AUTHORED_SHARED_FEED_SOURCE_TYPE,
   DIRECT_SENT_FEED_SOURCE_TYPE,
+  THUMBS_UPPED_FEED_SOURCE_TYPE,
 ] as const;
 
 export const RESULT_GATED_MAIN_FEED_SOURCE_TYPES = {
@@ -18,6 +20,7 @@ export const RESULT_GATED_MAIN_FEED_SOURCE_TYPES = {
 export const QUESTION_SHARING_FEED_SOURCE_VISIBILITY = [
   { sourceType: AUTHORED_SHARED_FEED_SOURCE_TYPE, sourceResult: null, visible: true, reason: null },
   { sourceType: DIRECT_SENT_FEED_SOURCE_TYPE, sourceResult: null, visible: true, reason: null },
+  { sourceType: THUMBS_UPPED_FEED_SOURCE_TYPE, sourceResult: null, visible: true, reason: null },
   { sourceType: SOCIAL_FEED_SOURCE_TYPE, sourceResult: 'correct', visible: true, reason: null },
   {
     sourceType: SOCIAL_FEED_SOURCE_TYPE,
@@ -63,6 +66,7 @@ export function visibleFeedSourcePredicate(feedItemColumns: FeedItemsVisibilityC
   return or(
     eq(feedItemColumns.sourceType, AUTHORED_SHARED_FEED_SOURCE_TYPE),
     eq(feedItemColumns.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
+    eq(feedItemColumns.sourceType, THUMBS_UPPED_FEED_SOURCE_TYPE),
     and(
       eq(feedItemColumns.sourceType, SOCIAL_FEED_SOURCE_TYPE),
       eq(feedItemColumns.sourceResult, 'correct'),

@@ -15,9 +15,25 @@ type FriendResult = {
   result: 'correct' | 'incorrect' | null;
 };
 
+type AnsweredByYouPayload = {
+  correct: boolean | null;
+  answer_state: string | null;
+  correct_answer: string | null;
+  submitted_answer: string | null;
+  awarded_points: number | null;
+  base_points: number | null;
+  explanation: string | null;
+  quip: string | null;
+  unverified_answer: boolean;
+};
+
+type FeedCardType = 'direct_sent' | 'friend_answered' | 'friend_added' | 'friend_liked' | 'answered_by_you';
+
 type FeedApiItem = {
   id: string;
   kind: 'question';
+  card_type?: FeedCardType;
+  type?: FeedCardType;
   question_id: string | null;
   source_type: string;
   source_user_id: string;
@@ -34,6 +50,8 @@ type FeedApiItem = {
   is_in_bank: boolean;
   domain_pill: string | null;
   difficulty: string | null;
+  answered_by_you?: AnsweredByYouPayload | null;
+  answer_result?: AnsweredByYouPayload | null;
 };
 
 type FeedMeta = {
@@ -79,7 +97,21 @@ type ResultState = {
   explanation: string | null;
   quip: string | null;
   breadcrumb: string | null;
+  submittedAnswer?: string | null;
 };
+
+function resultFromAnsweredPayload(payload: AnsweredByYouPayload | null | undefined): ResultState | null {
+  if (!payload) return null;
+
+  return {
+    correct: payload.correct ?? (payload.answer_state ? payload.answer_state !== 'incorrect' : false),
+    answer: payload.correct_answer ?? '',
+    explanation: payload.explanation ?? null,
+    quip: payload.quip ?? null,
+    breadcrumb: null,
+    submittedAnswer: payload.submitted_answer,
+  };
+}
 
 function formatEventTime(value: string) {
   const date = new Date(value);
@@ -144,6 +176,22 @@ export default function FeedList({ pageSize = 20, infinite = false }: FeedListPr
       setViewerId(body.viewer_user_id);
       setFeedMeta(body.meta ?? null);
       setItems((current) => (isNextPage ? [...current, ...body.items] : body.items));
+      setResults((current) => {
+        const hydrated = Object.fromEntries(
+          body.items
+            .map((item) => [item.id, resultFromAnsweredPayload(item.answered_by_you ?? item.answer_result)] as const)
+            .filter((entry): entry is readonly [string, ResultState] => Boolean(entry[1])),
+        );
+        return isNextPage ? { ...current, ...hydrated } : hydrated;
+      });
+      setCardStates((current) => {
+        const hydrated = Object.fromEntries(
+          body.items
+            .filter((item) => (item.card_type ?? item.type) === 'answered_by_you' || item.state === 'answered')
+            .map((item) => [item.id, 'answered' as QuestionCardState]),
+        );
+        return isNextPage ? { ...current, ...hydrated } : hydrated;
+      });
       setNextCursor(body.next_cursor ?? body.meta?.next_cursor ?? null);
       setHasMore(Boolean(body.has_more ?? body.meta?.has_more));
 
@@ -341,7 +389,7 @@ export default function FeedList({ pageSize = 20, infinite = false }: FeedListPr
         <section className="space-y-3 pb-8">
           {visibleItems.map((item) => {
             const result = results[item.id];
-            const cardState = cardStates[item.id] ?? (item.state === 'answered' ? 'answered' : 'unanswered');
+            const cardState = cardStates[item.id] ?? ((item.card_type ?? item.type) === 'answered_by_you' || item.state === 'answered' ? 'answered' : 'unanswered');
             const toast = toasts[item.id];
 
 
@@ -409,6 +457,7 @@ export default function FeedList({ pageSize = 20, infinite = false }: FeedListPr
                         ? comparisonCopy(result.correct, item.friend_results)
                         : result.correct ? 'This one connected.' : 'Not quite.'}
                     </p>
+                    {result.submittedAnswer ? <p className="mt-1">You answered: {result.submittedAnswer}</p> : null}
                     {!result.correct ? <p className="mt-1">Answer: {result.answer}</p> : null}
                     {result.explanation ? <p className="mt-1 text-muted-foreground">{result.explanation}</p> : null}
                     {result.quip ? <p className="mt-1 text-muted-foreground">{result.quip}</p> : null}

@@ -31,7 +31,20 @@ const { checkBankedQuestionsMock, dbMock, getDismissedDomainsMock, getFeedForUse
             calibratedDifficulty: null,
             llmDifficulty: null,
             difficultyEstimate: null,
+            answerText: 'Correct answer',
+            explainerFull: 'A stored full explanation.',
           }]);
+        }
+        if ((selection as { answerId?: unknown })?.answerId) {
+          return thenable([{
+            answerId: 'feed:feed-answered-1:question-1:recipient-1',
+            answerState: 'incorrect',
+            awardedPoints: 0,
+            basePoints: 0,
+          }]);
+        }
+        if ((selection as { canonicalSubcategory?: unknown; totalPoints?: unknown; tier?: unknown })?.canonicalSubcategory) {
+          return thenable([{ canonicalSubcategory: 'Music', totalPoints: 12, tier: 'familiar' }]);
         }
         if ((selection as { id?: unknown; displayName?: unknown })?.id && (selection as { id?: unknown; displayName?: unknown })?.displayName) {
           return thenable([
@@ -66,11 +79,25 @@ vi.mock('@/server/db', () => ({
   feedItems: {
     recipientUserId: 'feedItems.recipientUserId',
     state: 'feedItems.state',
+    sourceType: 'feedItems.sourceType',
+    sourceResult: 'feedItems.sourceResult',
   },
   friendships: {
     status: 'friendships.status',
     userAId: 'friendships.userAId',
     userBId: 'friendships.userBId',
+  },
+  masteryEvents: {
+    answerId: 'masteryEvents.answerId',
+    answerState: 'masteryEvents.answerState',
+    awardedPoints: 'masteryEvents.awardedPoints',
+    basePoints: 'masteryEvents.basePoints',
+  },
+  playerMastery: {
+    userId: 'playerMastery.userId',
+    canonicalSubcategory: 'playerMastery.canonicalSubcategory',
+    totalPoints: 'playerMastery.totalPoints',
+    tier: 'playerMastery.tier',
   },
   questions: 'questions',
   users: {
@@ -99,6 +126,8 @@ describe('GET /api/feed', () => {
         personalMessage: 'Try this one.',
         state: 'active',
         isPinned: true,
+        submittedAnswer: null,
+        quip: null,
       }],
       nextCursor: null,
       hasMore: false,
@@ -114,6 +143,8 @@ describe('GET /api/feed', () => {
     expect(body.items).toEqual([
       expect.objectContaining({
         id: 'feed-direct-1',
+        card_type: 'direct_sent',
+        type: 'direct_sent',
         source_type: 'direct_sent',
         state: 'active',
         is_pinned: true,
@@ -123,5 +154,64 @@ describe('GET /api/feed', () => {
       }),
     ]);
     expect(body.meta.active_item_count).toBe(1);
+  });
+
+  it('passes the Feed filter query param to the feed query', async () => {
+    const response = await GET(new Request('https://joshing.example/api/feed?filter=sent-to-me') as never);
+
+    expect(response.status).toBe(200);
+    expect(getFeedForUserMock).toHaveBeenCalledWith('recipient-1', expect.objectContaining({ filter: 'sent-to-me' }));
+  });
+
+  it('returns durable answered_by_you card data for answered Feed items', async () => {
+    getFeedForUserMock.mockResolvedValueOnce({
+      items: [{
+        id: 'feed-answered-1',
+        questionId: 'question-1',
+        joshingGameId: null,
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: 'Try this one.',
+        state: 'answered',
+        isPinned: true,
+        submittedAnswer: 'My wrong answer',
+        quip: 'Not quite.',
+      }],
+      nextCursor: null,
+      hasMore: false,
+      totalCount: 1,
+    });
+
+    const response = await GET(new Request('https://joshing.example/api/feed') as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.items[0]).toEqual(expect.objectContaining({
+      card_type: 'answered_by_you',
+      type: 'answered_by_you',
+      state: 'answered',
+      is_pinned: false,
+      original_source: expect.objectContaining({ source_type: 'direct_sent' }),
+      answered_by_you: expect.objectContaining({
+        correct: false,
+        answer_state: 'incorrect',
+        correct_answer: 'Correct answer',
+        submitted_answer: 'My wrong answer',
+        awarded_points: 0,
+        explanation: 'A stored full explanation.',
+        quip: 'Not quite.',
+      }),
+      mastery_progress: expect.objectContaining({ domain: 'Music', total_points: 12, tier: 'familiar' }),
+    }));
+  });
+
+  it('rejects unsupported Feed filters', async () => {
+    const response = await GET(new Request('https://joshing.example/api/feed?filter=hidden-categories') as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('invalid_filter');
   });
 });
