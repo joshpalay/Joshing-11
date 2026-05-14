@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Send, SkipForward, X } from 'lucide-react';
 
@@ -48,6 +48,8 @@ type FeedResponse = {
   viewer_user_id: string;
   meta?: FeedMeta;
   items: FeedApiItem[];
+  nextCursor?: string | null;
+  hasMore?: boolean;
 };
 
 type CeremonyBanner = {
@@ -92,12 +94,13 @@ function comparisonCopy(playerCorrect: boolean, friendResults: FriendResult[] | 
 }
 
 type FeedListProps = {
-  limit?: number;
+  pageSize?: number;
+  infinite?: boolean;
 };
 
 type QuestionCardState = 'unanswered' | 'answered' | 'reacted';
 
-export default function FeedList({ limit = 25 }: FeedListProps) {
+export default function FeedList({ pageSize = 20, infinite = false }: FeedListProps) {
   const [items, setItems] = useState<FeedApiItem[]>([]);
   const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
@@ -105,44 +108,72 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
   const [results, setResults] = useState<Record<string, ResultState>>({});
   const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({});
   const [toasts, setToasts] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const loadFeed = useCallback(async () => {
-    setLoading(true);
+  const loadFeed = useCallback(async (cursor?: string | null) => {
+    const isNextPage = Boolean(cursor);
+    if (isNextPage) setLoadingMore(true);
+    else setLoadingInitial(true);
     setError(null);
+
     try {
-      const response = await fetch('/api/feed', { cache: 'no-store', credentials: 'include' });
+      const search = new URLSearchParams({ limit: String(pageSize) });
+      if (cursor) search.set('cursor', cursor);
+
+      const response = await fetch(`/api/feed?${search.toString()}`, { cache: 'no-store', credentials: 'include' });
       const body = await response.json().catch(() => null) as FeedResponse | { message?: string } | null;
       if (!response.ok || !body || !('items' in body)) {
         throw new Error((body as { message?: string } | null)?.message ?? 'Could not load your Feed.');
       }
       setViewerId(body.viewer_user_id);
       setFeedMeta(body.meta ?? null);
-      setItems(body.items);
-      const bannerResponse = await fetch('/api/ceremony/banner', { cache: 'no-store', credentials: 'include' });
-      const bannerBody = await bannerResponse.json().catch(() => null) as { ceremony?: CeremonyBanner | null } | null;
-      setCeremonyBanner(bannerResponse.ok ? bannerBody?.ceremony ?? null : null);
+      setItems((current) => (isNextPage ? [...current, ...body.items] : body.items));
+      setNextCursor(body.nextCursor ?? null);
+      setHasMore(Boolean(body.hasMore ?? body.nextCursor));
+
+      if (!isNextPage) {
+        const bannerResponse = await fetch('/api/ceremony/banner', { cache: 'no-store', credentials: 'include' });
+        const bannerBody = await bannerResponse.json().catch(() => null) as { ceremony?: CeremonyBanner | null } | null;
+        setCeremonyBanner(bannerResponse.ok ? bannerBody?.ceremony ?? null : null);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load your Feed.');
     } finally {
-      setLoading(false);
+      setLoadingInitial(false);
+      setLoadingMore(false);
     }
-  }, []);
+  }, [pageSize]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void loadFeed();
+      void loadFeed(null);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadFeed]);
 
-  const visibleItems = useMemo(() => items.slice(0, limit), [items, limit]);
+  useEffect(() => {
+    const target = sentinelRef.current;
+    if (!infinite || !target || !hasMore || !nextCursor || loadingInitial || loadingMore) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) void loadFeed(nextCursor);
+    }, { rootMargin: '320px' });
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, infinite, loadFeed, loadingInitial, loadingMore, nextCursor]);
+
+  const visibleItems = items;
 
   const emptyCopy = useMemo(() => {
-    if (loading) return 'Loading your Feed...';
+    if (loadingInitial) return 'Loading your Feed...';
     if (error) return error;
     if (!feedMeta?.has_friends) return "When friends recognize each other’s questions, those moments will appear here.";
     // pre_filter_active_count > 0 means items exist in active/skipped state but are hidden by domain filters
@@ -151,7 +182,7 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
     }
     if (feedMeta.total_item_count > 0) return "You're caught up. Answer questions to reveal more common ground.";
     return "Answer questions to reveal common ground.";
-  }, [error, feedMeta, loading]);
+  }, [error, feedMeta, loadingInitial]);
 
   const showToast = useCallback((itemId: string, message: string) => {
     setToasts((t) => ({ ...t, [itemId]: message }));
@@ -447,6 +478,10 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
               </article>
             );
           })}
+          <div ref={sentinelRef} aria-hidden className="h-1" />
+          {loadingMore ? (
+            <p className="py-3 text-center text-sm text-muted-foreground">Loading more...</p>
+          ) : null}
         </section>
       )}
     </>

@@ -34,7 +34,7 @@ export default async function Home() {
             <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
               What&apos;s happening
             </p>
-            <FeedList limit={3} />
+            <FeedList pageSize={3} />
             <div className="mt-2 flex justify-end">
               <Link
                 href="/feed"
