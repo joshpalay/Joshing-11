@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, friendships, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem, type FeedCursor } from '@/server/db/queries/feed';
+import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem, type FeedCursor, type FeedFilter } from '@/server/db/queries/feed';
 import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE, socialFeedDomainLabel, visibleFeedSourcePredicate } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
 
 type ParsedPagination =
-  | { limit: number; cursor: FeedCursor | null }
+  | { limit: number; cursor: FeedCursor | null; filter: FeedFilter }
   | { error: string };
 
 function encodeCursor(cursor: FeedCursor | null): string | null {
@@ -47,6 +47,7 @@ function decodeCursor(value: string): FeedCursor | null {
 function parsePagination(request: NextRequest): ParsedPagination {
   const limitParam = request.nextUrl.searchParams.get('limit');
   const cursorParam = request.nextUrl.searchParams.get('cursor');
+  const filterParam = request.nextUrl.searchParams.get('filter') ?? request.nextUrl.searchParams.get('feed_filter') ?? 'all';
   const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : DEFAULT_PAGE_LIMIT;
 
   const limit = Number.isFinite(parsedLimit)
@@ -55,8 +56,11 @@ function parsePagination(request: NextRequest): ParsedPagination {
   const cursor = cursorParam ? decodeCursor(cursorParam) : null;
 
   if (cursorParam && !cursor) return { error: 'invalid_cursor' };
+  if (filterParam !== 'all' && filterParam !== 'sent-to-me' && filterParam !== 'from-friends') {
+    return { error: 'invalid_filter' };
+  }
 
-  return { limit, cursor };
+  return { limit, cursor, filter: filterParam };
 }
 
 function displayName(name: string | null, fallback = 'A friend') {
@@ -69,6 +73,22 @@ function authoredSharedAttribution(sourceName: string, domain: string | null): s
 
 function directSentAttribution(sourceName: string, domain: string | null): string {
   return domain ? `${sourceName} sent you a question — ${domain}` : `${sourceName} sent you a question`;
+}
+
+function feedFilterSourcePredicate(filter: FeedFilter) {
+  if (filter === 'sent-to-me') return eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE);
+  if (filter === 'from-friends') {
+    return inArray(feedItems.sourceType, ['friend_answered', AUTHORED_SHARED_FEED_SOURCE_TYPE, 'thumbs_upped']);
+  }
+  return undefined;
+}
+
+function feedCardType(item: CollapsedFeedItem): 'direct_sent' | 'friend_answered' | 'friend_added' | 'friend_liked' | 'answered_by_you' {
+  if (item.state === 'answered') return 'answered_by_you';
+  if (item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE) return 'direct_sent';
+  if (item.sourceType === AUTHORED_SHARED_FEED_SOURCE_TYPE) return 'friend_added';
+  if (item.sourceType === 'thumbs_upped') return 'friend_liked';
+  return 'friend_answered';
 }
 
 function friendAnsweredAttribution(
@@ -101,10 +121,10 @@ export async function GET(request: NextRequest) {
   const pagination = parsePagination(request);
   if ('error' in pagination) return NextResponse.json({ error: pagination.error }, { status: 400 });
 
-  const { limit, cursor } = pagination;
+  const { limit, cursor, filter } = pagination;
 
   const [feedPage, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
-    getFeedForUser(session.userId, { limit, cursor }),
+    getFeedForUser(session.userId, { limit, cursor, filter }),
     db
       .select({ value: count() })
       .from(friendships)
@@ -120,6 +140,7 @@ export async function GET(request: NextRequest) {
       .where(and(
         eq(feedItems.recipientUserId, session.userId),
         visibleSourcePredicate,
+        feedFilterSourcePredicate(filter),
       ))
       .then((rows) => rows[0]?.value ?? 0),
     db
@@ -128,6 +149,7 @@ export async function GET(request: NextRequest) {
       .where(and(
         eq(feedItems.recipientUserId, session.userId),
         visibleSourcePredicate,
+        feedFilterSourcePredicate(filter),
         inArray(feedItems.state, ['active', 'skipped']),
       ))
       .then((rows) => rows[0]?.value ?? 0),
@@ -143,6 +165,7 @@ export async function GET(request: NextRequest) {
   console.info('[feed/get]', {
     userId: session.userId,
     limit,
+    filter,
     cursorPresent: Boolean(cursor),
     friendCount,
     dismissedDomainCount: dismissedDomains.length,
@@ -191,6 +214,7 @@ export async function GET(request: NextRequest) {
       cursor: cursor ? encodeCursor(cursor) : null,
       next_cursor: nextCursor,
       has_more: feedPage.hasMore,
+      filter,
     },
     next_cursor: nextCursor,
     has_more: feedPage.hasMore,
@@ -200,10 +224,15 @@ export async function GET(request: NextRequest) {
       const sourceName = displayName(sourceUser?.displayName ?? null);
       const authorName = displayName(question?.creatorId ? userById.get(question.creatorId)?.displayName ?? null : null, 'the author');
       const domain = socialFeedDomainLabel(question);
+      const cardType = feedCardType(item);
+      const answerResult = item.answerResult ?? null;
+      const awardedPoints = typeof item.pointsAwarded === 'number' ? item.pointsAwarded : null;
 
       return {
         id: item.id,
         kind: 'question',
+        card_type: cardType,
+        type: cardType,
         question_id: item.questionId,
         joshing_game_id: item.joshingGameId,
         source_type: item.sourceType,
@@ -227,6 +256,13 @@ export async function GET(request: NextRequest) {
         domain_pill: domain,
         game_title: null,
         difficulty: question?.calibratedDifficulty ?? question?.llmDifficulty ?? question?.difficultyEstimate ?? null,
+        answer_result: answerResult,
+        is_correct: answerResult === null ? null : answerResult === 'correct',
+        correct_answer: cardType === 'answered_by_you' ? question?.answerText ?? null : null,
+        submitted_answer: cardType === 'answered_by_you' ? item.submittedAnswer ?? null : null,
+        awarded_points: cardType === 'answered_by_you' ? awardedPoints : null,
+        mastery_delta: cardType === 'answered_by_you' ? item.masteryDelta ?? null : null,
+        unverified_answer: cardType === 'answered_by_you' ? question?.verified === false : false,
       };
     }),
   });

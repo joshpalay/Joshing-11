@@ -18,7 +18,8 @@ export type CollapsedFeedItem = FeedItem & {
   additionalEndorsers?: Array<{ userId: string; displayName: string }>;
 };
 
-const VISIBLE_FEED_STATES = ['active', 'skipped'] as const;
+const VISIBLE_FEED_STATES = ['active', 'skipped', 'answered'] as const;
+const ACTION_REQUIRED_FEED_STATES = ['active', 'skipped'] as const;
 const BLOCKING_FEED_STATES = ['active', 'skipped', 'dismissed'] as const;
 
 const visibleSourcePredicate = visibleFeedSourcePredicate(feedItems);
@@ -171,7 +172,7 @@ export async function dismissDomain(userId: string, canonicalSubcategory: string
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
     .where(and(
       eq(feedItems.recipientUserId, userId),
-      inArray(feedItems.state, VISIBLE_FEED_STATES),
+      inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES),
       eq(questions.canonicalSubcategory, canonicalSubcategory),
     ));
 
@@ -199,9 +200,12 @@ export type FeedCursor = {
   id: string;
 };
 
+export type FeedFilter = 'all' | 'sent-to-me' | 'from-friends';
+
 type FeedForUserOptions = {
   limit?: number;
   cursor?: FeedCursor | null;
+  filter?: FeedFilter;
 };
 
 export type PaginatedFeedResult = {
@@ -217,6 +221,26 @@ const MAX_FEED_LIMIT = 50;
 function normalizeFeedLimit(limit: number | undefined): number {
   if (!Number.isFinite(limit)) return DEFAULT_FEED_LIMIT;
   return Math.min(Math.max(Math.trunc(limit!), 1), MAX_FEED_LIMIT);
+}
+
+
+function feedFilterPredicate(filter: FeedFilter | undefined) {
+  if (filter === 'sent-to-me') return eq(feedItems.sourceType, 'direct_sent');
+  if (filter === 'from-friends') {
+    return inArray(feedItems.sourceType, ['friend_answered', 'authored_shared', 'thumbs_upped']);
+  }
+  return undefined;
+}
+
+function feedPinnedPredicate(pinned: boolean | undefined) {
+  if (pinned) {
+    return and(eq(feedItems.isPinned, true), inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES));
+  }
+
+  return or(
+    eq(feedItems.isPinned, false),
+    eq(feedItems.state, 'answered'),
+  );
 }
 
 function feedCursorPredicate(cursor: FeedCursor | null | undefined) {
@@ -250,7 +274,7 @@ function visibleQuestionPredicate(dismissedDomains: string[]) {
 async function fetchVisibleFeedItems(
   userId: string,
   dismissedDomains: string[],
-  options: { limit: number; cursor?: FeedCursor | null; pinned?: boolean },
+  options: { limit: number; cursor?: FeedCursor | null; pinned?: boolean; filter?: FeedFilter },
 ): Promise<FeedItem[]> {
   const cursorPredicate = options.pinned ? undefined : feedCursorPredicate(options.cursor);
 
@@ -260,8 +284,9 @@ async function fetchVisibleFeedItems(
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
     .where(and(
       eq(feedItems.recipientUserId, userId),
-      eq(feedItems.isPinned, options.pinned ?? false),
+      feedPinnedPredicate(options.pinned),
       visibleSourcePredicate,
+      feedFilterPredicate(options.filter),
       inArray(feedItems.state, VISIBLE_FEED_STATES),
       visibleQuestionPredicate(dismissedDomains),
       cursorPredicate,
@@ -275,14 +300,15 @@ async function fetchVisibleFeedItems(
 export async function getFeedForUser(userId: string, options: FeedForUserOptions = {}): Promise<PaginatedFeedResult> {
   const dismissedDomains = await getDismissedDomains(userId);
   const limit = normalizeFeedLimit(options.limit);
+  const filter = options.filter ?? 'all';
   const isFirstPage = !options.cursor;
 
   // Pinned items are deliberately returned only on the first page, ahead of the chronological feed.
   const [pinned, nonPinnedRaw, countRows] = await Promise.all([
     isFirstPage
-      ? fetchVisibleFeedItems(userId, dismissedDomains, { limit, pinned: true })
+      ? fetchVisibleFeedItems(userId, dismissedDomains, { limit, pinned: true, filter })
       : Promise.resolve([]),
-    fetchVisibleFeedItems(userId, dismissedDomains, { limit: limit + 1, cursor: options.cursor, pinned: false }),
+    fetchVisibleFeedItems(userId, dismissedDomains, { limit: limit + 1, cursor: options.cursor, pinned: false, filter }),
     db
       .select({ value: count() })
       .from(feedItems)
@@ -290,6 +316,7 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
       .where(and(
         eq(feedItems.recipientUserId, userId),
         visibleSourcePredicate,
+        feedFilterPredicate(filter),
         inArray(feedItems.state, VISIBLE_FEED_STATES),
         visibleQuestionPredicate(dismissedDomains),
       )),
@@ -333,10 +360,10 @@ export async function rollOffOldItems(userId: string): Promise<number> {
     .where(and(
       eq(feedItems.recipientUserId, userId),
       eq(feedItems.isPinned, false),
-      inArray(feedItems.state, VISIBLE_FEED_STATES),
+      inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES),
     ))
     .orderBy(desc(feedItems.sourceEventAt))
-    .offset(25);
+    .offset(50);
 
   if (overflow.length === 0) return 0;
 
