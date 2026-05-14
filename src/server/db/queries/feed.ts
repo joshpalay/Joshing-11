@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
-import { isMainFeedSourceVisible } from '@/server/feed/visibility';
+import { AUTHORED_SHARED_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE, isMainFeedSourceVisible } from '@/server/feed/visibility';
 import { pgErrorCode } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
@@ -21,11 +21,23 @@ export type CollapsedFeedItem = FeedItem & {
 const VISIBLE_FEED_STATES = ['active', 'skipped'] as const;
 const BLOCKING_FEED_STATES = ['active', 'skipped', 'dismissed'] as const;
 
+const visibleFeedSourcePredicate = or(
+  eq(feedItems.sourceType, AUTHORED_SHARED_FEED_SOURCE_TYPE),
+  and(
+    eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
+    eq(feedItems.sourceResult, 'correct'),
+  ),
+);
+
+function isVisibleFriendAnsweredSource(sourceType: string, sourceResult: string | null): boolean {
+  return sourceType === SOCIAL_FEED_SOURCE_TYPE && sourceResult === 'correct';
+}
+
 async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<CollapsedFeedItem[]> {
   const friendAnsweredByQuestion = new Map<string, FeedItem[]>();
 
   for (const item of items) {
-    if (isMainFeedSourceVisible(item.sourceType, item.sourceResult) && item.questionId) {
+    if (isVisibleFriendAnsweredSource(item.sourceType, item.sourceResult) && item.questionId) {
       const group = friendAnsweredByQuestion.get(item.questionId) ?? [];
       group.push(item);
       friendAnsweredByQuestion.set(item.questionId, group);
@@ -73,7 +85,7 @@ async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<Collapsed
     .map((item) => {
       if (collapsedById.has(item.id)) return collapsedById.get(item.id)!;
       // Single friend_answered item — wrap in friendResults for consistent display
-      if (isMainFeedSourceVisible(item.sourceType, item.sourceResult)) {
+      if (isVisibleFriendAnsweredSource(item.sourceType, item.sourceResult)) {
         return {
           ...item,
           friendResults: [{
@@ -203,8 +215,7 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
       .where(and(
         eq(feedItems.recipientUserId, userId),
         eq(feedItems.isPinned, true),
-        eq(feedItems.sourceType, 'friend_answered'),
-        eq(feedItems.sourceResult, 'correct'),
+        visibleFeedSourcePredicate,
         inArray(feedItems.state, VISIBLE_FEED_STATES),
       ))
       .orderBy(desc(feedItems.sourceEventAt)),
@@ -214,8 +225,7 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
       .where(and(
         eq(feedItems.recipientUserId, userId),
         eq(feedItems.isPinned, false),
-        eq(feedItems.sourceType, 'friend_answered'),
-        eq(feedItems.sourceResult, 'correct'),
+        visibleFeedSourcePredicate,
         inArray(feedItems.state, VISIBLE_FEED_STATES),
       ))
       .orderBy(desc(feedItems.sourceEventAt))
