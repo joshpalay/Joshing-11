@@ -1,10 +1,10 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, questions, users } from '@/server/db';
+import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
 import {
   createQuestion,
   getQuestion,
@@ -86,10 +86,54 @@ export async function POST(request: NextRequest) {
   const question = await getQuestion(created.id, session.userId);
 
   if (shareToFeed) {
+    const friends = await getFriends(session.userId);
+    const friendIds = friends.map((friend) => friend.id);
+    const dismissedRecipientIds = new Set<string>();
+
+    if (friendIds.length > 0 && categorizedQuestionFields.canonicalSubcategory) {
+      const dismissedRows = await db
+        .select({ userId: feedDismissedDomains.userId })
+        .from(feedDismissedDomains)
+        .where(and(
+          inArray(feedDismissedDomains.userId, friendIds),
+          eq(feedDismissedDomains.canonicalSubcategory, categorizedQuestionFields.canonicalSubcategory),
+          isNull(feedDismissedDomains.reinstatedAt),
+        ));
+
+      for (const row of dismissedRows) {
+        dismissedRecipientIds.add(row.userId);
+      }
+    }
+
+    let sharedCount = 0;
+    for (const friend of friends) {
+      if (dismissedRecipientIds.has(friend.id)) continue;
+
+      const alreadyInFeed = await userHasQuestionInBlockingFeed(friend.id, created.id);
+      if (alreadyInFeed) continue;
+
+      await db.insert(feedItems).values({
+        recipientUserId: friend.id,
+        questionId: created.id,
+        sourceType: 'authored_shared',
+        sourceUserId: session.userId,
+        sourceEventAt: new Date(),
+        state: 'active',
+      });
+      await rollOffOldItems(friend.id);
+      sharedCount += 1;
+    }
+
+    if (sharedCount > 0) {
+      await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
+    }
+
     console.info('[questions/shareToFeed]', {
       questionId: created.id,
       userId: session.userId,
-      skipped: 'created questions are managed in Questions until a non-author answers correctly',
+      friendCount: friends.length,
+      sharedCount,
+      skippedDismissedDomainCount: dismissedRecipientIds.size,
     });
   }
 
