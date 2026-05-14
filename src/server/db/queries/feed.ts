@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
 import { AUTHORED_SHARED_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE, isMainFeedSourceVisible } from '@/server/feed/visibility';
@@ -204,59 +204,125 @@ export async function reinstateDomain(userId: string, canonicalSubcategory: stri
     ));
 }
 
-export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[]> {
-  const dismissedDomains = await getDismissedDomains(userId);
-  const dismissedSet = new Set(dismissedDomains);
+export type FeedCursor = {
+  sourceEventAt: number;
+  id: string;
+};
 
-  const [pinned, nonPinnedRaw] = await Promise.all([
-    db
-      .select()
-      .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        eq(feedItems.isPinned, true),
-        visibleFeedSourcePredicate,
-        inArray(feedItems.state, VISIBLE_FEED_STATES),
-      ))
-      .orderBy(desc(feedItems.sourceEventAt)),
-    db
-      .select()
-      .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        eq(feedItems.isPinned, false),
-        visibleFeedSourcePredicate,
-        inArray(feedItems.state, VISIBLE_FEED_STATES),
-      ))
-      .orderBy(desc(feedItems.sourceEventAt))
-      .limit(50), // fetch extra to account for domain filtering and sorting
-  ]);
+export type FeedPageOptions = {
+  limit?: number;
+  cursor?: string;
+};
 
-  // Fetch surface_priority_score for all question IDs so we can sort by it
-  const allQuestionIds = [...new Set(
-    [...pinned, ...nonPinnedRaw]
-      .map((item) => item.questionId)
-      .filter((id): id is string => Boolean(id)),
-  )];
+export type FeedPage = {
+  items: CollapsedFeedItem[];
+  pinnedItems: CollapsedFeedItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
 
-  const scoreRows = allQuestionIds.length > 0
+const DEFAULT_FEED_LIMIT = 20;
+const MAX_FEED_LIMIT = 50;
+const FEED_FETCH_BATCH_SIZE = 100;
+
+function clampFeedLimit(limit: number | undefined): number {
+  if (!Number.isFinite(limit)) return DEFAULT_FEED_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit ?? DEFAULT_FEED_LIMIT), 1), MAX_FEED_LIMIT);
+}
+
+function encodeFeedCursor(item: FeedItem): string {
+  return Buffer.from(JSON.stringify({
+    sourceEventAt: item.sourceEventAt.getTime(),
+    id: item.id,
+  }), 'utf8').toString('base64url');
+}
+
+function decodeFeedCursor(cursor: string | undefined): FeedCursor | null {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+      sourceEventAt?: unknown;
+      id?: unknown;
+    };
+    if (typeof parsed.sourceEventAt !== 'number' || typeof parsed.id !== 'string') return null;
+    return { sourceEventAt: parsed.sourceEventAt, id: parsed.id };
+  } catch {
+    return null;
+  }
+}
+
+function feedCursorPredicate(cursor: FeedCursor | null) {
+  if (!cursor) return undefined;
+  const cursorDate = new Date(cursor.sourceEventAt);
+  if (Number.isNaN(cursorDate.getTime())) return undefined;
+
+  return or(
+    lt(feedItems.sourceEventAt, cursorDate),
+    and(eq(feedItems.sourceEventAt, cursorDate), lt(feedItems.id, cursor.id)),
+  );
+}
+
+function compareFeedItems(a: FeedItem, b: FeedItem): number {
+  return b.sourceEventAt.getTime() - a.sourceEventAt.getTime() || b.id.localeCompare(a.id);
+}
+
+async function visibleQuestionMetadata(items: FeedItem[]) {
+  const questionIds = [...new Set(items.map((item) => item.questionId).filter((id): id is string => Boolean(id)))];
+  const rows = questionIds.length > 0
     ? await db
-        .select({ id: questions.id, score: questions.surfacePriorityScore, canonicalSubcategory: questions.canonicalSubcategory, visibility: questions.visibility, deletedAt: questions.deletedAt })
+        .select({ id: questions.id, canonicalSubcategory: questions.canonicalSubcategory, visibility: questions.visibility, deletedAt: questions.deletedAt })
         .from(questions)
-        .where(inArray(questions.id, allQuestionIds))
+        .where(inArray(questions.id, questionIds))
     : [];
 
-  const scoreByQuestionId = new Map(scoreRows.map((r) => [r.id, r.score ?? 0]));
-  const domainByQuestionId = new Map(scoreRows.map((r) => [r.id, r.canonicalSubcategory]));
-  const visibleQuestionIds = new Set(scoreRows.filter((r) => r.visibility === 'public' && !r.deletedAt).map((r) => r.id));
+  return {
+    domainByQuestionId: new Map(rows.map((r) => [r.id, r.canonicalSubcategory])),
+    visibleQuestionIds: new Set(rows.filter((r) => r.visibility === 'public' && !r.deletedAt).map((r) => r.id)),
+  };
+}
 
-  // Sort non-pinned by surface_priority_score DESC then sourceEventAt DESC
-  const nonPinned = [...nonPinnedRaw].sort((a, b) => {
-    const scoreA = a.questionId ? (scoreByQuestionId.get(a.questionId) ?? 0) : 0;
-    const scoreB = b.questionId ? (scoreByQuestionId.get(b.questionId) ?? 0) : 0;
-    if (scoreB !== scoreA) return scoreB - scoreA;
-    return b.sourceEventAt.getTime() - a.sourceEventAt.getTime();
-  });
+async function collapseFeedItems(items: FeedItem[]): Promise<CollapsedFeedItem[]> {
+  const afterThumbsUp = await collapseThumbsUpItems(items);
+  return collapseFriendAnsweredItems(afterThumbsUp);
+}
+
+export async function getFeedForUser(userId: string, options: FeedPageOptions = {}): Promise<FeedPage> {
+  const limit = clampFeedLimit(options.limit);
+  const cursor = decodeFeedCursor(options.cursor);
+  const dismissedDomains = await getDismissedDomains(userId);
+  const dismissedSet = new Set(dismissedDomains);
+  const includePinnedItems = !cursor;
+
+  const baseNonPinnedPredicate = and(
+    eq(feedItems.recipientUserId, userId),
+    eq(feedItems.isPinned, false),
+    visibleFeedSourcePredicate,
+    inArray(feedItems.state, VISIBLE_FEED_STATES),
+    feedCursorPredicate(cursor),
+  );
+
+  const [pinnedRaw, nonPinnedRaw] = await Promise.all([
+    includePinnedItems
+      ? db
+          .select()
+          .from(feedItems)
+          .where(and(
+            eq(feedItems.recipientUserId, userId),
+            eq(feedItems.isPinned, true),
+            visibleFeedSourcePredicate,
+            inArray(feedItems.state, VISIBLE_FEED_STATES),
+          ))
+          .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
+      : Promise.resolve([]),
+    db
+      .select()
+      .from(feedItems)
+      .where(baseNonPinnedPredicate)
+      .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
+      .limit(FEED_FETCH_BATCH_SIZE),
+  ]);
+
+  const { domainByQuestionId, visibleQuestionIds } = await visibleQuestionMetadata([...pinnedRaw, ...nonPinnedRaw]);
 
   const filterItem = (item: FeedItem) => {
     if (!isMainFeedSourceVisible(item.sourceType, item.sourceResult)) return false;
@@ -266,10 +332,28 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
     return !domain || !dismissedSet.has(domain);
   };
 
-  const filteredNonPinned = nonPinned.filter(filterItem).slice(0, 25);
-  const all = [...pinned.filter(filterItem), ...filteredNonPinned];
-  const afterThumbsUp = await collapseThumbsUpItems(all);
-  return collapseFriendAnsweredItems(afterThumbsUp);
+  const pinnedItems = includePinnedItems ? await collapseFeedItems(pinnedRaw.filter(filterItem).sort(compareFeedItems)) : [];
+  const visibleNonPinned = nonPinnedRaw.filter(filterItem).sort(compareFeedItems);
+  const pageRawItems: FeedItem[] = [];
+  let items: CollapsedFeedItem[] = [];
+
+  for (const item of visibleNonPinned) {
+    pageRawItems.push(item);
+    items = await collapseFeedItems(pageRawItems);
+    if (items.length === limit) break;
+  }
+
+  const lastConsumedItem = pageRawItems[pageRawItems.length - 1];
+  const lastFetchedItem = nonPinnedRaw[nonPinnedRaw.length - 1];
+  const hasMore = pageRawItems.length < visibleNonPinned.length || nonPinnedRaw.length === FEED_FETCH_BATCH_SIZE;
+  const cursorItem = lastConsumedItem ?? lastFetchedItem;
+
+  return {
+    items,
+    pinnedItems,
+    nextCursor: hasMore && cursorItem ? encodeFeedCursor(cursorItem) : null,
+    hasMore,
+  };
 }
 
 export async function createFeedItem(data: NewFeedItem): Promise<FeedItem> {

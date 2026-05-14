@@ -1,5 +1,5 @@
 import { and, count, eq, inArray, or } from 'drizzle-orm';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, friendships, questions, users } from '@/server/db';
@@ -19,6 +19,16 @@ const visibleFeedSourcePredicate = or(
 
 function displayName(name: string | null, fallback = 'A friend') {
   return name?.trim() || fallback;
+}
+
+const DEFAULT_FEED_LIMIT = 20;
+const MAX_FEED_LIMIT = 50;
+
+function parseLimit(value: string | null): number {
+  if (!value) return DEFAULT_FEED_LIMIT;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_FEED_LIMIT;
+  return Math.min(Math.max(Math.trunc(parsed), 1), MAX_FEED_LIMIT);
 }
 
 function friendAnsweredAttribution(
@@ -44,12 +54,16 @@ function friendAnsweredAttribution(
   return domain ? `Common ground in ${domain}: ${names}` : `${names} share this one`;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const [rawFeed, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
-    getFeedForUser(session.userId),
+  const params = request.nextUrl.searchParams;
+  const limit = parseLimit(params.get('limit'));
+  const cursor = params.get('cursor') ?? undefined;
+
+  const [feedPage, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
+    getFeedForUser(session.userId, { limit, cursor }),
     db
       .select({ value: count() })
       .from(friendships)
@@ -78,8 +92,10 @@ export async function GET() {
       .then((rows) => rows[0]?.value ?? 0),
   ]);
 
-  const feed = rawFeed;
-  const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
+  const feed = feedPage.items;
+  const pinnedFeed = feedPage.pinnedItems;
+  const allReturnedFeed = [...pinnedFeed, ...feed];
+  const questionIds = allReturnedFeed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
 
   const [questionRows, bankedById] = await Promise.all([
     questionIds.length
@@ -90,7 +106,7 @@ export async function GET() {
 
   const questionById = new Map(questionRows.map((q) => [q.id, q]));
   const userIds = [...new Set([
-    ...feed.map((item) => item.sourceUserId),
+    ...allReturnedFeed.map((item) => item.sourceUserId),
     ...questionRows.map((question) => question.creatorId).filter((id): id is string => Boolean(id)),
   ])];
   const userRows = userIds.length
@@ -98,45 +114,50 @@ export async function GET() {
     : [];
   const userById = new Map(userRows.map((u) => [u.id, u]));
 
+  const serializeFeedItem = (item: CollapsedFeedItem) => {
+    const question = item.questionId ? questionById.get(item.questionId) : undefined;
+    const sourceUser = userById.get(item.sourceUserId);
+    const sourceName = displayName(sourceUser?.displayName ?? null);
+    const authorName = displayName(question?.creatorId ? userById.get(question.creatorId)?.displayName ?? null : null, 'the author');
+    const domain = socialFeedDomainLabel(question);
+
+    return {
+      id: item.id,
+      kind: 'question',
+      question_id: item.questionId,
+      joshing_game_id: item.joshingGameId,
+      source_type: item.sourceType,
+      source_user_id: item.sourceUserId,
+      source_result: item.sourceResult ?? null,
+      source_friend_display_name: sourceName,
+      source_attribution: friendAnsweredAttribution(item, userById, domain, authorName),
+      friend_results: item.friendResults ?? null,
+      source_event_at: item.sourceEventAt,
+      personal_message: item.personalMessage,
+      state: item.state,
+      is_pinned: item.isPinned,
+      question_text: question?.questionText ?? null,
+      verified: question?.verified ?? true,
+      is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
+      explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
+      domain_pill: domain,
+      game_title: null,
+      difficulty: question?.calibratedDifficulty ?? question?.llmDifficulty ?? question?.difficultyEstimate ?? null,
+    };
+  };
+
   return NextResponse.json({
     viewer_user_id: session.userId,
     meta: {
       has_friends: friendCount > 0,
       has_dismissed_domains: dismissedDomains.length > 0,
       total_item_count: totalItemCount,
-      active_item_count: feed.length,
+      active_item_count: allReturnedFeed.length,
       pre_filter_active_count: preFilterActiveCount,
     },
-    items: feed.map((item) => {
-      const question = item.questionId ? questionById.get(item.questionId) : undefined;
-      const sourceUser = userById.get(item.sourceUserId);
-      const sourceName = displayName(sourceUser?.displayName ?? null);
-      const authorName = displayName(question?.creatorId ? userById.get(question.creatorId)?.displayName ?? null : null, 'the author');
-      const domain = socialFeedDomainLabel(question);
-
-      return {
-        id: item.id,
-        kind: 'question',
-        question_id: item.questionId,
-        joshing_game_id: item.joshingGameId,
-        source_type: item.sourceType,
-        source_user_id: item.sourceUserId,
-        source_result: item.sourceResult ?? null,
-        source_friend_display_name: sourceName,
-        source_attribution: friendAnsweredAttribution(item, userById, domain, authorName),
-        friend_results: item.friendResults ?? null,
-        source_event_at: item.sourceEventAt,
-        personal_message: item.personalMessage,
-        state: item.state,
-        is_pinned: item.isPinned,
-        question_text: question?.questionText ?? null,
-        verified: question?.verified ?? true,
-        is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
-        explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
-        domain_pill: domain,
-        game_title: null,
-        difficulty: question?.calibratedDifficulty ?? question?.llmDifficulty ?? question?.difficultyEstimate ?? null,
-      };
-    }),
+    pinned_items: pinnedFeed.map(serializeFeedItem),
+    items: feed.map(serializeFeedItem),
+    next_cursor: feedPage.nextCursor,
+    has_more: feedPage.hasMore,
   });
 }
