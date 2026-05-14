@@ -16,7 +16,9 @@ describe('create question payload categorization', () => {
       ...basePayload,
       category: 'literature',
       broadCategory: 'Literature',
+      broad_category: 'Literature',
       canonicalSubcategory: '  The   Waste Land  ',
+      canonical_subcategory: '  Poetry  ',
       subcategory: 'Modernist Poetry',
       domain: 'TS Eliot',
     });
@@ -24,7 +26,9 @@ describe('create question payload categorization', () => {
     expect(result.errors).toEqual([]);
     expect('category' in result.value).toBe(false);
     expect('broadCategory' in result.value).toBe(false);
+    expect('broad_category' in result.value).toBe(false);
     expect('canonicalSubcategory' in result.value).toBe(false);
+    expect('canonical_subcategory' in result.value).toBe(false);
     expect('subcategory' in result.value).toBe(false);
     expect('domain' in result.value).toBe(false);
   });
@@ -53,14 +57,22 @@ describe('create question payload categorization', () => {
     expect('domain' in result.value).toBe(false);
   });
 
-  it('does not accept a user-supplied difficulty', () => {
+  it('ignores user-supplied difficulty fields', () => {
     const result = readCreateQuestionPayload({
       ...basePayload,
       difficulty: 5,
+      calibratedDifficulty: 1,
+      calibrated_difficulty: 2,
+      llmDifficulty: 4,
+      llm_difficulty: 5,
     });
 
     expect(result.errors).toEqual([]);
     expect('difficulty' in result.value).toBe(false);
+    expect('calibratedDifficulty' in result.value).toBe(false);
+    expect('calibrated_difficulty' in result.value).toBe(false);
+    expect('llmDifficulty' in result.value).toBe(false);
+    expect('llm_difficulty' in result.value).toBe(false);
   });
 
   it('does not require friends when sharing to feed', () => {
