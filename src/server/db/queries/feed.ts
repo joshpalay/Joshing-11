@@ -204,9 +204,16 @@ export async function reinstateDomain(userId: string, canonicalSubcategory: stri
     ));
 }
 
-export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[]> {
+type FeedForUserOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+export async function getFeedForUser(userId: string, options: FeedForUserOptions = {}): Promise<CollapsedFeedItem[]> {
   const dismissedDomains = await getDismissedDomains(userId);
   const dismissedSet = new Set(dismissedDomains);
+  const limit = options.limit;
+  const offset = options.offset ?? 0;
 
   const [pinned, nonPinnedRaw] = await Promise.all([
     db
@@ -228,8 +235,7 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
         visibleFeedSourcePredicate,
         inArray(feedItems.state, VISIBLE_FEED_STATES),
       ))
-      .orderBy(desc(feedItems.sourceEventAt))
-      .limit(50), // fetch extra to account for domain filtering and sorting
+      .orderBy(desc(feedItems.sourceEventAt)),
   ]);
 
   // Fetch surface_priority_score for all question IDs so we can sort by it
@@ -266,10 +272,13 @@ export async function getFeedForUser(userId: string): Promise<CollapsedFeedItem[
     return !domain || !dismissedSet.has(domain);
   };
 
-  const filteredNonPinned = nonPinned.filter(filterItem).slice(0, 25);
+  const filteredNonPinned = nonPinned.filter(filterItem);
   const all = [...pinned.filter(filterItem), ...filteredNonPinned];
   const afterThumbsUp = await collapseThumbsUpItems(all);
-  return collapseFriendAnsweredItems(afterThumbsUp);
+  const collapsed = await collapseFriendAnsweredItems(afterThumbsUp);
+
+  if (typeof limit !== 'number') return collapsed;
+  return collapsed.slice(offset, offset + limit);
 }
 
 export async function createFeedItem(data: NewFeedItem): Promise<FeedItem> {
