@@ -62,6 +62,7 @@ describe('friend portrait data', () => {
       id: 'friend-1',
       displayName: 'Frances Friend',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      phoneNumber: '+15550101010',
     })
     getFriendshipMock.mockResolvedValue({
       id: 'friendship-1',
@@ -98,6 +99,19 @@ describe('friend portrait data', () => {
     })
   })
 
+  it('falls back to the verified phone number when a friend has no display name yet', async () => {
+    getUserByIdMock.mockResolvedValueOnce({
+      id: 'friend-1',
+      displayName: null,
+      phoneNumber: '+15550101010',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    })
+
+    const portrait = await getFriendPortraitData('friend-1', 'viewer-1')
+
+    expect(portrait?.user.displayName).toBe('+15550101010')
+  })
+
   it('returns null for missing users and non-active friendships', async () => {
     getUserByIdMock.mockResolvedValueOnce(null)
     await expect(
@@ -108,6 +122,7 @@ describe('friend portrait data', () => {
       id: 'stranger-1',
       displayName: 'Stranger',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      phoneNumber: '+15550101011',
     })
     getFriendshipMock.mockResolvedValueOnce({
       id: 'friendship-2',
