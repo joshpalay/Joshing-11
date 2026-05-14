@@ -200,12 +200,15 @@ describe('POST /api/questions shareToFeed', () => {
   })
 
   it('creates feed rows for legacy share-with-friends payload flags', async () => {
+    const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }])
 
     const response = await POST(questionRequest({ share_with_friends: 'true' }))
     const body = await response.json()
+    const createPayloadLogCall = consoleInfoMock.mock.calls.find(([label]) => label === '[questions/createPayload]')
 
     expect(response.status).toBe(201)
+    expect(createPayloadLogCall?.[1]).toEqual(expect.objectContaining({ shareToFeed: true }))
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 1,
