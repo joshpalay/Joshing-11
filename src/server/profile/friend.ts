@@ -27,8 +27,11 @@ export type FriendPortraitData = {
   sharedInterests: string[]
 }
 
-function profileDisplayName(name: string | null, fallback = 'Joshing friend') {
-  return name?.trim() || fallback
+function profileDisplayName(
+  name: string | null,
+  fallback: string | null = 'Joshing friend'
+) {
+  return name?.trim() || fallback?.trim() || 'Joshing friend'
 }
 
 export async function getFriendPortraitData(
@@ -85,7 +88,10 @@ export async function getFriendPortraitData(
   return {
     user: {
       id: viewedUser.id,
-      displayName: profileDisplayName(viewedUser.displayName),
+      displayName: profileDisplayName(
+        viewedUser.displayName,
+        viewedUser.phoneNumber
+      ),
       memberSince: viewedUser.createdAt,
     },
     visibility: isSelf ? 'self' : 'friend',
