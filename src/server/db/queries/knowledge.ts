@@ -38,9 +38,22 @@ export type DomainMastery = {
   territoryType: 'declared' | 'demonstrated';
 };
 
+export type ExpandingDomain = {
+  domain: string;
+  momentumScore: number;
+  reason:
+    | 'new-discovery'
+    | 'mastery-shift'
+    | 'social-overlap'
+    | 'saved-questions'
+    | 'active-play';
+  supportingText?: string;
+};
+
 export type KnowledgePageData = {
   allDomains: DomainMastery[];
   declaredInterests: string[];
+  expandingDomains: ExpandingDomain[];
 };
 
 export type RecentActivity = {
@@ -206,6 +219,117 @@ function sourceLabel(row: SourceLabelRow): string {
   }
   if (row.sourceType === 'author_credit') return 'author_credit';
   return row.sourceType === 'live_correct' ? 'daily' : row.sourceType;
+}
+
+
+
+type ExpansionEvent = {
+  canonicalSubcategory: string;
+  sourceType?: string | null;
+  answerState?: string | null;
+  sessionContext?: string | null;
+  awardedPoints?: number | string | null;
+  createdAt: Date;
+};
+
+function supportingTextFor(reason: ExpandingDomain['reason']): string {
+  switch (reason) {
+    case 'new-discovery':
+      return 'New territory opened this week.';
+    case 'mastery-shift':
+      return 'This territory moved recently.';
+    case 'social-overlap':
+      return 'Shared overlap grew here.';
+    case 'saved-questions':
+      return 'You saved questions here.';
+    case 'active-play':
+    default:
+      return 'You’ve been spending more time here lately.';
+  }
+}
+
+function deriveExpandingDomains(events: ExpansionEvent[]): ExpandingDomain[] {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const byDomain = new Map<string, {
+    domain: string;
+    firstAt: Date;
+    latestAt: Date;
+    answered: number;
+    recentAnswered: number;
+    recentPoints: number;
+    wrongAnswers: number;
+    socialEvents: number;
+    savedEvents: number;
+  }>();
+
+  for (const event of events) {
+    const domain = event.canonicalSubcategory.trim().replace(/\s+/g, ' ');
+    if (!domain || !event.createdAt) continue;
+    const key = domainKey(domain);
+    const ageDays = Math.max(0, (now - event.createdAt.getTime()) / dayMs);
+    const existing = byDomain.get(key) ?? {
+      domain,
+      firstAt: event.createdAt,
+      latestAt: event.createdAt,
+      answered: 0,
+      recentAnswered: 0,
+      recentPoints: 0,
+      wrongAnswers: 0,
+      socialEvents: 0,
+      savedEvents: 0,
+    };
+
+    if (event.createdAt < existing.firstAt) existing.firstAt = event.createdAt;
+    if (event.createdAt > existing.latestAt) existing.latestAt = event.createdAt;
+    if (event.answerState) existing.answered += 1;
+    if (event.answerState && ageDays <= 21) existing.recentAnswered += 1;
+    if (ageDays <= 21) existing.recentPoints += Number(event.awardedPoints ?? 0);
+    if (event.answerState === 'incorrect' && ageDays <= 21) existing.wrongAnswers += 1;
+    if (event.sessionContext && FRIEND_MEDIATED_CONTEXTS.includes(event.sessionContext) && ageDays <= 21) {
+      existing.socialEvents += 1;
+    }
+    if ((event.sourceType === 'authored' || event.sourceType === 'author_credit') && ageDays <= 21) {
+      existing.savedEvents += 1;
+    }
+    byDomain.set(key, existing);
+  }
+
+  return [...byDomain.values()]
+    .map((domain) => {
+      const latestAgeDays = Math.max(0, (now - domain.latestAt.getTime()) / dayMs);
+      const firstAgeDays = Math.max(0, (now - domain.firstAt.getTime()) / dayMs);
+      const recency = Math.max(0, (30 - latestAgeDays) / 30);
+      const novelty = firstAgeDays <= 14 ? 1 : 0;
+      const reason: ExpandingDomain['reason'] = novelty
+        ? 'new-discovery'
+        : domain.socialEvents > 0
+          ? 'social-overlap'
+          : domain.savedEvents > 0
+            ? 'saved-questions'
+            : domain.recentPoints > 0
+              ? 'mastery-shift'
+              : 'active-play';
+      const momentumScore = Math.round(
+        (recency * 60)
+        + (novelty * 35)
+        + (Math.min(domain.recentAnswered, 6) * 10)
+        + (Math.min(domain.wrongAnswers, 4) * 8)
+        + (Math.min(domain.recentPoints, 120) * 0.18)
+        + (Math.min(domain.socialEvents, 3) * 14)
+        + (Math.min(domain.savedEvents, 3) * 10),
+      );
+
+      return {
+        domain: displayNameForDomain(domain.domain),
+        momentumScore,
+        reason,
+        supportingText: supportingTextFor(reason),
+      };
+    })
+    .filter((domain) => domain.momentumScore > 0)
+    .sort((a, b) => b.momentumScore - a.momentumScore || a.domain.localeCompare(b.domain))
+    .slice(0, 8);
 }
 
 function toIso(value: Date | string | null | undefined): string | null {
@@ -388,7 +512,10 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
     db
       .select({
         canonicalSubcategory: masteryEvents.canonicalSubcategory,
+        sourceType: masteryEvents.sourceType,
         answerState: masteryEvents.answerState,
+        sessionContext: masteryEvents.sessionContext,
+        awardedPoints: masteryEvents.awardedPoints,
         createdAt: masteryEvents.createdAt,
       })
       .from(masteryEvents)
@@ -466,6 +593,7 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
 
   return {
     allDomains,
+    expandingDomains: deriveExpandingDomains(eventRows),
     declaredInterests: declaredRows
       .map((row) => row.domain.trim().replace(/\s+/g, ' '))
       .filter(Boolean),
