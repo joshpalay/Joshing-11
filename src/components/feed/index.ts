@@ -1,4 +1,4 @@
-export { AnswerForm, UnansweredFeedActions } from './FeedActions'
+export { AnswerForm, FeedOverflowMenu, UnansweredFeedActions } from './FeedActions'
 export { AnsweredByYouCard } from './AnsweredByYouCard'
 export { DirectSentCard } from './DirectSentCard'
 export { FeedCard } from './FeedCard'

@@ -7,6 +7,7 @@ import {
   AnsweredByYouCard,
   AnswerForm,
   DirectSentCard,
+  FeedOverflowMenu,
   FriendAddedCard,
   FriendAnsweredCard,
   FriendLikedCard,
@@ -43,6 +44,7 @@ type FeedApiItem = {
   source_type: string
   source_user_id: string
   source_friend_display_name: string
+  source_profile_href?: string | null
   source_attribution: string
   source_result: 'correct' | 'incorrect' | null
   friend_results: FriendResult[] | null
@@ -61,6 +63,7 @@ type FeedApiItem = {
   correct_answer: string | null
   submitted_answer: string | null
   awarded_points: number | null
+  pointsAwarded?: number | null
   mastery_delta: unknown | null
   unverified_answer: boolean
 }
@@ -103,6 +106,10 @@ type AnswerResponse = {
   quip?: string | null
   consolation?: string | null
   breadcrumb?: string | null
+  pointsAwarded?: number | null
+  awarded_points?: number | null
+  masteryDelta?: unknown | null
+  mastery_delta?: unknown | null
 }
 
 type ResultState = {
@@ -111,6 +118,8 @@ type ResultState = {
   explanation: string | null
   quip: string | null
   breadcrumb: string | null
+  awardedPoints: number | null
+  masteryDelta: unknown | null
 }
 
 function formatEventTime(value: string) {
@@ -139,15 +148,56 @@ function comparisonCopy(
   return 'This one is still waiting for common ground.'
 }
 
-function feedMetadata(item: FeedApiItem) {
-  const time = formatEventTime(item.source_event_at)
-  return time ? `${item.source_attribution} · ${time}` : item.source_attribution
+function profileHref(userId?: string | null) {
+  return userId ? `/users/${encodeURIComponent(userId)}` : null
 }
 
-function baseTypedFields(item: FeedApiItem) {
+function FeedPersonLink({
+  href,
+  name,
+}: {
+  href?: string | null
+  name: string
+}) {
+  if (!href) return <>{name}</>
+  return (
+    <Link href={href} className="underline-offset-2 hover:underline">
+      {name}
+    </Link>
+  )
+}
+
+function feedMetadata(item: FeedApiItem, answered = false) {
+  const time = formatEventTime(item.source_event_at)
+  const source = (
+    <span>
+      <FeedPersonLink
+        href={item.source_profile_href ?? profileHref(item.source_user_id)}
+        name={item.source_friend_display_name}
+      />{' '}
+      {item.source_type === 'direct_sent'
+        ? 'sent this to you'
+        : item.source_type === 'authored_shared'
+          ? 'shared this'
+          : item.source_type === 'thumbs_upped'
+            ? 'liked this'
+            : 'answered this'}
+    </span>
+  )
+
+  return (
+    <span>
+      {source}
+      {time ? <> · {time}</> : null}
+      {answered ? <> · You answered</> : null}
+    </span>
+  )
+}
+
+function baseTypedFields(item: FeedApiItem, answered = false) {
   return {
     id: item.id,
-    metadata: feedMetadata(item),
+    metadata: feedMetadata(item, answered),
     category: item.domain_pill,
     question: item.question_text ?? 'Untitled question',
     personalMessage: item.personal_message,
@@ -174,6 +224,7 @@ function toTypedFeedItem(item: FeedApiItem) {
       ...base,
       type: 'direct_sent' as const,
       senderName: item.source_friend_display_name,
+      senderHref: item.source_profile_href ?? profileHref(item.source_user_id),
     } satisfies DirectSentFeedItem
   }
 
@@ -182,6 +233,7 @@ function toTypedFeedItem(item: FeedApiItem) {
       ...base,
       type: 'friend_added' as const,
       friendName: item.source_friend_display_name,
+      friendHref: item.source_profile_href ?? profileHref(item.source_user_id),
     } satisfies FriendAddedFeedItem
   }
 
@@ -190,6 +242,7 @@ function toTypedFeedItem(item: FeedApiItem) {
       ...base,
       type: 'friend_liked' as const,
       friendName: item.source_friend_display_name,
+      friendHref: item.source_profile_href ?? profileHref(item.source_user_id),
     } satisfies FriendLikedFeedItem
   }
 
@@ -198,6 +251,9 @@ function toTypedFeedItem(item: FeedApiItem) {
     type: 'friend_answered' as const,
     friendName:
       item.friend_results?.[0]?.displayName ?? item.source_friend_display_name,
+    friendHref: profileHref(
+      item.friend_results?.[0]?.userId ?? item.source_user_id
+    ),
     friendCorrect:
       item.friend_results?.[0]?.result === 'correct' ||
       item.source_result === 'correct',
@@ -210,13 +266,21 @@ function toAnsweredByYouItem(
   result?: ResultState
 ): AnsweredByYouFeedItem {
   return {
-    ...baseTypedFields(item),
+    ...baseTypedFields(item, true),
     type: 'answered_by_you',
     resultLabel:
-      item.is_correct === false ? 'Answered by you · Not quite' : 'Answered by you',
+      item.is_correct === false || result?.correct === false
+        ? 'Reviewed privately'
+        : 'You answered',
     answerSummary: result
       ? comparisonCopy(result.correct, item.friend_results)
       : comparisonCopy(item.is_correct, item.friend_results),
+    correctAnswer: result?.answer || item.correct_answer,
+    submittedAnswer: item.submitted_answer || undefined,
+    isCorrect: result?.correct ?? item.is_correct,
+    awardedPoints: result?.awardedPoints ?? item.awarded_points,
+    explanation: result?.explanation ?? item.explanation,
+    unverifiedAnswer: item.unverified_answer,
   }
 }
 
@@ -386,27 +450,88 @@ export default function FeedList({
     setItems((current) => current.filter((item) => item.id !== itemId))
   }, [])
 
-  const updateState = useCallback(
-    async (itemId: string, state: 'skipped' | 'dismissed') => {
-      setBusyId(itemId)
+  const hideCategory = useCallback(async (item: FeedApiItem) => {
+    if (!item.domain_pill) return
+    setBusyId(item.id)
+    setError(null)
+    try {
+      const response = await fetch('/api/feed/dismiss-domain', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ domain: item.domain_pill }),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.message ?? 'Could not hide that category.')
+      }
+      setItems((current) =>
+        current.filter(
+          (currentItem) => currentItem.domain_pill !== item.domain_pill
+        )
+      )
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not hide that category.'
+      )
+    } finally {
+      setBusyId(null)
+    }
+  }, [])
+
+  const hidePerson = useCallback(async (item: FeedApiItem) => {
+    setBusyId(item.id)
+    setError(null)
+    try {
+      const response = await fetch(`/api/feed/${item.id}/state`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ state: 'dismissed' }),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(
+          body?.message ?? 'Could not hide questions from that person.'
+        )
+      }
+      setItems((current) =>
+        current.filter(
+          (currentItem) => currentItem.source_user_id !== item.source_user_id
+        )
+      )
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not hide questions from that person.'
+      )
+    } finally {
+      setBusyId(null)
+    }
+  }, [])
+
+  const reportItem = useCallback(
+    async (item: FeedApiItem) => {
+      setBusyId(item.id)
       setError(null)
       try {
-        const response = await fetch(`/api/feed/${itemId}/state`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
+        const response = await fetch(`/api/feed/${item.id}/thumbsdown`, {
+          method: 'POST',
           credentials: 'include',
-          body: JSON.stringify({ state }),
         })
         if (!response.ok) {
           const body = await response.json().catch(() => null)
-          throw new Error(body?.message ?? 'Could not update that Feed item.')
+          throw new Error(body?.message ?? 'Could not report that question.')
         }
-        removeItem(itemId)
+        removeItem(item.id)
       } catch (caught) {
         setError(
           caught instanceof Error
             ? caught.message
-            : 'Could not update that Feed item.'
+            : 'Could not report that question.'
         )
       } finally {
         setBusyId(null)
@@ -450,8 +575,33 @@ export default function FeedList({
             explanation: body.explanation ?? null,
             quip: body.quip ?? body.consolation ?? null,
             breadcrumb: body.breadcrumb ?? null,
+            awardedPoints: body.pointsAwarded ?? body.awarded_points ?? null,
+            masteryDelta: body.masteryDelta ?? body.mastery_delta ?? null,
           },
         }))
+        setItems((current) =>
+          current.map((currentItem) =>
+            currentItem.id === item.id
+              ? {
+                  ...currentItem,
+                  state: 'answered',
+                  card_type: 'answered_by_you',
+                  type: 'answered_by_you',
+                  submitted_answer: submitted,
+                  answer_result: Boolean(body.correct ?? body.isCorrect)
+                    ? 'correct'
+                    : 'incorrect',
+                  is_correct: Boolean(body.correct ?? body.isCorrect),
+                  correct_answer: body.answer ?? body.correctAnswer ?? '',
+                  awarded_points:
+                    body.pointsAwarded ?? body.awarded_points ?? null,
+                  mastery_delta:
+                    body.masteryDelta ?? body.mastery_delta ?? null,
+                  explanation: body.explanation ?? currentItem.explanation,
+                }
+              : currentItem
+          )
+        )
         setCardStates((s) => ({ ...s, [item.id]: 'answered' }))
       } catch (caught) {
         setError(
@@ -466,8 +616,30 @@ export default function FeedList({
     [answers]
   )
 
+  const filterOptions: Array<{ value: FeedFilter; label: string }> = [
+    { value: 'all', label: 'All' },
+    { value: 'sent-to-me', label: 'Sent to me' },
+    { value: 'from-friends', label: 'From friends' },
+  ]
+
   return (
     <>
+      <nav className="mb-4 flex flex-wrap gap-2" aria-label="Feed filters">
+        {filterOptions.map((option) => (
+          <Link
+            key={option.value}
+            href={`/feed?filter=${option.value}`}
+            aria-current={feedFilter === option.value ? 'page' : undefined}
+            className={
+              feedFilter === option.value
+                ? 'rounded-full bg-stone-950 px-3 py-1.5 text-sm font-medium text-white'
+                : 'rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50'
+            }
+          >
+            {option.label}
+          </Link>
+        ))}
+      </nav>
       {ceremonyBanner ? (
         <Link
           href={`/ceremony/${ceremonyBanner.id}`}
@@ -521,6 +693,26 @@ export default function FeedList({
                 : null
             const typedItem = toTypedFeedItem(item)
             const isBusy = busyId === item.id
+            const overflow = (
+              <FeedOverflowMenu
+                sourceName={item.source_friend_display_name}
+                category={item.domain_pill}
+                question={
+                  item.question_id && item.question_text
+                    ? {
+                        id: item.question_id,
+                        text: item.question_text,
+                        domain: item.domain_pill,
+                      }
+                    : null
+                }
+                isInBank={item.is_in_bank}
+                disabled={isBusy}
+                onHideCategory={() => void hideCategory(item)}
+                onHidePerson={() => void hidePerson(item)}
+                onReport={() => void reportItem(item)}
+              />
+            )
             const answerActions =
               cardState === 'answering' ? (
                 <AnswerForm
@@ -545,52 +737,14 @@ export default function FeedList({
                       [item.id]: 'answering',
                     }))
                   }
-                  onDismiss={() => void updateState(item.id, 'dismissed')}
+                  overflow={overflow}
                   disabled={isBusy}
                 />
               ) : null
 
-            const answeredDetails = result || cardState === 'answered' ? (
-              <div className="rounded-xl bg-white/60 p-3 text-sm leading-6 text-stone-700">
-                <p className="font-medium text-stone-900">
-                  {comparisonCopy(result?.correct ?? item.is_correct, item.friend_results)}
-                </p>
-                {item.submitted_answer || answers[item.id] ? (
-                  <p className="mt-1">Your answer: {item.submitted_answer || answers[item.id]}</p>
-                ) : null}
-                {(result?.answer || item.correct_answer) &&
-                (result?.correct === false || item.is_correct === false) ? (
-                  <p className="mt-1">
-                    Answer: {result?.answer || item.correct_answer}
-                  </p>
-                ) : null}
-                {typeof item.awarded_points === 'number' ? (
-                  <p className="mt-1">Points: +{item.awarded_points}</p>
-                ) : null}
-                {item.unverified_answer ? (
-                  <p className="text-muted-foreground mt-1">This answer is still unverified.</p>
-                ) : null}
-                {result?.explanation || item.explanation ? (
-                  <p className="text-muted-foreground mt-1">
-                    {result?.explanation || item.explanation}
-                  </p>
-                ) : null}
-                {result?.quip ? (
-                  <p className="text-muted-foreground mt-1">{result.quip}</p>
-                ) : null}
-                {result?.breadcrumb ? (
-                  <p className="text-muted-foreground mt-2 italic">
-                    {result.breadcrumb}
-                  </p>
-                ) : null}
-              </div>
-            ) : null
-
             if (answeredByYouItem) {
               return (
-                <AnsweredByYouCard key={item.id} item={answeredByYouItem}>
-                  {answeredDetails}
-                </AnsweredByYouCard>
+                <AnsweredByYouCard key={item.id} item={answeredByYouItem} />
               )
             }
 

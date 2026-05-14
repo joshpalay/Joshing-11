@@ -239,6 +239,7 @@ export async function GET(request: NextRequest) {
         source_user_id: item.sourceUserId,
         source_result: item.sourceResult ?? null,
         source_friend_display_name: sourceName,
+        source_profile_href: `/users/${encodeURIComponent(item.sourceUserId)}`,
         source_attribution: item.sourceType === AUTHORED_SHARED_FEED_SOURCE_TYPE
           ? authoredSharedAttribution(sourceName, domain)
           : item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE
