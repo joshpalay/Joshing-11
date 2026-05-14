@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 
+import { GeometricProgress } from '@/components/play/GeometricProgress'
+
 import { FeedCard } from './FeedCard'
 import type { AnsweredByYouFeedItem } from './types'
 
@@ -15,25 +17,12 @@ function FeedProgressCircles({
   correct: boolean | null | undefined
 }) {
   return (
-    <div
-      className="flex items-center gap-1.5"
-      aria-label="Feed answer progress"
-    >
-      {Array.from({ length: 5 }, (_, index) => {
-        const active = index === 0
-        const className = active
-          ? correct
-            ? 'bg-emerald-600 border-emerald-600'
-            : 'bg-stone-400 border-stone-400'
-          : 'border-stone-300 bg-white/70'
-        return (
-          <span
-            key={index}
-            aria-hidden
-            className={`size-2.5 rounded-full border ${className}`}
-          />
-        )
-      })}
+    <div aria-label="Feed answer progress">
+      <GeometricProgress
+        total={5}
+        current={1}
+        results={{ 1: correct ? 'correct' : 'expired' }}
+      />
     </div>
   )
 }
@@ -70,9 +59,7 @@ function AnsweredDetails({ item }: { item: AnsweredByYouFeedItem }) {
         </p>
       ) : null}
       {item.unverifiedAnswer ? (
-        <p className="text-muted-foreground mt-2">
-          This answer is still unverified.
-        </p>
+        <p className="text-muted-foreground mt-2">LLM answer — unverified.</p>
       ) : null}
       {item.explanation ? (
         <p className="text-muted-foreground mt-2">{item.explanation}</p>

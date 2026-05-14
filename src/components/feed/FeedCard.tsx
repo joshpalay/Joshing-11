@@ -14,6 +14,14 @@ const toneClasses: Record<FeedCardTone, string> = {
   gray: 'border-stone-200 bg-stone-100/80 text-stone-800 shadow-none',
 }
 
+const categoryToneClasses: Record<FeedCardTone, string> = {
+  cream: 'text-amber-700',
+  white: 'text-stone-500',
+  green: 'text-emerald-700',
+  amber: 'text-orange-700',
+  gray: 'text-stone-500',
+}
+
 export function FeedCard({
   item,
   tone,
@@ -42,7 +50,12 @@ export function FeedCard({
 
         <div className="space-y-2">
           {category ? (
-            <p className="text-[0.68rem] font-semibold tracking-[0.18em] text-stone-500 uppercase">
+            <p
+              className={cn(
+                'text-[0.68rem] font-semibold tracking-[0.18em] uppercase',
+                categoryToneClasses[tone]
+              )}
+            >
               {category.toUpperCase()}
             </p>
           ) : null}

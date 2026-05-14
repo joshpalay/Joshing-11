@@ -9,7 +9,7 @@ export default function FeedPage() {
             Feed
           </h1>
           <p className="text-muted-foreground mt-3 max-w-xl text-base leading-7">
-            Questions your friends thought you&apos;d like
+            Questions your friends thought you&apos;d like.
           </p>
         </div>
         <FeedList />

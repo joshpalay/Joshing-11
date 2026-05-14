@@ -180,7 +180,7 @@ function feedMetadata(item: FeedApiItem, answered = false) {
       {item.source_type === 'direct_sent'
         ? 'sent this to you'
         : item.source_type === 'authored_shared'
-          ? 'shared this'
+          ? 'wrote this'
           : item.source_type === 'thumbs_upped'
             ? 'liked this'
             : 'answered this'}
@@ -624,7 +624,7 @@ export default function FeedList({
   const filterOptions: Array<{ value: FeedFilter; label: string }> = [
     { value: 'all', label: 'All' },
     { value: 'sent-to-me', label: 'Sent to me' },
-    { value: 'from-friends', label: 'From friends only' },
+    { value: 'from-friends', label: 'From friends' },
   ]
 
   return (
