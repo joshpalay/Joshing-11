@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Send, SkipForward, X } from 'lucide-react';
 
@@ -96,11 +96,13 @@ function comparisonCopy(playerCorrect: boolean, friendResults: FriendResult[] | 
 type FeedListProps = {
   pageSize?: number;
   infinite?: boolean;
+  limit?: number;
 };
 
 type QuestionCardState = 'unanswered' | 'answered' | 'reacted';
 
-export default function FeedList({ pageSize = 20, infinite = false }: FeedListProps) {
+export default function FeedList({ pageSize, infinite = false, limit }: FeedListProps) {
+  const effectivePageSize = pageSize ?? limit ?? 20;
   const [items, setItems] = useState<FeedApiItem[]>([]);
   const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
@@ -115,7 +117,7 @@ export default function FeedList({ pageSize = 20, infinite = false }: FeedListPr
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [sentinel, setSentinel] = useState<HTMLDivElement | null>(null);
 
   const loadFeed = useCallback(async (cursor?: string | null) => {
     const isNextPage = Boolean(cursor);
@@ -124,7 +126,7 @@ export default function FeedList({ pageSize = 20, infinite = false }: FeedListPr
     setError(null);
 
     try {
-      const search = new URLSearchParams({ limit: String(pageSize) });
+      const search = new URLSearchParams({ limit: String(effectivePageSize) });
       if (cursor) search.set('cursor', cursor);
 
       const response = await fetch(`/api/feed?${search.toString()}`, { cache: 'no-store', credentials: 'include' });
@@ -149,7 +151,7 @@ export default function FeedList({ pageSize = 20, infinite = false }: FeedListPr
       setLoadingInitial(false);
       setLoadingMore(false);
     }
-  }, [pageSize]);
+  }, [effectivePageSize]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -159,16 +161,15 @@ export default function FeedList({ pageSize = 20, infinite = false }: FeedListPr
   }, [loadFeed]);
 
   useEffect(() => {
-    const target = sentinelRef.current;
-    if (!infinite || !target || !hasMore || !nextCursor || loadingInitial || loadingMore) return;
+    if (!infinite || !sentinel || !hasMore || !nextCursor || loadingInitial || loadingMore) return;
 
     const observer = new IntersectionObserver((entries) => {
       if (entries[0]?.isIntersecting) void loadFeed(nextCursor);
     }, { rootMargin: '320px' });
 
-    observer.observe(target);
+    observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, infinite, loadFeed, loadingInitial, loadingMore, nextCursor]);
+  }, [hasMore, infinite, loadFeed, loadingInitial, loadingMore, nextCursor, sentinel]);
 
   const visibleItems = items;
 
@@ -478,7 +479,7 @@ export default function FeedList({ pageSize = 20, infinite = false }: FeedListPr
               </article>
             );
           })}
-          <div ref={sentinelRef} aria-hidden className="h-1" />
+          <div ref={setSentinel} aria-hidden className="h-1" />
           {loadingMore ? (
             <p className="py-3 text-center text-sm text-muted-foreground">Loading more...</p>
           ) : null}
