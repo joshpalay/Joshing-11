@@ -9,11 +9,11 @@ const publicQuestion = {
 };
 
 describe('correct-answer social feed eligibility', () => {
-  it('allows authored sharing but rejects game-publication and direct-sent sources from the main feed', () => {
+  it('allows authored and direct-sent sharing but rejects game-publication sources from the main feed', () => {
     expect(isMainFeedSourceVisible('authored_shared', null)).toBe(true);
     expect(isMainFeedSourceVisible('authored_shared', 'incorrect')).toBe(true);
     expect(isMainFeedSourceVisible('joshing_game', null)).toBe(false);
-    expect(isMainFeedSourceVisible('direct_sent', null)).toBe(false);
+    expect(isMainFeedSourceVisible('direct_sent', null)).toBe(true);
   });
 
   it('allows a correct answer by someone other than the author in a visible social context', () => {

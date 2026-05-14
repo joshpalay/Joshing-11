@@ -4,18 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, friendships, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem, type FeedCursor } from '@/server/db/queries/feed';
-import { AUTHORED_SHARED_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE, socialFeedDomainLabel } from '@/server/feed/visibility';
+import { getDismissedDomains, getFeedForUser, visibleFeedSourcePredicate, type CollapsedFeedItem, type FeedCursor } from '@/server/db/queries/feed';
+import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE, socialFeedDomainLabel } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
-
-const visibleFeedSourcePredicate = or(
-  eq(feedItems.sourceType, AUTHORED_SHARED_FEED_SOURCE_TYPE),
-  and(
-    eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
-    eq(feedItems.sourceResult, 'correct'),
-  ),
-);
 
 const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
@@ -71,6 +63,10 @@ function displayName(name: string | null, fallback = 'A friend') {
 
 function authoredSharedAttribution(sourceName: string, domain: string | null): string {
   return domain ? `${sourceName} shared a question — ${domain}` : `${sourceName} shared a question`;
+}
+
+function directSentAttribution(sourceName: string, domain: string | null): string {
+  return domain ? `${sourceName} sent you a question — ${domain}` : `${sourceName} sent you a question`;
 }
 
 function friendAnsweredAttribution(
@@ -191,7 +187,9 @@ export async function GET(request: NextRequest) {
         source_friend_display_name: sourceName,
         source_attribution: item.sourceType === AUTHORED_SHARED_FEED_SOURCE_TYPE
           ? authoredSharedAttribution(sourceName, domain)
-          : friendAnsweredAttribution(item, userById, domain, authorName),
+          : item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE
+            ? directSentAttribution(sourceName, domain)
+            : friendAnsweredAttribution(item, userById, domain, authorName),
         friend_results: item.friendResults ?? null,
         source_event_at: item.sourceEventAt,
         personal_message: item.personalMessage,

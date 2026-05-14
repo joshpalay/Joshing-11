@@ -12,6 +12,7 @@ import {
 } from '@/server/db/queries/feed';
 import { getFriends } from '@/server/db/queries/friends';
 import { sendSms } from '@/server/sms';
+import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
     .where(and(
       eq(feedItems.recipientUserId, parsed.recipientUserId),
       eq(feedItems.sourceUserId, session.userId),
-      eq(feedItems.sourceType, 'direct_sent'),
+      eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
       gt(feedItems.createdAt, lastTwentyFourHours()),
     ));
 
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
   const created = await createFeedItem({
     recipientUserId: parsed.recipientUserId,
     questionId: sendableQuestionId!,
-    sourceType: 'direct_sent',
+    sourceType: DIRECT_SENT_FEED_SOURCE_TYPE,
     sourceUserId: session.userId,
     sourceEventAt: new Date(),
     personalMessage: parsed.personalMessage,
