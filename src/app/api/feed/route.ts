@@ -21,6 +21,10 @@ function displayName(name: string | null, fallback = 'A friend') {
   return name?.trim() || fallback;
 }
 
+function authoredSharedAttribution(sourceName: string, domain: string | null): string {
+  return domain ? `${sourceName} shared a question — ${domain}` : `${sourceName} shared a question`;
+}
+
 function friendAnsweredAttribution(
   item: CollapsedFeedItem,
   userById: Map<string, { displayName: string | null }>,
@@ -123,7 +127,9 @@ export async function GET() {
         source_user_id: item.sourceUserId,
         source_result: item.sourceResult ?? null,
         source_friend_display_name: sourceName,
-        source_attribution: friendAnsweredAttribution(item, userById, domain, authorName),
+        source_attribution: item.sourceType === AUTHORED_SHARED_FEED_SOURCE_TYPE
+          ? authoredSharedAttribution(sourceName, domain)
+          : friendAnsweredAttribution(item, userById, domain, authorName),
         friend_results: item.friendResults ?? null,
         source_event_at: item.sourceEventAt,
         personal_message: item.personalMessage,
