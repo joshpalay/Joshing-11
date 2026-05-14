@@ -199,16 +199,32 @@ describe('POST /api/questions shareToFeed', () => {
     expect(state.questionUpdateValues).toContainEqual({ sharedToFriendsFeed: true })
   })
 
-  it('creates feed rows for legacy share-with-friends payload flags', async () => {
+  it('logs parsed shareToFeed intent and creates feed rows for legacy share-with-friends payload flags', async () => {
     const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }])
 
     const response = await POST(questionRequest({ share_with_friends: 'true' }))
     const body = await response.json()
     const createPayloadLogCall = consoleInfoMock.mock.calls.find(([label]) => label === '[questions/createPayload]')
+    const createPayloadLog = createPayloadLogCall?.[1]
 
     expect(response.status).toBe(201)
-    expect(createPayloadLogCall?.[1]).toEqual(expect.objectContaining({ shareToFeed: true }))
+    expect(createPayloadLog).toEqual(expect.objectContaining({
+      userId: 'creator-1',
+      hasErrors: false,
+      shareToFeed: true,
+      sendToFriendCount: 0,
+      payloadShareKeysPresent: {
+        shareToFeed: false,
+        shareWithFriends: false,
+        share_with_friends: true,
+        share_to_feed: false,
+        sharedToFriendsFeed: false,
+      },
+    }))
+    expect(createPayloadLog).not.toHaveProperty('text')
+    expect(createPayloadLog).not.toHaveProperty('correctAnswer')
+    expect(createPayloadLog).not.toHaveProperty('sendToFriendIds')
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 1,

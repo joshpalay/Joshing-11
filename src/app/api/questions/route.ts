@@ -28,6 +28,10 @@ function shouldIncludeShareRecipientDiagnostics() {
   return process.env.NODE_ENV !== 'production' || process.env.SHARE_TO_FEED_DEBUG_RECIPIENT_IDS === 'true';
 }
 
+function hasPayloadKey(body: Record<string, unknown> | null, key: string) {
+  return Object.prototype.hasOwnProperty.call(body ?? {}, key);
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -47,11 +51,11 @@ export async function POST(request: NextRequest) {
     shareToFeed: value.shareToFeed,
     sendToFriendCount: value.sendToFriendIds.length,
     payloadShareKeysPresent: {
-      shareToFeed: Object.prototype.hasOwnProperty.call(body ?? {}, 'shareToFeed'),
-      shareWithFriends: Object.prototype.hasOwnProperty.call(body ?? {}, 'shareWithFriends'),
-      share_with_friends: Object.prototype.hasOwnProperty.call(body ?? {}, 'share_with_friends'),
-      share_to_feed: Object.prototype.hasOwnProperty.call(body ?? {}, 'share_to_feed'),
-      sharedToFriendsFeed: Object.prototype.hasOwnProperty.call(body ?? {}, 'sharedToFriendsFeed'),
+      shareToFeed: hasPayloadKey(body, 'shareToFeed'),
+      shareWithFriends: hasPayloadKey(body, 'shareWithFriends'),
+      share_with_friends: hasPayloadKey(body, 'share_with_friends'),
+      share_to_feed: hasPayloadKey(body, 'share_to_feed'),
+      sharedToFriendsFeed: hasPayloadKey(body, 'sharedToFriendsFeed'),
     },
   });
   if (errors.length > 0) {
