@@ -337,15 +337,16 @@ function KnowledgePageContent() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(values),
     });
-    const body = await response.json().catch(() => null) as { message?: string } | null;
+    const body = await response.json().catch(() => null) as { message?: string; feedShare?: { requested: boolean; createdCount: number } } | null;
     if (!response.ok) throw new Error(body?.message ?? 'Could not save that question.');
     setSendQuestionOpen(false);
     setWriteQuestionOpen(false);
     if (values.sendToFriendIds.length > 0) {
       const n = values.sendToFriendIds.length;
       setQuestionToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
-    } else if (values.shareToFeed) {
-      setQuestionToast('Saved and shared with your friends.');
+    } else if (body?.feedShare?.createdCount && body.feedShare.createdCount > 0) {
+      const n = body.feedShare.createdCount;
+      setQuestionToast(`Saved and shared with ${n} ${n === 1 ? 'friend' : 'friends'}.`);
     } else {
       setQuestionToast('Saved to your bank.');
     }
