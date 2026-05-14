@@ -168,7 +168,14 @@ describe('POST /api/questions shareToFeed', () => {
 
     expect(response.status).toBe(201)
     expect(body.id).toBe('question-1')
-    expect(body.feedShare).toEqual({ requested: true, createdCount: 2 })
+    expect(body.feedShare).toEqual({
+      requested: true,
+      createdCount: 2,
+      friendCount: 2,
+      sharedRecipientIds: ['friend-1', 'friend-2'],
+      skippedDismissedDomainRecipientIds: [],
+      skippedExistingFeedRecipientIds: [],
+    })
     expect(getFriendsMock).toHaveBeenCalledWith('creator-1')
     expect(state.feedInsertValues).toEqual([
       expect.objectContaining({
@@ -200,7 +207,14 @@ describe('POST /api/questions shareToFeed', () => {
     expect(response.status).toBe(201)
     expect(createQuestionMock).toHaveBeenCalled()
     const body = await response.json()
-    expect(body.feedShare).toEqual({ requested: true, createdCount: 1 })
+    expect(body.feedShare).toEqual({
+      requested: true,
+      createdCount: 1,
+      friendCount: 1,
+      sharedRecipientIds: ['friend-1'],
+      skippedDismissedDomainRecipientIds: [],
+      skippedExistingFeedRecipientIds: [],
+    })
     expect(state.feedInsertValues).toHaveLength(1)
     expect(state.feedInsertValues[0]).toEqual(expect.objectContaining({ recipientUserId: 'friend-1' }))
   })
@@ -218,7 +232,14 @@ describe('POST /api/questions shareToFeed', () => {
 
     expect(response.status).toBe(201)
     const body = await response.json()
-    expect(body.feedShare).toEqual({ requested: true, createdCount: 1 })
+    expect(body.feedShare).toEqual({
+      requested: true,
+      createdCount: 1,
+      friendCount: 3,
+      sharedRecipientIds: ['friend-1'],
+      skippedDismissedDomainRecipientIds: ['friend-3'],
+      skippedExistingFeedRecipientIds: ['friend-2'],
+    })
     expect(userHasQuestionInBlockingFeedMock).toHaveBeenCalledWith('friend-1', 'question-1')
     expect(userHasQuestionInBlockingFeedMock).toHaveBeenCalledWith('friend-2', 'question-1')
     expect(userHasQuestionInBlockingFeedMock).not.toHaveBeenCalledWith('friend-3', 'question-1')
@@ -236,12 +257,43 @@ describe('POST /api/questions shareToFeed', () => {
     const body = await response.json()
 
     expect(response.status).toBe(201)
-    expect(body.feedShare).toEqual({ requested: true, createdCount: 0 })
+    expect(body.feedShare).toEqual({
+      requested: true,
+      createdCount: 0,
+      friendCount: 0,
+      sharedRecipientIds: [],
+      skippedDismissedDomainRecipientIds: [],
+      skippedExistingFeedRecipientIds: [],
+    })
     expect(state.feedInsertValues).toEqual([])
     expect(state.questionUpdateValues).toEqual([])
   })
 
-  it('redacts share-to-feed recipient ids from production responses and logs', async () => {
+  it('reports visible skip reasons when zero rows are created for non-empty all-friends sharing', async () => {
+    getFriendsMock.mockResolvedValue([
+      { id: 'friend-1', displayName: 'Friend One' },
+      { id: 'friend-2', displayName: 'Friend Two' },
+    ])
+    state.dismissedRows = [{ userId: 'friend-2' }]
+    userHasQuestionInBlockingFeedMock.mockImplementation(async (userId: string) => userId === 'friend-1')
+
+    const response = await POST(questionRequest({ shareToFeed: true }))
+    const body = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(body.feedShare).toEqual({
+      requested: true,
+      createdCount: 0,
+      friendCount: 2,
+      sharedRecipientIds: [],
+      skippedDismissedDomainRecipientIds: ['friend-2'],
+      skippedExistingFeedRecipientIds: ['friend-1'],
+    })
+    expect(state.feedInsertValues).toEqual([])
+    expect(state.questionUpdateValues).toEqual([])
+  })
+
+  it('exposes production response diagnostics while redacting recipient ids from logs by default', async () => {
     vi.stubEnv('NODE_ENV', 'production')
     const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     getFriendsMock.mockResolvedValue([
@@ -257,10 +309,14 @@ describe('POST /api/questions shareToFeed', () => {
     const shareLogCall = consoleInfoMock.mock.calls.find(([label]) => label === '[questions/shareToFeed]')
 
     expect(response.status).toBe(201)
-    expect(body.feedShare).toEqual({ requested: true, createdCount: 1 })
-    expect(JSON.stringify(body)).not.toContain('friend-1')
-    expect(JSON.stringify(body)).not.toContain('friend-2')
-    expect(JSON.stringify(body)).not.toContain('friend-3')
+    expect(body.feedShare).toEqual({
+      requested: true,
+      createdCount: 1,
+      friendCount: 3,
+      sharedRecipientIds: ['friend-1'],
+      skippedDismissedDomainRecipientIds: ['friend-3'],
+      skippedExistingFeedRecipientIds: ['friend-2'],
+    })
     expect(shareLogCall).toBeDefined()
     expect(shareLogCall?.[1]).toEqual({
       questionId: 'question-1',

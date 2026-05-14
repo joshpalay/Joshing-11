@@ -89,7 +89,14 @@ export async function POST(request: NextRequest) {
     questionId: created.id,
   });
   const question = await getQuestion(created.id, session.userId);
-  const feedShare = { requested: shareToFeed, createdCount: 0 };
+  const feedShare = {
+    requested: shareToFeed,
+    createdCount: 0,
+    friendCount: 0,
+    sharedRecipientIds: [] as string[],
+    skippedDismissedDomainRecipientIds: [] as string[],
+    skippedExistingFeedRecipientIds: [] as string[],
+  };
 
   if (shareToFeed) {
     const friends = await getFriends(session.userId);
@@ -142,6 +149,10 @@ export async function POST(request: NextRequest) {
     }
 
     feedShare.createdCount = sharedCount;
+    feedShare.friendCount = friends.length;
+    feedShare.sharedRecipientIds = sharedRecipientIds;
+    feedShare.skippedDismissedDomainRecipientIds = skippedDismissedDomainRecipientIds;
+    feedShare.skippedExistingFeedRecipientIds = skippedExistingFeedRecipientIds;
 
     if (sharedCount > 0) {
       await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
