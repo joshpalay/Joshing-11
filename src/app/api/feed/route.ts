@@ -133,6 +133,29 @@ export async function GET(request: NextRequest) {
       .then((rows) => rows[0]?.value ?? 0),
   ]);
 
+  const verboseFeedDebug = process.env.FEED_DEBUG_VERBOSE === 'true';
+
+  console.info('[feed/get]', {
+    userId: session.userId,
+    limit,
+    cursorPresent: Boolean(cursor),
+    friendCount,
+    dismissedDomainCount: dismissedDomains.length,
+    totalItemCount,
+    preFilterActiveCount,
+    activeItemCount: feedPage.totalCount,
+    pageItemCount: feedPage.items.length,
+    hasMore: feedPage.hasMore,
+    ...(verboseFeedDebug
+      ? {
+          preview: feedPage.items.map((item) => ({
+            id: item.id,
+            sourceType: item.sourceType,
+          })),
+        }
+      : {}),
+  });
+
   const activeItemCount = feedPage.totalCount;
   const feed = feedPage.items;
   const nextCursor = encodeCursor(feedPage.nextCursor);
