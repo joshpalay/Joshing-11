@@ -1,161 +1,121 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const {
-  getPortraitDataMock,
-  answerFindManyMock,
-  userFindManyMock,
-} = vi.hoisted(() => ({
-  getPortraitDataMock: vi.fn(),
-  answerFindManyMock: vi.fn(),
-  userFindManyMock: vi.fn(),
-}));
+const { dbMock, getFriendshipMock, getUserByIdMock, state } = vi.hoisted(() => {
+  const state = {
+    interestRows: [] as Array<{
+      userId: string
+      domain: string
+      broadCategory: string | null
+    }>,
+  }
 
-vi.mock('@/server/profile/portrait', () => ({
-  getPortraitData: getPortraitDataMock,
-}));
+  const dbMock = {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          orderBy: vi.fn(async () => state.interestRows),
+        })),
+      })),
+    })),
+  }
 
-import { getFriendPortraitData } from '@/server/profile/friend';
+  return {
+    dbMock,
+    getFriendshipMock: vi.fn(),
+    getUserByIdMock: vi.fn(),
+    state,
+  }
+})
 
-describe('friend portrait data shaping', () => {
+vi.mock('drizzle-orm', () => ({
+  and: vi.fn((...parts) => ({ op: 'and', parts })),
+  asc: vi.fn((column) => ({ op: 'asc', column })),
+  eq: vi.fn((column, value) => ({ op: 'eq', column, value })),
+  inArray: vi.fn((column, values) => ({ op: 'inArray', column, values })),
+}))
+
+vi.mock('@/server/db', () => ({
+  db: dbMock,
+  declaredInterests: {
+    userId: 'declaredInterests.userId',
+    domain: 'declaredInterests.domain',
+    broadCategory: 'declaredInterests.broadCategory',
+    isActive: 'declaredInterests.isActive',
+  },
+}))
+
+vi.mock('@/server/db/queries/friends', () => ({
+  getFriendship: getFriendshipMock,
+}))
+
+vi.mock('@/server/db/queries/users', () => ({
+  getUserById: getUserByIdMock,
+}))
+
+import { getFriendPortraitData } from '@/server/profile/friend'
+
+describe('friend portrait data', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-  });
+    vi.clearAllMocks()
+    state.interestRows = []
+    getUserByIdMock.mockResolvedValue({
+      id: 'friend-1',
+      displayName: 'Frances Friend',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    })
+    getFriendshipMock.mockResolvedValue({
+      id: 'friendship-1',
+      status: 'active',
+      formedAt: new Date('2026-02-01T00:00:00.000Z'),
+    })
+  })
 
-  it('limits visitor_unexplored to 50 categories and maps overlap counters', async () => {
-    const ownerCategories = [
-      {
-        canonical_subcategory: 'Late Tchaikovsky',
-        broad_category: 'Music',
-        declared_score: 5,
-        proven_score: 4,
-        proven_score_catchup: 0,
-        question_count: 0,
-        answer_count: 0,
-        difficulty_breakdown: {
-          declared: { accessible: 0, moderate: 0, specialist: 1 },
-          proven: { accessible: 0, moderate: 1, specialist: 0 },
-        },
+  it('returns a minimal friend portrait for active friends', async () => {
+    state.interestRows = [
+      { userId: 'friend-1', domain: 'Jazz piano', broadCategory: 'Music' },
+      { userId: 'friend-1', domain: 'Roman roads', broadCategory: 'History' },
+      { userId: 'viewer-1', domain: 'Jazz piano', broadCategory: 'Music' },
+    ]
+
+    await expect(
+      getFriendPortraitData('friend-1', 'viewer-1')
+    ).resolves.toEqual({
+      user: {
+        id: 'friend-1',
+        displayName: 'Frances Friend',
+        memberSince: new Date('2026-01-01T00:00:00.000Z'),
       },
-    ];
-
-    const viewerCategories = Array.from({ length: 55 }, (_, index) => ({
-      canonical_subcategory: `Viewer category ${index + 1}`,
-      broad_category: 'History',
-      declared_score: 1,
-      proven_score: 1,
-      proven_score_catchup: 0,
-      question_count: 0,
-      answer_count: 0,
-      difficulty_breakdown: {
-        declared: { accessible: 1, moderate: 0, specialist: 0 },
-        proven: { accessible: 0, moderate: 1, specialist: 0 },
+      visibility: 'friend',
+      friendship: {
+        id: 'friendship-1',
+        formedAt: new Date('2026-02-01T00:00:00.000Z'),
       },
-    }));
+      interests: [
+        { domain: 'Jazz piano', broadCategory: 'Music', shared: true },
+        { domain: 'Roman roads', broadCategory: 'History', shared: false },
+      ],
+      sharedInterests: ['Jazz piano'],
+    })
+  })
 
-    getPortraitDataMock
-      .mockResolvedValueOnce({ categories: ownerCategories, max_declared_score: 5, max_proven_score: 4 })
-      .mockResolvedValueOnce({ categories: viewerCategories, max_declared_score: 1, max_proven_score: 1 });
+  it('returns null for missing users and non-active friendships', async () => {
+    getUserByIdMock.mockResolvedValueOnce(null)
+    await expect(
+      getFriendPortraitData('missing-user', 'viewer-1')
+    ).resolves.toBeNull()
 
-    answerFindManyMock.mockResolvedValueOnce([
-      { result: 'correct', question: { canonical_subcategory: 'Late Tchaikovsky' } },
-      { result: 'wrong', question: { canonical_subcategory: 'Late Tchaikovsky' } },
-    ]);
-    userFindManyMock.mockReset();
+    getUserByIdMock.mockResolvedValueOnce({
+      id: 'stranger-1',
+      displayName: 'Stranger',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    })
+    getFriendshipMock.mockResolvedValueOnce({
+      id: 'friendship-2',
+      status: 'pending',
+    })
 
-    const result = await getFriendPortraitData('owner-1', 'viewer-1');
-
-    expect(result.categories).toHaveLength(1);
-    expect(result.categories[0].visitor_overlap).toEqual({
-      has_played_here: true,
-      has_correct_here: true,
-      questions_answered: 2,
-      questions_correct: 1,
-      overlap_top_peer_name: null,
-    });
-    expect(result.visitor_unexplored).toHaveLength(50);
-    expect(result.visitor_unexplored[0].canonical_subcategory).toBe('Viewer category 1');
-    expect(result.visitor_unexplored[49].canonical_subcategory).toBe('Viewer category 50');
-  });
-
-  it('keeps friend overlap behavior neutral when the viewer has no answer history in owner categories', async () => {
-    getPortraitDataMock
-      .mockResolvedValueOnce({
-        categories: [
-          {
-            canonical_subcategory: 'Roman legal codification',
-            broad_category: 'History',
-            declared_score: 4,
-            proven_score: 2,
-            proven_score_catchup: 0,
-            question_count: 0,
-            answer_count: 0,
-            difficulty_breakdown: {
-              declared: { accessible: 0, moderate: 1, specialist: 1 },
-              proven: { accessible: 1, moderate: 0, specialist: 0 },
-            },
-          },
-          {
-            canonical_subcategory: 'Byzantine hymnography',
-            broad_category: 'Music',
-            declared_score: 3,
-            proven_score: 2,
-            proven_score_catchup: 0,
-            question_count: 0,
-            answer_count: 0,
-            difficulty_breakdown: {
-              declared: { accessible: 1, moderate: 0, specialist: 1 },
-              proven: { accessible: 1, moderate: 0, specialist: 0 },
-            },
-          },
-        ],
-        max_declared_score: 4,
-        max_proven_score: 2,
-      })
-      .mockResolvedValueOnce({
-        categories: [
-          {
-            canonical_subcategory: 'Byzantine hymnography',
-            broad_category: 'Music',
-            declared_score: 2,
-            proven_score: 1,
-            proven_score_catchup: 0,
-            question_count: 0,
-            answer_count: 0,
-            difficulty_breakdown: {
-              declared: { accessible: 1, moderate: 0, specialist: 0 },
-              proven: { accessible: 1, moderate: 0, specialist: 0 },
-            },
-          },
-        ],
-        max_declared_score: 2,
-        max_proven_score: 1,
-      });
-
-    answerFindManyMock.mockResolvedValueOnce([]);
-    const result = await getFriendPortraitData('owner-2', 'viewer-2');
-
-    expect(result.categories).toEqual([
-      expect.objectContaining({
-        canonical_subcategory: 'Roman legal codification',
-        visitor_overlap: {
-          has_played_here: false,
-          has_correct_here: false,
-          questions_answered: 0,
-          questions_correct: 0,
-          overlap_top_peer_name: null,
-        },
-      }),
-      expect.objectContaining({
-        canonical_subcategory: 'Byzantine hymnography',
-        visitor_overlap: {
-          has_played_here: false,
-          has_correct_here: false,
-          questions_answered: 0,
-          questions_correct: 0,
-          overlap_top_peer_name: null,
-        },
-      }),
-    ]);
-    expect(result.visitor_unexplored).toEqual([]);
-  });
-});
+    await expect(
+      getFriendPortraitData('stranger-1', 'viewer-1')
+    ).resolves.toBeNull()
+  })
+})
