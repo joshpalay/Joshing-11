@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { isCorrectAnswerFeedEligible, isMainFeedSourceVisible, socialFeedDomainLabel } from '@/server/feed/visibility';
+import {
+  QUESTION_SHARING_FEED_SOURCE_VISIBILITY,
+  isCorrectAnswerFeedEligible,
+  isMainFeedSourceVisible,
+  socialFeedDomainLabel,
+} from '@/server/feed/visibility';
 
 const publicQuestion = {
   creatorId: 'author-1',
@@ -58,6 +63,24 @@ describe('correct-answer social feed eligibility', () => {
       question: publicQuestion,
       hasVisibleSocialContext: false,
     })).toBe(false);
+  });
+
+  it('documents visibility for every source type created by question-sharing routes', () => {
+    expect(QUESTION_SHARING_FEED_SOURCE_VISIBILITY).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceType: 'authored_shared' }),
+      expect.objectContaining({ sourceType: 'direct_sent' }),
+      expect.objectContaining({ sourceType: 'friend_answered' }),
+    ]));
+
+    for (const { sourceType, sourceResult, visible, reason } of QUESTION_SHARING_FEED_SOURCE_VISIBILITY) {
+      expect(isMainFeedSourceVisible(sourceType, sourceResult)).toBe(visible);
+      if (visible) {
+        expect(reason).toBeNull();
+      } else {
+        expect(reason).toEqual(expect.any(String));
+        expect(reason?.length).toBeGreaterThan(0);
+      }
+    }
   });
 
   it('suppresses forbidden fallback categories on feed cards', () => {
