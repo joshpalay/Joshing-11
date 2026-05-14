@@ -52,6 +52,7 @@ type FeedResponse = {
   viewer_user_id: string;
   meta?: FeedMeta;
   items: FeedApiItem[];
+  nextCursor?: string | null;
 };
 
 type CeremonyBanner = {
@@ -96,85 +97,101 @@ function comparisonCopy(playerCorrect: boolean, friendResults: FriendResult[] | 
 }
 
 type FeedListProps = {
-  limit?: number;
   pageSize?: number;
   infinite?: boolean;
 };
 
 type QuestionCardState = 'unanswered' | 'answered' | 'reacted';
 
-export default function FeedList({ limit, pageSize, infinite = false }: FeedListProps) {
-  const itemsPerPage = pageSize ?? limit ?? 25;
-  const [visibleCount, setVisibleCount] = useState(itemsPerPage);
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+export default function FeedList({ pageSize = 20, infinite = false }: FeedListProps) {
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [items, setItems] = useState<FeedApiItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ResultState>>({});
   const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({});
   const [toasts, setToasts] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null);
 
-  const loadFeed = useCallback(async () => {
-    setLoading(true);
+  const loadFeed = useCallback(async (cursor?: string | null) => {
+    const isNextPage = Boolean(cursor);
+    if (isNextPage) setLoadingMore(true);
+    else setLoadingInitial(true);
     setError(null);
+
     try {
-      const response = await fetch(`/api/feed?limit=${encodeURIComponent(String(limit))}`, { cache: 'no-store', credentials: 'include' });
+      const searchParams = new URLSearchParams({ limit: String(pageSize) });
+      if (cursor) searchParams.set('cursor', cursor);
+
+      const response = await fetch(`/api/feed?${searchParams.toString()}`, { cache: 'no-store', credentials: 'include' });
       const body = await response.json().catch(() => null) as FeedResponse | { message?: string } | null;
       if (!response.ok || !body || !('items' in body)) {
         throw new Error((body as { message?: string } | null)?.message ?? 'Could not load your Feed.');
       }
+
+      const fallbackNextCursor = body.meta?.has_more
+        ? String((body.meta.offset ?? 0) + body.items.length)
+        : null;
+      const nextPageCursor = body.nextCursor ?? fallbackNextCursor;
+
       setViewerId(body.viewer_user_id);
       setFeedMeta(body.meta ?? null);
-      setItems(body.items);
-      const bannerResponse = await fetch('/api/ceremony/banner', { cache: 'no-store', credentials: 'include' });
-      const bannerBody = await bannerResponse.json().catch(() => null) as { ceremony?: CeremonyBanner | null } | null;
-      setCeremonyBanner(bannerResponse.ok ? bannerBody?.ceremony ?? null : null);
+      setItems((current) => (isNextPage ? [...current, ...body.items] : body.items));
+      setNextCursor(nextPageCursor);
+      setHasMore(Boolean(nextPageCursor));
+
+      if (!isNextPage) {
+        const bannerResponse = await fetch('/api/ceremony/banner', { cache: 'no-store', credentials: 'include' });
+        const bannerBody = await bannerResponse.json().catch(() => null) as { ceremony?: CeremonyBanner | null } | null;
+        setCeremonyBanner(bannerResponse.ok ? bannerBody?.ceremony ?? null : null);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load your Feed.');
     } finally {
-      setLoading(false);
+      setLoadingInitial(false);
+      setLoadingMore(false);
     }
-  }, [limit]);
+  }, [pageSize]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void loadFeed();
+      void loadFeed(null);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadFeed]);
 
-  const visibleLimit = infinite ? visibleCount : itemsPerPage;
-  const visibleItems = useMemo(() => items.slice(0, visibleLimit), [items, visibleLimit]);
-  const hasMoreItems = visibleItems.length < items.length;
+  const visibleItems = items;
 
   useEffect(() => {
-    if (!infinite || !hasMoreItems) return;
+    if (!infinite || !hasMore || loadingInitial || loadingMore || !nextCursor) return;
 
-    const loadMoreNode = loadMoreRef.current;
-    if (!loadMoreNode) return;
+    const sentinelNode = sentinelRef.current;
+    if (!sentinelNode) return;
 
     if (!('IntersectionObserver' in window)) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
-          setVisibleCount((current) => Math.min(current + itemsPerPage, items.length));
+          void loadFeed(nextCursor);
         }
       },
       { rootMargin: '320px 0px' },
     );
 
-    observer.observe(loadMoreNode);
+    observer.observe(sentinelNode);
     return () => observer.disconnect();
-  }, [hasMoreItems, infinite, items.length, itemsPerPage]);
+  }, [hasMore, infinite, loadFeed, loadingInitial, loadingMore, nextCursor]);
 
   const emptyCopy = useMemo(() => {
-    if (loading) return 'Loading your Feed...';
+    if (loadingInitial) return 'Loading your Feed...';
     if (error) return error;
     if (!feedMeta?.has_friends) return "When friends recognize each other’s questions, those moments will appear here.";
     // pre_filter_active_count > 0 means items exist in active/skipped state but are hidden by domain filters
@@ -183,7 +200,7 @@ export default function FeedList({ limit, pageSize, infinite = false }: FeedList
     }
     if (feedMeta.total_item_count > 0) return "You're caught up. Answer questions to reveal more common ground.";
     return "Answer questions to reveal common ground.";
-  }, [error, feedMeta, loading]);
+  }, [error, feedMeta, loadingInitial]);
 
   const emptyDiagnostics = useMemo(() => {
     if (process.env.NODE_ENV === 'production' || !feedMeta) return null;
@@ -195,11 +212,12 @@ export default function FeedList({ limit, pageSize, infinite = false }: FeedList
       `pre_filter_active_count=${feedMeta.pre_filter_active_count}`,
       `active_item_count=${feedMeta.active_item_count}`,
       `page_item_count=${feedMeta.page_item_count ?? items.length}`,
-      `limit=${feedMeta.limit ?? limit}`,
+      `limit=${feedMeta.limit ?? pageSize}`,
       `offset=${feedMeta.offset ?? 0}`,
-      `has_more=${String(feedMeta.has_more ?? false)}`,
+      `has_more=${String(hasMore)}`,
+      `next_cursor=${nextCursor ?? ''}`,
     ].join(' · ');
-  }, [feedMeta, items.length, limit]);
+  }, [feedMeta, hasMore, items.length, nextCursor, pageSize]);
 
   const showToast = useCallback((itemId: string, message: string) => {
     setToasts((t) => ({ ...t, [itemId]: message }));
@@ -502,9 +520,9 @@ export default function FeedList({ limit, pageSize, infinite = false }: FeedList
           })}
         </section>
       )}
-      {infinite && hasMoreItems ? (
-        <div ref={loadMoreRef} className="py-4 text-center" aria-live="polite">
-          <p className="text-muted-foreground text-sm">Loading more Feed...</p>
+      {infinite && hasMore ? (
+        <div ref={sentinelRef} className="py-4 text-center" aria-live="polite">
+          <p className="text-muted-foreground text-sm">{loadingMore ? 'Loading more Feed...' : 'Load more Feed'}</p>
         </div>
       ) : null}
     </>

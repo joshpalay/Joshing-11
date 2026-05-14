@@ -22,14 +22,17 @@ const MAX_PAGE_LIMIT = 50;
 
 function parsePagination(request: NextRequest) {
   const limitParam = request.nextUrl.searchParams.get('limit');
+  const cursorParam = request.nextUrl.searchParams.get('cursor');
   const offsetParam = request.nextUrl.searchParams.get('offset');
   const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : DEFAULT_PAGE_LIMIT;
+  const parsedCursor = cursorParam ? Number.parseInt(cursorParam, 10) : null;
   const parsedOffset = offsetParam ? Number.parseInt(offsetParam, 10) : 0;
 
   const limit = Number.isFinite(parsedLimit)
     ? Math.min(Math.max(parsedLimit, 1), MAX_PAGE_LIMIT)
     : DEFAULT_PAGE_LIMIT;
-  const offset = Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0;
+  const offsetSource = parsedCursor !== null && Number.isFinite(parsedCursor) ? parsedCursor : parsedOffset;
+  const offset = Number.isFinite(offsetSource) ? Math.max(offsetSource, 0) : 0;
 
   return { limit, offset };
 }
@@ -122,8 +125,12 @@ export async function GET(request: NextRequest) {
     : [];
   const userById = new Map(userRows.map((u) => [u.id, u]));
 
+  const hasMore = offset + feed.length < activeItemCount;
+  const nextCursor = hasMore ? String(offset + feed.length) : null;
+
   return NextResponse.json({
     viewer_user_id: session.userId,
+    nextCursor,
     meta: {
       has_friends: friendCount > 0,
       has_dismissed_domains: dismissedDomains.length > 0,
@@ -133,7 +140,7 @@ export async function GET(request: NextRequest) {
       page_item_count: feed.length,
       limit,
       offset,
-      has_more: offset + feed.length < activeItemCount,
+      has_more: hasMore,
     },
     items: feed.map((item) => {
       const question = item.questionId ? questionById.get(item.questionId) : undefined;
