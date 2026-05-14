@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
 
   const activeItemCount = feedPage.totalCount;
   const feed = feedPage.items;
-  const pageItemCount = feed.length;
+  const pageItemCount = feedPage.items.length;
   const nextCursor = encodeCursor(feedPage.nextCursor);
   const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
   const verboseFeedDebug = process.env.FEED_DEBUG_VERBOSE === 'true';
@@ -148,12 +148,12 @@ export async function GET(request: NextRequest) {
     dismissedDomainCount: dismissedDomains.length,
     totalItemCount,
     preFilterActiveCount,
-    activeItemCount,
-    pageItemCount,
+    activeItemCount: feedPage.totalCount,
+    pageItemCount: feedPage.items.length,
     hasMore: feedPage.hasMore,
     ...(verboseFeedDebug
       ? {
-          items: feed.map((item) => ({
+          feedItemPreview: feedPage.items.map((item) => ({
             id: item.id,
             sourceType: item.sourceType,
           })),
