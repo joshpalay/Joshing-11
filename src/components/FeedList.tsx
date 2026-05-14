@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -296,7 +296,23 @@ type FeedListProps = {
 
 type QuestionCardState = 'unanswered' | 'answering' | 'answered' | 'reacted'
 
-export default function FeedList({
+export default function FeedList(props: FeedListProps) {
+  return (
+    <Suspense fallback={<FeedListLoading />}>
+      <FeedListContent {...props} />
+    </Suspense>
+  )
+}
+
+function FeedListLoading() {
+  return (
+    <div className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
+      Loading feed…
+    </div>
+  )
+}
+
+function FeedListContent({
   pageSize = 20,
   infinite = false,
 }: FeedListProps) {
