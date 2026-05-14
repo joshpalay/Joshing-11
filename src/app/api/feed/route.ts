@@ -4,10 +4,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, friendships, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { getDismissedDomains, getFeedForUser, visibleFeedSourcePredicate, type CollapsedFeedItem, type FeedCursor } from '@/server/db/queries/feed';
-import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE, socialFeedDomainLabel } from '@/server/feed/visibility';
+import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem, type FeedCursor } from '@/server/db/queries/feed';
+import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE, socialFeedDomainLabel, visibleFeedSourcePredicate } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
+
+const visibleSourcePredicate = visibleFeedSourcePredicate(feedItems);
 
 const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
@@ -117,7 +119,7 @@ export async function GET(request: NextRequest) {
       .from(feedItems)
       .where(and(
         eq(feedItems.recipientUserId, session.userId),
-        visibleFeedSourcePredicate,
+        visibleSourcePredicate,
       ))
       .then((rows) => rows[0]?.value ?? 0),
     db
@@ -125,7 +127,7 @@ export async function GET(request: NextRequest) {
       .from(feedItems)
       .where(and(
         eq(feedItems.recipientUserId, session.userId),
-        visibleFeedSourcePredicate,
+        visibleSourcePredicate,
         inArray(feedItems.state, ['active', 'skipped']),
       ))
       .then((rows) => rows[0]?.value ?? 0),
