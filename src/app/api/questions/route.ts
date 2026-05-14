@@ -41,6 +41,19 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const { value, errors } = readCreateQuestionPayload(body);
+  console.info('[questions/createPayload]', {
+    userId: session.userId,
+    hasErrors: errors.length > 0,
+    shareToFeed: value.shareToFeed,
+    sendToFriendCount: value.sendToFriendIds.length,
+    payloadShareKeysPresent: {
+      shareToFeed: Object.prototype.hasOwnProperty.call(body ?? {}, 'shareToFeed'),
+      shareWithFriends: Object.prototype.hasOwnProperty.call(body ?? {}, 'shareWithFriends'),
+      share_with_friends: Object.prototype.hasOwnProperty.call(body ?? {}, 'share_with_friends'),
+      share_to_feed: Object.prototype.hasOwnProperty.call(body ?? {}, 'share_to_feed'),
+      sharedToFriendsFeed: Object.prototype.hasOwnProperty.call(body ?? {}, 'sharedToFriendsFeed'),
+    },
+  });
   if (errors.length > 0) {
     return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
