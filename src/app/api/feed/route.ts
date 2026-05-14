@@ -1,10 +1,17 @@
 import { and, count, eq, inArray, or } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, friendships, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem } from '@/server/db/queries/feed';
+import {
+  DEFAULT_FEED_LIMIT,
+  getDismissedDomains,
+  getFeedForUser,
+  MAX_FEED_LIMIT,
+  type CollapsedFeedItem,
+} from '@/server/db/queries/feed';
 import { AUTHORED_SHARED_FEED_SOURCE_TYPE, SOCIAL_FEED_SOURCE_TYPE, socialFeedDomainLabel } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
@@ -20,9 +27,6 @@ const visibleFeedSourcePredicate = or(
 function displayName(name: string | null, fallback = 'A friend') {
   return name?.trim() || fallback;
 }
-
-const DEFAULT_FEED_LIMIT = 20;
-const MAX_FEED_LIMIT = 50;
 
 function parseLimit(value: string | null): number {
   if (!value) return DEFAULT_FEED_LIMIT;

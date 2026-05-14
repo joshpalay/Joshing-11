@@ -221,8 +221,8 @@ export type FeedPage = {
   hasMore: boolean;
 };
 
-const DEFAULT_FEED_LIMIT = 20;
-const MAX_FEED_LIMIT = 50;
+export const DEFAULT_FEED_LIMIT = 20;
+export const MAX_FEED_LIMIT = 50;
 const FEED_FETCH_BATCH_SIZE = 100;
 
 function clampFeedLimit(limit: number | undefined): number {
@@ -334,19 +334,10 @@ export async function getFeedForUser(userId: string, options: FeedPageOptions = 
 
   const pinnedItems = includePinnedItems ? await collapseFeedItems(pinnedRaw.filter(filterItem).sort(compareFeedItems)) : [];
   const visibleNonPinned = nonPinnedRaw.filter(filterItem).sort(compareFeedItems);
-  const pageRawItems: FeedItem[] = [];
-  let items: CollapsedFeedItem[] = [];
-
-  for (const item of visibleNonPinned) {
-    pageRawItems.push(item);
-    items = await collapseFeedItems(pageRawItems);
-    if (items.length === limit) break;
-  }
-
-  const lastConsumedItem = pageRawItems[pageRawItems.length - 1];
-  const lastFetchedItem = nonPinnedRaw[nonPinnedRaw.length - 1];
-  const hasMore = pageRawItems.length < visibleNonPinned.length || nonPinnedRaw.length === FEED_FETCH_BATCH_SIZE;
-  const cursorItem = lastConsumedItem ?? lastFetchedItem;
+  const collapsedNonPinned = await collapseFeedItems(visibleNonPinned);
+  const items = collapsedNonPinned.slice(0, limit);
+  const hasMore = collapsedNonPinned.length > limit || nonPinnedRaw.length === FEED_FETCH_BATCH_SIZE;
+  const cursorItem = items[items.length - 1] ?? nonPinnedRaw[nonPinnedRaw.length - 1];
 
   return {
     items,
