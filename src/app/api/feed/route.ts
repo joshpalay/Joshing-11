@@ -1,5 +1,5 @@
 import { and, count, eq, inArray, or } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, friendships, questions, users } from '@/server/db';
@@ -16,20 +16,6 @@ const visibleFeedSourcePredicate = or(
     eq(feedItems.sourceResult, 'correct'),
   ),
 );
-
-function parseLimit(value: string | null): number {
-  if (!value) return 20;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 20;
-  return Math.min(Math.max(Math.trunc(parsed), 1), 50);
-}
-
-function parseCursor(value: string | null): number {
-  if (!value) return 0;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.max(Math.trunc(parsed), 0);
-}
 
 function displayName(name: string | null, fallback = 'A friend') {
   return name?.trim() || fallback;
@@ -58,13 +44,9 @@ function friendAnsweredAttribution(
   return domain ? `Common ground in ${domain}: ${names}` : `${names} share this one`;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-
-  const params = request.nextUrl.searchParams;
-  const limit = parseLimit(params.get('limit'));
-  const offset = parseCursor(params.get('cursor'));
 
   const [rawFeed, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
     getFeedForUser(session.userId),
@@ -96,9 +78,7 @@ export async function GET(request: NextRequest) {
       .then((rows) => rows[0]?.value ?? 0),
   ]);
 
-  const feed = rawFeed.slice(offset, offset + limit);
-  const nextOffset = offset + feed.length;
-  const nextCursor = nextOffset < rawFeed.length ? String(nextOffset) : null;
+  const feed = rawFeed;
   const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
 
   const [questionRows, bankedById] = await Promise.all([
@@ -124,11 +104,9 @@ export async function GET(request: NextRequest) {
       has_friends: friendCount > 0,
       has_dismissed_domains: dismissedDomains.length > 0,
       total_item_count: totalItemCount,
-      active_item_count: rawFeed.length,
+      active_item_count: feed.length,
       pre_filter_active_count: preFilterActiveCount,
     },
-    nextCursor,
-    hasMore: Boolean(nextCursor),
     items: feed.map((item) => {
       const question = item.questionId ? questionById.get(item.questionId) : undefined;
       const sourceUser = userById.get(item.sourceUserId);
