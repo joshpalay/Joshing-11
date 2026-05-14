@@ -5,6 +5,7 @@ import {
   creatorNotes,
   db,
   feedItems,
+  friendships,
   joshingGameQuestions,
   joshingGameRecipients,
   joshingGameResponses,
@@ -62,9 +63,19 @@ export type ActivityItemView = Pick<
       domain: string | null;
       result: 'correct' | 'incorrect';
     };
+    authoredSharedQuestion?: {
+      domain: string;
+      recipientCount: number;
+    };
     declaredPromoted?: {
       domain: string;
       questionText: string;
+    };
+    friendshipRequest?: {
+      id: string;
+      status: string;
+      requestedByUserId: string;
+      suggestedInterests: string[];
     };
     creatorNote?: {
       id: string;
@@ -101,8 +112,55 @@ function isActivityType(value: string): value is ActivityItemType {
     'question_curated',
     'creator_note_received',
     'friend_answered_your_question',
+    'authored_question_shared',
     'declared_promoted',
   ].includes(value);
+}
+
+
+function parseFriendshipRequestInterests(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  const interests = (value as { suggestedInterests?: unknown }).suggestedInterests;
+  if (!Array.isArray(interests)) return [];
+
+  return interests
+    .filter((interest): interest is string => typeof interest === 'string' && interest.trim().length > 0)
+    .map((interest) => interest.trim())
+    .slice(0, 3);
+}
+
+async function hydrateFriendshipRequests(items: ActivityItemRow[]) {
+  const friendshipIds = [
+    ...new Set(
+      items
+        .filter((item) => item.referenceType === 'friendship')
+        .map((item) => item.referenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (friendshipIds.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['friendshipRequest']>>();
+  }
+
+  const rows = await db
+    .select({
+      id: friendships.id,
+      status: friendships.status,
+      requestedByUserId: friendships.requestedByUserId,
+      requestContext: friendships.requestContext,
+    })
+    .from(friendships)
+    .where(inArray(friendships.id, friendshipIds));
+
+  return new Map(rows.map((row) => [
+    row.id,
+    {
+      id: row.id,
+      status: row.status,
+      requestedByUserId: row.requestedByUserId,
+      suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
+    },
+  ]));
 }
 
 async function hydrateActors(items: ActivityItemRow[]) {
@@ -463,6 +521,44 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
   );
 }
 
+async function hydrateAuthoredSharedQuestions(items: ActivityItemRow[]) {
+  const relevant = items.filter(
+    (item) => item.type === 'authored_question_shared' && item.referenceType === 'question' && item.referenceId,
+  );
+  if (relevant.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['authoredSharedQuestion']>>();
+  }
+
+  const questionIds = [...new Set(relevant.map((item) => item.referenceId!))];
+  const [questionRows, recipientRows] = await Promise.all([
+    db
+      .select({ id: questions.id, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+      .from(questions)
+      .where(inArray(questions.id, questionIds)),
+    db
+      .select({ questionId: feedItems.questionId, value: count() })
+      .from(feedItems)
+      .where(and(
+        inArray(feedItems.questionId, questionIds),
+        eq(feedItems.sourceType, 'authored_shared'),
+      ))
+      .groupBy(feedItems.questionId),
+  ]);
+
+  const questionById = new Map(questionRows.map((row) => [row.id, row]));
+  const countByQuestionId = new Map(recipientRows.map((row) => [row.questionId, row.value]));
+
+  return new Map(
+    relevant.map((item) => {
+      const question = questionById.get(item.referenceId!);
+      return [item.id, {
+        domain: question ? (question.canonicalSubcategory ?? question.broadCategory ?? question.category) : 'General',
+        recipientCount: Number(countByQuestionId.get(item.referenceId!) ?? 0),
+      }] as const;
+    }),
+  );
+}
+
 async function hydrateDeclaredPromoted(items: ActivityItemRow[]) {
   const relevant = items.filter(
     (item) => item.type === 'declared_promoted' && item.referenceType === 'question' && item.referenceId,
@@ -501,8 +597,9 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     .orderBy(desc(activityItems.createdAt))
     .limit(100);
 
-  const [actorsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, declaredPromotedById] = await Promise.all([
+  const [actorsById, friendshipRequestsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, authoredSharedQuestionsById, declaredPromotedById] = await Promise.all([
     hydrateActors(rows),
+    hydrateFriendshipRequests(rows),
     hydrateGames(rows, userId),
     hydrateMasteryEvents(rows),
     hydrateReactions(rows),
@@ -510,6 +607,7 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     hydrateCuratedQuestions(rows),
     hydrateCreatorNotes(rows),
     hydrateFriendAnsweredQuestions(rows),
+    hydrateAuthoredSharedQuestions(rows),
     hydrateDeclaredPromoted(rows),
   ]);
 
@@ -526,6 +624,9 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
       createdAt: row.createdAt,
       actor: row.actorUserId ? actorsById.get(row.actorUserId) ?? null : null,
       reference: {
+        friendshipRequest: row.referenceType === 'friendship' && row.referenceId
+          ? friendshipRequestsById.get(row.referenceId)
+          : undefined,
         game: row.referenceType === 'joshing_game' && row.referenceId
           ? gamesById.get(row.referenceId)
           : undefined,
@@ -543,6 +644,9 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
           : undefined,
         friendAnsweredQuestion: row.type === 'friend_answered_your_question'
           ? friendAnsweredQuestionsById.get(row.id)
+          : undefined,
+        authoredSharedQuestion: row.type === 'authored_question_shared'
+          ? authoredSharedQuestionsById.get(row.id)
           : undefined,
         declaredPromoted: row.type === 'declared_promoted'
           ? declaredPromotedById.get(row.id)

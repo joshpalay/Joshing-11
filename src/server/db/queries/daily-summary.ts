@@ -10,6 +10,7 @@ import {
 import { resolveTier } from '@/server/mastery/tiers';
 import { getDeliveredCreatorNotesForQuestions, type DeliveredCreatorNote } from '@/server/creator-notes';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
+import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import type { QueueSlot } from '@/server/daily/types';
 import type { MasteryTier } from '@/types/db';
 
@@ -19,6 +20,7 @@ export type DailySummaryView = {
   totalCorrect: number;
   totalSkipped: number;
   pointsEarned: number;
+  difficultyMode: string | null;
   questions: QuestionRecap[];
   domainGains: DomainGain[];
   newTerritory: string[];
@@ -89,7 +91,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     .map((slot) => slot.generated_question_id)
     .filter((id): id is string => Boolean(id));
 
-  const [questions, todayEvents] = await Promise.all([
+  const [questions, todayEvents, prefs] = await Promise.all([
     generatedIds.length > 0
       ? db
           .select()
@@ -112,18 +114,34 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
             sql`${masteryEvents.answerId} like ${`daily:${queue.id}:%`}`,
           ))
       : Promise.resolve([]),
+    getDailyPreferences(userId),
   ]);
 
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const pointsByDomain = new Map<string, number>();
   const touchedDomains = new Set<string>();
 
-  for (const slot of slots) {
-    if (slot.domain) touchedDomains.add(slot.domain);
-  }
   for (const event of todayEvents) {
     touchedDomains.add(event.domain);
     pointsByDomain.set(event.domain, (pointsByDomain.get(event.domain) ?? 0) + Number(event.awardedPoints ?? 0));
+  }
+
+  const slotPointsByDomain = new Map<string, number>();
+  for (const slot of slots) {
+    if (!slot.domain) continue;
+    touchedDomains.add(slot.domain);
+
+    const slotPoints = Number(slot.awarded_points ?? 0);
+    if (slotPoints > 0) {
+      slotPointsByDomain.set(slot.domain, (slotPointsByDomain.get(slot.domain) ?? 0) + slotPoints);
+    }
+  }
+
+  for (const [domain, slotPoints] of slotPointsByDomain) {
+    // The queue slot is the source of truth for the visible round total. If the
+    // mastery event write is missing or undercounts a domain, keep the per-domain
+    // recap in sync with the total card instead of showing +0 under a +N total.
+    pointsByDomain.set(domain, Math.max(pointsByDomain.get(domain) ?? 0, slotPoints));
   }
 
   const priorRows = touchedDomains.size > 0
@@ -198,8 +216,8 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const totalSkipped = slots.filter((slot) => slot.skipped).length;
   const totalAnswered = slots.filter((slot) => slot.answered).length;
   const totalCorrect = slots.filter((slot) => slot.answer_state === 'correct').length;
-  const pointsEarned = [...pointsByDomain.values()].reduce((sum, points) => sum + points, 0)
-    || slots.reduce((sum, slot) => sum + Number(slot.awarded_points ?? 0), 0);
+  const pointsEarned = [...pointsByDomain.values()].reduce((sum, points) => sum + points, 0);
+  const gainedDomains = [...touchedDomains].filter((domain) => (pointsByDomain.get(domain) ?? 0) > 0);
 
   return {
     date: dateString,
@@ -207,8 +225,9 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     totalCorrect,
     totalSkipped,
     pointsEarned,
+    difficultyMode: prefs.difficulty,
     questions: recaps,
-    domainGains: [...touchedDomains]
+    domainGains: gainedDomains
       .map((domain) => ({
         domain,
         displayName: displayNameForDomain(domain),

@@ -3,9 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { GameplayChatThread, newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
+import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
+import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+
+function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
+  const tier = difficultyEstimateToTierLabel(slot.difficulty_estimate);
+  return tier ? [{ label: tier }] : [];
+}
 
 type QueueResponse = {
   queue_id: string;
@@ -25,7 +31,35 @@ type AnswerResponse = {
   consolation?: string | null;
   quip?: string | null;
   breadcrumb?: string | null;
+  masteryDelta?: unknown | null;
+  mastery_delta?: unknown | null;
 };
+
+type FailedAnswerResponse = {
+  message?: string;
+  error?: string;
+};
+
+type RecheckResponse = {
+  accepted?: boolean;
+  status?: 'accepted' | 'rejected' | 'needs_human';
+  reason?: string;
+  pointsAwarded?: number;
+  correctAnswer?: string;
+};
+
+const ANSWER_ERROR_MESSAGES: Record<string, string> = {
+  unauthorized: "Please sign in to answer today's question.",
+  validation: 'Check your answer and try again.',
+  not_found: 'We could not find that Daily Five queue.',
+  invalid_state: 'That question is already closed.',
+  question_not_found: 'We could not find that Daily Five question.',
+  unexpected: 'Could not record that answer.',
+};
+
+function answerFailureMessage(body: FailedAnswerResponse | null): string {
+  return body?.message ?? (body?.error ? ANSWER_ERROR_MESSAGES[body.error] : undefined) ?? 'Could not record that answer.';
+}
 
 function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
   return slots.find((slot) => !slot.answered && !slot.skipped) ?? null;
@@ -143,6 +177,54 @@ export default function DailyPage() {
     }
   }, [currentSlot, queue, submitting]);
 
+  const requestRecheck = useCallback(async (slotIndex: number): Promise<RecheckActionResult> => {
+    if (!queue) throw new Error('No active queue');
+
+    const response = await fetch('/api/daily/recheck', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slotIndex }),
+    });
+    const body = await response.json().catch(() => null) as RecheckResponse | FailedAnswerResponse | null;
+
+    if (!response.ok) {
+      throw new Error(body && 'message' in body && body.message ? body.message : 'Could not recheck that answer.');
+    }
+
+    const accepted = Boolean(body && 'accepted' in body && body.accepted);
+    const status = body && 'status' in body ? body.status : accepted ? 'accepted' : 'rejected';
+    const reason = body && 'reason' in body && body.reason ? body.reason : null;
+    const pointsAwarded = body && 'pointsAwarded' in body && typeof body.pointsAwarded === 'number' ? body.pointsAwarded : 0;
+    const correctAnswer = body && 'correctAnswer' in body && body.correctAnswer ? body.correctAnswer : undefined;
+
+    setQueue((existing) => existing
+      ? {
+          ...existing,
+          slots: existing.slots.map((slot) =>
+            slot.slot_index === slotIndex
+              ? {
+                  ...slot,
+                  answer_state: accepted ? 'correct' : 'incorrect',
+                  awarded_points: accepted ? pointsAwarded : slot.awarded_points,
+                  reveal_canonical_answer: correctAnswer ?? slot.reveal_canonical_answer,
+                  recheck_status: status,
+                  recheck_reason: reason,
+                }
+              : slot
+          ),
+        }
+      : existing);
+
+    if (accepted) {
+      return { accepted: true, message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.` };
+    }
+    if (status === 'needs_human') {
+      return { accepted: false, message: reason ?? 'Flagged for a human look.' };
+    }
+    return { accepted: false, message: reason ?? 'Rechecked and still marked wrong.' };
+  }, [queue]);
+
   const messages = useMemo<ChatMessage[]>(() => {
     if (!queue) return [];
     const rows: ChatMessage[] = [];
@@ -153,7 +235,8 @@ export default function DailyPage() {
           kind: 'question',
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
-          creatorName: 'From Joshing',
+          creatorName: null,
+          badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
           rows.push({ id: `u-${slot.slot_index}`, kind: 'user', text: slot.submitted_answer });
@@ -171,6 +254,9 @@ export default function DailyPage() {
           copyVariant: slot.slot_index,
           creatorName: 'Joshing',
           canonicalSubcategory: slot.domain,
+          recheckAction: slot.answer_state === 'incorrect' && !slot.recheck_status
+            ? { onSubmit: () => requestRecheck(slot.slot_index) }
+            : null,
         });
         continue;
       }
@@ -188,7 +274,8 @@ export default function DailyPage() {
           kind: 'question',
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
-          creatorName: 'From Joshing',
+          creatorName: null,
+          badges: questionBadges(slot),
         });
         break;
       }
@@ -205,7 +292,7 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, skipCurrent]);
+  }, [allDone, currentSlot?.slot_index, queue, requestRecheck]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -232,9 +319,14 @@ export default function DailyPage() {
           submitted_answer: submittedAnswer,
         }),
       });
+      if (!response.ok) {
+        const failedBody = await response.json().catch(() => null) as FailedAnswerResponse | null;
+        throw new Error(answerFailureMessage(failedBody));
+      }
+
       const body = await response.json().catch(() => null) as AnswerResponse | null;
-      if (!response.ok || !body) {
-        throw new Error((body as { message?: string } | null)?.message ?? 'Could not record that answer.');
+      if (!body) {
+        throw new Error('Could not record that answer.');
       }
 
       const isCorrect = Boolean(body.isCorrect ?? body.correct);

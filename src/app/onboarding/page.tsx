@@ -21,12 +21,12 @@ export default async function OnboardingPage() {
     redirect('/');
   }
 
-  const rawSeeded = await getPreSeededInterestsForUser(session.userId);
-  const preSeededInterests: PreSeededInterest[] = rawSeeded.map((interest) => ({
+  const seeded = await getPreSeededInterestsForUser(session.userId);
+  const preSeededInterests: PreSeededInterest[] = seeded.interests.map((interest) => ({
     domain: interest.label,
-    broadCategory: interest.broadCategory ?? 'Other',
+    broadCategory: interest.broadCategory ?? 'General Knowledge',
     rationale: interest.description ?? null,
   }));
 
-  return <OnboardingFlow preSeededInterests={preSeededInterests} />;
+  return <OnboardingFlow preSeededInterests={preSeededInterests} inviterName={seeded.inviterName} />;
 }

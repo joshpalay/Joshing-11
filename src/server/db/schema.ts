@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   date,
   doublePrecision,
   index,
@@ -30,7 +31,7 @@ export const categoryEnum = pgEnum('Category', [
   'philosophy',
   'pop_culture',
   'language',
-  'other',
+  'general_knowledge',
 ]);
 
 export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public']);
@@ -202,7 +203,9 @@ export const questions = pgTable(
   'Question',
   {
     id: id(),
-    creatorId: text('creator_id').notNull().references(() => users.id),
+    creatorId: text('creator_id').references(() => users.id),
+    generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id, { onDelete: 'set null' }),
+    source: text('source').$type<'authored' | 'daily_generated'>().notNull().default('authored'),
     sourceQuestionId: text('source_question_id'),
     sourceCreatorId: text('source_creator_id'),
     questionText: text('question_text').notNull(),
@@ -213,7 +216,7 @@ export const questions = pgTable(
     answerSource: answerSourceEnum('answer_source'),
     questionType: questionTypeEnum('question_type').notNull().default('factual'),
     minimumRequired: integer('minimum_required'),
-    category: categoryEnum('category').notNull().default('other'),
+    category: categoryEnum('category').notNull().default('general_knowledge'),
     broadCategory: text('broad_category'),
     subcategory: text('subcategory'),
     canonicalSubcategory: text('canonical_subcategory'),
@@ -233,6 +236,9 @@ export const questions = pgTable(
     explainerFullExpired: text('explainer_full_expired'),
     shortLabel: text('short_label'),
     status: questionStatusEnum('status').notNull().default('verified'),
+    verified: boolean('verified').notNull().default(true),
+    llmSuggestedAnswer: text('llm_suggested_answer'),
+    critiqueIterations: integer('critique_iterations').notNull().default(0),
     visibility: questionVisibilityEnum('visibility').notNull().default('public'),
     publicStatus: publicStatusEnum('public_status').notNull().default('not_scored'),
     publicEligibilityScore: doublePrecision('public_eligibility_score'),
@@ -253,6 +259,7 @@ export const questions = pgTable(
     index('Question_canonical_subcategory_idx').on(table.canonicalSubcategory),
     index('Question_source_question_id_idx').on(table.sourceQuestionId),
     index('Question_source_creator_id_idx').on(table.sourceCreatorId),
+    uniqueIndex('Question_generated_question_id_key').on(table.generatedQuestionId),
   ],
 );
 
@@ -299,12 +306,29 @@ export const playerMastery = pgTable(
     tier: masteryTierEnum('tier').notNull().default('establishing'),
     tierReachedAt: timestamp('tier_reached_at', { withTimezone: true }),
     seasonPointsStart: doublePrecision('season_points_start').notNull().default(0),
+    territoryType: text('territory_type').$type<'declared' | 'demonstrated'>().notNull().default('demonstrated'),
     updatedAt: updatedAt(),
   },
   (table) => [
     unique('PLAYER_MASTERY_user_id_canonical_subcategory_key').on(table.userId, table.canonicalSubcategory),
     index('PLAYER_MASTERY_user_id_idx').on(table.userId),
     index('PLAYER_MASTERY_canonical_subcategory_idx').on(table.canonicalSubcategory),
+  ],
+);
+
+
+export const critiqueUsageDaily = pgTable(
+  'CritiqueUsageDaily',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    usageDate: date('usage_date').notNull(),
+    critiqueCount: integer('critique_count').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('CritiqueUsageDaily_user_id_usage_date_key').on(table.userId, table.usageDate),
+    index('CritiqueUsageDaily_user_id_usage_date_idx').on(table.userId, table.usageDate),
   ],
 );
 
@@ -393,6 +417,11 @@ export const gradeDisputes = pgTable(
     creatorId: text('creator_id').notNull(),
     submittedAnswer: text('submitted_answer').notNull(),
     canonicalAnswer: text('canonical_answer').notNull(),
+    questionText: text('question_text'),
+    surface: text('surface'),
+    reviewDecision: text('review_decision'),
+    reviewReason: text('review_reason'),
+    acceptedAlternative: text('accepted_alternative'),
     status: gradeDisputeStatusEnum('status').notNull().default('pending'),
     createdAt: createdAt(),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
@@ -583,8 +612,12 @@ export const profileDomainVisibility = pgTable(
       table.userId,
       table.canonicalSubcategory,
     ),
-    unique('PROFILE_DOMAIN_VISIBILITY_user_id_domain_key').on(table.userId, table.domain),
+    uniqueIndex('PROFILE_DOMAIN_VISIBILITY_user_id_domain_key').on(table.userId, table.domain),
     index('PROFILE_DOMAIN_VISIBILITY_user_id_idx').on(table.userId),
+    check(
+      'PROFILE_DOMAIN_VISIBILITY_visibility_check',
+      sql`${table.visibility} IN ('public', 'friends', 'private')`,
+    ),
   ],
 );
 
@@ -597,7 +630,6 @@ export const declaredInterests = pgTable(
     broadCategory: text('broadCategory'),
     declaredAt: timestamp('declaredAt', { withTimezone: true }).notNull().defaultNow(),
     isActive: boolean('isActive').notNull().default(true),
-    territoryType: text('territory_type').$type<'declared' | 'demonstrated'>().notNull().default('declared'),
   },
   (table) => [
     unique('DeclaredInterest_userId_domain_key').on(table.userId, table.domain),
@@ -617,6 +649,7 @@ export const friendships = pgTable(
     formedAt: timestamp('formedAt', { withTimezone: true }),
     removedAt: timestamp('removedAt', { withTimezone: true }),
     removedByUserId: text('removedByUserId').references(() => users.id),
+    requestContext: jsonb('requestContext').$type<{ suggestedInterests?: string[] }>(),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -651,6 +684,7 @@ export const feedItems = pgTable(
     sourceEventAt: timestamp('sourceEventAt', { withTimezone: true }).notNull().defaultNow(),
     personalMessage: text('personalMessage'),
     submittedAnswer: text('submittedAnswer'),
+    sourceAnswerId: text('sourceAnswerId'),
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
     quip: text('quip'),
@@ -659,6 +693,7 @@ export const feedItems = pgTable(
   (table) => [
     index('FeedItem_recipientUserId_state_idx').on(table.recipientUserId, table.state, table.sourceEventAt.desc()),
     index('FeedItem_recipientUserId_pinned_idx').on(table.recipientUserId, table.isPinned).where(sql`"isPinned" = TRUE`),
+    uniqueIndex('FeedItem_recipientUserId_sourceAnswerId_key').on(table.recipientUserId, table.sourceAnswerId).where(sql`"sourceAnswerId" IS NOT NULL`),
   ],
 );
 
@@ -763,6 +798,9 @@ export const feedDismissedDomains = pgTable(
   (table) => [
     index('FeedDismissedDomain_userId_idx').on(table.userId),
     index('FeedDismissedDomain_userId_sub_idx').on(table.userId, table.canonicalSubcategory),
+    uniqueIndex('feed_dismissed_domains_active_unique')
+      .on(table.userId, table.canonicalSubcategory)
+      .where(sql`${table.reinstatedAt} IS NULL`),
   ],
 );
 
@@ -772,17 +810,21 @@ export const friendInvitations = pgTable(
     id: id(),
     inviterUserId: text('inviterUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
     inviteePhone: text('inviteePhone').notNull(),
+    inviteeDisplayName: text('inviteeDisplayName'),
     inviteeUserId: text('inviteeUserId').references(() => users.id),
     preSeededInterests: jsonb('preSeededInterests'),
     personalMessage: text('personalMessage'),
     token: text('token').notNull(),
     sentAt: timestamp('sentAt', { withTimezone: true }).notNull().defaultNow(),
     acceptedAt: timestamp('acceptedAt', { withTimezone: true }),
+    cancelledAt: timestamp('cancelledAt', { withTimezone: true }),
     expiresAt: timestamp('expiresAt', { withTimezone: true }).notNull(),
   },
   (table) => [
     uniqueIndex('FriendInvitation_token_key').on(table.token),
     index('FriendInvitation_token_idx').on(table.token),
     index('FriendInvitation_inviterUserId_idx').on(table.inviterUserId),
+    index('FriendInvitation_inviteePhone_idx').on(table.inviteePhone),
+    index('FriendInvitation_inviterUserId_inviteePhone_idx').on(table.inviterUserId, table.inviteePhone),
   ],
 );

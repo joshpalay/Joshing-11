@@ -35,6 +35,25 @@ if (DRY_RUN) {
   console.log('[backfill-domains] APPLY mode — data will be modified.\n');
 }
 
+
+function logDatabaseErrorCause(err: unknown) {
+  const cause = err instanceof Error ? err.cause : undefined;
+  if (!cause || typeof cause !== 'object') return;
+
+  const pgCause = cause as Record<string, unknown>;
+  const fields = ['code', 'schema', 'table', 'column', 'constraint', 'detail']
+    .map((key) => [key, pgCause[key]] as const)
+    .filter((entry): entry is readonly [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
+
+  const causeMessage = cause instanceof Error ? cause.message : undefined;
+  if (causeMessage) {
+    console.error(`[backfill-domains] database cause: ${causeMessage}`);
+  }
+  if (fields.length > 0) {
+    console.error(`[backfill-domains] database details: ${fields.map(([key, value]) => `${key}=${value}`).join(' ')}`);
+  }
+}
+
 async function main() {
   const userIds: string[] = [];
 
@@ -65,6 +84,7 @@ async function main() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[backfill-domains] user=${userId} ERROR: ${message}`);
+      logDatabaseErrorCause(err);
       totalErrors += 1;
     }
   }

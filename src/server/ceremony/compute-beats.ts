@@ -131,14 +131,13 @@ async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive:
       )),
     readCorrectQuestionIds(userId, cycleStart, cycleEndExclusive),
     db
-      .select({ domain: declaredInterests.domain })
-      .from(declaredInterests)
+      .select({ domain: playerMastery.canonicalSubcategory })
+      .from(playerMastery)
       .where(and(
-        eq(declaredInterests.userId, userId),
-        eq(declaredInterests.isActive, true),
-        sql`${declaredInterests.territoryType} = 'declared'`,
-        gte(declaredInterests.declaredAt, cycleStart),
-        lt(declaredInterests.declaredAt, cycleEndExclusive),
+        eq(playerMastery.userId, userId),
+        eq(playerMastery.territoryType, 'declared'),
+        gte(playerMastery.updatedAt, cycleStart),
+        lt(playerMastery.updatedAt, cycleEndExclusive),
       )),
     db
       .select({ domain: masteryEvents.canonicalSubcategory })
@@ -206,9 +205,11 @@ async function computeBeat3(userId: string, cycleStart: Date, cycleEndExclusive:
   ]);
 
   const counts = new Map<string, number>();
-  gameRows.forEach((row) => counts.set(row.contributorId, (counts.get(row.contributorId) ?? 0) + 1));
+  gameRows.forEach((row) => {
+    if (row.contributorId) counts.set(row.contributorId, (counts.get(row.contributorId) ?? 0) + 1);
+  });
   feedRows.forEach((row) => {
-    if (row.questionId && correctQuestionIds.has(row.questionId)) {
+    if (row.contributorId && row.questionId && correctQuestionIds.has(row.questionId)) {
       counts.set(row.contributorId, (counts.get(row.contributorId) ?? 0) + 1);
     }
   });

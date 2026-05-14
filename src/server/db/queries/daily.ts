@@ -8,12 +8,14 @@ import {
   generatedQuestions,
   masteryEvents,
   playerMastery,
+  userDomainExclusions,
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
+import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { pgErrorCode } from '@/server/db/pg-error';
 import { categoryLabel } from '@/lib/questions-types';
 import { asQueueSlots, dailyQueueItemId } from '@/server/daily/catchup';
 import type { QueueSlot } from '@/server/daily/types';
-import { pgErrorCode } from '@/server/db/pg-error';
 import {
   catchUpExpiresAt,
   expiresWithin24Hours,
@@ -21,7 +23,17 @@ import {
   isCatchUpSlotEligible,
   queueAgeInDays,
 } from '@/server/play/catch-up-eligibility';
-import { orderCatchUpItems } from '@/server/play/catch-up-turn-sequencing';
+import {
+  dedupeCatchUpItems,
+  orderCatchUpItems,
+} from '@/server/play/catch-up-turn-sequencing';
+
+function asQueueSlotDifficulty(
+  value: string | null | undefined,
+): 'accessible' | 'moderate' | 'specialist' | undefined {
+  if (value === 'accessible' || value === 'moderate' || value === 'specialist') return value;
+  return undefined;
+}
 
 export type KnowledgeBaseDomain = {
   domain: string;
@@ -52,6 +64,7 @@ export type CatchupQueueItem = {
   domainDisplayName: string;
   broadCategory: string;
   basePoints: number;
+  difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   submittedAnswer: string | null;
   wasSkipped: boolean;
 };
@@ -62,36 +75,37 @@ function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-async function getDeclaredInterests(userId: string) {
+async function getExcludedKnowledgeDomains(userId: string): Promise<Set<string>> {
   try {
-    return await db
-      .select({
-        domain: declaredInterests.domain,
-        broadCategory: declaredInterests.broadCategory,
-        territoryType: declaredInterests.territoryType,
-      })
-      .from(declaredInterests)
-      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
-      .orderBy(asc(declaredInterests.declaredAt));
-  } catch (err) {
-    if (pgErrorCode(err) !== '42703') throw err;
-    // territory_type column not yet migrated — default to 'declared'
     const rows = await db
-      .select({
-        domain: declaredInterests.domain,
-        broadCategory: declaredInterests.broadCategory,
-      })
-      .from(declaredInterests)
-      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
-      .orderBy(asc(declaredInterests.declaredAt));
-    return rows.map((r) => ({ ...r, territoryType: 'declared' as const }));
+      .select({ domain: userDomainExclusions.canonicalSubcategory })
+      .from(userDomainExclusions)
+      .where(eq(userDomainExclusions.userId, userId));
+
+    return new Set(rows.map((row) => normalizeDomain(row.domain).toLowerCase()).filter(Boolean));
+  } catch (error) {
+    if (pgErrorCode(error) === '42P01') return new Set();
+    throw error;
   }
 }
 
-export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
-  const [declared, demonstrated] = await Promise.all([
-    getDeclaredInterests(userId),
-    db
+async function getPlayerMasteryKnowledgeRows(userId: string) {
+  try {
+    return await db
+      .select({
+        domain: playerMastery.canonicalSubcategory,
+        broadCategory: playerMastery.broadCategory,
+        territoryType: playerMastery.territoryType,
+        totalPoints: playerMastery.totalPoints,
+        tier: playerMastery.tier,
+      })
+      .from(playerMastery)
+      .where(eq(playerMastery.userId, userId))
+      .orderBy(asc(playerMastery.canonicalSubcategory));
+  } catch (error) {
+    if (pgErrorCode(error) !== '42703') throw error;
+
+    const rows = await db
       .select({
         domain: playerMastery.canonicalSubcategory,
         broadCategory: playerMastery.broadCategory,
@@ -99,52 +113,54 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
         tier: playerMastery.tier,
       })
       .from(playerMastery)
-      .where(and(
-        eq(playerMastery.userId, userId),
-        sql`exists (
-          select 1
-          from "MASTERY_EVENTS" me
-          where me."user_id" = ${userId}
-            and me."canonical_subcategory" = ${playerMastery.canonicalSubcategory}
-            and me."source_type" in ('live_correct', 'catchup_correct')
-            and me."question_id" is not null
-        )`,
-      ))
-      .orderBy(asc(playerMastery.canonicalSubcategory)),
+      .where(eq(playerMastery.userId, userId))
+      .orderBy(asc(playerMastery.canonicalSubcategory));
+
+    return rows.map((row) => ({ ...row, territoryType: 'demonstrated' as const }));
+  }
+}
+
+export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
+  const [masteryRows, declaredRows, excludedDomains] = await Promise.all([
+    getPlayerMasteryKnowledgeRows(userId),
+    getActiveDeclaredInterests(userId),
+    getExcludedKnowledgeDomains(userId),
   ]);
 
-  const domains = new Map<string, KnowledgeBaseDomain>();
+  const domainsByKey = new Map<string, KnowledgeBaseDomain>();
 
-  for (const row of declared) {
-    const domain = normalizeDomain(row.domain);
-    if (!domain) continue;
-    const territoryType = row.territoryType ?? 'declared';
-    domains.set(domain.toLowerCase(), {
-      domain,
-      broadCategory: row.broadCategory,
-      source: 'declared',
-      territoryType,
-      totalPoints: 0,
-      tier: 'establishing',
-    });
-  }
-
-  for (const row of demonstrated) {
+  for (const row of masteryRows) {
     const domain = normalizeDomain(row.domain);
     if (!domain) continue;
     const key = domain.toLowerCase();
-    const existing = domains.get(key);
-    domains.set(key, {
-      domain: existing?.domain ?? domain,
-      broadCategory: existing?.broadCategory ?? row.broadCategory,
-      source: existing?.source ?? 'friend_mediated',
-      territoryType: 'demonstrated',
+    if (excludedDomains.has(key)) continue;
+    domainsByKey.set(key, {
+      domain,
+      broadCategory: row.broadCategory,
+      source: row.territoryType === 'declared' ? 'declared' : 'friend_mediated',
+      territoryType: row.territoryType,
       totalPoints: row.totalPoints,
       tier: row.tier,
     });
   }
 
-  return [...domains.values()];
+  for (const row of declaredRows) {
+    const domain = normalizeDomain(row.domain);
+    if (!domain) continue;
+    const key = domain.toLowerCase();
+    if (excludedDomains.has(key)) continue;
+    const existing = domainsByKey.get(key);
+    domainsByKey.set(key, {
+      domain: existing?.domain ?? domain,
+      broadCategory: existing?.broadCategory ?? row.broadCategory,
+      source: existing?.source ?? 'declared',
+      territoryType: existing?.territoryType ?? row.territoryType,
+      totalPoints: existing?.totalPoints ?? 0,
+      tier: existing?.tier ?? 'establishing',
+    });
+  }
+
+  return [...domainsByKey.values()].sort((a, b) => a.domain.localeCompare(b.domain));
 }
 
 export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow | null> {
@@ -228,13 +244,14 @@ export async function getCatchupQuestions(userId: string): Promise<CatchupQuesti
         domainDisplayName: categoryLabel(domain),
         broadCategory: question.broadCategory,
         basePoints: question.basePoints,
+        difficultyEstimate: asQueueSlotDifficulty(question.difficultyEstimate) ?? null,
         submittedAnswer: slot.submitted_answer ?? null,
         wasSkipped: Boolean(slot.skipped),
       } satisfies CatchupQuestion;
     })
     .filter((question): question is CatchupQuestion => Boolean(question));
 
-  return orderCatchUpItems(mapped);
+  return dedupeCatchUpItems(orderCatchUpItems(mapped));
 }
 
 export async function createDailyQueueItem(
@@ -263,6 +280,7 @@ export async function createDailyQueueItem(
     generated_question_id: question.id,
     domain: question.canonicalSubcategory,
     question_text: question.questionText,
+    difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate),
     answered: false,
     difficulty_stepped_up: false,
   };
@@ -373,22 +391,18 @@ async function _legacyInsertDeclared(
       userId,
       domain,
       broadCategory: broadCategory ?? null,
-      territoryType: 'declared',
     })
     .onConflictDoNothing({
       target: [declaredInterests.userId, declaredInterests.domain],
     });
 }
 
+/**
+ * @deprecated Use promoteDeclaredToDemonstrated. This function
+ * still exists for any in-flight code paths but should not be
+ * called. Scheduled for removal in v11.2.
+ */
 export async function upgradeKBDomainToDemonstrated(userId: string, domain: string): Promise<void> {
-  const existing = await getKBDomainEntry(userId, domain);
-  if (existing && existing.territoryType === 'declared') {
-    await db
-      .update(declaredInterests)
-      .set({ territoryType: 'demonstrated' })
-      .where(and(
-        eq(declaredInterests.userId, userId),
-        eq(declaredInterests.domain, domain),
-      ));
-  }
+  const { openKBDomain } = await import('@/server/knowledge/open-domain');
+  await openKBDomain({ userId, domain, via: 'answered_correctly' });
 }

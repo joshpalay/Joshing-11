@@ -1,24 +1,35 @@
-'use client';
+'use client'
 
-import Link from 'next/link';
-import { ThumbsDown, ThumbsUp } from 'lucide-react';
-import { type CSSProperties, useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import Link from 'next/link'
+import { Flag, Heart, MoreHorizontal, X } from 'lucide-react'
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react'
 
-import { SendQuestionAction } from '@/components/SendQuestionAction';
-import { AddToBankAction } from '@/components/AddToBankAction';
-import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay';
-import MasteryMoment from '@/components/review/MasteryMoment';
-import { cn } from '@/lib/utils';
-import type { DailySummaryView, QuestionRecap, TierCrossing } from '@/server/db/queries/daily-summary';
+import { SendQuestionAction } from '@/components/SendQuestionAction'
+import { AddToBankAction } from '@/components/AddToBankAction'
+import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
+import MasteryMoment from '@/components/review/MasteryMoment'
+import { cn } from '@/lib/utils'
+import type {
+  DailySummaryView,
+  QuestionRecap,
+} from '@/server/db/queries/daily-summary'
 
-type FeedbackSignal = 'thumbs_up' | 'thumbs_down';
+type FeedbackSignal = 'thumbs_up' | 'thumbs_down'
 
 const monoStyle: CSSProperties = {
   fontFamily: 'var(--font-mono)',
   fontSize: '0.62rem',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
-};
+}
 
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
@@ -27,130 +38,158 @@ const titleStyle: CSSProperties = {
   color: '#111111',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-};
+}
 
 function formatDate(value: string) {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' }).format(date);
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date)
 }
 
 function formatTier(tier: string) {
-  return tier.replace(/_/g, ' ').toUpperCase();
+  return tier.replace(/_/g, ' ').toUpperCase()
 }
 
 function interpretiveLine(summary: DailySummaryView): string | null {
   // 1. Tier crossing
-  const crossing = summary.tierCrossings[0];
+  const crossing = summary.tierCrossings[0]
   if (crossing) {
-    const domain = summary.domainGains.find((gain) => gain.domain === crossing.domain)?.displayName ?? crossing.domain;
-    return `You moved to ${formatTier(crossing.toTier).toLowerCase()} in ${domain}.`;
+    const domain =
+      summary.domainGains.find((gain) => gain.domain === crossing.domain)
+        ?.displayName ?? crossing.domain
+    return `You moved to ${formatTier(crossing.toTier).toLowerCase()} in ${domain}.`
   }
 
   // 2. First correct in new demonstrated domain
-  const newDomain = summary.domainGains.find((gain) => gain.isNewTerritory);
-  if (newDomain) return `You found new ground in ${newDomain.displayName}.`;
+  const newDomain = summary.domainGains.find((gain) => gain.isNewTerritory)
+  if (newDomain) return `You found new ground in ${newDomain.displayName}.`
 
-  const answered = summary.questions.filter((q) => !q.isSkipped);
-  const total = answered.length;
+  const answered = summary.questions.filter((q) => !q.isSkipped)
+  const total = answered.length
 
   // 3. 5/5
-  if (total > 0 && summary.totalCorrect === total && total === 5) return 'Clean sweep.';
+  if (total > 0 && summary.totalCorrect === total && total === 5)
+    return 'Clean sweep.'
 
   // 4. 0/5
-  if (total > 0 && summary.totalCorrect === 0 && total === 5) return 'Every one of them. Tomorrow.';
+  if (total > 0 && summary.totalCorrect === 0 && total === 5)
+    return 'Every one of them. Tomorrow.'
 
   // 5. 3+ correct in a row
-  let streak = 0;
-  let maxStreak = 0;
+  let streak = 0
+  let maxStreak = 0
   for (const q of answered) {
     if (q.isCorrect) {
-      streak += 1;
-      if (streak > maxStreak) maxStreak = streak;
+      streak += 1
+      if (streak > maxStreak) maxStreak = streak
     } else {
-      streak = 0;
+      streak = 0
     }
   }
-  if (maxStreak >= 3) return 'Three in a row at one point.';
+  if (maxStreak >= 3) return 'Three in a row at one point.'
 
   // 6. All wrong in a single domain
-  const domainGroups = new Map<string, { total: number; wrong: number }>();
+  const domainGroups = new Map<string, { total: number; wrong: number }>()
   for (const q of answered) {
-    const key = q.domainDisplayName;
-    const entry = domainGroups.get(key) ?? { total: 0, wrong: 0 };
-    entry.total += 1;
-    if (!q.isCorrect) entry.wrong += 1;
-    domainGroups.set(key, entry);
+    const key = q.domainDisplayName
+    const entry = domainGroups.get(key) ?? { total: 0, wrong: 0 }
+    entry.total += 1
+    if (!q.isCorrect) entry.wrong += 1
+    domainGroups.set(key, entry)
   }
   for (const [domain, counts] of domainGroups) {
     if (counts.total >= 2 && counts.wrong === counts.total) {
-      return `${domain} is worth a deeper look.`;
+      return `${domain} is worth a deeper look.`
     }
   }
 
-  return null;
+  return null
 }
 
 export default function DailySummaryPage() {
-  const [summary, setSummary] = useState<DailySummaryView | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<DailySummaryView | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    let cancelled = false;
+    let cancelled = false
     async function load() {
       try {
-        const response = await fetch('/api/daily/summary', { credentials: 'include', cache: 'no-store' });
-        const body = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(body?.message ?? 'Could not load your daily summary.');
-        if (!cancelled) setSummary(body as DailySummaryView);
+        const response = await fetch('/api/daily/summary', {
+          credentials: 'include',
+          cache: 'no-store',
+        })
+        const body = await response.json().catch(() => null)
+        if (!response.ok)
+          throw new Error(body?.message ?? 'Could not load your daily summary.')
+        if (!cancelled) setSummary(body as DailySummaryView)
       } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : 'Could not load your daily summary.');
+        if (!cancelled)
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : 'Could not load your daily summary.'
+          )
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoading(false)
       }
     }
-    void load();
+    void load()
     return () => {
-      cancelled = true;
-    };
-  }, []);
+      cancelled = true
+    }
+  }, [])
 
-  const line = useMemo(() => summary ? interpretiveLine(summary) : null, [summary]);
+  const line = useMemo(
+    () => (summary ? interpretiveLine(summary) : null),
+    [summary]
+  )
   const growthCircleItems = useMemo(() => {
-    if (!summary) return [];
+    if (!summary) return []
     return summary.domainGains.map((gain) => ({
       canonical_subcategory: gain.displayName,
       broad_category: gain.broadCategory,
       points_total: gain.totalPoints,
       points_gained_this_round: gain.pointsGained,
       tier_current: gain.currentTier,
-    }));
-  }, [summary]);
-  const firstTierCrossing = summary?.tierCrossings[0] ?? null;
+    }))
+  }, [summary])
+  const firstTierCrossing = summary?.tierCrossings[0] ?? null
 
   if (loading) {
     return (
       <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
-        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>Loading summary...</p>
+        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
+          Loading summary...
+        </p>
       </main>
-    );
+    )
   }
 
   if (error || !summary) {
     return (
       <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
-        <p className="text-sm text-muted-foreground">{error ?? 'No summary is ready yet.'}</p>
-        <Link className="btn-ghost mt-4" href="/">Back home</Link>
+        <p className="text-muted-foreground text-sm">
+          {error ?? 'No summary is ready yet.'}
+        </p>
+        <Link className="btn-ghost mt-4" href="/">
+          Back home
+        </Link>
       </main>
-    );
+    )
   }
 
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
       <header>
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          <Link href="/" className="underline underline-offset-2">HOME</Link>
+          <Link href="/" className="underline underline-offset-2">
+            HOME
+          </Link>
           {' / DAILY FIVE / SUMMARY'}
         </p>
         <h1
@@ -166,7 +205,9 @@ export default function DailySummaryPage() {
         >
           How You Did
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{formatDate(summary.date)}</p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {formatDate(summary.date)}
+        </p>
       </header>
 
       <section
@@ -177,22 +218,22 @@ export default function DailySummaryPage() {
         }}
       >
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>Total</p>
-        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[#111111]">
+        <p className="mt-2 font-mono text-5xl leading-none font-bold text-[#111111]">
           +{Math.round(summary.pointsEarned)}
         </p>
-        <p style={{ ...monoStyle, marginTop: '12px', color: 'var(--text-muted)' }}>
+        <p
+          style={{
+            ...monoStyle,
+            marginTop: '12px',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {summary.difficultyMode
+            ? `${summary.difficultyMode.charAt(0).toUpperCase() + summary.difficultyMode.slice(1)} · `
+            : ''}
           {summary.totalCorrect}/{summary.questions.length} correct
           {summary.totalSkipped > 0 ? ` · ${summary.totalSkipped} skipped` : ''}
         </p>
-      </section>
-
-      <section className="mt-6">
-        <h2 style={titleStyle}>Round Recap</h2>
-        <div className="mt-3 space-y-3">
-          {summary.questions.map((question) => (
-            <QuestionCard key={question.questionId} question={question} />
-          ))}
-        </div>
       </section>
 
       <section className="card mt-4 px-5 py-4">
@@ -205,158 +246,351 @@ export default function DailySummaryPage() {
 
       {firstTierCrossing ? (
         <MasteryMoment
-          subcategory={summary.domainGains.find((gain) => gain.domain === firstTierCrossing.domain)?.displayName ?? firstTierCrossing.domain}
+          subcategory={
+            summary.domainGains.find(
+              (gain) => gain.domain === firstTierCrossing.domain
+            )?.displayName ?? firstTierCrossing.domain
+          }
           newTier={firstTierCrossing.toTier}
         />
       ) : null}
 
       {line ? <InterpretiveLine text={line} /> : null}
 
+      <section className="mt-6">
+        <h2 style={titleStyle}>Round Recap</h2>
+        <div className="mt-3 space-y-3">
+          {summary.questions.map((question) => (
+            <QuestionCard key={question.questionId} question={question} />
+          ))}
+        </div>
+      </section>
+
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <Link className="btn-primary sm:flex-1" href="/knowledge">See your knowledge map</Link>
-        <Link className="btn-ghost sm:flex-1" href="/">Back home</Link>
+        <Link className="btn-primary sm:flex-1" href="/knowledge">
+          See your knowledge map
+        </Link>
+        <Link className="btn-ghost sm:flex-1" href="/">
+          Back home
+        </Link>
       </div>
     </main>
-  );
+  )
 }
 
 function InterpretiveLine({ text }: { text: string }) {
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(false)
   useEffect(() => {
-    const t = window.setTimeout(() => setVisible(true), 300);
-    return () => window.clearTimeout(t);
-  }, []);
+    const t = window.setTimeout(() => setVisible(true), 300)
+    return () => window.clearTimeout(t)
+  }, [])
   return (
     <p
-      className="mt-4 text-sm italic leading-6 text-muted-foreground"
+      className="text-muted-foreground mt-4 text-sm leading-6 italic"
       style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.4s ease' }}
     >
       {text}
     </p>
-  );
+  )
 }
 
 function QuestionCard({ question }: { question: QuestionRecap }) {
+  const [isOverflowOpen, setIsOverflowOpen] = useState(false)
+  const [rating, setRating] = useState<FeedbackSignal | null>(null)
+  const [isFeedbackPending, startFeedbackTransition] = useTransition()
+  const [exclusionState, setExclusionState] = useState<ExclusionState>({
+    kind: 'idle',
+  })
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const updateFeedback = useCallback(
+    (next: FeedbackSignal) => {
+      const previous = rating
+      const signal = previous === next ? null : next
+      setRating(signal)
+
+      if (!signal) return
+      startFeedbackTransition(async () => {
+        const response = await fetch('/api/daily/feedback', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            generated_question_id: question.questionId,
+            signal,
+          }),
+        })
+        if (!response.ok) setRating(previous)
+      })
+    },
+    [question.questionId, rating]
+  )
+
+  const handleExcludeDomain = useCallback(async () => {
+    setIsOverflowOpen(false)
+    setExclusionState({ kind: 'confirmed' })
+    undoTimerRef.current = setTimeout(() => {
+      undoTimerRef.current = null
+    }, 5000)
+    try {
+      await fetch('/api/users/domain-exclusions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ canonical_subcategory: question.domain }),
+      })
+    } catch {
+      // Optimistic UI is acceptable here; the next summary load will reflect persisted state.
+    }
+  }, [question.domain])
+
+  const handleUndoExcludeDomain = useCallback(async () => {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current)
+      undoTimerRef.current = null
+    }
+    setExclusionState({ kind: 'undone' })
+    try {
+      await fetch(
+        `/api/users/domain-exclusions/${encodeURIComponent(question.domain)}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        }
+      )
+    } catch {
+      // Fire-and-forget; the affordance returns on reload if persistence failed.
+    }
+  }, [question.domain])
+
+  const handleReportContent = useCallback(() => {
+    updateFeedback('thumbs_down')
+    setIsOverflowOpen(false)
+  }, [updateFeedback])
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+    }
+  }, [])
+
   return (
-    <article className="card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          JOSHING BOT · {question.domainDisplayName.toUpperCase()}
-        </p>
+    <article
+      className={cn(
+        'card relative p-5',
+        question.isSkipped
+          ? 'border-stone-200 bg-stone-50'
+          : question.isCorrect
+            ? 'border-emerald-200 bg-emerald-50'
+            : 'border-rose-200 bg-rose-50'
+      )}
+    >
+      <div className="flex flex-wrap items-start gap-2 pr-11">
         <span
           className={cn(
-            'rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]',
+            'rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase',
             question.isSkipped
-              ? 'border-stone-200 bg-stone-50 text-stone-600'
+              ? 'border-stone-300 bg-stone-100 text-stone-700'
               : question.isCorrect
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-rose-200 bg-rose-50 text-rose-700',
+                ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                : 'border-rose-300 bg-rose-100 text-rose-800'
           )}
         >
-          {question.isSkipped ? 'SKIPPED' : question.isCorrect ? 'CORRECT' : 'WRONG'}
+          {question.isSkipped
+            ? 'SKIPPED'
+            : question.isCorrect
+              ? 'CORRECT'
+              : 'WRONG'}
         </span>
+        <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
+          JOSHING BOT · {question.domainDisplayName.toUpperCase()}
+        </p>
       </div>
-      <p className="mt-3 font-medium leading-snug text-foreground">{question.questionText}</p>
-      <div className="mt-3 space-y-1 text-sm">
+
+      <button
+        type="button"
+        aria-label="More actions"
+        aria-expanded={isOverflowOpen}
+        onClick={() => setIsOverflowOpen(true)}
+        className="text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground focus-visible:ring-ring absolute top-3 right-3 inline-flex size-11 items-center justify-center rounded-full border border-transparent transition focus-visible:ring-2 focus-visible:outline-none"
+      >
+        <MoreHorizontal className="size-5" />
+      </button>
+
+      <p className="text-foreground mt-4 leading-snug font-medium">
+        {question.questionText}
+      </p>
+      <div className="mt-4 space-y-1 text-sm">
         <p className="text-muted-foreground">
-          <span className="font-medium text-foreground">You:</span>{' '}
-          {question.isSkipped ? 'skipped' : question.submittedAnswer?.trim() || 'No answer submitted'}
+          <span className="text-foreground font-medium">You:</span>{' '}
+          {question.isSkipped
+            ? 'skipped'
+            : question.submittedAnswer?.trim() || 'No answer submitted'}
         </p>
         <p className="text-muted-foreground">
-          <span className="font-medium text-foreground">Answer:</span> {question.correctAnswer || 'No answer available'}
+          <span className="text-foreground font-medium">Answer:</span>{' '}
+          {question.correctAnswer || 'No answer available'}
         </p>
       </div>
       {question.explanation ? (
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">{question.explanation}</p>
+        <p className="bg-muted/35 text-muted-foreground mt-5 rounded-xl px-4 py-3 text-sm leading-6">
+          {question.explanation}
+        </p>
       ) : null}
       {question.creatorNote ? (
-        <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
-          <span className="font-medium">A note from {question.creatorNote.authorName}:</span>{' '}
+        <p className="bg-muted/40 text-foreground mt-4 rounded-xl border p-3 text-sm leading-6">
+          <span className="font-medium">
+            A note from {question.creatorNote.authorName}:
+          </span>{' '}
           {question.creatorNote.noteText}
         </p>
       ) : null}
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-        <DailyQuestionFeedbackButtons questionId={question.questionId} />
+      {exclusionState.kind === 'confirmed' ? (
+        <div className="bg-muted/35 text-muted-foreground mt-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs">
+          <span>
+            {question.domainDisplayName} won&apos;t appear in your daily queue
+            anymore.
+          </span>
+          <button
+            type="button"
+            onClick={handleUndoExcludeDomain}
+            className="ml-auto font-medium tracking-[0.08em] uppercase underline underline-offset-4"
+          >
+            Undo
+          </button>
+        </div>
+      ) : null}
+      <div className="border-border/50 mt-5 flex items-center justify-between border-t pt-3">
+        <button
+          aria-label="Love this question"
+          aria-pressed={rating === 'thumbs_up'}
+          className={cn(
+            'text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex size-11 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none',
+            rating === 'thumbs_up' ? 'bg-rose-50 text-rose-600' : ''
+          )}
+          disabled={isFeedbackPending}
+          type="button"
+          onClick={() => updateFeedback('thumbs_up')}
+        >
+          <Heart
+            className={cn(
+              'size-5 transition-transform',
+              rating === 'thumbs_up' ? 'scale-110 fill-current' : ''
+            )}
+          />
+        </button>
         <SendQuestionAction
-          question={{ id: question.questionId, text: question.questionText, domain: question.domainDisplayName }}
+          question={{
+            id: question.questionId,
+            text: question.questionText,
+            domain: question.domainDisplayName,
+          }}
           label=""
-          className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex size-11 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none"
         />
+      </div>
+
+      {isOverflowOpen ? (
+        <QuestionCardOverflowMenu
+          question={question}
+          onClose={() => setIsOverflowOpen(false)}
+          onHideQuestionsLikeThis={handleExcludeDomain}
+          onMuteCategory={handleExcludeDomain}
+          onReportContent={handleReportContent}
+          reportSelected={rating === 'thumbs_down'}
+          reportDisabled={isFeedbackPending}
+        />
+      ) : null}
+    </article>
+  )
+}
+
+function QuestionCardOverflowMenu({
+  question,
+  onClose,
+  onHideQuestionsLikeThis,
+  onMuteCategory,
+  onReportContent,
+  reportSelected,
+  reportDisabled,
+}: {
+  question: QuestionRecap
+  onClose: () => void
+  onHideQuestionsLikeThis: () => void
+  onMuteCategory: () => void
+  onReportContent: () => void
+  reportSelected: boolean
+  reportDisabled: boolean
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:top-14 sm:right-3 sm:block sm:bg-transparent sm:p-0">
+      <button
+        className="absolute inset-0 cursor-default sm:hidden"
+        type="button"
+        aria-label="Close menu"
+        onClick={onClose}
+      />
+      <div className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl sm:shadow-xl">
+        <div className="flex items-center justify-between px-3 py-2 sm:hidden">
+          <p className="text-foreground text-sm font-medium">More actions</p>
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={onClose}
+            className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={onHideQuestionsLikeThis}
+          className="text-foreground hover:bg-muted flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+        >
+          Hide questions like this
+        </button>
+        <button
+          type="button"
+          onClick={onMuteCategory}
+          className="text-foreground hover:bg-muted flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+        >
+          Mute {question.domainDisplayName}
+        </button>
+        <button
+          type="button"
+          disabled
+          className="text-muted-foreground/70 flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm"
+        >
+          Hide from feed
+        </button>
         {question.bankQuestionId ? (
           <AddToBankAction
             questionId={question.bankQuestionId}
             initialInBank={question.isInBank}
             contextType="manual"
-            label=""
-            className="inline-flex size-9 items-center justify-center rounded-md border px-0"
+            label="Save to question bank"
+            className="hover:bg-muted flex min-h-11 w-full justify-start rounded-xl border-0 px-3 text-left text-sm"
           />
         ) : null}
+        <button
+          type="button"
+          onClick={onReportContent}
+          disabled={reportDisabled}
+          aria-pressed={reportSelected}
+          className={cn(
+            'text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm transition disabled:opacity-60',
+            reportSelected ? 'bg-muted text-foreground' : ''
+          )}
+        >
+          <Flag className="size-4" />
+          Report content
+        </button>
       </div>
-    </article>
-  );
-}
-
-function DailyQuestionFeedbackButtons({ questionId }: { questionId: string }) {
-  const [rating, setRating] = useState<FeedbackSignal | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  const update = useCallback((next: FeedbackSignal) => {
-    const previous = rating;
-    const signal = previous === next ? null : next;
-    setRating(signal);
-
-    if (!signal) return;
-    startTransition(async () => {
-      const response = await fetch('/api/daily/feedback', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ generated_question_id: questionId, signal }),
-      });
-      if (!response.ok) setRating(previous);
-    });
-  }, [questionId, rating]);
-
-  return (
-    <div className="flex items-center justify-end gap-2">
-      <button
-        aria-label="Thumbs up"
-        aria-pressed={rating === 'thumbs_up'}
-        className={cn(
-          'inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition',
-          rating === 'thumbs_up'
-            ? 'border-amber-300 bg-amber-100 text-amber-700'
-            : 'border-border bg-background hover:bg-muted hover:text-foreground',
-        )}
-        disabled={isPending}
-        type="button"
-        onClick={() => update('thumbs_up')}
-      >
-        <ThumbsUp className="size-4" />
-      </button>
-      <button
-        aria-label="Thumbs down"
-        aria-pressed={rating === 'thumbs_down'}
-        className={cn(
-          'inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition',
-          rating === 'thumbs_down'
-            ? 'border-stone-400 bg-stone-200 text-stone-800'
-            : 'border-border bg-background hover:bg-muted hover:text-foreground',
-        )}
-        disabled={isPending}
-        type="button"
-        onClick={() => update('thumbs_down')}
-      >
-        <ThumbsDown className="size-4" />
-      </button>
     </div>
-  );
+  )
 }
 
-function TierLabel({ crossing }: { crossing: TierCrossing }) {
-  return (
-    <p style={{ ...monoStyle, fontSize: '0.52rem', color: 'var(--success)' }}>
-      ↑ Now {formatTier(crossing.toTier)}
-    </p>
-  );
-}
+type ExclusionState =
+  | { kind: 'idle' }
+  | { kind: 'confirmed' }
+  | { kind: 'undone' }

@@ -7,12 +7,14 @@ import {
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
 import {
+  getDomainDifficultyOverrides,
   mapAdaptiveLevelToDifficultyHint,
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
 import { getKnowledgeBase, getRecentDailyQuestionTexts } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
+import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { resolveDailyBasePoints } from './types';
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
@@ -183,11 +185,14 @@ function parseQuestions(raw: string): LlmQuestion[] {
     if (!canonical || !broad || !questionText || !answer || !explainer || !difficulty) {
       continue;
     }
+    if (isGenericCanonicalAnswer(answer)) {
+      continue;
+    }
     result.push({
       canonical_subcategory: canonical,
       broad_category: broad,
       question_text: questionText,
-      answer,
+      answer: normalizeCanonicalAnswerLabel(answer),
       explainer,
       difficulty_estimate: difficulty,
     });
@@ -334,7 +339,7 @@ function selectDiverseDomains(
   // Group by broad category so we can pick one domain per category
   const byCategory = new Map<string, (typeof knowledgeBase)[number][]>();
   for (const d of knowledgeBase) {
-    const cat = d.broadCategory ?? 'other';
+    const cat = d.broadCategory ?? 'General Knowledge';
     const arr = byCategory.get(cat) ?? [];
     arr.push(d);
     byCategory.set(cat, arr);
@@ -400,6 +405,10 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     domainsForRound = selectDiverseDomains(knowledgeBase, count);
   }
 
+  const domainDifficultyOverrides = preferences.difficulty === 'adaptive'
+    ? await getDomainDifficultyOverrides(userId, domainsForRound).catch(() => undefined)
+    : undefined;
+
   return generateDailyQuestions(
     domainsForRound,
     count,
@@ -408,7 +417,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     [],
     undefined,
     preferences.difficulty,
-    undefined,
+    domainDifficultyOverrides,
     adaptiveLevel,
   );
 }

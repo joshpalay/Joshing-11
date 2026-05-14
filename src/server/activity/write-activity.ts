@@ -13,6 +13,7 @@ export type ActivityItemType =
   | 'question_curated'
   | 'creator_note_received'
   | 'friend_answered_your_question'
+  | 'authored_question_shared'
   | 'declared_promoted';
 
 export async function writeActivity(params: {

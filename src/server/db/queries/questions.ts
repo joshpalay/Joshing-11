@@ -1,4 +1,4 @@
-import { and, countDistinct, eq, isNull, sql } from 'drizzle-orm';
+import { and, countDistinct, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 
 import {
   db,
@@ -8,7 +8,8 @@ import {
   questions,
   userQuestionBank,
 } from '@/server/db';
-import { categoryLabel } from '@/lib/questions-types';
+import { broadCategoryDisplayName } from '@/lib/question-categorization';
+import { pgErrorCode } from '@/server/db/pg-error';
 
 export type QuestionView = {
   id: string;
@@ -18,6 +19,9 @@ export type QuestionView = {
   explanation: string | null;
   domain: string;
   domainDisplayName: string;
+  broadCategory: string | null;
+  canonicalSubcategory: string | null;
+  subcategory: string | null;
   difficulty: number;
   timesAnswered: number;
   timesCorrect: number;
@@ -30,7 +34,7 @@ export type QuestionView = {
   accepted_alternatives: string[];
   category: string;
   difficulty_estimate: 'accessible' | 'moderate' | 'specialist' | null;
-  creator_id: string;
+  creator_id: string | null;
   created_at: string;
   updated_at: string;
   breadcrumb_context: string | null;
@@ -47,11 +51,77 @@ export type QuestionView = {
   isInBank?: boolean;
   isOwnAuthored?: boolean;
   authorName?: string;
+  verified: boolean;
+  llmSuggestedAnswer: string | null;
+  critiqueIterations: number;
 };
 
 export type QuestionMutationResult = { ok: boolean; reason?: 'not_found' | 'in_use' };
 
 type QuestionRow = typeof questions.$inferSelect;
+
+let ensureQuestionSurfacePriorityColumnPromise: Promise<void> | null = null;
+
+function ensureQuestionSurfacePriorityColumn(): Promise<void> {
+  ensureQuestionSurfacePriorityColumnPromise ??= db.execute(sql`
+    ALTER TABLE "Question"
+      ADD COLUMN IF NOT EXISTS "surface_priority_score" DOUBLE PRECISION NOT NULL DEFAULT 0
+  `).then(() => undefined);
+  return ensureQuestionSurfacePriorityColumnPromise;
+}
+
+const questionTableColumns = getTableColumns(questions);
+const questionViewColumns = {
+  id: questionTableColumns.id,
+  creatorId: questionTableColumns.creatorId,
+  generatedQuestionId: questionTableColumns.generatedQuestionId,
+  source: questionTableColumns.source,
+  sourceQuestionId: questionTableColumns.sourceQuestionId,
+  sourceCreatorId: questionTableColumns.sourceCreatorId,
+  questionText: questionTableColumns.questionText,
+  breadcrumbContext: questionTableColumns.breadcrumbContext,
+  answerText: questionTableColumns.answerText,
+  factualExplanation: questionTableColumns.factualExplanation,
+  acceptedAlternatives: questionTableColumns.acceptedAlternatives,
+  answerSource: questionTableColumns.answerSource,
+  questionType: questionTableColumns.questionType,
+  minimumRequired: questionTableColumns.minimumRequired,
+  category: questionTableColumns.category,
+  broadCategory: questionTableColumns.broadCategory,
+  subcategory: questionTableColumns.subcategory,
+  canonicalSubcategory: questionTableColumns.canonicalSubcategory,
+  categoryOverridden: questionTableColumns.categoryOverridden,
+  creatorNote: questionTableColumns.creatorNote,
+  difficultyEstimate: questionTableColumns.difficultyEstimate,
+  llmDifficulty: questionTableColumns.llmDifficulty,
+  calibratedDifficulty: questionTableColumns.calibratedDifficulty,
+  correctRate: questionTableColumns.correctRate,
+  explainerBrief: questionTableColumns.explainerBrief,
+  explainerFull: questionTableColumns.explainerFull,
+  explainerBriefCorrect: questionTableColumns.explainerBriefCorrect,
+  explainerFullCorrect: questionTableColumns.explainerFullCorrect,
+  explainerBriefWrong: questionTableColumns.explainerBriefWrong,
+  explainerFullWrong: questionTableColumns.explainerFullWrong,
+  explainerBriefExpired: questionTableColumns.explainerBriefExpired,
+  explainerFullExpired: questionTableColumns.explainerFullExpired,
+  shortLabel: questionTableColumns.shortLabel,
+  status: questionTableColumns.status,
+  visibility: questionTableColumns.visibility,
+  publicStatus: questionTableColumns.publicStatus,
+  publicEligibilityScore: questionTableColumns.publicEligibilityScore,
+  publicEligibilityReason: questionTableColumns.publicEligibilityReason,
+  sharedToFriendsFeed: questionTableColumns.sharedToFriendsFeed,
+  askedCount: questionTableColumns.askedCount,
+  correctCount: questionTableColumns.correctCount,
+  createdAt: questionTableColumns.createdAt,
+  updatedAt: questionTableColumns.updatedAt,
+  deletedAt: questionTableColumns.deletedAt,
+};
+
+export const bankQuestionSelectColumns = questionViewColumns;
+
+type QuestionViewRow = Omit<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>
+  & Partial<Pick<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>>;
 
 function difficultyToNumber(value: QuestionRow['difficultyEstimate']): number {
   if (value === 'accessible') return 1;
@@ -65,7 +135,7 @@ function numberToDifficulty(value: number): 'accessible' | 'moderate' | 'special
   return 'moderate';
 }
 
-function explanationFor(row: QuestionRow): string | null {
+function explanationFor(row: QuestionViewRow): string | null {
   return row.factualExplanation
     ?? row.explainerFullWrong
     ?? row.explainerFull
@@ -114,9 +184,9 @@ async function readQuestionStats(questionId: string) {
   };
 }
 
-export async function toQuestionView(row: QuestionRow): Promise<QuestionView> {
+export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView> {
   const stats = await readQuestionStats(row.id);
-  const domain = row.category;
+  const domain = row.canonicalSubcategory ?? row.category;
   const createdAt = toIso(row.createdAt) ?? new Date().toISOString();
   const updatedAt = toIso(row.updatedAt) ?? createdAt;
 
@@ -127,7 +197,10 @@ export async function toQuestionView(row: QuestionRow): Promise<QuestionView> {
     alternateAnswers: row.acceptedAlternatives ?? [],
     explanation: explanationFor(row),
     domain,
-    domainDisplayName: categoryLabel(domain),
+    domainDisplayName: row.canonicalSubcategory ?? broadCategoryDisplayName(domain),
+    broadCategory: row.broadCategory,
+    canonicalSubcategory: row.canonicalSubcategory,
+    subcategory: row.subcategory,
     difficulty: difficultyToNumber(row.difficultyEstimate),
     timesAnswered: stats.timesAnswered,
     timesCorrect: stats.timesCorrect,
@@ -154,6 +227,9 @@ export async function toQuestionView(row: QuestionRow): Promise<QuestionView> {
     tags: [],
     asked_count: row.askedCount,
     correct_count: row.correctCount,
+    verified: row.verified ?? true,
+    llmSuggestedAnswer: row.llmSuggestedAnswer ?? null,
+    critiqueIterations: row.critiqueIterations ?? 0,
   };
 }
 
@@ -164,7 +240,7 @@ export async function getQuestionsForUser(userId: string): Promise<QuestionView[
 
 export async function getQuestion(questionId: string, userId: string): Promise<QuestionView | null> {
   const [row] = await db
-    .select()
+    .select(questionViewColumns)
     .from(questions)
     .where(and(eq(questions.id, questionId), eq(questions.creatorId, userId), isNull(questions.deletedAt)))
     .limit(1);
@@ -178,27 +254,129 @@ export async function createQuestion(params: {
   correctAnswer: string;
   alternateAnswers: string[];
   explanation: string | null;
-  domain: string;
+  category: string;
+  broadCategory: string | null;
+  subcategory: string;
+  canonicalSubcategory: string;
+  domain?: string;
   difficulty: number;
+  creatorNote?: string | null;
+  verified: boolean;
+  llmSuggestedAnswer?: string | null;
+  critiqueIterations: number;
 }): Promise<{ id: string }> {
-  const [created] = await db
-    .insert(questions)
-    .values({
-      creatorId: params.authorId,
-      questionText: params.text,
-      answerText: params.correctAnswer,
-      acceptedAlternatives: params.alternateAnswers,
-      factualExplanation: params.explanation,
-      category: params.domain as typeof questions.$inferInsert.category,
-      categoryOverridden: true,
-      difficultyEstimate: numberToDifficulty(params.difficulty),
-      llmDifficulty: numberToDifficulty(params.difficulty),
-      calibratedDifficulty: numberToDifficulty(params.difficulty),
-      answerSource: 'creator_written',
-      questionType: 'factual',
-      visibility: 'public',
-    })
-    .returning({ id: questions.id });
+  await ensureQuestionSurfacePriorityColumn();
+
+  const difficulty = numberToDifficulty(params.difficulty);
+  const baseValues = {
+    creatorId: params.authorId,
+    questionText: params.text,
+    answerText: params.correctAnswer,
+    acceptedAlternatives: params.alternateAnswers,
+    factualExplanation: params.explanation,
+    creatorNote: params.creatorNote ?? null,
+    category: params.category as typeof questions.$inferInsert.category,
+    broadCategory: params.broadCategory,
+    subcategory: params.subcategory,
+    canonicalSubcategory: params.canonicalSubcategory,
+    categoryOverridden: false,
+    difficultyEstimate: difficulty,
+    llmDifficulty: difficulty,
+    calibratedDifficulty: difficulty,
+    answerSource: params.llmSuggestedAnswer ? (params.verified ? 'llm_suggested' : 'llm_edited') : 'creator_written',
+    questionType: 'factual',
+    visibility: 'public',
+    status: params.verified ? 'verified' : 'unverified',
+  } satisfies Partial<typeof questions.$inferInsert>;
+
+  const createWithValues = async (values: typeof questions.$inferInsert) => {
+    const [created] = await db
+      .insert(questions)
+      .values(values)
+      .returning({ id: questions.id });
+    return created;
+  };
+
+  const createWithLegacyColumns = async () => {
+    const answerSource = params.llmSuggestedAnswer
+      ? (params.verified ? 'llm_suggested' : 'llm_edited')
+      : 'creator_written';
+    const status = params.verified ? 'verified' : 'unverified';
+    const rows = await db.execute<{ id: string }>(sql`
+      INSERT INTO "Question" (
+        "creator_id",
+        "question_text",
+        "answer_text",
+        "factual_explanation",
+        "accepted_alternatives",
+        "answer_source",
+        "question_type",
+        "category",
+        "broad_category",
+        "subcategory",
+        "canonical_subcategory",
+        "category_overridden",
+        "creator_note",
+        "difficulty_estimate",
+        "llm_difficulty",
+        "calibrated_difficulty",
+        "status",
+        "visibility"
+      )
+      VALUES (
+        ${params.authorId},
+        ${params.text},
+        ${params.correctAnswer},
+        ${params.explanation},
+        ${params.alternateAnswers}::text[],
+        ${answerSource}::"AnswerSource",
+        'factual'::"QuestionType",
+        ${params.category}::"Category",
+        ${params.broadCategory},
+        ${params.subcategory},
+        ${params.canonicalSubcategory},
+        false,
+        ${params.creatorNote ?? null},
+        ${difficulty}::"DifficultyEstimate",
+        ${difficulty}::"DifficultyEstimate",
+        ${difficulty}::"DifficultyEstimate",
+        ${status}::"QuestionStatus",
+        'public'::"QuestionVisibility"
+      )
+      RETURNING "id"
+    `);
+    const created = Array.isArray(rows) ? rows[0] : rows.rows?.[0];
+    if (!created) throw new Error('Failed to create legacy-compatible question');
+    return created;
+  };
+
+  let created: { id: string };
+  try {
+    created = await createWithValues({
+      ...baseValues,
+      verified: params.verified,
+      llmSuggestedAnswer: params.llmSuggestedAnswer ?? null,
+      critiqueIterations: params.critiqueIterations,
+    } as typeof questions.$inferInsert);
+  } catch (error) {
+    if (pgErrorCode(error) !== '42703') throw error;
+    console.warn('[questions/create] current question columns unavailable; retrying legacy-compatible question insert', {
+      userId: params.authorId,
+      category: params.category,
+      canonicalSubcategory: params.canonicalSubcategory,
+    });
+    try {
+      created = await createWithValues(baseValues as typeof questions.$inferInsert);
+    } catch (fallbackError) {
+      if (pgErrorCode(fallbackError) !== '42703') throw fallbackError;
+      console.warn('[questions/create] drizzle insert still references unavailable columns; saving with raw legacy-compatible insert', {
+        userId: params.authorId,
+        category: params.category,
+      canonicalSubcategory: params.canonicalSubcategory,
+      });
+      created = await createWithLegacyColumns();
+    }
+  }
 
   await db
     .insert(userQuestionBank)
@@ -221,7 +399,10 @@ export async function updateQuestion(params: {
   correctAnswer?: string;
   alternateAnswers?: string[];
   explanation?: string;
-  domain?: string;
+  category?: string;
+  broadCategory?: string | null;
+  subcategory?: string;
+  canonicalSubcategory?: string;
   difficulty?: number;
 }): Promise<QuestionMutationResult> {
   const existing = await getQuestion(params.questionId, params.userId);
@@ -233,10 +414,13 @@ export async function updateQuestion(params: {
   if (params.correctAnswer !== undefined) values.answerText = params.correctAnswer;
   if (params.alternateAnswers !== undefined) values.acceptedAlternatives = params.alternateAnswers;
   if (params.explanation !== undefined) values.factualExplanation = params.explanation || null;
-  if (params.domain !== undefined) {
-    values.category = params.domain as typeof questions.$inferInsert.category;
-    values.categoryOverridden = true;
+  if (params.category !== undefined) {
+    values.category = params.category as typeof questions.$inferInsert.category;
+    values.categoryOverridden = false;
   }
+  if (params.broadCategory !== undefined) values.broadCategory = params.broadCategory;
+  if (params.subcategory !== undefined) values.subcategory = params.subcategory;
+  if (params.canonicalSubcategory !== undefined) values.canonicalSubcategory = params.canonicalSubcategory;
   if (params.difficulty !== undefined) {
     const difficulty = numberToDifficulty(params.difficulty);
     values.difficultyEstimate = difficulty;

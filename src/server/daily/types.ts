@@ -27,6 +27,8 @@ export type QueueSlot = {
   author_note?: string | null;
   domain: string;
   question_text: string;
+  /** LLM-rated objective difficulty for this question, surfaced as a badge in the UI. */
+  difficulty_estimate?: 'accessible' | 'moderate' | 'specialist';
   answered: boolean;
   answer_state?: QueueSlotAnswerState;
   /** Text the player typed; persisted so the summary screen can show it. */
@@ -52,6 +54,10 @@ export type QueueSlot = {
   reveal_quip?: string | null;
   /** Per-answer commentary quip from selectQuip(). */
   quip?: string | null;
+  /** Optional appeal state after a player asks the app to recheck a wrong grade. */
+  recheck_status?: 'accepted' | 'rejected' | 'needs_human';
+  /** Short player-facing explanation from the recheck reviewer. */
+  recheck_reason?: string | null;
 };
 
 /**

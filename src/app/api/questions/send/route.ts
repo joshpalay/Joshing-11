@@ -10,70 +10,10 @@ import {
   userAnsweredQuestionCorrectly,
   userHasQuestionInBlockingFeed,
 } from '@/server/db/queries/feed';
+import { getFriends } from '@/server/db/queries/friends';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
-
-function parseBody(value: unknown): { questionId: string; recipientUserId: string; personalMessage: string | null } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const questionId = typeof record.question_id === 'string'
-    ? record.question_id
-    : typeof record.questionId === 'string'
-      ? record.questionId
-      : null;
-  const recipientUserId = typeof record.recipient_user_id === 'string'
-    ? record.recipient_user_id
-    : typeof record.friend_id === 'string'
-      ? record.friend_id
-      : typeof record.recipientUserId === 'string'
-        ? record.recipientUserId
-        : null;
-  const rawMessage = typeof record.personalMessage === 'string'
-    ? record.personalMessage
-    : typeof record.personal_message === 'string'
-      ? record.personal_message
-      : '';
-  const personalMessage = rawMessage.trim().slice(0, 200) || null;
-
-  return questionId && recipientUserId ? { questionId, recipientUserId, personalMessage } : null;
-}
-
-function lastTwentyFourHours(date = new Date()) {
-  return new Date(date.getTime() - 24 * 60 * 60 * 1000);
-}
-
-async function resolveQuestionIdForSend(questionId: string, senderUserId: string): Promise<string | null> {
-  const [question] = await db.select({ id: questions.id }).from(questions).where(eq(questions.id, questionId)).limit(1);
-  if (question) return question.id;
-
-  const [generated] = await db
-    .select()
-    .from(generatedQuestions)
-    .where(eq(generatedQuestions.id, questionId))
-    .limit(1);
-
-  if (!generated) return null;
-
-  const [created] = await db
-    .insert(questions)
-    .values({
-      creatorId: senderUserId,
-      sourceQuestionId: generated.id,
-      questionText: generated.questionText,
-      answerText: generated.answer,
-      factualExplanation: generated.explainer,
-      category: 'other',
-      broadCategory: generated.broadCategory,
-      canonicalSubcategory: generated.canonicalSubcategory,
-      difficultyEstimate: generated.difficultyEstimate === 'accessible' || generated.difficultyEstimate === 'moderate' || generated.difficultyEstimate === 'specialist'
-        ? generated.difficultyEstimate
-        : null,
-    })
-    .returning({ id: questions.id });
-
-  return created?.id ?? null;
-}
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -88,6 +28,11 @@ export async function POST(request: NextRequest) {
   }
   if (parsed.recipientUserId === session.userId) {
     return NextResponse.json({ error: 'validation', message: 'Choose a friend to send this to.' }, { status: 400 });
+  }
+
+  const friends = await getFriends(session.userId);
+  if (!friends.some((friend) => friend.id === parsed.recipientUserId)) {
+    return NextResponse.json({ error: 'Recipient is not a friend.' }, { status: 403 });
   }
 
   const sendableQuestionId = await resolveQuestionIdForSend(parsed.questionId, session.userId);
@@ -170,4 +115,66 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ item: created }, { status: 201 });
+}
+
+function parseBody(value: unknown): { questionId: string; recipientUserId: string; personalMessage: string | null } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const questionId = typeof record.question_id === 'string'
+    ? record.question_id
+    : typeof record.questionId === 'string'
+      ? record.questionId
+      : null;
+  const recipientUserId = typeof record.recipient_user_id === 'string'
+    ? record.recipient_user_id
+    : typeof record.friend_id === 'string'
+      ? record.friend_id
+      : typeof record.recipientUserId === 'string'
+        ? record.recipientUserId
+        : null;
+  const rawMessage = typeof record.personalMessage === 'string'
+    ? record.personalMessage
+    : typeof record.personal_message === 'string'
+      ? record.personal_message
+      : '';
+  const personalMessage = rawMessage.trim().slice(0, 200) || null;
+
+  return questionId && recipientUserId ? { questionId, recipientUserId, personalMessage } : null;
+}
+
+function lastTwentyFourHours(date = new Date()) {
+  return new Date(date.getTime() - 24 * 60 * 60 * 1000);
+}
+
+async function resolveQuestionIdForSend(questionId: string, senderUserId: string): Promise<string | null> {
+  const [question] = await db.select({ id: questions.id }).from(questions).where(eq(questions.id, questionId)).limit(1);
+  if (question) return question.id;
+
+  const [generated] = await db
+    .select()
+    .from(generatedQuestions)
+    .where(eq(generatedQuestions.id, questionId))
+    .limit(1);
+
+  if (!generated) return null;
+
+  const [created] = await db
+    .insert(questions)
+    .values({
+      creatorId: senderUserId,
+      sourceQuestionId: generated.id,
+      source: 'authored',
+      questionText: generated.questionText,
+      answerText: generated.answer,
+      factualExplanation: generated.explainer,
+      category: 'general_knowledge',
+      broadCategory: generated.broadCategory,
+      canonicalSubcategory: generated.canonicalSubcategory,
+      difficultyEstimate: generated.difficultyEstimate === 'accessible' || generated.difficultyEstimate === 'moderate' || generated.difficultyEstimate === 'specialist'
+        ? generated.difficultyEstimate
+        : null,
+    })
+    .returning({ id: questions.id });
+
+  return created?.id ?? null;
 }

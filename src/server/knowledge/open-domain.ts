@@ -1,44 +1,46 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
-import { activityItems, db, declaredInterests } from '@/server/db';
+import { activityItems, db, masteryEvents, playerMastery } from '@/server/db';
 import type { ActivityItemType } from '@/server/activity/write-activity';
+
+type TerritoryType = 'declared' | 'demonstrated';
 
 export async function openKBDomain(params: {
   userId: string;
   domain: string;
-  via: 'friend_answered' | 'authorship' | 'onboarding';
+  via: 'friend_answered' | 'authorship' | 'onboarding' | 'answered_correctly';
   broadCategory?: string | null;
   questionId?: string;
-}): Promise<{ opened: boolean; alreadyExisted: boolean }> {
-  const existing = await db
-    .select({ id: declaredInterests.id })
-    .from(declaredInterests)
+}): Promise<{ opened: boolean; alreadyExisted: boolean; territoryType: TerritoryType }> {
+  const desiredTerritoryType: TerritoryType = params.via === 'authorship' ? 'declared' : 'demonstrated';
+
+  const [existing] = await db
+    .select({ id: playerMastery.id, territoryType: playerMastery.territoryType })
+    .from(playerMastery)
     .where(and(
-      eq(declaredInterests.userId, params.userId),
-      eq(declaredInterests.domain, params.domain),
-      eq(declaredInterests.isActive, true),
+      eq(playerMastery.userId, params.userId),
+      eq(playerMastery.canonicalSubcategory, params.domain),
     ))
     .limit(1);
 
-  if (existing.length > 0) {
-    return { opened: false, alreadyExisted: true };
+  if (existing) {
+    return { opened: false, alreadyExisted: true, territoryType: existing.territoryType };
   }
 
-  const territoryType: 'declared' | 'demonstrated' =
-    params.via === 'authorship' ? 'declared' : 'demonstrated';
-
   await db
-    .insert(declaredInterests)
+    .insert(playerMastery)
     .values({
       userId: params.userId,
-      domain: params.domain,
+      canonicalSubcategory: params.domain,
       broadCategory: params.broadCategory ?? null,
-      territoryType,
-      isActive: true,
+      totalPoints: 0,
+      tier: 'establishing',
+      seasonPointsStart: 0,
+      territoryType: desiredTerritoryType,
     })
-    .onConflictDoNothing({ target: [declaredInterests.userId, declaredInterests.domain] });
+    .onConflictDoNothing({ target: [playerMastery.userId, playerMastery.canonicalSubcategory] });
 
-  return { opened: true, alreadyExisted: false };
+  return { opened: true, alreadyExisted: false, territoryType: desiredTerritoryType };
 }
 
 export async function promoteDeclaredToDemonstrated(params: {
@@ -46,49 +48,61 @@ export async function promoteDeclaredToDemonstrated(params: {
   domain: string;
   triggeringFriendId: string;
   questionId: string;
-}): Promise<{ promoted: boolean }> {
-  const [row] = await db
-    .select({ id: declaredInterests.id, territoryType: declaredInterests.territoryType })
-    .from(declaredInterests)
-    .where(and(
-      eq(declaredInterests.userId, params.userId),
-      eq(declaredInterests.domain, params.domain),
-      eq(declaredInterests.isActive, true),
-    ))
-    .limit(1);
-
-  if (!row || row.territoryType !== 'declared') {
-    return { promoted: false };
-  }
-
-  await db
-    .update(declaredInterests)
-    .set({ territoryType: 'demonstrated' })
-    .where(and(
-      eq(declaredInterests.userId, params.userId),
-      eq(declaredInterests.domain, params.domain),
-    ));
-
-  const answerId = `declared_promoted:${params.domain}:${params.questionId}:${params.triggeringFriendId}`;
-
+}): Promise<
+  | { promoted: true }
+  | { promoted: false; reason: 'no_row' | 'already_demonstrated' | 'error' }
+> {
   try {
-    await db.execute(sql`
-      insert into "MASTERY_EVENTS" (
-        "user_id", "canonical_subcategory", "source_type",
-        "question_id", "answered_by_user_id", "answer_id",
-        "base_points", "weight", "awarded_points", "session_context"
-      ) values (
-        ${params.userId}, ${params.domain}, 'declared_promoted',
-        ${params.questionId}, ${params.triggeringFriendId}, ${answerId},
-        0, 0, 0, 'declared_promoted'
-      )
-      on conflict ("answer_id") do nothing
-    `);
-  } catch {
-    // Non-fatal — traceability only
-  }
+    const [row] = await db
+      .select({ id: playerMastery.id, territoryType: playerMastery.territoryType })
+      .from(playerMastery)
+      .where(and(
+        eq(playerMastery.userId, params.userId),
+        eq(playerMastery.canonicalSubcategory, params.domain),
+      ))
+      .limit(1);
 
-  try {
+    if (!row) {
+      console.warn('[promoteDeclaredToDemonstrated] no PlayerMastery row', {
+        userId: params.userId,
+        domain: params.domain,
+        triggeringFriendId: params.triggeringFriendId,
+        questionId: params.questionId,
+      });
+      return { promoted: false, reason: 'no_row' };
+    }
+
+    if (row.territoryType === 'demonstrated') {
+      return { promoted: false, reason: 'already_demonstrated' };
+    }
+
+    await db
+      .update(playerMastery)
+      .set({ territoryType: 'demonstrated', updatedAt: new Date() })
+      .where(and(
+        eq(playerMastery.userId, params.userId),
+        eq(playerMastery.canonicalSubcategory, params.domain),
+      ));
+
+    const answerId = `declared_promoted:${params.domain}:${params.questionId}:${params.triggeringFriendId}`;
+
+    await db
+      .insert(masteryEvents)
+      .values({
+        userId: params.userId,
+        canonicalSubcategory: params.domain,
+        sourceType: 'declared_promoted',
+        questionId: params.questionId,
+        answeredByUserId: params.triggeringFriendId,
+        answerId,
+        basePoints: 0,
+        weight: 0,
+        awardedPoints: 0,
+        sessionContext: 'declared_promoted',
+        metadata: { byUserId: params.triggeringFriendId, domain: params.domain },
+      })
+      .onConflictDoNothing({ target: masteryEvents.answerId });
+
     await db.insert(activityItems).values({
       userId: params.userId,
       type: 'declared_promoted' satisfies ActivityItemType,
@@ -97,9 +111,16 @@ export async function promoteDeclaredToDemonstrated(params: {
       referenceType: 'question',
       read: false,
     });
-  } catch {
-    // Non-fatal
-  }
 
-  return { promoted: true };
+    return { promoted: true };
+  } catch (error) {
+    console.warn('[promoteDeclaredToDemonstrated] promotion failed', {
+      userId: params.userId,
+      domain: params.domain,
+      triggeringFriendId: params.triggeringFriendId,
+      questionId: params.questionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { promoted: false, reason: 'error' };
+  }
 }

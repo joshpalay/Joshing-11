@@ -2,17 +2,16 @@
 
 import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Combine, Plus, Repeat2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 
-import { DomainCard } from '@/components/knowledge/DomainCard';
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
 import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
-import { ProgressionLandscape, type ProgressionDomain } from '@/components/knowledge/ProgressionLandscape';
 import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
+import { AskFriendForDomain } from '@/components/knowledge/AskFriendForDomain';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
-import type { KnowledgeDomain } from '@/server/profile/knowledge-types';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import type { MasteryTier } from '@/types/db';
 
 type DomainMastery = {
@@ -62,17 +61,6 @@ type TidyResult = {
   details: Array<{ sources: string[]; target: string; rationale: string }>;
 };
 
-type KnowledgeView = 'classic' | 'progression';
-
-const KNOWLEDGE_VIEW_KEY = 'joshing_knowledge_view';
-
-function readSavedView(): KnowledgeView {
-  if (typeof window === 'undefined') return 'progression';
-  const raw = localStorage.getItem(KNOWLEDGE_VIEW_KEY);
-  if (raw === 'classic' || raw === 'progression') return raw;
-  return 'progression';
-}
-
 function asTier(value: string): MasteryTier {
   if (value === 'familiar' || value === 'solid' || value === 'mastery') return value;
   return 'establishing';
@@ -88,45 +76,19 @@ function domainKey(value: string): string {
 
 function displayMind(domains: DomainMastery[], declaredInterests: string[]): string {
   const top = domains.filter((domain) => domain.points > 0).slice(0, 3).map((domain) => domain.displayName);
-  if (top.length >= 2) return `Your mind is building around ${top.slice(0, -1).join(', ')} and ${top.at(-1)}.`;
-  if (top.length === 1) return `Your mind is building around ${top[0]}.`;
+  if (top.length >= 2) return `A mind that is building around ${top.slice(0, -1).join(', ')} and ${top.at(-1)}.`;
+  if (top.length === 1) return `A mind that is building around ${top[0]}.`;
   if (declaredInterests.length > 0) return `Your mind is ready to explore ${declaredInterests.slice(0, 3).join(', ')}.`;
   return 'Your mind will take shape as you play and write questions.';
-}
-
-function toKnowledgeDomain(domain: DomainMastery): KnowledgeDomain {
-  return {
-    name: domain.displayName,
-    tier: asTier(domain.tier),
-    progressWithinTier: domain.tierProgress / 100,
-    masteryPoints: domain.points,
-    declaredQuestionCount: domain.isDeclaredInterest ? Math.max(1, domain.questionsAnswered) : domain.questionsAnswered,
-    provenCorrectCount: domain.questionsCorrect,
-    isVisibleOnProfile: true,
-    broadCategory: domain.broadCategory,
-  };
 }
 
 function toPortraitEntry(domain: DomainMastery): PortraitEntry {
   return {
     canonicalSubcategory: domain.displayName,
-    broadCategory: domain.broadCategory ?? 'Other',
+    broadCategory: normalizeBroadCategory(domain.broadCategory) ?? 'General Knowledge',
     totalMasteryPoints: Math.max(domain.points, domain.isDeclaredInterest ? 1 : 0),
     tier: asTier(domain.tier),
     authoredAnsweredCount: domain.questionsAnswered,
-  };
-}
-
-function toProgressionDomain(domain: DomainMastery): ProgressionDomain {
-  return {
-    canonicalSubcategory: domain.displayName,
-    canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
-    broadCategory: domain.broadCategory,
-    currentTier: asTier(domain.tier),
-    correctAnswerCount: domain.questionsCorrect,
-    authoredCount: domain.questionsAnswered,
-    iconKey: domain.iconKey,
-    territoryType: (domain.territoryType as 'declared' | 'demonstrated' | undefined) ?? 'demonstrated',
   };
 }
 
@@ -168,18 +130,17 @@ export default function KnowledgePage() {
 }
 
 function KnowledgePageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const highlightedDomainSlug = searchParams.get('domain');
   const tierCrossed = searchParams.get('tier_crossed');
   const manageInterestsParam = searchParams.get('interests');
+  const emptyDomainParam = searchParams.get('emptyDomain')?.trim() || searchParams.get('askDomain')?.trim() || '';
+  const emptyQuestionDomain = emptyDomainParam || null;
 
   const [data, setData] = useState<KnowledgeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<KnowledgeView>('progression');
   const [activeSlug, setActiveSlug] = useState<string | null>(highlightedDomainSlug);
-  const [isFading, setIsFading] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [interestModal, setInterestModal] = useState<InterestModalState | null>(null);
   const [selectedInterest, setSelectedInterest] = useState<ProposedInterest | null>(null);
@@ -196,6 +157,7 @@ function KnowledgePageContent() {
   const [sendQuestionOpen, setSendQuestionOpen] = useState(false);
   const [writeQuestionOpen, setWriteQuestionOpen] = useState(false);
   const [questionToast, setQuestionToast] = useState<string | null>(null);
+  const [askFriendDomain, setAskFriendDomain] = useState<string | null>(null);
 
   const loadKnowledge = async () => {
     const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
@@ -208,16 +170,20 @@ function KnowledgePageContent() {
 
   useEffect(() => {
     let active = true;
-    setView(readSavedView());
     setLoading(true);
-    Promise.all([
-      loadKnowledge(),
-      fetch('/api/feed/dismissed-domains', { cache: 'no-store', credentials: 'include' })
-        .then((r) => r.json().catch(() => null))
-        .then((body: { domains?: string[] } | null) => {
-          if (active && body?.domains) setDismissedDomains(body.domains);
-        }),
-    ])
+    setError(null);
+
+    const loadDismissedDomains = async () => {
+      try {
+        const response = await fetch('/api/feed/dismissed-domains', { cache: 'no-store', credentials: 'include' });
+        const body = await response.json().catch(() => null) as { domains?: string[] } | null;
+        if (active && response.ok && body?.domains) setDismissedDomains(body.domains);
+      } catch {
+        if (active) setDismissedDomains([]);
+      }
+    };
+
+    Promise.all([loadKnowledge(), loadDismissedDomains()])
       .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : 'Could not load your Knowledge Map.');
       })
@@ -261,13 +227,7 @@ function KnowledgePageContent() {
     [data],
   );
 
-  const activeDomains = useMemo(() => sortedDomains.map(toKnowledgeDomain), [sortedDomains]);
   const portraitEntries = useMemo(() => sortedDomains.map(toPortraitEntry), [sortedDomains]);
-  const progressionDomains = useMemo(() => sortedDomains.map(toProgressionDomain), [sortedDomains]);
-  const maxCorrectAnswerCount = useMemo(
-    () => Math.max(...progressionDomains.map((domain) => domain.correctAnswerCount), 1),
-    [progressionDomains],
-  );
   const declaredSlots = useMemo(() => {
     if (!data) return [];
     const byKey = new Map(data.pageData.allDomains.map((domain) => [domainKey(domain.domain), domain]));
@@ -282,20 +242,10 @@ function KnowledgePageContent() {
       .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
   }, [data, declaredKeys]);
 
-  const topCardDomains = useMemo(() => sortedDomains.filter((domain) => domain.points > 0).slice(0, 8), [sortedDomains]);
+  const topCardDomains = useMemo(() => sortedDomains.filter((domain) => domain.points > 0).slice(0, 5), [sortedDomains]);
   const yourMind = data ? displayMind(sortedDomains, data.pageData.declaredInterests) : '';
   const displayName = 'You';
   const hasAnything = sortedDomains.length > 0;
-
-  const onToggleView = (nextView: KnowledgeView) => {
-    if (nextView === view) return;
-    setIsFading(true);
-    window.setTimeout(() => {
-      setView(nextView);
-      localStorage.setItem(KNOWLEDGE_VIEW_KEY, nextView);
-      setIsFading(false);
-    }, 150);
-  };
 
   const openInterestModal = (slotIndex: number, currentDomain: string | null) => {
     setInterestModal({ slotIndex, currentDomain });
@@ -383,7 +333,14 @@ function KnowledgePageContent() {
     if (!response.ok) throw new Error(body?.message ?? 'Could not save that question.');
     setSendQuestionOpen(false);
     setWriteQuestionOpen(false);
-    setQuestionToast('Question saved.');
+    if (values.sendToFriendIds.length > 0) {
+      const n = values.sendToFriendIds.length;
+      setQuestionToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
+    } else if (values.shareToFeed) {
+      setQuestionToast('Saved and shared with your friends.');
+    } else {
+      setQuestionToast('Saved to your bank.');
+    }
     window.setTimeout(() => setQuestionToast(null), 2500);
   };
 
@@ -467,6 +424,7 @@ function KnowledgePageContent() {
               currentTier: asTier(domain.tier),
               lifetimePoints: domain.points,
               iconKey: domain.iconKey,
+              broadCategory: domain.broadCategory,
             }))}
             overflowCount={Math.max(0, sortedDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
             tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${sortedDomains.length} territories`}
@@ -488,50 +446,33 @@ function KnowledgePageContent() {
             <p style={knowledgeSubtitleStyle}>SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;</p>
           </div>
 
-          <div style={toggleRowStyle} aria-label="Knowledge view toggle">
-            <div style={toggleWrapStyle}>
-              <button type="button" onClick={() => onToggleView('classic')} style={view === 'classic' ? activeToggleStyle : inactiveToggleStyle} aria-pressed={view === 'classic'}>
-                Classic
-              </button>
-              <button type="button" onClick={() => onToggleView('progression')} style={view === 'progression' ? activeToggleStyle : inactiveToggleStyle} aria-pressed={view === 'progression'}>
-                Progression
+          <div id="portrait-circles-section">
+            <PortraitCircles entries={portraitEntries} />
+            <div style={sharePortraitWrapStyle}>
+              <button type="button" style={sharePortraitBtnStyle} onClick={() => setShareModalOpen(true)}>
+                Share portrait
               </button>
             </div>
           </div>
-
-          <div style={{ ...contentShellStyle, opacity: isFading ? 0 : 1 }}>
-            {view === 'classic' ? (
-              <div style={cardStackStyle}>
-                {activeDomains.map((domain) => (
-                  <div key={domain.name} id={`knowledge-domain-${toCanonicalDomainSlug(domain.name)}`}>
-                    <DomainCard
-                      domain={domain}
-                      highlighted={activeSlug === toCanonicalDomainSlug(domain.name)}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div id="portrait-circles-section">
-                <PortraitCircles entries={portraitEntries} />
-                <div style={{ marginTop: 24 }}>
-                  <ProgressionLandscape
-                    domains={progressionDomains}
-                    maxCorrectAnswerCount={maxCorrectAnswerCount}
-                    highlightSlug={activeSlug}
-                    onDomainSelect={(domain) => router.push(`/knowledge/${encodeURIComponent(domain)}`)}
-                  />
-                </div>
-                <div style={sharePortraitWrapStyle}>
-                  <button type="button" style={sharePortraitBtnStyle} onClick={() => setShareModalOpen(true)}>
-                    Share portrait
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
         </section>
       )}
+
+
+      {emptyQuestionDomain ? (
+        <section style={emptyQuestionStateStyle} aria-label={`No ${emptyQuestionDomain} questions yet`}>
+          <p style={knowledgeEyebrowStyle}>No matching public questions</p>
+          <h2 style={emptyQuestionHeadingStyle}>We don’t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
+          <p style={growMapBodyStyle}>Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
+          <div style={growMapActionsStyle}>
+            <button type="button" style={growMapPrimaryBtnStyle} onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
+              Ask a friend
+            </button>
+            <button type="button" style={growMapSecondaryBtnStyle} onClick={() => setWriteQuestionOpen(true)}>
+              Write one myself
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section style={growMapSectionStyle}>
         <h2 style={growMapHeadingStyle}>Grow your map</h2>
@@ -581,6 +522,10 @@ function KnowledgePageContent() {
       {shareModalOpen && (
         <SharePortraitModal entries={portraitEntries} playerDisplayName={displayName} onClose={() => setShareModalOpen(false)} />
       )}
+
+      {askFriendDomain ? (
+        <AskFriendForDomain key={askFriendDomain} domain={askFriendDomain} onClose={() => setAskFriendDomain(null)} />
+      ) : null}
 
       {interestModal ? (
         <div style={{ ...modalOverlayStyle, zIndex: 55 }}>
@@ -662,7 +607,7 @@ function KnowledgePageContent() {
             <div style={modalHeaderStyle}>
               <div>
                 <h2 style={modalTitleStyle}>Tidy up your map?</h2>
-                <p style={modalCopyStyle}>We'll look for domains in your map that could be combined. This is automatic and based on what you've answered.</p>
+                <p style={modalCopyStyle}>We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
               </div>
               <button type="button" style={iconButtonStyle} onClick={() => setTidyConfirmOpen(false)} aria-label="Close" disabled={tidying}>
                 <X className="size-4" />
@@ -831,51 +776,6 @@ const knowledgeSubtitleStyle: CSSProperties = {
   color: '#8a8070',
   letterSpacing: '0.06em',
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-};
-
-const toggleRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  margin: '0.75rem 0',
-};
-
-const toggleWrapStyle: CSSProperties = {
-  display: 'flex',
-  gap: 8,
-};
-
-const activeToggleStyle: CSSProperties = {
-  minHeight: 34,
-  padding: '0 14px',
-  borderRadius: 999,
-  border: 'none',
-  background: '#1a1208',
-  color: '#f5f0e8',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  fontSize: 14,
-};
-
-const inactiveToggleStyle: CSSProperties = {
-  minHeight: 34,
-  padding: '0 12px',
-  borderRadius: 999,
-  border: 'none',
-  background: 'transparent',
-  color: '#8a8070',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  fontSize: 14,
-};
-
-const contentShellStyle: CSSProperties = {
-  transition: 'opacity 150ms ease',
-};
-
-const cardStackStyle: CSSProperties = {
-  display: 'grid',
-  gap: '0.6rem',
 };
 
 const emptyStyle: CSSProperties = {
@@ -1157,6 +1057,21 @@ const modalPrimaryStyle: CSSProperties = {
   color: '#f5f0e8',
   padding: '0 16px',
   cursor: 'pointer',
+};
+
+const emptyQuestionStateStyle: CSSProperties = {
+  background: '#fff7e8',
+  border: '1px solid #d9b56c',
+  padding: '1.25rem 0.95rem',
+};
+
+const emptyQuestionHeadingStyle: CSSProperties = {
+  margin: '0.4rem 0 0',
+  fontSize: '1.25rem',
+  lineHeight: 1.35,
+  color: '#1a1208',
+  fontFamily: 'var(--font-literata), serif',
+  fontWeight: 600,
 };
 
 const growMapSectionStyle: CSSProperties = {

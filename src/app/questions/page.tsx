@@ -1,11 +1,11 @@
 'use client';
 
 import { Lock, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
-import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
@@ -15,13 +15,31 @@ type DrawerState =
   | { mode: 'create' }
   | { mode: 'edit'; question: QuestionView };
 
+type QuestionsApiResponse = {
+  questions?: QuestionView[] | null;
+  message?: string;
+  error?: string;
+};
+
+const NO_QUESTIONS_PATTERNS = [
+  /no questions/i,
+  /not found/i,
+  /empty/i,
+];
+
+function isNoQuestionsResponse(response: Response, body: QuestionsApiResponse | null): boolean {
+  const apiMessage = body?.message ?? body?.error ?? '';
+  return response.status === 204
+    || response.status === 404
+    || NO_QUESTIONS_PATTERNS.some((pattern) => pattern.test(apiMessage));
+}
 
 const DIFFICULTY_COPY: Record<number, string> = {
-  1: 'Accessible',
-  2: 'Accessible → Moderate',
-  3: 'Moderate',
-  4: 'Moderate → Specialist',
-  5: 'Specialist',
+  1: 'Establishing',
+  2: 'Establishing → Solid',
+  3: 'Solid',
+  4: 'Skilled',
+  5: 'Master',
 };
 
 const DOMAIN_COLORS: Record<string, string> = {
@@ -34,7 +52,7 @@ const DOMAIN_COLORS: Record<string, string> = {
   philosophy: '#6d28d9',
   pop_culture: '#db2777',
   language: '#0369a1',
-  other: '#64748b',
+  general_knowledge: '#64748b',
 };
 
 function relativeTime(value: string | null): string {
@@ -63,8 +81,9 @@ function initialValues(question: QuestionView): QuestionFormValues {
     correctAnswer: question.correctAnswer,
     alternateAnswers: question.alternateAnswers,
     explanation: question.explanation,
-    domain: question.domain,
-    difficulty: question.difficulty,
+    verified: question.verified,
+    llmSuggestedAnswer: question.llmSuggestedAnswer,
+    critiqueIterations: question.critiqueIterations,
     sendToFriendIds: [],
   };
 }
@@ -84,6 +103,15 @@ function LoadingSkeleton() {
 }
 
 export default function QuestionsPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <QuestionsPageContent />
+    </Suspense>
+  );
+}
+
+function QuestionsPageContent() {
+  const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<QuestionView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +119,9 @@ export default function QuestionsPage() {
   const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
-  const [drawer, setDrawer] = useState<DrawerState>({ mode: 'closed' });
+  const [drawer, setDrawer] = useState<DrawerState>(() => (
+    searchParams.get('create') === '1' ? { mode: 'create' } : { mode: 'closed' }
+  ));
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [cardError, setCardError] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -102,8 +132,12 @@ export default function QuestionsPage() {
     setError(null);
     try {
       const response = await fetch('/api/questions', { cache: 'no-store', credentials: 'include' });
-      const body = await response.json().catch(() => null) as { questions?: QuestionView[]; message?: string } | null;
-      if (!response.ok || !Array.isArray(body?.questions)) throw new Error(body?.message ?? 'Could not load your questions.');
+      const body = await response.json().catch(() => null) as QuestionsApiResponse | null;
+      if (isNoQuestionsResponse(response, body)) {
+        setQuestions([]);
+        return;
+      }
+      if (!response.ok || !Array.isArray(body?.questions)) throw new Error(body?.message ?? body?.error ?? 'Could not load your questions.');
       setQuestions(body.questions);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load your questions.');
@@ -113,7 +147,7 @@ export default function QuestionsPage() {
   }, []);
 
   useEffect(() => {
-    void loadQuestions();
+    void Promise.resolve().then(loadQuestions);
   }, [loadQuestions]);
 
   useEffect(() => {
@@ -122,10 +156,11 @@ export default function QuestionsPage() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const availableDomains = useMemo(() => {
-    const seen = new Set(questions.map((question) => question.domain));
-    return CATEGORIES.filter((category) => seen.has(category));
-  }, [questions]);
+  const availableDomains = useMemo(() => (
+    [...new Map(questions.map((question) => [question.domain, question.domainDisplayName] as const)).entries()]
+      .map(([domain, label]) => ({ domain, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  ), [questions]);
 
   const filteredQuestions = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -166,6 +201,8 @@ export default function QuestionsPage() {
     if (values.sendToFriendIds.length > 0) {
       const n = values.sendToFriendIds.length;
       setToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
+    } else if (values.shareToFeed) {
+      setToast('Saved and shared with your friends.');
     } else {
       setToast('Saved to your bank.');
     }
@@ -263,8 +300,8 @@ export default function QuestionsPage() {
           aria-label="Filter by domain"
         >
           <option value="all">All domains</option>
-          {availableDomains.map((domain) => (
-            <option key={domain} value={domain}>{categoryLabel(domain)}</option>
+          {availableDomains.map((item) => (
+            <option key={item.domain} value={item.domain}>{item.label}</option>
           ))}
         </select>
         <select
@@ -291,7 +328,10 @@ export default function QuestionsPage() {
 
       {questions.length === 0 ? (
         <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-          <h2 className="font-serif text-2xl font-semibold">You haven&apos;t written any questions yet.</h2>
+          <h2 className="font-serif text-2xl font-semibold">No questions yet.</h2>
+          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+            Your question bank is empty. Write a question or save one from a friend to build your bank.
+          </p>
           <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create' })}>
             Write a question
           </button>
@@ -308,7 +348,7 @@ export default function QuestionsPage() {
           {filteredQuestions.map((question) => {
             const isOwnAuthored = question.isOwnAuthored ?? true;
             const inUse = question.usedInGamesCount > 0;
-            const color = DOMAIN_COLORS[question.domain] ?? '#64748b';
+            const color = DOMAIN_COLORS[question.category] ?? '#64748b';
             const deleting = removingId === question.id;
 
             return (
@@ -323,10 +363,10 @@ export default function QuestionsPage() {
                   >
                     {question.domainDisplayName}
                   </span>
-                  <span className="font-mono text-xs text-muted-foreground" aria-label={`Difficulty ${question.difficulty} of 5 (${DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'})`}>
+                  <span className="font-mono text-xs text-muted-foreground" aria-label={`LLM-rated difficulty: ${DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'}`}>
                     {difficultyDots(question.difficulty)}
                     {' · '}
-                    {question.difficulty}/5 {DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'}
+                    {DIFFICULTY_COPY[question.difficulty] ?? 'Unrated'}
                   </span>
                   <span className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                     {isOwnAuthored ? 'Written by you' : `From ${question.authorName ?? 'a friend'}`}

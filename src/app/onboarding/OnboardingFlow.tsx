@@ -1,56 +1,63 @@
-'use client';
+'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
-import { Check, Edit3, Loader2, Plus, X } from 'lucide-react';
-import { COUNTRIES } from '@/lib/onboarding/countries';
-import { US_STATES } from '@/lib/onboarding/us-regions';
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import { Check, Edit3, Loader2, Plus, X } from 'lucide-react'
+import { COUNTRIES } from '@/lib/onboarding/countries'
+import { US_STATES } from '@/lib/onboarding/us-regions'
 
-type CurrentStep = 'welcome' | 'background' | 'warmup' | 'review' | 'pick' | 'complete';
+type CurrentStep =
+  | 'invite-suggestions'
+  | 'welcome'
+  | 'background'
+  | 'warmup'
+  | 'review'
+  | 'pick'
+  | 'complete'
 
 export type WarmupAnswers = {
-  deepDive?: string;
-  hourLongTopic?: string;
-  anythingElse?: string;
-};
+  deepDive?: string
+  hourLongTopic?: string
+  anythingElse?: string
+}
 
 export type ProposedInterest = {
-  domain: string;
-  broadCategory: string;
-  rationale?: string | null;
-};
+  domain: string
+  broadCategory: string
+  rationale?: string | null
+}
 
 type SelectedInterest = {
-  domain: string;
-  broadCategory: string;
-};
+  domain: string
+  broadCategory: string
+}
 
-export type PreSeededInterest = ProposedInterest & {
-  inviterName?: string | null;
-};
+export type PreSeededInterest = ProposedInterest
 
 type OnboardingFlowProps = {
-  preSeededInterests: PreSeededInterest[];
-};
+  preSeededInterests: PreSeededInterest[]
+  inviterName?: string | null
+}
 
 type CanonicalSuggestion = {
-  original: string;
-  suggested: string;
-  broadCategory: string;
-  explanation: string | null;
-};
+  original: string
+  suggested: string
+  broadCategory: string
+  explanation: string | null
+}
 
 const WARMUP_FIELDS: Array<{
-  field: keyof WarmupAnswers;
-  label: string;
-  placeholder: string;
-  optional?: boolean;
+  field: keyof WarmupAnswers
+  label: string
+  placeholder: string
+  optional?: boolean
 }> = [
   {
     field: 'deepDive',
-    label: 'A book, composer, or filmmaker you\'ve gone deep on?',
-    placeholder: 'e.g. Middlemarch, or Tchaikovsky\'s symphonies, or Werner Herzog',
+    label: "A book, composer, or filmmaker you've gone deep on?",
+    placeholder:
+      "e.g. Middlemarch, or Tchaikovsky's symphonies, or Werner Herzog",
   },
   {
     field: 'hourLongTopic',
@@ -63,43 +70,50 @@ const WARMUP_FIELDS: Array<{
     placeholder: 'Anything',
     optional: true,
   },
-];
-
+]
 
 const LOADING_COPY = [
   'Reading your answers...',
   'Looking for connections...',
   'Building your map...',
-];
+]
 
 const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
   { step: 'background', label: 'About You' },
   { step: 'warmup', label: 'Warmup' },
   { step: 'review', label: 'Review' },
   { step: 'pick', label: 'Confirm' },
-];
+]
 
 function normalizeDomain(domain: string) {
-  return domain.trim().replace(/\s+/g, ' ');
+  return domain.trim().replace(/\s+/g, ' ')
 }
 
 function selectedKey(interest: SelectedInterest) {
-  return interest.domain.trim().toLowerCase();
+  return interest.domain.trim().toLowerCase()
 }
 
 function toSelected(interest: ProposedInterest): SelectedInterest | null {
-  const domain = normalizeDomain(interest.domain);
-  if (domain.length < 2) return null;
+  const domain = normalizeDomain(interest.domain)
+  if (domain.length < 2) return null
 
   return {
     domain,
-    broadCategory: normalizeDomain(interest.broadCategory || 'Other') || 'Other',
-  };
+    broadCategory:
+      normalizeDomain(interest.broadCategory || 'General Knowledge') || 'General Knowledge',
+  }
 }
 
-function isSelected(selectedInterests: SelectedInterest[], interest: ProposedInterest) {
-  const selected = toSelected(interest);
-  return selected ? selectedInterests.some((item) => selectedKey(item) === selectedKey(selected)) : false;
+function isSelected(
+  selectedInterests: SelectedInterest[],
+  interest: ProposedInterest
+) {
+  const selected = toSelected(interest)
+  return selected
+    ? selectedInterests.some(
+        (item) => selectedKey(item) === selectedKey(selected)
+      )
+    : false
 }
 
 function isBeforeNoonEastern() {
@@ -107,9 +121,11 @@ function isBeforeNoonEastern() {
     timeZone: 'America/New_York',
     hour: 'numeric',
     hourCycle: 'h23',
-  }).formatToParts(new Date());
-  const hour = Number(easternParts.find((part) => part.type === 'hour')?.value ?? '12');
-  return hour < 12;
+  }).formatToParts(new Date())
+  const hour = Number(
+    easternParts.find((part) => part.type === 'hour')?.value ?? '12'
+  )
+  return hour < 12
 }
 
 function Spinner({ small = false }: { small?: boolean }) {
@@ -118,21 +134,28 @@ function Spinner({ small = false }: { small?: boolean }) {
       className={`${small ? 'size-4' : 'size-7'} animate-spin`}
       aria-hidden="true"
     />
-  );
+  )
 }
 
 function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
-  const activeIndex = currentStep === 'welcome'
-    ? -1
-    : currentStep === 'complete'
-      ? STEP_DOTS.length
-      : Math.max(0, STEP_DOTS.findIndex((item) => item.step === currentStep));
+  const activeIndex =
+    currentStep === 'welcome' || currentStep === 'invite-suggestions'
+      ? -1
+      : currentStep === 'complete'
+        ? STEP_DOTS.length
+        : Math.max(
+            0,
+            STEP_DOTS.findIndex((item) => item.step === currentStep)
+          )
 
   return (
-    <div className="flex items-center justify-center gap-3" aria-label="Onboarding progress">
+    <div
+      className="flex items-center justify-center gap-3"
+      aria-label="Onboarding progress"
+    >
       {STEP_DOTS.map((item, index) => {
-        const active = index <= activeIndex;
-        const current = item.step === currentStep;
+        const active = index <= activeIndex
+        const current = item.step === currentStep
 
         return (
           <div key={item.step} className="flex items-center gap-2">
@@ -140,196 +163,257 @@ function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
               className={[
                 'block size-2.5 rounded-full transition',
                 active ? 'bg-foreground' : 'bg-border',
-                current ? 'ring-4 ring-foreground/10' : '',
+                current ? 'ring-foreground/10 ring-4' : '',
               ].join(' ')}
             />
             <span className="sr-only">{item.label}</span>
           </div>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
 function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="space-y-2">
-      <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">{title}</h1>
-      <p className="text-base leading-7 text-muted-foreground">{subtitle}</p>
+      <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">
+        {title}
+      </h1>
+      <p className="text-muted-foreground text-base leading-7">{subtitle}</p>
     </div>
-  );
+  )
 }
 
-export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowProps) {
-  const router = useRouter();
-  const [currentStep, setCurrentStep] = useState<CurrentStep>('welcome');
-  const [birthYear, setBirthYear] = useState('');
-  const [grewUpCountry, setGrewUpCountry] = useState('');
-  const [grewUpRegion, setGrewUpRegion] = useState('');
-  const [warmupAnswers, setWarmupAnswers] = useState<WarmupAnswers>({});
-  const [proposedInterests, setProposedInterests] = useState<ProposedInterest[] | null>(null);
-  const [selectedInterests, setSelectedInterests] = useState<SelectedInterest[]>(
-    () => preSeededInterests.flatMap((interest) => {
-      const selected = toSelected(interest);
-      return selected ? [selected] : [];
-    }).slice(0, 5),
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCanonicalizing, setIsCanonicalizing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loadingCopyIndex, setLoadingCopyIndex] = useState(0);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editingDomain, setEditingDomain] = useState('');
-  const [showComposer, setShowComposer] = useState(false);
-  const [customInput, setCustomInput] = useState('');
-  const [canonicalSuggestion, setCanonicalSuggestion] = useState<CanonicalSuggestion | null>(null);
-  const [customChoice, setCustomChoice] = useState<'suggested' | 'mine' | null>(null);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showDailySetup = useMemo(() => isBeforeNoonEastern(), []);
+export default function OnboardingFlow({
+  preSeededInterests,
+  inviterName,
+}: OnboardingFlowProps) {
+  const router = useRouter()
+  const [currentStep, setCurrentStep] = useState<CurrentStep>(() =>
+    preSeededInterests.length > 0 ? 'invite-suggestions' : 'welcome'
+  )
+  const [birthYear, setBirthYear] = useState('')
+  const [grewUpCountry, setGrewUpCountry] = useState('')
+  const [grewUpRegion, setGrewUpRegion] = useState('')
+  const [warmupAnswers, setWarmupAnswers] = useState<WarmupAnswers>({})
+  const [proposedInterests, setProposedInterests] = useState<
+    ProposedInterest[] | null
+  >(null)
+  const [inviteInterests, setInviteInterests] = useState<PreSeededInterest[]>(
+    () => preSeededInterests
+  )
+  const [selectedInterests, setSelectedInterests] = useState<
+    SelectedInterest[]
+  >(() =>
+    preSeededInterests
+      .flatMap((interest) => {
+        const selected = toSelected(interest)
+        return selected ? [selected] : []
+      })
+      .slice(0, 5)
+  )
+  const [isLoading, setIsLoading] = useState(false)
+  const [isCanonicalizing, setIsCanonicalizing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loadingCopyIndex, setLoadingCopyIndex] = useState(0)
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [editingDomain, setEditingDomain] = useState('')
+  const [showComposer, setShowComposer] = useState(false)
+  const [customInput, setCustomInput] = useState('')
+  const [canonicalSuggestion, setCanonicalSuggestion] =
+    useState<CanonicalSuggestion | null>(null)
+  const [customChoice, setCustomChoice] = useState<'suggested' | 'mine' | null>(
+    null
+  )
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showDailySetup = useMemo(() => isBeforeNoonEastern(), [])
 
-  const inviterName = preSeededInterests.find((interest) => interest.inviterName)?.inviterName ?? 'A friend';
+  const displayInviterName = inviterName?.trim()
+    ? inviterName.trim()
+    : 'A friend'
 
-  const parsedBirthYear = parseInt(birthYear, 10);
-  const maxBirthYear = new Date().getFullYear() - 13;
-  const birthYearValid = birthYear.length === 4 && parsedBirthYear >= 1920 && parsedBirthYear <= maxBirthYear;
+  const parsedBirthYear = parseInt(birthYear, 10)
+  const maxBirthYear = new Date().getFullYear() - 13
+  const birthYearValid =
+    birthYear.length === 4 &&
+    parsedBirthYear >= 1920 &&
+    parsedBirthYear <= maxBirthYear
   const canAdvanceBackground =
     birthYearValid &&
     grewUpCountry !== '' &&
-    (grewUpCountry !== 'US' || grewUpRegion !== '');
+    (grewUpCountry !== 'US' || grewUpRegion !== '')
 
   const canGenerate =
     normalizeDomain(warmupAnswers.deepDive ?? '').length > 0 &&
-    normalizeDomain(warmupAnswers.hourLongTopic ?? '').length > 0;
+    normalizeDomain(warmupAnswers.hourLongTopic ?? '').length > 0
 
   const reviewInterests = useMemo(
     () => [
-      ...preSeededInterests,
+      ...inviteInterests,
       ...(proposedInterests ?? []).filter(
-        (interest) => !preSeededInterests.some(
-          (seeded) => selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) === selectedKey(toSelected(interest) ?? { domain: '', broadCategory: '' }),
-        ),
+        (interest) =>
+          !inviteInterests.some(
+            (seeded) =>
+              selectedKey(
+                toSelected(seeded) ?? { domain: '', broadCategory: '' }
+              ) ===
+              selectedKey(
+                toSelected(interest) ?? { domain: '', broadCategory: '' }
+              )
+          )
       ),
     ],
-    [preSeededInterests, proposedInterests],
-  );
+    [inviteInterests, proposedInterests]
+  )
 
   useEffect(() => {
-    if (!isLoading || currentStep !== 'warmup') return;
+    if (!isLoading || currentStep !== 'warmup') return
 
     const interval = window.setInterval(() => {
-      setLoadingCopyIndex((current) => (current + 1) % LOADING_COPY.length);
-    }, 3000);
+      setLoadingCopyIndex((current) => (current + 1) % LOADING_COPY.length)
+    }, 3000)
 
-    return () => window.clearInterval(interval);
-  }, [currentStep, isLoading]);
+    return () => window.clearInterval(interval)
+  }, [currentStep, isLoading])
 
   useEffect(() => {
-    const rawInput = normalizeDomain(customInput);
-    setCanonicalSuggestion(null);
-    setCustomChoice(null);
+    const rawInput = normalizeDomain(customInput)
+    const resetTimer = window.setTimeout(() => {
+      setCanonicalSuggestion(null)
+      setCustomChoice(null)
+      if (!showComposer || rawInput.length <= 3) setIsCanonicalizing(false)
+    }, 0)
 
     if (!showComposer || rawInput.length <= 3) {
-      setIsCanonicalizing(false);
-      return;
+      return () => window.clearTimeout(resetTimer)
     }
 
-    const controller = new AbortController();
+    const controller = new AbortController()
     const timer = window.setTimeout(async () => {
-      setIsCanonicalizing(true);
+      setIsCanonicalizing(true)
       try {
         const response = await fetch('/api/onboarding/canonicalize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ rawInput }),
           signal: controller.signal,
-        });
-        const data = await response.json().catch(() => ({}));
+        })
+        const data = await response.json().catch(() => ({}))
 
-        if (!response.ok || typeof data?.suggested !== 'string') return;
+        if (!response.ok || typeof data?.suggested !== 'string') return
 
         setCanonicalSuggestion({
           original: data.original ?? rawInput,
           suggested: data.suggested,
-          broadCategory: data.broadCategory ?? 'Other',
+          broadCategory: data.broadCategory ?? 'General Knowledge',
           explanation: data.explanation ?? null,
-        });
+        })
       } catch (fetchError) {
-        if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
-          setCanonicalSuggestion(null);
+        if (
+          !(
+            fetchError instanceof DOMException &&
+            fetchError.name === 'AbortError'
+          )
+        ) {
+          setCanonicalSuggestion(null)
         }
       } finally {
-        if (!controller.signal.aborted) setIsCanonicalizing(false);
+        if (!controller.signal.aborted) setIsCanonicalizing(false)
       }
-    }, 800);
+    }, 800)
 
     return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-    };
-  }, [customInput, showComposer]);
+      controller.abort()
+      window.clearTimeout(resetTimer)
+      window.clearTimeout(timer)
+    }
+  }, [customInput, showComposer])
 
   function updateWarmupAnswer(field: keyof WarmupAnswers, value: string) {
-    setWarmupAnswers((current) => ({ ...current, [field]: value.slice(0, 200) }));
+    setWarmupAnswers((current) => ({
+      ...current,
+      [field]: value.slice(0, 200),
+    }))
   }
 
   function toggleInterest(interest: ProposedInterest) {
-    const selected = toSelected(interest);
-    if (!selected) return;
+    const selected = toSelected(interest)
+    if (!selected) return
 
     setSelectedInterests((current) => {
-      const exists = current.some((item) => selectedKey(item) === selectedKey(selected));
-      if (exists) return current.filter((item) => selectedKey(item) !== selectedKey(selected));
-      if (current.length >= 5) return current;
-      return [...current, selected];
-    });
+      const exists = current.some(
+        (item) => selectedKey(item) === selectedKey(selected)
+      )
+      if (exists)
+        return current.filter(
+          (item) => selectedKey(item) !== selectedKey(selected)
+        )
+      if (current.length >= 5) return current
+      return [...current, selected]
+    })
   }
 
   function beginEdit(interest: ProposedInterest) {
-    const selected = toSelected(interest);
-    if (!selected) return;
+    const selected = toSelected(interest)
+    if (!selected) return
 
-    setEditingKey(selectedKey(selected));
-    setEditingDomain(selected.domain);
+    setEditingKey(selectedKey(selected))
+    setEditingDomain(selected.domain)
   }
 
   function saveEdit(interest: ProposedInterest) {
-    const selected = toSelected(interest);
-    const nextDomain = normalizeDomain(editingDomain);
-    if (!selected || nextDomain.length < 2) return;
+    const selected = toSelected(interest)
+    const nextDomain = normalizeDomain(editingDomain)
+    if (!selected || nextDomain.length < 2) return
 
-    const edited = { ...interest, domain: nextDomain };
-    setProposedInterests((current) => current?.map((item) => (
-      selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) === selectedKey(selected)
-        ? edited
-        : item
-    )) ?? current);
-    setSelectedInterests((current) => current.map((item) => (
-      selectedKey(item) === selectedKey(selected)
-        ? { ...item, domain: nextDomain }
-        : item
-    )));
-    setEditingKey(null);
-    setEditingDomain('');
+    const edited = { ...interest, domain: nextDomain }
+    setInviteInterests((current) =>
+      current.map((item) =>
+        selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) ===
+        selectedKey(selected)
+          ? edited
+          : item
+      )
+    )
+    setProposedInterests(
+      (current) =>
+        current?.map((item) =>
+          selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) ===
+          selectedKey(selected)
+            ? edited
+            : item
+        ) ?? current
+    )
+    setSelectedInterests((current) =>
+      current.map((item) =>
+        selectedKey(item) === selectedKey(selected)
+          ? { ...item, domain: nextDomain }
+          : item
+      )
+    )
+    setEditingKey(null)
+    setEditingDomain('')
   }
 
   function startLongPress(interest: ProposedInterest) {
-    clearLongPress();
-    longPressTimer.current = setTimeout(() => beginEdit(interest), 500);
+    clearLongPress()
+    longPressTimer.current = setTimeout(() => beginEdit(interest), 500)
   }
 
   function clearLongPress() {
     if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
     }
   }
 
   async function generateProposals() {
-    if (!canGenerate) return;
+    if (!canGenerate) return
 
-    setError(null);
-    setIsLoading(true);
-    setLoadingCopyIndex(0);
+    setError(null)
+    setIsLoading(true)
+    setLoadingCopyIndex(0)
 
     try {
       const response = await fetch('/api/onboarding/propose-interests', {
@@ -337,141 +421,248 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           warmupAnswers,
-          culturalAnchor: birthYearValid && grewUpCountry ? {
-            birthYear: parsedBirthYear,
-            grewUpCountry,
-            grewUpRegion: grewUpRegion || undefined,
-          } : undefined,
+          culturalAnchor:
+            birthYearValid && grewUpCountry
+              ? {
+                  birthYear: parsedBirthYear,
+                  grewUpCountry,
+                  grewUpRegion: grewUpRegion || undefined,
+                }
+              : undefined,
         }),
-      });
-      const data = await response.json().catch(() => ({}));
+      })
+      const data = await response.json().catch(() => ({}))
 
       if (!response.ok || !Array.isArray(data?.proposedInterests)) {
-        setError("We couldn't generate suggestions. You can try again or write your own.");
-        return;
+        setError(
+          "We couldn't generate suggestions. You can try again or write your own."
+        )
+        return
       }
 
-      setProposedInterests(data.proposedInterests);
-      setCurrentStep('review');
+      setProposedInterests(data.proposedInterests)
+      setCurrentStep('review')
     } catch {
-      setError("We couldn't generate suggestions. You can try again or write your own.");
+      setError(
+        "We couldn't generate suggestions. You can try again or write your own."
+      )
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
+  }
+
+  function keepInviteInterests() {
+    setError(null)
+    setSelectedInterests(
+      inviteInterests
+        .flatMap((interest) => {
+          const selected = toSelected(interest)
+          return selected ? [selected] : []
+        })
+        .slice(0, 5)
+    )
+    setCurrentStep('background')
+  }
+
+  function reviewInviteInterests() {
+    setError(null)
+    setSelectedInterests(
+      inviteInterests
+        .flatMap((interest) => {
+          const selected = toSelected(interest)
+          return selected ? [selected] : []
+        })
+        .slice(0, 5)
+    )
+    setCurrentStep('review')
+  }
+
+  function skipInviteInterests() {
+    setError(null)
+    setSelectedInterests([])
+    setInviteInterests([])
+    setCurrentStep('background')
   }
 
   async function saveInterests() {
     const cleanSelected = selectedInterests
       .flatMap((interest) => {
-        const selected = toSelected(interest);
-        return selected ? [selected] : [];
+        const selected = toSelected(interest)
+        return selected ? [selected] : []
       })
-      .slice(0, 5);
+      .slice(0, 5)
+
+    const inviteSelectedCount = inviteInterests.filter((interest) => {
+      const selected = toSelected(interest)
+      return selected
+        ? cleanSelected.some(
+            (item) => selectedKey(item) === selectedKey(selected)
+          )
+        : false
+    }).length
 
     if (cleanSelected.length === 0) {
-      setError('Pick at least 1 to continue.');
-      return;
+      setError('Pick at least 1 to continue.')
+      return
     }
 
-    setError(null);
-    setIsLoading(true);
+    setError(null)
+    setIsLoading(true)
 
     try {
       const response = await fetch('/api/onboarding/save-interests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ interests: cleanSelected }),
-      });
-      const data = await response.json().catch(() => ({}));
+        body: JSON.stringify({
+          interests: cleanSelected,
+          telemetry: {
+            inviteInterestCount: inviteInterests.length,
+            inviteSelectedCount,
+          },
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
 
       if (!response.ok || data?.ok !== true) {
-        setError(data?.message ?? data?.error ?? 'Unable to save interests.');
-        return;
+        setError(data?.message ?? data?.error ?? 'Unable to save interests.')
+        return
       }
 
-      setCurrentStep('complete');
-      router.refresh();
+      setCurrentStep('complete')
+      router.refresh()
     } catch {
-      setError('Unable to save interests.');
+      setError('Unable to save interests.')
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   }
 
   function skipSuggestions() {
-    setError(null);
-    setProposedInterests([]);
-    setShowComposer(true);
-    setCurrentStep('review');
+    setError(null)
+    setProposedInterests([])
+    setShowComposer(true)
+    setCurrentStep('review')
   }
 
   function addCustomInterest() {
-    const rawInput = normalizeDomain(customInput);
-    const chosenDomain = customChoice === 'suggested' && canonicalSuggestion
-      ? canonicalSuggestion.suggested
-      : rawInput;
-    const broadCategory = canonicalSuggestion?.broadCategory ?? 'Other';
-    const selected = toSelected({ domain: chosenDomain, broadCategory });
+    const rawInput = normalizeDomain(customInput)
+    const chosenDomain =
+      customChoice === 'suggested' && canonicalSuggestion
+        ? canonicalSuggestion.suggested
+        : rawInput
+    const broadCategory = canonicalSuggestion?.broadCategory ?? 'General Knowledge'
+    const selected = toSelected({ domain: chosenDomain, broadCategory })
 
-    if (!selected || selectedInterests.length >= 5) return;
+    if (!selected || selectedInterests.length >= 5) return
 
     setSelectedInterests((current) => {
-      if (current.some((item) => selectedKey(item) === selectedKey(selected))) return current;
-      return [...current, selected].slice(0, 5);
-    });
-    setCustomInput('');
-    setCanonicalSuggestion(null);
-    setCustomChoice(null);
+      if (current.some((item) => selectedKey(item) === selectedKey(selected)))
+        return current
+      return [...current, selected].slice(0, 5)
+    })
+    setCustomInput('')
+    setCanonicalSuggestion(null)
+    setCustomChoice(null)
   }
 
   if (isLoading && currentStep === 'warmup') {
     return (
-      <main className="grid min-h-screen place-items-center bg-background px-5 py-12 text-foreground">
+      <main className="bg-background text-foreground grid min-h-screen place-items-center px-5 py-12">
         <div className="flex max-w-sm flex-col items-center gap-5 text-center">
-          <div className="grid size-16 place-items-center rounded-full border bg-card shadow-sm">
+          <div className="bg-card grid size-16 place-items-center rounded-full border shadow-sm">
             <Spinner />
           </div>
-          <p className="text-xl font-semibold">{LOADING_COPY[loadingCopyIndex]}</p>
+          <p className="text-xl font-semibold">
+            {LOADING_COPY[loadingCopyIndex]}
+          </p>
         </div>
       </main>
-    );
+    )
   }
 
   return (
-    <main className="min-h-screen bg-background px-4 pb-10 pt-8 text-foreground sm:px-6 sm:pt-12">
+    <main className="bg-background text-foreground min-h-screen px-4 pt-8 pb-10 sm:px-6 sm:pt-12">
       <section className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-2xl flex-col">
         <ProgressDots currentStep={currentStep} />
 
         <div className="mt-9 flex flex-1 flex-col">
+          {currentStep === 'invite-suggestions' ? (
+            <div className="flex flex-1 flex-col justify-center gap-8">
+              <StepHeader
+                title={`${displayInviterName} suggested these for you.`}
+                subtitle="Keep the ones that fit. You can edit or skip them."
+              />
+
+              <ul className="space-y-3">
+                {inviteInterests.map((interest) => (
+                  <li
+                    key={`${interest.domain}-${interest.broadCategory}`}
+                    className="bg-card rounded-lg border p-4"
+                  >
+                    <span className="block text-xl font-semibold tracking-normal">
+                      {interest.domain}
+                    </span>
+                    <span className="text-muted-foreground mt-1 block text-xs font-medium uppercase">
+                      {interest.broadCategory}
+                    </span>
+                    {interest.rationale ? (
+                      <span className="text-muted-foreground mt-3 block text-sm leading-6 italic">
+                        {interest.rationale}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  className="btn-primary h-12 w-full"
+                  onClick={keepInviteInterests}
+                >
+                  Keep all
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost h-12 w-full"
+                  onClick={reviewInviteInterests}
+                >
+                  Choose/edit
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost h-12 w-full"
+                  onClick={skipInviteInterests}
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {currentStep === 'welcome' ? (
             <div className="flex flex-1 flex-col justify-center gap-8">
               <StepHeader
                 title="Welcome to Joshing"
                 subtitle="The trivia you wish you were asked."
               />
-              <div className="space-y-4 text-base leading-7 text-muted-foreground">
-                <p>Every day, you&apos;ll get five questions calibrated to your intellectual world.</p>
-                <p>First, let&apos;s figure out what that world looks like.</p>
+              <div className="text-muted-foreground space-y-4 text-base leading-7">
+                <p>
+                  Every day, you&apos;ll get five questions tuned around the
+                  things you care about.
+                </p>
+                <p>
+                  First, sketch a little of that world. You can change it
+                  anytime.
+                </p>
                 <p>It takes about two minutes.</p>
               </div>
 
-              {preSeededInterests.length > 0 ? (
-                <div className="rounded-lg border bg-card p-4 text-sm leading-6 shadow-sm">
-                  <p className="font-medium">
-                    {inviterName} thought you&apos;d like questions about:
-                  </p>
-                  <ul className="mt-2 space-y-1 text-muted-foreground">
-                    {preSeededInterests.slice(0, 3).map((interest) => (
-                      <li key={interest.domain}>- {interest.domain}</li>
-                    ))}
-                  </ul>
-                  <p className="mt-3 text-muted-foreground">
-                    We&apos;ll add these in - you can change them later.
-                  </p>
-                </div>
-              ) : null}
-
-              <button type="button" className="btn-primary h-12 w-full" onClick={() => setCurrentStep('background')}>
+              <button
+                type="button"
+                className="btn-primary h-12 w-full"
+                onClick={() => setCurrentStep('background')}
+              >
                 Let&apos;s go
               </button>
             </div>
@@ -486,10 +677,12 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
 
               <div className="space-y-5">
                 <label className="block">
-                  <span className="text-sm font-medium">What year were you born?</span>
+                  <span className="text-sm font-medium">
+                    What year were you born?
+                  </span>
                   <input
                     type="number"
-                    className="mt-2 h-12 w-full rounded-md border bg-card px-3 text-base outline-none transition placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring"
+                    className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
                     placeholder="e.g. 1978"
                     min={1920}
                     max={2010}
@@ -497,25 +690,29 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                     onChange={(e) => setBirthYear(e.target.value.slice(0, 4))}
                   />
                   {birthYear.length === 4 && !birthYearValid ? (
-                    <span className="mt-1 block text-xs text-destructive">
+                    <span className="text-destructive mt-1 block text-xs">
                       Please enter a year between 1920 and {maxBirthYear}.
                     </span>
                   ) : null}
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium">Where did you grow up?</span>
+                  <span className="text-sm font-medium">
+                    Where did you grow up?
+                  </span>
                   <select
-                    className="mt-2 h-12 w-full rounded-md border bg-card px-3 text-base outline-none transition focus:ring-2 focus:ring-ring"
+                    className="bg-card focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
                     value={grewUpCountry}
                     onChange={(e) => {
-                      setGrewUpCountry(e.target.value);
-                      setGrewUpRegion('');
+                      setGrewUpCountry(e.target.value)
+                      setGrewUpRegion('')
                     }}
                   >
                     <option value="">Select a country</option>
                     {COUNTRIES.map((c) => (
-                      <option key={c.code} value={c.code}>{c.name}</option>
+                      <option key={c.code} value={c.code}>
+                        {c.name}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -524,13 +721,15 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                   <label className="block">
                     <span className="text-sm font-medium">Which state?</span>
                     <select
-                      className="mt-2 h-12 w-full rounded-md border bg-card px-3 text-base outline-none transition focus:ring-2 focus:ring-ring"
+                      className="bg-card focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
                       value={grewUpRegion}
                       onChange={(e) => setGrewUpRegion(e.target.value)}
                     >
                       <option value="">Select a state</option>
                       {US_STATES.map((s) => (
-                        <option key={s.code} value={s.name}>{s.name}</option>
+                        <option key={s.code} value={s.name}>
+                          {s.name}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -538,7 +737,11 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
               </div>
 
               <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
-                <button type="button" className="btn-ghost h-12" onClick={() => setCurrentStep('welcome')}>
+                <button
+                  type="button"
+                  className="btn-ghost h-12"
+                  onClick={() => setCurrentStep('welcome')}
+                >
                   Back
                 </button>
                 <button
@@ -561,49 +764,70 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
               />
 
               <div className="space-y-4">
-                {WARMUP_FIELDS.map(({ field, label, placeholder, optional }) => {
-                  const value = warmupAnswers[field] ?? '';
-                  return (
-                    <label key={field} className="block">
-                      <span className="text-sm font-medium">
-                        {label}
-                        {optional ? <span className="text-muted-foreground"> optional</span> : null}
-                      </span>
-                      <input
-                        className="mt-2 h-12 w-full rounded-md border bg-card px-3 text-base outline-none transition placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-ring"
-                        maxLength={200}
-                        placeholder={placeholder}
-                        value={value}
-                        onChange={(event) => updateWarmupAnswer(field, event.target.value)}
-                      />
-                      {value.length > 150 ? (
-                        <span className="mt-1 block text-right text-xs text-muted-foreground">
-                          {value.length}/200
+                {WARMUP_FIELDS.map(
+                  ({ field, label, placeholder, optional }) => {
+                    const value = warmupAnswers[field] ?? ''
+                    return (
+                      <label key={field} className="block">
+                        <span className="text-sm font-medium">
+                          {label}
+                          {optional ? (
+                            <span className="text-muted-foreground">
+                              {' '}
+                              optional
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
-                    </label>
-                  );
-                })}
+                        <input
+                          className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
+                          maxLength={200}
+                          placeholder={placeholder}
+                          value={value}
+                          onChange={(event) =>
+                            updateWarmupAnswer(field, event.target.value)
+                          }
+                        />
+                        {value.length > 150 ? (
+                          <span className="text-muted-foreground mt-1 block text-right text-xs">
+                            {value.length}/200
+                          </span>
+                        ) : null}
+                      </label>
+                    )
+                  }
+                )}
               </div>
 
               {error ? (
                 <ErrorPanel
                   message={error}
-                  actions={(
+                  actions={
                     <>
-                      <button type="button" className="btn-primary h-10" onClick={generateProposals}>
+                      <button
+                        type="button"
+                        className="btn-primary h-10"
+                        onClick={generateProposals}
+                      >
                         Try again
                       </button>
-                      <button type="button" className="btn-ghost h-10" onClick={skipSuggestions}>
+                      <button
+                        type="button"
+                        className="btn-ghost h-10"
+                        onClick={skipSuggestions}
+                      >
                         Skip suggestions
                       </button>
                     </>
-                  )}
+                  }
                 />
               ) : null}
 
               <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
-                <button type="button" className="btn-ghost h-12" onClick={() => setCurrentStep('background')}>
+                <button
+                  type="button"
+                  className="btn-ghost h-12"
+                  onClick={() => setCurrentStep('background')}
+                >
                   Back
                 </button>
                 <button
@@ -627,22 +851,38 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
 
               <div className="space-y-3">
                 {reviewInterests.map((interest) => {
-                  const selected = isSelected(selectedInterests, interest);
-                  const normalized = toSelected(interest);
-                  const atCap = selectedInterests.length >= 5 && !selected;
-                  const fromInvite = preSeededInterests.some((seeded) => selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) === selectedKey(normalized ?? { domain: '', broadCategory: '' }));
-                  const key = `${interest.domain}-${interest.broadCategory}`;
-                  const editing = normalized ? editingKey === selectedKey(normalized) : false;
+                  const selected = isSelected(selectedInterests, interest)
+                  const normalized = toSelected(interest)
+                  const atCap = selectedInterests.length >= 5 && !selected
+                  const fromInvite = inviteInterests.some(
+                    (seeded) =>
+                      selectedKey(
+                        toSelected(seeded) ?? { domain: '', broadCategory: '' }
+                      ) ===
+                      selectedKey(
+                        normalized ?? { domain: '', broadCategory: '' }
+                      )
+                  )
+                  const key = `${interest.domain}-${interest.broadCategory}`
+                  const editing = normalized
+                    ? editingKey === selectedKey(normalized)
+                    : false
 
                   return (
                     <div
                       key={key}
                       className={[
                         'rounded-lg border p-4 transition',
-                        selected ? 'border-foreground bg-foreground text-background' : 'bg-card',
+                        selected
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'bg-card',
                         atCap ? 'opacity-45' : '',
                       ].join(' ')}
-                      title={atCap ? '5 max - deselect one to add another' : undefined}
+                      title={
+                        atCap
+                          ? '5 max - deselect one to add another'
+                          : undefined
+                      }
                       onPointerDown={() => startLongPress(interest)}
                       onPointerUp={clearLongPress}
                       onPointerLeave={clearLongPress}
@@ -650,16 +890,26 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                       {editing ? (
                         <div className="space-y-3">
                           <input
-                            className="h-11 w-full rounded-md border bg-background px-3 text-base text-foreground outline-none focus:ring-2 focus:ring-ring"
+                            className="bg-background text-foreground focus:ring-ring h-11 w-full rounded-md border px-3 text-base outline-none focus:ring-2"
                             value={editingDomain}
                             maxLength={100}
-                            onChange={(event) => setEditingDomain(event.target.value)}
+                            onChange={(event) =>
+                              setEditingDomain(event.target.value)
+                            }
                           />
                           <div className="flex gap-2">
-                            <button type="button" className="btn-primary h-9" onClick={() => saveEdit(interest)}>
+                            <button
+                              type="button"
+                              className="btn-primary h-9"
+                              onClick={() => saveEdit(interest)}
+                            >
                               Save
                             </button>
-                            <button type="button" className="btn-ghost h-9" onClick={() => setEditingKey(null)}>
+                            <button
+                              type="button"
+                              className="btn-ghost h-9"
+                              onClick={() => setEditingKey(null)}
+                            >
                               Cancel
                             </button>
                           </div>
@@ -672,18 +922,26 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                             onClick={() => toggleInterest(interest)}
                             disabled={atCap}
                           >
-                            <span className="block text-xl font-semibold tracking-normal">{interest.domain}</span>
-                            <span className={`mt-1 block text-xs font-medium uppercase ${selected ? 'text-background/70' : 'text-muted-foreground'}`}>
+                            <span className="block text-xl font-semibold tracking-normal">
+                              {interest.domain}
+                            </span>
+                            <span
+                              className={`mt-1 block text-xs font-medium uppercase ${selected ? 'text-background/70' : 'text-muted-foreground'}`}
+                            >
                               {interest.broadCategory}
                             </span>
                             {interest.rationale ? (
-                              <span className={`mt-3 block text-sm italic leading-6 ${selected ? 'text-background/80' : 'text-muted-foreground'}`}>
+                              <span
+                                className={`mt-3 block text-sm leading-6 italic ${selected ? 'text-background/80' : 'text-muted-foreground'}`}
+                              >
                                 {interest.rationale}
                               </span>
                             ) : null}
                             {fromInvite ? (
-                              <span className={`mt-3 inline-flex rounded-sm border px-2 py-1 text-[11px] font-semibold uppercase ${selected ? 'border-background/30 text-background/80' : 'text-muted-foreground'}`}>
-                                From {inviterName}
+                              <span
+                                className={`mt-3 inline-flex rounded-sm border px-2 py-1 text-[11px] font-semibold uppercase ${selected ? 'border-background/30 text-background/80' : 'text-muted-foreground'}`}
+                              >
+                                From {displayInviterName}
                               </span>
                             ) : null}
                           </button>
@@ -699,7 +957,7 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                         </div>
                       )}
                     </div>
-                  );
+                  )
                 })}
               </div>
 
@@ -715,10 +973,10 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                     Write your own
                   </button>
                 ) : (
-                  <div className="rounded-lg border bg-card p-4">
+                  <div className="bg-card rounded-lg border p-4">
                     <div className="flex items-center gap-2">
                       <input
-                        className="h-11 min-w-0 flex-1 rounded-md border bg-background px-3 text-base outline-none focus:ring-2 focus:ring-ring"
+                        className="bg-background focus:ring-ring h-11 min-w-0 flex-1 rounded-md border px-3 text-base outline-none focus:ring-2"
                         placeholder="Write an interest"
                         value={customInput}
                         maxLength={100}
@@ -727,7 +985,7 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                       />
                       <button
                         type="button"
-                        className="grid size-11 place-items-center rounded-md border hover:bg-muted"
+                        className="hover:bg-muted grid size-11 place-items-center rounded-md border"
                         aria-label="Close composer"
                         title="Close"
                         onClick={() => setShowComposer(false)}
@@ -738,15 +996,18 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
 
                     <div className="mt-3 min-h-11 text-sm">
                       {isCanonicalizing ? (
-                        <p className="flex items-center gap-2 text-muted-foreground">
+                        <p className="text-muted-foreground flex items-center gap-2">
                           <Spinner small />
                           Checking wording...
                         </p>
                       ) : null}
                       {canonicalSuggestion ? (
-                        <div className="space-y-3 rounded-md border bg-background p-3">
+                        <div className="bg-background space-y-3 rounded-md border p-3">
                           <p>
-                            Suggested: <span className="font-medium">{canonicalSuggestion.suggested}</span>
+                            Suggested:{' '}
+                            <span className="font-medium">
+                              {canonicalSuggestion.suggested}
+                            </span>
                           </p>
                           <div className="flex flex-wrap gap-2">
                             <button
@@ -785,16 +1046,26 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                 )}
               </div>
 
-              <div className="sticky bottom-0 mt-auto border-t bg-background/95 py-4 backdrop-blur">
+              <div className="bg-background/95 sticky bottom-0 mt-auto border-t py-4 backdrop-blur">
                 <div className="mb-3 flex items-center justify-between text-sm">
-                  <span className="font-medium">{selectedInterests.length} of 5 selected</span>
+                  <span className="font-medium">
+                    {selectedInterests.length} of 5 selected
+                  </span>
                   <span className="text-muted-foreground">
-                    {selectedInterests.length === 0 ? 'Pick at least 1 to continue' : null}
-                    {selectedInterests.length === 5 ? '5 max - deselect one to add another' : null}
+                    {selectedInterests.length === 0
+                      ? 'Pick at least 1 to continue'
+                      : null}
+                    {selectedInterests.length === 5
+                      ? '5 max - deselect one to add another'
+                      : null}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <button type="button" className="btn-ghost h-12" onClick={() => setCurrentStep('warmup')}>
+                  <button
+                    type="button"
+                    className="btn-ghost h-12"
+                    onClick={() => setCurrentStep('warmup')}
+                  >
                     Back
                   </button>
                   <button
@@ -819,13 +1090,18 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
 
               <ol className="space-y-3">
                 {selectedInterests.map((interest, index) => (
-                  <li key={`${interest.domain}-${index}`} className="flex gap-3 rounded-lg border bg-card p-4">
-                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-sm font-semibold text-background">
+                  <li
+                    key={`${interest.domain}-${index}`}
+                    className="bg-card flex gap-3 rounded-lg border p-4"
+                  >
+                    <span className="bg-foreground text-background grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold">
                       {index + 1}
                     </span>
                     <span className="min-w-0 pt-1">
-                      <span className="block font-semibold">{interest.domain}</span>
-                      <span className="mt-1 block text-sm text-muted-foreground">
+                      <span className="block font-semibold">
+                        {interest.domain}
+                      </span>
+                      <span className="text-muted-foreground mt-1 block text-sm">
                         {interest.broadCategory}
                       </span>
                     </span>
@@ -836,10 +1112,20 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
               {error ? <ErrorPanel message={error} /> : null}
 
               <div className="mt-auto grid grid-cols-2 gap-3 pt-4">
-                <button type="button" className="btn-ghost h-12" onClick={() => setCurrentStep('review')} disabled={isLoading}>
+                <button
+                  type="button"
+                  className="btn-ghost h-12"
+                  onClick={() => setCurrentStep('review')}
+                  disabled={isLoading}
+                >
                   Back
                 </button>
-                <button type="button" className="btn-primary h-12" onClick={saveInterests} disabled={isLoading}>
+                <button
+                  type="button"
+                  className="btn-primary h-12"
+                  onClick={saveInterests}
+                  disabled={isLoading}
+                >
                   {isLoading ? 'Saving...' : 'Lock it in'}
                 </button>
               </div>
@@ -852,13 +1138,23 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
                 title="You're set."
                 subtitle="Your first daily round will be ready at noon EST."
               />
-              <p className="text-base leading-7 text-muted-foreground">Until then, take a look around.</p>
+              <p className="text-muted-foreground text-base leading-7">
+                Until then, take a look around.
+              </p>
               <div className="space-y-3">
-                <button type="button" className="btn-primary h-12 w-full" onClick={() => router.push('/')}>
+                <button
+                  type="button"
+                  className="btn-primary h-12 w-full"
+                  onClick={() => router.push('/')}
+                >
                   Go to home
                 </button>
                 {showDailySetup ? (
-                  <button type="button" className="btn-ghost h-12 w-full" onClick={() => router.push('/daily/setup')}>
+                  <button
+                    type="button"
+                    className="btn-ghost h-12 w-full"
+                    onClick={() => router.push('/daily/setup')}
+                  >
                     Set up today&apos;s round now
                   </button>
                 ) : null}
@@ -868,14 +1164,22 @@ export default function OnboardingFlow({ preSeededInterests }: OnboardingFlowPro
         </div>
       </section>
     </main>
-  );
+  )
 }
 
-function ErrorPanel({ message, actions }: { message: string; actions?: ReactNode }) {
+function ErrorPanel({
+  message,
+  actions,
+}: {
+  message: string
+  actions?: ReactNode
+}) {
   return (
-    <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+    <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
       <p>{message}</p>
-      {actions ? <div className="mt-3 flex flex-wrap gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="mt-3 flex flex-wrap gap-2">{actions}</div>
+      ) : null}
     </div>
-  );
+  )
 }

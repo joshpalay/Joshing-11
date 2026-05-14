@@ -1,8 +1,10 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { QUESTION_DOMAIN_KEYS } from '@/lib/game-constants';
+import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
+import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
+import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { db, questions } from '@/server/db';
 import {
   deleteQuestion,
@@ -13,8 +15,6 @@ import {
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
-
-const VALID_DOMAINS = new Set<string>(QUESTION_DOMAIN_KEYS);
 
 function splitAlternates(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
@@ -33,7 +33,10 @@ function validatePatchPayload(body: Record<string, unknown> | null) {
     correctAnswer?: string;
     alternateAnswers?: string[];
     explanation?: string;
-    domain?: string;
+    category?: string;
+    broadCategory?: string | null;
+    subcategory?: string;
+    canonicalSubcategory?: string;
     difficulty?: number;
   } = {};
   const errors: string[] = [];
@@ -56,17 +59,6 @@ function validatePatchPayload(body: Record<string, unknown> | null) {
     values.explanation = typeof body.explanation === 'string' ? body.explanation.trim() : '';
     if (values.explanation.length > 500) errors.push('explanation');
   }
-  if (body?.domain !== undefined) {
-    values.domain = typeof body.domain === 'string' ? body.domain : '';
-    if (!VALID_DOMAINS.has(values.domain)) errors.push('domain');
-  }
-  if (body?.difficulty !== undefined) {
-    values.difficulty = typeof body.difficulty === 'number' ? body.difficulty : Number.NaN;
-    if (!Number.isInteger(values.difficulty) || values.difficulty < 1 || values.difficulty > 5) {
-      errors.push('difficulty');
-    }
-  }
-
   return { values, errors };
 }
 
@@ -108,6 +100,43 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const { values, errors } = validatePatchPayload(body);
   if (errors.length > 0) return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
+
+  const existing = await getQuestion(id, session.userId);
+  if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (existing.usedInGamesCount > 0) {
+    return NextResponse.json({ error: 'Question has been used in a game and cannot be edited.' }, { status: 409 });
+  }
+
+  const shouldRecategorize = values.text !== undefined || values.correctAnswer !== undefined;
+  if (shouldRecategorize) {
+    const categorization = await categorizeQuestion(
+      values.text ?? existing.text,
+      values.correctAnswer ?? existing.correctAnswer,
+    );
+    const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
+    const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
+    values.category = category;
+    values.broadCategory = broadCategoryDisplayName(category);
+    values.canonicalSubcategory = canonicalSubcategory;
+    values.subcategory = canonicalSubcategory;
+  }
+
+  const shouldReassessDifficulty = values.text !== undefined
+    || values.correctAnswer !== undefined
+    || values.explanation !== undefined
+    || values.category !== undefined
+    || values.canonicalSubcategory !== undefined;
+
+  if (shouldReassessDifficulty) {
+    const difficultyAssessment = await assessQuestionDifficulty({
+      questionText: values.text ?? existing.text,
+      correctAnswer: values.correctAnswer ?? existing.correctAnswer,
+      broadCategory: values.broadCategory ?? existing.broadCategory,
+      canonicalSubcategory: values.canonicalSubcategory ?? existing.canonicalSubcategory ?? existing.domain,
+      explanation: values.explanation ?? existing.explanation,
+    });
+    values.difficulty = difficultyAssessment.difficulty;
+  }
 
   const result = await updateQuestion({ questionId: id, userId: session.userId, ...values });
   if (!result.ok && result.reason === 'in_use') {

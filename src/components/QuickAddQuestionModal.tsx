@@ -2,7 +2,7 @@
 
 /**
  * QuickAddQuestionModal — lightweight modal for capturing a question from the homepage.
- * Posts to POST /api/questions. No LLM suggestion; just question, answer, context, and optional short label.
+ * Posts to POST /api/questions. The server classifies category/domain through the LLM.
  */
 
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
@@ -82,6 +82,9 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
           breadcrumb_context: bc,
           short_label: shortLabel.trim() || null,
           answer_source: 'creator_written',
+          difficulty: 3,
+          verified: true,
+          critiqueIterations: 0,
         }),
       });
       if (!res.ok) {
@@ -208,6 +211,13 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
               placeholder="e.g. Snorlax"
               style={inputStyle}
             />
+          </div>
+
+          <div style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'color-mix(in srgb, var(--muted, #f5f5f5) 55%, var(--bg))' }}>
+            <p style={{ ...monoStyle, color: 'var(--text-muted)', marginBottom: '4px' }}>AI classification</p>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+              Joshing will read the question and answer when you save, then choose the category and specific area automatically.
+            </p>
           </div>
 
           <div>

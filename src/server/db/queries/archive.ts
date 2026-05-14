@@ -37,6 +37,7 @@ export type ArchiveItem = {
   myRating: 'up' | 'down' | null;
   canUseQuestionActions: boolean;
   creatorNote: DeliveredCreatorNote | null;
+  verified: boolean;
 };
 
 export type ArchiveResult = {
@@ -203,6 +204,7 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
           myRating: null,
           canUseQuestionActions: Boolean(slot.question_id),
           creatorNote: null,
+          verified: bankQuestion?.verified ?? true,
         } satisfies ArchiveItem;
       }),
   );
@@ -273,6 +275,7 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       myRating: null,
       canUseQuestionActions: true,
       creatorNote: null,
+      verified: question.verified,
     } satisfies ArchiveItem;
   });
 }
@@ -310,6 +313,7 @@ async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
       myRating: null,
       canUseQuestionActions: true,
       creatorNote: null,
+      verified: question.verified,
     } satisfies ArchiveItem;
   });
 }
@@ -363,6 +367,7 @@ async function readWrittenByMeItems(userId: string): Promise<ArchiveItem[]> {
       myRating: null,
       canUseQuestionActions: true,
       creatorNote: null,
+      verified: question.verified,
     } satisfies ArchiveItem;
   });
 }

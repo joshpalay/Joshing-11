@@ -2,14 +2,17 @@ import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 
 import { gradeAnswer, selectQuip } from '@/server/grading';
+import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
-import { dailyQueues, db } from '@/server/db';
+import { dailyQueues, db, questions } from '@/server/db';
 import { getCatchupQuestions } from '@/server/db/queries/daily';
 import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/server/daily/catchup';
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
+import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
+import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
 
 export const dynamic = 'force-dynamic';
@@ -113,11 +116,44 @@ export async function POST(request: NextRequest) {
     .set({ slots: nextSlots })
     .where(eq(dailyQueues.id, catchupItem.queueId));
 
-  void createFeedItemsForFriendsFromAnswer(
+  await updateDomainDifficultyOnAnswer(
     session.userId,
-    catchupItem.questionId,
-    isCorrect ? 'correct' : 'incorrect',
-  );
+    catchupItem.domain,
+    isCorrect,
+  ).catch((err) => {
+    console.warn('[daily/catchup/answer] updateDomainDifficultyOnAnswer failed', err);
+  });
+
+  try {
+    const persisted = await persistGeneratedQuestion(catchupItem.questionId);
+    const [persistedQuestion] = await db
+      .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+      .from(questions)
+      .where(eq(questions.id, persisted.questionId))
+      .limit(1);
+    const persistedDomain = persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category;
+
+    if (isCorrect && persistedQuestion?.creatorId && persistedQuestion.creatorId !== session.userId && persistedDomain) {
+      void promoteDeclaredToDemonstrated({
+        userId: persistedQuestion.creatorId,
+        domain: persistedDomain,
+        triggeringFriendId: session.userId,
+        questionId: persisted.questionId,
+      });
+    }
+
+    await createFeedItemsForFriendsFromAnswer(
+      session.userId,
+      persisted.questionId,
+      isCorrect ? 'correct' : 'incorrect',
+      `catchup:${catchupItem.dailyQueueItemId}:${session.userId}`,
+    );
+  } catch (error) {
+    console.warn('[daily/catchup/answer] failed to persist generated question for feed propagation', {
+      generatedQuestionId: catchupItem.questionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   const nextItem = (await getCatchupQuestions(session.userId))[0] ?? null;
 
@@ -154,6 +190,7 @@ export async function POST(request: NextRequest) {
           wasSkipped: nextItem.wasSkipped,
           expiresAt: nextItem.expiresAt,
           expiresSoon: nextItem.expiresSoon,
+          difficultyEstimate: nextItem.difficultyEstimate,
         }
       : null,
   });

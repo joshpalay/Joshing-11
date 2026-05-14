@@ -29,6 +29,7 @@ export async function GET() {
       wasSkipped: item.wasSkipped,
       expiresAt: item.expiresAt,
       expiresSoon: item.expiresSoon,
+      difficultyEstimate: item.difficultyEstimate,
     })),
     introCopy: first
       ? formatCatchUpSessionThreadIntro(items.length, first.queueDate, last?.queueDate)

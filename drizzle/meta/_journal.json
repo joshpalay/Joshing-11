@@ -127,6 +127,97 @@
       "when": 1777840400000,
       "tag": "0017_creator_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1777840500000,
+      "tag": "0018_daily_generated_and_player_mastery_territory",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778508000000,
+      "tag": "0019_feed_item_nullable_columns_hotfix",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1778510000000,
+      "tag": "0020_question_critique_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1778521283376,
+      "tag": "0021_feed_dismissed_domains_active_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1778538800000,
+      "tag": "0022_player_mastery_territory_type_hotfix",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1778540000000,
+      "tag": "0023_profile_domain_visibility_runtime_hotfix",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1778616500000,
+      "tag": "0024_question_surface_priority_runtime_hotfix",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1778616600000,
+      "tag": "0025_grade_dispute_recheck_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1778616700000,
+      "tag": "0026_friend_invitation_pre_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1778616800000,
+      "tag": "0027_friendship_request_context",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1778616900000,
+      "tag": "0028_remove_other_question_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1778714100000,
+      "tag": "0029_correct_answer_social_feed",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1778714200000,
+      "tag": "0030_apply_general_knowledge_category",
+      "breakpoints": true
     }
   ]
 }

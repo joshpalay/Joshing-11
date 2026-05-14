@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 
 import {
+  dedupeCatchUpItems,
+  orderCatchUpItems,
+} from '../src/server/play/catch-up-turn-sequencing.ts';
+
+import {
   dailyQueueItemId,
   findQueueSlotBySlotIndex,
   isCatchupQueueDate,
@@ -48,3 +53,43 @@ const dismissed = replaceQueueSlot(slots, 3, (slot) => ({
 }));
 
 assert.equal(dismissed[0].dismissed_at, '2026-05-01T12:00:00.000Z');
+
+const duplicateCatchupItems = [
+  {
+    dailyQueueItemId: 'queue-1:0',
+    queueDate: '2026-04-29',
+    wasSkipped: false,
+    questionId: 'generated-synergy-1',
+    questionText: 'In the 1980s cartoon Jem, what was the holographic computer called?',
+    correctAnswer: 'Synergy',
+    domain: '1980s Animation',
+  },
+  {
+    dailyQueueItemId: 'queue-2:0',
+    queueDate: '2026-04-30',
+    wasSkipped: false,
+    questionId: 'generated-synergy-2',
+    questionText: 'Jerrica Benton became Jem with help from which holographic computer?',
+    correctAnswer: 'Synergy',
+    domain: '1980s Animation',
+  },
+  {
+    dailyQueueItemId: 'queue-3:0',
+    queueDate: '2026-04-30',
+    wasSkipped: true,
+    questionId: 'generated-bach',
+    questionText: 'Who composed the Mass in B minor?',
+    correctAnswer: 'Bach',
+    domain: 'Classical Music',
+  },
+];
+
+const sortedCatchupItems = orderCatchUpItems(duplicateCatchupItems);
+assert.equal(sortedCatchupItems[0].dailyQueueItemId, 'queue-3:0');
+
+const dedupedCatchupItems = dedupeCatchUpItems(sortedCatchupItems);
+assert.equal(dedupedCatchupItems.length, 2);
+assert.deepEqual(
+  dedupedCatchupItems.map((item) => item.dailyQueueItemId),
+  ['queue-3:0', 'queue-1:0'],
+);

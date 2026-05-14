@@ -13,22 +13,22 @@ describe('mastery tiers', () => {
 
   it('resolveTier maps point totals (naive — ignores creator gate)', () => {
     expect(resolveTier(0)).toBe('establishing');
-    expect(resolveTier(499)).toBe('establishing');
-    expect(resolveTier(500)).toBe('familiar');
-    expect(resolveTier(1499)).toBe('familiar');
-    expect(resolveTier(1500)).toBe('solid');
-    expect(resolveTier(3499)).toBe('solid');
-    expect(resolveTier(3500)).toBe('mastery');
+    expect(resolveTier(99)).toBe('establishing');
+    expect(resolveTier(100)).toBe('familiar');
+    expect(resolveTier(999)).toBe('familiar');
+    expect(resolveTier(1000)).toBe('solid');
+    expect(resolveTier(1999)).toBe('solid');
+    expect(resolveTier(2000)).toBe('mastery');
   });
 
-  it('effectiveTier applies the Mastery creator-share gate at 3500+', () => {
-    expect(effectiveTier(4000, 799)).toBe('solid'); // 799/4000 < 20%
-    expect(effectiveTier(4000, 800)).toBe('mastery'); // exactly 20%
-    expect(effectiveTier(3499, 0)).toBe('solid');
+  it('effectiveTier applies the Mastery creator-share gate at 2000+', () => {
+    expect(effectiveTier(2500, 499)).toBe('solid'); // 499/2500 < 20%
+    expect(effectiveTier(2500, 500)).toBe('mastery'); // exactly 20%
+    expect(effectiveTier(1999, 0)).toBe('solid');
   });
 
   it('effectiveTier requires creator credit from multiple distinct questions for Mastery', () => {
-    expect(effectiveTier(4000, 1000, 1)).toBe('solid');
-    expect(effectiveTier(4000, 1000, 2)).toBe('mastery');
+    expect(effectiveTier(2500, 1000, 1)).toBe('solid');
+    expect(effectiveTier(2500, 1000, 2)).toBe('mastery');
   });
 });

@@ -422,7 +422,7 @@ export async function submitJoshingGameResponse(params: {
     weight: 1,
   });
 
-  if (isCorrect && question.creatorId !== params.userId) {
+  if (isCorrect && question.creatorId && question.creatorId !== params.userId) {
     const existingAuthorCredits = await countAuthorCreditEvents(params.questionId, question.creatorId);
     const authorAward = creatorMasteryAwardForNthCorrect(
       question.correctCount + 1,

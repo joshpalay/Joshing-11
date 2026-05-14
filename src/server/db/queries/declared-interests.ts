@@ -1,7 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 
 import { db, declaredInterests } from '@/server/db';
-import { pgErrorCode } from '@/server/db/pg-error';
 
 export type ActiveDeclaredInterestRow = {
   id: string;
@@ -13,28 +12,22 @@ export type ActiveDeclaredInterestRow = {
   territoryType: 'declared' | 'demonstrated';
 };
 
-// Returns active declared interests for a user. Falls back to a column-narrowed
-// query when the territory_type column is missing on the deployed DB (migration
-// 0014 not yet applied), defaulting territoryType to 'declared'.
+// DeclaredInterest is now only the user's editable interest list. Territory
+// state lives on PLAYER_MASTERY, so keep this query column-narrowed and never
+// select the legacy DeclaredInterest.territory_type column. Some deployed
+// databases do not have that column, and selecting it breaks onboarding saves.
 export async function getActiveDeclaredInterests(userId: string): Promise<ActiveDeclaredInterestRow[]> {
-  try {
-    return await db
-      .select()
-      .from(declaredInterests)
-      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
-  } catch (err) {
-    if (pgErrorCode(err) !== '42703') throw err;
-    const rows = await db
-      .select({
-        id: declaredInterests.id,
-        userId: declaredInterests.userId,
-        domain: declaredInterests.domain,
-        broadCategory: declaredInterests.broadCategory,
-        declaredAt: declaredInterests.declaredAt,
-        isActive: declaredInterests.isActive,
-      })
-      .from(declaredInterests)
-      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
-    return rows.map((row) => ({ ...row, territoryType: 'declared' as const }));
-  }
+  const rows = await db
+    .select({
+      id: declaredInterests.id,
+      userId: declaredInterests.userId,
+      domain: declaredInterests.domain,
+      broadCategory: declaredInterests.broadCategory,
+      declaredAt: declaredInterests.declaredAt,
+      isActive: declaredInterests.isActive,
+    })
+    .from(declaredInterests)
+    .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
+
+  return rows.map((row) => ({ ...row, territoryType: 'declared' as const }));
 }

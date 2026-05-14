@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { writeActivity } from '@/server/activity/write-activity';
 import { db, questions, userQuestionBank, users } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { type QuestionView, toQuestionView } from '@/server/db/queries/questions';
+import { bankQuestionSelectColumns, type QuestionView, toQuestionView } from '@/server/db/queries/questions';
 
 export type BankContextType = 'feed' | 'joshing_game' | 'manual';
 
@@ -57,7 +57,7 @@ export async function addToBank(params: {
     .set({ sharedToFriendsFeed: true, updatedAt: new Date() })
     .where(eq(questions.id, params.questionId));
 
-  if (question.creatorId !== params.userId) {
+  if (question.creatorId && question.creatorId !== params.userId) {
     const domain = questionDomain(question);
     await Promise.all([
       writeMasteryEvent({
@@ -119,7 +119,7 @@ export async function getBankedQuestions(userId: string): Promise<BankedQuestion
   const rows = await db
     .select({
       bank: userQuestionBank,
-      question: questions,
+      question: bankQuestionSelectColumns,
       author: {
         id: users.id,
         displayName: users.displayName,

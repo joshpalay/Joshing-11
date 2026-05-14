@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { logTelemetry } from '@/server/telemetry';
 import {
   type DeclaredInterestInput,
   markOnboardingComplete,
@@ -9,6 +11,7 @@ import {
 
 type SaveInterestsBody = {
   interests?: unknown;
+  telemetry?: unknown;
 };
 
 function parseInterest(value: unknown): DeclaredInterestInput | null {
@@ -18,16 +21,36 @@ function parseInterest(value: unknown): DeclaredInterestInput | null {
   const domain = typeof record.domain === 'string' ? record.domain.trim().replace(/\s+/g, ' ') : '';
   if (domain.length < 2 || domain.length > 100) return null;
 
+  const broadCategory = typeof record.broadCategory === 'string' && record.broadCategory.trim()
+    ? normalizeBroadCategory(record.broadCategory)
+    : null;
+
   return {
     label: domain,
-    broadCategory: typeof record.broadCategory === 'string' && record.broadCategory.trim()
-      ? record.broadCategory.trim().slice(0, 80)
-      : null,
+    broadCategory: broadCategory ? broadCategory.slice(0, 80) : null,
   };
 }
 
+function parseOnboardingTelemetry(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { inviteInterestCount: 0, inviteSelectedCount: 0 };
+  }
+
+  const record = value as Record<string, unknown>;
+  const inviteInterestCount =
+    typeof record.inviteInterestCount === 'number' && Number.isFinite(record.inviteInterestCount)
+      ? Math.max(0, Math.min(5, Math.trunc(record.inviteInterestCount)))
+      : 0;
+  const inviteSelectedCount =
+    typeof record.inviteSelectedCount === 'number' && Number.isFinite(record.inviteSelectedCount)
+      ? Math.max(0, Math.min(inviteInterestCount, Math.trunc(record.inviteSelectedCount)))
+      : 0;
+
+  return { inviteInterestCount, inviteSelectedCount };
+}
+
 function parseInterests(value: unknown): DeclaredInterestInput[] | null {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 5) return null;
+  if (!Array.isArray(value) || value.length > 5) return null;
 
   const interests = value.map(parseInterest);
   if (interests.some((interest) => !interest)) return null;
@@ -43,10 +66,18 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as SaveInterestsBody | null;
   const interests = parseInterests(body?.interests);
+  const telemetry = parseOnboardingTelemetry(body?.telemetry);
 
-  if (!interests) {
+  const isInviteSkip = Boolean(
+    interests &&
+    interests.length === 0 &&
+    telemetry.inviteInterestCount > 0 &&
+    telemetry.inviteSelectedCount === 0
+  );
+
+  if (!interests || (interests.length === 0 && !isInviteSkip)) {
     return NextResponse.json(
-      { error: 'invalid_request', message: 'Save 1 to 5 interests. Domains must be 2 to 100 characters.' },
+      { error: 'invalid_request', message: 'Save 1 to 5 interests, or skip invite suggestions. Domains must be 2 to 100 characters.' },
       { status: 400 },
     );
   }
@@ -54,6 +85,21 @@ export async function POST(request: Request) {
   try {
     await saveDeclaredInterests(session.userId, interests);
     await markOnboardingComplete(session.userId);
+
+    if (telemetry.inviteInterestCount > 0) {
+      const event = telemetry.inviteSelectedCount === 0
+        ? 'friend_onboarding_interests_skipped'
+        : telemetry.inviteSelectedCount >= telemetry.inviteInterestCount
+          ? 'friend_onboarding_interests_accepted_all'
+          : 'friend_onboarding_interests_partial';
+
+      logTelemetry(event, {
+        user_id: session.userId,
+        invite_interest_count: telemetry.inviteInterestCount,
+        invite_interest_selected_count: telemetry.inviteSelectedCount,
+        saved_interest_count: interests.length,
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

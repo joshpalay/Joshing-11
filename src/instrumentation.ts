@@ -24,14 +24,135 @@ export async function register() {
       // Table or columns may not exist yet — that's fine, migrate() will create them
     }
 
-    // Migration 0012 adds "sourceResult" to FeedItem but the final statement
-    // (ALTER TYPE ... ADD VALUE) can fail in some PostgreSQL environments, leaving
-    // the migration unrecorded and the column absent on every subsequent startup.
-    // Pre-apply the column so the feed query never hits a missing-column error.
+    // Domain-merge mastery events were introduced after the base table in
+    // drizzle/0009_domain_merge_events.sql. Some preview/production databases
+    // can have that migration recorded without the enum value or metadata column
+    // present, which makes the domain cleanup audit insert in ceremony.ts fail.
+    // Add both pieces idempotently before migrate() so the backfill can proceed.
     try {
-      await db.execute(sql`ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "sourceResult" TEXT`);
+      await db.execute(sql`
+        ALTER TYPE "public"."MasterySourceType" ADD VALUE IF NOT EXISTS 'curator_credit'
+      `);
+      await db.execute(sql`
+        ALTER TYPE "public"."MasterySourceType" ADD VALUE IF NOT EXISTS 'domain_merged'
+      `);
+      await db.execute(sql`
+        ALTER TYPE "public"."MasterySourceType" ADD VALUE IF NOT EXISTS 'declared_promoted'
+      `);
+      await db.execute(sql`
+        ALTER TABLE "MASTERY_EVENTS"
+          ADD COLUMN IF NOT EXISTS "metadata" jsonb
+      `);
     } catch {
-      // Column already exists or FeedItem table not yet created — migrate() handles both
+      // MASTERY_EVENTS or MasterySourceType may not exist yet — migrate() handles
+      // initial creation and the additive migration will add these schema pieces.
+    }
+
+    // PlayerMastery.territory_type was introduced after the base table. Preview
+    // databases can have the migration recorded without the column present, which
+    // makes Drizzle selects fail with Postgres 42703 before app code can recover.
+    // Add it idempotently before migrate() so answer routes remain usable.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "PLAYER_MASTERY"
+          ADD COLUMN IF NOT EXISTS "territory_type" text DEFAULT 'demonstrated' NOT NULL
+      `);
+    } catch {
+      // PLAYER_MASTERY may not exist yet — migrate() handles initial creation.
+    }
+
+    // UserQuestionBank provenance columns were added after the original table. If
+    // a preview/production database has the migration marked as applied without
+    // these additive columns present, Drizzle selects fail with Postgres 42703.
+    // Add them idempotently before migrate() so question-bank reads stay safe.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "UserQuestionBank"
+          ADD COLUMN IF NOT EXISTS "added_from_context_type" text,
+          ADD COLUMN IF NOT EXISTS "added_from_context_id" text
+      `);
+    } catch {
+      // UserQuestionBank may not exist yet — migrate() handles initial creation.
+    }
+
+    // Question generated-question provenance columns and constraints were added
+    // in migration 0018. If that migration is recorded without these additive
+    // pieces present, "my questions" reads can fail before migrate() repairs them.
+    // Add the columns, foreign key, and unique index idempotently before migrate().
+    try {
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "generated_question_id" text,
+          ADD COLUMN IF NOT EXISTS "source" text DEFAULT 'authored' NOT NULL
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          question_table regclass := to_regclass('public."Question"');
+          generated_question_table regclass := to_regclass('public."GeneratedQuestion"');
+        BEGIN
+          IF question_table IS NOT NULL
+            AND generated_question_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM pg_constraint
+              WHERE conname = 'Question_generated_question_id_GeneratedQuestion_id_fk'
+                AND conrelid = question_table
+            )
+          THEN
+            ALTER TABLE "Question"
+              ADD CONSTRAINT "Question_generated_question_id_GeneratedQuestion_id_fk"
+              FOREIGN KEY ("generated_question_id")
+              REFERENCES "GeneratedQuestion"("id")
+              ON DELETE set null;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "Question_generated_question_id_key"
+        ON "Question" USING btree ("generated_question_id")
+      `);
+    } catch {
+      // Question or GeneratedQuestion may not exist yet — migrate() handles
+      // initial creation and the 0018 migration will add these schema pieces.
+    }
+
+    // Several FeedItem columns were introduced after the original table. In preview
+    // databases with partially-recorded migrations, Drizzle can believe these
+    // migrations already ran while the nullable columns are still absent, causing
+    // feed reads to fail before migrate() gets another chance to reconcile them.
+    // Pre-apply these additive columns idempotently so GET /api/feed remains safe.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "FeedItem"
+          ADD COLUMN IF NOT EXISTS "personalMessage" text,
+          ADD COLUMN IF NOT EXISTS "sourceResult" text,
+          ADD COLUMN IF NOT EXISTS "submittedAnswer" text,
+          ADD COLUMN IF NOT EXISTS "quip" text
+      `);
+    } catch {
+      // FeedItem table may not exist yet — migrate() handles initial creation.
+    }
+
+    // Migration 0028 adds the Category.general_knowledge enum value and migration
+    // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
+    // migrations in one transaction, but Postgres requires a newly-added enum value
+    // to be committed before it can be used. Pre-apply the enum addition and data
+    // change outside the migrator transaction so production startup cannot get
+    // stuck on `unsafe use of new value "general_knowledge"`.
+    try {
+      await db.execute(sql`
+        ALTER TYPE "public"."Category" ADD VALUE IF NOT EXISTS 'general_knowledge'
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Question" ALTER COLUMN "category" SET DEFAULT 'general_knowledge'
+      `);
+      await db.execute(sql`
+        UPDATE "Question" SET "category" = 'general_knowledge' WHERE "category" = 'other'
+      `);
+    } catch {
+      // Fresh databases may not have Category or Question yet. In that case the
+      // normal migration sequence will create the base schema first.
     }
 
     // If the Category enum type already exists but migration 0000 isn't recorded,
@@ -75,6 +196,45 @@ export async function register() {
     } catch {
       // If this check fails, proceed — migrate() will attempt all migrations and
       // log the error itself
+    }
+
+    // Migration 0021 adds a partial unique index on FeedDismissedDomain. Some
+    // deployments may still execute an index-only copy of that migration, or may
+    // have migration 0012 recorded without the table actually present. Create the
+    // table and its non-unique indexes first so either migration shape can finish.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "FeedDismissedDomain" (
+          "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "canonicalSubcategory" TEXT NOT NULL,
+          "dismissedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "reinstatedAt" TIMESTAMPTZ
+        )
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "FeedDismissedDomain_userId_idx"
+        ON "FeedDismissedDomain" ("userId")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "FeedDismissedDomain_userId_sub_idx"
+        ON "FeedDismissedDomain" ("userId", "canonicalSubcategory")
+      `);
+      await db.execute(sql`
+        DELETE FROM "FeedDismissedDomain" existing
+        USING "FeedDismissedDomain" newest
+        WHERE existing."userId" = newest."userId"
+          AND existing."canonicalSubcategory" = newest."canonicalSubcategory"
+          AND existing."reinstatedAt" IS NULL
+          AND newest."reinstatedAt" IS NULL
+          AND (
+            existing."dismissedAt" < newest."dismissedAt"
+            OR (existing."dismissedAt" = newest."dismissedAt" AND existing."id" < newest."id")
+          )
+      `);
+    } catch {
+      // Fresh databases may not have the User table yet. In that case migrate()
+      // will create both User and FeedDismissedDomain in normal migration order.
     }
 
     try {

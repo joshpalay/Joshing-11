@@ -14,6 +14,7 @@ import {
   submitJoshingGameResponse,
 } from '@/server/db/queries/joshing-game';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
+import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
@@ -111,10 +112,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }).catch(() => null)
       : null;
 
-    void createFeedItemsForFriendsFromAnswer(
+    if (grade.isCorrect && answeredQuestion?.question.creatorId && answeredQuestion.question.creatorId !== session.userId) {
+      void promoteDeclaredToDemonstrated({
+        userId: answeredQuestion.question.creatorId,
+        domain,
+        triggeringFriendId: session.userId,
+        questionId: parsed.questionId,
+      });
+    }
+
+    await createFeedItemsForFriendsFromAnswer(
       session.userId,
       parsed.questionId,
       grade.isCorrect ? 'correct' : 'incorrect',
+      `joshing_game:${id}:${parsed.questionId}:${session.userId}`,
     );
 
     if (!grade.isCorrect) {

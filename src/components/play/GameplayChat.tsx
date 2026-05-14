@@ -3,7 +3,7 @@
  */
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
 import { CANNED_REACTIONS, type ReactionKey } from '@/lib/reactions';
@@ -13,6 +13,12 @@ export type ReactionPromptData = {
   questionId: string;
   contextType: 'feed' | 'joshing_game';
   contextId: string | null;
+};
+
+export type RecheckActionResult = { accepted: boolean; message: string };
+
+export type RecheckAction = {
+  onSubmit: () => Promise<RecheckActionResult>;
 };
 
 export type ChatMessage =
@@ -54,6 +60,7 @@ export type ChatMessage =
       reactionPrompt?: ReactionPromptData | null;
       pointsAwarded?: number | null;
       pointsLabel?: string | null;
+      recheckAction?: RecheckAction | null;
     }
   | {
       id: string;
@@ -142,37 +149,17 @@ function QuestionRow({
 
   return (
     <div className="flex flex-col gap-0.5">
-      {subhead || badges.length > 0 ? (
+      {subhead ? (
         <div className="flex flex-wrap items-center gap-1.5 pb-1 pl-0.5">
-          {subhead ? (
-            <p
-              style={{
-                ...monoStyle,
-                fontSize: '0.58rem',
-                color: 'var(--text-muted)',
-              }}
-            >
-              {subhead}
-            </p>
-          ) : null}
-          {badges.map((badge) => (
-            <span
-              key={badge.label}
-              style={{
-                ...monoStyle,
-                borderRadius: '999px',
-                border: '1px solid var(--border)',
-                background: badge.tone === 'warning'
-                  ? 'color-mix(in srgb, #b45309 12%, var(--surface))'
-                  : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
-                color: badge.tone === 'warning' ? '#b45309' : 'var(--text-muted)',
-                fontSize: '0.52rem',
-                padding: '2px 6px',
-              }}
-            >
-              {badge.label}
-            </span>
-          ))}
+          <p
+            style={{
+              ...monoStyle,
+              fontSize: '0.58rem',
+              color: 'var(--text-muted)',
+            }}
+          >
+            {subhead}
+          </p>
         </div>
       ) : null}
       {creatorName ? (
@@ -202,6 +189,28 @@ function QuestionRow({
       >
         <p style={{ margin: 0 }}>{questionText}</p>
       </div>
+      {badges.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 pl-0.5">
+          {badges.map((badge) => (
+            <span
+              key={badge.label}
+              style={{
+                ...monoStyle,
+                borderRadius: '999px',
+                border: '1px solid var(--border)',
+                background: badge.tone === 'warning'
+                  ? 'color-mix(in srgb, #b45309 12%, var(--surface))'
+                  : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                color: badge.tone === 'warning' ? '#b45309' : 'var(--text-muted)',
+                fontSize: '0.52rem',
+                padding: '2px 6px',
+              }}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {onDismiss ? (
         dismissed ? (
           <p
@@ -256,7 +265,7 @@ function UserRow({ text }: { text: string }) {
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
           padding: '10px 14px',
           fontSize: '0.9rem',
-          color: 'var(--accent-contrast)',
+          color: 'var(--accent-foreground)',
         }}
       >
         {text}
@@ -287,34 +296,6 @@ function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: stri
       >
         “{text}”
       </p>
-    </div>
-  );
-}
-
-function BreadcrumbRow({ text }: { text: string }) {
-  return (
-    <div className="flex justify-start py-0.5">
-      <div
-        style={{
-          maxWidth: '82%',
-          background: 'color-mix(in srgb, var(--surface-2) 64%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--border) 75%, transparent)',
-          borderRadius: 'var(--radius-md)',
-          padding: '8px 12px',
-        }}
-      >
-        <p
-          style={{
-            margin: 0,
-            fontSize: '0.78rem',
-            fontStyle: 'italic',
-            color: 'color-mix(in srgb, var(--text-muted) 78%, var(--text))',
-            lineHeight: 1.35,
-          }}
-        >
-          {text}
-        </p>
-      </div>
     </div>
   );
 }
@@ -476,109 +457,6 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   );
 }
 
-type ExclusionState =
-  | { kind: 'idle' }
-  | { kind: 'confirmed' }
-  | { kind: 'undone' };
-
-function DomainExclusionAffordance({ canonicalSubcategory }: { canonicalSubcategory: string }) {
-  const [state, setState] = useState<ExclusionState>({ kind: 'idle' });
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleExclude = useCallback(async () => {
-    setState({ kind: 'confirmed' });
-    undoTimerRef.current = setTimeout(() => {
-      undoTimerRef.current = null;
-    }, 5000);
-    try {
-      await fetch('/api/users/domain-exclusions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_subcategory: canonicalSubcategory }),
-      });
-    } catch {
-      // fire-and-forget; optimistic UI is acceptable here
-    }
-  }, [canonicalSubcategory]);
-
-  const handleUndo = useCallback(async () => {
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current);
-      undoTimerRef.current = null;
-    }
-    setState({ kind: 'undone' });
-    try {
-      await fetch(`/api/users/domain-exclusions/${encodeURIComponent(canonicalSubcategory)}`, {
-        method: 'DELETE',
-      });
-    } catch {
-      // fire-and-forget
-    }
-  }, [canonicalSubcategory]);
-
-  useEffect(() => {
-    return () => {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    };
-  }, []);
-
-  if (state.kind === 'undone') return null;
-
-  if (state.kind === 'confirmed') {
-    return (
-      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-        <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-          Got it — {canonicalSubcategory} won&apos;t appear in your daily queue anymore.
-        </p>
-        <button
-          type="button"
-          onClick={handleUndo}
-          style={{
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.6rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--text-muted)',
-            textDecoration: 'underline',
-            textUnderlineOffset: '2px',
-          }}
-        >
-          Undo
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ marginTop: '10px' }}>
-      <button
-        type="button"
-        onClick={handleExclude}
-        style={{
-          background: 'none',
-          border: 'none',
-          padding: 0,
-          cursor: 'pointer',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '0.6rem',
-          textTransform: 'uppercase',
-          letterSpacing: '0.06em',
-          color: 'var(--text-muted)',
-          textDecoration: 'underline',
-          textUnderlineOffset: '2px',
-          opacity: 0.75,
-        }}
-      >
-        Remove this topic from my rotation
-      </button>
-    </div>
-  );
-}
-
 function QuipLine({ text }: { text: string }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -604,17 +482,17 @@ function QuipLine({ text }: { text: string }) {
 
 function ResultRow({
   result,
-  questionText,
   correctAnswer,
   consolation,
   breadcrumb,
+  quip,
   copyVariant,
   creatorName,
   relationalFeedbackLine,
-  canonicalSubcategory,
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
+  recheckAction,
 }: {
   result: 'correct' | 'wrong' | 'expired';
   submitted: string;
@@ -622,6 +500,7 @@ function ResultRow({
   correctAnswer: string | null;
   consolation: string | null;
   breadcrumb: string | null;
+  quip?: string | null;
   copyVariant: number;
   creatorName: string | null;
   relationalFeedbackLine?: string | null;
@@ -629,10 +508,27 @@ function ResultRow({
   reactionPrompt?: ReactionPromptData | null;
   pointsAwarded?: number | null;
   pointsLabel?: string | null;
+  recheckAction?: RecheckAction | null;
 }) {
+  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
+  const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
   const expired = result === 'expired';
   const correct = result === 'correct';
   const copy = CORRECT_COPY[copyVariant % 4];
+  const requestRecheck = useCallback(async () => {
+    if (!recheckAction || recheckState === 'submitting') return;
+    setRecheckState('submitting');
+    setRecheckMessage(null);
+    try {
+      const outcome = await recheckAction.onSubmit();
+      setRecheckState('done');
+      setRecheckMessage(outcome.message);
+    } catch {
+      setRecheckState('error');
+      setRecheckMessage('Could not recheck that answer.');
+    }
+  }, [recheckAction, recheckState]);
+
   const resultToneStyle: CSSProperties = expired
     ? {
       background: 'var(--surface-2)',
@@ -680,18 +576,48 @@ function ResultRow({
               <span style={{ color: '#8b1f16', marginRight: '6px' }}>✕</span>
               {wrongHeadline(copyVariant)}
             </p>
+            {correctAnswer ? (
+              <p style={{ marginTop: '8px', fontSize: '0.9rem', color: 'var(--text)' }}>
+                <span style={{ fontWeight: 600 }}>Answer:</span> {correctAnswer}
+              </p>
+            ) : null}
             {consolation ? (
-              <p style={{ marginTop: '6px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                 {consolation}
               </p>
             ) : null}
-            {correctAnswer ? (
-              <p style={{ marginTop: '10px', fontSize: '0.9rem', color: 'var(--text)' }}>
-                {correctAnswer}
-              </p>
+            {recheckAction ? (
+              <div style={{ marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => void requestRecheck()}
+                  disabled={recheckState === 'submitting' || recheckState === 'done'}
+                  style={{
+                    borderRadius: '999px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                    color: 'var(--text)',
+                    cursor: recheckState === 'submitting' || recheckState === 'done' ? 'default' : 'pointer',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.58rem',
+                    letterSpacing: '0.06em',
+                    padding: '6px 10px',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {recheckState === 'submitting' ? 'Rechecking...' : 'Recheck my answer'}
+                </button>
+                {recheckMessage ? (
+                  <p style={{ marginTop: '6px', fontSize: '0.78rem', color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)', lineHeight: 1.35 }}>
+                    {recheckMessage}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
           </>
         )}
+        {breadcrumb ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} /> : null}
+        {quip ? <QuipLine text={quip} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
@@ -699,9 +625,6 @@ function ResultRow({
           </p>
         ) : null}
       </div>
-      {canonicalSubcategory ? (
-        <DomainExclusionAffordance canonicalSubcategory={canonicalSubcategory} />
-      ) : null}
       {reactionPrompt ? <QuestionReactionPrompt prompt={reactionPrompt} /> : null}
     </div>
   );
@@ -881,25 +804,24 @@ export function GameplayChatThread({
             return <UserRow key={m.id} text={m.text} />;
           case 'result':
             return (
-              <div key={m.id} className="space-y-2">
-                <ResultRow
-                  result={m.result}
-                  submitted={m.submitted}
-                  questionText={m.questionText}
-                  correctAnswer={m.correctAnswer}
-                  consolation={m.consolation}
-                  breadcrumb={m.breadcrumb}
-                  copyVariant={m.copyVariant}
-                  creatorName={m.creatorName}
-                  relationalFeedbackLine={m.relationalFeedbackLine}
-                  canonicalSubcategory={m.canonicalSubcategory}
-                  reactionPrompt={m.reactionPrompt}
-                  pointsAwarded={m.pointsAwarded}
-                  pointsLabel={m.pointsLabel}
-                />
-                {m.breadcrumb ? <BreadcrumbRow text={m.breadcrumb} /> : null}
-                {m.quip ? <QuipLine text={m.quip} /> : null}
-              </div>
+              <ResultRow
+                key={m.id}
+                result={m.result}
+                submitted={m.submitted}
+                questionText={m.questionText}
+                correctAnswer={m.correctAnswer}
+                consolation={m.consolation}
+                breadcrumb={m.breadcrumb}
+                quip={m.quip}
+                copyVariant={m.copyVariant}
+                creatorName={m.creatorName}
+                relationalFeedbackLine={m.relationalFeedbackLine}
+                canonicalSubcategory={m.canonicalSubcategory}
+                reactionPrompt={m.reactionPrompt}
+                pointsAwarded={m.pointsAwarded}
+                pointsLabel={m.pointsLabel}
+                recheckAction={m.recheckAction}
+              />
             );
           case 'session_complete':
             return (

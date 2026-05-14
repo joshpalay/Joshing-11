@@ -233,12 +233,10 @@ export default function DomainDetailPage() {
         >
           Answer questions in {detail.displayName}
         </Link>
-        <Link
-          href={`/new-game?domain=${encodeURIComponent(detail.domain)}`}
-          className="rounded-lg border bg-card p-4 font-medium transition hover:border-foreground/30"
-        >
-          Send a question in {detail.displayName}
-        </Link>
+        {/*
+          // v11.1: Joshing Game creation disabled at FAB level. Re-enable
+          // when game creation flow is restored.
+        */}
       </section>
 
       <section className="mb-7">

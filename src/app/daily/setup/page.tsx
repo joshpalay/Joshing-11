@@ -41,9 +41,9 @@ const DIFFICULTIES: { value: Difficulty; label: string; copy: string }[] = [
 ];
 
 const TIER_NEXT_POINTS = {
-  establishing: 500,
-  familiar: 1500,
-  solid: 3500,
+  establishing: 100,
+  familiar: 1000,
+  solid: 2000,
   mastery: Number.POSITIVE_INFINITY,
 };
 
@@ -59,7 +59,7 @@ function masteryDistance(domain: DomainRow): number {
 function groupByCategory(domains: DomainRow[]) {
   const groups = new Map<string, DomainRow[]>();
   for (const domain of domains) {
-    const category = domain.broadCategory ?? 'Other';
+    const category = domain.broadCategory ?? 'General Knowledge';
     groups.set(category, [...(groups.get(category) ?? []), domain]);
   }
   return Array.from(groups.entries())
@@ -90,6 +90,7 @@ function DailySetupContent() {
   const [sortMode, setSortMode] = useState<DomainSortMode>('category');
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(new Set());
   const [adaptiveLabel, setAdaptiveLabel] = useState<string | null>(null);
+  const [hasUnstartedQueue, setHasUnstartedQueue] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,7 +113,13 @@ function DailySetupContent() {
         }
 
         const status = await statusResponse.json();
-        if (status.queue_id) {
+        const questionsAnswered =
+          typeof status.questionsAnswered === 'number'
+            ? status.questionsAnswered
+            : typeof status.answered === 'number'
+              ? status.answered
+              : 0;
+        if (status.queue_id && (status.complete || status.isComplete || questionsAnswered > 0)) {
           router.replace(status.complete || status.isComplete ? '/daily/summary' : '/daily');
           return;
         }
@@ -122,7 +129,17 @@ function DailySetupContent() {
 
         const requestedDomain = searchParams.get('domain')?.trim();
         const requestedCustom = searchParams.get('domainMode') === 'custom' && requestedDomain;
-        setDomains(body.domains ?? []);
+        const availableDomains = body.domains ?? [];
+        if (
+          requestedCustom &&
+          !availableDomains.some((domain) => domain.domain.toLocaleLowerCase('en-US') === requestedDomain.toLocaleLowerCase('en-US'))
+        ) {
+          router.replace(`/knowledge?emptyDomain=${encodeURIComponent(requestedDomain)}`);
+          return;
+        }
+
+        setHasUnstartedQueue(Boolean(status.queue_id));
+        setDomains(availableDomains);
         setDifficulty(body.preferences?.difficulty ?? 'adaptive');
         setDomainMode(requestedCustom ? 'custom' : body.preferences?.domainMode ?? 'random');
         setSelectedDomains(new Set(requestedCustom ? [requestedDomain] : body.preferences?.selectedDomains ?? []));
@@ -182,6 +199,18 @@ function DailySetupContent() {
         throw new Error(body?.message ?? 'Could not save your setup.');
       }
 
+      if (hasUnstartedQueue) {
+        const resetResponse = await fetch('/api/daily/reset', {
+          method: 'POST',
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!resetResponse.ok) {
+          const body = await resetResponse.json().catch(() => null);
+          throw new Error(body?.message ?? 'Could not refresh your setup.');
+        }
+      }
+
       const queueResponse = await fetch('/api/daily/queue', {
         method: 'POST',
         credentials: 'include',
@@ -189,6 +218,11 @@ function DailySetupContent() {
       });
       const queueBody = await queueResponse.json().catch(() => null);
       if (!queueResponse.ok) {
+        if (domainMode === 'custom' && selectedDomains.size > 0) {
+          const [domain] = Array.from(selectedDomains);
+          router.push(`/knowledge?emptyDomain=${encodeURIComponent(domain)}`);
+          return;
+        }
         throw new Error(queueBody?.message ?? 'Could not build your round.');
       }
 
@@ -197,7 +231,7 @@ function DailySetupContent() {
       setError(caught instanceof Error ? caught.message : 'Could not start your round.');
       setSubmitting(false);
     }
-  }, [canStart, difficulty, domainMode, router, selectedDomains]);
+  }, [canStart, difficulty, domainMode, hasUnstartedQueue, router, selectedDomains]);
 
   if (loading) {
     return (
@@ -222,7 +256,7 @@ function DailySetupContent() {
         <p className="mb-3 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
           Difficulty
         </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="flex flex-wrap gap-3">
           {DIFFICULTIES.map((item) => {
             const active = difficulty === item.value;
             return (
@@ -230,7 +264,7 @@ function DailySetupContent() {
                 key={item.value}
                 type="button"
                 onClick={() => setDifficulty(item.value)}
-                className={`min-h-11 rounded-full border px-3 text-xs font-medium uppercase tracking-[0.08em] transition ${
+                className={`min-h-11 whitespace-nowrap rounded-full border px-5 text-xs font-medium uppercase tracking-[0.08em] transition ${
                   active ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'
                 }`}
                 aria-pressed={active}

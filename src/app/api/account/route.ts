@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { getSession } from '@/server/auth/session';
-import { getUserProfile, updateDisplayName } from '@/server/db/queries/account';
+import { destroySession, getSession } from '@/server/auth/session';
+import { deleteUserAccount, getUserProfile, updateDisplayName } from '@/server/db/queries/account';
 
 const DISPLAY_NAME_ERROR = 'Display name must be 2-30 characters.';
 
@@ -40,6 +40,20 @@ export async function PATCH(request: Request) {
   if (!result.ok && result.reason === 'invalid') {
     return NextResponse.json({ error: DISPLAY_NAME_ERROR }, { status: 400 });
   }
+
+  return NextResponse.json({ ok: true });
+}
+
+
+export async function DELETE() {
+  const session = await getSession();
+
+  if (!session) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  await deleteUserAccount(session.userId);
+  await destroySession();
 
   return NextResponse.json({ ok: true });
 }
