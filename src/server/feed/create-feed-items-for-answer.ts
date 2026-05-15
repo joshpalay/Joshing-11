@@ -55,7 +55,14 @@ async function _createFeedItemsForFriendsFromAnswer(
   if (thumbsDown || ratingDown) return;
 
   const [question] = await db
-    .select({ creatorId: questions.creatorId, visibility: questions.visibility, deletedAt: questions.deletedAt, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })
+    .select({
+      creatorId: questions.creatorId,
+      source: questions.source,
+      visibility: questions.visibility,
+      deletedAt: questions.deletedAt,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+    })
     .from(questions)
     .where(eq(questions.id, questionId))
     .limit(1);
