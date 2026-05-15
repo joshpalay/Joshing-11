@@ -27,9 +27,10 @@ export default async function Home() {
         </div>
         <div className="w-full space-y-3">
           <TodaysFiveCard />
-          {catchupCount > 0 ? (
-            <CatchupCard count={catchupCount} expiringCount={expiringCount} />
-          ) : null}
+          <MissedQuestionsCard
+            count={catchupCount}
+            expiringCount={expiringCount}
+          />
           <div className="bg-card text-card-foreground rounded-lg border p-4">
             <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
               What&apos;s happening
@@ -42,7 +43,7 @@ export default async function Home() {
   )
 }
 
-function CatchupCard({
+function MissedQuestionsCard({
   count,
   expiringCount,
 }: {
@@ -62,11 +63,18 @@ function CatchupCard({
           : undefined
       }
     >
-      <p className="text-foreground text-sm font-semibold">
-        {count} {count === 1 ? 'question' : 'questions'} you missed
+      <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+        Play missed questions
+      </p>
+      <p className="text-foreground mt-2 text-sm font-semibold">
+        {count > 0
+          ? `${count} ${count === 1 ? 'question' : 'questions'} you missed`
+          : 'No missed questions right now'}
       </p>
       <p className="text-muted-foreground mt-1 text-sm leading-6">
-        Catch up - 0.25x points
+        {count > 0
+          ? 'Catch up - 0.25x points'
+          : 'When you miss or skip daily questions, they will appear here for review.'}
       </p>
       {expiringCount > 0 ? (
         <p
@@ -80,7 +88,7 @@ function CatchupCard({
         href="/daily/catchup"
         className="btn-ghost mt-4 min-h-11 w-full justify-center"
       >
-        Catch up →
+        {count > 0 ? 'Catch up →' : 'Review missed questions'}
       </Link>
     </div>
   )
