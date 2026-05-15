@@ -54,6 +54,7 @@ export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   isCorrect?: boolean | null
   awardedPoints?: number | null
   explanation?: string | null
+  quip?: string | null
   unverifiedAnswer?: boolean
 }
 

@@ -43,20 +43,23 @@ function AnsweredResult({
   const markerClass = item.isCorrect ? 'text-emerald-700' : 'text-stone-500'
 
   return (
-    <div className="w-full space-y-1">
+    <div className="w-full space-y-1.5">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-medium text-stone-800">
           <span className={markerClass}>{marker}</span>{' '}
           {item.answerSummary ?? 'You answered this question.'}
         </p>
         {item.isCorrect && typeof item.awardedPoints === 'number' ? (
-          <span className="shrink-0 text-xs font-semibold text-emerald-700">
+          <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
             +{item.awardedPoints} pts
           </span>
         ) : null}
       </div>
-      {item.correctAnswer ? (
+      {!item.isCorrect && item.correctAnswer ? (
         <p className="text-sm text-stone-500 italic">{item.correctAnswer}</p>
+      ) : null}
+      {!item.isCorrect && item.quip ? (
+        <p className="text-sm text-stone-500">{item.quip}</p>
       ) : null}
       {recheckAction && recheckState !== 'done' ? (
         <div className="pt-1">
@@ -83,7 +86,7 @@ export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByY
   return (
     <FeedCard
       item={item}
-      tone="gray"
+      tone={item.isCorrect ? 'green' : 'gray'}
       overflow={overflow}
       resultContent={<AnsweredResult item={item} recheckAction={recheckAction} />}
     />
