@@ -280,6 +280,7 @@ function toAnsweredByYouItem(
     isCorrect: result?.correct ?? item.is_correct,
     awardedPoints: result?.awardedPoints ?? item.awarded_points,
     explanation: result?.explanation ?? item.explanation,
+    quip: result?.quip ?? null,
     unverifiedAnswer: item.unverified_answer,
   }
 }
