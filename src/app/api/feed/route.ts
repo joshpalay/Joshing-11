@@ -11,6 +11,24 @@ export const dynamic = 'force-dynamic';
 
 const visibleSourcePredicate = visibleFeedSourcePredicate(feedItems);
 
+const feedQuestionSelectColumns = {
+  id: questions.id,
+  questionText: questions.questionText,
+  answerText: questions.answerText,
+  creatorId: questions.creatorId,
+  explainerBrief: questions.explainerBrief,
+  factualExplanation: questions.factualExplanation,
+  canonicalSubcategory: questions.canonicalSubcategory,
+  broadCategory: questions.broadCategory,
+  category: questions.category,
+};
+
+async function selectFeedQuestions(questionIds: string[]) {
+  return questionIds.length
+    ? db.select(feedQuestionSelectColumns).from(questions).where(inArray(questions.id, questionIds))
+    : Promise.resolve([]);
+}
+
 const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
 
@@ -185,9 +203,7 @@ export async function GET(request: NextRequest) {
   });
 
   const [questionRows, bankedById] = await Promise.all([
-    questionIds.length
-      ? db.select().from(questions).where(inArray(questions.id, questionIds))
-      : Promise.resolve([]),
+    selectFeedQuestions(questionIds),
     checkBankedQuestions(session.userId, questionIds),
   ]);
 
@@ -253,19 +269,19 @@ export async function GET(request: NextRequest) {
         state: item.state,
         is_pinned: item.isPinned,
         question_text: question?.questionText ?? null,
-        verified: question?.verified ?? true,
+        verified: true,
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
         domain_pill: domain,
         game_title: null,
-        difficulty: question?.calibratedDifficulty ?? question?.llmDifficulty ?? question?.difficultyEstimate ?? null,
+        difficulty: null,
         answer_result: answerResult,
         is_correct: answerResult === null ? null : answerResult === 'correct',
         correct_answer: cardType === 'answered_by_you' ? question?.answerText ?? null : null,
         submitted_answer: cardType === 'answered_by_you' ? item.submittedAnswer ?? null : null,
         awarded_points: cardType === 'answered_by_you' ? awardedPoints : null,
         mastery_delta: cardType === 'answered_by_you' ? item.masteryDelta ?? null : null,
-        unverified_answer: cardType === 'answered_by_you' ? question?.verified === false : false,
+        unverified_answer: false,
       };
     }),
   });

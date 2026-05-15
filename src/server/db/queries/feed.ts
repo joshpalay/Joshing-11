@@ -2,7 +2,7 @@ import { and, count, desc, eq, inArray, isNull, lt, ne, notInArray, or, sql } fr
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
 import { isVisibleFriendAnsweredSource, visibleFeedSourcePredicate } from '@/server/feed/visibility';
-import { pgErrorCode } from '@/server/db/pg-error';
+import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
 export type NewFeedItem = typeof feedItems.$inferInsert;
@@ -23,6 +23,36 @@ const ACTION_REQUIRED_FEED_STATES = ['active', 'skipped'] as const;
 const BLOCKING_FEED_STATES = ['active', 'skipped', 'dismissed'] as const;
 
 const visibleSourcePredicate = visibleFeedSourcePredicate(feedItems);
+
+const feedItemCompatibilityColumns = {
+  id: feedItems.id,
+  recipientUserId: feedItems.recipientUserId,
+  questionId: feedItems.questionId,
+  joshingGameId: feedItems.joshingGameId,
+  sourceType: feedItems.sourceType,
+  sourceUserId: feedItems.sourceUserId,
+  sourceResult: feedItems.sourceResult,
+  sourceEventAt: feedItems.sourceEventAt,
+  personalMessage: feedItems.personalMessage,
+  submittedAnswer: feedItems.submittedAnswer,
+  answerResult: sql<'correct' | 'incorrect' | null>`NULL`.as('answerResult'),
+  pointsAwarded: sql<number | null>`NULL`.as('pointsAwarded'),
+  masteryDelta: sql<Record<string, unknown> | null>`NULL`.as('masteryDelta'),
+  sourceAnswerId: sql<string | null>`NULL`.as('sourceAnswerId'),
+  state: feedItems.state,
+  isPinned: feedItems.isPinned,
+  quip: feedItems.quip,
+  createdAt: feedItems.createdAt,
+};
+
+function isMissingOptionalFeedColumn(error: unknown): boolean {
+  if (pgErrorCode(error) !== '42703') return false;
+
+  const message = pgErrorMessage(error) ?? (error instanceof Error ? error.message : String(error));
+  return ['answerResult', 'pointsAwarded', 'masteryDelta', 'sourceAnswerId'].some((column) =>
+    message.includes(column),
+  );
+}
 
 async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<CollapsedFeedItem[]> {
   const friendAnsweredByQuestion = new Map<string, FeedItem[]>();
@@ -278,7 +308,7 @@ async function fetchVisibleFeedItems(
 ): Promise<FeedItem[]> {
   const cursorPredicate = options.pinned ? undefined : feedCursorPredicate(options.cursor);
 
-  const rows = await db
+  const baseQuery = () => db
     .select({ item: feedItems })
     .from(feedItems)
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
@@ -294,7 +324,34 @@ async function fetchVisibleFeedItems(
     .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
     .limit(options.limit);
 
-  return rows.map((row) => row.item);
+  try {
+    const rows = await baseQuery();
+    return rows.map((row) => row.item);
+  } catch (error) {
+    if (!isMissingOptionalFeedColumn(error)) throw error;
+
+    console.warn('[feed/query] Falling back to compatibility FeedItem projection', {
+      missingColumnError: pgErrorMessage(error) ?? (error instanceof Error ? error.message : String(error)),
+    });
+
+    const rows = await db
+      .select({ item: feedItemCompatibilityColumns })
+      .from(feedItems)
+      .innerJoin(questions, eq(feedItems.questionId, questions.id))
+      .where(and(
+        eq(feedItems.recipientUserId, userId),
+        feedPinnedPredicate(options.pinned),
+        visibleSourcePredicate,
+        feedFilterPredicate(options.filter),
+        inArray(feedItems.state, VISIBLE_FEED_STATES),
+        visibleQuestionPredicate(dismissedDomains),
+        cursorPredicate,
+      ))
+      .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
+      .limit(options.limit);
+
+    return rows.map((row) => row.item as FeedItem);
+  }
 }
 
 export async function getFeedForUser(userId: string, options: FeedForUserOptions = {}): Promise<PaginatedFeedResult> {
