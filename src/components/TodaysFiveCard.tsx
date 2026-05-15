@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { CheckCircle2, Clock, MessageCircleQuestion } from 'lucide-react'
+import { CheckCircle2, Clock, MessageCircleQuestion, Settings } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 type DailyStatus = {
@@ -10,6 +10,29 @@ type DailyStatus = {
   isComplete: boolean
   nextRoundAt: string
   queueId: string | null
+}
+
+type DailyPreferences = {
+  difficulty: 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive'
+  domainMode: 'random' | 'custom'
+  selectedDomains: string[]
+}
+
+const DIFFICULTY_LABELS: Record<string, string> = {
+  normal: 'Establishing',
+  moderate: 'Solid',
+  challenging: 'Skilled',
+  ridiculous: 'Master',
+  adaptive: 'Adaptive',
+}
+
+function preferenceSummary(prefs: DailyPreferences): string {
+  const diffLabel = DIFFICULTY_LABELS[prefs.difficulty] ?? 'Adaptive'
+  if (prefs.domainMode === 'random') return `${diffLabel} · Random`
+  if (prefs.selectedDomains.length === 0) return `${diffLabel} · Custom`
+  const domains = prefs.selectedDomains.slice(0, 3).join(', ')
+  const extra = prefs.selectedDomains.length > 3 ? ` +${prefs.selectedDomains.length - 3}` : ''
+  return `${diffLabel} · ${domains}${extra}`
 }
 
 const FALLBACK_STATUS: DailyStatus = {
@@ -39,6 +62,7 @@ function formatCountdown(targetIso: string, nowMs: number): string {
 
 export default function TodaysFiveCard() {
   const [status, setStatus] = useState<DailyStatus | null>(null)
+  const [preferences, setPreferences] = useState<DailyPreferences | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [resetting, setResetting] = useState(false)
   const [resetError, setResetError] = useState<string | null>(null)
@@ -48,12 +72,12 @@ export default function TodaysFiveCard() {
 
     async function loadStatus() {
       try {
-        const response = await fetch('/api/daily/status', {
-          cache: 'no-store',
-          credentials: 'include',
-        })
-        if (!response.ok) throw new Error('daily status unavailable')
-        const body = await response.json()
+        const [statusResponse, prefsResponse] = await Promise.all([
+          fetch('/api/daily/status', { cache: 'no-store', credentials: 'include' }),
+          fetch('/api/daily/preferences', { cache: 'no-store', credentials: 'include' }),
+        ])
+        if (!statusResponse.ok) throw new Error('daily status unavailable')
+        const body = await statusResponse.json()
         if (cancelled) return
         setStatus({
           questionsRemaining:
@@ -78,6 +102,17 @@ export default function TodaysFiveCard() {
               : FALLBACK_STATUS.nextRoundAt,
           queueId: typeof body.queue_id === 'string' ? body.queue_id : null,
         })
+        if (prefsResponse.ok) {
+          const prefsBody = await prefsResponse.json()
+          const prefs = prefsBody?.preferences
+          if (prefs) {
+            setPreferences({
+              difficulty: prefs.difficulty ?? 'adaptive',
+              domainMode: prefs.domainMode ?? 'random',
+              selectedDomains: Array.isArray(prefs.selectedDomains) ? prefs.selectedDomains : [],
+            })
+          }
+        }
       } catch {
         if (!cancelled) setStatus(FALLBACK_STATUS)
       }
@@ -102,9 +137,7 @@ export default function TodaysFiveCard() {
   const hasStartedRound = Boolean(effectiveStatus.queueId) && answered > 0
   const playHref = isComplete
     ? '/daily/summary'
-    : hasStartedRound
-      ? '/daily'
-      : '/daily/setup'
+    : '/daily'
   const actionLabel = isComplete
     ? 'See your recap'
     : hasStartedRound
@@ -129,7 +162,7 @@ export default function TodaysFiveCard() {
       const body = await response.json().catch(() => null)
       if (!response.ok)
         throw new Error(body?.message ?? 'Could not reset daily round.')
-      window.location.assign('/daily/setup')
+      window.location.assign('/daily')
     } catch (caught) {
       setResetError(
         caught instanceof Error
@@ -151,12 +184,26 @@ export default function TodaysFiveCard() {
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
-            Today&apos;s Five
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
+              Today&apos;s Five
+            </p>
+            <Link
+              href="/daily/setup"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Set up daily round"
+            >
+              <Settings className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
           <p className="text-foreground mt-2 text-sm leading-6">
             Five questions to keep your knowledge map moving.
           </p>
+          {preferences ? (
+            <p className="text-muted-foreground mt-0.5 text-xs leading-5">
+              {preferenceSummary(preferences)}
+            </p>
+          ) : null}
           <p className="text-muted-foreground mt-1 text-sm leading-6">
             {subtext}
           </p>
