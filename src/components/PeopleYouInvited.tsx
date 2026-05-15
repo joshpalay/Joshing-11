@@ -172,143 +172,122 @@ export default function PeopleYouInvited() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  if (loading) {
-    return (
-      <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 shadow-sm">
-        <h2 className="font-serif text-xl font-semibold">
-          People you thought of
-        </h2>
-        <p className="text-muted-foreground mt-2 text-sm">Loading invites…</p>
-      </section>
-    )
-  }
-
-  if (!loading && invites.length === 0 && !error) return null
-
   return (
-    <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 shadow-sm">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-            Notes sent
-          </p>
-          <h2 className="mt-1 font-serif text-xl font-semibold">
-            People you thought of
-          </h2>
-        </div>
-        <button
-          type="button"
-          className="text-muted-foreground text-sm font-medium underline-offset-4 hover:underline"
-          onClick={() => void loadInvites()}
-        >
-          Refresh
-        </button>
-      </div>
-
+    <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
       {error ? (
         <p className="text-destructive mb-3 text-sm font-medium">{error}</p>
       ) : null}
 
-      <div className="space-y-3">
-        {invites.map((invite) => {
-          const canMessage =
-            invite.status === 'pending' &&
-            invite.message &&
-            invite.inviteePhoneForActions
+      {loading ? (
+        <p className="text-muted-foreground text-sm">Loading invites…</p>
+      ) : invites.length === 0 ? (
+        <p className="text-muted-foreground bg-muted rounded-xl px-3 py-2 text-sm">
+          No notes sent yet.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {invites.map((invite) => {
+            const canMessage =
+              invite.status === 'pending' &&
+              invite.message &&
+              invite.inviteePhoneForActions
 
-          return (
-            <article
-              key={invite.id}
-              className="bg-background rounded-xl border p-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-foreground font-medium">
-                    {invite.inviteeDisplayName}
-                  </h3>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {invite.inviteePhoneMasked}
+            return (
+              <article
+                key={invite.id}
+                className="bg-background rounded-xl border p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-foreground font-medium">
+                      {invite.inviteeDisplayName}
+                    </h3>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      {invite.inviteePhoneMasked}
+                    </p>
+                  </div>
+                  <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-medium">
+                    {STATUS_COPY[invite.status]}
+                  </span>
+                </div>
+
+                {invite.suggestedInterests.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {invite.suggestedInterests.map((interest) => (
+                      <span
+                        key={interest}
+                        className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm"
+                      >
+                        {interest}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="bg-muted text-muted-foreground mt-3 rounded-lg px-3 py-2 text-sm">
+                    No ideas attached to this note.
                   </p>
-                </div>
-                <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-medium">
-                  {STATUS_COPY[invite.status]}
-                </span>
-              </div>
+                )}
 
-              {invite.suggestedInterests.length > 0 ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {invite.suggestedInterests.map((interest) => (
-                    <span
-                      key={interest}
-                      className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm"
+                <p className="text-muted-foreground mt-3 text-sm">
+                  {statusDetail(invite)}
+                </p>
+
+                {invite.status === 'accepted' ? (
+                  <p className="bg-muted text-muted-foreground mt-3 rounded-lg px-3 py-2 text-sm">
+                    They accepted your note — now you can trade questions more
+                    easily.
+                  </p>
+                ) : null}
+
+                {invite.status === 'expired' ? (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      className="btn-ghost min-h-11 w-full rounded-full"
+                      onClick={() => createNewInvite(invite)}
                     >
-                      {interest}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="bg-muted text-muted-foreground mt-3 rounded-lg px-3 py-2 text-sm">
-                  No ideas attached to this note.
-                </p>
-              )}
+                      Write a fresh note
+                    </button>
+                  </div>
+                ) : null}
 
-              <p className="text-muted-foreground mt-3 text-sm">
-                {statusDetail(invite)}
-              </p>
-
-              {invite.status === 'accepted' ? (
-                <p className="bg-muted text-muted-foreground mt-3 rounded-lg px-3 py-2 text-sm">
-                  They accepted your note — now you can trade questions more
-                  easily.
-                </p>
-              ) : null}
-
-              {invite.status === 'expired' ? (
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    className="btn-ghost min-h-11 w-full rounded-full"
-                    onClick={() => createNewInvite(invite)}
-                  >
-                    Write a fresh note
-                  </button>
-                </div>
-              ) : null}
-
-              {canMessage ? (
-                <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                  <button
-                    type="button"
-                    className="btn-primary min-h-11 rounded-full sm:col-span-1"
-                    onClick={() => copyInvite(invite)}
-                  >
-                    {copyingId === invite.id ? 'Copied ✓' : 'Copy message'}
-                  </button>
-                  <a
-                    className="btn-ghost min-h-11 rounded-full sm:col-span-1"
-                    href={buildSmsHref(
-                      invite.inviteePhoneForActions!,
-                      invite.message!
-                    )}
-                  >
-                    Open Messages
-                  </a>
-                  <button
-                    type="button"
-                    className="text-muted-foreground min-h-11 rounded-full border px-4 text-sm font-medium"
-                    onClick={() => cancelInvite(invite)}
-                    disabled={cancellingId === invite.id}
-                  >
-                    {cancellingId === invite.id
-                      ? 'Setting aside…'
-                      : 'Set aside'}
-                  </button>
-                </div>
-              ) : null}
-            </article>
-          )
-        })}
-      </div>
+                {canMessage ? (
+                  <div className="mt-3 space-y-2">
+                    <a
+                      className="btn-primary flex min-h-11 w-full items-center justify-center rounded-full"
+                      href={buildSmsHref(
+                        invite.inviteePhoneForActions!,
+                        invite.message!
+                      )}
+                    >
+                      Send message
+                    </a>
+                    <div className="flex justify-center gap-6">
+                      <button
+                        type="button"
+                        className="text-muted-foreground text-sm"
+                        onClick={() => copyInvite(invite)}
+                      >
+                        {copyingId === invite.id ? 'Copied ✓' : 'Copy instead'}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-muted-foreground text-sm"
+                        onClick={() => cancelInvite(invite)}
+                        disabled={cancellingId === invite.id}
+                      >
+                        {cancellingId === invite.id
+                          ? 'Setting aside…'
+                          : 'Set aside'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </article>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }
