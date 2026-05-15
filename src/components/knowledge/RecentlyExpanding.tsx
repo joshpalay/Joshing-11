@@ -44,6 +44,7 @@ export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotic
         @keyframes recentExpansionIn {
           to { opacity: 1; transform: translateY(0); }
         }
+        [data-expanding-row="true"] { grid-template-columns: 44px minmax(0, 1fr) minmax(112px, auto) minmax(86px, 112px); }
         @media (hover: hover) {
           button[data-expanding-share="true"] { transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease; }
           button[data-expanding-share="true"]:hover { border-color: #c9bea9; background: #f8f3eb; transform: translateY(-1px); }
@@ -282,7 +283,6 @@ const rowsStyle: CSSProperties = {
 const rowStyle: CSSProperties = {
   minHeight: 62,
   display: 'grid',
-  gridTemplateColumns: '44px minmax(0, 1fr) minmax(112px, auto) minmax(86px, 112px)',
   alignItems: 'center',
   columnGap: '0.75rem',
   padding: '0.54rem 0',
