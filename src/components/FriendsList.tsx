@@ -4,6 +4,8 @@ import Link from 'next/link'
 import PeopleYouInvited from '@/components/PeopleYouInvited'
 import { useCallback, useEffect, useState } from 'react'
 
+type Tab = 'friends' | 'requests' | 'sent'
+
 type Friend = {
   id: string
   displayName: string
@@ -34,11 +36,6 @@ function previewInterests(interests: string[]) {
   return remainder > 0 ? `${visible}, +${remainder} more` : visible
 }
 
-function openAddFriend() {
-  window.dispatchEvent(new CustomEvent('friend-invitations:create-new'))
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
 export default function FriendsList() {
   const [friends, setFriends] = useState<Friend[]>([])
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>(
@@ -47,6 +44,7 @@ export default function FriendsList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingRequest, setPendingRequest] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<Tab>('friends')
 
   const loadFriends = useCallback(async () => {
     setError(null)
@@ -116,177 +114,185 @@ export default function FriendsList() {
     }
   }
 
-  const hasNoRelationships =
-    !loading && !error && friends.length === 0 && incomingRequests.length === 0
-
   return (
     <div className="space-y-5">
-      {hasNoRelationships ? (
-        <section className="bg-card text-card-foreground rounded-2xl border p-5 text-center shadow-sm">
-          <h2 className="font-serif text-2xl font-semibold">
-            Joshing gets better when your people are here.
-          </h2>
-          <p className="text-muted-foreground mt-2 text-sm leading-6">
-            Invite someone you already trade facts, recommendations, and inside
-            jokes with.
-          </p>
-          <button
-            type="button"
-            className="btn-primary mt-4 min-h-12 w-full rounded-full sm:w-auto sm:px-6"
-            onClick={openAddFriend}
-          >
-            Add friend
-          </button>
+      {/* Tab bar */}
+      <div className="flex border-b">
+        <button
+          type="button"
+          className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+            activeTab === 'friends'
+              ? 'border-b-2 border-foreground text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setActiveTab('friends')}
+        >
+          Friends
+        </button>
+        <button
+          type="button"
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+            activeTab === 'requests'
+              ? 'border-b-2 border-foreground text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setActiveTab('requests')}
+        >
+          Requests
+          {incomingRequests.length > 0 ? (
+            <span className="bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-xs leading-none">
+              {incomingRequests.length}
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+            activeTab === 'sent'
+              ? 'border-b-2 border-foreground text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setActiveTab('sent')}
+        >
+          Sent
+        </button>
+      </div>
+
+      {/* Friends tab */}
+      {activeTab === 'friends' ? (
+        <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+          {error ? (
+            <p className="text-destructive mb-3 text-sm font-medium">{error}</p>
+          ) : null}
+
+          {loading ? (
+            <p className="text-muted-foreground text-sm">Loading friends…</p>
+          ) : friends.length > 0 ? (
+            <div className="space-y-3">
+              {friends.map((friend) => {
+                const interests = previewInterests(friend.declaredInterests)
+                const sharedInterest = friend.sharedInterests[0]
+
+                return (
+                  <Link
+                    key={friend.id}
+                    href={`/users/${friend.id}`}
+                    className="bg-background hover:border-foreground/30 block rounded-xl border p-3 transition hover:shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-foreground font-medium">
+                          {friend.displayName}
+                        </h3>
+                        {interests ? (
+                          <p className="text-muted-foreground mt-1 text-sm leading-6">
+                            Into {interests}
+                          </p>
+                        ) : (
+                          <p className="text-muted-foreground mt-1 text-sm leading-6">
+                            Interests will appear here as they declare them.
+                          </p>
+                        )}
+                      </div>
+                      {sharedInterest ? (
+                        <span className="bg-muted text-foreground shrink-0 rounded-full px-3 py-1 text-xs font-medium">
+                          Shared: {sharedInterest}
+                        </span>
+                      ) : null}
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="py-2 text-center">
+              <h2 className="font-serif text-xl font-semibold">
+                Joshing gets better when your people are here.
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm leading-6">
+                Invite someone you already trade facts, recommendations, and
+                inside jokes with.
+              </p>
+            </div>
+          )}
         </section>
       ) : null}
 
-      <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-              Requests
-            </p>
-            <h2 className="mt-1 font-serif text-xl font-semibold">
-              Invitations from friends
-            </h2>
-          </div>
-          <button
-            type="button"
-            className="text-muted-foreground text-sm font-medium underline-offset-4 hover:underline"
-            onClick={() => void loadFriends()}
-          >
-            Refresh
-          </button>
-        </div>
-
-        {loading ? (
-          <p className="text-muted-foreground text-sm">Loading requests…</p>
-        ) : incomingRequests.length > 0 ? (
-          <div className="space-y-3">
-            {incomingRequests.map((request) => (
-              <article
-                key={request.id}
-                className="bg-background rounded-xl border p-3"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="text-foreground font-medium">
-                      {request.requesterName}
-                    </h3>
-                    {request.suggestedInterests.length > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {request.suggestedInterests.map((interest) => (
-                          <span
-                            key={interest}
-                            className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm"
-                          >
-                            {interest}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground mt-1 text-sm">
-                        No ideas attached — just a friendly hello.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 sm:min-w-48">
-                    <button
-                      type="button"
-                      className="btn-primary min-h-11 rounded-full"
-                      disabled={Boolean(pendingRequest)}
-                      onClick={() => void updateRequest(request.id, 'accept')}
-                    >
-                      {pendingRequest === `${request.id}:accept`
-                        ? 'Accepting…'
-                        : 'Accept'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost min-h-11 rounded-full"
-                      disabled={Boolean(pendingRequest)}
-                      onClick={() => void updateRequest(request.id, 'ignore')}
-                    >
-                      {pendingRequest === `${request.id}:ignore`
-                        ? 'Setting aside…'
-                        : 'Not now'}
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="text-muted-foreground bg-muted rounded-xl px-3 py-2 text-sm">
-            No incoming requests right now.
-          </p>
-        )}
-      </section>
-
-      <PeopleYouInvited />
-
-      <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
-        <div className="mb-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-            Friends
-          </p>
-          <h2 className="mt-1 font-serif text-xl font-semibold">
-            Active friends
-          </h2>
-        </div>
-
-        {error ? (
-          <p className="text-destructive mb-3 text-sm font-medium">{error}</p>
-        ) : null}
-
-        {loading ? (
-          <p className="text-muted-foreground text-sm">Loading friends…</p>
-        ) : friends.length > 0 ? (
-          <div className="space-y-3">
-            {friends.map((friend) => {
-              const interests = previewInterests(friend.declaredInterests)
-              const sharedInterest = friend.sharedInterests[0]
-
-              return (
-                <Link
-                  key={friend.id}
-                  href={`/users/${friend.id}`}
-                  className="bg-background hover:border-foreground/30 block rounded-xl border p-3 transition hover:shadow-sm"
+      {/* Requests tab */}
+      {activeTab === 'requests' ? (
+        <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+          {loading ? (
+            <p className="text-muted-foreground text-sm">Loading requests…</p>
+          ) : incomingRequests.length > 0 ? (
+            <div className="space-y-3">
+              {incomingRequests.map((request) => (
+                <article
+                  key={request.id}
+                  className="bg-background rounded-xl border p-3"
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <h3 className="text-foreground font-medium">
-                        {friend.displayName}
+                        {request.requesterName}
                       </h3>
-                      {interests ? (
-                        <p className="text-muted-foreground mt-1 text-sm leading-6">
-                          Into {interests}
-                        </p>
+                      {request.suggestedInterests.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {request.suggestedInterests.map((interest) => (
+                            <span
+                              key={interest}
+                              className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm"
+                            >
+                              {interest}
+                            </span>
+                          ))}
+                        </div>
                       ) : (
-                        <p className="text-muted-foreground mt-1 text-sm leading-6">
-                          Interests will appear here as they declare them.
+                        <p className="text-muted-foreground mt-1 text-sm">
+                          No ideas attached — just a friendly hello.
                         </p>
                       )}
                     </div>
-                    {sharedInterest ? (
-                      <span className="bg-muted text-foreground shrink-0 rounded-full px-3 py-1 text-xs font-medium">
-                        Shared: {sharedInterest}
-                      </span>
-                    ) : null}
+
+                    <div className="grid grid-cols-2 gap-2 sm:min-w-48">
+                      <button
+                        type="button"
+                        className="btn-primary min-h-11 rounded-full"
+                        disabled={Boolean(pendingRequest)}
+                        onClick={() =>
+                          void updateRequest(request.id, 'accept')
+                        }
+                      >
+                        {pendingRequest === `${request.id}:accept`
+                          ? 'Accepting…'
+                          : 'Accept'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost min-h-11 rounded-full"
+                        disabled={Boolean(pendingRequest)}
+                        onClick={() =>
+                          void updateRequest(request.id, 'ignore')
+                        }
+                      >
+                        {pendingRequest === `${request.id}:ignore`
+                          ? 'Setting aside…'
+                          : 'Not now'}
+                      </button>
+                    </div>
                   </div>
-                </Link>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="bg-muted rounded-xl px-3 py-2">
-            <p className="text-muted-foreground text-sm">
-              No active friends yet.
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground bg-muted rounded-xl px-3 py-2 text-sm">
+              No incoming requests right now.
             </p>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      ) : null}
+
+      {/* Sent tab */}
+      {activeTab === 'sent' ? <PeopleYouInvited /> : null}
     </div>
   )
 }
