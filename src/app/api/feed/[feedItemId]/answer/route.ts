@@ -182,17 +182,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   return NextResponse.json({
     isCorrect,
-    correct: isCorrect,
     explanation: question.explainerFull ?? question.explainerBrief ?? question.factualExplanation,
     pointsAwarded,
     answerState,
     breadcrumb,
-    awarded_points: pointsAwarded,
     masteryDelta,
-    mastery_delta: masteryDelta,
     correctAnswer: question.answerText,
-    answer: question.answerText,
-    consolation: grade.consolation,
     quip,
   });
 }

@@ -3,14 +3,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import {
-  AnswerForm,
   AnsweredByYouCard,
   DirectSentCard,
   FeedOverflowMenu,
   FriendAddedCard,
   FriendAnsweredCard,
   FriendLikedCard,
-  UnansweredFeedActions,
   feedCardPreviewFixtures,
   getFeedOverflowMenuLabels,
   visibleFeedCategory,
@@ -69,111 +67,90 @@ describe('Feed card preview fixtures', () => {
     ])
   })
 
-  it('renders each typed Feed card variant without changing the fixture discriminant', () => {
+  it('renders each typed Feed card variant with social signal text', () => {
     const fixtures = feedCardPreviewFixtures
     expect(
       html(<DirectSentCard item={fixtures.directSentUnanswered} />)
-    ).toContain('For you')
+    ).toContain("thought you")
     expect(
       html(<FriendAnsweredCard item={fixtures.friendAnsweredRight} />)
-    ).toContain('Friend answered')
+    ).toContain('recognized this one')
     expect(
       html(<FriendAddedCard item={fixtures.friendAddedWroteQuestion} />)
-    ).toContain('New question')
+    ).toContain('added a question')
     expect(
       html(<FriendLikedCard item={fixtures.friendLikedShared} />)
-    ).toContain('Friend liked')
+    ).toContain('liked this question')
     expect(
       html(<AnsweredByYouCard item={fixtures.answeredByYouCorrect} />)
-    ).toContain('+5 points')
+    ).toContain('You both had it')
   })
 })
 
 describe('Feed unanswered card actions', () => {
-  it('shows Answer plus overflow only in the inline action row', () => {
+  it('shows Answer button in the card bottom strip when onAnswer is provided', () => {
     const rendered = html(
       <DirectSentCard
         item={feedCardPreviewFixtures.directSentUnanswered}
-        actions={
-          <UnansweredFeedActions
-            onAnswer={() => undefined}
-            overflow={
-              <FeedOverflowMenu
-                sourceName="Maya"
-                category="Food & Drink"
-                question={{
-                  id: 'question-1',
-                  text: 'Question?',
-                  domain: 'Food & Drink',
-                }}
-              />
-            }
-          />
-        }
+        onAnswer={() => undefined}
       />
     )
 
     expect(rendered).toContain('Answer')
-    expect(rendered).toContain('More Feed actions')
-    expect(rendered).not.toContain('Send to friend')
     expect(rendered).not.toContain('Skip')
     expect(rendered).not.toContain('Not my focus')
     expect(rendered).not.toContain('Bookmark')
   })
 
-  it('uses the answering fixture state to expand the inline answer input', () => {
+  it('omits Answer button when onAnswer is not provided', () => {
+    const rendered = html(
+      <DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />
+    )
+    expect(rendered).not.toContain('Answer →')
+  })
+
+  it('shows overflow menu when passed', () => {
     const rendered = html(
       <DirectSentCard
         item={feedCardPreviewFixtures.directSentUnanswered}
-        actions={
-          <AnswerForm
-            value="kombucha"
-            onChange={() => undefined}
-            onSubmit={() => undefined}
-            onCancel={() => undefined}
+        overflow={
+          <FeedOverflowMenu
+            sourceName="Maya"
+            category="Food & Drink"
+            question={{
+              id: 'question-1',
+              text: 'Question?',
+              domain: 'Food & Drink',
+            }}
           />
         }
       />
     )
-
-    expect(rendered).toContain('Your answer...')
-    expect(rendered).toContain('Submit answer')
-    expect(rendered).toContain('Cancel')
+    expect(rendered).toContain('More Feed actions')
+    expect(rendered).not.toContain('Send to friend')
   })
 })
 
 describe('Feed answered states', () => {
-  it('submitting an answer resolves to an answered card with the correct answer copy', () => {
+  it('submitting an answer resolves to an answered card with comparison copy and correct answer', () => {
     const rendered = html(
       <AnsweredByYouCard item={feedCardPreviewFixtures.answeredByYouCorrect} />
     )
 
-    expect(rendered).toContain('Correct answer:')
+    expect(rendered).toContain('You both had it')
     expect(rendered).toContain('Barcelona')
-    expect(rendered).toContain('+5 points')
-    expect(rendered).toContain('Feed answer progress')
+    expect(rendered).toContain('+5 pts')
   })
 
-  it('wrong answers use neutral missed-question copy and avoid red Feed styling', () => {
+  it('wrong answers show correct answer and avoid red Feed styling', () => {
     const rendered = html(
       <AnsweredByYouCard item={feedCardPreviewFixtures.answeredByYouWrong} />
     )
 
-    expect(rendered).toContain('Added to your missed questions')
+    expect(rendered).toContain('Lisbon')
     expect(rendered).not.toContain('bg-red')
     expect(rendered).not.toContain('text-red')
     expect(rendered).not.toContain('destructive')
-  })
-
-  it('shows unverified answer and explanation notes', () => {
-    const rendered = html(
-      <AnsweredByYouCard
-        item={feedCardPreviewFixtures.unverifiedAnsweredExplanationNote}
-      />
-    )
-
-    expect(rendered).toContain('LLM answer — unverified.')
-    expect(rendered).toContain('Explanation is pending verification')
   })
 })
 

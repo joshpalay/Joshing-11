@@ -6,17 +6,15 @@ import type { FriendAnsweredFeedItem } from './types'
 
 type FriendAnsweredCardProps = {
   item: FriendAnsweredFeedItem
-  actions?: ReactNode
-  children?: ReactNode
+  overflow?: ReactNode
+  onAnswer?: () => void
+  resultContent?: ReactNode
 }
 
 function PersonName({ href, name }: { href?: string | null; name: string }) {
   if (!href) return <>{name}</>
   return (
-    <Link
-      href={href}
-      className="font-medium underline-offset-2 hover:underline"
-    >
+    <Link href={href} className="font-medium underline-offset-2 hover:underline">
       {name}
     </Link>
   )
@@ -24,27 +22,25 @@ function PersonName({ href, name }: { href?: string | null; name: string }) {
 
 export function FriendAnsweredCard({
   item,
-  actions,
-  children,
+  overflow,
+  onAnswer,
+  resultContent,
 }: FriendAnsweredCardProps) {
   const tone = item.friendCorrect ? 'green' : 'white'
+  const socialSignal: ReactNode = item.answerSummary ?? (
+    <>
+      <PersonName href={item.friendHref} name={item.friendName} /> answered this.
+    </>
+  )
 
   return (
     <FeedCard
       item={item}
       tone={tone}
-      eyebrow={<span>Friend answered</span>}
-      actions={actions}
-    >
-      {children ??
-        (item.answerSummary ? (
-          <p>{item.answerSummary}</p>
-        ) : (
-          <p>
-            <PersonName href={item.friendHref} name={item.friendName} />{' '}
-            answered this question.
-          </p>
-        ))}
-    </FeedCard>
+      socialSignal={socialSignal}
+      overflow={overflow}
+      onAnswer={onAnswer}
+      resultContent={resultContent}
+    />
   )
 }

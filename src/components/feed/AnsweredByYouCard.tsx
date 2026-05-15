@@ -1,86 +1,91 @@
-import type { ReactNode } from 'react'
+'use client'
 
-import { GeometricProgress } from '@/components/play/GeometricProgress'
+import { useCallback, useState, type ReactNode } from 'react'
 
 import { FeedCard } from './FeedCard'
 import type { AnsweredByYouFeedItem } from './types'
 
+export type FeedRecheckAction = {
+  onSubmit: () => Promise<{ accepted: boolean; message: string }>
+}
+
 type AnsweredByYouCardProps = {
   item: AnsweredByYouFeedItem
-  actions?: ReactNode
-  children?: ReactNode
+  recheckAction?: FeedRecheckAction | null
+  overflow?: ReactNode
 }
 
-function FeedProgressCircles({
-  correct,
+function AnsweredResult({
+  item,
+  recheckAction,
 }: {
-  correct: boolean | null | undefined
+  item: AnsweredByYouFeedItem
+  recheckAction?: FeedRecheckAction | null
 }) {
-  return (
-    <div aria-label="Feed answer progress">
-      <GeometricProgress
-        total={5}
-        current={1}
-        results={{ 1: correct ? 'correct' : 'expired' }}
-      />
-    </div>
-  )
-}
+  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle')
+  const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
 
-function AnsweredDetails({ item }: { item: AnsweredByYouFeedItem }) {
+  const requestRecheck = useCallback(async () => {
+    if (!recheckAction || recheckState === 'submitting') return
+    setRecheckState('submitting')
+    setRecheckMessage(null)
+    try {
+      const outcome = await recheckAction.onSubmit()
+      setRecheckState('done')
+      setRecheckMessage(outcome.message)
+    } catch {
+      setRecheckState('error')
+      setRecheckMessage('Could not recheck that answer.')
+    }
+  }, [recheckAction, recheckState])
+
+  const marker = item.isCorrect ? '✓' : '✗'
+  const markerClass = item.isCorrect ? 'text-emerald-700' : 'text-stone-500'
+
   return (
-    <div className="rounded-xl bg-white/65 p-3 text-sm leading-6 text-stone-700">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-medium text-stone-900">
+    <div className="w-full space-y-1">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-medium text-stone-800">
+          <span className={markerClass}>{marker}</span>{' '}
           {item.answerSummary ?? 'You answered this question.'}
         </p>
-        <FeedProgressCircles correct={item.isCorrect} />
+        {item.isCorrect && typeof item.awardedPoints === 'number' ? (
+          <span className="shrink-0 text-xs font-semibold text-emerald-700">
+            +{item.awardedPoints} pts
+          </span>
+        ) : null}
       </div>
-      {item.submittedAnswer ? (
-        <p className="mt-2">
-          <span className="font-medium text-stone-900">Your answer:</span>{' '}
-          {item.submittedAnswer}
-        </p>
-      ) : null}
       {item.correctAnswer ? (
-        <p className="mt-1">
-          <span className="font-medium text-stone-900">Correct answer:</span>{' '}
-          {item.correctAnswer}
+        <p className="text-sm text-stone-500 italic">{item.correctAnswer}</p>
+      ) : null}
+      {recheckAction && recheckState !== 'done' ? (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => void requestRecheck()}
+            disabled={recheckState === 'submitting'}
+            className="rounded-full border border-stone-300 bg-white px-3 py-1 font-mono text-xs uppercase tracking-wide text-stone-600 hover:bg-stone-50 disabled:cursor-default disabled:opacity-60"
+          >
+            {recheckState === 'submitting' ? 'Rechecking...' : 'Recheck my answer'}
+          </button>
+        </div>
+      ) : null}
+      {recheckMessage ? (
+        <p className={`text-xs ${recheckState === 'error' ? 'text-red-600' : 'text-stone-500'}`}>
+          {recheckMessage}
         </p>
-      ) : null}
-      {item.isCorrect && typeof item.awardedPoints === 'number' ? (
-        <p className="mt-2 inline-flex rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-900">
-          +{item.awardedPoints} points
-        </p>
-      ) : null}
-      {item.isCorrect === false ? (
-        <p className="mt-2 rounded-lg bg-stone-100 px-3 py-2 text-stone-700">
-          Added to your missed questions — you can try again for review later.
-        </p>
-      ) : null}
-      {item.unverifiedAnswer ? (
-        <p className="text-muted-foreground mt-2">LLM answer — unverified.</p>
-      ) : null}
-      {item.explanation ? (
-        <p className="text-muted-foreground mt-2">{item.explanation}</p>
       ) : null}
     </div>
   )
 }
 
-export function AnsweredByYouCard({
-  item,
-  actions,
-  children,
-}: AnsweredByYouCardProps) {
+export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByYouCardProps) {
   return (
     <FeedCard
       item={item}
       tone="gray"
-      eyebrow={<span>{item.resultLabel ?? 'You answered'}</span>}
-      actions={actions}
-    >
-      {children ?? <AnsweredDetails item={item} />}
-    </FeedCard>
+      overflow={overflow}
+      resultContent={<AnsweredResult item={item} recheckAction={recheckAction} />}
+    />
   )
 }

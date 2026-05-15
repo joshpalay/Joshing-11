@@ -50,6 +50,7 @@ function MissedQuestionsCard({
   count: number
   expiringCount: number
 }) {
+  if (count === 0) return null
   return (
     <div
       className="bg-card text-card-foreground rounded-lg border p-4"
@@ -67,14 +68,10 @@ function MissedQuestionsCard({
         Play missed questions
       </p>
       <p className="text-foreground mt-2 text-sm font-semibold">
-        {count > 0
-          ? `${count} ${count === 1 ? 'question' : 'questions'} you missed`
-          : 'No missed questions right now'}
+        {count === 1 ? '1 question you missed' : `${count} questions you missed`}
       </p>
       <p className="text-muted-foreground mt-1 text-sm leading-6">
-        {count > 0
-          ? 'Catch up - 0.25x points'
-          : 'When you miss or skip daily questions, they will appear here for review.'}
+        Catch up - 0.25x points
       </p>
       {expiringCount > 0 ? (
         <p
@@ -88,7 +85,7 @@ function MissedQuestionsCard({
         href="/daily/catchup"
         className="btn-ghost mt-4 min-h-11 w-full justify-center"
       >
-        {count > 0 ? 'Catch up →' : 'Review missed questions'}
+        Catch up →
       </Link>
     </div>
   )

@@ -12,7 +12,6 @@ import {
 
 import { AddToBankAction } from '@/components/AddToBankAction'
 import { SendQuestionAction } from '@/components/SendQuestionAction'
-import { Button } from '@/components/ui/button'
 import { visibleFeedCategory } from './category'
 
 export type FeedOverflowQuestion = {
@@ -211,95 +210,3 @@ export function FeedOverflowMenu({
   )
 }
 
-export type UnansweredFeedActionsProps = {
-  onAnswer: () => void
-  disabled?: boolean
-  overflow: ReactNode
-}
-
-export function UnansweredFeedActions({
-  onAnswer,
-  disabled = false,
-  overflow,
-}: UnansweredFeedActionsProps) {
-  return (
-    <div className="flex items-center gap-2">
-      <Button
-        type="button"
-        onClick={onAnswer}
-        disabled={disabled}
-        aria-label="Answer this Feed question"
-        className="bg-stone-950 text-white hover:bg-stone-800"
-      >
-        Answer
-      </Button>
-      {overflow}
-    </div>
-  )
-}
-
-export type AnswerFormProps = {
-  value: string
-  onChange: (value: string) => void
-  onSubmit: () => void
-  onCancel: () => void
-  disabled?: boolean
-  loading?: boolean
-}
-
-export function AnswerForm({
-  value,
-  onChange,
-  onSubmit,
-  onCancel,
-  disabled = false,
-  loading = false,
-}: AnswerFormProps) {
-  const answerInputId = useId()
-
-  return (
-    <form
-      className="flex flex-col gap-3 sm:flex-row"
-      onSubmit={(event) => {
-        event.preventDefault()
-        onSubmit()
-      }}
-    >
-      <div className="flex flex-1 flex-col gap-1.5">
-        <label
-          htmlFor={answerInputId}
-          className="text-sm font-medium text-stone-800"
-        >
-          Your answer
-        </label>
-        <input
-          id={answerInputId}
-          aria-label="Your answer"
-          className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-base outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:opacity-60"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="Your answer..."
-          disabled={disabled || loading}
-        />
-      </div>
-      <div className="flex items-end gap-2">
-        <Button
-          type="submit"
-          disabled={disabled || loading || !value.trim()}
-          aria-disabled={disabled || loading || !value.trim()}
-          className="bg-stone-950 text-white hover:bg-stone-800"
-        >
-          {loading ? 'Submitting...' : 'Submit answer'}
-        </Button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={disabled || loading}
-          className="px-2 pb-2 text-sm font-medium text-sky-700 hover:underline disabled:opacity-50"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
-  )
-}

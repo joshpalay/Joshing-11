@@ -67,8 +67,9 @@ export type TypedFeedItem =
 export type FeedCardShellProps = {
   item: FeedCardBaseItem
   tone: FeedCardTone
-  eyebrow?: ReactNode
-  children?: ReactNode
-  actions?: ReactNode
+  socialSignal?: ReactNode
+  overflow?: ReactNode
+  onAnswer?: () => void
+  resultContent?: ReactNode
   className?: string
 }

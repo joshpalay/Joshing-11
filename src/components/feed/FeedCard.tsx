@@ -22,33 +22,45 @@ const categoryToneClasses: Record<FeedCardTone, string> = {
   gray: 'text-stone-500',
 }
 
+const dividerToneClasses: Record<FeedCardTone, string> = {
+  cream: 'border-amber-200/60',
+  white: 'border-stone-200',
+  green: 'border-emerald-200/60',
+  amber: 'border-orange-200/60',
+  gray: 'border-stone-200',
+}
+
 export function FeedCard({
   item,
   tone,
-  eyebrow,
-  children,
-  actions,
+  socialSignal,
+  overflow,
+  onAnswer,
+  resultContent,
   className,
 }: FeedCardShellProps) {
   const category = visibleFeedCategory(item.category)
+  const hasBottom = Boolean(socialSignal ?? resultContent ?? onAnswer)
 
   return (
     <article
       className={cn(
-        'text-card-foreground rounded-2xl border p-4 transition-colors sm:p-5',
+        'text-card-foreground rounded-2xl border transition-colors',
         toneClasses[tone],
         className
       )}
     >
-      <div className="space-y-3">
-        <div className="text-muted-foreground flex items-start justify-between gap-3 text-xs leading-5 font-medium">
-          <p>{item.metadata}</p>
-          {eyebrow ? (
-            <div className="shrink-0 text-right">{eyebrow}</div>
-          ) : null}
+      <div className="p-4 sm:p-5">
+        {/* Header: metadata + overflow */}
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-muted-foreground text-xs leading-5 font-medium">
+            {item.metadata}
+          </p>
+          {overflow ? <div className="shrink-0">{overflow}</div> : null}
         </div>
 
-        <div className="space-y-2">
+        {/* Category + question */}
+        <div className="mt-3 space-y-2">
           {category ? (
             <p
               className={cn(
@@ -65,18 +77,46 @@ export function FeedCard({
         </div>
 
         {item.personalMessage ? (
-          <p className="text-muted-foreground text-sm leading-6">
+          <p className="text-muted-foreground mt-3 text-sm leading-6">
             &ldquo;{item.personalMessage}&rdquo;
           </p>
         ) : null}
-
-        {children ? (
-          <div className="pt-1 text-sm leading-6 text-stone-700">
-            {children}
-          </div>
-        ) : null}
-        {actions ? <div className="pt-2">{actions}</div> : null}
       </div>
+
+      {/* Bottom strip */}
+      {hasBottom ? (
+        <div
+          className={cn(
+            'flex items-center gap-3 border-t px-4 py-3 sm:px-5',
+            dividerToneClasses[tone]
+          )}
+        >
+          {resultContent ? (
+            <div className="flex-1 text-sm leading-6 text-stone-700">
+              {resultContent}
+            </div>
+          ) : (
+            <>
+              {socialSignal ? (
+                <p className="flex-1 text-sm text-stone-600 leading-5">
+                  {socialSignal}
+                </p>
+              ) : (
+                <div className="flex-1" />
+              )}
+              {onAnswer ? (
+                <button
+                  type="button"
+                  onClick={onAnswer}
+                  className="shrink-0 text-sm font-semibold text-stone-950 transition hover:opacity-70"
+                >
+                  Answer →
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
     </article>
   )
 }

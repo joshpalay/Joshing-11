@@ -11,7 +11,10 @@
       "Bash(npx drizzle-kit *)",
       "Bash(git stash *)",
       "Bash(git checkout *)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\rpala\\\\Desktop\\\\dev\\\\joshing-11\" -Recurse -Depth 2)",
+      "Bash(Select-Object FullName)",
+      "Bash(npm run *)"
     ]
   }
 }

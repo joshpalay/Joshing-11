@@ -2,18 +2,18 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import {
   AnsweredByYouCard,
-  AnswerForm,
+  AnswerSheet,
   DirectSentCard,
   FeedOverflowMenu,
   FriendAddedCard,
   FriendAnsweredCard,
   FriendLikedCard,
-  UnansweredFeedActions,
   type AnsweredByYouFeedItem,
   type DirectSentFeedItem,
+  type FeedRecheckAction,
   type FriendAddedFeedItem,
   type FriendAnsweredFeedItem,
   type FriendLikedFeedItem,
@@ -100,18 +100,13 @@ type CeremonyBanner = {
 }
 
 type AnswerResponse = {
-  correct?: boolean
   isCorrect?: boolean
-  answer?: string
   correctAnswer?: string
   explanation?: string | null
   quip?: string | null
-  consolation?: string | null
   breadcrumb?: string | null
   pointsAwarded?: number | null
-  awarded_points?: number | null
   masteryDelta?: unknown | null
-  mastery_delta?: unknown | null
 }
 
 type ResultState = {
@@ -294,7 +289,7 @@ type FeedListProps = {
   infinite?: boolean
 }
 
-type QuestionCardState = 'unanswered' | 'answering' | 'answered' | 'reacted'
+type QuestionCardState = 'unanswered' | 'answered'
 
 export default function FeedList(props: FeedListProps) {
   return (
@@ -316,14 +311,14 @@ function FeedListContent({
   pageSize = 20,
   infinite = false,
 }: FeedListProps) {
-  const pathname = usePathname()
   const searchParams = useSearchParams()
-  const feedFilterParam =
+  const initialFilterParam =
     searchParams.get('filter') ?? searchParams.get('feed_filter') ?? 'all'
-  const feedFilter: FeedFilter =
-    feedFilterParam === 'sent-to-me' || feedFilterParam === 'from-friends'
-      ? feedFilterParam
+  const initialFilter: FeedFilter =
+    initialFilterParam === 'sent-to-me' || initialFilterParam === 'from-friends'
+      ? initialFilterParam
       : 'all'
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const [items, setItems] = useState<FeedApiItem[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -331,16 +326,12 @@ function FeedListContent({
   const [loadingInitial, setLoadingInitial] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null)
-  const [answers, setAnswers] = useState<Record<string, string>>({})
   const [results, setResults] = useState<Record<string, ResultState>>({})
-  const [cardStates, setCardStates] = useState<
-    Record<string, QuestionCardState>
-  >({})
+  const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({})
+  const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(
-    null
-  )
+  const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null)
 
   const loadFeed = useCallback(
     async (cursor?: string | null) => {
@@ -409,8 +400,6 @@ function FeedListContent({
     }, 0)
     return () => window.clearTimeout(timer)
   }, [loadFeed])
-
-  const visibleItems = items
 
   useEffect(() => {
     if (!infinite || !hasMore || loadingInitial || loadingMore || !nextCursor)
@@ -563,9 +552,7 @@ function FeedListContent({
   )
 
   const submitAnswer = useCallback(
-    async (item: FeedApiItem) => {
-      const submitted = answers[item.id]?.trim()
-      if (!submitted) return
+    async (item: FeedApiItem, submittedAnswer: string) => {
       setBusyId(item.id)
       setError(null)
       try {
@@ -573,32 +560,29 @@ function FeedListContent({
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ submitted_answer: submitted }),
+          body: JSON.stringify({ submitted_answer: submittedAnswer }),
         })
         const body = (await response.json().catch(() => null)) as
           | AnswerResponse
           | { message?: string }
           | null
-        if (
-          !response.ok ||
-          !body ||
-          !('correct' in body || 'isCorrect' in body)
-        ) {
+        if (!response.ok || !body || !('isCorrect' in body)) {
           throw new Error(
             (body as { message?: string } | null)?.message ??
               'Could not submit that answer.'
           )
         }
+        const isCorrect = Boolean(body.isCorrect)
         setResults((current) => ({
           ...current,
           [item.id]: {
-            correct: Boolean(body.correct ?? body.isCorrect),
-            answer: body.answer ?? body.correctAnswer ?? '',
+            correct: isCorrect,
+            answer: body.correctAnswer ?? '',
             explanation: body.explanation ?? null,
-            quip: body.quip ?? body.consolation ?? null,
+            quip: body.quip ?? null,
             breadcrumb: body.breadcrumb ?? null,
-            awardedPoints: body.pointsAwarded ?? body.awarded_points ?? null,
-            masteryDelta: body.masteryDelta ?? body.mastery_delta ?? null,
+            awardedPoints: body.pointsAwarded ?? null,
+            masteryDelta: body.masteryDelta ?? null,
           },
         }))
         setItems((current) =>
@@ -609,22 +593,19 @@ function FeedListContent({
                   state: 'answered',
                   card_type: 'answered_by_you',
                   type: 'answered_by_you',
-                  submitted_answer: submitted,
-                  answer_result: Boolean(body.correct ?? body.isCorrect)
-                    ? 'correct'
-                    : 'incorrect',
-                  is_correct: Boolean(body.correct ?? body.isCorrect),
-                  correct_answer: body.answer ?? body.correctAnswer ?? '',
-                  awarded_points:
-                    body.pointsAwarded ?? body.awarded_points ?? null,
-                  mastery_delta:
-                    body.masteryDelta ?? body.mastery_delta ?? null,
+                  submitted_answer: submittedAnswer,
+                  answer_result: isCorrect ? 'correct' : 'incorrect',
+                  is_correct: isCorrect,
+                  correct_answer: body.correctAnswer ?? '',
+                  awarded_points: body.pointsAwarded ?? null,
+                  mastery_delta: body.masteryDelta ?? null,
                   explanation: body.explanation ?? currentItem.explanation,
                 }
               : currentItem
           )
         )
         setCardStates((s) => ({ ...s, [item.id]: 'answered' }))
+        setAnswerSheetId(null)
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -635,7 +616,48 @@ function FeedListContent({
         setBusyId(null)
       }
     },
-    [answers]
+    []
+  )
+
+  const submitRecheck = useCallback(
+    async (item: FeedApiItem): Promise<{ accepted: boolean; message: string }> => {
+      const response = await fetch(`/api/feed/${item.id}/recheck`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const body = (await response.json().catch(() => null)) as {
+        accepted?: boolean
+        status?: string
+        reason?: string
+        pointsAwarded?: number
+        message?: string
+      } | null
+      if (!response.ok) {
+        throw new Error(body?.message ?? 'Could not recheck that answer.')
+      }
+      const accepted = Boolean(body?.accepted)
+      const pointsAwarded = typeof body?.pointsAwarded === 'number' ? body.pointsAwarded : 0
+      if (accepted) {
+        setItems((current) =>
+          current.map((currentItem) =>
+            currentItem.id === item.id
+              ? { ...currentItem, is_correct: true, answer_result: 'correct', awarded_points: pointsAwarded }
+              : currentItem
+          )
+        )
+        setResults((current) => {
+          const existing = current[item.id]
+          if (!existing) return current
+          return { ...current, [item.id]: { ...existing, correct: true, awardedPoints: pointsAwarded } }
+        })
+        return { accepted: true, message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.` }
+      }
+      if (body?.status === 'needs_human') {
+        return { accepted: false, message: body.reason ?? 'Flagged for a human look.' }
+      }
+      return { accepted: false, message: body?.reason ?? 'Rechecked and still marked wrong.' }
+    },
+    []
   )
 
   const filterOptions: Array<{ value: FeedFilter; label: string }> = [
@@ -644,23 +666,14 @@ function FeedListContent({
     { value: 'from-friends', label: 'From friends' },
   ]
 
-  const feedFilterHref = useCallback(
-    (filter: FeedFilter) => {
-      const params = new URLSearchParams(searchParams.toString())
-      params.set('filter', filter)
-      params.delete('feed_filter')
-      return `${pathname}?${params.toString()}`
-    },
-    [pathname, searchParams]
-  )
-
   return (
     <>
       <nav className="mb-4 flex flex-wrap gap-2" aria-label="Feed filters">
         {filterOptions.map((option) => (
-          <Link
+          <button
             key={option.value}
-            href={feedFilterHref(option.value)}
+            type="button"
+            onClick={() => setFeedFilter(option.value)}
             aria-current={feedFilter === option.value ? 'page' : undefined}
             className={
               feedFilter === option.value
@@ -669,7 +682,7 @@ function FeedListContent({
             }
           >
             {option.label}
-          </Link>
+          </button>
         ))}
       </nav>
       {ceremonyBanner ? (
@@ -691,7 +704,7 @@ function FeedListContent({
         </Link>
       ) : null}
 
-      {visibleItems.length === 0 ? (
+      {items.length === 0 ? (
         <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
           <p
             className={
@@ -707,24 +720,17 @@ function FeedListContent({
               {emptyDiagnostics}
             </p>
           ) : null}
-          {/*
-            // v11.1: Joshing Game creation disabled at FAB level. Re-enable
-            // when game creation flow is restored.
-          */}
         </section>
       ) : (
         <section className="space-y-3 pb-8">
-          {visibleItems.map((item) => {
+          {items.map((item) => {
             const result = results[item.id]
             const cardState =
               cardStates[item.id] ??
               (item.state === 'answered' ? 'answered' : 'unanswered')
-            const answeredByYouItem =
-              cardState === 'answered'
-                ? toAnsweredByYouItem(item, result)
-                : null
-            const typedItem = toTypedFeedItem(item)
+            const isAnswered = cardState === 'answered'
             const isBusy = busyId === item.id
+
             const overflow = (
               <FeedOverflowMenu
                 sourceName={item.source_friend_display_name}
@@ -745,48 +751,33 @@ function FeedListContent({
                 onReport={() => void reportItem(item)}
               />
             )
-            const answerActions =
-              cardState === 'answering' ? (
-                <AnswerForm
-                  value={answers[item.id] ?? ''}
-                  onChange={(value) =>
-                    setAnswers((current) => ({ ...current, [item.id]: value }))
-                  }
-                  onSubmit={() => void submitAnswer(item)}
-                  onCancel={() =>
-                    setCardStates((state) => ({
-                      ...state,
-                      [item.id]: 'unanswered',
-                    }))
-                  }
-                  disabled={isBusy}
-                  loading={isBusy}
-                />
-              ) : cardState === 'unanswered' ? (
-                <UnansweredFeedActions
-                  onAnswer={() =>
-                    setCardStates((state) => ({
-                      ...state,
-                      [item.id]: 'answering',
-                    }))
-                  }
-                  overflow={overflow}
-                  disabled={isBusy}
-                />
-              ) : null
 
-            if (answeredByYouItem) {
+            if (isAnswered) {
+              const answeredItem = toAnsweredByYouItem(item, result)
+              const isIncorrect = answeredItem.isCorrect === false
+              const recheckAction: FeedRecheckAction | null = isIncorrect
+                ? { onSubmit: () => submitRecheck(item) }
+                : null
               return (
-                <AnsweredByYouCard key={item.id} item={answeredByYouItem} />
+                <AnsweredByYouCard
+                  key={item.id}
+                  item={answeredItem}
+                  recheckAction={recheckAction}
+                  overflow={overflow}
+                />
               )
             }
+
+            const onAnswer = () => setAnswerSheetId(item.id)
+            const typedItem = toTypedFeedItem(item)
 
             if (typedItem.type === 'direct_sent') {
               return (
                 <DirectSentCard
                   key={item.id}
                   item={typedItem}
-                  actions={answerActions}
+                  overflow={overflow}
+                  onAnswer={onAnswer}
                 />
               )
             }
@@ -796,7 +787,8 @@ function FeedListContent({
                 <FriendAddedCard
                   key={item.id}
                   item={typedItem}
-                  actions={answerActions}
+                  overflow={overflow}
+                  onAnswer={onAnswer}
                 />
               )
             }
@@ -806,7 +798,8 @@ function FeedListContent({
                 <FriendLikedCard
                   key={item.id}
                   item={typedItem}
-                  actions={answerActions}
+                  overflow={overflow}
+                  onAnswer={onAnswer}
                 />
               )
             }
@@ -815,12 +808,14 @@ function FeedListContent({
               <FriendAnsweredCard
                 key={item.id}
                 item={typedItem}
-                actions={answerActions}
+                overflow={overflow}
+                onAnswer={onAnswer}
               />
             )
           })}
         </section>
       )}
+
       {infinite && hasMore ? (
         <div ref={sentinelRef} className="py-4 text-center" aria-live="polite">
           {loadingMore ? (
@@ -830,6 +825,20 @@ function FeedListContent({
           ) : null}
         </div>
       ) : null}
+
+      {answerSheetId ? (() => {
+        const sheetItem = items.find((item) => item.id === answerSheetId)
+        if (!sheetItem) return null
+        return (
+          <AnswerSheet
+            question={sheetItem.question_text ?? ''}
+            category={sheetItem.domain_pill}
+            onSubmit={(answer) => void submitAnswer(sheetItem, answer)}
+            onClose={() => setAnswerSheetId(null)}
+            loading={busyId === sheetItem.id}
+          />
+        )
+      })() : null}
     </>
   )
 }
