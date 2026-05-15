@@ -329,7 +329,7 @@ function deriveExpandingDomains(events: ExpansionEvent[]): ExpandingDomain[] {
     })
     .filter((domain) => domain.momentumScore > 0)
     .sort((a, b) => b.momentumScore - a.momentumScore || a.domain.localeCompare(b.domain))
-    .slice(0, 8);
+    .slice(0, 5);
 }
 
 function toIso(value: Date | string | null | undefined): string | null {
