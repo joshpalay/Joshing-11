@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
   AnsweredByYouCard,
   AnswerForm,
@@ -316,6 +316,7 @@ function FeedListContent({
   pageSize = 20,
   infinite = false,
 }: FeedListProps) {
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const feedFilterParam =
     searchParams.get('filter') ?? searchParams.get('feed_filter') ?? 'all'
@@ -643,13 +644,23 @@ function FeedListContent({
     { value: 'from-friends', label: 'From friends' },
   ]
 
+  const feedFilterHref = useCallback(
+    (filter: FeedFilter) => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('filter', filter)
+      params.delete('feed_filter')
+      return `${pathname}?${params.toString()}`
+    },
+    [pathname, searchParams]
+  )
+
   return (
     <>
       <nav className="mb-4 flex flex-wrap gap-2" aria-label="Feed filters">
         {filterOptions.map((option) => (
           <Link
             key={option.value}
-            href={`/feed?filter=${option.value}`}
+            href={feedFilterHref(option.value)}
             aria-current={feedFilter === option.value ? 'page' : undefined}
             className={
               feedFilter === option.value
