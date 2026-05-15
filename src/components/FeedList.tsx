@@ -63,14 +63,15 @@ type AnswerResponse = {
   quip?: string | null;
   consolation?: string | null;
   breadcrumb?: string | null;
+  pointsAwarded?: number;
 };
 
 type ResultState = {
   correct: boolean;
   answer: string;
-  explanation: string | null;
   quip: string | null;
   breadcrumb: string | null;
+  pointsAwarded: number | null;
 };
 
 function formatEventTime(value: string) {
@@ -227,9 +228,9 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
         [item.id]: {
           correct: Boolean(body.correct ?? body.isCorrect),
           answer: body.answer ?? body.correctAnswer ?? '',
-          explanation: body.explanation ?? null,
           quip: body.quip ?? body.consolation ?? null,
           breadcrumb: body.breadcrumb ?? null,
+          pointsAwarded: body.pointsAwarded ?? null,
         },
       }));
       setCardStates((s) => ({ ...s, [item.id]: 'answered' }));
@@ -330,16 +331,31 @@ export default function FeedList({ limit = 25 }: FeedListProps) {
 
                 {/* State 2 — Answered */}
                 {cardState === 'answered' && result ? (
-                  <div className="mt-4 rounded-md bg-muted p-3 text-sm">
+                  <div
+                    className="mt-4 rounded-md p-3 text-sm"
+                    style={result.correct
+                      ? { background: 'color-mix(in srgb, var(--success) 9%, var(--surface-2))', border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))' }
+                      : { background: 'color-mix(in srgb, #b42318 7%, var(--surface-2))', border: '1px solid color-mix(in srgb, #b42318 24%, var(--border))' }
+                    }
+                  >
                     {/* Comparison copy */}
                     <p className="font-medium">
+                      <span style={{ color: result.correct ? '#178245' : '#b42318', marginRight: '6px' }}>
+                        {result.correct ? '✓' : '✗'}
+                      </span>
                       {item.source_type === 'friend_answered'
                         ? comparisonCopy(result.correct, item.friend_results)
                         : result.correct ? 'This one connected.' : 'Not quite.'}
                     </p>
-                    {!result.correct ? <p className="mt-1">Answer: {result.answer}</p> : null}
-                    {result.explanation ? <p className="mt-1 text-muted-foreground">{result.explanation}</p> : null}
-                    {result.quip ? <p className="mt-1 text-muted-foreground">{result.quip}</p> : null}
+                    {result.correct && result.pointsAwarded ? (
+                      <p className="mt-2">
+                        <span style={{ background: 'color-mix(in srgb, var(--success) 15%, transparent)', color: '#178245', borderRadius: '9999px', padding: '2px 10px', fontSize: '0.75rem', fontWeight: 600 }}>
+                          +{result.pointsAwarded} points
+                        </span>
+                      </p>
+                    ) : null}
+                    {!result.correct ? <p className="mt-1 text-muted-foreground">Answer: {result.answer}</p> : null}
+                    {!result.correct && result.quip ? <p className="mt-1 text-muted-foreground">{result.quip}</p> : null}
                     {result.breadcrumb ? <p className="mt-2 text-muted-foreground italic">{result.breadcrumb}</p> : null}
 
                     {/* Post-answer actions */}
