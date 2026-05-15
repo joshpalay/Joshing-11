@@ -218,6 +218,13 @@
       "when": 1778714200000,
       "tag": "0030_apply_general_knowledge_category",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1778806800000,
+      "tag": "0031_feed_answered_card_data",
+      "breakpoints": true
     }
   ]
 }
