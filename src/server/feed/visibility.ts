@@ -31,13 +31,13 @@ export const QUESTION_SHARING_FEED_SOURCE_VISIBILITY = [
 
 const SUPPRESSED_CATEGORY_LABELS = new Set(['other', 'uncategorized', 'unknown', 'general', 'general knowledge']);
 
-type QuestionLike = Pick<typeof questions.$inferSelect, 'creatorId' | 'visibility' | 'canonicalSubcategory' | 'broadCategory' | 'category' | 'deletedAt'>;
+type QuestionLike = Pick<typeof questions.$inferSelect, 'creatorId' | 'source' | 'visibility' | 'canonicalSubcategory' | 'broadCategory' | 'category' | 'deletedAt'>;
 type FeedItemsVisibilityColumns = Pick<typeof feedItems, 'sourceType' | 'sourceResult'>;
 
 export type FeedEventEligibilityInput = {
   answerIsCorrect: boolean;
   answererUserId: string;
-  question: Pick<QuestionLike, 'creatorId' | 'visibility' | 'deletedAt'> | null | undefined;
+  question: Pick<QuestionLike, 'creatorId' | 'source' | 'visibility' | 'deletedAt'> | null | undefined;
   hasVisibleSocialContext: boolean;
 };
 
@@ -47,6 +47,7 @@ export function isCorrectAnswerFeedEligible(input: FeedEventEligibilityInput): b
   if (!input.question) return false;
   if (input.question.deletedAt) return false;
   if (input.question.visibility !== 'public') return false;
+  if (input.question.source === 'daily_generated') return true;
   if (!input.question.creatorId) return false;
   return input.answererUserId !== input.question.creatorId;
 }

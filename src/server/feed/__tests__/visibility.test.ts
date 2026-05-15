@@ -9,6 +9,7 @@ import {
 
 const publicQuestion = {
   creatorId: 'author-1',
+  source: 'authored' as const,
   visibility: 'public' as const,
   deletedAt: null,
 };
@@ -29,6 +30,20 @@ describe('correct-answer social feed eligibility', () => {
       hasVisibleSocialContext: true,
     })).toBe(true);
     expect(isMainFeedSourceVisible('friend_answered', 'correct')).toBe(true);
+  });
+
+  it('allows public daily-generated questions without an author to propagate correct friend answers', () => {
+    expect(isCorrectAnswerFeedEligible({
+      answerIsCorrect: true,
+      answererUserId: 'answerer-1',
+      question: {
+        creatorId: null,
+        source: 'daily_generated' as const,
+        visibility: 'public' as const,
+        deletedAt: null,
+      },
+      hasVisibleSocialContext: true,
+    })).toBe(true);
   });
 
   it('rejects a correct answer by the author', () => {
