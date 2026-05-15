@@ -14,6 +14,12 @@ import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-i
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
+import { computeAnswerState } from '@/server/answer-state';
+import { readPriorAnswersForQuestion } from '@/server/answer-history';
+import {
+  CATCHUP_SURFACE_WEIGHT,
+  RECOVERY_STATE_WEIGHT,
+} from '@/server/mastery/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +76,6 @@ export async function POST(request: NextRequest) {
     'factual',
   );
   const isCorrect = grade.result === 'correct';
-  const pointsAwarded = isCorrect ? Math.round(catchupItem.basePoints * 0.25) : 0;
   const answerState = isCorrect ? 'correct' : 'incorrect';
   const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
   const breadcrumb = await generateBreadcrumb({
@@ -81,6 +86,46 @@ export async function POST(request: NextRequest) {
     isCorrect,
     domain: catchupItem.domain,
   }).catch(() => null);
+
+  // Promote the bot question to a canonical row BEFORE writing the mastery
+  // event so cross-surface dedup can key on the canonical Question.id
+  // (F2.2 — same shape as F2.1 in the live Daily route).
+  let canonicalQuestionId: string | null = null;
+  let persistedCreatorId: string | null = null;
+  let persistedDomainForCreator: string | null = null;
+  try {
+    const persisted = await persistGeneratedQuestion(catchupItem.questionId);
+    canonicalQuestionId = persisted.questionId;
+    const [persistedQuestion] = await db
+      .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+      .from(questions)
+      .where(eq(questions.id, persisted.questionId))
+      .limit(1);
+    persistedCreatorId = persistedQuestion?.creatorId ?? null;
+    persistedDomainForCreator =
+      persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+  } catch (error) {
+    console.warn('[daily/catchup/answer] failed to persist generated question; mastery event will skip canonical id', {
+      generatedQuestionId: catchupItem.questionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const priorAnswers = canonicalQuestionId
+    ? await readPriorAnswersForQuestion(session.userId, canonicalQuestionId)
+    : [];
+  const masteryAnswerState = computeAnswerState(
+    isCorrect ? 'correct' : 'wrong',
+    priorAnswers,
+  );
+
+  const baseCatchupPoints = Math.round(catchupItem.basePoints * CATCHUP_SURFACE_WEIGHT);
+  const pointsAwarded =
+    masteryAnswerState === 'first_correct'
+      ? baseCatchupPoints
+      : masteryAnswerState === 'first_correct_after_wrong'
+        ? Math.round(baseCatchupPoints * RECOVERY_STATE_WEIGHT)
+        : 0;
 
   const nextSlots = replaceQueueSlot(slots, catchupItem.slotIndex, (item) => {
     return {
@@ -101,14 +146,14 @@ export async function POST(request: NextRequest) {
     userId: session.userId,
     questionId: catchupItem.questionId,
     domain: catchupItem.domain,
-    answerState: isCorrect ? 'first_correct' : 'incorrect',
+    answerState: masteryAnswerState,
     pointsAwarded,
     sourceType: 'catchup',
     sourceId: parsed.dailyQueueItemId,
     broadCategory: catchupItem.broadCategory,
-    eventQuestionId: null,
+    eventQuestionId: canonicalQuestionId,
     basePoints: catchupItem.basePoints,
-    weight: isCorrect ? 0.25 : 0,
+    weight: catchupItem.basePoints > 0 ? pointsAwarded / catchupItem.basePoints : 0,
   });
 
   await db
@@ -124,35 +169,30 @@ export async function POST(request: NextRequest) {
     console.warn('[daily/catchup/answer] updateDomainDifficultyOnAnswer failed', err);
   });
 
-  try {
-    const persisted = await persistGeneratedQuestion(catchupItem.questionId);
-    const [persistedQuestion] = await db
-      .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
-      .from(questions)
-      .where(eq(questions.id, persisted.questionId))
-      .limit(1);
-    const persistedDomain = persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category;
+  if (canonicalQuestionId) {
+    try {
+      if (isCorrect && persistedCreatorId && persistedCreatorId !== session.userId && persistedDomainForCreator) {
+        void promoteDeclaredToDemonstrated({
+          userId: persistedCreatorId,
+          domain: persistedDomainForCreator,
+          triggeringFriendId: session.userId,
+          questionId: canonicalQuestionId,
+        });
+      }
 
-    if (isCorrect && persistedQuestion?.creatorId && persistedQuestion.creatorId !== session.userId && persistedDomain) {
-      void promoteDeclaredToDemonstrated({
-        userId: persistedQuestion.creatorId,
-        domain: persistedDomain,
-        triggeringFriendId: session.userId,
-        questionId: persisted.questionId,
+      await createFeedItemsForFriendsFromAnswer(
+        session.userId,
+        canonicalQuestionId,
+        isCorrect ? 'correct' : 'incorrect',
+        `catchup:${catchupItem.dailyQueueItemId}:${session.userId}`,
+      );
+    } catch (error) {
+      console.warn('[daily/catchup/answer] feed propagation failed', {
+        generatedQuestionId: catchupItem.questionId,
+        canonicalQuestionId,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
-
-    await createFeedItemsForFriendsFromAnswer(
-      session.userId,
-      persisted.questionId,
-      isCorrect ? 'correct' : 'incorrect',
-      `catchup:${catchupItem.dailyQueueItemId}:${session.userId}`,
-    );
-  } catch (error) {
-    console.warn('[daily/catchup/answer] failed to persist generated question for feed propagation', {
-      generatedQuestionId: catchupItem.questionId,
-      error: error instanceof Error ? error.message : String(error),
-    });
   }
 
   const nextItem = (await getCatchupQuestions(session.userId))[0] ?? null;

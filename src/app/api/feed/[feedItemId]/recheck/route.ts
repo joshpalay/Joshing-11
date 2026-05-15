@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, gradeDisputes, questions } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { getBasePoints } from '@/server/mastery/awards';
+import { getBasePoints } from '@/server/mastery/scoring';
 import { recheckAnswerWithLLM } from '@/server/llm/recheck';
 
 export const dynamic = 'force-dynamic';

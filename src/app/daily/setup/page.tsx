@@ -34,7 +34,7 @@ type AdaptiveLevelResponse = {
 
 const DIFFICULTIES: { value: Difficulty; label: string; copy: string }[] = [
   { value: 'normal', label: 'Establishing', copy: 'Approachable, core-recognition questions.' },
-  { value: 'moderate', label: 'Solid', copy: 'A steady challenge for generally knowledgeable players.' },
+  { value: 'moderate', label: 'Solid', copy: 'Familiar questions for anyone reasonably engaged with the domain.' },
   { value: 'challenging', label: 'Skilled', copy: 'Deeper-domain questions with more specific recall.' },
   { value: 'ridiculous', label: 'Master', copy: 'Master-level deep cuts within the domain.' },
   { value: 'adaptive', label: 'Adaptive', copy: 'Calibrated to your recent performance.' },

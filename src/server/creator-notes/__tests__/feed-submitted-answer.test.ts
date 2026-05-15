@@ -98,7 +98,7 @@ vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
 vi.mock('@/server/grading', () => ({ gradeAnswer: gradeAnswerMock }));
 vi.mock('@/server/daily/generate-breadcrumb', () => ({ generateBreadcrumb: generateBreadcrumbMock }));
 vi.mock('@/server/mastery/write-mastery-event', () => ({ writeMasteryEvent: writeMasteryEventMock }));
-vi.mock('@/server/mastery/awards', () => ({ getBasePoints: vi.fn(() => 10) }));
+vi.mock('@/server/mastery/scoring', () => ({ getBasePoints: vi.fn(() => 10) }));
 vi.mock('@/server/db/queries/feed', () => ({ userAnsweredQuestionCorrectly: userAnsweredQuestionCorrectlyMock }));
 vi.mock('@/server/sms', () => ({ sendSms: vi.fn() }));
 vi.mock('@/server/activity/write-activity', () => ({ writeActivity: vi.fn() }));

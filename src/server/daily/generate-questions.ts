@@ -22,9 +22,8 @@ export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
 const SYSTEM_PROMPT = `You are generating trivia questions for Joshing, a social trivia game played among friends.
 Questions must be:
 - Factual with a single objectively correct answer
-- Specific and surprising, not the most obvious fact about the topic
 - Drawn from the intellectual and cultural world of the domain, not biographical trivia
-- Written at a level that would reward genuine knowledge
+- Calibrated to the difficulty instruction below: at easier tiers, lean on well-known, recognizable facts that anyone interested in the domain would have encountered; save specific, surprising deep cuts for higher difficulty tiers
 
 GRANULARITY RULES:
 Domain labels identify a body of knowledge — a work, an artist, a period, a discipline. They never identify a facet, aspect, or angle on that knowledge.

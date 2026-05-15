@@ -115,17 +115,17 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
 
   if (normalized < 1.5) {
     return {
-      targetCorrectRate: 0.7,
+      targetCorrectRate: 0.78,
       difficultyLabel: 'approachable trivia',
-      promptHint: 'Target roughly a 70% correct rate. Write approachable trivia with one satisfying twist.',
+      promptHint: 'Target roughly a 78% correct rate. Write friendly, recognizable questions a casually interested person in the domain would get — lean on well-known facts, not deep cuts.',
     };
   }
 
   if (normalized < 2.5) {
     return {
-      targetCorrectRate: 0.55,
-      difficultyLabel: 'challenging but fair',
-      promptHint: 'Target roughly a 55% correct rate. Write questions that are challenging but fair for a knowledgeable player.',
+      targetCorrectRate: 0.62,
+      difficultyLabel: 'fair and familiar',
+      promptHint: 'Target roughly a 62% correct rate. Write questions a reasonably engaged fan of the domain should know without needing specialist depth.',
     };
   }
 

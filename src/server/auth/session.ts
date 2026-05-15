@@ -20,11 +20,25 @@ const MISSING_SECRET_ERROR =
 
 type SessionJwtPayload = {
   sid: string;
+  /**
+   * Set to true when the session was minted (or refreshed) after the user's
+   * invitation acceptance was confirmed. Middleware uses this as a fast
+   * Edge-safe gate without a DB lookup. Legacy sessions (issued before this
+   * claim existed) omit the field and must be refreshed via
+   * /api/auth/refresh-session.
+   */
+  inv?: boolean;
 };
 
 export type Session = {
   id: string;
   userId: string;
+};
+
+export type SessionJwtClaims = {
+  userId: string;
+  sessionId: string;
+  invitationAccepted: boolean;
 };
 
 function readConfiguredSessionSecret(): string | null {
@@ -66,13 +80,26 @@ function getJwtSecret(): Uint8Array {
 /**
  * Create a new UserSession for the user and set the session cookie.
  * Call after successful OTP verification (login).
+ *
+ * `invitationAccepted` MUST be true — callers should only mint a session
+ * after the invitation gate has been satisfied (see
+ * src/app/api/auth/verify-otp/route.ts). The flag is required (rather than
+ * defaulted) to prevent accidental regression of the gate.
  */
-export async function createSession(userId: string): Promise<string> {
+export async function createSession(
+  userId: string,
+  options: { invitationAccepted: true },
+): Promise<string> {
   const sessionId = randomBytes(24).toString('hex');
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_DAYS);
 
-  const token = await new SignJWT({ sid: sessionId } satisfies SessionJwtPayload)
+  const payload: SessionJwtPayload = {
+    sid: sessionId,
+    inv: options.invitationAccepted,
+  };
+
+  const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId)
     .setIssuedAt()
@@ -91,6 +118,91 @@ export async function createSession(userId: string): Promise<string> {
   });
 
   return token;
+}
+
+/**
+ * Edge-safe: verifies the JWT signature and returns the claims, without
+ * touching the database. Used by middleware to gate authenticated routes.
+ * Returns null if the token is missing/invalid/expired.
+ */
+export async function readSessionClaims(
+  token: string | null | undefined,
+): Promise<SessionJwtClaims | null> {
+  if (!token) return null;
+
+  try {
+    const verified = await jwtVerify<SessionJwtPayload>(token, getJwtSecret());
+    const { sub, sid, inv } = verified.payload;
+    if (!sub || typeof sid !== 'string') return null;
+    return {
+      userId: sub,
+      sessionId: sid,
+      invitationAccepted: inv === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Re-sign the current session JWT with `inv: true`. Used by the refresh
+ * endpoint to upgrade legacy sessions (issued before the invitation claim
+ * existed) without forcing the user to log in again.
+ *
+ * The DB row's `token` column is updated to the new JWT so that
+ * `validateSessionToken` continues to match by token.
+ */
+export async function refreshSessionInvitationClaim(): Promise<boolean> {
+  const cookieStore = await cookies();
+  const existingToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!existingToken) return false;
+
+  let userId: string;
+  let sessionId: string;
+  try {
+    const verified = await jwtVerify<SessionJwtPayload>(
+      existingToken,
+      getJwtSecret(),
+    );
+    if (!verified.payload.sub || typeof verified.payload.sid !== 'string') {
+      return false;
+    }
+    userId = verified.payload.sub;
+    sessionId = verified.payload.sid;
+  } catch {
+    return false;
+  }
+
+  const [existingRow] = await db
+    .select({ id: userSessions.id, expiresAt: userSessions.expiresAt })
+    .from(userSessions)
+    .where(eq(userSessions.token, existingToken))
+    .limit(1);
+
+  if (!existingRow || existingRow.expiresAt < new Date()) return false;
+
+  const payload: SessionJwtPayload = { sid: sessionId, inv: true };
+  const newToken = await new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setExpirationTime(`${SESSION_DAYS}d`)
+    .sign(getJwtSecret());
+
+  await db
+    .update(userSessions)
+    .set({ token: newToken })
+    .where(eq(userSessions.id, existingRow.id));
+
+  cookieStore.set(SESSION_COOKIE_NAME, newToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: SESSION_DAYS * 24 * 60 * 60,
+    path: '/',
+  });
+
+  return true;
 }
 
 /**

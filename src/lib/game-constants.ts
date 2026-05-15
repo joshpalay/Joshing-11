@@ -2,7 +2,7 @@
  * Game flow constants from PRD.
  * Pool minimum is per-group (minimum_questions_required); default 5.
  */
-import { getBasePoints } from '@/server/mastery/awards';
+import { getBasePoints } from '@/server/mastery/scoring';
 import type { AnswerState, DifficultyEstimate } from '@/types/db';
 import { CATEGORIES } from '@/lib/questions-types';
 

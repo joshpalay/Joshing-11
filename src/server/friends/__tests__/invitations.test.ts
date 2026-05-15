@@ -410,20 +410,18 @@ describe('friend invitation helpers', () => {
       ],
     })
 
+    // F1.5: pre-seeded interest labels MUST NOT appear in the public
+    // landing payload. They are still stored on the invitation row and
+    // surfaced to the recipient post-OTP via getPreSeededInterestsForUser.
     await expect(
       getFriendInvitationLandingByToken('valid-token', now)
     ).resolves.toEqual({
       status: 'valid',
       inviterName: 'Alex Inviter',
-      suggestedInterests: [
-        { label: 'Jazz' },
-        { label: 'Poetry' },
-        { label: 'Film' },
-      ],
     })
   })
 
-  it('returns an expired landing state without suggested interests', async () => {
+  it('returns an expired landing state with no leaked interest labels', async () => {
     setInvitation({
       expiresAt: new Date('2026-05-12T12:00:00.000Z'),
       preSeededInterests: ['Jazz'],
@@ -434,7 +432,6 @@ describe('friend invitation helpers', () => {
     ).resolves.toEqual({
       status: 'expired',
       inviterName: 'Alex Inviter',
-      suggestedInterests: [],
     })
   })
 
@@ -446,7 +443,6 @@ describe('friend invitation helpers', () => {
     ).resolves.toEqual({
       status: 'accepted',
       inviterName: 'Alex Inviter',
-      suggestedInterests: [],
     })
   })
 
@@ -454,7 +450,6 @@ describe('friend invitation helpers', () => {
     await expect(getFriendInvitationLandingByToken('', now)).resolves.toEqual({
       status: 'invalid',
       inviterName: 'Someone',
-      suggestedInterests: [],
     })
 
     setInvitation({ cancelledAt: new Date('2026-05-13T11:00:00.000Z') })
@@ -463,7 +458,6 @@ describe('friend invitation helpers', () => {
     ).resolves.toEqual({
       status: 'invalid',
       inviterName: 'Someone',
-      suggestedInterests: [],
     })
   })
 

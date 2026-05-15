@@ -1,7 +1,7 @@
 import { and, asc, count, eq, sql } from 'drizzle-orm';
 
 import { writeActivity } from '@/server/activity/write-activity';
-import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/mastery/awards';
+import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
 import { computeAnswerState } from '@/server/answer-state';
 import { gradeAnswer } from '@/server/grading';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';

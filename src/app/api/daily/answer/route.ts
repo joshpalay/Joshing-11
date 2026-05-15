@@ -18,6 +18,9 @@ import { persistGeneratedQuestion } from '@/server/questions/persist-generated-q
 import { type QueueSlot } from '@/server/daily/types';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
+import { computeAnswerState } from '@/server/answer-state';
+import { readPriorAnswersForQuestion } from '@/server/answer-history';
+import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -144,7 +147,6 @@ export async function POST(request: NextRequest) {
       'factual',
     );
     const isCorrect = grade.result === 'correct';
-    const pointsAwarded = isCorrect ? Math.round(question.basePoints) : 0;
     const answerState = isCorrect ? 'correct' : 'incorrect';
     const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
     const breadcrumb = await generateBreadcrumb({
@@ -155,6 +157,52 @@ export async function POST(request: NextRequest) {
       isCorrect,
       domain: question.canonicalSubcategory,
     }).catch(() => null);
+
+    // Promote the bot question to a canonical row BEFORE writing the mastery
+    // event so cross-surface dedup can key on the canonical Question.id
+    // (F2.1). If persistence fails the route still records the answer in the
+    // queue and the user-visible result is unaffected; only mastery /
+    // friend-feed propagation are skipped for this attempt.
+    let canonicalQuestionId: string | null = null;
+    let persistedCreatorId: string | null = null;
+    let persistedDomainForCreator: string | null = null;
+    try {
+      const persisted = await persistGeneratedQuestion(question.id);
+      canonicalQuestionId = persisted.questionId;
+      const [persistedQuestion] = await db
+        .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+        .from(questions)
+        .where(eq(questions.id, persisted.questionId))
+        .limit(1);
+      persistedCreatorId = persistedQuestion?.creatorId ?? null;
+      persistedDomainForCreator =
+        persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+    } catch (error) {
+      console.warn('[daily/answer] failed to persist generated question; mastery event will skip canonical id', {
+        generatedQuestionId: question.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    // Compute answer_state against masteryEvents history so first_correct
+    // vs first_correct_after_wrong vs repeat_correct vs incorrect is
+    // determined correctly across surfaces (F2.1). Falls back to the old
+    // behaviour (treat as first attempt) only if persistence failed and we
+    // have no canonical id to look up history against.
+    const priorAnswers = canonicalQuestionId
+      ? await readPriorAnswersForQuestion(session.userId, canonicalQuestionId)
+      : [];
+    const masteryAnswerState = computeAnswerState(
+      isCorrect ? 'correct' : 'wrong',
+      priorAnswers,
+    );
+    const basePoints = Math.round(question.basePoints);
+    const pointsAwarded =
+      masteryAnswerState === 'first_correct'
+        ? basePoints
+        : masteryAnswerState === 'first_correct_after_wrong'
+          ? Math.round(basePoints * RECOVERY_STATE_WEIGHT)
+          : 0;
 
     const nextSlots = slots.map((item) => {
       if (item.slot_index !== parsed.slotIndex) return item;
@@ -183,14 +231,14 @@ export async function POST(request: NextRequest) {
         userId: session.userId,
         questionId: question.id,
         domain: question.canonicalSubcategory,
-        answerState: isCorrect ? 'first_correct' : 'incorrect',
+        answerState: masteryAnswerState,
         pointsAwarded,
         sourceType: 'daily',
         sourceId: `${queue.id}:${parsed.slotIndex}`,
         broadCategory: question.broadCategory,
-        eventQuestionId: null,
-        basePoints: question.basePoints,
-        weight: 1,
+        eventQuestionId: canonicalQuestionId,
+        basePoints,
+        weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
       });
     } catch (error) {
       console.warn('[daily/answer] writeMasteryEvent failed', error);
@@ -204,35 +252,30 @@ export async function POST(request: NextRequest) {
       console.warn('[daily/answer] updateDomainDifficultyOnAnswer failed', err);
     });
 
-    try {
-      const persisted = await persistGeneratedQuestion(question.id);
-      const [persistedQuestion] = await db
-        .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
-        .from(questions)
-        .where(eq(questions.id, persisted.questionId))
-        .limit(1);
-      const persistedDomain = persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category;
+    if (canonicalQuestionId) {
+      try {
+        if (isCorrect && persistedCreatorId && persistedCreatorId !== session.userId && persistedDomainForCreator) {
+          void promoteDeclaredToDemonstrated({
+            userId: persistedCreatorId,
+            domain: persistedDomainForCreator,
+            triggeringFriendId: session.userId,
+            questionId: canonicalQuestionId,
+          });
+        }
 
-      if (isCorrect && persistedQuestion?.creatorId && persistedQuestion.creatorId !== session.userId && persistedDomain) {
-        void promoteDeclaredToDemonstrated({
-          userId: persistedQuestion.creatorId,
-          domain: persistedDomain,
-          triggeringFriendId: session.userId,
-          questionId: persisted.questionId,
+        await createFeedItemsForFriendsFromAnswer(
+          session.userId,
+          canonicalQuestionId,
+          isCorrect ? 'correct' : 'incorrect',
+          `daily:${question.id}:${session.userId}`,
+        );
+      } catch (error) {
+        console.warn('[daily/answer] feed propagation failed', {
+          generatedQuestionId: question.id,
+          canonicalQuestionId,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
-
-      await createFeedItemsForFriendsFromAnswer(
-        session.userId,
-        persisted.questionId,
-        isCorrect ? 'correct' : 'incorrect',
-        `daily:${question.id}:${session.userId}`,
-      );
-    } catch (error) {
-      console.warn('[daily/answer] failed to persist generated question for feed propagation', {
-        generatedQuestionId: question.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
     }
 
     return NextResponse.json({

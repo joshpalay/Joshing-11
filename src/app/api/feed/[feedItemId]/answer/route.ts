@@ -6,11 +6,12 @@ import { getSession } from '@/server/auth/session';
 import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, playerMastery, questions, users } from '@/server/db';
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
-import { getBasePoints } from '@/server/mastery/awards';
+import { getBasePoints } from '@/server/mastery/scoring';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
+import { computeAnswerState } from '@/server/answer-state';
+import { readPriorAnswersForQuestion } from '@/server/answer-history';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,7 +73,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const friendResult = (rawSource === 'correct' || rawSource === 'incorrect') ? rawSource : null;
   const friendName = row.sourceDisplayName ?? undefined;
   const quip = selectQuip({ isCorrect, surface: 'feed', friendResult, friendName });
-  const alreadyCorrect = await userAnsweredQuestionCorrectly(session.userId, question.id);
+
+  // F2.3: compute answer_state against the user's prior history on this
+  // canonical question so first_correct_after_wrong (recovery) is detected
+  // instead of being collapsed into first_correct. getBasePoints returns the
+  // correct state-adjusted credit (full for first_correct, 0.25x for
+  // first_correct_after_wrong, 0 for repeat_correct / incorrect).
+  const priorAnswers = await readPriorAnswersForQuestion(session.userId, question.id);
+  const answerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
 
   const existingMastery = await db
     .select()
@@ -81,9 +89,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     .limit(1);
 
   const previousTier: MasteryTier = existingMastery[0]?.tier ?? 'establishing';
-  const answerState = isCorrect ? (alreadyCorrect ? 'repeat_correct' : 'first_correct') : 'incorrect';
-  const basePoints = isCorrect ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, answerState) : 0;
-  const pointsAwarded = isCorrect ? basePoints : 0;
+  const basePoints = isCorrect
+    ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, answerState)
+    : 0;
+  const pointsAwarded = basePoints;
+  const awardsMasteryCredit = pointsAwarded > 0;
   const breadcrumb = await generateBreadcrumb({
     questionId: question.id,
     questionText: question.questionText,
@@ -97,13 +107,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     questionId: question.id,
     domain,
     answerState,
-    pointsAwarded: isCorrect && !alreadyCorrect ? pointsAwarded : 0,
+    pointsAwarded,
     sourceType: 'feed',
     sourceId: feedItemId,
     broadCategory: question.broadCategory,
-    eventQuestionId: isCorrect && !alreadyCorrect ? question.id : null,
+    eventQuestionId: question.id,
     basePoints,
-    weight: isCorrect && !alreadyCorrect ? 1 : 0,
+    weight: awardsMasteryCredit ? 1 : 0,
   }).catch((error: unknown) => {
     console.warn('[feed/answer] failed to write mastery/adaptive answer event', {
       error: error instanceof Error ? error.message : 'unknown',
@@ -118,7 +128,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   });
 
   await db.transaction(async (tx) => {
-    if (isCorrect && !alreadyCorrect) {
+    if (awardsMasteryCredit) {
       await tx
         .update(questions)
         .set({
@@ -150,8 +160,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .where(eq(feedItems.id, feedItemId));
   });
 
-  // Promote author's declared territory to demonstrated when a non-author answers correctly
-  if (isCorrect && !alreadyCorrect && question.creatorId && session.userId !== question.creatorId) {
+  // Promote author's declared territory to demonstrated when a non-author
+  // gets the question right for the first time (first_correct OR recovery —
+  // both award mastery credit, both mean "this friend has now demonstrated
+  // knowledge here").
+  if (awardsMasteryCredit && question.creatorId && session.userId !== question.creatorId) {
     void promoteDeclaredToDemonstrated({
       userId: question.creatorId,
       domain,

@@ -21,6 +21,7 @@ import { sendSms } from '@/server/sms';
 import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import { readCreateQuestionPayload } from '@/server/questions/create-payload';
 import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
+import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +66,28 @@ export async function POST(request: NextRequest) {
   const { sendToFriendIds, shareToFeed, ...rawQuestionFields } = value;
   const categorization = await categorizeQuestion(rawQuestionFields.text, rawQuestionFields.correctAnswer);
   const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
-  const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
+  const normalizedSubcategory = normalizeCanonicalSubcategory(categorization.subcategory);
+
+  // F4.5: reject creation if categorization produced a generic bucket label.
+  // The LLM helper already re-prompts (see GENERIC_SUBCATEGORY_NORMALIZED in
+  // src/lib/llm.ts) so reaching here means the LLM couldn't find a
+  // hyper-specific label — better to fail fast than silently file under
+  // 'General Knowledge'.
+  if (isGenericSubcategory(normalizedSubcategory)) {
+    console.warn('[questions/create] rejected generic canonical_subcategory', {
+      attempted: normalizedSubcategory,
+      llmSubcategory: categorization.subcategory,
+    });
+    return NextResponse.json(
+      {
+        error: 'category_too_generic',
+        message:
+          "We couldn't pin a specific category for this question. Try rephrasing with a more specific topic.",
+      },
+      { status: 422 },
+    );
+  }
+  const canonicalSubcategory = normalizedSubcategory;
   const questionFields = {
     ...rawQuestionFields,
     category,

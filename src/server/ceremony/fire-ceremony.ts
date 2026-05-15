@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { writeActivity } from '@/server/activity/write-activity';
-import { computeBeats } from '@/server/ceremony/compute-beats';
+import { beatsPayloadSchema, computeBeats } from '@/server/ceremony/compute-beats';
 import { biweeklyCeremonies, db, users } from '@/server/db';
 import { runDomainMergesForUser } from '@/server/mastery/ceremony';
 import { sendSms } from '@/server/sms';
@@ -14,10 +14,37 @@ function appUrl() {
   return (process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 }
 
+async function findExistingCeremony(
+  userId: string,
+  cycleStartIso: string,
+  cycleEndIso: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ id: biweeklyCeremonies.id })
+    .from(biweeklyCeremonies)
+    .where(and(
+      eq(biweeklyCeremonies.userId, userId),
+      eq(biweeklyCeremonies.cycleStart, cycleStartIso),
+      eq(biweeklyCeremonies.cycleEnd, cycleEndIso),
+    ))
+    .limit(1);
+  return row?.id ?? null;
+}
+
 export async function fireCeremony(userId: string): Promise<string> {
   const cycleEnd = new Date();
   const cycleStart = new Date(cycleEnd);
   cycleStart.setDate(cycleStart.getDate() - 14);
+  const cycleStartIso = isoDate(cycleStart);
+  const cycleEndIso = isoDate(cycleEnd);
+
+  // F3.3 idempotency: if a ceremony already exists for this (user, cycle),
+  // return it without redoing domain merges, recomputing beats, writing a
+  // duplicate activity row, or sending another SMS. The DB unique index
+  // makes this race-safe; this pre-check just avoids the wasted work in
+  // the common case.
+  const existingId = await findExistingCeremony(userId, cycleStartIso, cycleEndIso);
+  if (existingId) return existingId;
 
   const mergeResult = await runDomainMergesForUser(userId);
   const beatsPayload = await computeBeats(userId, cycleStart, cycleEnd);
@@ -27,23 +54,41 @@ export async function fireCeremony(userId: string): Promise<string> {
       details: mergeResult.details,
     };
   }
-  const [ceremony] = await db
-    .insert(biweeklyCeremonies)
-    .values({
-      userId,
-      cycleStart: isoDate(cycleStart),
-      cycleEnd: isoDate(cycleEnd),
-      firedAt: new Date(),
-      beatsPayload,
-    })
-    .returning({ id: biweeklyCeremonies.id });
 
-  if (!ceremony) throw new Error('Failed to create ceremony.');
+  // F3.5: strict validation at write — catch any compute-beats bugs before
+  // they land in the DB as malformed JSONB. Throws on shape mismatch; the
+  // cron handler will see the exception and skip this user rather than
+  // shipping a broken ceremony.
+  beatsPayloadSchema.parse(beatsPayload);
+
+  let ceremonyId: string;
+  try {
+    const [ceremony] = await db
+      .insert(biweeklyCeremonies)
+      .values({
+        userId,
+        cycleStart: cycleStartIso,
+        cycleEnd: cycleEndIso,
+        firedAt: new Date(),
+        beatsPayload,
+      })
+      .returning({ id: biweeklyCeremonies.id });
+
+    if (!ceremony) throw new Error('Failed to create ceremony.');
+    ceremonyId = ceremony.id;
+  } catch (error) {
+    // Concurrent fire raced us: the unique index on (userId, cycleStart,
+    // cycleEnd) rejected our insert. Look up the row that won and treat
+    // this call as a successful no-op.
+    const concurrentExistingId = await findExistingCeremony(userId, cycleStartIso, cycleEndIso);
+    if (concurrentExistingId) return concurrentExistingId;
+    throw error;
+  }
 
   await writeActivity({
     userId,
     type: 'ceremony_ready',
-    referenceId: ceremony.id,
+    referenceId: ceremonyId,
     referenceType: 'ceremony',
   });
 
@@ -56,11 +101,11 @@ export async function fireCeremony(userId: string): Promise<string> {
   if (user?.phoneNumber && user.smsOptIn !== 'opted_out') {
     await sendSms(
       user.phoneNumber,
-      `Two weeks of Joshing. Here's what you've been up to. ${appUrl()}/ceremony/${ceremony.id}`,
+      `Two weeks of Joshing. Here's what you've been up to. ${appUrl()}/ceremony/${ceremonyId}`,
       'ceremony_ready',
       userId,
     );
   }
 
-  return ceremony.id;
+  return ceremonyId;
 }
