@@ -81,8 +81,22 @@ function parsePagination(request: NextRequest): ParsedPagination {
   return { limit, cursor, filter: filterParam };
 }
 
-function displayName(name: string | null, fallback = 'A friend') {
-  return name?.trim() || fallback;
+type UserDisplay = { displayName: string | null; slug?: string | null };
+
+function humanizeSlug(slug: string | null | undefined): string | null {
+  const trimmed = slug?.trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(/[-_]+/).filter(Boolean);
+  if (parts.length === 0) return null;
+  return parts.map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+}
+
+function displayName(user: UserDisplay | null | undefined, fallback = 'A friend') {
+  const name = user?.displayName?.trim();
+  if (name) return name;
+  const fromSlug = humanizeSlug(user?.slug);
+  if (fromSlug) return fromSlug;
+  return fallback;
 }
 
 function authoredSharedAttribution(sourceName: string, domain: string | null): string {
@@ -111,13 +125,13 @@ function feedCardType(item: CollapsedFeedItem): 'direct_sent' | 'friend_answered
 
 function friendAnsweredAttribution(
   item: CollapsedFeedItem,
-  userById: Map<string, { displayName: string | null }>,
+  userById: Map<string, UserDisplay>,
   domain: string | null,
   authorName: string,
 ): string {
   const results = item.friendResults;
   if (!results || results.length === 0) {
-    const name = displayName(userById.get(item.sourceUserId)?.displayName ?? null);
+    const name = displayName(userById.get(item.sourceUserId));
     return domain ? `${name} knew ${authorName}’s question — ${domain}` : `${name} knew ${authorName}’s question`;
   }
 
@@ -213,7 +227,7 @@ export async function GET(request: NextRequest) {
     ...questionRows.map((question) => question.creatorId).filter((id): id is string => Boolean(id)),
   ])];
   const userRows = userIds.length
-    ? await db.select({ id: users.id, displayName: users.displayName }).from(users).where(inArray(users.id, userIds))
+    ? await db.select({ id: users.id, displayName: users.displayName, slug: users.slug }).from(users).where(inArray(users.id, userIds))
     : [];
   const userById = new Map(userRows.map((u) => [u.id, u]));
 
@@ -237,8 +251,8 @@ export async function GET(request: NextRequest) {
     items: feed.map((item) => {
       const question = item.questionId ? questionById.get(item.questionId) : undefined;
       const sourceUser = userById.get(item.sourceUserId);
-      const sourceName = displayName(sourceUser?.displayName ?? null);
-      const authorName = displayName(question?.creatorId ? userById.get(question.creatorId)?.displayName ?? null : null, 'the author');
+      const sourceName = displayName(sourceUser);
+      const authorName = displayName(question?.creatorId ? userById.get(question.creatorId) : null, 'the author');
       const domain = socialFeedDomainLabel(question);
       const cardType = feedCardType(item);
       const answerResult = item.answerResult ?? null;
