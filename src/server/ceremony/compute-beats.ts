@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
+import { z } from 'zod';
 
 import {
   db,
@@ -7,11 +8,83 @@ import {
   joshingGameResponses,
   masteryEvents,
   playerMastery,
+  profileDomainVisibility,
   questions,
   users,
 } from '@/server/db';
 import { getFriends } from '@/server/db/queries/friends';
+import { ceremonyModeFromAnsweringCount, type CeremonyMode } from '@/lib/ceremony/mode';
 import type { MasteryTier } from '@/types/db';
+
+// F3.5: runtime validation of the beats payload. Strict at write time
+// (catches bugs in compute-beats early); lenient at read time (don't break
+// the pre-existing corpus that may not match this schema exactly — see the
+// ceremony GET route).
+const masteryTierSchema = z.enum(['establishing', 'familiar', 'solid', 'mastery']);
+
+const beat1Schema = z.array(
+  z.object({
+    domain: z.string(),
+    fromTier: masteryTierSchema,
+    toTier: masteryTierSchema,
+  }),
+);
+
+const beat2Schema = z.object({
+  friendMediated: z.array(
+    z.object({
+      domain: z.string(),
+      questionCount: z.number(),
+      correctCount: z.number(),
+    }),
+  ),
+  authored: z.array(z.object({ domain: z.string() })),
+  promoted: z.array(z.object({ domain: z.string() })),
+});
+
+const beat3Schema = z.array(
+  z.object({
+    userId: z.string(),
+    displayName: z.string(),
+    contributionCount: z.number(),
+  }),
+);
+
+const beat4Schema = z.object({
+  userId: z.string(),
+  displayName: z.string(),
+  sharedDomains: z.array(z.string()),
+});
+
+const beat5Schema = z.object({
+  totalCreatorPoints: z.number(),
+  topQuestion: z
+    .object({ text: z.string(), answeredCount: z.number() })
+    .nullable(),
+});
+
+export const beatsPayloadSchema = z.object({
+  cycleStart: z.string(),
+  cycleEnd: z.string(),
+  mode: z.enum(['solo', 'duo', 'group']).optional(),
+  mergeNote: z
+    .object({
+      mergesApplied: z.number(),
+      details: z.array(
+        z.object({
+          sources: z.array(z.string()),
+          target: z.string(),
+          rationale: z.string(),
+        }),
+      ),
+    })
+    .optional(),
+  beat1: beat1Schema.nullable(),
+  beat2: beat2Schema.nullable(),
+  beat3: beat3Schema.nullable(),
+  beat4: beat4Schema.nullable(),
+  beat5: beat5Schema.nullable(),
+});
 
 export type Beat1Mastered = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
 export type Beat2DiscoveredItem = { domain: string; questionCount: number; correctCount: number };
@@ -30,6 +103,14 @@ export type Beat5Gave = {
 export type BeatsPayload = {
   cycleStart: string;
   cycleEnd: string;
+  /**
+   * F3.2: classifies the ceremony as solo / duo / group based on the count
+   * of friends who actively answered in the cycle. Drives copy variants and
+   * future beat suppression (e.g. Beat 3 / Beat 4 don't make sense in solo
+   * mode). Stored on the payload (not as a separate column) to avoid a
+   * schema migration; downstream UI / telemetry can read it directly.
+   */
+  mode?: CeremonyMode;
   mergeNote?: {
     mergesApplied: number;
     details: Array<{ sources: string[]; target: string; rationale: string }>;
@@ -238,14 +319,27 @@ async function computeBeat4(userId: string): Promise<Beat4Alignment | null> {
   const friendIds = new Set(friends.map((friend) => friend.id));
   if (friendIds.size === 0) return null;
 
+  // F3.4: LEFT JOIN profileDomainVisibility so we can filter friend rows
+  // marked private. Viewer's own rows always pass through (their portrait,
+  // their data); only the FRIEND's privacy setting hides a friend's domain
+  // from this viewer's alignment beat. Missing visibility row defaults to
+  // 'public' (per the table default), which is included.
   const rows = await db
     .select({
       userId: playerMastery.userId,
       displayName: users.displayName,
       domain: playerMastery.canonicalSubcategory,
+      visibility: profileDomainVisibility.visibility,
     })
     .from(playerMastery)
     .innerJoin(users, eq(playerMastery.userId, users.id))
+    .leftJoin(
+      profileDomainVisibility,
+      and(
+        eq(profileDomainVisibility.userId, playerMastery.userId),
+        eq(profileDomainVisibility.canonicalSubcategory, playerMastery.canonicalSubcategory),
+      ),
+    )
     .where(sql`${playerMastery.totalPoints} > 0`);
 
   const viewerDomains = new Set(rows.filter((row) => row.userId === userId).map((row) => row.domain));
@@ -254,6 +348,9 @@ async function computeBeat4(userId: string): Promise<Beat4Alignment | null> {
   const candidates = new Map<string, { displayName: string; sharedDomains: string[] }>();
   rows.forEach((row) => {
     if (row.userId === userId || !friendIds.has(row.userId) || !viewerDomains.has(row.domain)) return;
+    // A friend marked this domain private — do not surface it to anyone
+    // else's ceremony, even if both share points there.
+    if (row.visibility === 'private') return;
     const current = candidates.get(row.userId) ?? { displayName: row.displayName?.trim() || 'Someone', sharedDomains: [] };
     current.sharedDomains.push(row.domain);
     candidates.set(row.userId, current);
@@ -294,19 +391,47 @@ async function computeBeat5(userId: string, cycleStart: Date, cycleEndExclusive:
   return { totalCreatorPoints, topQuestion: topQuestion ?? null };
 }
 
+/**
+ * F3.2 — count friends who answered at least one question in the cycle.
+ * Plus the user themselves (always 1). Used to derive ceremony mode.
+ */
+async function countActiveAnsweringPlayers(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+): Promise<number> {
+  const friends = await getFriends(userId);
+  if (friends.length === 0) return 1;
+
+  const friendIds = friends.map((friend) => friend.id);
+  const rows = await db
+    .selectDistinct({ userId: masteryEvents.userId })
+    .from(masteryEvents)
+    .where(and(
+      inArray(masteryEvents.userId, friendIds),
+      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+      gte(masteryEvents.createdAt, cycleStart),
+      lt(masteryEvents.createdAt, cycleEndExclusive),
+    ));
+
+  return rows.length + 1;
+}
+
 export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: Date): Promise<BeatsPayload> {
   const cycleEndExclusive = endExclusive(cycleEnd);
-  const [beat1, beat2, beat3, beat4, beat5] = await Promise.all([
+  const [beat1, beat2, beat3, beat4, beat5, activeAnsweringPlayers] = await Promise.all([
     computeBeat1(userId, cycleStart, cycleEndExclusive),
     computeBeat2(userId, cycleStart, cycleEndExclusive),
     computeBeat3(userId, cycleStart, cycleEndExclusive),
     computeBeat4(userId),
     computeBeat5(userId, cycleStart, cycleEndExclusive),
+    countActiveAnsweringPlayers(userId, cycleStart, cycleEndExclusive),
   ]);
 
   return {
     cycleStart: toIsoDate(cycleStart),
     cycleEnd: toIsoDate(cycleEnd),
+    mode: ceremonyModeFromAnsweringCount(activeAnsweringPlayers),
     beat1,
     beat2,
     beat3,

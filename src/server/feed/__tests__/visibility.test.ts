@@ -1,18 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import { isCorrectAnswerFeedEligible, isMainFeedSourceVisible, socialFeedDomainLabel } from '@/server/feed/visibility';
+import {
+  QUESTION_SHARING_FEED_SOURCE_VISIBILITY,
+  isCorrectAnswerFeedEligible,
+  isMainFeedSourceVisible,
+  socialFeedDomainLabel,
+} from '@/server/feed/visibility';
 
 const publicQuestion = {
   creatorId: 'author-1',
+  source: 'authored' as const,
   visibility: 'public' as const,
   deletedAt: null,
 };
 
 describe('correct-answer social feed eligibility', () => {
-  it('rejects newly-created/authored feed sources and game-publication sources from the main feed', () => {
-    expect(isMainFeedSourceVisible('authored_shared', null)).toBe(false);
+  it('allows authored and direct-sent sharing but rejects game-publication sources from the main feed', () => {
+    expect(isMainFeedSourceVisible('authored_shared', null)).toBe(true);
+    expect(isMainFeedSourceVisible('authored_shared', 'incorrect')).toBe(true);
     expect(isMainFeedSourceVisible('joshing_game', null)).toBe(false);
-    expect(isMainFeedSourceVisible('direct_sent', null)).toBe(false);
+    expect(isMainFeedSourceVisible('direct_sent', null)).toBe(true);
   });
 
   it('allows a correct answer by someone other than the author in a visible social context', () => {
@@ -23,6 +30,20 @@ describe('correct-answer social feed eligibility', () => {
       hasVisibleSocialContext: true,
     })).toBe(true);
     expect(isMainFeedSourceVisible('friend_answered', 'correct')).toBe(true);
+  });
+
+  it('allows public daily-generated questions without an author to propagate correct friend answers', () => {
+    expect(isCorrectAnswerFeedEligible({
+      answerIsCorrect: true,
+      answererUserId: 'answerer-1',
+      question: {
+        creatorId: null,
+        source: 'daily_generated' as const,
+        visibility: 'public' as const,
+        deletedAt: null,
+      },
+      hasVisibleSocialContext: true,
+    })).toBe(true);
   });
 
   it('rejects a correct answer by the author', () => {
@@ -57,6 +78,24 @@ describe('correct-answer social feed eligibility', () => {
       question: publicQuestion,
       hasVisibleSocialContext: false,
     })).toBe(false);
+  });
+
+  it('documents visibility for every source type created by question-sharing routes', () => {
+    expect(QUESTION_SHARING_FEED_SOURCE_VISIBILITY).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceType: 'authored_shared' }),
+      expect.objectContaining({ sourceType: 'direct_sent' }),
+      expect.objectContaining({ sourceType: 'friend_answered' }),
+    ]));
+
+    for (const { sourceType, sourceResult, visible, reason } of QUESTION_SHARING_FEED_SOURCE_VISIBILITY) {
+      expect(isMainFeedSourceVisible(sourceType, sourceResult)).toBe(visible);
+      if (visible) {
+        expect(reason).toBeNull();
+      } else {
+        expect(reason).toEqual(expect.any(String));
+        expect(reason?.length).toBeGreaterThan(0);
+      }
+    }
   });
 
   it('suppresses forbidden fallback categories on feed cards', () => {

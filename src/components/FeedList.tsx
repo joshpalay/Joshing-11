@@ -1,453 +1,845 @@
-'use client';
+'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { Send, SkipForward, X } from 'lucide-react';
-
-import { AddToBankAction } from '@/components/AddToBankAction';
-import { SendQuestionAction } from '@/components/SendQuestionAction';
-import { QuestionReactionPrompt } from '@/components/play/GameplayChat';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import {
+  AnsweredByYouCard,
+  AnswerSheet,
+  DirectSentCard,
+  FeedOverflowMenu,
+  FriendAddedCard,
+  FriendAnsweredCard,
+  FriendLikedCard,
+  type AnsweredByYouFeedItem,
+  type DirectSentFeedItem,
+  type FeedRecheckAction,
+  type FriendAddedFeedItem,
+  type FriendAnsweredFeedItem,
+  type FriendLikedFeedItem,
+} from '@/components/feed'
 
 type FriendResult = {
-  userId: string;
-  displayName: string;
-  result: 'correct' | 'incorrect' | null;
-};
-
-type FeedApiItem = {
-  id: string;
-  kind: 'question';
-  question_id: string | null;
-  source_type: string;
-  source_user_id: string;
-  source_friend_display_name: string;
-  source_attribution: string;
-  source_result: 'correct' | 'incorrect' | null;
-  friend_results: FriendResult[] | null;
-  source_event_at: string;
-  personal_message: string | null;
-  state: string;
-  is_pinned: boolean;
-  question_text: string | null;
-  verified: boolean;
-  is_in_bank: boolean;
-  domain_pill: string | null;
-  difficulty: string | null;
-};
-
-type FeedMeta = {
-  has_friends: boolean;
-  has_dismissed_domains: boolean;
-  total_item_count: number;
-  active_item_count: number;
-  pre_filter_active_count: number;
-};
-
-type FeedResponse = {
-  viewer_user_id: string;
-  meta?: FeedMeta;
-  items: FeedApiItem[];
-};
-
-type CeremonyBanner = {
-  id: string;
-  firedAt: string;
-};
-
-type AnswerResponse = {
-  correct?: boolean;
-  isCorrect?: boolean;
-  answer?: string;
-  correctAnswer?: string;
-  explanation?: string | null;
-  quip?: string | null;
-  consolation?: string | null;
-  breadcrumb?: string | null;
-};
-
-type ResultState = {
-  correct: boolean;
-  answer: string;
-  explanation: string | null;
-  quip: string | null;
-  breadcrumb: string | null;
-};
-
-function formatEventTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+  userId: string
+  displayName: string
+  result: 'correct' | 'incorrect' | null
 }
 
-function comparisonCopy(playerCorrect: boolean, friendResults: FriendResult[] | null): string {
-  const primaryFriend = friendResults?.[0];
-  const friendName = primaryFriend?.displayName ?? 'They';
-  const friendCorrect = primaryFriend?.result === 'correct';
+type FeedApiItem = {
+  id: string
+  kind: 'question'
+  question_id: string | null
+  card_type:
+    | 'direct_sent'
+    | 'friend_answered'
+    | 'friend_added'
+    | 'friend_liked'
+    | 'answered_by_you'
+  type?:
+    | 'direct_sent'
+    | 'friend_answered'
+    | 'friend_added'
+    | 'friend_liked'
+    | 'answered_by_you'
+  source_type: string
+  source_user_id: string
+  source_friend_display_name: string
+  source_profile_href?: string | null
+  source_attribution: string
+  source_result: 'correct' | 'incorrect' | null
+  friend_results: FriendResult[] | null
+  endorsement_count?: number | null
+  additional_endorsers?: Array<{ userId: string; displayName: string }> | null
+  source_event_at: string
+  personal_message: string | null
+  state: string
+  is_pinned: boolean
+  question_text: string | null
+  verified: boolean
+  is_in_bank: boolean
+  domain_pill: string | null
+  difficulty: string | null
+  explanation: string | null
+  answer_result: 'correct' | 'incorrect' | null
+  is_correct: boolean | null
+  correct_answer: string | null
+  submitted_answer: string | null
+  awarded_points: number | null
+  pointsAwarded?: number | null
+  mastery_delta: unknown | null
+  unverified_answer: boolean
+}
 
-  if (playerCorrect && friendCorrect) return 'You both had it.';
-  if (playerCorrect && !friendCorrect) return `You found a connection ${friendName} missed.`;
-  if (!playerCorrect && friendCorrect) return `${friendName} recognized this one. You might next time.`;
-  return 'This one is still waiting for common ground.';
+type FeedMeta = {
+  has_friends: boolean
+  has_dismissed_domains: boolean
+  total_item_count: number
+  active_item_count: number
+  pre_filter_active_count: number
+  page_item_count?: number
+  limit?: number
+  cursor?: string | null
+  next_cursor?: string | null
+  has_more?: boolean
+  filter?: FeedFilter
+}
+
+type FeedFilter = 'all' | 'sent-to-me' | 'from-friends'
+
+type FeedResponse = {
+  viewer_user_id: string
+  meta?: FeedMeta
+  next_cursor?: string | null
+  has_more?: boolean
+  items: FeedApiItem[]
+}
+
+type CeremonyBanner = {
+  id: string
+  firedAt: string
+}
+
+type AnswerResponse = {
+  isCorrect?: boolean
+  correctAnswer?: string
+  explanation?: string | null
+  quip?: string | null
+  breadcrumb?: string | null
+  pointsAwarded?: number | null
+  masteryDelta?: unknown | null
+}
+
+type ResultState = {
+  correct: boolean
+  answer: string
+  explanation: string | null
+  quip: string | null
+  breadcrumb: string | null
+  awardedPoints: number | null
+  masteryDelta: unknown | null
+}
+
+function formatEventTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
+}
+
+function comparisonCopy(
+  playerCorrect: boolean | null,
+  friendResults: FriendResult[] | null
+): string {
+  const primaryFriend = friendResults?.[0]
+  const friendName = primaryFriend?.displayName ?? 'They'
+  const friendCorrect = primaryFriend?.result === 'correct'
+
+  if (playerCorrect === null) return 'You have already answered this question.'
+  if (playerCorrect && friendCorrect) return 'You both had it.'
+  if (playerCorrect && !friendCorrect)
+    return `You found a connection ${friendName} missed.`
+  if (!playerCorrect && friendCorrect)
+    return `${friendName} recognized this one. You might next time.`
+  return 'This one is still waiting for common ground.'
+}
+
+function profileHref(userId?: string | null) {
+  return userId ? `/users/${encodeURIComponent(userId)}` : null
+}
+
+function FeedPersonLink({
+  href,
+  name,
+}: {
+  href?: string | null
+  name: string
+}) {
+  if (!href) return <>{name}</>
+  return (
+    <Link href={href} className="underline-offset-2 hover:underline">
+      {name}
+    </Link>
+  )
+}
+
+function feedMetadata(item: FeedApiItem, answered = false) {
+  const time = formatEventTime(item.source_event_at)
+  const source = (
+    <span>
+      <FeedPersonLink
+        href={item.source_profile_href ?? profileHref(item.source_user_id)}
+        name={item.source_friend_display_name}
+      />{' '}
+      {item.source_type === 'direct_sent'
+        ? 'sent this to you'
+        : item.source_type === 'authored_shared'
+          ? 'wrote this'
+          : item.source_type === 'thumbs_upped'
+            ? 'liked this'
+            : 'answered this'}
+    </span>
+  )
+
+  return (
+    <span>
+      {source}
+      {time ? <> · {time}</> : null}
+      {answered ? <> · You answered</> : null}
+    </span>
+  )
+}
+
+function baseTypedFields(item: FeedApiItem, answered = false) {
+  return {
+    id: item.id,
+    metadata: feedMetadata(item, answered),
+    category: item.domain_pill,
+    question: item.question_text ?? 'Untitled question',
+    personalMessage: item.personal_message,
+    isInBank: item.is_in_bank,
+  }
+}
+
+function friendAnsweredSummary(item: FeedApiItem) {
+  const primaryFriend = item.friend_results?.[0]
+  const friendName =
+    primaryFriend?.displayName ?? item.source_friend_display_name
+
+  if (primaryFriend?.result === 'correct' || item.source_result === 'correct') {
+    return `${friendName} recognized this one. See if you share the same common ground.`
+  }
+
+  return `${friendName} answered this question.`
+}
+
+function toTypedFeedItem(item: FeedApiItem) {
+  const base = baseTypedFields(item)
+
+  if (item.card_type === 'direct_sent') {
+    return {
+      ...base,
+      type: 'direct_sent' as const,
+      senderName: item.source_friend_display_name,
+      senderHref: item.source_profile_href ?? profileHref(item.source_user_id),
+    } satisfies DirectSentFeedItem
+  }
+
+  if (item.card_type === 'friend_added') {
+    return {
+      ...base,
+      type: 'friend_added' as const,
+      friendName: item.source_friend_display_name,
+      friendHref: item.source_profile_href ?? profileHref(item.source_user_id),
+    } satisfies FriendAddedFeedItem
+  }
+
+  if (item.card_type === 'friend_liked') {
+    return {
+      ...base,
+      type: 'friend_liked' as const,
+      friendName: item.source_friend_display_name,
+      friendHref: item.source_profile_href ?? profileHref(item.source_user_id),
+      endorsementCount: item.endorsement_count,
+      additionalEndorsers: item.additional_endorsers,
+    } satisfies FriendLikedFeedItem
+  }
+
+  return {
+    ...base,
+    type: 'friend_answered' as const,
+    friendName:
+      item.friend_results?.[0]?.displayName ?? item.source_friend_display_name,
+    friendHref: profileHref(
+      item.friend_results?.[0]?.userId ?? item.source_user_id
+    ),
+    friendCorrect:
+      item.friend_results?.[0]?.result === 'correct' ||
+      item.source_result === 'correct',
+    answerSummary: friendAnsweredSummary(item),
+  } satisfies FriendAnsweredFeedItem
+}
+
+function toAnsweredByYouItem(
+  item: FeedApiItem,
+  result?: ResultState
+): AnsweredByYouFeedItem {
+  return {
+    ...baseTypedFields(item, true),
+    type: 'answered_by_you',
+    resultLabel:
+      item.is_correct === false || result?.correct === false
+        ? 'Reviewed privately'
+        : 'You answered',
+    answerSummary: result
+      ? comparisonCopy(result.correct, item.friend_results)
+      : comparisonCopy(item.is_correct, item.friend_results),
+    correctAnswer: result?.answer || item.correct_answer,
+    submittedAnswer: item.submitted_answer || undefined,
+    isCorrect: result?.correct ?? item.is_correct,
+    awardedPoints: result?.awardedPoints ?? item.awarded_points,
+    explanation: result?.explanation ?? item.explanation,
+    quip: result?.quip ?? null,
+    unverifiedAnswer: item.unverified_answer,
+  }
 }
 
 type FeedListProps = {
-  limit?: number;
-};
+  pageSize?: number
+  infinite?: boolean
+}
 
-type QuestionCardState = 'unanswered' | 'answered' | 'reacted';
+type QuestionCardState = 'unanswered' | 'answered'
 
-export default function FeedList({ limit = 25 }: FeedListProps) {
-  const [items, setItems] = useState<FeedApiItem[]>([]);
-  const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null);
-  const [viewerId, setViewerId] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [results, setResults] = useState<Record<string, ResultState>>({});
-  const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({});
-  const [toasts, setToasts] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null);
+export default function FeedList(props: FeedListProps) {
+  return (
+    <Suspense fallback={<FeedListLoading />}>
+      <FeedListContent {...props} />
+    </Suspense>
+  )
+}
 
-  const loadFeed = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/feed', { cache: 'no-store', credentials: 'include' });
-      const body = await response.json().catch(() => null) as FeedResponse | { message?: string } | null;
-      if (!response.ok || !body || !('items' in body)) {
-        throw new Error((body as { message?: string } | null)?.message ?? 'Could not load your Feed.');
+function FeedListLoading() {
+  return (
+    <div className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
+      Loading feed…
+    </div>
+  )
+}
+
+function FeedListContent({
+  pageSize = 20,
+  infinite = false,
+}: FeedListProps) {
+  const searchParams = useSearchParams()
+  const initialFilterParam =
+    searchParams.get('filter') ?? searchParams.get('feed_filter') ?? 'all'
+  const initialFilter: FeedFilter =
+    initialFilterParam === 'sent-to-me' || initialFilterParam === 'from-friends'
+      ? initialFilterParam
+      : 'all'
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const [items, setItems] = useState<FeedApiItem[]>([])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingInitial, setLoadingInitial] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null)
+  const [results, setResults] = useState<Record<string, ResultState>>({})
+  const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({})
+  const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null)
+
+  const loadFeed = useCallback(
+    async (cursor?: string | null) => {
+      const isNextPage = Boolean(cursor)
+      if (isNextPage) setLoadingMore(true)
+      else setLoadingInitial(true)
+      setError(null)
+
+      try {
+        const search = new URLSearchParams({
+          limit: String(pageSize),
+          filter: feedFilter,
+        })
+        if (cursor) search.set('cursor', cursor)
+
+        const response = await fetch(`/api/feed?${search.toString()}`, {
+          cache: 'no-store',
+          credentials: 'include',
+        })
+        const body = (await response.json().catch(() => null)) as
+          | FeedResponse
+          | { message?: string; error?: string }
+          | null
+        if (!response.ok || !body || !('items' in body)) {
+          const message =
+            (body as { message?: string; error?: string } | null)?.message ??
+            (body as { message?: string; error?: string } | null)?.error ??
+            'Could not load your Feed.'
+          throw new Error(message)
+        }
+
+        setFeedMeta(body.meta ?? null)
+        setItems((current) =>
+          isNextPage ? [...current, ...body.items] : body.items
+        )
+        setNextCursor(body.next_cursor ?? body.meta?.next_cursor ?? null)
+        setHasMore(Boolean(body.has_more ?? body.meta?.has_more))
+
+        if (!isNextPage) {
+          const bannerResponse = await fetch('/api/ceremony/banner', {
+            cache: 'no-store',
+            credentials: 'include',
+          })
+          const bannerBody = (await bannerResponse
+            .json()
+            .catch(() => null)) as { ceremony?: CeremonyBanner | null } | null
+          setCeremonyBanner(
+            bannerResponse.ok ? (bannerBody?.ceremony ?? null) : null
+          )
+        }
+      } catch (caught) {
+        setError(
+          caught instanceof Error ? caught.message : 'Could not load your Feed.'
+        )
+      } finally {
+        setLoadingInitial(false)
+        setLoadingMore(false)
       }
-      setViewerId(body.viewer_user_id);
-      setFeedMeta(body.meta ?? null);
-      setItems(body.items);
-      const bannerResponse = await fetch('/api/ceremony/banner', { cache: 'no-store', credentials: 'include' });
-      const bannerBody = await bannerResponse.json().catch(() => null) as { ceremony?: CeremonyBanner | null } | null;
-      setCeremonyBanner(bannerResponse.ok ? bannerBody?.ceremony ?? null : null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not load your Feed.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [feedFilter, pageSize]
+  )
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void loadFeed();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadFeed]);
+      void loadFeed()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadFeed])
 
-  const visibleItems = useMemo(() => items.slice(0, limit), [items, limit]);
+  useEffect(() => {
+    if (!infinite || !hasMore || loadingInitial || loadingMore || !nextCursor)
+      return
+
+    const sentinelNode = sentinelRef.current
+    if (!sentinelNode) return
+
+    if (!('IntersectionObserver' in window)) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadFeed(nextCursor)
+        }
+      },
+      { rootMargin: '320px 0px' }
+    )
+
+    observer.observe(sentinelNode)
+    return () => observer.disconnect()
+  }, [hasMore, infinite, loadFeed, loadingInitial, loadingMore, nextCursor])
 
   const emptyCopy = useMemo(() => {
-    if (loading) return 'Loading your Feed...';
-    if (error) return error;
-    if (!feedMeta?.has_friends) return "When friends recognize each other’s questions, those moments will appear here.";
+    if (loadingInitial) return 'Loading your Feed...'
+    if (error) return error
+    if (!feedMeta?.has_friends)
+      return 'When friends recognize each other’s questions, those moments will appear here.'
     // pre_filter_active_count > 0 means items exist in active/skipped state but are hidden by domain filters
-    if (feedMeta.has_dismissed_domains && feedMeta.pre_filter_active_count > 0) {
-      return "You've focused your Feed. You can re-open domains from your Knowledge page.";
+    if (
+      feedMeta.has_dismissed_domains &&
+      feedMeta.pre_filter_active_count > 0
+    ) {
+      return "You've focused your Feed. You can re-open domains from your Knowledge page."
     }
-    if (feedMeta.total_item_count > 0) return "You're caught up. Answer questions to reveal more common ground.";
-    return "Answer questions to reveal common ground.";
-  }, [error, feedMeta, loading]);
+    if (feedMeta.total_item_count > 0)
+      return "You're caught up. Answer questions to reveal more common ground."
+    return 'Answer questions to reveal common ground.'
+  }, [error, feedMeta, loadingInitial])
 
-  const showToast = useCallback((itemId: string, message: string) => {
-    setToasts((t) => ({ ...t, [itemId]: message }));
-    setTimeout(() => setToasts((t) => { const next = { ...t }; delete next[itemId]; return next; }), 3000);
-  }, []);
+  const emptyDiagnostics = useMemo(() => {
+    if (process.env.NODE_ENV === 'production' || !feedMeta) return null
+
+    return [
+      `has_friends=${String(feedMeta.has_friends)}`,
+      `has_dismissed_domains=${String(feedMeta.has_dismissed_domains)}`,
+      `total_item_count=${feedMeta.total_item_count}`,
+      `pre_filter_active_count=${feedMeta.pre_filter_active_count}`,
+      `active_item_count=${feedMeta.active_item_count}`,
+      `page_item_count=${feedMeta.page_item_count ?? items.length}`,
+      `limit=${feedMeta.limit ?? pageSize}`,
+      `cursor=${feedMeta.cursor ?? 'none'}`,
+      `next_cursor=${nextCursor ?? 'none'}`,
+      `has_more=${String(hasMore)}`,
+    ].join(' · ')
+  }, [feedMeta, hasMore, items.length, nextCursor, pageSize])
 
   const removeItem = useCallback((itemId: string) => {
-    setItems((current) => current.filter((item) => item.id !== itemId));
-  }, []);
+    setItems((current) => current.filter((item) => item.id !== itemId))
+  }, [])
 
-  const updateState = useCallback(async (itemId: string, state: 'skipped' | 'dismissed') => {
-    setBusyId(itemId);
-    setError(null);
-    try {
-      const response = await fetch(`/api/feed/${itemId}/state`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ state }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.message ?? 'Could not update that Feed item.');
-      }
-      removeItem(itemId);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not update that Feed item.');
-    } finally {
-      setBusyId(null);
-    }
-  }, [removeItem]);
-
-  const dismissDomain = useCallback(async (itemId: string, domain: string) => {
-    setBusyId(itemId);
+  const hideCategory = useCallback(async (item: FeedApiItem) => {
+    if (!item.domain_pill) return
+    setBusyId(item.id)
+    setError(null)
     try {
       const response = await fetch('/api/feed/dismiss-domain', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ domain }),
-      });
+        body: JSON.stringify({ domain: item.domain_pill }),
+      })
       if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.message ?? 'Could not dismiss domain.');
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.message ?? 'Could not hide that category.')
       }
-      // Remove all items with this domain from local state
-      setItems((current) => current.filter((item) => item.domain_pill !== domain));
-      showToast(itemId, `Got it. No more ${domain} questions.`);
+      setItems((current) =>
+        current.filter(
+          (currentItem) => currentItem.domain_pill !== item.domain_pill
+        )
+      )
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not dismiss domain.');
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not hide that category.'
+      )
     } finally {
-      setBusyId(null);
+      setBusyId(null)
     }
-  }, [showToast]);
+  }, [])
 
-  const submitAnswer = useCallback(async (item: FeedApiItem) => {
-    const submitted = answers[item.id]?.trim();
-    if (!submitted) return;
-    setBusyId(item.id);
-    setError(null);
+  const hidePerson = useCallback(async (item: FeedApiItem) => {
+    setBusyId(item.id)
+    setError(null)
     try {
-      const response = await fetch(`/api/feed/${item.id}/answer`, {
-        method: 'POST',
+      const response = await fetch(`/api/feed/${item.id}/state`, {
+        method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ submitted_answer: submitted }),
-      });
-      const body = await response.json().catch(() => null) as AnswerResponse | { message?: string } | null;
-      if (!response.ok || !body || !('correct' in body || 'isCorrect' in body)) {
-        throw new Error((body as { message?: string } | null)?.message ?? 'Could not submit that answer.');
+        body: JSON.stringify({ state: 'dismissed' }),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(
+          body?.message ?? 'Could not hide questions from that person.'
+        )
       }
-      setResults((current) => ({
-        ...current,
-        [item.id]: {
-          correct: Boolean(body.correct ?? body.isCorrect),
-          answer: body.answer ?? body.correctAnswer ?? '',
-          explanation: body.explanation ?? null,
-          quip: body.quip ?? body.consolation ?? null,
-          breadcrumb: body.breadcrumb ?? null,
-        },
-      }));
-      setCardStates((s) => ({ ...s, [item.id]: 'answered' }));
+      setItems((current) =>
+        current.filter(
+          (currentItem) => currentItem.source_user_id !== item.source_user_id
+        )
+      )
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not submit that answer.');
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not hide questions from that person.'
+      )
     } finally {
-      setBusyId(null);
+      setBusyId(null)
     }
-  }, [answers]);
+  }, [])
+
+  const reportItem = useCallback(
+    async (item: FeedApiItem) => {
+      setBusyId(item.id)
+      setError(null)
+      try {
+        const response = await fetch(`/api/feed/${item.id}/thumbsdown`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+        if (!response.ok) {
+          const body = await response.json().catch(() => null)
+          throw new Error(body?.message ?? 'Could not report that question.')
+        }
+        removeItem(item.id)
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : 'Could not report that question.'
+        )
+      } finally {
+        setBusyId(null)
+      }
+    },
+    [removeItem]
+  )
+
+  const submitAnswer = useCallback(
+    async (item: FeedApiItem, submittedAnswer: string) => {
+      setBusyId(item.id)
+      setError(null)
+      try {
+        const response = await fetch(`/api/feed/${item.id}/answer`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ submitted_answer: submittedAnswer }),
+        })
+        const body = (await response.json().catch(() => null)) as
+          | AnswerResponse
+          | { message?: string }
+          | null
+        if (!response.ok || !body || !('isCorrect' in body)) {
+          throw new Error(
+            (body as { message?: string } | null)?.message ??
+              'Could not submit that answer.'
+          )
+        }
+        const isCorrect = Boolean(body.isCorrect)
+        setResults((current) => ({
+          ...current,
+          [item.id]: {
+            correct: isCorrect,
+            answer: body.correctAnswer ?? '',
+            explanation: body.explanation ?? null,
+            quip: body.quip ?? null,
+            breadcrumb: body.breadcrumb ?? null,
+            awardedPoints: body.pointsAwarded ?? null,
+            masteryDelta: body.masteryDelta ?? null,
+          },
+        }))
+        setItems((current) =>
+          current.map((currentItem) =>
+            currentItem.id === item.id
+              ? {
+                  ...currentItem,
+                  state: 'answered',
+                  card_type: 'answered_by_you',
+                  type: 'answered_by_you',
+                  submitted_answer: submittedAnswer,
+                  answer_result: isCorrect ? 'correct' : 'incorrect',
+                  is_correct: isCorrect,
+                  correct_answer: body.correctAnswer ?? '',
+                  awarded_points: body.pointsAwarded ?? null,
+                  mastery_delta: body.masteryDelta ?? null,
+                  explanation: body.explanation ?? currentItem.explanation,
+                }
+              : currentItem
+          )
+        )
+        setCardStates((s) => ({ ...s, [item.id]: 'answered' }))
+        setAnswerSheetId(null)
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : 'Could not submit that answer.'
+        )
+      } finally {
+        setBusyId(null)
+      }
+    },
+    []
+  )
+
+  const submitRecheck = useCallback(
+    async (item: FeedApiItem): Promise<{ accepted: boolean; message: string }> => {
+      const response = await fetch(`/api/feed/${item.id}/recheck`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const body = (await response.json().catch(() => null)) as {
+        accepted?: boolean
+        status?: string
+        reason?: string
+        pointsAwarded?: number
+        message?: string
+      } | null
+      if (!response.ok) {
+        throw new Error(body?.message ?? 'Could not recheck that answer.')
+      }
+      const accepted = Boolean(body?.accepted)
+      const pointsAwarded = typeof body?.pointsAwarded === 'number' ? body.pointsAwarded : 0
+      if (accepted) {
+        setItems((current) =>
+          current.map((currentItem) =>
+            currentItem.id === item.id
+              ? { ...currentItem, is_correct: true, answer_result: 'correct', awarded_points: pointsAwarded }
+              : currentItem
+          )
+        )
+        setResults((current) => {
+          const existing = current[item.id]
+          if (!existing) return current
+          return { ...current, [item.id]: { ...existing, correct: true, awardedPoints: pointsAwarded } }
+        })
+        return { accepted: true, message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.` }
+      }
+      if (body?.status === 'needs_human') {
+        return { accepted: false, message: body.reason ?? 'Flagged for a human look.' }
+      }
+      return { accepted: false, message: body?.reason ?? 'Rechecked and still marked wrong.' }
+    },
+    []
+  )
+
+  const filterOptions: Array<{ value: FeedFilter; label: string }> = [
+    { value: 'all', label: 'All' },
+    { value: 'sent-to-me', label: 'Sent to me' },
+    { value: 'from-friends', label: 'From friends' },
+  ]
 
   return (
     <>
+      <nav className="mb-4 flex flex-wrap gap-2" aria-label="Feed filters">
+        {filterOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => setFeedFilter(option.value)}
+            aria-current={feedFilter === option.value ? 'page' : undefined}
+            className={
+              feedFilter === option.value
+                ? 'rounded-full bg-stone-950 px-3 py-1.5 text-sm font-medium text-white'
+                : 'rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50'
+            }
+          >
+            {option.label}
+          </button>
+        ))}
+      </nav>
       {ceremonyBanner ? (
         <Link
           href={`/ceremony/${ceremonyBanner.id}`}
           className="mb-4 block rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-stone-950 shadow-sm"
         >
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 text-lg" aria-hidden>✦</span>
+            <span className="mt-0.5 text-lg" aria-hidden>
+              ✦
+            </span>
             <div>
               <p className="font-medium">Your two-week reflection is ready</p>
-              <p className="mt-1 text-sm text-stone-700">See what you&rsquo;ve been up to {'->'}</p>
+              <p className="mt-1 text-sm text-stone-700">
+                See what you&rsquo;ve been up to {'->'}
+              </p>
             </div>
           </div>
         </Link>
       ) : null}
 
-      {visibleItems.length === 0 ? (
+      {items.length === 0 ? (
         <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
-          <p className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>{emptyCopy}</p>
-          {/*
-            // v11.1: Joshing Game creation disabled at FAB level. Re-enable
-            // when game creation flow is restored.
-          */}
+          <p
+            className={
+              error
+                ? 'text-destructive text-sm'
+                : 'text-muted-foreground text-sm'
+            }
+          >
+            {emptyCopy}
+          </p>
+          {emptyDiagnostics ? (
+            <p className="bg-muted text-muted-foreground max-w-xl rounded px-3 py-2 font-mono text-xs break-words">
+              {emptyDiagnostics}
+            </p>
+          ) : null}
         </section>
       ) : (
         <section className="space-y-3 pb-8">
-          {visibleItems.map((item) => {
-            const result = results[item.id];
-            const cardState = cardStates[item.id] ?? (item.state === 'answered' ? 'answered' : 'unanswered');
-            const toast = toasts[item.id];
+          {items.map((item) => {
+            const result = results[item.id]
+            const cardState =
+              cardStates[item.id] ??
+              (item.state === 'answered' ? 'answered' : 'unanswered')
+            const isAnswered = cardState === 'answered'
+            const isBusy = busyId === item.id
 
+            const overflow = (
+              <FeedOverflowMenu
+                sourceName={item.source_friend_display_name}
+                category={item.domain_pill}
+                question={
+                  item.question_id && item.question_text
+                    ? {
+                        id: item.question_id,
+                        text: item.question_text,
+                        domain: item.domain_pill,
+                      }
+                    : null
+                }
+                isInBank={item.is_in_bank}
+                disabled={isBusy}
+                onHideCategory={() => void hideCategory(item)}
+                onHidePerson={() => void hidePerson(item)}
+                onReport={() => void reportItem(item)}
+              />
+            )
+
+            if (isAnswered) {
+              const answeredItem = toAnsweredByYouItem(item, result)
+              const isIncorrect = answeredItem.isCorrect === false
+              const recheckAction: FeedRecheckAction | null = isIncorrect
+                ? { onSubmit: () => submitRecheck(item) }
+                : null
+              return (
+                <AnsweredByYouCard
+                  key={item.id}
+                  item={answeredItem}
+                  recheckAction={recheckAction}
+                  overflow={overflow}
+                />
+              )
+            }
+
+            const onAnswer = () => setAnswerSheetId(item.id)
+            const typedItem = toTypedFeedItem(item)
+
+            if (typedItem.type === 'direct_sent') {
+              return (
+                <DirectSentCard
+                  key={item.id}
+                  item={typedItem}
+                  overflow={overflow}
+                  onAnswer={onAnswer}
+                />
+              )
+            }
+
+            if (typedItem.type === 'friend_added') {
+              return (
+                <FriendAddedCard
+                  key={item.id}
+                  item={typedItem}
+                  overflow={overflow}
+                  onAnswer={onAnswer}
+                />
+              )
+            }
+
+            if (typedItem.type === 'friend_liked') {
+              return (
+                <FriendLikedCard
+                  key={item.id}
+                  item={typedItem}
+                  overflow={overflow}
+                  onAnswer={onAnswer}
+                />
+              )
+            }
 
             return (
-              <article
+              <FriendAnsweredCard
                 key={item.id}
-                className="rounded-lg border bg-card p-4 text-card-foreground"
-              >
-                {/* Header row */}
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  {item.is_pinned ? (
-                    <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">Pinned</span>
-                  ) : null}
-                  {item.domain_pill ? (
-                    <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
-                      {item.domain_pill}
-                    </span>
-                  ) : null}
-                  {!item.verified ? (
-                    <button
-                      type="button"
-                      className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground"
-                      title="The author wrote their own answer instead of using the LLM's suggestion. The answer may not be standard."
-                      onClick={() => showToast(item.id, "The author wrote their own answer instead of using the LLM's suggestion. The answer may not be standard.")}
-                    >
-                      ⚠ unverified
-                    </button>
-                  ) : null}
-                  {item.difficulty ? (
-                    <span className={[
-                      'rounded-full px-2.5 py-1 text-xs font-medium',
-                      item.difficulty === 'specialist' ? 'bg-rose-100 text-rose-700'
-                      : item.difficulty === 'moderate' ? 'bg-amber-100 text-amber-700'
-                      : 'bg-sky-100 text-sky-700',
-                    ].join(' ')}>
-                      {item.difficulty.charAt(0).toUpperCase() + item.difficulty.slice(1)}
-                    </span>
-                  ) : null}
-                  <span className="ml-auto text-xs text-muted-foreground">{formatEventTime(item.source_event_at)}</span>
-                </div>
-
-                {/* Question text */}
-                <p className="text-base leading-7 text-foreground">{item.question_text}</p>
-
-                {/* Attribution line */}
-                <div className="mt-2 flex items-center gap-1.5">
-                  <p className="text-sm font-medium text-foreground">{item.source_attribution}</p>
-                </div>
-                {item.personal_message ? (
-                  <p className="mt-1 text-sm italic text-muted-foreground">&ldquo;{item.personal_message}&rdquo;</p>
-                ) : null}
-
-                {/* Toast */}
-                {toast ? (
-                  <p className="mt-2 text-sm text-muted-foreground">{toast}</p>
-                ) : null}
-
-
-                {/* State 2 — Answered */}
-                {cardState === 'answered' && result ? (
-                  <div className="mt-4 rounded-md bg-muted p-3 text-sm">
-                    {/* Comparison copy */}
-                    <p className="font-medium">
-                      {item.source_type === 'friend_answered'
-                        ? comparisonCopy(result.correct, item.friend_results)
-                        : result.correct ? 'This one connected.' : 'Not quite.'}
-                    </p>
-                    {!result.correct ? <p className="mt-1">Answer: {result.answer}</p> : null}
-                    {result.explanation ? <p className="mt-1 text-muted-foreground">{result.explanation}</p> : null}
-                    {result.quip ? <p className="mt-1 text-muted-foreground">{result.quip}</p> : null}
-                    {result.breadcrumb ? <p className="mt-2 text-muted-foreground italic">{result.breadcrumb}</p> : null}
-
-                    {/* Post-answer actions */}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {item.question_id ? (
-                        <SendQuestionAction
-                          question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill ?? '' }}
-                          label="Send to friend"
-                          className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted"
-                        />
-                      ) : null}
-                      {item.question_id ? (
-                        <AddToBankAction
-                          questionId={item.question_id}
-                          initialInBank={item.is_in_bank}
-                          contextType="feed"
-                          contextId={item.id}
-                          label=""
-                          className="inline-flex size-9 items-center justify-center rounded-md border px-0"
-                          onChange={(inBank) => setItems((current) => current.map((row) => row.id === item.id ? { ...row, is_in_bank: inBank } : row))}
-                        />
-                      ) : null}
-                      {item.question_id && viewerId && item.source_user_id !== viewerId ? (
-                        <QuestionReactionPrompt
-                          prompt={{
-                            senderName: item.source_friend_display_name,
-                            questionId: item.question_id,
-                            contextType: 'feed',
-                            contextId: item.id,
-                          }}
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                ) : cardState === 'unanswered' ? (
-                  /* State 1 — Unanswered */
-                  <form
-                    className="mt-4 flex flex-col gap-3 sm:flex-row"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void submitAnswer(item);
-                    }}
-                  >
-                    <input
-                      className="min-h-11 flex-1 rounded-md border bg-background px-3 text-base outline-none"
-                      value={answers[item.id] ?? ''}
-                      onChange={(event) => setAnswers((current) => ({ ...current, [item.id]: event.target.value }))}
-                      placeholder="Your answer..."
-                      disabled={busyId === item.id}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <button className="btn-primary inline-flex h-11 items-center gap-2" type="submit" disabled={busyId === item.id || !answers[item.id]?.trim()}>
-                        <Send className="size-4" />
-                        Send
-                      </button>
-                      <button
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-md border"
-                        type="button"
-                        onClick={() => void updateState(item.id, 'skipped')}
-                        disabled={busyId === item.id}
-                        title="Skip"
-                      >
-                        <SkipForward className="size-4" />
-                      </button>
-                      <button
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-md border"
-                        type="button"
-                        onClick={() => void updateState(item.id, 'dismissed')}
-                        disabled={busyId === item.id}
-                        title="Dismiss"
-                      >
-                        <X className="size-4" />
-                      </button>
-                      <button
-                        className="inline-flex h-11 items-center gap-1.5 rounded-md border px-3 text-sm text-muted-foreground"
-                        type="button"
-                        onClick={() => item.domain_pill ? void dismissDomain(item.id, item.domain_pill) : undefined}
-                        disabled={busyId === item.id || !item.domain_pill}
-                        title={item.domain_pill ? `Not my focus: ${item.domain_pill}` : 'No category to focus'}
-                      >
-                        Not my focus
-                      </button>
-                      {item.question_id ? (
-                        <SendQuestionAction
-                          question={{ id: item.question_id, text: item.question_text ?? '', domain: item.domain_pill ?? '' }}
-                          label=""
-                          className="inline-flex h-11 w-11 items-center justify-center rounded-md border hover:bg-muted"
-                        />
-                      ) : null}
-                      {item.question_id ? (
-                        <AddToBankAction
-                          questionId={item.question_id}
-                          initialInBank={item.is_in_bank}
-                          contextType="feed"
-                          contextId={item.id}
-                          label=""
-                          className="inline-flex h-11 w-11 items-center justify-center rounded-md border px-0"
-                          onChange={(inBank) => setItems((current) => current.map((row) => row.id === item.id ? { ...row, is_in_bank: inBank } : row))}
-                        />
-                      ) : null}
-                    </div>
-                  </form>
-                ) : null}
-              </article>
-            );
+                item={typedItem}
+                overflow={overflow}
+                onAnswer={onAnswer}
+              />
+            )
           })}
         </section>
       )}
+
+      {infinite && hasMore ? (
+        <div ref={sentinelRef} className="py-4 text-center" aria-live="polite">
+          {loadingMore ? (
+            <p className="text-muted-foreground text-sm">
+              Loading more Feed...
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {answerSheetId ? (() => {
+        const sheetItem = items.find((item) => item.id === answerSheetId)
+        if (!sheetItem) return null
+        return (
+          <AnswerSheet
+            question={sheetItem.question_text ?? ''}
+            category={sheetItem.domain_pill}
+            onSubmit={(answer) => void submitAnswer(sheetItem, answer)}
+            onClose={() => setAnswerSheetId(null)}
+            loading={busyId === sheetItem.id}
+          />
+        )
+      })() : null}
     </>
-  );
+  )
 }

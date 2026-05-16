@@ -4,7 +4,7 @@ import { db, feedDismissedDomains, feedItems, masteryEvents, questionFeedback, q
 import { writeActivity } from '@/server/activity/write-activity';
 import { getFriends } from '@/server/db/queries/friends';
 import { rollOffOldItems, userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
-import { isCorrectAnswerFeedEligible } from '@/server/feed/visibility';
+import { isCorrectAnswerFeedEligible, SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 export async function createFeedItemsForFriendsFromAnswer(
   userId: string,
@@ -55,7 +55,14 @@ async function _createFeedItemsForFriendsFromAnswer(
   if (thumbsDown || ratingDown) return;
 
   const [question] = await db
-    .select({ creatorId: questions.creatorId, visibility: questions.visibility, deletedAt: questions.deletedAt, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })
+    .select({
+      creatorId: questions.creatorId,
+      source: questions.source,
+      visibility: questions.visibility,
+      deletedAt: questions.deletedAt,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+    })
     .from(questions)
     .where(eq(questions.id, questionId))
     .limit(1);
@@ -119,7 +126,7 @@ async function _createFeedItemsForFriendsFromAnswer(
     await db.insert(feedItems).values({
       recipientUserId: friend.id,
       questionId,
-      sourceType: 'friend_answered',
+      sourceType: SOCIAL_FEED_SOURCE_TYPE,
       sourceUserId: userId,
       sourceResult: result,
       sourceEventAt: new Date(),

@@ -27,22 +27,15 @@ export default async function Home() {
         </div>
         <div className="w-full space-y-3">
           <TodaysFiveCard />
-          {catchupCount > 0 ? (
-            <CatchupCard count={catchupCount} expiringCount={expiringCount} />
-          ) : null}
+          <MissedQuestionsCard
+            count={catchupCount}
+            expiringCount={expiringCount}
+          />
           <div className="bg-card text-card-foreground rounded-lg border p-4">
             <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
               What&apos;s happening
             </p>
-            <FeedList limit={3} />
-            <div className="mt-2 flex justify-end">
-              <Link
-                href="/feed"
-                className="text-sm font-medium underline-offset-4 hover:underline"
-              >
-                Feed
-              </Link>
-            </div>
+            <FeedList pageSize={20} infinite />
           </div>
         </div>
       </section>
@@ -50,13 +43,14 @@ export default async function Home() {
   )
 }
 
-function CatchupCard({
+function MissedQuestionsCard({
   count,
   expiringCount,
 }: {
   count: number
   expiringCount: number
 }) {
+  if (count === 0) return null
   return (
     <div
       className="bg-card text-card-foreground rounded-lg border p-4"
@@ -70,8 +64,11 @@ function CatchupCard({
           : undefined
       }
     >
-      <p className="text-foreground text-sm font-semibold">
-        {count} {count === 1 ? 'question' : 'questions'} you missed
+      <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+        Play missed questions
+      </p>
+      <p className="text-foreground mt-2 text-sm font-semibold">
+        {count === 1 ? '1 question you missed' : `${count} questions you missed`}
       </p>
       <p className="text-muted-foreground mt-1 text-sm leading-6">
         Catch up - 0.25x points

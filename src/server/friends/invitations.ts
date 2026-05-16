@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto'
 
-import { and, desc, eq, gt, isNull, or } from 'drizzle-orm'
+import { and, desc, eq, gt, isNotNull, isNull, or } from 'drizzle-orm'
 
 import { db, friendInvitations, users } from '@/server/db'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
@@ -27,7 +27,6 @@ export type OutgoingFriendInvitation = FriendInvitation & {
 export type FriendInvitationLanding = {
   status: 'valid' | 'expired' | 'accepted' | 'invalid'
   inviterName: string
-  suggestedInterests: { label: string }[]
 }
 
 export type CreateFriendInvitationInput = {
@@ -87,17 +86,13 @@ export function parseInvitationInterests(value: unknown): string[] {
   return interests
 }
 
-function parseLandingInterests(value: unknown): { label: string }[] {
-  return parseInvitationInterests(value).map((label) => ({ label }))
-}
-
 export async function getFriendInvitationLandingByToken(
   token: string,
   now = new Date()
 ): Promise<FriendInvitationLanding> {
   const normalizedToken = token.trim()
   if (!normalizedToken) {
-    return { status: 'invalid', inviterName: 'Someone', suggestedInterests: [] }
+    return { status: 'invalid', inviterName: 'Someone' }
   }
 
   const [row] = await db
@@ -118,11 +113,16 @@ export async function getFriendInvitationLandingByToken(
       status: 'invalid',
       invite_hash: hashTelemetryValue(normalizedToken),
     })
-    return { status: 'invalid', inviterName: 'Someone', suggestedInterests: [] }
+    return { status: 'invalid', inviterName: 'Someone' }
   }
 
   const inviterName = displayInviterName(row.inviterName)
-  const suggestedInterests = parseLandingInterests(row.preSeededInterests)
+  // Pre-seeded interests are NEVER returned to the public landing payload:
+  // anyone with the link could otherwise view the inviter's notes for the
+  // intended recipient. The labels are still surfaced to the recipient
+  // post-OTP via getPreSeededInterestsForUser(). We count them here only
+  // for telemetry.
+  const interestCount = parseInvitationInterests(row.preSeededInterests).length
 
   if (row.acceptedAt) {
     logTelemetry('friend_invite_link_opened', {
@@ -130,7 +130,7 @@ export async function getFriendInvitationLandingByToken(
       invite_hash: hashTelemetryValue(normalizedToken),
       suggested_interest_count: 0,
     })
-    return { status: 'accepted', inviterName, suggestedInterests: [] }
+    return { status: 'accepted', inviterName }
   }
 
   if (row.expiresAt <= now) {
@@ -139,16 +139,16 @@ export async function getFriendInvitationLandingByToken(
       invite_hash: hashTelemetryValue(normalizedToken),
       suggested_interest_count: 0,
     })
-    return { status: 'expired', inviterName, suggestedInterests: [] }
+    return { status: 'expired', inviterName }
   }
 
   logTelemetry('friend_invite_link_opened', {
     status: 'valid',
     invite_hash: hashTelemetryValue(normalizedToken),
-    suggested_interest_count: suggestedInterests.length,
+    suggested_interest_count: interestCount,
   })
 
-  return { status: 'valid', inviterName, suggestedInterests }
+  return { status: 'valid', inviterName }
 }
 
 function normalizeRequiredText(value: string, fieldName: string) {
@@ -228,6 +228,51 @@ export async function createFriendInvitation({
   }
 
   return createdInvitation
+}
+
+export async function hasAcceptedInvitationForUser(
+  inviteeUserId: string
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: friendInvitations.id })
+    .from(friendInvitations)
+    .where(
+      and(
+        eq(friendInvitations.inviteeUserId, inviteeUserId),
+        isNotNull(friendInvitations.acceptedAt)
+      )
+    )
+    .limit(1)
+
+  return !!row
+}
+
+export async function getValidInvitationForPhone({
+  token,
+  verifiedPhone,
+  now = new Date(),
+}: {
+  token: string
+  verifiedPhone: string
+  now?: Date
+}): Promise<FriendInvitation | null> {
+  if (!token || !verifiedPhone) return null
+
+  const [invitation] = await db
+    .select()
+    .from(friendInvitations)
+    .where(
+      and(
+        eq(friendInvitations.token, token),
+        eq(friendInvitations.inviteePhone, verifiedPhone),
+        isNull(friendInvitations.acceptedAt),
+        isNull(friendInvitations.cancelledAt),
+        gt(friendInvitations.expiresAt, now)
+      )
+    )
+    .limit(1)
+
+  return invitation ?? null
 }
 
 export async function getInvitationByToken(

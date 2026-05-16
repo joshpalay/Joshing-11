@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
-    "@prisma/client": "^5",
     "bcryptjs": "latest",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -47,9 +46,10 @@
     "postcss": "latest",
     "prettier": "latest",
     "prettier-plugin-tailwindcss": "latest",
-    "prisma": "^5",
     "tailwindcss": "^4",
     "tsx": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.6"
   }
 }

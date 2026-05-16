@@ -4,12 +4,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { GameplayChatThread, type ChatMessage } from '@/components/play/GameplayChat';
+import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy';
 import type { JoshingGameView, QuestionRow } from '@/server/db/queries/joshing-game';
 
 function questionBadges(q: QuestionRow): Array<{ label: string; tone?: 'warning' }> | undefined {
   const level = q.calibratedDifficulty ?? q.llmDifficulty ?? q.difficultyEstimate ?? null;
   if (!level) return undefined;
-  const label = level.charAt(0).toUpperCase() + level.slice(1);
+  const label = difficultyCopyFromEstimate(level);
+  if (!label) return undefined;
   return [level === 'specialist' ? { label, tone: 'warning' as const } : { label }];
 }
 

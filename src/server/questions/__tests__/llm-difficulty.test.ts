@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fallbackQuestionDifficulty, parseQuestionDifficultyAssessment } from '@/server/questions/llm-difficulty';
+import { DIFFICULTY_COPY, fallbackQuestionDifficulty, parseQuestionDifficultyAssessment } from '@/server/questions/llm-difficulty';
 
 describe('question LLM difficulty assessment', () => {
   it('maps domain-relative tier labels to persisted numeric difficulty', () => {
@@ -16,5 +16,14 @@ describe('question LLM difficulty assessment', () => {
 
   it('falls back to solid when no LLM rating is available', () => {
     expect(fallbackQuestionDifficulty()).toEqual({ tier: 'solid', difficulty: 3 });
+  });
+
+  it('uses tier names for persisted numeric difficulty display copy', () => {
+    expect(DIFFICULTY_COPY).toMatchObject({
+      1: 'Establishing',
+      3: 'Solid',
+      4: 'Skilled',
+      5: 'Master',
+    });
   });
 });

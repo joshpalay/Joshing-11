@@ -1,6 +1,7 @@
 import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, parseJsonObject } from '@/lib/llm';
+import { DIFFICULTY_COPY, type QuestionDifficultyTier } from '@/lib/questions/difficulty-copy';
 
-export type QuestionDifficultyTier = 'establishing' | 'solid' | 'skilled' | 'master';
+export { DIFFICULTY_COPY };
 
 export type QuestionDifficultyAssessment = {
   tier: QuestionDifficultyTier;

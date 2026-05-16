@@ -38,27 +38,6 @@ export default async function InvitePage({ params }: InvitePageProps) {
             </h1>
           </div>
 
-          {invitation.suggestedInterests.length > 0 ? (
-            <div className="bg-background/60 space-y-3 rounded-lg border p-4">
-              <p className="text-sm leading-6 font-medium">
-                They left a few ideas for your first corner:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {invitation.suggestedInterests.map((interest) => (
-                  <span
-                    key={interest.label}
-                    className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm shadow-sm"
-                  >
-                    {interest.label}
-                  </span>
-                ))}
-              </div>
-              <p className="text-muted-foreground text-sm">
-                You can keep, edit, or ignore these before anything is saved.
-              </p>
-            </div>
-          ) : null}
-
           <Link
             href={inviteLoginHref(token)}
             className="bg-primary text-primary-foreground inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium"

@@ -108,7 +108,7 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     suggestionError: null,
     suggesting: false,
     specificMode: initialSpecificMode,
-    shareToFeed: initialValues?.shareToFeed ?? false,
+    shareToFeed: initialValues?.shareToFeed ?? !initialSpecificMode,
     friends: [],
     friendsLoading: false,
     sendToFriendIds: initialValues?.sendToFriendIds ?? [],

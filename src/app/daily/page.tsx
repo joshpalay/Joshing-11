@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Settings } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
@@ -94,7 +96,28 @@ export default function DailyPage() {
       const body = await response.json().catch(() => null);
 
       if (response.ok && body?.queue === null) {
-        router.replace('/daily/setup');
+        const createResponse = await fetch('/api/daily/queue', {
+          method: 'POST',
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!createResponse.ok) {
+          router.replace('/daily/setup');
+          return;
+        }
+        const refetchResponse = await fetch('/api/daily/queue', { cache: 'no-store', credentials: 'include' });
+        const refetchBody = await refetchResponse.json().catch(() => null);
+        if (!refetchResponse.ok) {
+          throw new Error(refetchBody?.message ?? 'Could not load today.');
+        }
+        if (!refetchBody?.queue_id) {
+          setQueue(null);
+          setLoading(false);
+          return;
+        }
+        const refetchSlots = Array.isArray(refetchBody.slots) ? refetchBody.slots : [];
+        setQueue({ queue_id: refetchBody.queue_id, queue_date: refetchBody.queue_date, slots: refetchSlots });
+        setLoading(false);
         return;
       }
 
@@ -138,14 +161,6 @@ export default function DailyPage() {
   const completedCount = queue?.slots.filter((slot) => slot.answered || slot.skipped).length ?? 0;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
 
-  useEffect(() => {
-    if (!allDone || loading) return;
-    const timer = window.setTimeout(() => {
-      router.replace('/daily/summary');
-    }, 2000);
-
-    return () => window.clearTimeout(timer);
-  }, [allDone, loading, router]);
 
   const skipCurrent = useCallback(async () => {
     if (!queue || !currentSlot || submitting) return;
@@ -252,7 +267,7 @@ export default function DailyPage() {
           consolation: slot.reveal_quip ?? null,
           breadcrumb: slot.reveal_breadcrumb ?? null,
           copyVariant: slot.slot_index,
-          creatorName: 'Joshing',
+          creatorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
           canonicalSubcategory: slot.domain,
           recheckAction: slot.answer_state === 'incorrect' && !slot.recheck_status
             ? { onSubmit: () => requestRecheck(slot.slot_index) }
@@ -275,8 +290,13 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
+          isNew: true,
           badges: questionBadges(slot),
         });
+        if (submitting && answer.trim()) {
+          rows.push({ id: 'u-pending', kind: 'user', text: answer.trim() });
+          rows.push({ id: 'grading', kind: 'typing' });
+        }
         break;
       }
     }
@@ -286,13 +306,15 @@ export default function DailyPage() {
         id: 'session-close',
         kind: 'session_close',
         text: sessionCloseCopy(queue.slots),
+        summaryHref: '/daily/summary',
       });
     }
 
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, requestRecheck]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -370,9 +392,18 @@ export default function DailyPage() {
           backdropFilter: 'blur(6px)',
         }}
       >
-        <div>
-          <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Daily Five</p>
-          <h1 className="font-serif text-xl font-semibold text-[var(--text)]">Today&apos;s five</h1>
+        <div className="flex items-center gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Daily Five</p>
+            <h1 className="font-serif text-xl font-semibold text-[var(--text)]">Today&apos;s five</h1>
+          </div>
+          <Link
+            href="/daily/setup"
+            className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+            aria-label="Set up daily round"
+          >
+            <Settings className="size-4" aria-hidden="true" />
+          </Link>
         </div>
         <GeometricProgress
           total={queue?.slots.length || DAILY_QUEUE_SIZE}

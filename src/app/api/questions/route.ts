@@ -1,10 +1,10 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, questions, users } from '@/server/db';
+import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
 import {
   createQuestion,
   getQuestion,
@@ -18,10 +18,20 @@ import {
 } from '@/server/db/queries/feed';
 import { openKBDomain } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
+import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import { readCreateQuestionPayload } from '@/server/questions/create-payload';
 import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
+import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export const dynamic = 'force-dynamic';
+
+function shouldIncludeShareRecipientDiagnostics() {
+  return process.env.NODE_ENV !== 'production' || process.env.SHARE_TO_FEED_DEBUG_RECIPIENT_IDS === 'true';
+}
+
+function hasPayloadKey(body: Record<string, unknown> | null, key: string) {
+  return Object.prototype.hasOwnProperty.call(body ?? {}, key);
+}
 
 export async function GET() {
   const session = await getSession();
@@ -36,6 +46,19 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const { value, errors } = readCreateQuestionPayload(body);
+  console.info('[questions/createPayload]', {
+    userId: session.userId,
+    hasErrors: errors.length > 0,
+    shareToFeed: value.shareToFeed,
+    sendToFriendCount: value.sendToFriendIds.length,
+    payloadShareKeysPresent: {
+      shareToFeed: hasPayloadKey(body, 'shareToFeed'),
+      shareWithFriends: hasPayloadKey(body, 'shareWithFriends'),
+      share_with_friends: hasPayloadKey(body, 'share_with_friends'),
+      share_to_feed: hasPayloadKey(body, 'share_to_feed'),
+      sharedToFriendsFeed: hasPayloadKey(body, 'sharedToFriendsFeed'),
+    },
+  });
   if (errors.length > 0) {
     return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
@@ -43,7 +66,28 @@ export async function POST(request: NextRequest) {
   const { sendToFriendIds, shareToFeed, ...rawQuestionFields } = value;
   const categorization = await categorizeQuestion(rawQuestionFields.text, rawQuestionFields.correctAnswer);
   const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
-  const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
+  const normalizedSubcategory = normalizeCanonicalSubcategory(categorization.subcategory);
+
+  // F4.5: reject creation if categorization produced a generic bucket label.
+  // The LLM helper already re-prompts (see GENERIC_SUBCATEGORY_NORMALIZED in
+  // src/lib/llm.ts) so reaching here means the LLM couldn't find a
+  // hyper-specific label — better to fail fast than silently file under
+  // 'General Knowledge'.
+  if (isGenericSubcategory(normalizedSubcategory)) {
+    console.warn('[questions/create] rejected generic canonical_subcategory', {
+      attempted: normalizedSubcategory,
+      llmSubcategory: categorization.subcategory,
+    });
+    return NextResponse.json(
+      {
+        error: 'category_too_generic',
+        message:
+          "We couldn't pin a specific category for this question. Try rephrasing with a more specific topic.",
+      },
+      { status: 422 },
+    );
+  }
+  const canonicalSubcategory = normalizedSubcategory;
   const questionFields = {
     ...rawQuestionFields,
     category,
@@ -76,20 +120,87 @@ export async function POST(request: NextRequest) {
 
   const created = await createQuestion({ authorId: session.userId, ...categorizedQuestionFields });
   console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: categorizedQuestionFields.verified, category: categorizedQuestionFields.category, canonicalSubcategory: categorizedQuestionFields.canonicalSubcategory, difficultyTier: difficultyAssessment.tier });
-  const kbResult = await openKBDomain({
-    userId: session.userId,
-    domain: categorizedQuestionFields.canonicalSubcategory,
-    via: 'authorship',
-    broadCategory: categorizedQuestionFields.broadCategory,
-    questionId: created.id,
-  });
-  const question = await getQuestion(created.id, session.userId);
+  const feedShare = {
+    requested: shareToFeed,
+    createdCount: 0,
+    friendCount: 0,
+    sharedRecipientIds: [] as string[],
+    skippedDismissedDomainRecipientIds: [] as string[],
+    skippedExistingFeedRecipientIds: [] as string[],
+  };
 
   if (shareToFeed) {
+    const friends = await getFriends(session.userId);
+    const friendIds = friends.map((friend) => friend.id);
+    const dismissedRecipientIds = new Set<string>();
+
+    if (friendIds.length > 0 && categorizedQuestionFields.canonicalSubcategory) {
+      const dismissedRows = await db
+        .select({ userId: feedDismissedDomains.userId })
+        .from(feedDismissedDomains)
+        .where(and(
+          inArray(feedDismissedDomains.userId, friendIds),
+          eq(feedDismissedDomains.canonicalSubcategory, categorizedQuestionFields.canonicalSubcategory),
+          isNull(feedDismissedDomains.reinstatedAt),
+        ));
+
+      for (const row of dismissedRows) {
+        dismissedRecipientIds.add(row.userId);
+      }
+    }
+
+    let sharedCount = 0;
+    const sharedRecipientIds: string[] = [];
+    const skippedDismissedDomainRecipientIds: string[] = [];
+    const skippedExistingFeedRecipientIds: string[] = [];
+
+    for (const friend of friends) {
+      if (dismissedRecipientIds.has(friend.id)) {
+        skippedDismissedDomainRecipientIds.push(friend.id);
+        continue;
+      }
+
+      const alreadyInFeed = await userHasQuestionInBlockingFeed(friend.id, created.id);
+      if (alreadyInFeed) {
+        skippedExistingFeedRecipientIds.push(friend.id);
+        continue;
+      }
+
+      await db.insert(feedItems).values({
+        recipientUserId: friend.id,
+        questionId: created.id,
+        sourceType: AUTHORED_SHARED_FEED_SOURCE_TYPE,
+        sourceUserId: session.userId,
+        sourceEventAt: new Date(),
+        state: 'active',
+      });
+      await rollOffOldItems(friend.id);
+      sharedRecipientIds.push(friend.id);
+      sharedCount += 1;
+    }
+
+    feedShare.createdCount = sharedCount;
+    feedShare.friendCount = friends.length;
+    feedShare.sharedRecipientIds = sharedRecipientIds;
+    feedShare.skippedDismissedDomainRecipientIds = skippedDismissedDomainRecipientIds;
+    feedShare.skippedExistingFeedRecipientIds = skippedExistingFeedRecipientIds;
+
+    if (sharedCount > 0) {
+      await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
+    }
+
+    const includeRecipientDiagnostics = shouldIncludeShareRecipientDiagnostics();
     console.info('[questions/shareToFeed]', {
       questionId: created.id,
       userId: session.userId,
-      skipped: 'created questions are managed in Questions until a non-author answers correctly',
+      requested: true,
+      friendCount: friends.length,
+      sharedCount,
+      ...(includeRecipientDiagnostics ? { sharedRecipientIds } : {}),
+      skippedDismissedDomainCount: skippedDismissedDomainRecipientIds.length,
+      ...(includeRecipientDiagnostics ? { skippedDismissedDomainRecipientIds } : {}),
+      skippedExistingFeedCount: skippedExistingFeedRecipientIds.length,
+      ...(includeRecipientDiagnostics ? { skippedExistingFeedRecipientIds } : {}),
     });
   }
 
@@ -116,7 +227,7 @@ export async function POST(request: NextRequest) {
       await db.insert(feedItems).values({
         recipientUserId: recipientId,
         questionId: created.id,
-        sourceType: 'direct_sent',
+        sourceType: DIRECT_SENT_FEED_SOURCE_TYPE,
         sourceUserId: session.userId,
         sourceEventAt: new Date(),
         state: 'active',
@@ -138,12 +249,33 @@ export async function POST(request: NextRequest) {
     await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
   }
 
+  let openedDomain: string | null = null;
+  try {
+    const kbResult = await openKBDomain({
+      userId: session.userId,
+      domain: categorizedQuestionFields.canonicalSubcategory,
+      via: 'authorship',
+      broadCategory: categorizedQuestionFields.broadCategory,
+      questionId: created.id,
+    });
+    openedDomain = kbResult.opened ? categorizedQuestionFields.canonicalSubcategory : null;
+  } catch (error) {
+    console.error('[questions/create] openKBDomain failed after question save/share; continuing response', {
+      questionId: created.id,
+      userId: session.userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const question = await getQuestion(created.id, session.userId);
+
   return NextResponse.json(
     {
       ...created,
       question,
       ...(question ?? {}),
-      openedDomain: kbResult.opened ? categorizedQuestionFields.canonicalSubcategory : null,
+      openedDomain,
+      feedShare,
     },
     { status: 201 },
   );

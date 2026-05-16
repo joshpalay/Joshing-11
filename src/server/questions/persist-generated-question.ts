@@ -1,6 +1,10 @@
 import { eq } from 'drizzle-orm';
 
 import { db, generatedQuestions, questions } from '@/server/db';
+import {
+  assertSpecificCanonicalSubcategory,
+  isGenericSubcategory,
+} from '@/server/questions/canonical-subcategory';
 
 type PersistGeneratedQuestionResult = {
   questionId: string;
@@ -34,6 +38,16 @@ export async function persistGeneratedQuestion(generatedQuestionId: string): Pro
       throw new Error(`Generated question not found: ${generatedQuestionId}`);
     }
 
+    // F4.5: refuse to persist a question whose canonical_subcategory is a
+    // generic bucket. Prefer the canonical subcategory; fall back to the
+    // broad category if it's specific; otherwise throw before the INSERT.
+    const desiredCanonical = !isGenericSubcategory(generated.canonicalSubcategory)
+      ? generated.canonicalSubcategory!
+      : !isGenericSubcategory(generated.broadCategory)
+        ? generated.broadCategory!
+        : generated.canonicalSubcategory || generated.broadCategory;
+    assertSpecificCanonicalSubcategory(desiredCanonical);
+
     const [created] = await db
       .insert(questions)
       .values({
@@ -48,7 +62,7 @@ export async function persistGeneratedQuestion(generatedQuestionId: string): Pro
         questionType: 'factual',
         category: 'general_knowledge',
         broadCategory: generated.broadCategory,
-        canonicalSubcategory: generated.canonicalSubcategory || generated.broadCategory,
+        canonicalSubcategory: desiredCanonical,
         categoryOverridden: true,
         difficultyEstimate: asDifficulty(generated.difficultyEstimate),
         llmDifficulty: asDifficulty(generated.difficultyEstimate),

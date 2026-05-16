@@ -29,12 +29,14 @@ export type ChatMessage =
       assignmentId: string;
       questionText: string;
       creatorName: string | null;
+      isNew?: boolean;
       onDismiss?: () => void;
       dismissLabel?: string;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
     }
   | { id: string; kind: 'user'; text: string }
+  | { id: string; kind: 'typing' }
   | {
       id: string;
       kind: 'result';
@@ -72,7 +74,7 @@ export type ChatMessage =
       roundsRemaining: number;
       nextRoundOpensAt: string | null;
     }
-  | { id: string; kind: 'session_close'; text: string }
+  | { id: string; kind: 'session_close'; text: string; summaryHref?: string }
   | {
       id: string;
       kind: 'bonus_offer';
@@ -130,6 +132,7 @@ function QuestionRow({
   badges = [],
   questionText,
   creatorName,
+  isNew = false,
   onDismiss,
   dismissLabel = "Skip - don't show again",
 }: {
@@ -137,10 +140,19 @@ function QuestionRow({
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
   creatorName: string | null;
+  isNew?: boolean;
   onDismiss?: () => void;
   dismissLabel?: string;
 }) {
   const [dismissed, setDismissed] = useState(false);
+  const [visible, setVisible] = useState(!isNew);
+
+  useEffect(() => {
+    if (!isNew) return;
+    const t = window.setTimeout(() => setVisible(true), 30);
+    return () => window.clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleDismiss = useCallback(() => {
     setDismissed(true);
@@ -148,7 +160,10 @@ function QuestionRow({
   }, [onDismiss]);
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div
+      className="flex flex-col gap-0.5"
+      style={isNew ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' } : undefined}
+    >
       {subhead ? (
         <div className="flex flex-wrap items-center gap-1.5 pb-1 pl-0.5">
           <p
@@ -275,7 +290,7 @@ function UserRow({ text }: { text: string }) {
 }
 
 function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: string | null }) {
-  const authorLabel = creatorName?.trim() ? `FROM [${creatorName.trim()}]` : 'FROM [Author]';
+  const author = creatorName?.trim() ?? null;
   return (
     <div
       style={{
@@ -284,17 +299,19 @@ function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: stri
         paddingLeft: '8px',
       }}
     >
-      <p style={{ ...monoStyle, fontSize: '0.5rem', color: 'var(--text-muted)' }}>{authorLabel}</p>
+      {author ? (
+        <p style={{ ...monoStyle, fontSize: '0.5rem', color: 'var(--text-muted)' }}>FROM [{author}]</p>
+      ) : null}
       <p
         style={{
-          marginTop: '2px',
+          marginTop: author ? '2px' : '0',
           fontSize: '0.78rem',
           fontStyle: 'italic',
           color: 'color-mix(in srgb, var(--text-muted) 78%, var(--text))',
           lineHeight: 1.35,
         }}
       >
-        “{text}”
+        &ldquo;{text}&rdquo;
       </p>
     </div>
   );
@@ -480,6 +497,33 @@ function QuipLine({ text }: { text: string }) {
   );
 }
 
+function TypingRow() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setVisible(true), 30);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <div style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }}>
+      <div
+        style={{
+          alignSelf: 'flex-start',
+          display: 'inline-block',
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+          padding: '10px 16px',
+          fontSize: '0.9rem',
+          color: 'var(--text-muted)',
+          fontStyle: 'italic',
+        }}
+      >
+        Grading...
+      </div>
+    </div>
+  );
+}
+
 function ResultRow({
   result,
   correctAnswer,
@@ -630,7 +674,7 @@ function ResultRow({
   );
 }
 
-function SessionCloseRow({ text }: { text: string }) {
+function SessionCloseRow({ text, summaryHref }: { text: string; summaryHref?: string }) {
   return (
     <div
       className="mt-4"
@@ -644,6 +688,13 @@ function SessionCloseRow({ text }: { text: string }) {
       }}
     >
       <SessionCloseMessage closeCopy={text} />
+      {summaryHref ? (
+        <div className="pt-3">
+          <Link href={summaryHref} className="btn-primary inline-flex">
+            See summary →
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -794,6 +845,7 @@ export function GameplayChatThread({
                 key={m.id}
                 questionText={m.questionText}
                 creatorName={m.creatorName}
+                isNew={m.isNew}
                 onDismiss={m.onDismiss}
                 dismissLabel={m.dismissLabel}
                 subhead={m.subhead}
@@ -802,6 +854,8 @@ export function GameplayChatThread({
             );
           case 'user':
             return <UserRow key={m.id} text={m.text} />;
+          case 'typing':
+            return <TypingRow key={m.id} />;
           case 'result':
             return (
               <ResultRow
@@ -836,7 +890,7 @@ export function GameplayChatThread({
               />
             );
           case 'session_close':
-            return <SessionCloseRow key={m.id} text={m.text} />;
+            return <SessionCloseRow key={m.id} text={m.text} summaryHref={m.summaryHref} />;
           case 'bonus_offer':
             return (
               <BonusOfferRow

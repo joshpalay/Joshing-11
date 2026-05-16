@@ -83,6 +83,12 @@ async function readRecentAnsweredQuestions(userId: string): Promise<RecentAnswer
   });
 }
 
+export function applyAdaptiveLevelAdjustment(currentLevel: number, correctRate: number): number {
+  if (correctRate > 0.75) return roundLevel(currentLevel + ADAPTIVE_STEP);
+  if (correctRate < 0.45) return roundLevel(currentLevel - ADAPTIVE_STEP);
+  return currentLevel;
+}
+
 export async function computeAdaptiveLevel(userId: string): Promise<number> {
   const [currentLevel, recentAnswers] = await Promise.all([
     readCurrentAdaptiveLevel(userId),
@@ -94,9 +100,7 @@ export async function computeAdaptiveLevel(userId: string): Promise<number> {
   const correctCount = recentAnswers.filter((answer) => answer.isCorrect).length;
   const correctRate = correctCount / recentAnswers.length;
 
-  if (correctRate > 0.75) return roundLevel(currentLevel + ADAPTIVE_STEP);
-  if (correctRate < 0.45) return roundLevel(currentLevel - ADAPTIVE_STEP);
-  return currentLevel;
+  return applyAdaptiveLevelAdjustment(currentLevel, correctRate);
 }
 
 export async function updateAdaptiveLevel(userId: string): Promise<number> {
@@ -115,17 +119,17 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
 
   if (normalized < 1.5) {
     return {
-      targetCorrectRate: 0.7,
+      targetCorrectRate: 0.78,
       difficultyLabel: 'approachable trivia',
-      promptHint: 'Target roughly a 70% correct rate. Write approachable trivia with one satisfying twist.',
+      promptHint: 'Target roughly a 78% correct rate. Write friendly, recognizable questions a casually interested person in the domain would get — lean on well-known facts, not deep cuts.',
     };
   }
 
   if (normalized < 2.5) {
     return {
-      targetCorrectRate: 0.55,
-      difficultyLabel: 'challenging but fair',
-      promptHint: 'Target roughly a 55% correct rate. Write questions that are challenging but fair for a knowledgeable player.',
+      targetCorrectRate: 0.62,
+      difficultyLabel: 'fair and familiar',
+      promptHint: 'Target roughly a 62% correct rate. Write questions a reasonably engaged fan of the domain should know without needing specialist depth.',
     };
   }
 
@@ -175,6 +179,31 @@ function stepDifficulty(current: ServedDifficulty, direction: 1 | -1): ServedDif
   return DIFFICULTY_LADDER[next];
 }
 
+export type DomainDifficultyState = {
+  servedDifficulty: ServedDifficulty;
+  consecutiveCorrect: number;
+  consecutiveIncorrect: number;
+};
+
+export function computeDomainDifficultyStep(
+  existing: DomainDifficultyState,
+  isCorrect: boolean,
+): DomainDifficultyState {
+  let nextCorrect = isCorrect ? existing.consecutiveCorrect + 1 : 0;
+  let nextIncorrect = isCorrect ? 0 : existing.consecutiveIncorrect + 1;
+  let nextDifficulty: ServedDifficulty = existing.servedDifficulty;
+
+  if (isCorrect && nextCorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'specialist') {
+    nextDifficulty = stepDifficulty(existing.servedDifficulty, 1);
+    nextCorrect = 0;
+  } else if (!isCorrect && nextIncorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'accessible') {
+    nextDifficulty = stepDifficulty(existing.servedDifficulty, -1);
+    nextIncorrect = 0;
+  }
+
+  return { servedDifficulty: nextDifficulty, consecutiveCorrect: nextCorrect, consecutiveIncorrect: nextIncorrect };
+}
+
 /**
  * Update per-domain difficulty after a graded answer. Two consecutive correct →
  * step up; two consecutive incorrect → step down. Streak counter resets when
@@ -209,24 +238,14 @@ export async function updateDomainDifficultyOnAnswer(
     return;
   }
 
-  let nextCorrect = isCorrect ? existing.consecutiveCorrect + 1 : 0;
-  let nextIncorrect = isCorrect ? 0 : existing.consecutiveIncorrect + 1;
-  let nextDifficulty: ServedDifficulty = existing.servedDifficulty;
-
-  if (isCorrect && nextCorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'specialist') {
-    nextDifficulty = stepDifficulty(existing.servedDifficulty, 1);
-    nextCorrect = 0;
-  } else if (!isCorrect && nextIncorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'accessible') {
-    nextDifficulty = stepDifficulty(existing.servedDifficulty, -1);
-    nextIncorrect = 0;
-  }
+  const next = computeDomainDifficultyStep(existing, isCorrect);
 
   await db
     .update(userDomainDifficulties)
     .set({
-      servedDifficulty: nextDifficulty,
-      consecutiveCorrect: nextCorrect,
-      consecutiveIncorrect: nextIncorrect,
+      servedDifficulty: next.servedDifficulty,
+      consecutiveCorrect: next.consecutiveCorrect,
+      consecutiveIncorrect: next.consecutiveIncorrect,
       lastUpdated: new Date(),
     })
     .where(eq(userDomainDifficulties.id, existing.id));

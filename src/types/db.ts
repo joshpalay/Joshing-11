@@ -1,4 +1,4 @@
-import type { smsMessageTypeEnum } from '@/server/db/schema';
+import type { difficultyEstimateEnum, smsMessageTypeEnum } from '@/server/db/schema';
 
 export type AnswerState =
   | 'first_correct'
@@ -6,11 +6,12 @@ export type AnswerState =
   | 'repeat_correct'
   | 'incorrect';
 
-export type DifficultyEstimate =
-  | 'easy'
-  | 'medium'
-  | 'hard'
-  | 'very_hard';
+/**
+ * Derived from the Drizzle enum so the TypeScript type can never drift from
+ * the live DB enum. PRD §9 / Prompt 4 — three values:
+ * 'accessible' | 'moderate' | 'specialist'.
+ */
+export type DifficultyEstimate = (typeof difficultyEstimateEnum.enumValues)[number];
 
 export type MasteryTier =
   | 'establishing'

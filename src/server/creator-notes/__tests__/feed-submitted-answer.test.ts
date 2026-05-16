@@ -35,6 +35,8 @@ vi.mock('@/server/db', () => ({
   feedItems: {
     id: 'feedItems.id',
     questionId: 'feedItems.questionId',
+    sourceType: 'feedItems.sourceType',
+    sourceResult: 'feedItems.sourceResult',
     recipientUserId: 'feedItems.recipientUserId',
     state: 'feedItems.state',
     submittedAnswer: 'feedItems.submittedAnswer',
@@ -96,7 +98,7 @@ vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
 vi.mock('@/server/grading', () => ({ gradeAnswer: gradeAnswerMock }));
 vi.mock('@/server/daily/generate-breadcrumb', () => ({ generateBreadcrumb: generateBreadcrumbMock }));
 vi.mock('@/server/mastery/write-mastery-event', () => ({ writeMasteryEvent: writeMasteryEventMock }));
-vi.mock('@/server/mastery/awards', () => ({ getBasePoints: vi.fn(() => 10) }));
+vi.mock('@/server/mastery/scoring', () => ({ getBasePoints: vi.fn(() => 10) }));
 vi.mock('@/server/db/queries/feed', () => ({ userAnsweredQuestionCorrectly: userAnsweredQuestionCorrectlyMock }));
 vi.mock('@/server/sms', () => ({ sendSms: vi.fn() }));
 vi.mock('@/server/activity/write-activity', () => ({ writeActivity: vi.fn() }));
@@ -178,10 +180,12 @@ describe('Feed submitted answers for creator notes', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(feedUpdateSetCalls).toContainEqual({
+    expect(feedUpdateSetCalls).toContainEqual(expect.objectContaining({
       state: 'answered',
       submittedAnswer: 'Morris Day',
-    });
+      answerResult: 'incorrect',
+      pointsAwarded: 0,
+    }));
   });
 
   it('returns the saved Feed submitted answer for creator-note context', async () => {

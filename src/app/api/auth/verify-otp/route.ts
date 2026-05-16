@@ -6,6 +6,8 @@ import { createSession } from '@/server/auth/session'
 import { db, users } from '@/server/db'
 import {
   acceptFriendInvitation,
+  getValidInvitationForPhone,
+  hasAcceptedInvitationForUser,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE,
 } from '@/server/friends/invitations'
 
@@ -22,33 +24,52 @@ type AuthUser = {
   timezone: string
 }
 
-async function getOrCreateUserForLogin(phoneNumber: string): Promise<AuthUser> {
-  const selection = {
-    id: users.id,
-    phoneNumber: users.phoneNumber,
-    displayName: users.displayName,
-    timezone: users.timezone,
-  }
+const USER_SELECTION = {
+  id: users.id,
+  phoneNumber: users.phoneNumber,
+  displayName: users.displayName,
+  timezone: users.timezone,
+}
 
-  const [createdUser] = await db
-    .insert(users)
-    .values({ phoneNumber })
-    .onConflictDoNothing({ target: users.phoneNumber })
-    .returning(selection)
-
-  if (createdUser) return createdUser
-
-  const [existingUser] = await db
-    .select(selection)
+async function findUserByPhone(
+  phoneNumber: string
+): Promise<AuthUser | null> {
+  const [existing] = await db
+    .select(USER_SELECTION)
     .from(users)
     .where(eq(users.phoneNumber, phoneNumber))
     .limit(1)
 
-  if (!existingUser) {
+  return existing ?? null
+}
+
+async function provisionUserForPhone(
+  phoneNumber: string
+): Promise<AuthUser> {
+  const [created] = await db
+    .insert(users)
+    .values({ phoneNumber })
+    .onConflictDoNothing({ target: users.phoneNumber })
+    .returning(USER_SELECTION)
+
+  if (created) return created
+
+  // Conflict: another request created the user between findUserByPhone and now.
+  const existing = await findUserByPhone(phoneNumber)
+  if (!existing) {
     throw new Error('Unable to find or create user for verified phone number.')
   }
+  return existing
+}
 
-  return existingUser
+function invitationRejection() {
+  return NextResponse.json(
+    {
+      error: 'invalid_invitation',
+      message: INVITATION_ACCEPTANCE_ERROR_MESSAGE,
+    },
+    { status: 400 }
+  )
 }
 
 export async function POST(request: Request) {
@@ -58,18 +79,25 @@ export async function POST(request: Request) {
       .catch(() => null)) as VerifyOtpBody | null
     const phone = typeof body?.phone === 'string' ? body.phone.trim() : ''
     const code = typeof body?.code === 'string' ? body.code.trim() : ''
-    const hasInvitationToken =
+    const tokenProvided =
       body?.invitationToken !== undefined && body?.invitationToken !== null
     const invitationToken =
       typeof body?.invitationToken === 'string'
         ? body.invitationToken.trim()
         : ''
+    const hasUsableToken = tokenProvided && invitationToken.length > 0
 
     if (!phone || !code) {
       return NextResponse.json(
         { error: 'invalid_request', message: 'phone and code are required' },
         { status: 400 }
       )
+    }
+
+    // A token field was supplied but it's empty/whitespace — reject before
+    // anything else. This closes the `{"invitationToken": ""}` bypass.
+    if (tokenProvided && !hasUsableToken) {
+      return invitationRejection()
     }
 
     const normalizedPhone = await verifyOtp(phone, code)
@@ -81,37 +109,84 @@ export async function POST(request: Request) {
       )
     }
 
-    if (hasInvitationToken && !invitationToken) {
-      return NextResponse.json(
-        {
-          error: 'invalid_invitation',
-          message: INVITATION_ACCEPTANCE_ERROR_MESSAGE,
-        },
-        { status: 400 }
-      )
-    }
+    const existingUser = await findUserByPhone(normalizedPhone)
 
-    const user = await getOrCreateUserForLogin(normalizedPhone)
+    // Re-login path: user already exists. Allow if they have a prior accepted
+    // invitation OR they're accepting one now. New invitation acceptance is
+    // optional here — a returning user without a token should still log in.
+    if (existingUser) {
+      let invitationResult: { accepted: boolean } = { accepted: false }
 
-    const invitation = hasInvitationToken
-      ? await acceptFriendInvitation({
+      if (hasUsableToken) {
+        invitationResult = await acceptFriendInvitation({
           token: invitationToken,
-          inviteeUserId: user.id,
+          inviteeUserId: existingUser.id,
           verifiedPhone: normalizedPhone,
         })
-      : { accepted: false }
 
-    if (hasInvitationToken && !invitation.accepted) {
-      return NextResponse.json(
-        {
-          error: 'invalid_invitation',
-          message: INVITATION_ACCEPTANCE_ERROR_MESSAGE,
+        if (!invitationResult.accepted) {
+          // The token they sent didn't accept. Fall through to the
+          // prior-invitation check — if they have history, the token failure
+          // shouldn't block re-login.
+        }
+      }
+
+      if (!invitationResult.accepted) {
+        const hasPrior = await hasAcceptedInvitationForUser(existingUser.id)
+        if (!hasPrior) {
+          // User row exists but no invitation ever accepted (e.g. legacy
+          // orphan from before this gate). Reject.
+          return invitationRejection()
+        }
+      }
+
+      await createSession(existingUser.id, { invitationAccepted: true })
+
+      return NextResponse.json({
+        user: {
+          id: existingUser.id,
+          phone_number: existingUser.phoneNumber,
+          display_name: existingUser.displayName,
+          timezone: existingUser.timezone,
+          onboardingComplete: false,
         },
-        { status: 400 }
-      )
+        invitation: invitationResult,
+      })
     }
 
-    await createSession(user.id)
+    // New-user path: invitation is a hard precondition.
+    if (!hasUsableToken) {
+      return invitationRejection()
+    }
+
+    // Pre-validate the invitation read-only so we don't provision a user
+    // for a bad token.
+    const candidateInvitation = await getValidInvitationForPhone({
+      token: invitationToken,
+      verifiedPhone: normalizedPhone,
+    })
+
+    if (!candidateInvitation) {
+      return invitationRejection()
+    }
+
+    const user = await provisionUserForPhone(normalizedPhone)
+
+    const invitation = await acceptFriendInvitation({
+      token: invitationToken,
+      inviteeUserId: user.id,
+      verifiedPhone: normalizedPhone,
+    })
+
+    if (!invitation.accepted) {
+      // Race condition: the invitation was claimed between our pre-validate
+      // and accept. The user row already exists but has no accepted
+      // invitation — future logins will hit the orphan-rejection branch
+      // above, so the access surface is closed.
+      return invitationRejection()
+    }
+
+    await createSession(user.id, { invitationAccepted: true })
 
     return NextResponse.json({
       user: {

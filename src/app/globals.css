@@ -93,7 +93,10 @@
     --wrong: var(--destructive);
     --font-neutral: var(--font-sans);
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    --font-literata: Georgia, "Times New Roman", serif;
+    /* F5.2: prefer Playfair Display italic for editorial/category labels.
+       Falls back to Georgia if next/font hasn't loaded yet or in non-browser
+       contexts. The next/font variable is wired in src/app/layout.tsx. */
+    --font-literata: var(--font-display, Georgia), "Times New Roman", serif;
     --radius-sm: 0.375rem;
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;

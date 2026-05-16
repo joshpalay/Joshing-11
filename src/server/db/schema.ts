@@ -684,6 +684,9 @@ export const feedItems = pgTable(
     sourceEventAt: timestamp('sourceEventAt', { withTimezone: true }).notNull().defaultNow(),
     personalMessage: text('personalMessage'),
     submittedAnswer: text('submittedAnswer'),
+    answerResult: text('answerResult').$type<'correct' | 'incorrect'>(),
+    pointsAwarded: doublePrecision('pointsAwarded'),
+    masteryDelta: jsonb('masteryDelta').$type<Record<string, unknown> | null>(),
     sourceAnswerId: text('sourceAnswerId'),
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
@@ -763,6 +766,7 @@ export const biweeklyCeremonies = pgTable(
   },
   (table) => [
     uniqueIndex('BiweeklyCeremony_shareCardToken_key').on(table.shareCardToken),
+    uniqueIndex('BiweeklyCeremony_user_cycle_key').on(table.userId, table.cycleStart, table.cycleEnd),
     index('BiweeklyCeremony_userId_firedAt_idx').on(table.userId, table.firedAt.desc()),
   ],
 );
