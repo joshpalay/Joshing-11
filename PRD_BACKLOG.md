@@ -28,6 +28,13 @@
 - **Code reality:** `DAILY_WRONG` in `src/server/grading/select-quip.ts:12–17` has 4 entries; the fifth quip is intentionally absent.
 - **Proposed PRD update:** Remove "Tomorrow's version of you will know." from the DAILY_WRONG quip list in §8.1.14. The four-entry bank is the correct implementation.
 
+## §8.2.6 — Feed cap is 50, not 25
+- **Date:** 2026-05-16
+- **Section affected:** §8.2.6 Feed Mechanics
+- **Current PRD text:** "Maximum 25 items. Older items roll off."
+- **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
+- **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
+
 ## Open Questions
 
 ## §8.1.11 — Thumbs-up signal has no effect on feed surface ordering
