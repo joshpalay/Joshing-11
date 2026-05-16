@@ -232,6 +232,20 @@
       "when": 1778888376122,
       "tag": "0032_biweekly_ceremony_unique_cycle",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1778910000000,
+      "tag": "0033_feed_item_source_result_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1778952386715,
+      "tag": "0034_territory_type_enum",
+      "breakpoints": true
     }
   ]
 }
