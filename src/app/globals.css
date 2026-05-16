@@ -48,7 +48,7 @@
 }
 
 :root {
-    --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-sans: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -91,7 +91,15 @@
     --success: #178245;
     --danger: var(--destructive);
     --wrong: var(--destructive);
-    --font-neutral: var(--font-sans);
+    /* Joshing brand palette — INK on CREAM editorial register */
+    --ink:             oklch(0.14 0.018 55);    /* ≈ #1a1208 warm near-black */
+    --cream:           oklch(0.976 0.010 80);   /* ≈ #fdfbf6 off-white surface */
+    --cream-warm:      oklch(0.962 0.018 80);   /* ≈ #f5f0e8 slightly deeper warm */
+    --cream-accent:    oklch(0.930 0.030 80);   /* ≈ #f0e6c8 highlight/accent */
+    --border-warm:     oklch(0.876 0.016 80);   /* ≈ #ddd6c7 warm border */
+    --border-light:    oklch(0.905 0.010 80);   /* ≈ #e8e2d6 lighter inner border */
+    --text-muted-warm: oklch(0.600 0.020 60);   /* ≈ #696257 muted editorial text */
+    --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     /* F5.2: prefer Playfair Display italic for editorial/category labels.
        Falls back to Georgia if next/font hasn't loaded yet or in non-browser

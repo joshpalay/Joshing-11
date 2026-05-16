@@ -39,7 +39,7 @@ const trackStyle: CSSProperties = {
   borderRadius: '999px',
   background: '#f3f1eb',
   overflow: 'hidden',
-  border: '1px solid #d8d2c6',
+  border: '1px solid var(--border-warm)',
 };
 
 const fillStyle: CSSProperties = {

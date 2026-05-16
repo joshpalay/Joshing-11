@@ -131,8 +131,8 @@ function emptyDomain(domain: string): DomainMastery {
 function LoadingSkeleton() {
   return (
     <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
-      <section className="bg-white border border-[#ddd6c7] p-4">
-        <p className="m-0 text-[#696257]">Loading...</p>
+      <section className="bg-white border border-[var(--border-warm)] p-4">
+        <p className="m-0 text-[var(--text-muted-warm)]">Loading...</p>
       </section>
     </main>
   );
@@ -409,10 +409,10 @@ function KnowledgePageContent() {
   if (error || !data) {
     return (
       <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
-        <section className="bg-white border border-[#ddd6c7] p-4">
+        <section className="bg-white border border-[var(--border-warm)] p-4">
           <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Knowledge</p>
           <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[#111111] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
-          <p className="m-0 text-[#696257]">{error ?? 'Something went sideways.'}</p>
+          <p className="m-0 text-[var(--text-muted-warm)]">{error ?? 'Something went sideways.'}</p>
         </section>
       </main>
     );
@@ -421,12 +421,12 @@ function KnowledgePageContent() {
   return (
     <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
       {tierCrossed && highlightedDomainSlug && (
-        <section className="bg-[#f0e6c8] text-[#1a1208] px-[0.95rem] py-3 text-base">
+        <section className="bg-[var(--cream-accent)] text-[var(--ink)] px-[0.95rem] py-3 text-base">
           You reached {tierCrossed} in this domain this session.
         </section>
       )}
 
-      <section className="bg-white border border-[#ddd6c7] p-4" aria-label="Your Mind">
+      <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Your Mind">
         <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Your Mind</p>
         <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[#111111] font-[var(--font-neutral)] font-semibold">{yourMind}</h1>
         <p className="mt-[10px] text-[0.82rem]">
@@ -437,7 +437,7 @@ function KnowledgePageContent() {
       </section>
 
       {topCardDomains.length > 0 && (
-        <section className="bg-white border border-[#ddd6c7] p-4" aria-label="Knowledge card">
+        <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Knowledge card">
           <KnowledgeCard
             playerDisplayName={displayName}
             portraitStatement={yourMind}
@@ -463,10 +463,10 @@ function KnowledgePageContent() {
       )}
 
       {hasAnything && (
-        <section className="bg-white border border-[#ddd6c7] p-4" aria-label="Knowledge progression">
+        <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
           <div className="mb-2">
-            <p className="m-0 text-[13px] [font-variant:small-caps] text-[#1a1208] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
-            <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[#8a8070] tracking-[0.06em] font-[var(--font-neutral)]">SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;</p>
+            <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
+            <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;</p>
           </div>
 
           <div id="portrait-circles-section">
@@ -484,46 +484,52 @@ function KnowledgePageContent() {
 
       {emptyQuestionDomain ? (
         <section className="bg-[#fff7e8] border border-[#d9b56c] px-[0.95rem] py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[#1a1208] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
-          <h2 className="mt-[0.4rem] text-[1.25rem] leading-[1.35] text-[#1a1208] font-[var(--font-literata)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
-          <p className="mt-3 text-[0.88rem] leading-[1.6] text-[#696257]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
+          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
+          <h2 className="mt-[0.4rem] text-[1.25rem] leading-[1.35] text-[var(--ink)] font-[var(--font-literata)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
+          <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
           <div className="flex flex-wrap gap-[10px] mt-5">
-            <button type="button" className="min-h-10 border border-[#1a1208] bg-[#1a1208] text-[#f5f0e8] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
+            <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
               Ask a friend
             </button>
-            <button type="button" className="min-h-10 border border-[#ddd6c7] bg-white text-[#1a1208] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
+            <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
               Write one myself
             </button>
           </div>
         </section>
       ) : null}
 
-      <section className="bg-[#fdfbf6] border border-[#ddd6c7] px-[0.95rem] py-5">
-        <h2 className="m-0 text-[1.1rem] font-[var(--font-literata)] text-[#1a1208]">Grow your map</h2>
-        <p className="mt-3 text-[0.88rem] leading-[1.6] text-[#696257]">Your map grows in two directions.</p>
-        <p className="mt-3 text-[0.88rem] leading-[1.6] text-[#696257]">When you send a friend a question and they answer it correctly, that domain joins your map. When a friend sends you a question and you answer it correctly, that domain joins your map too. Either direction works. Both are how it expands.</p>
-        <p className="mt-3 text-[0.88rem] leading-[1.6] text-[#696257]">Try asking a friend about something you&apos;d love to know more about — Disney World, 1970s BBC Drama, the 1956 Hungarian Uprising. The ask itself is the start.</p>
+      <section className="bg-[var(--cream)] border border-[var(--border-warm)] px-[0.95rem] py-5">
+        <h2 className="m-0 text-[1.1rem] font-[var(--font-literata)] text-[var(--ink)]">Grow your map</h2>
+        <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
+          Your map grows whenever you correctly answer a question that came through a friend — from your Feed, from a direct send, or from a Joshing Game.
+        </p>
+        <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
+          It also grows when you write a question yourself. The domain you wrote in opens as declared territory on your map. When a friend answers it correctly, it becomes proven.
+        </p>
+        <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
+          One way to start: ask a friend about something you&apos;d love to learn from them — Disney World, 1970s BBC Drama, the 1956 Hungarian Uprising. The ask itself plants the seed.
+        </p>
         <div className="flex flex-wrap gap-[10px] mt-5">
-          <button type="button" className="min-h-10 border border-[#1a1208] bg-[#1a1208] text-[#f5f0e8] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'send-question' })}>
+          <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'send-question' })}>
             Send a friend a question
           </button>
-          <button type="button" className="min-h-10 border border-[#ddd6c7] bg-white text-[#1a1208] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
+          <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
             Write a question
           </button>
         </div>
       </section>
 
       {dismissedDomains.length > 0 && (
-        <section className="bg-white border border-[#ddd6c7] p-4" aria-label="Dismissed domains">
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[#1a1208] font-[var(--font-neutral)] tracking-[0.06em]">FOCUSED FEED</p>
-          <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[#8a8070] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — RE-OPEN ANY TIME</p>
+        <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Dismissed domains">
+          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">FOCUSED FEED</p>
+          <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — RE-OPEN ANY TIME</p>
           <div className="mt-3 flex flex-col gap-2">
             {dismissedDomains.map((domain) => (
               <div key={domain} className="flex items-center justify-between gap-2">
                 <span className="text-sm">{domain}</span>
                 <button
                   type="button"
-                  className="mt-2 border-none bg-transparent text-[#696257] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]"
+                  className="mt-2 border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]"
                   onClick={() => void reinstateDomain(domain)}
                   disabled={reinstating === domain}
                 >
@@ -535,9 +541,9 @@ function KnowledgePageContent() {
         </section>
       )}
 
-      <section className="flex items-center justify-between gap-4 border-t border-[#ddd6c7] pt-[0.85rem] px-[0.2rem]">
-        <p className="m-0 text-[#696257]">Map maintenance</p>
-        <button type="button" className="min-h-9 border border-[#ddd6c7] bg-white text-[#1a1208] inline-flex items-center justify-center gap-2 px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => setActiveModal({ type: 'tidy' })} disabled={tidying}>
+      <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] pt-[0.85rem] px-[0.2rem]">
+        <p className="m-0 text-[var(--text-muted-warm)]">Map maintenance</p>
+        <button type="button" className="min-h-9 border border-[var(--border-warm)] bg-white text-[var(--ink)] inline-flex items-center justify-center gap-2 px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => setActiveModal({ type: 'tidy' })} disabled={tidying}>
           <Combine className="size-3.5" />
           Tidy up my map
         </button>
@@ -553,31 +559,31 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'interests' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[#ddd6c7] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[#1a1208] text-[1.45rem] font-[var(--font-literata)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
+                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
                 {activeModal.currentDomain ? (
-                  <p className="mt-[0.45rem] text-[#696257] text-[0.88rem] leading-[1.5]">Your progress in {activeModal.currentDomain} is preserved. It moves to your demonstrated knowledge.</p>
+                  <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your progress in {activeModal.currentDomain} is preserved. It moves to your demonstrated knowledge.</p>
                 ) : null}
               </div>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[#8a8070] grid place-items-center cursor-pointer" onClick={closeInterestModal} aria-label="Close">
+              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={closeInterestModal} aria-label="Close">
                 <X className="size-4" />
               </button>
             </div>
 
             <div className="grid gap-5 mt-5">
               <div>
-                <h3 className="m-0 text-[#1a1208] text-[0.9rem]">Pick from your knowledge base</h3>
+                <h3 className="m-0 text-[var(--ink)] text-[0.9rem]">Pick from your knowledge base</h3>
                 {demonstratedChoices.length === 0 ? (
-                  <p className="mt-2 border border-[#e8e2d6] p-3 text-[#696257] text-[0.88rem]">No demonstrated domains are available to add right now.</p>
+                  <p className="mt-2 border border-[var(--border-light)] p-3 text-[var(--text-muted-warm)] text-[0.88rem]">No demonstrated domains are available to add right now.</p>
                 ) : (
-                  <div className="mt-2 max-h-[176px] overflow-y-auto border border-[#e8e2d6]">
+                  <div className="mt-2 max-h-[176px] overflow-y-auto border border-[var(--border-light)]">
                     {demonstratedChoices.map((domain) => (
                       <button
                         key={domain.domain}
                         type="button"
-                        className={`w-full min-h-[38px] border-0 border-b border-b-[#e8e2d6] flex justify-between gap-3 px-3 cursor-pointer ${selectedInterest?.label === domain.domain ? 'bg-[#f5f0e8] text-[#1a1208]' : 'bg-white text-[#696257]'}`}
+                        className={`w-full min-h-[38px] border-0 border-b border-b-[var(--border-light)] flex justify-between gap-3 px-3 cursor-pointer ${selectedInterest?.label === domain.domain ? 'bg-[var(--cream-warm)] text-[var(--ink)]' : 'bg-white text-[var(--text-muted-warm)]'}`}
                         onClick={() => setSelectedInterest({ label: domain.domain, broadCategory: domain.broadCategory ?? undefined })}
                       >
                         <span>{domain.displayName}</span>
@@ -589,23 +595,23 @@ function KnowledgePageContent() {
               </div>
 
               <div>
-                <h3 className="m-0 text-[#1a1208] text-[0.9rem]">Write a new interest</h3>
+                <h3 className="m-0 text-[var(--ink)] text-[0.9rem]">Write a new interest</h3>
                 <div className="flex gap-2 mt-2">
                   <input
                     value={customInterest}
                     onChange={(event) => setCustomInterest(event.target.value)}
                     placeholder="Late-period Bowie, Weimar cinema..."
-                    className="min-h-10 flex-1 border border-[#ddd6c7] px-[10px] bg-white text-[#1a1208]"
+                    className="min-h-10 flex-1 border border-[var(--border-warm)] px-[10px] bg-white text-[var(--ink)]"
                   />
-                  <button type="button" className="min-h-10 border border-[#1a1208] bg-[#1a1208] text-[#f5f0e8] px-4 cursor-pointer" disabled={!customInterest.trim() || canonicalizing} onClick={() => void proposeCustomInterest()}>
+                  <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" disabled={!customInterest.trim() || canonicalizing} onClick={() => void proposeCustomInterest()}>
                     {canonicalizing ? 'Refining...' : 'Refine'}
                   </button>
                 </div>
                 {selectedInterest ? (
-                  <div className="mt-3 border border-[#e8e2d6] bg-[#fdfbf6] p-3">
+                  <div className="mt-3 border border-[var(--border-light)] bg-[var(--cream)] p-3">
                     <p className="m-0 font-semibold">{selectedInterest.label}</p>
-                    {selectedInterest.description ? <p className="mt-[0.45rem] text-[#696257] text-[0.88rem] leading-[1.5]">{selectedInterest.description}</p> : null}
-                    <button type="button" className="mt-2 border-none bg-transparent text-[#696257] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]" onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}>
+                    {selectedInterest.description ? <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">{selectedInterest.description}</p> : null}
+                    <button type="button" className="mt-2 border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]" onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}>
                       Use my wording
                     </button>
                   </div>
@@ -616,8 +622,8 @@ function KnowledgePageContent() {
             {interestError ? <p className="mt-4 border border-[#c0392b]/40 text-[#8b1a0e] p-3 text-[0.88rem]">{interestError}</p> : null}
 
             <div className="flex justify-end gap-2 mt-5">
-              <button type="button" className="min-h-10 border border-[#ddd6c7] bg-white text-[#696257] px-4 cursor-pointer" onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
-              <button type="button" className="min-h-10 border border-[#1a1208] bg-[#1a1208] text-[#f5f0e8] px-4 cursor-pointer" onClick={() => void confirmInterestChange()} disabled={!selectedInterest?.label || savingInterests}>
+              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
+              <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" onClick={() => void confirmInterestChange()} disabled={!selectedInterest?.label || savingInterests}>
                 {savingInterests ? 'Saving...' : activeModal.currentDomain ? 'Confirm swap' : 'Confirm add'}
               </button>
             </div>
@@ -627,19 +633,19 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'tidy' ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[#ddd6c7] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[#1a1208] text-[1.45rem] font-[var(--font-literata)]">Tidy up your map?</h2>
-                <p className="mt-[0.45rem] text-[#696257] text-[0.88rem] leading-[1.5]">We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
+                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Tidy up your map?</h2>
+                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
               </div>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[#8a8070] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close" disabled={tidying}>
+              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close" disabled={tidying}>
                 <X className="size-4" />
               </button>
             </div>
             <div className="flex justify-end gap-2 mt-5">
-              <button type="button" className="min-h-10 border border-[#ddd6c7] bg-white text-[#696257] px-4 cursor-pointer" onClick={() => setActiveModal(null)} disabled={tidying}>Cancel</button>
-              <button type="button" className="min-h-10 border border-[#1a1208] bg-[#1a1208] text-[#f5f0e8] px-4 cursor-pointer" onClick={() => void confirmTidy()} disabled={tidying}>
+              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)} disabled={tidying}>Cancel</button>
+              <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" onClick={() => void confirmTidy()} disabled={tidying}>
                 {tidying ? 'Tidying...' : 'Confirm tidy'}
               </button>
             </div>
@@ -647,11 +653,11 @@ function KnowledgePageContent() {
         </div>
       ) : null}
 
-      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[#ddd6c7] bg-white text-[#1a1208] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">{tidyNotice}</div> : null}
+      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">{tidyNotice}</div> : null}
       {questionToast ? (
         <div
           style={{ bottom: tidyNotice ? 64 : 20 }}
-          className="fixed left-1/2 -translate-x-1/2 z-[60] border border-[#ddd6c7] bg-white text-[#1a1208] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]"
+          className="fixed left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]"
         >
           {questionToast}
         </div>
@@ -659,32 +665,32 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'manage-interests' ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[#ddd6c7] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[#1a1208] text-[1.45rem] font-[var(--font-literata)]">Manage interests</h2>
-                <p className="mt-[0.45rem] text-[#696257] text-[0.88rem] leading-[1.5]">Your five declared interests seed your Daily Five questions.</p>
+                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Manage interests</h2>
+                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your five declared interests seed your Daily Five questions.</p>
               </div>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[#8a8070] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
+              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
                 <X className="size-4" />
               </button>
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-[0.6rem] mt-5">
               {declaredSlots.map((slot, index) => (
-                <div key={slot?.domain ?? `empty-${index}`} className="min-h-[132px] border border-[#e8e2d6] rounded-lg p-3 flex flex-col justify-between bg-[#fdfbf6]">
+                <div key={slot?.domain ?? `empty-${index}`} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
                   {slot ? (
                     <>
                       <div className="min-w-0">
-                        <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[#1a1208]">{slot.displayName}</h3>
-                        <p className="mt-1 text-[#8a8070] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
+                        <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
+                        <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
                       </div>
-                      <button type="button" className="min-h-[34px] border border-[#ddd6c7] bg-white text-[#696257] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
+                      <button type="button" className="min-h-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
                         <Repeat2 className="size-3.5" />
                         Swap
                       </button>
                     </>
                   ) : (
-                    <button type="button" className="min-h-[104px] border border-dashed border-[#c8c0b0] bg-transparent text-[#8a8070] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full" onClick={() => openInterestModal(index, null)}>
+                    <button type="button" className="min-h-[104px] border border-dashed border-[#c8c0b0] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full" onClick={() => openInterestModal(index, null)}>
                       <Plus className="size-4" />
                       Add interest
                     </button>
@@ -693,7 +699,7 @@ function KnowledgePageContent() {
               ))}
             </div>
             <div className="flex justify-start gap-2 mt-4">
-              <button type="button" className="min-h-10 border border-[#ddd6c7] bg-white text-[#696257] px-4 cursor-pointer" onClick={() => setActiveModal(null)}>Done</button>
+              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)}>Done</button>
             </div>
           </div>
         </div>
@@ -701,10 +707,10 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'send-question' ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[#ddd6c7] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
-              <h2 className="m-0 text-[#1a1208] text-[1.45rem] font-[var(--font-literata)]">Send a friend a question</h2>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[#8a8070] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
+              <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Send a friend a question</h2>
+              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
                 <X className="size-4" />
               </button>
             </div>
@@ -722,10 +728,10 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'write-question' ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[#ddd6c7] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
-              <h2 className="m-0 text-[#1a1208] text-[1.45rem] font-[var(--font-literata)]">Write a question</h2>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[#8a8070] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
+              <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Write a question</h2>
+              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
                 <X className="size-4" />
               </button>
             </div>

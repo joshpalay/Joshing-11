@@ -135,8 +135,8 @@ function endExclusive(cycleEnd: Date): Date {
   return end;
 }
 
-function domainFor(question: Pick<typeof questions.$inferSelect, 'canonicalSubcategory' | 'broadCategory' | 'category'>) {
-  return question.canonicalSubcategory || question.broadCategory || question.category || 'General';
+function domainFor(question: Pick<typeof questions.$inferSelect, 'canonicalSubcategory' | 'broadCategory' | 'category'>): string | null {
+  return question.canonicalSubcategory || question.broadCategory || question.category || null;
 }
 
 function previousTier(tier: MasteryTier): MasteryTier {
@@ -240,8 +240,14 @@ async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive:
     byDomain.set(domain, current);
   };
 
-  gameAnswers.forEach((row) => add(domainFor(row.question), row.isCorrect === true));
-  feedAnswers.forEach((row) => add(domainFor(row.question), correctQuestionIds.has(row.question.id)));
+  gameAnswers.forEach((row) => {
+    const domain = domainFor(row.question);
+    if (domain) add(domain, row.isCorrect === true);
+  });
+  feedAnswers.forEach((row) => {
+    const domain = domainFor(row.question);
+    if (domain) add(domain, correctQuestionIds.has(row.question.id));
+  });
 
   const friendMediated = [...byDomain.values()].sort((a, b) => b.questionCount - a.questionCount || a.domain.localeCompare(b.domain));
 
@@ -314,10 +320,24 @@ async function computeBeat3(userId: string, cycleStart: Date, cycleEndExclusive:
   }));
 }
 
-async function computeBeat4(userId: string): Promise<Beat4Alignment | null> {
+async function computeBeat4(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Beat4Alignment | null> {
   const friends = await getFriends(userId);
   const friendIds = new Set(friends.map((friend) => friend.id));
   if (friendIds.size === 0) return null;
+
+  // Only consider friends who answered at least one question in this cycle;
+  // all-time mastery overlap could surface a friend who hasn't played in months.
+  const activeFriendRows = await db
+    .selectDistinct({ userId: masteryEvents.userId })
+    .from(masteryEvents)
+    .where(and(
+      inArray(masteryEvents.userId, [...friendIds]),
+      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+      gte(masteryEvents.createdAt, cycleStart),
+      lt(masteryEvents.createdAt, cycleEndExclusive),
+    ));
+  const activeFriendIds = new Set(activeFriendRows.map((r) => r.userId));
+  if (activeFriendIds.size === 0) return null;
 
   // F3.4: LEFT JOIN profileDomainVisibility so we can filter friend rows
   // marked private. Viewer's own rows always pass through (their portrait,
@@ -347,7 +367,7 @@ async function computeBeat4(userId: string): Promise<Beat4Alignment | null> {
 
   const candidates = new Map<string, { displayName: string; sharedDomains: string[] }>();
   rows.forEach((row) => {
-    if (row.userId === userId || !friendIds.has(row.userId) || !viewerDomains.has(row.domain)) return;
+    if (row.userId === userId || !activeFriendIds.has(row.userId) || !viewerDomains.has(row.domain)) return;
     // A friend marked this domain private — do not surface it to anyone
     // else's ceremony, even if both share points there.
     if (row.visibility === 'private') return;
@@ -423,19 +443,25 @@ export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: D
     computeBeat1(userId, cycleStart, cycleEndExclusive),
     computeBeat2(userId, cycleStart, cycleEndExclusive),
     computeBeat3(userId, cycleStart, cycleEndExclusive),
-    computeBeat4(userId),
+    computeBeat4(userId, cycleStart, cycleEndExclusive),
     computeBeat5(userId, cycleStart, cycleEndExclusive),
     countActiveAnsweringPlayers(userId, cycleStart, cycleEndExclusive),
   ]);
 
+  const mode = ceremonyModeFromAnsweringCount(activeAnsweringPlayers);
+  // Beat 3 (Shaped) and Beat 4 (Alignment) require at least one active friend;
+  // suppress both in solo mode so the ceremony doesn't reference absent friends.
+  const beat3Final = mode === 'solo' ? null : beat3;
+  const beat4Final = mode === 'solo' ? null : beat4;
+
   return {
     cycleStart: toIsoDate(cycleStart),
     cycleEnd: toIsoDate(cycleEnd),
-    mode: ceremonyModeFromAnsweringCount(activeAnsweringPlayers),
+    mode,
     beat1,
     beat2,
-    beat3,
-    beat4,
+    beat3: beat3Final,
+    beat4: beat4Final,
     beat5,
   };
 }
