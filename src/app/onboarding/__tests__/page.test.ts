@@ -4,13 +4,11 @@ const {
   getSessionMock,
   getUserOnboardingProfileMock,
   getPreSeededInterestsForUserMock,
-  hasAcceptedInvitationForUserMock,
   redirectMock,
 } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   getUserOnboardingProfileMock: vi.fn(),
   getPreSeededInterestsForUserMock: vi.fn(),
-  hasAcceptedInvitationForUserMock: vi.fn(),
   redirectMock: vi.fn((target: string) => {
     // Mirror Next.js: redirect() throws to short-circuit rendering.
     throw new Error(`__REDIRECT__:${target}`)
@@ -28,10 +26,6 @@ vi.mock('@/server/auth/session', () => ({
 vi.mock('@/server/db/queries/users', () => ({
   getUserOnboardingProfile: getUserOnboardingProfileMock,
   getPreSeededInterestsForUser: getPreSeededInterestsForUserMock,
-}))
-
-vi.mock('@/server/friends/invitations', () => ({
-  hasAcceptedInvitationForUser: hasAcceptedInvitationForUserMock,
 }))
 
 // Stub the client component import so this test stays server-side.
@@ -59,7 +53,6 @@ describe('OnboardingPage guard', () => {
     getSessionMock.mockReset()
     getUserOnboardingProfileMock.mockReset()
     getPreSeededInterestsForUserMock.mockReset()
-    hasAcceptedInvitationForUserMock.mockReset()
     getPreSeededInterestsForUserMock.mockResolvedValue({
       inviterName: 'Someone',
       interests: [],
@@ -70,7 +63,6 @@ describe('OnboardingPage guard', () => {
     getSessionMock.mockResolvedValueOnce(null)
     const result = await callPage()
     expect(result).toEqual({ redirected: true, target: '/login' })
-    expect(hasAcceptedInvitationForUserMock).not.toHaveBeenCalled()
   })
 
   it('redirects to /login when the user row is missing', async () => {
@@ -78,22 +70,6 @@ describe('OnboardingPage guard', () => {
     getUserOnboardingProfileMock.mockResolvedValueOnce(null)
     const result = await callPage()
     expect(result).toEqual({ redirected: true, target: '/login' })
-    expect(hasAcceptedInvitationForUserMock).not.toHaveBeenCalled()
-  })
-
-  it('redirects to /login?reason=no_invitation when the user has no accepted invitation', async () => {
-    getSessionMock.mockResolvedValueOnce({ userId: 'u1', id: 's1' })
-    getUserOnboardingProfileMock.mockResolvedValueOnce({
-      id: 'u1',
-      onboardingComplete: false,
-    })
-    hasAcceptedInvitationForUserMock.mockResolvedValueOnce(false)
-    const result = await callPage()
-    expect(result).toEqual({
-      redirected: true,
-      target: '/login?reason=no_invitation',
-    })
-    expect(getPreSeededInterestsForUserMock).not.toHaveBeenCalled()
   })
 
   it('redirects already-onboarded users to /', async () => {
@@ -102,18 +78,16 @@ describe('OnboardingPage guard', () => {
       id: 'u1',
       onboardingComplete: true,
     })
-    hasAcceptedInvitationForUserMock.mockResolvedValueOnce(true)
     const result = await callPage()
     expect(result).toEqual({ redirected: true, target: '/' })
   })
 
-  it('renders OnboardingFlow when session + invitation + not-yet-onboarded', async () => {
+  it('renders OnboardingFlow when session present and not-yet-onboarded', async () => {
     getSessionMock.mockResolvedValueOnce({ userId: 'u1', id: 's1' })
     getUserOnboardingProfileMock.mockResolvedValueOnce({
       id: 'u1',
       onboardingComplete: false,
     })
-    hasAcceptedInvitationForUserMock.mockResolvedValueOnce(true)
     const result = await callPage()
     expect(result).toEqual({ redirected: false })
     expect(getPreSeededInterestsForUserMock).toHaveBeenCalledWith('u1')
