@@ -21,6 +21,13 @@
 - **Code reality:** The group/seed-account test-game flow does not exist. The only developer utility is `POST /api/daily/reset` (`src/app/api/daily/reset/route.ts`), which deletes the current user's daily queue so it regenerates on next load. The Daily Five is now a solo experience between the player and the LM — there is no group or second player to provision.
 - **Proposed PRD update:** Remove §8.39 in its current form. Replace with: "Developer testing mode: a 'Reset today's questions' action is available in Settings, implemented via `POST /api/daily/reset`. This clears the current user's daily queue so a fresh set is generated on next page load, allowing retesting of the daily session, scoring, and session-close flow without waiting for the next noon reset."
 
+## §8.1.14 — Missing DAILY_WRONG quip
+- **Date:** 2026-05-16
+- **Section affected:** §8.1.14 Per-Answer Commentary
+- **Current PRD text:** DAILY_WRONG bank includes "Tomorrow's version of you will know." (use sparingly) as a fifth entry.
+- **Code reality:** `DAILY_WRONG` in `src/server/grading/select-quip.ts:12–17` has 4 entries; the fifth quip is intentionally absent.
+- **Proposed PRD update:** Remove "Tomorrow's version of you will know." from the DAILY_WRONG quip list in §8.1.14. The four-entry bank is the correct implementation.
+
 ## Open Questions
 
 ## §7.3 — Cultural anchor skipped on "Keep all" invite path
