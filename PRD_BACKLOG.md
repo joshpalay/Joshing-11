@@ -42,6 +42,14 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
+## §8.10b — Reaction custom message cap is 160 chars, not 100
+
+- **Date:** 2026-05-16
+- **Section affected:** §8.10b Question Reactions and Micro-Conversations
+- **Current PRD text:** "Optional personal note up to 100 characters."
+- **Code reality:** `src/app/api/reactions/route.ts` enforces a 160-character limit on `customMessage`.
+- **Proposed PRD update:** Change §8.10b to read: "Optional personal note up to 160 characters."
+
 ## §8.10 — Star voting replaced by thumbs up/down
 
 - **Date:** 2026-05-16
