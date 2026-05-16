@@ -1,4 +1,4 @@
-import { and, countDistinct, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
+import { and, countDistinct, desc, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 
 import {
   db,
@@ -236,6 +236,47 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
 export async function getQuestionsForUser(userId: string): Promise<QuestionView[]> {
   const { getBankedQuestions } = await import('@/server/db/queries/bank');
   return getBankedQuestions(userId);
+}
+
+export type AuthoredQuestionPreview = {
+  id: string;
+  questionText: string;
+  canonicalSubcategory: string | null;
+  broadCategory: string | null;
+  createdAt: string;
+};
+
+export async function getAuthoredQuestionsForUser(params: {
+  userId: string;
+  limit?: number;
+}): Promise<AuthoredQuestionPreview[]> {
+  const limit = Math.max(1, Math.min(params.limit ?? 25, 100));
+  const rows = await db
+    .select({
+      id: questions.id,
+      questionText: questions.questionText,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+      createdAt: questions.createdAt,
+    })
+    .from(questions)
+    .where(
+      and(
+        eq(questions.creatorId, params.userId),
+        isNull(questions.deletedAt),
+        eq(questions.source, 'authored'),
+      ),
+    )
+    .orderBy(desc(questions.createdAt))
+    .limit(limit);
+
+  return rows.map((row) => ({
+    id: row.id,
+    questionText: row.questionText,
+    canonicalSubcategory: row.canonicalSubcategory,
+    broadCategory: row.broadCategory,
+    createdAt: row.createdAt.toISOString(),
+  }));
 }
 
 export async function getQuestion(questionId: string, userId: string): Promise<QuestionView | null> {

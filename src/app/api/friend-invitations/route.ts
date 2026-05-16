@@ -345,6 +345,8 @@ function serializeOutgoingInvitation(
   return {
     id: invitation.id,
     inviteeDisplayName: invitation.inviteeDisplayName ?? 'Friend',
+    inviteeUserId:
+      invitation.status === 'accepted' ? invitation.inviteeUserId ?? null : null,
     inviteePhoneMasked: maskPhoneNumber(invitation.inviteePhone),
     inviteePhoneForActions:
       invitation.status === 'pending' || invitation.status === 'expired'
