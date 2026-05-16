@@ -472,9 +472,7 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
   };
 }
 
-export async function getProgressionLandscape(userId: string): Promise<ProgressionView[]> {
-  const pageData = await getKnowledgePageData(userId);
-
+export function toProgressionLandscape(pageData: KnowledgePageData): ProgressionView[] {
   return pageData.allDomains
     .map((domain) => ({
       canonicalSubcategory: domain.displayName,

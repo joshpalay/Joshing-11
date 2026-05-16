@@ -8,7 +8,13 @@ export async function register() {
     const fs = await import('fs');
     const crypto = await import('crypto');
 
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    // Migrations run multi-statement transactions that transaction-mode poolers
+    // (Supabase Supavisor on port 6543) reject. Prefer DIRECT_URL so the migrator
+    // talks straight to Postgres, and so this short-lived pool doesn't compete
+    // with the runtime pool for the pooler's bounded session-mode slots.
+    const pool = new Pool({
+      connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
+    });
     const db = drizzle(pool);
 
     // Migration 0006 sets NOT NULL on senderUserId/recipientUserId after adding them
