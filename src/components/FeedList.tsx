@@ -69,6 +69,7 @@ type FeedApiItem = {
   pointsAwarded?: number | null
   mastery_delta: unknown | null
   unverified_answer: boolean
+  viewer_is_author?: boolean
 }
 
 type FeedMeta = {
@@ -813,7 +814,7 @@ function FeedListContent({
               )
             }
 
-            const onAnswer = () => setAnswerSheetId(item.id)
+            const onAnswer = item.viewer_is_author ? undefined : () => setAnswerSheetId(item.id)
             const typedItem = toTypedFeedItem(item)
 
             if (typedItem.type === 'direct_sent') {
