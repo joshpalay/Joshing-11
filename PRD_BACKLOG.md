@@ -42,6 +42,14 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
+## §8.12 — Navigation is Home / Friends / Questions / Knowledge / Account
+
+- **Date:** 2026-05-16
+- **Section affected:** §8.12.2 Navigation
+- **Current PRD text:** 5-item nav: Home / Feed (→ §8.2) / Knowledge / Activities / Account
+- **Code reality:** `src/components/Nav.tsx:15–21` implements: Home / Friends (→ `/friends`) / Questions (→ `/questions`) / Knowledge / Account. No Activities (bell) nav item; feed is not a primary nav destination.
+- **Proposed PRD update:** Update §8.12.2 nav table to: Home / Friends / Questions / Knowledge / Account. Remove Activities as a nav item — activity notifications are accessible via Account or inline. Remove Feed as a primary nav destination.
+
 ## §8.11 — "Friend answered your question" and thumbs-up SMS triggers removed
 
 - **Date:** 2026-05-16
