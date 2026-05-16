@@ -108,6 +108,13 @@
 
 ## Open Questions
 
+## §8.15 — Activities Tab deferred
+- **Date:** 2026-05-16
+- **Section affected:** §8.15 Activities Tab
+- **Current PRD text:** Activities is the fifth nav item — a notification and history layer for social events (friend requests, Joshing Games, mastery crossings, ceremony, reactions). Unread badge in nav. 90-day retention. Batch read-marking on tab open.
+- **Code reality:** `/activities` page is fully implemented (item types, unread count, batch read-marking, ceremony banner in Feed) but is not linked from primary nav or Account tab. Not a reachable surface for users.
+- **Decision needed:** When Activities is re-enabled, add nav entry and unread badge. Until then, mark §8.15 as deferred in the PRD.
+
 ## §8.14 — Joshing Game deferred
 - **Date:** 2026-05-16
 - **Section affected:** §8.14 Joshing Game
