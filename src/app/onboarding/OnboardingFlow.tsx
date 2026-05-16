@@ -9,12 +9,9 @@ import { US_STATES } from '@/lib/onboarding/us-regions'
 
 type CurrentStep =
   | 'invite-suggestions'
-  | 'welcome'
   | 'background'
   | 'warmup'
   | 'review'
-  | 'pick'
-  | 'complete'
 
 export type WarmupAnswers = {
   deepDive?: string
@@ -82,7 +79,6 @@ const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
   { step: 'background', label: 'About You' },
   { step: 'warmup', label: 'Warmup' },
   { step: 'review', label: 'Review' },
-  { step: 'pick', label: 'Confirm' },
 ]
 
 function normalizeDomain(domain: string) {
@@ -116,18 +112,6 @@ function isSelected(
     : false
 }
 
-function isBeforeNoonEastern() {
-  const easternParts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: 'numeric',
-    hourCycle: 'h23',
-  }).formatToParts(new Date())
-  const hour = Number(
-    easternParts.find((part) => part.type === 'hour')?.value ?? '12'
-  )
-  return hour < 12
-}
-
 function Spinner({ small = false }: { small?: boolean }) {
   return (
     <Loader2
@@ -139,14 +123,12 @@ function Spinner({ small = false }: { small?: boolean }) {
 
 function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
   const activeIndex =
-    currentStep === 'welcome' || currentStep === 'invite-suggestions'
+    currentStep === 'invite-suggestions'
       ? -1
-      : currentStep === 'complete'
-        ? STEP_DOTS.length
-        : Math.max(
-            0,
-            STEP_DOTS.findIndex((item) => item.step === currentStep)
-          )
+      : Math.max(
+          0,
+          STEP_DOTS.findIndex((item) => item.step === currentStep)
+        )
 
   return (
     <div
@@ -191,7 +173,7 @@ export default function OnboardingFlow({
 }: OnboardingFlowProps) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState<CurrentStep>(() =>
-    preSeededInterests.length > 0 ? 'invite-suggestions' : 'welcome'
+    preSeededInterests.length > 0 ? 'invite-suggestions' : 'background'
   )
   const [birthYear, setBirthYear] = useState('')
   const [grewUpCountry, setGrewUpCountry] = useState('')
@@ -227,8 +209,6 @@ export default function OnboardingFlow({
     null
   )
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const showDailySetup = useMemo(() => isBeforeNoonEastern(), [])
-
   const displayInviterName = inviterName?.trim()
     ? inviterName.trim()
     : 'A friend'
@@ -453,15 +433,13 @@ export default function OnboardingFlow({
 
   function keepInviteInterests() {
     setError(null)
-    setSelectedInterests(
-      inviteInterests
-        .flatMap((interest) => {
-          const selected = toSelected(interest)
-          return selected ? [selected] : []
-        })
-        .slice(0, 5)
-    )
-    setCurrentStep('background')
+    const toSave = inviteInterests
+      .flatMap((interest) => {
+        const selected = toSelected(interest)
+        return selected ? [selected] : []
+      })
+      .slice(0, 5)
+    saveInterests(toSave)
   }
 
   function reviewInviteInterests() {
@@ -484,8 +462,8 @@ export default function OnboardingFlow({
     setCurrentStep('background')
   }
 
-  async function saveInterests() {
-    const cleanSelected = selectedInterests
+  async function saveInterests(interestsOverride?: SelectedInterest[]) {
+    const cleanSelected = (interestsOverride ?? selectedInterests)
       .flatMap((interest) => {
         const selected = toSelected(interest)
         return selected ? [selected] : []
@@ -528,8 +506,7 @@ export default function OnboardingFlow({
         return
       }
 
-      setCurrentStep('complete')
-      router.refresh()
+      router.push('/')
     } catch {
       setError('Unable to save interests.')
     } finally {
@@ -619,13 +596,15 @@ export default function OnboardingFlow({
                   type="button"
                   className="btn-primary h-12 w-full"
                   onClick={keepInviteInterests}
+                  disabled={isLoading}
                 >
-                  Keep all
+                  {isLoading ? 'Saving...' : 'Keep all'}
                 </button>
                 <button
                   type="button"
                   className="btn-ghost h-12 w-full"
                   onClick={reviewInviteInterests}
+                  disabled={isLoading}
                 >
                   Choose/edit
                 </button>
@@ -633,6 +612,7 @@ export default function OnboardingFlow({
                   type="button"
                   className="btn-ghost h-12 w-full"
                   onClick={skipInviteInterests}
+                  disabled={isLoading}
                 >
                   Skip
                 </button>
@@ -640,39 +620,11 @@ export default function OnboardingFlow({
             </div>
           ) : null}
 
-          {currentStep === 'welcome' ? (
-            <div className="flex flex-1 flex-col justify-center gap-8">
-              <StepHeader
-                title="Welcome to Joshing"
-                subtitle="The trivia you wish you were asked."
-              />
-              <div className="text-muted-foreground space-y-4 text-base leading-7">
-                <p>
-                  Every day, you&apos;ll get five questions tuned around the
-                  things you care about.
-                </p>
-                <p>
-                  First, sketch a little of that world. You can change it
-                  anytime.
-                </p>
-                <p>It takes about two minutes.</p>
-              </div>
-
-              <button
-                type="button"
-                className="btn-primary h-12 w-full"
-                onClick={() => setCurrentStep('background')}
-              >
-                Let&apos;s go
-              </button>
-            </div>
-          ) : null}
-
           {currentStep === 'background' ? (
             <div className="flex flex-1 flex-col gap-7">
               <StepHeader
-                title="Tell us where you're coming from"
-                subtitle="Two quick facts that help us calibrate. We won't share these."
+                title="Welcome to Joshing"
+                subtitle="Two quick facts to calibrate your daily round. We won't share these."
               />
 
               <div className="space-y-5">
@@ -736,17 +688,10 @@ export default function OnboardingFlow({
                 ) : null}
               </div>
 
-              <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
+              <div className="mt-auto pt-2">
                 <button
                   type="button"
-                  className="btn-ghost h-12"
-                  onClick={() => setCurrentStep('welcome')}
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary h-12"
+                  className="btn-primary h-12 w-full"
                   onClick={() => setCurrentStep('warmup')}
                   disabled={!canAdvanceBackground}
                 >
@@ -1047,6 +992,11 @@ export default function OnboardingFlow({
               </div>
 
               <div className="bg-background/95 sticky bottom-0 mt-auto border-t py-4 backdrop-blur">
+                {error ? (
+                  <div className="mb-3">
+                    <ErrorPanel message={error} />
+                  </div>
+                ) : null}
                 <div className="mb-3 flex items-center justify-between text-sm">
                   <span className="font-medium">
                     {selectedInterests.length} of 5 selected
@@ -1065,102 +1015,23 @@ export default function OnboardingFlow({
                     type="button"
                     className="btn-ghost h-12"
                     onClick={() => setCurrentStep('warmup')}
+                    disabled={isLoading}
                   >
                     Back
                   </button>
                   <button
                     type="button"
                     className="btn-primary h-12"
-                    onClick={() => setCurrentStep('pick')}
-                    disabled={selectedInterests.length === 0}
+                    onClick={() => saveInterests()}
+                    disabled={selectedInterests.length === 0 || isLoading}
                   >
-                    Continue
+                    {isLoading ? 'Saving...' : 'Lock it in'}
                   </button>
                 </div>
               </div>
             </div>
           ) : null}
 
-          {currentStep === 'pick' ? (
-            <div className="flex flex-1 flex-col gap-7">
-              <StepHeader
-                title="Here's your starting map"
-                subtitle="These are what your daily round will draw from. You can change them any time from your Knowledge page."
-              />
-
-              <ol className="space-y-3">
-                {selectedInterests.map((interest, index) => (
-                  <li
-                    key={`${interest.domain}-${index}`}
-                    className="bg-card flex gap-3 rounded-lg border p-4"
-                  >
-                    <span className="bg-foreground text-background grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold">
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0 pt-1">
-                      <span className="block font-semibold">
-                        {interest.domain}
-                      </span>
-                      <span className="text-muted-foreground mt-1 block text-sm">
-                        {interest.broadCategory}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-
-              {error ? <ErrorPanel message={error} /> : null}
-
-              <div className="mt-auto grid grid-cols-2 gap-3 pt-4">
-                <button
-                  type="button"
-                  className="btn-ghost h-12"
-                  onClick={() => setCurrentStep('review')}
-                  disabled={isLoading}
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary h-12"
-                  onClick={saveInterests}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Saving...' : 'Lock it in'}
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {currentStep === 'complete' ? (
-            <div className="flex flex-1 flex-col justify-center gap-8">
-              <StepHeader
-                title="You're set."
-                subtitle="Your first daily round will be ready at noon EST."
-              />
-              <p className="text-muted-foreground text-base leading-7">
-                Until then, take a look around.
-              </p>
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  className="btn-primary h-12 w-full"
-                  onClick={() => router.push('/')}
-                >
-                  Go to home
-                </button>
-                {showDailySetup ? (
-                  <button
-                    type="button"
-                    className="btn-ghost h-12 w-full"
-                    onClick={() => router.push('/daily/setup')}
-                  >
-                    Set up today&apos;s round now
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
         </div>
       </section>
     </main>
