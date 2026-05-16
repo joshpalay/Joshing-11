@@ -42,6 +42,14 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
+## §8.5 — "Share with all friends" broadcast destination retained
+
+- **Date:** 2026-05-16
+- **Section affected:** §8.5 Question Creation
+- **Current PRD text (v11.1):** The broadcast-to-all-friends destination was explicitly removed from §8.5; only "Saved to your bank only" and the direct-send flow remain.
+- **Code reality:** `src/components/QuestionForm.tsx` retains a "Share with all friends" checkbox (`shareToFeed` state, line ~503) that defaults to `true` and submits to the feed broadcast path.
+- **Proposed PRD update:** Reinstate the broadcast destination in §8.5. After authoring a question, players may choose: (a) save to bank only, or (b) share with all friends (broadcast to the feed). The checkbox defaults to ON. Direct send to a specific friend remains a separate gesture from the bank/feed authoring flow.
+
 ## Open Questions
 
 ## §8.1.11 — Thumbs-up signal has no effect on feed surface ordering
