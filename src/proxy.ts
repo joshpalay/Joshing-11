@@ -37,7 +37,7 @@ async function getAuthenticatedUser(
  * Route handlers MUST keep their own `getSession()` checks — this is an
  * additional fence, not a replacement.
  */
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   if (request.method === 'OPTIONS') {
     return new NextResponse(null, { status: 200 })
   }
@@ -130,6 +130,8 @@ export async function proxy(request: NextRequest) {
  * handles authenticated users hitting those pages (e.g. redirecting them
  * to /).
  */
+export { middleware as proxy }
+
 export const config = {
   matcher: [
     '/((?!api/auth|api/cron|api/share|api/telemetry|share|_next/static|_next/image|favicon\\.ico|__nextjs).*)',
