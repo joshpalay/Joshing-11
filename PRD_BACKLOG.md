@@ -30,6 +30,14 @@
 
 ## Open Questions
 
+## §8.1.11 — Thumbs-up signal has no effect on feed surface ordering
+- **Date:** 2026-05-16
+- **Section affected:** §8.1.11 Reactions on Daily Five Questions
+- **Current PRD text:** "Heavily thumbed questions surface earlier in friends' Feeds, all else equal."
+- **Code reality:** `thumbs_up` signals are recorded in `question_feedback` but `surface_priority_score` on the `questions` table is never updated, and the feed query doesn't use it in ordering. The signal is a no-op. (`src/app/api/daily/feedback/route.ts`, `src/server/db/queries/feed.ts`)
+- **Proposed PRD update:** No PRD change needed — the feature is specified correctly. The code needs to be updated.
+- **Decision needed:** How should surface priority be computed — eager update to `surface_priority_score` when feedback is recorded, or dynamic weighted sort in the feed query joining `question_feedback`? And what is the weighting formula (e.g. each thumbs-up adds X to priority score)?
+
 ## §7.3 — Cultural anchor skipped on "Keep all" invite path
 - **Date:** 2026-05-16
 - **Section affected:** §7.3 Onboarding — Step 2 (Cultural anchor)
