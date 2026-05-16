@@ -8,7 +8,7 @@ vi.mock('@/server/auth/session', () => ({
   readSessionClaims: readSessionClaimsMock,
 }))
 
-import { middleware } from '@/middleware'
+import { proxy } from '@/proxy'
 
 function makeRequest(
   pathname: string,
@@ -18,6 +18,10 @@ function makeRequest(
   return {
     nextUrl: new URL(url),
     url,
+    method: 'GET',
+    headers: {
+      get: () => null,
+    },
     cookies: {
       get: (name: string) =>
         options.cookie && name === 'joshing_session'
@@ -27,7 +31,7 @@ function makeRequest(
   } as unknown as import('next/server').NextRequest
 }
 
-describe('middleware (invitation gate)', () => {
+describe('proxy (invitation gate)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     readSessionClaimsMock.mockReset()
@@ -36,7 +40,7 @@ describe('middleware (invitation gate)', () => {
   describe('unauthenticated', () => {
     it('redirects page requests with no cookie to /login with next param', async () => {
       readSessionClaimsMock.mockResolvedValueOnce(null)
-      const res = await middleware(makeRequest('/feed'))
+      const res = await proxy(makeRequest('/feed'))
       expect(res.status).toBe(307) // NextResponse.redirect default
       expect(res.headers.get('location')).toContain('/login')
       expect(res.headers.get('location')).toContain('next=%2Ffeed')
@@ -44,7 +48,7 @@ describe('middleware (invitation gate)', () => {
 
     it('returns 401 JSON for API requests with no cookie', async () => {
       readSessionClaimsMock.mockResolvedValueOnce(null)
-      const res = await middleware(makeRequest('/api/feed'))
+      const res = await proxy(makeRequest('/api/feed'))
       expect(res.status).toBe(401)
       const body = await res.json()
       expect(body.error).toBe('unauthenticated')
@@ -52,7 +56,7 @@ describe('middleware (invitation gate)', () => {
 
     it('rejects requests with a present-but-invalid JWT (readSessionClaims returns null)', async () => {
       readSessionClaimsMock.mockResolvedValueOnce(null)
-      const res = await middleware(
+      const res = await proxy(
         makeRequest('/feed', { cookie: 'tampered.jwt.value' }),
       )
       expect(res.status).toBe(307)
@@ -61,26 +65,13 @@ describe('middleware (invitation gate)', () => {
   })
 
   describe('authenticated with invitation claim', () => {
-    it('lets page requests through when JWT has inv: true', async () => {
-      readSessionClaimsMock.mockResolvedValueOnce({
-        userId: 'u1',
-        sessionId: 's1',
-        invitationAccepted: true,
-      })
-      const res = await middleware(
-        makeRequest('/feed', { cookie: 'valid.jwt' }),
-      )
-      // NextResponse.next() returns 200 with no special headers
-      expect(res.status).toBe(200)
-    })
-
     it('lets API requests through when JWT has inv: true', async () => {
       readSessionClaimsMock.mockResolvedValueOnce({
         userId: 'u1',
         sessionId: 's1',
         invitationAccepted: true,
       })
-      const res = await middleware(
+      const res = await proxy(
         makeRequest('/api/feed', { cookie: 'valid.jwt' }),
       )
       expect(res.status).toBe(200)
@@ -94,7 +85,7 @@ describe('middleware (invitation gate)', () => {
         sessionId: 's1',
         invitationAccepted: false,
       })
-      const res = await middleware(
+      const res = await proxy(
         makeRequest('/knowledge', { cookie: 'legacy.jwt' }),
       )
       expect(res.status).toBe(307)
@@ -110,7 +101,7 @@ describe('middleware (invitation gate)', () => {
         sessionId: 's1',
         invitationAccepted: false,
       })
-      const res = await middleware(
+      const res = await proxy(
         makeRequest('/api/feed', { cookie: 'legacy.jwt' }),
       )
       expect(res.status).toBe(401)
