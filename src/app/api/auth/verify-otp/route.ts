@@ -7,7 +7,6 @@ import { db, users } from '@/server/db'
 import {
   acceptFriendInvitation,
   getValidInvitationForPhone,
-  hasAcceptedInvitationForUser,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE,
 } from '@/server/friends/invitations'
 
@@ -111,9 +110,8 @@ export async function POST(request: Request) {
 
     const existingUser = await findUserByPhone(normalizedPhone)
 
-    // Re-login path: user already exists. Allow if they have a prior accepted
-    // invitation OR they're accepting one now. New invitation acceptance is
-    // optional here — a returning user without a token should still log in.
+    // Re-login path: any existing user can re-authenticate after OTP. The
+    // invitation gate only applies to new-account creation below.
     if (existingUser) {
       let invitationResult: { accepted: boolean } = { accepted: false }
 
@@ -123,21 +121,6 @@ export async function POST(request: Request) {
           inviteeUserId: existingUser.id,
           verifiedPhone: normalizedPhone,
         })
-
-        if (!invitationResult.accepted) {
-          // The token they sent didn't accept. Fall through to the
-          // prior-invitation check — if they have history, the token failure
-          // shouldn't block re-login.
-        }
-      }
-
-      if (!invitationResult.accepted) {
-        const hasPrior = await hasAcceptedInvitationForUser(existingUser.id)
-        if (!hasPrior) {
-          // User row exists but no invitation ever accepted (e.g. legacy
-          // orphan from before this gate). Reject.
-          return invitationRejection()
-        }
       }
 
       await createSession(existingUser.id, { invitationAccepted: true })

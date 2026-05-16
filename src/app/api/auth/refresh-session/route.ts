@@ -1,23 +1,18 @@
 import { NextResponse } from 'next/server'
 
 import {
-  destroySession,
   getSession,
   refreshSessionInvitationClaim,
 } from '@/server/auth/session'
-import { hasAcceptedInvitationForUser } from '@/server/friends/invitations'
 
 /**
  * Graceful migration endpoint for sessions issued before the `inv` JWT
  * claim existed. Middleware redirects legacy sessions here; this handler
  * runs in the Node runtime, so DB calls are fine.
  *
- * - Session has prior accepted invitation -> re-sign JWT with `inv: true`
- *   and redirect to the original URL.
- * - Session has no prior accepted invitation -> destroy session and
- *   bounce to /login with reason=no_invitation. This catches legacy
- *   orphan accounts that existed before the F1.1/F1.2 gate was added.
- * - No session at all -> bounce to /login.
+ * Any valid session is re-signed with `inv: true` — established users
+ * (including legacy accounts created before the invitation gate existed)
+ * keep their session.
  */
 
 function safeNextPath(rawNext: string | null): string {
@@ -35,14 +30,6 @@ export async function GET(request: Request) {
   const session = await getSession()
   if (!session) {
     const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
-  }
-
-  const hasInvitation = await hasAcceptedInvitationForUser(session.userId)
-  if (!hasInvitation) {
-    await destroySession()
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('reason', 'no_invitation')
     return NextResponse.redirect(loginUrl)
   }
 

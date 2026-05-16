@@ -3,43 +3,48 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   acceptFriendInvitationMock,
   createSessionMock,
+  dbMock,
   findUserSelectMock,
   hasAcceptedInvitationForUserMock,
   getValidInvitationForPhoneMock,
   provisionUserInsertMock,
   verifyOtpMock,
 } = vi.hoisted(() => {
+  const findUserSelectMock = vi.fn(
+    async () => [] as Array<Record<string, unknown>>
+  )
+  const provisionUserInsertMock = vi.fn(
+    async () => [] as Array<Record<string, unknown>>
+  )
+  const dbMock = {
+    insert: vi.fn(() => ({
+      values: vi.fn(() => ({
+        onConflictDoNothing: vi.fn(() => ({
+          returning: vi.fn(() => provisionUserInsertMock()),
+        })),
+      })),
+    })),
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(() => findUserSelectMock()),
+        })),
+      })),
+    })),
+  }
   return {
     acceptFriendInvitationMock: vi.fn(),
     createSessionMock: vi.fn(async () => 'session-token'),
-    findUserSelectMock: vi.fn(async () => [] as Array<Record<string, unknown>>),
+    dbMock,
+    findUserSelectMock,
     hasAcceptedInvitationForUserMock: vi.fn(async () => false),
     getValidInvitationForPhoneMock: vi.fn(async () => null as unknown),
-    provisionUserInsertMock: vi.fn(
-      async () => [] as Array<Record<string, unknown>>
-    ),
+    provisionUserInsertMock,
     verifyOtpMock: vi.fn(async (phone: string, code: string) =>
       code === '000000' ? phone : null
     ),
   }
 })
-
-const dbMock = {
-  insert: vi.fn(() => ({
-    values: vi.fn(() => ({
-      onConflictDoNothing: vi.fn(() => ({
-        returning: vi.fn(() => provisionUserInsertMock()),
-      })),
-    })),
-  })),
-  select: vi.fn(() => ({
-    from: vi.fn(() => ({
-      where: vi.fn(() => ({
-        limit: vi.fn(() => findUserSelectMock()),
-      })),
-    })),
-  })),
-}
 
 vi.mock('@/server/auth', () => ({
   verifyOtp: verifyOtpMock,
@@ -123,7 +128,6 @@ describe('/api/auth/verify-otp invitation gate', () => {
   describe('re-login (existing user)', () => {
     it('allows re-login with no token when the user has a prior accepted invitation', async () => {
       findUserSelectMock.mockResolvedValueOnce([EXISTING_USER])
-      hasAcceptedInvitationForUserMock.mockResolvedValueOnce(true)
 
       const response = await POST(
         jsonRequest({ phone: '+15551234567', code: '000000' })
@@ -133,28 +137,30 @@ describe('/api/auth/verify-otp invitation gate', () => {
       expect(response.status).toBe(200)
       expect(body.user.id).toBe('user-1')
       expect(body.invitation).toEqual({ accepted: false })
-      expect(createSessionMock).toHaveBeenCalledWith('user-1')
+      expect(createSessionMock).toHaveBeenCalledWith('user-1', {
+        invitationAccepted: true,
+      })
       expect(acceptFriendInvitationMock).not.toHaveBeenCalled()
     })
 
-    it('rejects re-login with no token when the user has no prior accepted invitation', async () => {
+    it('allows re-login with no token even when the user has no prior accepted invitation (legacy/grandfathered account)', async () => {
       findUserSelectMock.mockResolvedValueOnce([EXISTING_USER])
-      hasAcceptedInvitationForUserMock.mockResolvedValueOnce(false)
 
       const response = await POST(
         jsonRequest({ phone: '+15551234567', code: '000000' })
       )
       const body = await response.json()
 
-      expect(response.status).toBe(400)
-      expect(body).toEqual({
-        error: 'invalid_invitation',
-        message: 'This invitation could not be accepted.',
+      expect(response.status).toBe(200)
+      expect(body.user.id).toBe('user-1')
+      expect(body.invitation).toEqual({ accepted: false })
+      expect(createSessionMock).toHaveBeenCalledWith('user-1', {
+        invitationAccepted: true,
       })
-      expect(createSessionMock).not.toHaveBeenCalled()
+      expect(hasAcceptedInvitationForUserMock).not.toHaveBeenCalled()
     })
 
-    it('allows re-login when accepting a new invitation, even without prior history', async () => {
+    it('allows re-login when accepting a new invitation', async () => {
       findUserSelectMock.mockResolvedValueOnce([EXISTING_USER])
       acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true })
 
@@ -174,16 +180,17 @@ describe('/api/auth/verify-otp invitation gate', () => {
         inviteeUserId: 'user-1',
         verifiedPhone: '+15551234567',
       })
-      expect(createSessionMock).toHaveBeenCalledWith('user-1')
+      expect(createSessionMock).toHaveBeenCalledWith('user-1', {
+        invitationAccepted: true,
+      })
     })
 
-    it('falls back to prior-invitation check when a supplied token fails to accept', async () => {
+    it('still logs in when a supplied invitation token fails to accept', async () => {
       findUserSelectMock.mockResolvedValueOnce([EXISTING_USER])
       acceptFriendInvitationMock.mockResolvedValueOnce({
         accepted: false,
         reason: 'expired',
       })
-      hasAcceptedInvitationForUserMock.mockResolvedValueOnce(true)
 
       const response = await POST(
         jsonRequest({
@@ -194,29 +201,9 @@ describe('/api/auth/verify-otp invitation gate', () => {
       )
 
       expect(response.status).toBe(200)
-      expect(createSessionMock).toHaveBeenCalledWith('user-1')
-    })
-
-    it('rejects when supplied token fails AND there is no prior invitation', async () => {
-      findUserSelectMock.mockResolvedValueOnce([EXISTING_USER])
-      acceptFriendInvitationMock.mockResolvedValueOnce({
-        accepted: false,
-        reason: 'phone_mismatch',
+      expect(createSessionMock).toHaveBeenCalledWith('user-1', {
+        invitationAccepted: true,
       })
-      hasAcceptedInvitationForUserMock.mockResolvedValueOnce(false)
-
-      const response = await POST(
-        jsonRequest({
-          phone: '+15551234567',
-          code: '000000',
-          invitationToken: 'invite-token',
-        })
-      )
-      const body = await response.json()
-
-      expect(response.status).toBe(400)
-      expect(body.error).toBe('invalid_invitation')
-      expect(createSessionMock).not.toHaveBeenCalled()
     })
   })
 
@@ -335,7 +322,9 @@ describe('/api/auth/verify-otp invitation gate', () => {
         inviteeUserId: 'user-2',
         verifiedPhone: '+15559876543',
       })
-      expect(createSessionMock).toHaveBeenCalledWith('user-2')
+      expect(createSessionMock).toHaveBeenCalledWith('user-2', {
+        invitationAccepted: true,
+      })
     })
 
     it('rejects new signup when accept races and fails after provisioning', async () => {
