@@ -222,23 +222,10 @@ export default function DailySummaryPage() {
         <p className="text-muted-foreground mt-1 text-sm">
           {formatDate(summary.date)}
         </p>
-      </header>
-
-      <section
-        className="mt-5 rounded-md border px-5 py-5"
-        style={{
-          background: 'color-mix(in srgb, var(--success) 10%, var(--surface))',
-          borderColor: 'color-mix(in srgb, var(--success) 22%, var(--border))',
-        }}
-      >
-        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>Total</p>
-        <p className="mt-2 font-mono text-5xl leading-none font-bold text-[#111111]">
-          +{Math.round(summary.pointsEarned)}
-        </p>
         <p
           style={{
             ...monoStyle,
-            marginTop: '12px',
+            marginTop: '8px',
             color: 'var(--text-muted)',
           }}
         >
@@ -248,9 +235,9 @@ export default function DailySummaryPage() {
           {summary.totalCorrect}/{summary.questions.length} correct
           {summary.totalSkipped > 0 ? ` · ${summary.totalSkipped} skipped` : ''}
         </p>
-      </section>
+      </header>
 
-      <section className="card mt-4 px-5 py-4">
+      <section className="card mt-5 px-5 py-4">
         <h2 style={titleStyle}>Your Growth Recap</h2>
         <CategoryGainsDisplay
           roundItems={growthCircleItems}
