@@ -3,14 +3,18 @@ import { and, eq, or } from 'drizzle-orm';
 import type { feedItems, questions } from '@/server/db';
 
 export const SOCIAL_FEED_SOURCE_TYPE = 'friend_answered' as const;
-export const AUTHORED_SHARED_FEED_SOURCE_TYPE = 'authored_shared' as const;
 export const DIRECT_SENT_FEED_SOURCE_TYPE = 'direct_sent' as const;
-export const LEGACY_THUMBS_UPPED_FEED_SOURCE_TYPE = 'thumbs_upped' as const;
+
+// 'authored_shared' and 'thumbs_upped' are legacy-read-only source types.
+// PRD v11.1 §8.2 killed authored_shared as a write path. thumbs_upped was
+// retired earlier. Both values may still exist in DB rows written before those
+// decisions; read queries include them for legacy support only. Do not write
+// new rows with these sourceType values.
 
 export const ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES = [
-  AUTHORED_SHARED_FEED_SOURCE_TYPE,
+  'authored_shared',
   DIRECT_SENT_FEED_SOURCE_TYPE,
-  LEGACY_THUMBS_UPPED_FEED_SOURCE_TYPE,
+  'thumbs_upped',
 ] as const;
 
 export const RESULT_GATED_MAIN_FEED_SOURCE_TYPES = {
@@ -18,7 +22,7 @@ export const RESULT_GATED_MAIN_FEED_SOURCE_TYPES = {
 } as const;
 
 export const QUESTION_SHARING_FEED_SOURCE_VISIBILITY = [
-  { sourceType: AUTHORED_SHARED_FEED_SOURCE_TYPE, sourceResult: null, visible: true, reason: null },
+  { sourceType: 'authored_shared' as const, sourceResult: null, visible: true, reason: null },
   { sourceType: DIRECT_SENT_FEED_SOURCE_TYPE, sourceResult: null, visible: true, reason: null },
   { sourceType: SOCIAL_FEED_SOURCE_TYPE, sourceResult: 'correct', visible: true, reason: null },
   {
@@ -64,9 +68,9 @@ export function isMainFeedSourceVisible(sourceType: string, sourceResult: string
 
 export function visibleFeedSourcePredicate(feedItemColumns: FeedItemsVisibilityColumns) {
   return or(
-    eq(feedItemColumns.sourceType, AUTHORED_SHARED_FEED_SOURCE_TYPE),
+    eq(feedItemColumns.sourceType, 'authored_shared'), // legacy-read-only
     eq(feedItemColumns.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
-    eq(feedItemColumns.sourceType, LEGACY_THUMBS_UPPED_FEED_SOURCE_TYPE),
+    eq(feedItemColumns.sourceType, 'thumbs_upped'), // legacy-read-only
     and(
       eq(feedItemColumns.sourceType, SOCIAL_FEED_SOURCE_TYPE),
       eq(feedItemColumns.sourceResult, 'correct'),
