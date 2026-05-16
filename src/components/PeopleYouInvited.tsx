@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
 type InviteStatus = 'pending' | 'accepted' | 'expired' | 'cancelled'
@@ -7,6 +8,7 @@ type InviteStatus = 'pending' | 'accepted' | 'expired' | 'cancelled'
 type OutgoingInvite = {
   id: string
   inviteeDisplayName: string
+  inviteeUserId: string | null
   inviteePhoneMasked: string
   inviteePhoneForActions: string | null
   suggestedInterests: string[]
@@ -191,25 +193,42 @@ export default function PeopleYouInvited() {
               invite.status === 'pending' &&
               invite.message &&
               invite.inviteePhoneForActions
+            const acceptedProfileHref =
+              invite.status === 'accepted' && invite.inviteeUserId
+                ? `/users/${invite.inviteeUserId}`
+                : null
+
+            const header = (
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-foreground font-medium">
+                    {invite.inviteeDisplayName}
+                  </h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    {invite.inviteePhoneMasked}
+                  </p>
+                </div>
+                <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-medium">
+                  {STATUS_COPY[invite.status]}
+                </span>
+              </div>
+            )
 
             return (
               <article
                 key={invite.id}
                 className="bg-background rounded-xl border p-3"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-foreground font-medium">
-                      {invite.inviteeDisplayName}
-                    </h3>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                      {invite.inviteePhoneMasked}
-                    </p>
-                  </div>
-                  <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-medium">
-                    {STATUS_COPY[invite.status]}
-                  </span>
-                </div>
+                {acceptedProfileHref ? (
+                  <Link
+                    href={acceptedProfileHref}
+                    className="hover:border-foreground/30 -m-3 mb-0 block rounded-xl p-3 transition hover:shadow-sm"
+                  >
+                    {header}
+                  </Link>
+                ) : (
+                  header
+                )}
 
                 {invite.suggestedInterests.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">

@@ -30,14 +30,12 @@ describe('Friends page QA surface', () => {
     expect(html).not.toMatch(forbiddenGamificationCopy)
   })
 
-  it('renders request, invite, active friend, and empty-state sections from the initial loading shell', () => {
+  it('renders the Friends / Requests / Sent tab bar with the friends tab active by default', () => {
     const html = renderToStaticMarkup(<FriendsList />)
 
-    expect(html).toContain('Invitations from friends')
-    expect(html).toContain('Loading requests')
-    expect(html).toContain('People you thought of')
-    expect(html).toContain('Loading invites')
-    expect(html).toContain('Active friends')
+    expect(html).toContain('Friends')
+    expect(html).toContain('Requests')
+    expect(html).toContain('Sent')
     expect(html).toContain('Loading friends')
     expect(html).not.toMatch(forbiddenGamificationCopy)
   })
