@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-export type FeedCardTone = 'cream' | 'white' | 'green' | 'amber' | 'gray'
+export type FeedCardTone = 'cream' | 'white' | 'green' | 'amber' | 'gray' | 'muted'
 
 export type FeedCardActionState =
   | 'unanswered'
@@ -23,12 +23,22 @@ export type DirectSentFeedItem = FeedCardBaseItem & {
   senderHref?: string | null
 }
 
+export type FriendAnsweredParticipant = {
+  userId: string
+  displayName: string
+  href?: string | null
+}
+
 export type FriendAnsweredFeedItem = FeedCardBaseItem & {
   type: 'friend_answered'
   friendName: string
   friendHref?: string | null
   friendCorrect?: boolean | null
   answerSummary?: string | null
+  // Friends who got this question right, in order of recency.
+  correctFriends?: FriendAnsweredParticipant[]
+  // Viewer's own status on the underlying question, regardless of feed-item state.
+  viewerResult?: 'correct' | 'incorrect' | null
 }
 
 export type FriendAddedFeedItem = FeedCardBaseItem & {
@@ -73,4 +83,7 @@ export type FeedCardShellProps = {
   onAnswer?: () => void
   resultContent?: ReactNode
   className?: string
+  // When true, the question text is rendered dimmed so the social signal
+  // becomes the visual focus. Used when the viewer has already answered.
+  dimQuestion?: boolean
 }

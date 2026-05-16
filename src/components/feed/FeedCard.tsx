@@ -12,6 +12,7 @@ const toneClasses: Record<FeedCardTone, string> = {
   amber:
     'border-orange-200 bg-orange-50/80 shadow-[0_1px_0_rgba(154,52,18,0.08)]',
   gray: 'border-stone-200 bg-stone-100/80 text-stone-800 shadow-none',
+  muted: 'border-stone-200 bg-stone-50 shadow-none',
 }
 
 const categoryToneClasses: Record<FeedCardTone, string> = {
@@ -20,6 +21,7 @@ const categoryToneClasses: Record<FeedCardTone, string> = {
   green: 'text-emerald-700',
   amber: 'text-orange-700',
   gray: 'text-stone-500',
+  muted: 'text-stone-400',
 }
 
 const dividerToneClasses: Record<FeedCardTone, string> = {
@@ -28,6 +30,7 @@ const dividerToneClasses: Record<FeedCardTone, string> = {
   green: 'border-emerald-200/60',
   amber: 'border-orange-200/60',
   gray: 'border-stone-200',
+  muted: 'border-stone-200',
 }
 
 export function FeedCard({
@@ -38,6 +41,7 @@ export function FeedCard({
   onAnswer,
   resultContent,
   className,
+  dimQuestion,
 }: FeedCardShellProps) {
   const category = visibleFeedCategory(item.category)
   const hasBottom = Boolean(socialSignal ?? resultContent ?? onAnswer)
@@ -71,7 +75,12 @@ export function FeedCard({
               {category.toUpperCase()}
             </p>
           ) : null}
-          <p className="text-foreground font-serif text-xl leading-8 sm:text-2xl sm:leading-9">
+          <p
+            className={cn(
+              'font-serif text-xl leading-8 sm:text-2xl sm:leading-9',
+              dimQuestion ? 'text-stone-400' : 'text-foreground'
+            )}
+          >
             {item.question}
           </p>
         </div>
@@ -98,7 +107,14 @@ export function FeedCard({
           ) : (
             <>
               {socialSignal ? (
-                <p className="flex-1 text-sm text-stone-600 leading-5">
+                <p
+                  className={cn(
+                    'flex-1 text-sm leading-5',
+                    dimQuestion
+                      ? 'text-stone-900 font-medium'
+                      : 'text-stone-600'
+                  )}
+                >
                   {socialSignal}
                 </p>
               ) : (

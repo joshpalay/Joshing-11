@@ -255,7 +255,9 @@ export async function GET(request: NextRequest) {
       const authorName = displayName(question?.creatorId ? userById.get(question.creatorId) : null, 'the author');
       const domain = socialFeedDomainLabel(question);
       const cardType = feedCardType(item);
-      const answerResult = item.answerResult ?? null;
+      // Fall back to viewer's mastery-event answer status when answerResult is null
+      // (legacy feed items answered before the answerResult column was added).
+      const answerResult = item.answerResult ?? item.viewerAnswerStatus?.result ?? null;
       const awardedPoints = typeof item.pointsAwarded === 'number' ? item.pointsAwarded : null;
 
       return {
@@ -276,6 +278,7 @@ export async function GET(request: NextRequest) {
             ? directSentAttribution(sourceName, domain)
             : friendAnsweredAttribution(item, userById, domain, authorName),
         friend_results: item.friendResults ?? null,
+        viewer_answer_status: item.viewerAnswerStatus ?? null,
         endorsement_count: item.thumbsUpCount ?? null,
         additional_endorsers: item.additionalEndorsers ?? null,
         source_event_at: item.sourceEventAt,

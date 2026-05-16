@@ -10,12 +10,17 @@ export type FeedItemState = 'active' | 'answered' | 'skipped' | 'dismissed' | 'r
 
 export type FriendResult = { userId: string; displayName: string; result: 'correct' | 'incorrect' | null };
 
+export type ViewerAnswerStatus = { result: 'correct' | 'incorrect' };
+
 export type CollapsedFeedItem = FeedItem & {
   // friend_answered collapse: all friends who answered this question
   friendResults?: FriendResult[];
   // legacy thumbs_upped collapse
   thumbsUpCount?: number;
   additionalEndorsers?: Array<{ userId: string; displayName: string }>;
+  // Viewer's own answer status on the underlying question, regardless of how they answered it.
+  // Distinct from item.state === 'answered', which only reflects answering THIS feed item.
+  viewerAnswerStatus?: ViewerAnswerStatus | null;
 };
 
 const VISIBLE_FEED_STATES = ['active', 'skipped', 'answered'] as const;
@@ -385,8 +390,18 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
   const collapsed = await collapseFriendAnsweredItems(afterThumbsUp);
   const lastNonPinned = nonPinnedPage.at(-1) ?? null;
 
+  const collapsedQuestionIds = collapsed
+    .map((item) => item.questionId)
+    .filter((id): id is string => Boolean(id));
+  const viewerStatusByQuestion = await getViewerAnswerStatusForQuestions(userId, collapsedQuestionIds);
+
+  const withViewerStatus: CollapsedFeedItem[] = collapsed.map((item) => ({
+    ...item,
+    viewerAnswerStatus: item.questionId ? viewerStatusByQuestion.get(item.questionId) ?? null : null,
+  }));
+
   return {
-    items: collapsed,
+    items: withViewerStatus,
     nextCursor: lastNonPinned
       ? { sourceEventAt: lastNonPinned.sourceEventAt, id: lastNonPinned.id }
       : null,
@@ -458,6 +473,40 @@ export async function userHasQuestionInBlockingFeed(userId: string, questionId: 
     .limit(1);
 
   return Boolean(row);
+}
+
+export async function getViewerAnswerStatusForQuestions(
+  userId: string,
+  questionIds: string[],
+): Promise<Map<string, ViewerAnswerStatus>> {
+  const result = new Map<string, ViewerAnswerStatus>();
+  if (questionIds.length === 0) return result;
+
+  const rows = await db
+    .select({
+      questionId: masteryEvents.questionId,
+      answerState: masteryEvents.answerState,
+    })
+    .from(masteryEvents)
+    .where(and(
+      eq(masteryEvents.userId, userId),
+      eq(masteryEvents.answeredByUserId, userId),
+      inArray(masteryEvents.questionId, questionIds),
+    ));
+
+  for (const row of rows) {
+    if (!row.questionId) continue;
+    const isCorrect = row.answerState !== null && row.answerState !== 'incorrect';
+    const existing = result.get(row.questionId);
+    // Any correct answer wins; otherwise stay with the first incorrect we see.
+    if (isCorrect) {
+      result.set(row.questionId, { result: 'correct' });
+    } else if (!existing) {
+      result.set(row.questionId, { result: 'incorrect' });
+    }
+  }
+
+  return result;
 }
 
 export async function userAnsweredQuestionCorrectly(userId: string, questionId: string): Promise<boolean> {
