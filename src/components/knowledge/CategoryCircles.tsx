@@ -75,6 +75,7 @@ export function KnowledgeCircle({
 }) {
   const dc = getPortraitDomainColor(broadCategory);
   const resolvedSize = size ?? getCircleSize(pointsAfter, maxPoints);
+  const slotSize = size ?? MAX_SIZE;
   const finalOpacity = getCircleOpacity(pointsAfter, maxPoints);
   const [opacity, setOpacity] = useState(animate ? MIN_OPACITY : finalOpacity);
   const rafRef = useRef<number | null>(null);
@@ -123,8 +124,8 @@ export function KnowledgeCircle({
   return (
     <div
       style={{
-        width: resolvedSize,
-        height: resolvedSize,
+        width: slotSize,
+        height: slotSize,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
