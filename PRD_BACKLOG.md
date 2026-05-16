@@ -42,6 +42,14 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
+## §8.5 — Bank-only helper text omits domain/territory info
+
+- **Date:** 2026-05-16
+- **Section affected:** §8.5.2 Question Creation — bank-only confirmation copy
+- **Current PRD text:** "Saved to your bank. It opens [Domain] as declared territory on your map."
+- **Code reality:** `src/components/QuestionForm.tsx` displays `"Saved to your bank only."` — no mention of which domain opens or that authorship creates declared territory.
+- **Proposed PRD update:** Simplify §8.5.2 confirmation copy to: "Saved to your bank only." The domain/territory-opening detail is surfaced elsewhere (knowledge page, mastery events) and is not needed in the inline save confirmation.
+
 ## §8.5 — "Share with all friends" broadcast destination retained
 
 - **Date:** 2026-05-16
