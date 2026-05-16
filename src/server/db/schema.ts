@@ -680,7 +680,7 @@ export const feedItems = pgTable(
     joshingGameId: text('joshingGameId').references(() => joshingGames.id, { onDelete: 'set null' }),
     sourceType: text('sourceType').notNull(),
     sourceUserId: text('sourceUserId').notNull().references(() => users.id),
-    sourceResult: text('sourceResult'),
+    sourceResult: text('sourceResult').$type<'correct' | 'incorrect' | null>(),
     sourceEventAt: timestamp('sourceEventAt', { withTimezone: true }).notNull().defaultNow(),
     personalMessage: text('personalMessage'),
     submittedAnswer: text('submittedAnswer'),

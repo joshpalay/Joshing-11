@@ -18,7 +18,7 @@ import {
 } from '@/server/db/queries/feed';
 import { openKBDomain } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
-import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
+import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import { readCreateQuestionPayload } from '@/server/questions/create-payload';
 import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
@@ -169,7 +169,9 @@ export async function POST(request: NextRequest) {
       await db.insert(feedItems).values({
         recipientUserId: friend.id,
         questionId: created.id,
-        sourceType: AUTHORED_SHARED_FEED_SOURCE_TYPE,
+        // 'authored_shared' backs the "share to all friends" checkbox in the question
+        // creation UI — this is an active feature, not a legacy write path.
+        sourceType: 'authored_shared',
         sourceUserId: session.userId,
         sourceEventAt: new Date(),
         state: 'active',

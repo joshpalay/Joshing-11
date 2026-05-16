@@ -19,9 +19,12 @@ type Beat3 = { userId: string; displayName: string; contributionCount: number }[
 type Beat4 = { userId: string; displayName: string; sharedDomains: string[] };
 type Beat5 = { totalCreatorPoints: number; topQuestion: { text: string; answeredCount: number } | null };
 
+type CeremonyMode = 'solo' | 'duo' | 'group';
+
 type BeatsPayload = {
   cycleStart: string;
   cycleEnd: string;
+  mode?: CeremonyMode;
   beat1: Beat1 | null;
   beat2: Beat2 | null;
   beat3: Beat3 | null;
@@ -104,7 +107,7 @@ function beatViews(payload: BeatsPayload): BeatView[] {
   return views;
 }
 
-function Beat({ beat }: { beat: BeatView }) {
+function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
   if (beat.id === 1) {
     return (
       <div className="mx-auto max-w-2xl text-center">
@@ -191,9 +194,12 @@ function Beat({ beat }: { beat: BeatView }) {
   }
 
   if (beat.id === 3) {
+    const heading = mode === 'solo'
+      ? 'Questions that shaped your cycle.'
+      : 'These people taught you something.';
     return (
       <div className="mx-auto max-w-2xl text-center">
-        <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">These people taught you something.</h1>
+        <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">{heading}</h1>
         <div className="mt-10 space-y-4 text-lg text-stone-200 sm:text-xl">
           {beat.content.map((contributor) => (
             <p key={contributor.userId}>
@@ -354,7 +360,7 @@ export default function CeremonyPage() {
             </div>
           </div>
         ) : (
-          <Beat beat={beats[currentIndex]!} />
+          <Beat beat={beats[currentIndex]!} mode={ceremony.beatsPayload.mode} />
         )}
       </div>
 

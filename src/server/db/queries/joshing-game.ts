@@ -2,6 +2,7 @@ import { and, asc, count, eq, sql } from 'drizzle-orm';
 
 import { writeActivity } from '@/server/activity/write-activity';
 import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
+import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
 import { computeAnswerState } from '@/server/answer-state';
 import { gradeAnswer } from '@/server/grading';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
@@ -16,7 +17,6 @@ import {
   joshingGameRecipients,
   joshingGameResponses,
   joshingGames,
-  masteryEvents,
   questions,
   users,
 } from '@/server/db';
@@ -127,18 +127,6 @@ async function readPriorAnswers(userId: string, questionId: string): Promise<{ r
   ];
 }
 
-async function countAuthorCreditEvents(questionId: string, authorId: string): Promise<number> {
-  const [row] = await db
-    .select({ value: count() })
-    .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, authorId),
-      eq(masteryEvents.questionId, questionId),
-      eq(masteryEvents.sourceType, 'author_credit'),
-    ));
-
-  return row?.value ?? 0;
-}
 
 export async function createJoshingGame(params: {
   title: string;
@@ -428,6 +416,7 @@ export async function submitJoshingGameResponse(params: {
       question.correctCount + 1,
       question.askedCount + 1,
       existingAuthorCredits + 1,
+      question.calibratedDifficulty ?? question.llmDifficulty,
     );
 
     if (authorAward.awardedPoints > 0) {

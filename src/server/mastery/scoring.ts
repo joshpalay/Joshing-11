@@ -67,16 +67,22 @@ function creatorMasteryWindowFromEmpiricalRate(
 }
 
 /**
- * NOTE (F2.5): This implementation differs from the PRD-locked author-credit
- * rule (0.5x difficulty, moderate/specialist only, one per question per
- * answerer). It uses an empirical-rate + windowed scheme instead. The
- * divergence is documented and pending product clarification.
+ * Author credit uses the empirical-rate windowed scheme (confirmed 2026-05-16,
+ * product decision: Option B). Accessible questions earn no credit — only
+ * Moderate and Specialist questions qualify, per PRD §8.32.
  */
 export function creatorMasteryAwardForNthCorrect(
   correctCount: number,
   askedCount: number,
   countedCorrectOrdinal: number,
+  difficulty?: LegacyDifficultyEstimate | null,
 ): { basePoints: number; weight: number; awardedPoints: number } {
+  // Accessible questions do not earn author credit (PRD §8.32, all models agree).
+  if (difficulty === 'accessible') {
+    const { basePoints } = creatorMasteryWindowFromEmpiricalRate(correctCount, askedCount)
+    return { basePoints, weight: 0, awardedPoints: 0 }
+  }
+
   const { basePoints, fullCreditWindow, reducedCreditWindow } = creatorMasteryWindowFromEmpiricalRate(
     correctCount,
     askedCount,

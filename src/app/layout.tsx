@@ -4,6 +4,8 @@ import './globals.css'
 import { Nav } from "@/components/Nav";
 
 
+// Intentional product choice (2026-05-16): Montserrat is the body font.
+// PRD §typography spec'd Inter, but Montserrat ships. Update PRD to reflect this.
 const montserrat = Montserrat({
   subsets: ['latin'],
   variable: '--font-sans-body',
