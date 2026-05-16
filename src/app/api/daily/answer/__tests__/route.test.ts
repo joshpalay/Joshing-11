@@ -205,7 +205,7 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
     const res = await POST(jsonRequest(VALID_BODY) as never)
     expect(res.status).toBe(200)
 
-    expect(persistGeneratedQuestionMock).toHaveBeenCalledWith('gen-q-1')
+    expect(persistGeneratedQuestionMock).toHaveBeenCalledWith('gen-q-1', 'history')
     expect(readPriorAnswersForQuestionMock).toHaveBeenCalledWith(
       'user-1',
       'canonical-q-1',

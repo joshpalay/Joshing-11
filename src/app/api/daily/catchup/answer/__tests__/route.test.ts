@@ -210,7 +210,7 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
 
     await POST(jsonRequest(VALID_BODY) as never)
 
-    expect(persistGeneratedQuestionMock).toHaveBeenCalledWith('gen-q-1')
+    expect(persistGeneratedQuestionMock).toHaveBeenCalledWith('gen-q-1', 'history')
     expect(readPriorAnswersForQuestionMock).toHaveBeenCalledWith('user-1', 'canonical-q-1')
     expect(writeMasteryEventMock).toHaveBeenCalledWith(
       expect.objectContaining({

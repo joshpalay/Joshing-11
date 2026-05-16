@@ -16,7 +16,7 @@ function asDifficulty(value: string): 'accessible' | 'moderate' | 'specialist' |
   return null;
 }
 
-export async function persistGeneratedQuestion(generatedQuestionId: string): Promise<PersistGeneratedQuestionResult> {
+export async function persistGeneratedQuestion(generatedQuestionId: string, slotDomain?: string): Promise<PersistGeneratedQuestionResult> {
   try {
     const [existing] = await db
       .select({ id: questions.id })
@@ -45,7 +45,9 @@ export async function persistGeneratedQuestion(generatedQuestionId: string): Pro
       ? generated.canonicalSubcategory!
       : !isGenericSubcategory(generated.broadCategory)
         ? generated.broadCategory!
-        : generated.canonicalSubcategory || generated.broadCategory;
+        : !isGenericSubcategory(slotDomain)
+          ? slotDomain!
+          : generated.canonicalSubcategory || generated.broadCategory;
     assertSpecificCanonicalSubcategory(desiredCanonical);
 
     const [created] = await db
