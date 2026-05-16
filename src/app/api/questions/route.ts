@@ -169,9 +169,8 @@ export async function POST(request: NextRequest) {
       await db.insert(feedItems).values({
         recipientUserId: friend.id,
         questionId: created.id,
-        // 'authored_shared' is a legacy write path that PRD v11.1 §8.2 retired.
-        // This write is kept alive by this route but should be removed once the
-        // "share a question to all friends on create" flow is formally deprecated.
+        // 'authored_shared' backs the "share to all friends" checkbox in the question
+        // creation UI — this is an active feature, not a legacy write path.
         sourceType: 'authored_shared',
         sourceUserId: session.userId,
         sourceEventAt: new Date(),
