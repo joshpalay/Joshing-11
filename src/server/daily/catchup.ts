@@ -1,4 +1,5 @@
-import type { QueueSlot } from '@/server/daily/types';
+import { z } from 'zod';
+import { type QueueSlot, queueSlotSchema } from '@/server/daily/types';
 
 export const CATCHUP_LOOKBACK_DAYS = 7;
 
@@ -18,7 +19,13 @@ export function isCatchupQueueDate(
 }
 
 export function asQueueSlots(value: unknown): QueueSlot[] {
-  return Array.isArray(value) ? (value as QueueSlot[]) : [];
+  if (!Array.isArray(value)) return [];
+  const result = z.array(queueSlotSchema).safeParse(value);
+  if (!result.success) {
+    console.warn('[daily] QueueSlot JSONB failed schema validation', result.error.issues);
+    return value as QueueSlot[];
+  }
+  return result.data;
 }
 
 export function dailyQueueItemId(queueId: string, slotIndex: number): string {

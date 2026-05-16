@@ -18,6 +18,7 @@ import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-i
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { type QueueSlot } from '@/server/daily/types';
+import { asQueueSlots } from '@/server/daily/catchup';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { computeAnswerState } from '@/server/answer-state';
@@ -36,10 +37,6 @@ type DailyAnswerErrorCode =
 
 function dailyAnswerErrorResponse(status: number, error: DailyAnswerErrorCode, message: string) {
   return NextResponse.json({ error, message }, { status });
-}
-
-function asQueueSlots(value: unknown): QueueSlot[] {
-  return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
 async function resolveCanonicalAnswer(question: typeof generatedQuestions.$inferSelect): Promise<string> {
