@@ -67,12 +67,10 @@ _Date: 2026-05-16 · Scope: five deep-dives approved after Phase 1 triage._
 
 ## Section 3 — Ceremony state machine: spec vs. reality
 
-### F3.1 — No per-game ceremony; biweekly personal is the only model **[P1 · Gameplay · Spec Drift]**
+### F3.1 — Ceremony model **[RESOLVED 2026-05-16 — code is correct, PRD was stale]**
 
-- **Location:** `src/server/ceremony/fire-ceremony.ts` (biweekly only, no `gameId` parameter or game-session reference). `src/server/db/schema.ts:755–772` (`BiweeklyCeremony` table — no `game_id`, no `act_1_viewed_at`, no `act_2_viewed_at`). `src/app/api/cron/biweekly-ceremony/route.ts` (cron trigger, no game trigger).
-- **What's wrong.** The PRD specifies a two-act ceremony tied to game completion: Act 1 fires on personal completion (Portrait, Personal Record); Act 2 fires when all active players finish (Group Knowledge Map, Authorship Impact, Relational Feedback, Climax, Invitation). None of this structure exists in code. The ceremony is a personal retrospective over a 14-day window, fired by a cron job, with no connection to any specific game session.
-- **Why it matters.** This is the largest outstanding architectural gap relative to the PRD. The biweekly-personal model may have been a deliberate scope reduction; if so the PRD needs updating. If the two-act model is still the target, an entirely new schema and trigger system is required.
-- **Direction.** Product must decide: (a) biweekly-personal is the shipped model → rewrite PRD ceremony sections to match; (b) two-act per-game is still the target → new `gameCeremonies` table keyed on `gameId`, an "all players finished" trigger on `joshingGameResponses`, Act 1/2 fire functions, and mode-specific beat sets. No engineering action until this decision is made.
+- **Confirmed product decision:** The ceremony model is biweekly-personal. There is no per-game ceremony and there never will be. PRD sections describing a two-act per-game ceremony are out of date and should be treated as superseded by this decision. The code (`fire-ceremony.ts`, `biweekly-ceremony` cron, `BiweeklyCeremony` table) correctly implements the shipped model.
+- **Action required on PRD:** Rewrite PRD §8.1.x ceremony sections to describe the biweekly personal cron model. Remove all references to Act 1 / Act 2 and the per-game trigger. No engineering action required.
 
 ### F3.2 — Mode is computed and stored; beat suppression in solo mode is implicit, not explicit **[P2 · Gameplay]**
 

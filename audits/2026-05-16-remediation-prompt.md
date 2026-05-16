@@ -3,7 +3,9 @@
 **Reference:** `audits/2026-05-16-phase1-triage.md`, `audits/2026-05-16-phase2-findings.md`  
 **Branch:** develop on the current working branch; commit after each logical group.
 
-This prompt is organized in four tracks. **Tracks 1 and 4 have no dependencies — start immediately.** Tracks 2 and 3 each open with a product decision that must be confirmed in writing before engineering begins; the engineering sub-tasks are written out so they can start the moment the decision lands.
+This prompt is organized in four tracks. **Tracks 1, 3, and 4 have no dependencies — start immediately.** Track 2 opens with a product decision that must be confirmed in writing before its engineering sub-tasks begin.
+
+**Confirmed product decision (2026-05-16):** The ceremony model is biweekly-personal. There is no per-game ceremony and there never will be. The PRD sections describing a two-act per-game ceremony are out of date and should be treated as superseded. F3.1 from the Phase 2 findings is closed — the code was correct, the PRD was stale.
 
 Do not modify files outside the scope described. Do not open PRs until explicitly asked.
 
@@ -348,19 +350,9 @@ Add tests in `src/server/mastery/__tests__/` verifying: author credit is written
 
 ---
 
-## Track 3 — Ceremony architecture (product decision required first)
+## Track 3 — Ceremony (pure engineering, no decisions required)
 
-### ⚠️ Decision 3A — Biweekly personal, or two-act per-game?
-
-The PRD specifies a two-act ceremony tied to game completion. The code ships a biweekly personal cron. Confirm which model is current:
-
-**Option A — Biweekly personal (current code):** The shipped model. Update PRD ceremony sections (§8.1.x) to match what ships. No schema or server changes needed for the core ceremony logic. Minor UI changes in Task 3.1 can proceed now.
-
-**Option B — Two-act per-game (PRD-specified):** Requires a separate, scoped prompt covering: new `gameCeremonies` table keyed on `gameId`; an "all players finished" trigger on `joshingGameResponses`; Act 1 / Act 2 fire functions with separate beat payloads; mode-specific beat suppression; UI changes for the two-act progression. This is a substantial scope — estimate and scope separately before starting.
-
----
-
-_Task 3.1 is safe to implement regardless of Decision 3A:_
+The ceremony is biweekly-personal. No per-game model. This track is unblocked.
 
 ### 3.1 · Ceremony copy branches on `mode` (UI only)
 
