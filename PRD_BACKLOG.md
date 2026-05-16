@@ -28,6 +28,13 @@
 - **Code reality:** `DAILY_WRONG` in `src/server/grading/select-quip.ts:12–17` has 4 entries; the fifth quip is intentionally absent.
 - **Proposed PRD update:** Remove "Tomorrow's version of you will know." from the DAILY_WRONG quip list in §8.1.14. The four-entry bank is the correct implementation.
 
+## §8.3.4 — Creator points for send-forwarded questions not implemented
+- **Date:** 2026-05-16
+- **Section affected:** §8.3.4 Creator Points
+- **Current PRD text:** Sender earns creator points when recipient answers correctly — 1.0x for own questions, 0.5x for forwarded questions originally authored by someone else.
+- **Code reality:** No creator-points logic fires on direct-sent question answers. The feed answer route awards mastery to the answerer only; the originating sender receives no credit. (`src/app/api/questions/send/route.ts`, `src/app/api/feed/[feedItemId]/answer/route.ts`)
+- **Proposed PRD update:** Remove §8.3.4 Creator Points. Replace with: "The sender does not earn creator points when a recipient answers a directly-sent question. The send gesture is its own reward — the social moment of sharing a question with a specific friend. Mastery credit flows only to the player who answers."
+
 ## §8.2.6 — Feed cap is 50, not 25
 - **Date:** 2026-05-16
 - **Section affected:** §8.2.6 Feed Mechanics
