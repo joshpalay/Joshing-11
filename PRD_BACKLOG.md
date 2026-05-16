@@ -42,6 +42,14 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
+## §8.10 — Star voting replaced by thumbs up/down
+
+- **Date:** 2026-05-16
+- **Section affected:** §8.10 End of Session Review — Voting
+- **Current PRD text:** "2 stars per player per day per group. Stars can be moved within daily budget. Starring notifies the question author via SMS."
+- **Code reality:** End of session review uses thumbs-up/thumbs-down (`src/app/daily/summary/page.tsx`, `src/components/games/QuestionRatingButtons.tsx`). No star budget, no scarcity mechanic, no author notification tied to stars.
+- **Proposed PRD update:** Remove the star voting mechanic from §8.10. Replace with: "Players may give thumbs-up or thumbs-down on any question in the End of Session Review. Thumbs-up increments the question's surface priority score; thumbs-down decrements it. No daily budget applies. Author SMS notification on starring is removed."
+
 ## §8.8a — Breadcrumb length is 1–2 sentences, not 2–6 words
 
 - **Date:** 2026-05-16
