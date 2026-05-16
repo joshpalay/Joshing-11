@@ -42,13 +42,13 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
-## §8.7 — Archive is not a current product feature
+## §8.7 — Archive page is not a current product feature; catch-up is a separate feature
 
 - **Date:** 2026-05-16
 - **Section affected:** §8.7 Archive
 - **Current PRD text:** Full archive of every question a player has interacted with, organized by source (Daily Five, Feed, Sent to me, Sent by me, Written by me, Catch-up), searchable by domain and free-text.
-- **Code reality:** The Archive page (`src/app/archive/page.tsx`) exists in code but is not surfaced in primary navigation — only linked from the account page. The feature is not part of the active product experience.
-- **Proposed PRD update:** Mark §8.7 Archive as deferred. Remove from the Phase 1 feature list. The archive code may remain but the section should note: "An archive page exists at /archive but is not a primary navigation destination. Full archive specification is deferred to a future phase."
+- **Code reality:** The Archive page (`src/app/archive/page.tsx`) exists in code but is not surfaced in primary navigation. Catch-up ("play the ones you missed") is a fully implemented separate feature with its own page (`/daily/catchup`), API routes (`/api/daily/catchup/*`), eligibility logic (`src/server/play/catch-up-eligibility.ts`), and turn sequencing — not a filter within an archive UI.
+- **Proposed PRD update:** Mark §8.7 Archive as deferred. Replace with two separate entries: (1) Catch-up — a dedicated play session for missed Daily Five questions, accessible from the home screen when eligible; (2) Archive — a searchable history of all interactions, deferred to a future phase.
 
 ## §8.5 — Bank-only helper text omits domain/territory info
 
