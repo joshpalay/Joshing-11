@@ -42,6 +42,14 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
+## §8.8a — Breadcrumb length is 1–2 sentences, not 2–6 words
+
+- **Date:** 2026-05-16
+- **Section affected:** §8.8a Breadcrumb System
+- **Current PRD text:** "2–6 words. No explanations. No facts. Observational tone." Examples: "you both know this", "not your lane yet"
+- **Code reality:** `src/server/daily/generate-breadcrumb.ts` prompts Claude Haiku for "1–2 sentence breadcrumbs" with min 12 chars and max 420 chars. The 2–6 word examples from §8.8a describe what are now the per-answer quips (§8.1.14), not LLM-generated breadcrumbs.
+- **Proposed PRD update:** Update §8.8a: "Breadcrumbs are short LLM-generated contextual notes (1–2 sentences) appearing after each answer. They are observational and conversational — no educational explainers. Separate from the per-answer quip (§8.1.14), which is a fixed 3–5 word phrase selected from a curated bank."
+
 ## §8.7 — Archive page is not a current product feature; catch-up is a separate feature
 
 - **Date:** 2026-05-16
