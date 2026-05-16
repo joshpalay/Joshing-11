@@ -42,6 +42,14 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
+## §8.11 — "Friend answered your question" and thumbs-up SMS triggers removed
+
+- **Date:** 2026-05-16
+- **Section affected:** §8.11 SMS Notifications
+- **Current PRD text:** Two opt-in triggers: (1) "Friend answered your question" — fires when anyone answers a question you wrote; (2) "Friend thought your question was excellent (thumbs-up)" — notifies question author on thumbs-up.
+- **Code reality:** `'friend_answered_question'` enum exists but is never triggered. `'star_notification'` is explicitly excluded from the active SmsMessageType. Neither notification fires.
+- **Proposed PRD update:** Remove both rows from the §8.11 SMS trigger table. Neither answer-notification nor thumbs-up notification is an SMS-worthy event.
+
 ## §8.10b — Reaction custom message cap is 160 chars, not 100
 
 - **Date:** 2026-05-16
