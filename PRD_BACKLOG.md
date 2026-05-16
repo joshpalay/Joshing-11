@@ -42,6 +42,14 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
+## §8.7 — "Sent by me" archive filter not implemented
+
+- **Date:** 2026-05-16
+- **Section affected:** §8.7 Archive
+- **Current PRD text:** Archive includes a "Sent by me" filter showing questions the player sent to friends, with recipient + answer status.
+- **Code reality:** No "Sent by me" filter exists. `src/app/archive/page.tsx:60` has "Mine" (authored/written_by_me). Outbound direct-sends are not tracked as a separate archive source.
+- **Proposed PRD update:** Remove "Sent by me" from the §8.7 filter list. The archive does not surface outbound direct-send history; senders can view delivery status via the Feed at the time of sending.
+
 ## §8.7 — "Catch-up" archive filter not implemented
 
 - **Date:** 2026-05-16
