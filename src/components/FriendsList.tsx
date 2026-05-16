@@ -31,9 +31,7 @@ type RequestAction = 'accept' | 'ignore'
 
 function previewInterests(interests: string[]) {
   if (interests.length === 0) return null
-  const visible = interests.slice(0, 3).join(', ')
-  const remainder = interests.length - 3
-  return remainder > 0 ? `${visible}, +${remainder} more` : visible
+  return interests.slice(0, 5).join(', ')
 }
 
 export default function FriendsList() {
