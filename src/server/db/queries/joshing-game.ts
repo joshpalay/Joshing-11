@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq, sql } from 'drizzle-orm';
 
 import { writeActivity } from '@/server/activity/write-activity';
 import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
