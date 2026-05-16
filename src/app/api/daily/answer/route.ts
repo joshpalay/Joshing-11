@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
     let persistedCreatorId: string | null = null;
     let persistedDomainForCreator: string | null = null;
     try {
-      const persisted = await persistGeneratedQuestion(question.id);
+      const persisted = await persistGeneratedQuestion(question.id, slot.domain);
       canonicalQuestionId = persisted.questionId;
       const [persistedQuestion] = await db
         .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
