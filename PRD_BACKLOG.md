@@ -108,6 +108,13 @@
 
 ## Open Questions
 
+## §8.14 — Joshing Game deferred
+- **Date:** 2026-05-16
+- **Section affected:** §8.14 Joshing Game
+- **Current PRD text:** Full Joshing Game spec — curated 5-question sets sent to friends, with creation flow, game card in Feed, results visibility rules, mastery scoring, and SMS notifications.
+- **Code reality:** Feature is fully implemented (schema, API, play interface, summary page, feed integration, SMS) but creation is explicitly disabled: `GAME_CREATION_DISABLED_IN_V11_1 = true` in `src/app/api/joshing-games/route.ts:12`. UI entry points also disabled.
+- **Decision needed:** When Joshing Games are re-enabled, remove the disable flag and restore UI entry points. Until then, mark §8.14 as deferred in the PRD.
+
 ## §8.1.11 — Thumbs-up signal has no effect on feed surface ordering
 - **Date:** 2026-05-16
 - **Section affected:** §8.1.11 Reactions on Daily Five Questions
