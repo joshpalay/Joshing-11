@@ -48,6 +48,7 @@ type FeedApiItem = {
   source_attribution: string
   source_result: 'correct' | 'incorrect' | null
   friend_results: FriendResult[] | null
+  viewer_answer_status?: { result: 'correct' | 'incorrect' } | null
   endorsement_count?: number | null
   additional_endorsers?: Array<{ userId: string; displayName: string }> | null
   source_event_at: string
@@ -256,6 +257,27 @@ function toTypedFeedItem(item: FeedApiItem) {
     } satisfies FriendLikedFeedItem
   }
 
+  const correctFriends = (item.friend_results ?? [])
+    .filter((friend) => friend.result === 'correct')
+    .map((friend) => ({
+      userId: friend.userId,
+      displayName: friend.displayName,
+      href: profileHref(friend.userId),
+    }))
+
+  // If we have no aggregated friend_results but the source friend got it right, synthesize one.
+  if (
+    correctFriends.length === 0 &&
+    item.source_result === 'correct' &&
+    item.source_user_id
+  ) {
+    correctFriends.push({
+      userId: item.source_user_id,
+      displayName: item.source_friend_display_name,
+      href: profileHref(item.source_user_id),
+    })
+  }
+
   return {
     ...base,
     type: 'friend_answered' as const,
@@ -268,6 +290,8 @@ function toTypedFeedItem(item: FeedApiItem) {
       item.friend_results?.[0]?.result === 'correct' ||
       item.source_result === 'correct',
     answerSummary: friendAnsweredSummary(item),
+    correctFriends,
+    viewerResult: item.viewer_answer_status?.result ?? null,
   } satisfies FriendAnsweredFeedItem
 }
 

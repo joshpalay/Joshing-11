@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db, feedDismissedDomains, feedItems, masteryEvents, questionFeedback, questionRatings, questions } from '@/server/db';
 import { writeActivity } from '@/server/activity/write-activity';
 import { getFriends } from '@/server/db/queries/friends';
-import { rollOffOldItems, userAnsweredQuestionCorrectly } from '@/server/db/queries/feed';
+import { rollOffOldItems } from '@/server/db/queries/feed';
 import { isCorrectAnswerFeedEligible, SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 export async function createFeedItemsForFriendsFromAnswer(
@@ -81,9 +81,6 @@ async function _createFeedItemsForFriendsFromAnswer(
   if (friends.length === 0) return;
 
   for (const friend of friends) {
-    const alreadyCorrect = await userAnsweredQuestionCorrectly(friend.id, questionId);
-    if (alreadyCorrect) continue;
-
     // Skip if friend has dismissed this domain
     const [dismissed] = await db
       .select({ id: feedDismissedDomains.id })
