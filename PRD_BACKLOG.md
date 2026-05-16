@@ -42,21 +42,13 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
-## §8.7 — "Sent by me" archive filter not implemented
+## §8.7 — Archive is not a current product feature
 
 - **Date:** 2026-05-16
 - **Section affected:** §8.7 Archive
-- **Current PRD text:** Archive includes a "Sent by me" filter showing questions the player sent to friends, with recipient + answer status.
-- **Code reality:** No "Sent by me" filter exists. `src/app/archive/page.tsx:60` has "Mine" (authored/written_by_me). Outbound direct-sends are not tracked as a separate archive source.
-- **Proposed PRD update:** Remove "Sent by me" from the §8.7 filter list. The archive does not surface outbound direct-send history; senders can view delivery status via the Feed at the time of sending.
-
-## §8.7 — "Catch-up" archive filter not implemented
-
-- **Date:** 2026-05-16
-- **Section affected:** §8.7 Archive
-- **Current PRD text:** Archive includes a "Catch-up" source filter for questions answered after the original session window.
-- **Code reality:** No catch-up filter exists. `src/app/archive/page.tsx:54–61` lists: All, Daily Five, Feed, Sent to me, Mine, Joshing Games. Catch-up answers are folded into Daily Five results.
-- **Proposed PRD update:** Remove "Catch-up" from the §8.7 filter list. Catch-up answers appear under the Daily Five filter; no separate catch-up view is provided.
+- **Current PRD text:** Full archive of every question a player has interacted with, organized by source (Daily Five, Feed, Sent to me, Sent by me, Written by me, Catch-up), searchable by domain and free-text.
+- **Code reality:** The Archive page (`src/app/archive/page.tsx`) exists in code but is not surfaced in primary navigation — only linked from the account page. The feature is not part of the active product experience.
+- **Proposed PRD update:** Mark §8.7 Archive as deferred. Remove from the Phase 1 feature list. The archive code may remain but the section should note: "An archive page exists at /archive but is not a primary navigation destination. Full archive specification is deferred to a future phase."
 
 ## §8.5 — Bank-only helper text omits domain/territory info
 
