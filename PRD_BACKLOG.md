@@ -42,6 +42,14 @@
 - **Code reality:** `MAX_FEED_LIMIT = 50` and `rollOffOldItems` uses `.offset(50)` — the live cap is 50. (`src/server/db/queries/feed.ts:254, 438`)
 - **Proposed PRD update:** Change §8.2.6 to read: "Maximum 50 items. Older items roll off (remain in table, no longer surfaced)."
 
+## §8.7 — "Catch-up" archive filter not implemented
+
+- **Date:** 2026-05-16
+- **Section affected:** §8.7 Archive
+- **Current PRD text:** Archive includes a "Catch-up" source filter for questions answered after the original session window.
+- **Code reality:** No catch-up filter exists. `src/app/archive/page.tsx:54–61` lists: All, Daily Five, Feed, Sent to me, Mine, Joshing Games. Catch-up answers are folded into Daily Five results.
+- **Proposed PRD update:** Remove "Catch-up" from the §8.7 filter list. Catch-up answers appear under the Daily Five filter; no separate catch-up view is provided.
+
 ## §8.5 — Bank-only helper text omits domain/territory info
 
 - **Date:** 2026-05-16
