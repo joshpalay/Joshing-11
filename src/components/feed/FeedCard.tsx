@@ -44,7 +44,7 @@ export function FeedCard({
   dimQuestion,
 }: FeedCardShellProps) {
   const category = visibleFeedCategory(item.category)
-  const hasBottom = Boolean(socialSignal ?? resultContent ?? onAnswer)
+  const hasBottom = Boolean(resultContent ?? onAnswer)
 
   return (
     <article
@@ -54,7 +54,7 @@ export function FeedCard({
         className
       )}
     >
-      <div className="p-4 sm:p-5">
+      <div className="p-3">
         {/* Header: metadata + overflow */}
         <div className="flex items-start justify-between gap-3">
           <p className="text-muted-foreground text-xs leading-5 font-medium">
@@ -63,8 +63,15 @@ export function FeedCard({
           {overflow ? <div className="shrink-0">{overflow}</div> : null}
         </div>
 
+        {/* Social signal — the headline event */}
+        {socialSignal ? (
+          <p className="mt-2 text-sm font-semibold text-stone-900 leading-5">
+            {socialSignal}
+          </p>
+        ) : null}
+
         {/* Category + question */}
-        <div className="mt-3 space-y-2">
+        <div className="mt-2 space-y-1.5">
           {category ? (
             <p
               className={cn(
@@ -77,7 +84,7 @@ export function FeedCard({
           ) : null}
           <p
             className={cn(
-              'font-serif text-xl leading-8 sm:text-2xl sm:leading-9',
+              'font-serif text-base leading-6',
               dimQuestion ? 'text-stone-400' : 'text-foreground'
             )}
           >
@@ -86,7 +93,7 @@ export function FeedCard({
         </div>
 
         {item.personalMessage ? (
-          <p className="text-muted-foreground mt-3 text-sm leading-6">
+          <p className="text-muted-foreground mt-2 text-sm leading-6">
             &ldquo;{item.personalMessage}&rdquo;
           </p>
         ) : null}
@@ -96,7 +103,7 @@ export function FeedCard({
       {hasBottom ? (
         <div
           className={cn(
-            'flex items-center gap-3 border-t px-4 py-3 sm:px-5',
+            'flex items-center gap-3 border-t px-3 py-2.5',
             dividerToneClasses[tone]
           )}
         >
@@ -106,20 +113,7 @@ export function FeedCard({
             </div>
           ) : (
             <>
-              {socialSignal ? (
-                <p
-                  className={cn(
-                    'flex-1 text-sm leading-5',
-                    dimQuestion
-                      ? 'text-stone-900 font-medium'
-                      : 'text-stone-600'
-                  )}
-                >
-                  {socialSignal}
-                </p>
-              ) : (
-                <div className="flex-1" />
-              )}
+              <div className="flex-1" />
               {onAnswer ? (
                 <button
                   type="button"

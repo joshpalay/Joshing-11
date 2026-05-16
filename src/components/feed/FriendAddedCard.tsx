@@ -65,7 +65,7 @@ export function FriendAddedCard({
       <Sparkle className="pointer-events-none absolute bottom-16 left-8 h-4 w-4 opacity-50" />
       <Sparkle className="pointer-events-none absolute right-4 bottom-4 h-6 w-6" />
 
-      <div className="relative p-4 pl-10 sm:p-5 sm:pl-12">
+      <div className="relative p-3 pl-9">
         {/* Header: metadata + overflow */}
         <div className="flex items-start justify-between gap-3">
           <p className="text-xs leading-5 font-medium text-amber-900/70">
@@ -86,7 +86,7 @@ export function FriendAddedCard({
         </p>
 
         {/* Question */}
-        <p className="text-foreground mt-2 font-serif text-xl leading-8 sm:text-2xl sm:leading-9">
+        <p className="text-foreground mt-2 font-serif text-base leading-6">
           {item.question}
         </p>
 
@@ -105,11 +105,11 @@ export function FriendAddedCard({
 
       {/* Bottom strip: result OR CTA */}
       {resultContent ? (
-        <div className="relative border-t border-amber-200/60 px-4 py-3 text-sm leading-6 text-stone-700 sm:px-5">
+        <div className="relative border-t border-amber-200/60 px-3 py-2.5 text-sm leading-6 text-stone-700">
           {resultContent}
         </div>
       ) : onAnswer ? (
-        <div className="relative border-t border-amber-200/60 px-4 py-3 sm:px-5">
+        <div className="relative border-t border-amber-200/60 px-3 py-2.5">
           <button
             type="button"
             onClick={onAnswer}

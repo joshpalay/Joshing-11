@@ -299,6 +299,7 @@ export async function GET(request: NextRequest) {
         awarded_points: cardType === 'answered_by_you' ? awardedPoints : null,
         mastery_delta: cardType === 'answered_by_you' ? item.masteryDelta ?? null : null,
         unverified_answer: false,
+        viewer_is_author: question?.creatorId ? question.creatorId === session.userId : false,
       };
     }),
   });
