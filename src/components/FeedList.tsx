@@ -130,13 +130,23 @@ function formatEventTime(value: string) {
 
 function comparisonCopy(
   playerCorrect: boolean | null,
-  friendResults: FriendResult[] | null
+  friendResults: FriendResult[] | null,
+  sourceType?: string,
+  sourceFriendName?: string
 ): string {
   const primaryFriend = friendResults?.[0]
-  const friendName = primaryFriend?.displayName ?? 'They'
+  const friendIsAuthor =
+    !primaryFriend &&
+    (sourceType === 'direct_sent' || sourceType === 'authored_shared')
+  const friendName =
+    primaryFriend?.displayName ?? sourceFriendName ?? 'They'
   const friendCorrect = primaryFriend?.result === 'correct'
 
   if (playerCorrect === null) return 'You have already answered this question.'
+  if (friendIsAuthor) {
+    if (playerCorrect) return `You and ${friendName} have that in common.`
+    return `${friendName} knows this one. You might next time.`
+  }
   if (playerCorrect && friendCorrect) return 'You both had it.'
   if (playerCorrect && !friendCorrect)
     return `You found a connection ${friendName} missed.`
@@ -273,8 +283,18 @@ function toAnsweredByYouItem(
         ? 'Reviewed privately'
         : 'You answered',
     answerSummary: result
-      ? comparisonCopy(result.correct, item.friend_results)
-      : comparisonCopy(item.is_correct, item.friend_results),
+      ? comparisonCopy(
+          result.correct,
+          item.friend_results,
+          item.source_type,
+          item.source_friend_display_name
+        )
+      : comparisonCopy(
+          item.is_correct,
+          item.friend_results,
+          item.source_type,
+          item.source_friend_display_name
+        ),
     correctAnswer: result?.answer || item.correct_answer,
     submittedAnswer: item.submitted_answer || undefined,
     isCorrect: result?.correct ?? item.is_correct,
