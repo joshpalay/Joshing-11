@@ -296,7 +296,7 @@ function RoundCircleRow({
     >
       <KnowledgeCircle
         broadCategory={item.broad_category}
-        pointsAfter={item.points_total}
+        pointsAfter={item.points_gained_this_round}
         maxPoints={maxPoints}
         animate={visible}
       />
@@ -324,30 +324,17 @@ function RoundCircleRow({
         >
           {isMastery ? 'Mastery' : tierProgression(tierLabel)}
         </div>
-      </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div
           style={{
-            fontSize: 15,
-            fontFamily: 'var(--font-mono)',
-            color: 'var(--text)',
-            fontWeight: 700,
-            lineHeight: 1,
-          }}
-        >
-          +{item.points_gained_this_round}
-        </div>
-        <div
-          style={{
-            fontSize: 8,
+            fontSize: 10,
             fontFamily: 'var(--font-mono)',
             color: 'var(--text-muted)',
-            letterSpacing: '0.1em',
+            letterSpacing: '0.05em',
             textTransform: 'uppercase',
-            marginTop: 2,
+            marginTop: 4,
           }}
         >
-          this round
+          +{item.points_gained_this_round} this round
         </div>
       </div>
     </div>
@@ -411,7 +398,7 @@ export function GameCategoryCircles({ items }: { items: GameCircleItem[] }) {
 export function RoundCategoryCircles({ items }: { items: RoundCircleItem[] }) {
   if (items.length === 0) return null;
 
-  const maxPoints = Math.max(...items.map((i) => i.points_total), 1);
+  const maxPoints = Math.max(...items.map((i) => i.points_gained_this_round), 1);
 
   return (
     <div>
@@ -427,7 +414,7 @@ export function RoundCategoryCircles({ items }: { items: RoundCircleItem[] }) {
           />
         ))}
       </div>
-      <p style={legendStyle}>Size = depth of knowledge</p>
+      <p style={legendStyle}>Size = points this round</p>
     </div>
   );
 }
