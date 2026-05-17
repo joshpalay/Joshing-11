@@ -14,33 +14,39 @@ export type BackfillResult = {
   errors: Array<{ masteryEventId: string; error: string }>;
 };
 
-// postgres-js puts the actual failure reason on `code`/`detail`/`column_name`/
-// `constraint_name`, not on `.message`. `.message` is often just the failed
-// SQL with parameter placeholders. Pull the useful bits into a single line so
-// the diagnostic UI shows the real cause.
+// Postgres drivers (postgres-js, pg) attach the actual failure reason to
+// the error object as own properties — but the property naming differs by
+// driver/version (`code`, `severity_local`, `column_name` vs `column`, etc).
+// Rather than guess the right names, dump every own property on the error
+// so the diagnostic UI shows whatever the driver actually attached. Falls
+// back to truncated `.message` only when the error has no own properties.
 function describeError(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
-  const e = error as Error & {
-    code?: string;
-    detail?: string;
-    column_name?: string;
-    constraint_name?: string;
-    table_name?: string;
-    severity?: string;
-    where?: string;
-    hint?: string;
-  };
+  const e = error as Error & Record<string, unknown>;
+  const skip = new Set(['message', 'stack', 'name', 'query', 'sql', 'parameters', 'params']);
   const parts: string[] = [];
-  if (e.code) parts.push(`code=${e.code}`);
-  if (e.constraint_name) parts.push(`constraint=${e.constraint_name}`);
-  if (e.column_name) parts.push(`column=${e.column_name}`);
-  if (e.table_name) parts.push(`table=${e.table_name}`);
-  if (e.detail) parts.push(`detail=${e.detail}`);
-  if (e.hint) parts.push(`hint=${e.hint}`);
-  // If nothing structured was attached, show the first 200 chars of .message.
-  if (parts.length === 0) {
-    return e.message.length > 200 ? `${e.message.slice(0, 200)}…` : e.message;
+  for (const key of Object.getOwnPropertyNames(e)) {
+    if (skip.has(key)) continue;
+    const value = e[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      const stringValue = String(value);
+      parts.push(`${key}=${stringValue.length > 200 ? `${stringValue.slice(0, 200)}…` : stringValue}`);
+    } else if (typeof value === 'object') {
+      // Nested error info from pg/postgres-js (e.g. `cause`, `originalError`).
+      try {
+        const json = JSON.stringify(value);
+        if (json && json !== '{}') {
+          parts.push(`${key}=${json.length > 200 ? `${json.slice(0, 200)}…` : json}`);
+        }
+      } catch {
+        // ignore non-serializable
+      }
+    }
   }
+  // Always include a snippet of message so we can tell which query failed.
+  const messageSnippet = e.message.length > 120 ? `${e.message.slice(0, 120)}…` : e.message;
+  parts.push(`message=${messageSnippet}`);
   return parts.join(' · ');
 }
 
