@@ -65,13 +65,10 @@ function MissedQuestionsCard({
       }
     >
       <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-        Play missed questions
+        Reinforce what you learned
       </p>
       <p className="text-foreground mt-2 text-sm font-semibold">
-        {count === 1 ? '1 question you missed' : `${count} questions you missed`}
-      </p>
-      <p className="text-muted-foreground mt-1 text-sm leading-6">
-        Catch up - 0.25x points
+        {count === 1 ? '1 question to revisit' : `${count} questions to revisit`}
       </p>
       {expiringCount > 0 ? (
         <p
