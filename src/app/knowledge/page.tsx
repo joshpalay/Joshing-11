@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Combine, Plus, Repeat2, X } from 'lucide-react';
@@ -426,16 +425,6 @@ function KnowledgePageContent() {
         </section>
       )}
 
-      <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Your Mind">
-        <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Your Mind</p>
-        <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[#111111] font-[var(--font-neutral)] font-semibold">{yourMind}</h1>
-        <p className="mt-[10px] text-[0.82rem]">
-          <Link href="/daily/setup" className="text-[var(--text-muted)] underline underline-offset-2">
-            Personal Daily
-          </Link>
-        </p>
-      </section>
-
       {topCardDomains.length > 0 && (
         <KnowledgeCard
           playerDisplayName={displayName}
@@ -461,6 +450,8 @@ function KnowledgePageContent() {
         />
       )}
 
+      <RecentlyExpanding domains={expandingDomains} playerDisplayName={displayName} onNotice={showShareNotice} />
+
       {hasAnything && (
         <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
           <div className="mb-2">
@@ -478,8 +469,6 @@ function KnowledgePageContent() {
           </div>
         </section>
       )}
-
-      <RecentlyExpanding domains={expandingDomains} playerDisplayName={displayName} onNotice={showShareNotice} />
 
       {emptyQuestionDomain ? (
         <section className="bg-[#fff7e8] border border-[#d9b56c] px-[0.95rem] py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
