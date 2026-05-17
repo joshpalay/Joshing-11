@@ -78,21 +78,19 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
   return (
     <section style={boxStyle} aria-label="Your Knowledge Portrait">
       <div style={headerStyle}>
-        <h2 style={titleStyle}>Your Knowledge Portrait</h2>
-        <div style={headerRightStyle}>
-          <p style={wordmarkStyle}>Joshing</p>
-          <button
-            type="button"
-            style={shareButtonStyle}
-            onClick={onShare}
-            data-portrait-share="true"
-            aria-label="Share your knowledge portrait"
-          >
-            <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
-            <span>{shareLabel}</span>
-          </button>
-        </div>
+        <p style={wordmarkStyle}>Joshing</p>
+        <button
+          type="button"
+          style={shareButtonStyle}
+          onClick={onShare}
+          data-portrait-share="true"
+          aria-label="Share your knowledge portrait"
+        >
+          <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
+          <span>{shareLabel}</span>
+        </button>
       </div>
+      <h2 style={titleStyle}>Your Knowledge Portrait</h2>
 
       <p style={statementStyle}>{props.portraitStatement}</p>
 
@@ -150,7 +148,7 @@ const boxStyle: CSSProperties = {
 
 const headerStyle: CSSProperties = {
   display: 'flex',
-  alignItems: 'flex-start',
+  alignItems: 'center',
   justifyContent: 'space-between',
   gap: '0.75rem',
 }
@@ -161,13 +159,6 @@ const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-literata), Georgia, serif',
   fontSize: '1rem',
   fontWeight: 700,
-}
-
-const headerRightStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'flex-end',
-  gap: '0.35rem',
 }
 
 const wordmarkStyle: CSSProperties = {
