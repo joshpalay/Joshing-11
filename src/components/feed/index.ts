@@ -12,8 +12,6 @@ export type {
   AnsweredByYouFeedItem,
   DirectSentFeedItem,
   FeedCardBaseItem,
-  FeedCardShellProps,
-  FeedCardTone,
   FriendAddedFeedItem,
   FriendAnsweredFeedItem,
   FriendLikedFeedItem,

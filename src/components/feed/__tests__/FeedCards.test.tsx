@@ -67,28 +67,53 @@ describe('Feed card preview fixtures', () => {
     ])
   })
 
-  it('renders each typed Feed card variant with social signal text', () => {
+  it('renders the author name, category, and question for each typed Feed card variant', () => {
     const fixtures = feedCardPreviewFixtures
-    expect(
-      html(<DirectSentCard item={fixtures.directSentUnanswered} />)
-    ).toContain("thought you")
-    expect(
-      html(<FriendAnsweredCard item={fixtures.friendAnsweredRight} />)
-    ).toContain('recognized this one')
-    expect(
-      html(<FriendAddedCard item={fixtures.friendAddedWroteQuestion} />)
-    ).toContain('added a question')
-    expect(
-      html(<FriendLikedCard item={fixtures.friendLikedShared} />)
-    ).toContain('liked this question')
-    expect(
-      html(<AnsweredByYouCard item={fixtures.answeredByYouCorrect} />)
-    ).toContain('You both had it')
+
+    const directSent = html(<DirectSentCard item={fixtures.directSentUnanswered} />)
+    expect(directSent).toContain('Maya')
+    expect(directSent).toContain('Food &amp; Drink')
+    expect(directSent).toContain('SCOBY')
+
+    const friendAnswered = html(<FriendAnsweredCard item={fixtures.friendAnsweredRight} />)
+    expect(friendAnswered).toContain('Noah')
+    expect(friendAnswered).toContain('Science')
+    expect(friendAnswered).toContain('magnetar')
+
+    const friendAdded = html(<FriendAddedCard item={fixtures.friendAddedWroteQuestion} />)
+    expect(friendAdded).toContain('Ari')
+    expect(friendAdded).toContain('History')
+
+    const friendLiked = html(<FriendLikedCard item={fixtures.friendLikedShared} />)
+    expect(friendLiked).toContain('Sam')
+    expect(friendLiked).toContain('Music')
+
+    const answeredByYou = html(<AnsweredByYouCard item={fixtures.answeredByYouCorrect} />)
+    expect(answeredByYou).toContain('You both had it')
+  })
+
+  it('drops the "has knowledge to share" phrasing from the unanswered question card', () => {
+    const variants = [
+      html(<DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />),
+      html(<FriendAnsweredCard item={feedCardPreviewFixtures.friendAnsweredRight} />),
+      html(<FriendAddedCard item={feedCardPreviewFixtures.friendAddedWroteQuestion} />),
+      html(<FriendLikedCard item={feedCardPreviewFixtures.friendLikedShared} />),
+    ]
+    for (const rendered of variants) {
+      expect(rendered).not.toContain('has knowledge to share')
+    }
+  })
+
+  it('renders the author name as a link to their profile when authorHref is provided', () => {
+    const rendered = html(
+      <DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />
+    )
+    expect(rendered).toMatch(/<a[^>]*href="\/users\/maya"[^>]*>Maya<\/a>/)
   })
 })
 
 describe('Feed unanswered card actions', () => {
-  it('shows Answer button in the card bottom strip when onAnswer is provided', () => {
+  it('shows the Answer button when onAnswer is provided', () => {
     const rendered = html(
       <DirectSentCard
         item={feedCardPreviewFixtures.directSentUnanswered}
@@ -96,7 +121,7 @@ describe('Feed unanswered card actions', () => {
       />
     )
 
-    expect(rendered).toContain('Answer')
+    expect(rendered).toContain('Answer →')
     expect(rendered).not.toContain('Skip')
     expect(rendered).not.toContain('Not my focus')
     expect(rendered).not.toContain('Bookmark')
@@ -132,13 +157,13 @@ describe('Feed unanswered card actions', () => {
 })
 
 describe('Feed answered states', () => {
-  it('submitting an answer resolves to an answered card with comparison copy and correct answer', () => {
+  it('submitting an answer resolves to an answered card with comparison copy', () => {
     const rendered = html(
       <AnsweredByYouCard item={feedCardPreviewFixtures.answeredByYouCorrect} />
     )
 
     expect(rendered).toContain('You both had it')
-    expect(rendered).toContain('Barcelona')
+    expect(rendered).toContain('Which city hosted the 1992 Summer Olympics?')
   })
 
   it('shows the knowledge-gain circle (no raw points pill) on a correct answer that crosses a tier', () => {
@@ -207,7 +232,7 @@ describe('Feed card category and overflow affordances', () => {
     ])
   })
 
-  it('renders collapsed multi-endorsement friend-liked copy', () => {
+  it('renders the friend-liked author once on a collapsed multi-endorsement card', () => {
     const rendered = html(
       <FriendLikedCard
         item={feedCardPreviewFixtures.friendLikedCollapsedMultiEndorsement}
@@ -215,7 +240,6 @@ describe('Feed card category and overflow affordances', () => {
     )
 
     expect(rendered).toContain('Sam')
-    expect(rendered).toContain('2 friends liked this question')
-    expect(rendered).toContain('Lena, Kai')
+    expect(rendered).toContain('Music')
   })
 })

@@ -18,6 +18,7 @@ import {
   type FriendAnsweredFeedItem,
   type FriendLikedFeedItem,
 } from '@/components/feed'
+import { formatRelativeTime } from '@/components/feed/visual'
 
 type FriendResult = {
   userId: string
@@ -224,6 +225,8 @@ function baseTypedFields(item: FeedApiItem, answered = false) {
     isInBank: item.is_in_bank,
     avatarName: item.source_friend_display_name,
     avatarUserId: item.source_user_id,
+    authorHref: item.source_profile_href ?? profileHref(item.source_user_id),
+    timestamp: formatRelativeTime(item.source_event_at),
   }
 }
 
