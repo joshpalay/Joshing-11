@@ -149,14 +149,32 @@ export function useCatchupFlow() {
   }, []);
 
   const skipCurrent = useCallback(() => {
-    if (!currentItem || submitting) return;
-    resultPostedItemIdsRef.current.add(currentItem.dailyQueueItemId);
+    if (!currentItem || submitting || isResolvingTurn) return;
+    const item = currentItem;
+    resultPostedItemIdsRef.current.add(item.dailyQueueItemId);
+    setIsResolvingTurn(true);
     setMessages((existing) => [
       ...existing,
-      { id: newMessageId(), kind: 'system', text: 'Skipped for now.' },
+      {
+        id: newMessageId(),
+        kind: 'result',
+        assignmentId: item.dailyQueueItemId,
+        questionText: item.questionText,
+        result: 'gave_up',
+        submitted: '',
+        correctAnswer: item.correctAnswer,
+        consolation: null,
+        breadcrumb: null,
+        copyVariant: item.queueAge,
+        creatorName: 'Joshing',
+        canonicalSubcategory: item.domain,
+      },
     ]);
-    advancePast(currentItem.dailyQueueItemId);
-  }, [advancePast, currentItem, submitting]);
+    window.setTimeout(() => {
+      advancePast(item.dailyQueueItemId);
+      setIsResolvingTurn(false);
+    }, 1200);
+  }, [advancePast, currentItem, isResolvingTurn, submitting]);
 
   const dismissCurrent = useCallback(async (reason: 'not_interested' | 'too_old' | 'unclear' = 'not_interested') => {
     if (!currentItem || submitting) return;
