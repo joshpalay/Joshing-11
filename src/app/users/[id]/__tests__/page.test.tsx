@@ -53,14 +53,57 @@ vi.mock('@/server/db/queries/questions', () => ({
   getAuthoredQuestionsForUser: getAuthoredQuestionsForUserMock,
 }))
 
-vi.mock('@/components/knowledge/KnowledgeCard', () => ({
-  KnowledgeCard: ({ playerDisplayName }: { playerDisplayName: string }) => (
-    <div data-testid="knowledge-card">{playerDisplayName}</div>
+vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
+  SharedInterestsOverlap: ({
+    sharedInterests,
+    friendSoloInterests,
+    viewerSoloInterests,
+    friendFirstName,
+  }: {
+    sharedInterests: string[]
+    friendSoloInterests: string[]
+    viewerSoloInterests: string[]
+    friendFirstName: string
+  }) => (
+    <div data-testid="shared-interests-overlap">
+      <span data-testid="shared">{sharedInterests.join(',')}</span>
+      <span data-testid="friend-solo">{friendSoloInterests.join(',')}</span>
+      <span data-testid="viewer-solo">{viewerSoloInterests.join(',')}</span>
+      <span data-testid="friend-first-name">{friendFirstName}</span>
+    </div>
   ),
 }))
 
-vi.mock('@/components/knowledge/PortraitCircles', () => ({
-  PortraitCircles: () => <div data-testid="portrait-circles" />,
+vi.mock('@/components/profile/AuthoredQuestionsFeed', () => ({
+  AuthoredQuestionsFeed: ({
+    questions,
+    friendDisplayName,
+  }: {
+    questions: Array<{
+      id: string
+      questionText: string
+      category: string | null
+      viewerAnswered: { result: 'correct' | 'incorrect' } | null
+    }>
+    friendDisplayName: string
+  }) => (
+    <div data-testid="authored-feed">
+      <span data-testid="friend-name">{friendDisplayName}</span>
+      {questions.length === 0 ? (
+        <span data-testid="authored-empty">
+          {friendDisplayName} has not written any questions yet.
+        </span>
+      ) : null}
+      {questions.map((q) => (
+        <div key={q.id} data-testid={`q-${q.id}`}>
+          <span data-testid={`q-text-${q.id}`}>{q.questionText}</span>
+          <span data-testid={`q-state-${q.id}`}>
+            {q.viewerAnswered ? `answered:${q.viewerAnswered.result}` : 'unanswered'}
+          </span>
+        </div>
+      ))}
+    </div>
+  ),
 }))
 
 import UserProfilePage from '@/app/users/[id]/page'
@@ -85,6 +128,8 @@ describe('/users/[id] friend profile page', () => {
         { domain: 'Roman roads', broadCategory: 'History', shared: false },
       ],
       sharedInterests: ['Jazz piano'],
+      viewerSoloInterests: ['Bauhaus design'],
+      friendSoloInterests: ['Roman roads'],
     })
     getUserMasteryOverviewMock.mockResolvedValue({
       totalPoints: 0,
@@ -103,7 +148,7 @@ describe('/users/[id] friend profile page', () => {
     getAuthoredQuestionsForUserMock.mockResolvedValue([])
   })
 
-  it('renders the active friend portrait shell', async () => {
+  it('renders the friend profile shell and shared-interests overlap', async () => {
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
     })
@@ -111,28 +156,36 @@ describe('/users/[id] friend profile page', () => {
 
     expect(getFriendPortraitDataMock).toHaveBeenCalledWith(
       'friend-1',
-      'viewer-1'
+      'viewer-1',
     )
+    expect(getAuthoredQuestionsForUserMock).toHaveBeenCalledWith({
+      userId: 'friend-1',
+      limit: 25,
+      viewerUserId: 'viewer-1',
+    })
     expect(html).toContain('Friend profile')
     expect(html).toContain('Frances Friend')
+    expect(html).toContain('shared-interests-overlap')
     expect(html).toContain('Jazz piano')
-    expect(html).toContain('shared')
+    expect(html).toContain('Bauhaus design')
     expect(html).toContain('href="/friends"')
   })
 
-  it('renders empty-state knowledge map and authored-questions sections', async () => {
+  it('renders the trimmed knowledge map with a link to the full overview', async () => {
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
     })
     const html = renderToStaticMarkup(element)
 
     expect(html).toContain('Knowledge map')
-    expect(html).toContain('Their map will fill in')
-    expect(html).toContain('Questions Frances wrote')
-    expect(html).toContain('hasn')
+    expect(html).toContain('href="/users/friend-1/knowledge"')
+    expect(html).toContain('full knowledge map')
+    // Boxed KnowledgeCard / PortraitCircles previews removed from this page.
+    expect(html).not.toContain('data-testid="knowledge-card"')
+    expect(html).not.toContain('data-testid="portrait-circles"')
   })
 
-  it('renders authored questions when present', async () => {
+  it('passes authored questions with viewer-answer status to the feed component', async () => {
     getAuthoredQuestionsForUserMock.mockResolvedValueOnce([
       {
         id: 'q1',
@@ -140,6 +193,15 @@ describe('/users/[id] friend profile page', () => {
         canonicalSubcategory: 'Cold War history',
         broadCategory: 'History',
         createdAt: '2026-05-10T00:00:00.000Z',
+        viewerAnswered: null,
+      },
+      {
+        id: 'q2',
+        questionText: 'Who painted Composition VIII?',
+        canonicalSubcategory: 'Modern art',
+        broadCategory: 'Art',
+        createdAt: '2026-05-09T00:00:00.000Z',
+        viewerAnswered: { result: 'correct' },
       },
     ])
 
@@ -149,19 +211,21 @@ describe('/users/[id] friend profile page', () => {
     const html = renderToStaticMarkup(element)
 
     expect(html).toContain('What year did the Hungarian uprising begin?')
-    expect(html).toContain('Cold War history')
+    expect(html).toContain('Who painted Composition VIII?')
+    expect(html).toContain('unanswered')
+    expect(html).toContain('answered:correct')
   })
 
   it('handles unauthenticated and unavailable profiles with notFound', async () => {
     getSessionMock.mockResolvedValueOnce(null)
     await expect(
-      UserProfilePage({ params: Promise.resolve({ id: 'friend-1' }) })
+      UserProfilePage({ params: Promise.resolve({ id: 'friend-1' }) }),
     ).rejects.toThrow('NEXT_NOT_FOUND')
 
     getSessionMock.mockResolvedValueOnce({ userId: 'viewer-1' })
     getFriendPortraitDataMock.mockResolvedValueOnce(null)
     await expect(
-      UserProfilePage({ params: Promise.resolve({ id: 'stranger-1' }) })
+      UserProfilePage({ params: Promise.resolve({ id: 'stranger-1' }) }),
     ).rejects.toThrow('NEXT_NOT_FOUND')
   })
 })

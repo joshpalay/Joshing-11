@@ -81,16 +81,18 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
         <h2 style={titleStyle}>Your Knowledge Portrait</h2>
         <div style={headerRightStyle}>
           <p style={wordmarkStyle}>Joshing</p>
-          <button
-            type="button"
-            style={shareButtonStyle}
-            onClick={onShare}
-            data-portrait-share="true"
-            aria-label="Share your knowledge portrait"
-          >
-            <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
-            <span>{shareLabel}</span>
-          </button>
+          {!props.readOnly && (
+            <button
+              type="button"
+              style={shareButtonStyle}
+              onClick={onShare}
+              data-portrait-share="true"
+              aria-label="Share your knowledge portrait"
+            >
+              <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
+              <span>{shareLabel}</span>
+            </button>
+          )}
         </div>
       </div>
 

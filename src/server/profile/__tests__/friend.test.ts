@@ -96,6 +96,8 @@ describe('friend portrait data', () => {
         { domain: 'Roman roads', broadCategory: 'History', shared: false },
       ],
       sharedInterests: ['Jazz piano'],
+      viewerSoloInterests: [],
+      friendSoloInterests: ['Roman roads'],
     })
   })
 

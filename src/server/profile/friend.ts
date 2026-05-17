@@ -25,6 +25,8 @@ export type FriendPortraitData = {
   } | null
   interests: FriendPortraitInterest[]
   sharedInterests: string[]
+  viewerSoloInterests: string[]
+  friendSoloInterests: string[]
 }
 
 function profileDisplayName(
@@ -85,6 +87,16 @@ export async function getFriendPortraitData(
       shared: !isSelf && viewerInterests.has(interest.domain),
     }))
 
+  const friendInterestDomains = new Set(interests.map((i) => i.domain))
+  const viewerSoloInterests = isSelf
+    ? []
+    : Array.from(viewerInterests)
+        .filter((domain) => !friendInterestDomains.has(domain))
+        .sort((a, b) => a.localeCompare(b))
+  const friendSoloInterests = interests
+    .filter((interest) => !interest.shared)
+    .map((interest) => interest.domain)
+
   return {
     user: {
       id: viewedUser.id,
@@ -105,5 +117,7 @@ export async function getFriendPortraitData(
     sharedInterests: interests
       .filter((interest) => interest.shared)
       .map((interest) => interest.domain),
+    viewerSoloInterests,
+    friendSoloInterests,
   }
 }
