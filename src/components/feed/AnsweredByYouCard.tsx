@@ -5,9 +5,9 @@ import { useCallback, useState, type ReactNode } from 'react'
 import { KnowledgeCircle } from '@/components/knowledge/CategoryCircles'
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
 
-import { FeedCard } from './FeedCard'
 import { visibleFeedCategory } from './category'
 import type { AnsweredByYouFeedItem } from './types'
+import { colorForCategory } from './visual'
 
 const TIER_LABEL: Record<string, string> = {
   establishing: 'Establishing',
@@ -132,16 +132,54 @@ function AnsweredResult({
 
 export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByYouCardProps) {
   const category = visibleFeedCategory(item.category)
-  const categoryClause = category ? <> about {category}</> : null
-  const socialSignal: ReactNode = <>You answered this{categoryClause}.</>
+  const categoryColor = colorForCategory(item.category)
 
   return (
-    <FeedCard
-      item={item}
-      tone={item.isCorrect ? 'green' : 'gray'}
-      socialSignal={socialSignal}
-      overflow={overflow}
-      resultContent={<AnsweredResult item={item} recheckAction={recheckAction} />}
-    />
+    <article
+      className="relative overflow-hidden rounded-2xl border border-[var(--border-warm)] bg-[var(--cream)]"
+    >
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-[2px]"
+        style={{ backgroundColor: categoryColor }}
+      />
+      <div className="p-[14px]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p
+              className="text-[11px] uppercase tracking-[0.08em]"
+              style={{ color: 'var(--ink)', opacity: 0.6 }}
+            >
+              You answered
+              {category ? (
+                <>
+                  {' · '}
+                  <span
+                    className="normal-case italic"
+                    style={{ fontFamily: 'var(--font-literata)' }}
+                  >
+                    {category}
+                  </span>
+                </>
+              ) : null}
+            </p>
+            <p
+              className="mt-2 text-[15px] leading-snug"
+              style={{
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                color: 'var(--ink)',
+                opacity: 0.65,
+              }}
+            >
+              {item.question}
+            </p>
+          </div>
+          {overflow ? <div className="shrink-0">{overflow}</div> : null}
+        </div>
+        <div className="mt-3 border-t border-[var(--border-light)] pt-3">
+          <AnsweredResult item={item} recheckAction={recheckAction} />
+        </div>
+      </div>
+    </article>
   )
 }

@@ -128,9 +128,10 @@ export function FeedOverflowMenu({
         aria-controls={open ? menuId : undefined}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
-        className="flex size-9 items-center justify-center rounded-lg border border-stone-300 bg-white/70 text-stone-700 transition hover:bg-white disabled:opacity-50"
+        className="-mr-1 flex size-9 items-center justify-center rounded-md transition hover:bg-black/5 disabled:opacity-50"
+        style={{ color: 'var(--ink)' }}
       >
-        <MoreHorizontal className="size-4" />
+        <MoreHorizontal className="size-5" />
       </button>
       {open ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:block sm:bg-transparent sm:p-0">
