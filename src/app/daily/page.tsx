@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Settings } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
@@ -517,13 +515,6 @@ export default function DailyPage() {
             <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Daily Five</p>
             <h1 className="font-serif text-xl font-semibold text-[var(--text)]">Today&apos;s five</h1>
           </div>
-          <Link
-            href="/daily/setup"
-            className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-            aria-label="Set up daily round"
-          >
-            <Settings className="size-4" aria-hidden="true" />
-          </Link>
         </div>
         <GeometricProgress
           total={queue?.slots.length || DAILY_QUEUE_SIZE}
