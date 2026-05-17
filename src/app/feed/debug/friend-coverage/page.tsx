@@ -15,7 +15,9 @@ type PageProps = {
 };
 
 function isFeedDebugEnabled() {
-  return process.env.NODE_ENV !== 'production' || process.env.FEED_DEBUG_ENABLED === 'true';
+  if (process.env.FEED_DEBUG_ENABLED === 'true') return true;
+  if (process.env.NODE_ENV !== 'production') return true;
+  return process.env.VERCEL_ENV !== undefined && process.env.VERCEL_ENV !== 'production';
 }
 
 const DIAGNOSIS_COLORS: Record<FriendCoverageDiagnosis, string> = {
