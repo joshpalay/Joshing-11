@@ -14,6 +14,36 @@ export type BackfillResult = {
   errors: Array<{ masteryEventId: string; error: string }>;
 };
 
+// postgres-js puts the actual failure reason on `code`/`detail`/`column_name`/
+// `constraint_name`, not on `.message`. `.message` is often just the failed
+// SQL with parameter placeholders. Pull the useful bits into a single line so
+// the diagnostic UI shows the real cause.
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const e = error as Error & {
+    code?: string;
+    detail?: string;
+    column_name?: string;
+    constraint_name?: string;
+    table_name?: string;
+    severity?: string;
+    where?: string;
+    hint?: string;
+  };
+  const parts: string[] = [];
+  if (e.code) parts.push(`code=${e.code}`);
+  if (e.constraint_name) parts.push(`constraint=${e.constraint_name}`);
+  if (e.column_name) parts.push(`column=${e.column_name}`);
+  if (e.table_name) parts.push(`table=${e.table_name}`);
+  if (e.detail) parts.push(`detail=${e.detail}`);
+  if (e.hint) parts.push(`hint=${e.hint}`);
+  // If nothing structured was attached, show the first 200 chars of .message.
+  if (parts.length === 0) {
+    return e.message.length > 200 ? `${e.message.slice(0, 200)}…` : e.message;
+  }
+  return parts.join(' · ');
+}
+
 // Extracts the generated question id from a synthesized `answer_id`
 // written by writeMasteryEvent. Format:
 //   daily:   `daily:<queueId>:<slotIndex>:<generatedQuestionId>:<answeredByUserId>`
@@ -89,7 +119,7 @@ export async function backfillMissingFeedItemsForAnswerer(
       result.persistFailures += 1;
       result.errors.push({
         masteryEventId: row.id,
-        error: error instanceof Error ? error.message : String(error),
+        error: describeError(error),
       });
       continue;
     }
@@ -134,7 +164,7 @@ export async function backfillMissingFeedItemsForAnswerer(
       result.persistFailures += 1;
       result.errors.push({
         masteryEventId: row.id,
-        error: error instanceof Error ? error.message : String(error),
+        error: describeError(error),
       });
       continue;
     }
@@ -152,7 +182,7 @@ export async function backfillMissingFeedItemsForAnswerer(
     } catch (error) {
       result.errors.push({
         masteryEventId: row.id,
-        error: `propagation: ${error instanceof Error ? error.message : String(error)}`,
+        error: `propagation: ${describeError(error)}`,
       });
     }
   }
