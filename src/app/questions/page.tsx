@@ -10,7 +10,6 @@ import { SendQuestionAction } from '@/components/SendQuestionAction';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
-type OwnershipFilter = 'all' | 'mine' | 'saved';
 type DrawerState =
   | { mode: 'closed' }
   | { mode: 'create' }
@@ -119,7 +118,6 @@ function QuestionsPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [domainFilter, setDomainFilter] = useState('all');
-  const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState<DrawerState>(() => (
@@ -168,10 +166,6 @@ function QuestionsPageContent() {
   const filteredQuestions = useMemo(() => {
     const query = search.trim().toLowerCase();
     return questions
-      .filter((question) => (
-        ownershipFilter === 'all'
-          || (ownershipFilter === 'mine' ? question.isOwnAuthored : !question.isOwnAuthored)
-      ))
       .filter((question) => domainFilter === 'all' || question.domain === domainFilter)
       .filter((question) => !query || question.text.toLowerCase().includes(query))
       .slice()
@@ -181,11 +175,10 @@ function QuestionsPageContent() {
         if (sortMode === 'easiest') return b.correctRate - a.correctRate || b.timesAnswered - a.timesAnswered;
         return Date.parse(b.createdAt) - Date.parse(a.createdAt);
       });
-  }, [domainFilter, ownershipFilter, questions, search, sortMode]);
+  }, [domainFilter, questions, search, sortMode]);
 
   function clearFilters() {
     setDomainFilter('all');
-    setOwnershipFilter('all');
     setSortMode('newest');
     setSearch('');
   }
@@ -285,20 +278,7 @@ function QuestionsPageContent() {
         </button>
       </header>
 
-      <section className="mb-4 flex flex-wrap gap-2">
-        {(['all', 'mine', 'saved'] as OwnershipFilter[]).map((filter) => (
-          <button
-            key={filter}
-            type="button"
-            onClick={() => setOwnershipFilter(filter)}
-            className={`rounded-md border px-3 py-2 text-sm ${ownershipFilter === filter ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-muted'}`}
-          >
-            {filter === 'all' ? 'All' : filter === 'mine' ? 'Mine' : 'Saved'}
-          </button>
-        ))}
-      </section>
-
-      <section className="mb-5 grid gap-3 rounded-lg border bg-card p-3 sm:grid-cols-[1fr_1fr_2fr]">
+      <section className="mb-5 grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3 sm:p-3">
         <select
           value={domainFilter}
           onChange={(event) => setDomainFilter(event.target.value)}
@@ -321,7 +301,7 @@ function QuestionsPageContent() {
           <option value="hardest">Hardest</option>
           <option value="easiest">Easiest</option>
         </select>
-        <label className="relative">
+        <label className="relative col-span-2 sm:col-span-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={search}
@@ -352,7 +332,6 @@ function QuestionsPageContent() {
       ) : (
         <section className="space-y-3">
           {filteredQuestions.map((question) => {
-            const isOwnAuthored = question.isOwnAuthored ?? true;
             const inUse = question.usedInGamesCount > 0;
             const color = DOMAIN_COLORS[question.category] ?? '#64748b';
             const deleting = removingId === question.id;
@@ -372,9 +351,6 @@ function QuestionsPageContent() {
                   </span>
                   <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground" aria-label={`LLM-rated difficulty: ${difficultyLabel}`}>
                     {difficultyLabel}
-                  </span>
-                  <span className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    {isOwnAuthored ? 'Written by you' : `From ${question.authorName ?? 'a friend'}`}
                   </span>
                 </div>
                 <p className="line-clamp-2 text-base font-medium leading-7">{question.text}</p>
@@ -396,12 +372,7 @@ function QuestionsPageContent() {
                     </>
                   ) : (
                     <>
-                      {!isOwnAuthored ? (
-                        <span className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground" title="Original author only">
-                          <Lock className="size-4" />
-                          Edit
-                        </span>
-                      ) : inUse ? (
+                      {inUse ? (
                         <span className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground" title="Used in a game - cannot be edited">
                           <Lock className="size-4" />
                           Edit
@@ -412,7 +383,7 @@ function QuestionsPageContent() {
                           Edit
                         </button>
                       )}
-                      {isOwnAuthored && inUse ? (
+                      {inUse ? (
                         <span className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground" title="Used in a game - cannot be edited">
                           <Lock className="size-4" />
                           Delete
