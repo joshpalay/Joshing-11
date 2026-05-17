@@ -158,7 +158,7 @@ export default function FriendsList() {
 
       {/* Friends tab */}
       {activeTab === 'friends' ? (
-        <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+        <section>
           {error ? (
             <p className="text-destructive mb-3 text-sm font-medium">{error}</p>
           ) : null}
