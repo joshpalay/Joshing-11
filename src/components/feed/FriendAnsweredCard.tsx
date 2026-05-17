@@ -16,7 +16,10 @@ type FriendAnsweredCardProps = {
 function PersonName({ href, name }: { href?: string | null; name: string }) {
   if (!href) return <>{name}</>
   return (
-    <Link href={href} className="font-medium underline-offset-2 hover:underline">
+    <Link
+      href={href}
+      className="font-semibold text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-stone-700"
+    >
       {name}
     </Link>
   )
@@ -68,15 +71,34 @@ export function FriendAnsweredCard({
     tone = 'muted'
     const friendNodes = friendNameNodes(fallbackFriends)
     if (viewerCorrect) {
-      const all = joinNames([<>You</>, ...friendNodes])
-      socialSignal = <>{all} got this right{categoryClause}.</>
+      socialSignal = (
+        <>
+          You and {joinNames(friendNodes)}{' '}
+          <span className="text-emerald-700">share this knowledge</span>
+          {categoryClause}.
+        </>
+      )
     } else {
-      socialSignal = <>{joinNames(friendNodes)} got this right{categoryClause}.</>
+      const verb = fallbackFriends.length === 1 ? 'has' : 'have'
+      socialSignal = (
+        <>
+          {joinNames(friendNodes)}{' '}
+          <span className="text-emerald-700">{verb} knowledge to share</span>
+          {categoryClause}.
+        </>
+      )
     }
   } else if (fallbackFriends.length > 0) {
     tone = 'green'
     const friendNodes = friendNameNodes(fallbackFriends)
-    socialSignal = <>{joinNames(friendNodes)} got this right{categoryClause}.</>
+    const verb = fallbackFriends.length === 1 ? 'has' : 'have'
+    socialSignal = (
+      <>
+        {joinNames(friendNodes)}{' '}
+        <span className="text-emerald-700">{verb} knowledge to share</span>
+        {categoryClause}.
+      </>
+    )
   } else {
     tone = 'white'
     socialSignal = (

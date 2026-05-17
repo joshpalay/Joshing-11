@@ -42,11 +42,14 @@ function AnsweredResult({
 
   const marker = item.isCorrect ? '✓' : '✗'
   const markerClass = item.isCorrect ? 'text-emerald-700' : 'text-stone-500'
+  const summaryClass = item.isCorrect
+    ? 'text-sm font-medium text-emerald-700'
+    : 'text-sm font-medium text-stone-800'
 
   return (
     <div className="w-full space-y-1.5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-medium text-stone-800">
+        <p className={summaryClass}>
           <span className={markerClass}>{marker}</span>{' '}
           {item.answerSummary ?? 'You answered this question.'}
         </p>
