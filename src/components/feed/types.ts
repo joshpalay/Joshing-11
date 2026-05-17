@@ -15,6 +15,8 @@ export type FeedCardBaseItem = {
   category?: string | null
   personalMessage?: string | null
   isInBank?: boolean
+  avatarName?: string | null
+  avatarUserId?: string | null
 }
 
 export type DirectSentFeedItem = FeedCardBaseItem & {

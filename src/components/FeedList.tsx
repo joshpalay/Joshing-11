@@ -211,6 +211,8 @@ function baseTypedFields(item: FeedApiItem, answered = false) {
     question: item.question_text ?? 'Untitled question',
     personalMessage: item.personal_message,
     isInBank: item.is_in_bank,
+    avatarName: item.source_friend_display_name,
+    avatarUserId: item.source_user_id,
   }
 }
 
@@ -302,6 +304,8 @@ function toAnsweredByYouItem(
 ): AnsweredByYouFeedItem {
   return {
     ...baseTypedFields(item, true),
+    avatarName: null,
+    avatarUserId: null,
     type: 'answered_by_you',
     resultLabel:
       item.is_correct === false || result?.correct === false
