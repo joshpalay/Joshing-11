@@ -28,10 +28,10 @@ function initialsFor(name: string): string {
   return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase();
 }
 
-export function Nav() {
+export function Nav({ initialUserId = null }: { initialUserId?: string | null }) {
   const pathname = usePathname();
   const [accountInitials, setAccountInitials] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(initialUserId);
   const [menuOpen, setMenuOpen] = useState(false);
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
   const isOtherUserProfilePath = (() => {
@@ -63,7 +63,6 @@ export function Nav() {
       setCurrentUserId(body?.user?.id ?? null);
     } catch {
       setAccountInitials(null);
-      setCurrentUserId(null);
     }
   }, []);
 
