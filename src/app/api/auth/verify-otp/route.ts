@@ -8,6 +8,7 @@ import {
   acceptFriendInvitation,
   getValidInvitationForPhone,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE,
+  INVITE_REQUIRED_MESSAGE,
 } from '@/server/friends/invitations'
 
 type VerifyOtpBody = {
@@ -68,6 +69,16 @@ function invitationRejection() {
       message: INVITATION_ACCEPTANCE_ERROR_MESSAGE,
     },
     { status: 400 }
+  )
+}
+
+function inviteRequiredRejection() {
+  return NextResponse.json(
+    {
+      error: 'invite_required',
+      message: INVITE_REQUIRED_MESSAGE,
+    },
+    { status: 403 }
   )
 }
 
@@ -142,7 +153,7 @@ export async function POST(request: Request) {
 
     // New-user path: invitation is a hard precondition.
     if (!hasUsableToken) {
-      return invitationRejection()
+      return inviteRequiredRejection()
     }
 
     // Pre-validate the invitation read-only so we don't provision a user

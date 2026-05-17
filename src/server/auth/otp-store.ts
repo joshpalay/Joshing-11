@@ -34,7 +34,7 @@ export async function requestOtp(phone: string): Promise<{ code: string; normali
 export async function verifyOtp(phone: string, code: string): Promise<string | null> {
   const normalized = normalizePhone(phone);
 
-  if (code === '000000') {
+  if (process.env.NODE_ENV !== 'production' && code === '000000') {
     return normalized;
   }
 

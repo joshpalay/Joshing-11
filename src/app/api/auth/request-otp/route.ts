@@ -1,6 +1,12 @@
+import { eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { isUsPhoneNumber, normalizePhone, requestOtp } from '@/server/auth';
+import { db, users } from '@/server/db';
+import {
+  hasValidPendingInvitationForPhone,
+  INVITE_REQUIRED_MESSAGE,
+} from '@/server/friends/invitations';
 
 export async function POST(request: Request) {
   try {
@@ -22,6 +28,23 @@ export async function POST(request: Request) {
     }
 
     const phone = normalizePhone(rawPhone);
+
+    const [existingUser] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.phoneNumber, phone))
+      .limit(1);
+
+    if (!existingUser) {
+      const hasInvite = await hasValidPendingInvitationForPhone(phone);
+      if (!hasInvite) {
+        return NextResponse.json(
+          { error: 'invite_required', message: INVITE_REQUIRED_MESSAGE },
+          { status: 403 },
+        );
+      }
+    }
+
     const { code } = await requestOtp(phone);
 
     return NextResponse.json({
