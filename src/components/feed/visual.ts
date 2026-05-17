@@ -68,3 +68,94 @@ export function formatRelativeTime(value: string | Date): string {
   const years = Math.floor(days / 365)
   return `${years}y ago`
 }
+
+const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
+
+const RECENCY_BUCKETS = [
+  { key: 'past-few-hours', label: 'Past few hours', maxMs: 5 * HOUR_MS },
+  { key: 'today', label: 'Today', maxMs: 24 * HOUR_MS },
+  { key: 'past-few-days', label: 'Past few days', maxMs: 3 * DAY_MS },
+  { key: 'this-week', label: 'This week', maxMs: 7 * DAY_MS },
+  { key: 'past-two-weeks', label: 'Past two weeks', maxMs: 14 * DAY_MS },
+  { key: 'past-few-weeks', label: 'Past few weeks', maxMs: 28 * DAY_MS },
+  { key: 'older', label: 'Older', maxMs: Infinity },
+] as const
+
+const MIN_GROUP_SIZE = 5
+
+export type RecencyGroup<T> = {
+  key: string
+  label: string
+  items: T[]
+}
+
+type WithSourceEventAt = { source_event_at: string }
+
+export function groupItemsByRecency<T extends WithSourceEventAt>(
+  items: readonly T[],
+  now: number = Date.now(),
+): RecencyGroup<T>[] {
+  if (items.length === 0) return []
+
+  const ages = items.map((item) => {
+    const parsed = Date.parse(item.source_event_at)
+    return Number.isNaN(parsed) ? Infinity : now - parsed
+  })
+
+  const groups: RecencyGroup<T>[] = []
+  let cursor = 0
+  let startBucket = 0
+
+  while (cursor < items.length) {
+    const remaining = items.length - cursor
+    let chosen = -1
+
+    for (let b = startBucket; b < RECENCY_BUCKETS.length; b++) {
+      const maxMs = RECENCY_BUCKETS[b]!.maxMs
+      let count = 0
+      for (let i = cursor; i < items.length; i++) {
+        if (ages[i]! <= maxMs) count++
+        else break
+      }
+      if (count >= MIN_GROUP_SIZE) {
+        chosen = b
+        break
+      }
+    }
+
+    if (chosen === -1) {
+      let smallestFit = RECENCY_BUCKETS.length - 1
+      for (let b = startBucket; b < RECENCY_BUCKETS.length; b++) {
+        if (ages[items.length - 1]! <= RECENCY_BUCKETS[b]!.maxMs) {
+          smallestFit = b
+          break
+        }
+      }
+      const bucket = RECENCY_BUCKETS[smallestFit]!
+      groups.push({
+        key: bucket.key,
+        label: bucket.label,
+        items: items.slice(cursor),
+      })
+      cursor += remaining
+      break
+    }
+
+    const bucket = RECENCY_BUCKETS[chosen]!
+    let count = 0
+    for (let i = cursor; i < items.length; i++) {
+      if (ages[i]! <= bucket.maxMs) count++
+      else break
+    }
+    groups.push({
+      key: bucket.key,
+      label: bucket.label,
+      items: items.slice(cursor, cursor + count),
+    })
+    cursor += count
+    startBucket = chosen + 1
+  }
+
+  return groups
+}
