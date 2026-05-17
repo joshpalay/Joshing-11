@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 
 import { db, generatedQuestions, questions } from '@/server/db';
 import {
-  assertSpecificCanonicalSubcategory,
+  GenericCanonicalSubcategoryError,
   isGenericSubcategory,
 } from '@/server/questions/canonical-subcategory';
 
@@ -38,17 +38,22 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
       throw new Error(`Generated question not found: ${generatedQuestionId}`);
     }
 
-    // F4.5: refuse to persist a question whose canonical_subcategory is a
-    // generic bucket. Prefer the canonical subcategory; fall back to the
-    // broad category if it's specific; otherwise throw before the INSERT.
+    // F4.5: prefer a specific canonical subcategory; fall back through broad
+    // category and slot domain. If all three are generic labels, use whatever
+    // is non-null rather than throwing — persisting with a generic label is
+    // far better than failing to persist at all, which would silently block
+    // feed propagation for every correct daily answer.
     const desiredCanonical = !isGenericSubcategory(generated.canonicalSubcategory)
       ? generated.canonicalSubcategory!
       : !isGenericSubcategory(generated.broadCategory)
         ? generated.broadCategory!
         : !isGenericSubcategory(slotDomain)
           ? slotDomain!
-          : generated.canonicalSubcategory || generated.broadCategory;
-    assertSpecificCanonicalSubcategory(desiredCanonical);
+          : slotDomain ?? generated.canonicalSubcategory ?? generated.broadCategory;
+
+    if (!desiredCanonical) {
+      throw new GenericCanonicalSubcategoryError(desiredCanonical);
+    }
 
     const [created] = await db
       .insert(questions)
