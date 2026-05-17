@@ -5,6 +5,7 @@ import { getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { type QueueSlot } from '@/server/daily/types';
+import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,11 +13,18 @@ function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
+// Drop slots whose domain is a bucket-level label. Older queues built before
+// the upstream guard could contain "general"/"general knowledge" slots; we
+// suppress them here so the user never sees a general question.
+function filterNonGenericSlots(slots: QueueSlot[]): QueueSlot[] {
+  return slots.filter((slot) => !isGenericSubcategory(slot.domain));
+}
+
 function serializeQueue(queue: NonNullable<Awaited<ReturnType<typeof getTodaysDailyQueue>>>, difficultyMode: string) {
   return {
     queue_id: queue.id,
     queue_date: queue.queueDate,
-    slots: asQueueSlots(queue.slots),
+    slots: filterNonGenericSlots(asQueueSlots(queue.slots)),
     difficulty_mode: difficultyMode,
   };
 }
