@@ -3,6 +3,7 @@
 import { useCallback, useState, type ReactNode } from 'react'
 
 import { FeedCard } from './FeedCard'
+import { visibleFeedCategory } from './category'
 import type { AnsweredByYouFeedItem } from './types'
 
 export type FeedRecheckAction = {
@@ -83,10 +84,15 @@ function AnsweredResult({
 }
 
 export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByYouCardProps) {
+  const category = visibleFeedCategory(item.category)
+  const categoryClause = category ? <> about {category}</> : null
+  const socialSignal: ReactNode = <>You answered this{categoryClause}.</>
+
   return (
     <FeedCard
       item={item}
       tone={item.isCorrect ? 'green' : 'gray'}
+      socialSignal={socialSignal}
       overflow={overflow}
       resultContent={<AnsweredResult item={item} recheckAction={recheckAction} />}
     />

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 
 import { FeedCard } from './FeedCard'
+import { visibleFeedCategory } from './category'
 import type { DirectSentFeedItem } from './types'
 
 type DirectSentCardProps = {
@@ -26,10 +27,13 @@ export function DirectSentCard({
   onAnswer,
   resultContent,
 }: DirectSentCardProps) {
+  const category = visibleFeedCategory(item.category)
+  const categoryClause = category ? <> about {category}</> : null
+
   const socialSignal: ReactNode = (
     <>
       <PersonName href={item.senderHref} name={item.senderName} /> thought
-      you&apos;d like this one.
+      you&apos;d like this{categoryClause}.
     </>
   )
 

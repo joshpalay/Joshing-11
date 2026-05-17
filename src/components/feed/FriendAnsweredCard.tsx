@@ -3,6 +3,7 @@ import { Fragment } from 'react'
 import Link from 'next/link'
 
 import { FeedCard } from './FeedCard'
+import { visibleFeedCategory } from './category'
 import type { FriendAnsweredFeedItem, FriendAnsweredParticipant } from './types'
 
 type FriendAnsweredCardProps = {
@@ -57,32 +58,30 @@ export function FriendAnsweredCard({
       ? [{ userId: '', displayName: item.friendName, href: item.friendHref ?? null }]
       : correctFriends
 
+  const category = visibleFeedCategory(item.category)
+  const categoryClause = category ? <> about {category}</> : null
+
   let socialSignal: ReactNode
   let tone: 'green' | 'white' | 'muted'
 
   if (viewerAnswered && fallbackFriends.length > 0) {
-    // Viewer already answered the question. Muted treatment, question dimmed,
-    // social update foregrounded.
     tone = 'muted'
     const friendNodes = friendNameNodes(fallbackFriends)
     if (viewerCorrect) {
       const all = joinNames([<>You</>, ...friendNodes])
-      socialSignal = <>{all} got this right.</>
+      socialSignal = <>{all} got this right{categoryClause}.</>
     } else {
-      // Viewer got it wrong — don't call attention to that. Just show friends.
-      socialSignal = <>{joinNames(friendNodes)} got this right.</>
+      socialSignal = <>{joinNames(friendNodes)} got this right{categoryClause}.</>
     }
   } else if (fallbackFriends.length > 0) {
-    // Viewer hasn't answered. Active card prompting answer.
     tone = 'green'
     const friendNodes = friendNameNodes(fallbackFriends)
-    socialSignal = <>{joinNames(friendNodes)} got this right.</>
+    socialSignal = <>{joinNames(friendNodes)} got this right{categoryClause}.</>
   } else {
-    // Fallback (no friend list, friend didn't get it right) — keep prior behavior.
     tone = 'white'
-    socialSignal = item.answerSummary ?? (
+    socialSignal = (
       <>
-        <PersonName href={item.friendHref} name={item.friendName} /> answered this.
+        <PersonName href={item.friendHref} name={item.friendName} /> answered this{categoryClause}.
       </>
     )
   }
