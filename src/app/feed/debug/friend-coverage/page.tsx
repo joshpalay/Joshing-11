@@ -7,6 +7,7 @@ import {
   type FriendCoverageEventRow,
   type FriendCoverageFriendBlock,
 } from '@/app/api/feed/friend-coverage/route';
+import { BackfillButton } from './backfill-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +86,7 @@ function EventRow({ row }: { row: FriendCoverageEventRow }) {
 }
 
 function FriendBlock({ block }: { block: FriendCoverageFriendBlock }) {
+  const missingCanonical = block.recentCorrectAnswers.filter((r) => r.questionId === null).length;
   return (
     <details open style={{ marginBottom: '16px', border: '1px solid #ddd', padding: '8px' }}>
       <summary style={{ cursor: 'pointer', fontFamily: 'monospace', fontSize: '13px' }}>
@@ -93,9 +95,14 @@ function FriendBlock({ block }: { block: FriendCoverageFriendBlock }) {
         {' · '}phone={block.friendPhoneNumber ?? '—'}
         {' · '}friendship={block.friendshipStatus ?? '(none)'}
         {' · '}rows={block.recentCorrectAnswers.length}
+        {missingCanonical > 0 && (
+          <span style={{ color: '#a02500' }}>{' · '}missingCanonical={missingCanonical}</span>
+        )}
       </summary>
 
       {block.note && <p style={{ color: '#666', fontSize: '12px', marginTop: '8px' }}>{block.note}</p>}
+
+      {missingCanonical > 0 && <BackfillButton answererUserId={block.friendUserId} />}
 
       {block.recentCorrectAnswers.length > 0 && (
         <table style={{ width: '100%', marginTop: '8px', borderCollapse: 'collapse' }}>
