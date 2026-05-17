@@ -59,6 +59,7 @@ type FeedApiItem = {
   verified: boolean
   is_in_bank: boolean
   domain_pill: string | null
+  broad_category?: string | null
   difficulty: string | null
   explanation: string | null
   answer_result: 'correct' | 'incorrect' | null
@@ -308,10 +309,37 @@ function toTypedFeedItem(item: FeedApiItem) {
   } satisfies FriendAnsweredFeedItem
 }
 
+function normalizeMasteryDelta(
+  raw: unknown
+): AnsweredByYouFeedItem['masteryDelta'] {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const previousTier = typeof r.previousTier === 'string' ? r.previousTier : null
+  const newTier = typeof r.newTier === 'string' ? r.newTier : null
+  if (!previousTier || !newTier) return null
+  const tierChanged =
+    typeof r.tierChanged === 'boolean' ? r.tierChanged : previousTier !== newTier
+  return { previousTier, newTier, tierChanged }
+}
+
+function pickBroadCategory(
+  raw: unknown,
+  item: FeedApiItem
+): string | null {
+  if (raw && typeof raw === 'object') {
+    const r = raw as Record<string, unknown>
+    if (typeof r.broadCategory === 'string' && r.broadCategory.length > 0) {
+      return r.broadCategory
+    }
+  }
+  return item.broad_category ?? null
+}
+
 function toAnsweredByYouItem(
   item: FeedApiItem,
   result?: ResultState
 ): AnsweredByYouFeedItem {
+  const masteryDeltaRaw = result?.masteryDelta ?? item.mastery_delta
   return {
     ...baseTypedFields(item, true),
     avatarName: null,
@@ -343,6 +371,8 @@ function toAnsweredByYouItem(
     explanation: result?.explanation ?? item.explanation,
     quip: result?.quip ?? null,
     unverifiedAnswer: item.unverified_answer,
+    broadCategory: pickBroadCategory(masteryDeltaRaw, item),
+    masteryDelta: normalizeMasteryDelta(masteryDeltaRaw),
   }
 }
 

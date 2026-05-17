@@ -121,6 +121,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
     return {
       domain,
+      broadCategory: question.broadCategory ?? null,
       points: pointsAwarded,
       previousTier,
       newTier: previousTier,

@@ -57,6 +57,12 @@ export type FriendLikedFeedItem = FeedCardBaseItem & {
   additionalEndorsers?: Array<{ userId: string; displayName: string }> | null
 }
 
+export type AnsweredByYouMasteryDelta = {
+  previousTier: string
+  newTier: string
+  tierChanged: boolean
+}
+
 export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   type: 'answered_by_you'
   resultLabel?: string | null
@@ -68,6 +74,8 @@ export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   explanation?: string | null
   quip?: string | null
   unverifiedAnswer?: boolean
+  broadCategory?: string | null
+  masteryDelta?: AnsweredByYouMasteryDelta | null
 }
 
 export type TypedFeedItem =

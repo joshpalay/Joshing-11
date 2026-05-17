@@ -290,6 +290,7 @@ export async function GET(request: NextRequest) {
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
         domain_pill: domain,
+        broad_category: question?.broadCategory ?? null,
         game_title: null,
         difficulty: null,
         answer_result: answerResult,
