@@ -14,16 +14,9 @@ export default async function Home() {
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-24 md:py-10">
       <section className="space-y-6 border-b pb-6">
         <div className="w-full">
-          <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
-            Joshing
-          </p>
-          <h1 className="text-foreground mt-3 font-serif text-4xl leading-tight font-semibold md:text-5xl">
+          <h1 className="text-foreground font-serif text-4xl leading-tight font-semibold md:text-5xl">
             You contain multitudes.
           </h1>
-          <p className="text-muted-foreground mt-4 max-w-xl text-base leading-7">
-            A small daily game for seeing what you know, what your friends know,
-            and how your map keeps changing.
-          </p>
         </div>
         <div className="w-full space-y-3">
           <TodaysFiveCard />
@@ -31,7 +24,7 @@ export default async function Home() {
             count={catchupCount}
             expiringCount={expiringCount}
           />
-          <div className="bg-card text-card-foreground rounded-lg border p-4">
+          <div>
             <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
               What&apos;s happening
             </p>
@@ -65,13 +58,10 @@ function MissedQuestionsCard({
       }
     >
       <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-        Play missed questions
+        Reinforce what you learned
       </p>
       <p className="text-foreground mt-2 text-sm font-semibold">
-        {count === 1 ? '1 question you missed' : `${count} questions you missed`}
-      </p>
-      <p className="text-muted-foreground mt-1 text-sm leading-6">
-        Catch up - 0.25x points
+        {count === 1 ? '1 question to revisit' : `${count} questions to revisit`}
       </p>
       {expiringCount > 0 ? (
         <p

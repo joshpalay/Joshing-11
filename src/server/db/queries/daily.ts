@@ -27,6 +27,7 @@ import {
   dedupeCatchUpItems,
   orderCatchUpItems,
 } from '@/server/play/catch-up-turn-sequencing';
+import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 function asQueueSlotDifficulty(
   value: string | null | undefined,
@@ -227,6 +228,11 @@ export async function getCatchupQuestions(userId: string): Promise<CatchupQuesti
       const queueDate = String(queue.queueDate);
       const expiresAt = catchUpExpiresAt(queueDate);
       const domain = slot.domain || question.canonicalSubcategory;
+      // Suppress catchup items whose domain is a bucket-level label
+      // ("general", "general knowledge", "trivia", etc.). These would
+      // otherwise replay an earlier generation that slipped past the
+      // upstream guard.
+      if (isGenericSubcategory(domain)) return null;
       return {
         dailyQueueItemId: dailyQueueItemId(queue.id, slot.slot_index),
         queueId: queue.id,

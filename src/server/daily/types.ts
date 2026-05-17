@@ -3,62 +3,70 @@
  *
  * QueueSlot is the per-slot shape persisted in DailyQueue.slots (JSONB)
  * and returned to the client from the queue / answer endpoints.
+ *
+ * The Zod schema (queueSlotSchema) is the source of truth; the TypeScript
+ * type is derived from it so the two stay in sync automatically (PRD §8.1.14).
  */
 
+import { z } from 'zod';
 import type { DifficultyEstimate } from '@/types/db';
 
 type DailyDifficultyEstimate = DifficultyEstimate | 'accessible' | 'moderate' | 'specialist';
 
-export type QueueSlotSource = 'friend' | 'bot' | 'community';
-export type QueueSlotAnswerState = 'correct' | 'incorrect';
+export const queueSlotSourceSchema = z.enum(['friend', 'bot', 'community']);
+export const queueSlotAnswerStateSchema = z.enum(['correct', 'incorrect']);
 
-export type QueueSlot = {
-  slot_index: number;
-  source: QueueSlotSource;
+export const queueSlotSchema = z.object({
+  slot_index: z.number().int(),
+  source: queueSlotSourceSchema,
   /** Canonical Question.id — only present when source = 'friend'. */
-  question_id?: string;
+  question_id: z.string().optional(),
   /** GeneratedQuestion.id — only present when source = 'bot'. */
-  generated_question_id?: string;
+  generated_question_id: z.string().optional(),
   /** Authoring user id — only present when source = 'friend'. */
-  author_id?: string;
+  author_id: z.string().optional(),
   /** Display name for UI attribution — null if friend has no display_name. */
-  author_name?: string | null;
+  author_name: z.string().nullish(),
   /** Optional creator note — only ever set for friend questions. */
-  author_note?: string | null;
-  domain: string;
-  question_text: string;
+  author_note: z.string().nullish(),
+  domain: z.string(),
+  question_text: z.string(),
   /** LLM-rated objective difficulty for this question, surfaced as a badge in the UI. */
-  difficulty_estimate?: 'accessible' | 'moderate' | 'specialist';
-  answered: boolean;
-  answer_state?: QueueSlotAnswerState;
+  difficulty_estimate: z.enum(['accessible', 'moderate', 'specialist']).optional(),
+  answered: z.boolean(),
+  answer_state: queueSlotAnswerStateSchema.optional(),
   /** Text the player typed; persisted so the summary screen can show it. */
-  submitted_answer?: string;
+  submitted_answer: z.string().optional(),
   /** Points earned for this slot (stored so summary screen can split friend/bot totals). */
-  awarded_points?: number;
+  awarded_points: z.number().optional(),
   /** Skip marker — true if the player skipped this slot. See Phase 4 skip mechanic. */
-  skipped?: boolean;
+  skipped: z.boolean().optional(),
   /** Catch-up dismissal marker; dismissed slots stop appearing in catch-up. */
-  dismissed_at?: string;
-  dismissed_reason?: 'not_interested' | 'too_old' | 'unclear';
+  dismissed_at: z.string().optional(),
+  dismissed_reason: z.enum(['not_interested', 'too_old', 'unclear']).optional(),
   /**
    * True when the effective difficulty for this slot's domain was stepped up above the
    * user's base preference due to mastery progress. Used by the UI to show "Getting harder".
    */
-  difficulty_stepped_up?: boolean;
+  difficulty_stepped_up: z.boolean().optional(),
   /** Filled on answer; lets session/summary re-render the reveal after the player taps NEXT. */
-  reveal_canonical_answer?: string;
-  reveal_explainer?: string;
+  reveal_canonical_answer: z.string().optional(),
+  reveal_explainer: z.string().optional(),
   /** Short contextual breadcrumb shown in the chat thread after grading. */
-  reveal_breadcrumb?: string | null;
-  /** LLM consolation quip for near-miss wrong answers. */
-  reveal_quip?: string | null;
-  /** Per-answer commentary quip from selectQuip(). */
-  quip?: string | null;
+  reveal_breadcrumb: z.string().nullish(),
+  /** LLM consolation quip for near-miss wrong answers (PRD §8.1.14). */
+  reveal_quip: z.string().nullish(),
+  /** Per-answer commentary quip from selectQuip() (PRD §8.1.14). */
+  quip: z.string().nullish(),
   /** Optional appeal state after a player asks the app to recheck a wrong grade. */
-  recheck_status?: 'accepted' | 'rejected' | 'needs_human';
+  recheck_status: z.enum(['accepted', 'rejected', 'needs_human']).optional(),
   /** Short player-facing explanation from the recheck reviewer. */
-  recheck_reason?: string | null;
-};
+  recheck_reason: z.string().nullish(),
+});
+
+export type QueueSlotSource = z.infer<typeof queueSlotSourceSchema>;
+export type QueueSlotAnswerState = z.infer<typeof queueSlotAnswerStateSchema>;
+export type QueueSlot = z.infer<typeof queueSlotSchema>;
 
 /**
  * Phase 4 skip mechanic — capped at 3 skips per round, server-enforced.

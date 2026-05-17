@@ -26,3 +26,6 @@ dev-out.txt
 dev-stderr.txt
 .drizzle-tmp/
 /{
+ 
+# TypeScript incremental build cache 
+*.tsbuildinfo 

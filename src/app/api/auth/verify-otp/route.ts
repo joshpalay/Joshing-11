@@ -111,7 +111,10 @@ export async function POST(request: Request) {
     const existingUser = await findUserByPhone(normalizedPhone)
 
     // Re-login path: any existing user can re-authenticate after OTP. The
-    // invitation gate only applies to new-account creation below.
+    // invitation gate only applies to new-account creation below. This is
+    // intentional policy (2026-05-16): accounts created before the invitation
+    // gate was added are grandfathered — they re-authenticate freely. Only
+    // brand-new accounts must arrive via an accepted friend invitation.
     if (existingUser) {
       let invitationResult: { accepted: boolean } = { accepted: false }
 

@@ -2,6 +2,7 @@ import { and, asc, count, eq, sql } from 'drizzle-orm';
 
 import { writeActivity } from '@/server/activity/write-activity';
 import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
+import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
 import { computeAnswerState } from '@/server/answer-state';
 import { gradeAnswer } from '@/server/grading';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
@@ -16,7 +17,6 @@ import {
   joshingGameRecipients,
   joshingGameResponses,
   joshingGames,
-  masteryEvents,
   questions,
   users,
 } from '@/server/db';
@@ -45,6 +45,110 @@ export type JoshingGameView = {
   responses: JoshingGameResponseRow[];
   viewerStatus: 'not_started' | 'in_progress' | 'complete';
 };
+
+export type OverlapAggregateCell = {
+  broadCategory: string;
+  canonicalSubcategory: string;
+  aScore: number;
+  bScore: number;
+  aCorrect: number;
+  bCorrect: number;
+  sharedCorrect: number;
+};
+
+const DIFFICULTY_WEIGHT: Record<string, number> = {
+  accessible: 1,
+  moderate: 2,
+  specialist: 3,
+};
+
+function difficultyWeight(question: QuestionRow): number {
+  const level = question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null;
+  if (!level) return 1;
+  return DIFFICULTY_WEIGHT[level] ?? 1;
+}
+
+export function computeOverlapCells(
+  view: JoshingGameView,
+  creatorId: string,
+  recipientId: string,
+): OverlapAggregateCell[] {
+  const responseIndex = new Map<string, JoshingGameResponseRow>();
+  for (const response of view.responses) {
+    responseIndex.set(`${response.userId}:${response.questionId}`, response);
+  }
+
+  const cells = new Map<string, OverlapAggregateCell>();
+  for (const gameQuestion of view.questions) {
+    const question = gameQuestion.question;
+    const canonical = question.canonicalSubcategory || question.broadCategory || question.category || 'General';
+    const broad = question.broadCategory || question.category || canonical;
+    const weight = difficultyWeight(question);
+
+    let cell = cells.get(canonical);
+    if (!cell) {
+      cell = {
+        broadCategory: broad,
+        canonicalSubcategory: canonical,
+        aScore: 0,
+        bScore: 0,
+        aCorrect: 0,
+        bCorrect: 0,
+        sharedCorrect: 0,
+      };
+      cells.set(canonical, cell);
+    }
+
+    if (question.creatorId === creatorId) cell.aScore += weight;
+    if (question.creatorId === recipientId) cell.bScore += weight;
+
+    const aResponse = responseIndex.get(`${creatorId}:${question.id}`);
+    const bResponse = responseIndex.get(`${recipientId}:${question.id}`);
+    const aCorrect = Boolean(aResponse?.isCorrect);
+    const bCorrect = Boolean(bResponse?.isCorrect);
+    if (aCorrect) {
+      cell.aScore += weight;
+      cell.aCorrect += 1;
+    }
+    if (bCorrect) {
+      cell.bScore += weight;
+      cell.bCorrect += 1;
+    }
+    if (aCorrect && bCorrect) cell.sharedCorrect += 1;
+  }
+
+  return [...cells.values()];
+}
+
+export async function getGameOverlapAggregates(gameId: string): Promise<{
+  creatorId: string;
+  recipientId: string | null;
+  recipientCount: number;
+  cells: OverlapAggregateCell[];
+} | null> {
+  const [gameRow] = await db
+    .select({ id: joshingGames.id, creatorId: joshingGames.creatorId })
+    .from(joshingGames)
+    .where(eq(joshingGames.id, gameId))
+    .limit(1);
+  if (!gameRow) return null;
+
+  const view = await getJoshingGame({ gameId, requestingUserId: gameRow.creatorId });
+  if (!view) return null;
+
+  const recipientCount = view.recipients.length;
+  const recipientId = recipientCount === 1 ? view.recipients[0].userId : null;
+  const cells = recipientId
+    ? computeOverlapCells(view, view.game.creatorId, recipientId)
+    : [];
+
+  return {
+    creatorId: view.game.creatorId,
+    recipientId,
+    recipientCount,
+    cells,
+  };
+}
 
 type PriorAnswerResult = 'correct' | 'wrong' | 'expired';
 
@@ -127,18 +231,6 @@ async function readPriorAnswers(userId: string, questionId: string): Promise<{ r
   ];
 }
 
-async function countAuthorCreditEvents(questionId: string, authorId: string): Promise<number> {
-  const [row] = await db
-    .select({ value: count() })
-    .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, authorId),
-      eq(masteryEvents.questionId, questionId),
-      eq(masteryEvents.sourceType, 'author_credit'),
-    ));
-
-  return row?.value ?? 0;
-}
 
 export async function createJoshingGame(params: {
   title: string;
@@ -428,6 +520,7 @@ export async function submitJoshingGameResponse(params: {
       question.correctCount + 1,
       question.askedCount + 1,
       existingAuthorCredits + 1,
+      question.calibratedDifficulty ?? question.llmDifficulty,
     );
 
     if (authorAward.awardedPoints > 0) {

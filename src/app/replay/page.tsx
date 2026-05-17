@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import Link from 'next/link';
 
 import { GameplayChatThread, newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
+import { ReplaySummary, type ReplaySessionResult } from '@/components/replay/ReplaySummary';
 import type { ReplayItem } from '@/server/replay/session';
 
 type ReplayResponse = {
@@ -16,6 +17,7 @@ type GradeResponse = {
   result: 'correct' | 'wrong';
   isCorrect: boolean;
   correctAnswer: string;
+  explanation?: string | null;
   consolation?: string | null;
   breadcrumb?: string | null;
 };
@@ -33,41 +35,50 @@ function questionMessage(item: ReplayItem): ChatMessage {
 }
 
 export default function ReplayPage() {
-  const [items, setItems] = useState<ReplayItem[]>([]);
+  const [totalRemaining, setTotalRemaining] = useState(0);
   const [sessionItems, setSessionItems] = useState<ReplayItem[]>([]);
+  const [practicedIds, setPracticedIds] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [sessionResults, setSessionResults] = useState<ReplaySessionResult[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(true);
   const [started, setStarted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingNext, setLoadingNext] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
   const currentItem = started ? sessionItems[currentIndex] ?? null : null;
-  const sessionDone = started && currentIndex >= sessionItems.length;
-  const correctCount = messages.filter((message) => message.kind === 'result' && message.result === 'correct').length;
-  const answeredCount = messages.filter((message) => message.kind === 'result').length;
+  const sessionDone = started && sessionItems.length > 0 && currentIndex >= sessionItems.length;
 
-  const load = useCallback(async () => {
+  const loadBatch = useCallback(async (excludeIds: string[]) => {
+    const url = excludeIds.length > 0
+      ? `/api/replay/missed?exclude=${encodeURIComponent(excludeIds.join(','))}`
+      : '/api/replay/missed';
+    const response = await fetch(url, { credentials: 'include', cache: 'no-store' });
+    const body = await response.json().catch(() => null) as ReplayResponse | null;
+    if (!response.ok || !body) throw new Error('Could not load replay questions.');
+    return body;
+  }, []);
+
+  const initialLoad = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/replay/missed', { credentials: 'include', cache: 'no-store' });
-      const body = await response.json().catch(() => null) as ReplayResponse | null;
-      if (!response.ok || !body) throw new Error('Could not load replay questions.');
-      setItems(body.items ?? []);
+      const body = await loadBatch([]);
       setSessionItems(body.session ?? []);
+      setTotalRemaining(body.total_wrong ?? 0);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load replay questions.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadBatch]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void initialLoad();
+  }, [initialLoad]);
 
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
@@ -78,8 +89,30 @@ export default function ReplayPage() {
   function startSession() {
     if (sessionItems.length === 0) return;
     setMessages([questionMessage(sessionItems[0])]);
+    setSessionResults([]);
     setCurrentIndex(0);
     setStarted(true);
+  }
+
+  const untouchedRemaining = Math.max(0, totalRemaining - sessionItems.length);
+
+  async function playNextBatch() {
+    setLoadingNext(true);
+    setError(null);
+    try {
+      const nextExcluded = [...practicedIds, ...sessionItems.map((item) => item.dailyQueueItemId)];
+      const body = await loadBatch(nextExcluded);
+      setPracticedIds(nextExcluded);
+      setSessionItems(body.session ?? []);
+      setTotalRemaining(body.total_wrong ?? 0);
+      setSessionResults([]);
+      setMessages((body.session ?? []).length > 0 ? [questionMessage((body.session ?? [])[0])] : []);
+      setCurrentIndex(0);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not load next batch.');
+    } finally {
+      setLoadingNext(false);
+    }
   }
 
   async function submitAnswer(event: FormEvent<HTMLFormElement>) {
@@ -101,9 +134,17 @@ export default function ReplayPage() {
       if (!response.ok || !body) throw new Error('Could not score replay answer.');
 
       const nextIndex = currentIndex + 1;
-      setItems((existing) => body.isCorrect
-        ? existing.filter((item) => item.dailyQueueItemId !== currentItem.dailyQueueItemId)
-        : existing);
+      const resolvedAnswer = body.isCorrect ? currentItem.correctAnswer : body.correctAnswer;
+      setSessionResults((existing) => [
+        ...existing,
+        {
+          item: currentItem,
+          submitted: submittedAnswer,
+          isCorrect: body.isCorrect,
+          correctAnswer: resolvedAnswer,
+          explanation: body.explanation ?? currentItem.explanation ?? null,
+        },
+      ]);
       setMessages((existing) => [
         ...existing,
         { id: newMessageId(), kind: 'user', text: submittedAnswer },
@@ -145,7 +186,7 @@ export default function ReplayPage() {
       {loading ? <p className="mt-5 text-sm text-[var(--text-muted)]">Loading replay...</p> : null}
       {error ? <p className="mt-5 text-sm text-[var(--danger)]">{error}</p> : null}
 
-      {!loading && !error && items.length === 0 ? (
+      {!loading && !error && totalRemaining === 0 && !started ? (
         <div className="mt-5 rounded-[var(--radius-md)] border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}>
           <p className="text-[var(--text)]">Nothing left to practice right now.</p>
           <Link href="/" className="btn-primary mt-4 inline-flex">Back home</Link>
@@ -155,7 +196,7 @@ export default function ReplayPage() {
       {!loading && !error && !started && previewItems.length > 0 ? (
         <div className="mt-5 rounded-[var(--radius-md)] border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}>
           <p className="text-sm text-[var(--text-muted)]">
-            {items.length} wrong {items.length === 1 ? 'answer' : 'answers'} ready for practice
+            {totalRemaining} wrong {totalRemaining === 1 ? 'answer' : 'answers'} ready for practice · playing {previewItems.length} this round
           </p>
           <ul className="mt-3 space-y-3">
             {previewItems.map((item) => (
@@ -173,11 +214,12 @@ export default function ReplayPage() {
         <div ref={threadRef} className="mt-5 flex-1 overflow-y-auto">
           <GameplayChatThread messages={messages} />
           {sessionDone ? (
-            <div className="mt-5 rounded-[var(--radius-md)] border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}>
-              <p className="font-serif text-lg text-[var(--text)]">Session complete.</p>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">{correctCount} of {answeredCount} correct.</p>
-              <Link href="/" className="btn-primary mt-4 inline-flex">Back home</Link>
-            </div>
+            <ReplaySummary
+              results={sessionResults}
+              hasMore={untouchedRemaining > 0}
+              onPlayNext={() => void playNextBatch()}
+              loadingNext={loadingNext}
+            />
           ) : null}
         </div>
       ) : null}

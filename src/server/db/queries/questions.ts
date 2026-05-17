@@ -1,10 +1,11 @@
-import { and, countDistinct, desc, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
+import { and, countDistinct, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
 
 import {
   db,
   joshingGameQuestions,
   joshingGameResponses,
   joshingGames,
+  masteryEvents,
   questions,
   userQuestionBank,
 } from '@/server/db';
@@ -244,11 +245,13 @@ export type AuthoredQuestionPreview = {
   canonicalSubcategory: string | null;
   broadCategory: string | null;
   createdAt: string;
+  viewerAnswered: { result: 'correct' | 'incorrect' } | null;
 };
 
 export async function getAuthoredQuestionsForUser(params: {
   userId: string;
   limit?: number;
+  viewerUserId?: string;
 }): Promise<AuthoredQuestionPreview[]> {
   const limit = Math.max(1, Math.min(params.limit ?? 25, 100));
   const rows = await db
@@ -270,12 +273,42 @@ export async function getAuthoredQuestionsForUser(params: {
     .orderBy(desc(questions.createdAt))
     .limit(limit);
 
+  const viewerStatus = new Map<string, { result: 'correct' | 'incorrect' }>();
+  if (params.viewerUserId && rows.length > 0) {
+    const ids = rows.map((row) => row.id);
+    const events = await db
+      .select({
+        questionId: masteryEvents.questionId,
+        answerState: masteryEvents.answerState,
+      })
+      .from(masteryEvents)
+      .where(
+        and(
+          eq(masteryEvents.userId, params.viewerUserId),
+          eq(masteryEvents.answeredByUserId, params.viewerUserId),
+          inArray(masteryEvents.questionId, ids),
+        ),
+      );
+
+    for (const event of events) {
+      if (!event.questionId) continue;
+      const isCorrect = event.answerState !== null && event.answerState !== 'incorrect';
+      const existing = viewerStatus.get(event.questionId);
+      if (isCorrect) {
+        viewerStatus.set(event.questionId, { result: 'correct' });
+      } else if (!existing) {
+        viewerStatus.set(event.questionId, { result: 'incorrect' });
+      }
+    }
+  }
+
   return rows.map((row) => ({
     id: row.id,
     questionText: row.questionText,
     canonicalSubcategory: row.canonicalSubcategory,
     broadCategory: row.broadCategory,
     createdAt: row.createdAt.toISOString(),
+    viewerAnswered: viewerStatus.get(row.id) ?? null,
   }));
 }
 

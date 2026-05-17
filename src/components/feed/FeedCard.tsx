@@ -1,109 +1,95 @@
 import { cn } from '@/lib/utils'
 
-import { visibleFeedCategory } from './category'
-import type { FeedCardShellProps, FeedCardTone } from './types'
+import type { FeedCardShellProps } from './types'
 
-const toneClasses: Record<FeedCardTone, string> = {
-  cream:
-    'border-amber-200/80 bg-[#fff7df] shadow-[0_1px_0_rgba(120,83,25,0.08)]',
-  white: 'border-stone-200 bg-white shadow-sm',
-  green:
-    'border-emerald-200 bg-emerald-50/80 shadow-[0_1px_0_rgba(22,101,52,0.08)]',
-  amber:
-    'border-orange-200 bg-orange-50/80 shadow-[0_1px_0_rgba(154,52,18,0.08)]',
-  gray: 'border-stone-200 bg-stone-100/80 text-stone-800 shadow-none',
+const AVATAR_COLORS = ['#0f766e', '#7c3aed', '#be123c', '#2563eb', '#b45309', '#15803d']
+const CATEGORY_COLORS = ['#0f766e', '#7c3aed', '#be123c', '#2563eb', '#b45309', '#15803d', '#c2410c', '#0369a1']
+
+function hashString(str: string): number {
+  return Array.from(str).reduce((sum, char) => sum + char.charCodeAt(0), 0)
 }
 
-const categoryToneClasses: Record<FeedCardTone, string> = {
-  cream: 'text-amber-700',
-  white: 'text-stone-500',
-  green: 'text-emerald-700',
-  amber: 'text-orange-700',
-  gray: 'text-stone-500',
+function colorForUser(userId?: string | null): string {
+  if (!userId) return '#9ca3af'
+  return AVATAR_COLORS[hashString(userId) % AVATAR_COLORS.length]!
 }
 
-const dividerToneClasses: Record<FeedCardTone, string> = {
-  cream: 'border-amber-200/60',
-  white: 'border-stone-200',
-  green: 'border-emerald-200/60',
-  amber: 'border-orange-200/60',
-  gray: 'border-stone-200',
+function colorForCategory(category?: string | null): string {
+  if (!category) return '#e5e7eb'
+  return CATEGORY_COLORS[hashString(category.toLowerCase()) % CATEGORY_COLORS.length]!
+}
+
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase()
 }
 
 export function FeedCard({
   item,
-  tone,
   socialSignal,
   overflow,
   onAnswer,
   resultContent,
   className,
+  dimQuestion,
 }: FeedCardShellProps) {
-  const category = visibleFeedCategory(item.category)
-  const hasBottom = Boolean(socialSignal ?? resultContent ?? onAnswer)
+  const hasBottom = Boolean(resultContent ?? onAnswer)
 
   return (
     <article
       className={cn(
-        'text-card-foreground rounded-2xl border transition-colors',
-        toneClasses[tone],
+        'overflow-hidden rounded-2xl border border-stone-200 bg-white transition-colors',
         className
       )}
+      style={{ borderLeftWidth: '4px', borderLeftColor: colorForCategory(item.category) }}
     >
-      <div className="p-4 sm:p-5">
-        {/* Header: metadata + overflow */}
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-muted-foreground text-xs leading-5 font-medium">
-            {item.metadata}
-          </p>
-          {overflow ? <div className="shrink-0">{overflow}</div> : null}
-        </div>
+      <div className="flex items-center gap-2.5 p-3 pl-4">
+        {item.avatarName ? (
+          <div
+            className="grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
+            style={{ backgroundColor: colorForUser(item.avatarUserId) }}
+          >
+            {initialsFor(item.avatarName)}
+          </div>
+        ) : null}
 
-        {/* Category + question */}
-        <div className="mt-3 space-y-2">
-          {category ? (
-            <p
-              className={cn(
-                'text-[0.68rem] font-semibold tracking-[0.18em] uppercase',
-                categoryToneClasses[tone]
-              )}
-            >
-              {category.toUpperCase()}
-            </p>
-          ) : null}
-          <p className="text-foreground font-serif text-xl leading-8 sm:text-2xl sm:leading-9">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            {socialSignal ? (
+              <p className="text-sm font-medium leading-5 text-stone-700">
+                {socialSignal}
+              </p>
+            ) : null}
+            {overflow ? <div className="shrink-0">{overflow}</div> : null}
+          </div>
+
+          <p
+            className={cn(
+              'mt-2 font-serif text-base leading-6',
+              dimQuestion ? 'text-stone-400' : 'text-foreground'
+            )}
+          >
             {item.question}
           </p>
-        </div>
 
-        {item.personalMessage ? (
-          <p className="text-muted-foreground mt-3 text-sm leading-6">
-            &ldquo;{item.personalMessage}&rdquo;
-          </p>
-        ) : null}
+          {item.personalMessage ? (
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              &ldquo;{item.personalMessage}&rdquo;
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {/* Bottom strip */}
       {hasBottom ? (
-        <div
-          className={cn(
-            'flex items-center gap-3 border-t px-4 py-3 sm:px-5',
-            dividerToneClasses[tone]
-          )}
-        >
+        <div className="flex items-center gap-3 border-t border-stone-200 px-3 py-2.5">
           {resultContent ? (
-            <div className="flex-1 text-sm leading-6 text-stone-700">
-              {resultContent}
-            </div>
+            <div className="flex-1 text-sm leading-6 text-stone-700">{resultContent}</div>
           ) : (
             <>
-              {socialSignal ? (
-                <p className="flex-1 text-sm text-stone-600 leading-5">
-                  {socialSignal}
-                </p>
-              ) : (
-                <div className="flex-1" />
-              )}
+              <div className="flex-1" />
               {onAnswer ? (
                 <button
                   type="button"

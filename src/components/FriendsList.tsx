@@ -158,7 +158,7 @@ export default function FriendsList() {
 
       {/* Friends tab */}
       {activeTab === 'friends' ? (
-        <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+        <section>
           {error ? (
             <p className="text-destructive mb-3 text-sm font-medium">{error}</p>
           ) : null}
@@ -179,12 +179,12 @@ export default function FriendsList() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-foreground font-medium">
+                        <h3 className="text-primary font-medium underline decoration-primary/40 underline-offset-4 hover:decoration-primary">
                           {friend.displayName}
                         </h3>
                         {interests ? (
                           <p className="text-muted-foreground mt-1 text-sm leading-6">
-                            Into {interests}
+                            A mind into {interests}…
                           </p>
                         ) : (
                           <p className="text-muted-foreground mt-1 text-sm leading-6">

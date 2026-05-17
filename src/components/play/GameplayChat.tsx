@@ -42,7 +42,7 @@ export type ChatMessage =
       kind: 'result';
       assignmentId: string;
       questionText: string;
-      result: 'correct' | 'wrong' | 'expired';
+      result: 'correct' | 'wrong' | 'expired' | 'gave_up';
       submitted: string;
       /** Canonical answer when wrong */
       correctAnswer: string | null;
@@ -538,7 +538,7 @@ function ResultRow({
   pointsLabel,
   recheckAction,
 }: {
-  result: 'correct' | 'wrong' | 'expired';
+  result: 'correct' | 'wrong' | 'expired' | 'gave_up';
   submitted: string;
   questionText: string;
   correctAnswer: string | null;
@@ -558,6 +558,7 @@ function ResultRow({
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
   const expired = result === 'expired';
   const correct = result === 'correct';
+  const gaveUp = result === 'gave_up';
   const copy = CORRECT_COPY[copyVariant % 4];
   const requestRecheck = useCallback(async () => {
     if (!recheckAction || recheckState === 'submitting') return;
@@ -583,10 +584,15 @@ function ResultRow({
         background: 'color-mix(in srgb, var(--success) 9%, var(--surface-2))',
         border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))',
       }
-      : {
-        background: 'color-mix(in srgb, #b42318 7%, var(--surface-2))',
-        border: '1px solid color-mix(in srgb, #b42318 24%, var(--border))',
-      };
+      : gaveUp
+        ? {
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border)',
+        }
+        : {
+          background: 'color-mix(in srgb, #b42318 7%, var(--surface-2))',
+          border: '1px solid color-mix(in srgb, #b42318 24%, var(--border))',
+        };
 
   return (
     <div className="flex flex-col gap-0 pt-0.5" style={{ alignItems: 'flex-start', maxWidth: '88%' }}>
@@ -613,6 +619,17 @@ function ResultRow({
               {copy.subLabel}
             </p>
             {relationalFeedbackLine ? <RelationalFeedbackFade text={relationalFeedbackLine} /> : null}
+          </>
+        ) : gaveUp ? (
+          <>
+            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--text-muted)' }}>
+              Here&rsquo;s the answer.
+            </p>
+            {correctAnswer ? (
+              <p style={{ marginTop: '8px', fontSize: '0.9rem', color: 'var(--text)' }}>
+                <span style={{ fontWeight: 600 }}>Answer:</span> {correctAnswer}
+              </p>
+            ) : null}
           </>
         ) : (
           <>

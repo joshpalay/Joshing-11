@@ -55,6 +55,7 @@ export const mockTypedFeedItems: TypedFeedItem[] = [
     id: 'mock-answered-by-you-correct',
     metadata: 'You answered · May 7',
     category: 'Sports',
+    broadCategory: 'Sports',
     question: 'Which city hosted the 1992 Summer Olympics?',
     resultLabel: 'You answered',
     answerSummary: 'You both had it.',
@@ -62,6 +63,11 @@ export const mockTypedFeedItems: TypedFeedItem[] = [
     correctAnswer: 'Barcelona',
     isCorrect: true,
     awardedPoints: 5,
+    masteryDelta: {
+      previousTier: 'familiar',
+      newTier: 'solid',
+      tierChanged: true,
+    },
   },
   {
     type: 'answered_by_you',
@@ -98,6 +104,7 @@ export const mockTypedFeedItems: TypedFeedItem[] = [
     id: 'mock-unverified-answered-note',
     metadata: 'You answered · May 5',
     category: 'Film',
+    broadCategory: 'Film & Television',
     question: 'Which editor cut Raging Bull?',
     resultLabel: 'You answered',
     answerSummary: 'You answered this question.',
@@ -107,6 +114,11 @@ export const mockTypedFeedItems: TypedFeedItem[] = [
     awardedPoints: 3,
     explanation: 'Explanation is pending verification by the question author.',
     unverifiedAnswer: true,
+    masteryDelta: {
+      previousTier: 'familiar',
+      newTier: 'familiar',
+      tierChanged: false,
+    },
   },
 ]
 

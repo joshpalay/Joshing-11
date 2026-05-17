@@ -10,6 +10,8 @@ import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/serv
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
+import { creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
+import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
@@ -93,22 +95,33 @@ export async function POST(request: NextRequest) {
   let canonicalQuestionId: string | null = null;
   let persistedCreatorId: string | null = null;
   let persistedDomainForCreator: string | null = null;
-  try {
-    const persisted = await persistGeneratedQuestion(catchupItem.questionId);
-    canonicalQuestionId = persisted.questionId;
-    const [persistedQuestion] = await db
-      .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
-      .from(questions)
-      .where(eq(questions.id, persisted.questionId))
-      .limit(1);
-    persistedCreatorId = persistedQuestion?.creatorId ?? null;
-    persistedDomainForCreator =
-      persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
-  } catch (error) {
-    console.warn('[daily/catchup/answer] failed to persist generated question; mastery event will skip canonical id', {
-      generatedQuestionId: catchupItem.questionId,
-      error: error instanceof Error ? error.message : String(error),
-    });
+  let persistAttempt = 0;
+  while (persistAttempt < 2 && canonicalQuestionId === null) {
+    persistAttempt += 1;
+    try {
+      const persisted = await persistGeneratedQuestion(catchupItem.questionId, catchupItem.domain);
+      canonicalQuestionId = persisted.questionId;
+      const [persistedQuestion] = await db
+        .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+        .from(questions)
+        .where(eq(questions.id, persisted.questionId))
+        .limit(1);
+      persistedCreatorId = persistedQuestion?.creatorId ?? null;
+      persistedDomainForCreator =
+        persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+    } catch (error) {
+      const finalAttempt = persistAttempt >= 2;
+      console.warn(
+        finalAttempt
+          ? '[daily/catchup/answer] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
+          : '[daily/catchup/answer] persistGeneratedQuestion failed; retrying once',
+        {
+          generatedQuestionId: catchupItem.questionId,
+          attempt: persistAttempt,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
   }
 
   const priorAnswers = canonicalQuestionId
@@ -124,7 +137,10 @@ export async function POST(request: NextRequest) {
     masteryAnswerState === 'first_correct'
       ? baseCatchupPoints
       : masteryAnswerState === 'first_correct_after_wrong'
-        ? Math.round(baseCatchupPoints * RECOVERY_STATE_WEIGHT)
+        // Recovery on a catch-up answer = 25% of the original live base (not 6.25%).
+        // RECOVERY_STATE_WEIGHT applies to the full base, not the already-reduced
+        // catch-up base, so wrong-then-right on catch-up still earns meaningful credit.
+        ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
         : 0;
 
   const nextSlots = replaceQueueSlot(slots, catchupItem.slotIndex, (item) => {
@@ -178,6 +194,39 @@ export async function POST(request: NextRequest) {
           triggeringFriendId: session.userId,
           questionId: canonicalQuestionId,
         });
+
+        // Author credit: windowed scheme, Moderate/Specialist only (PRD §8.32).
+        const [canonicalQ] = await db
+          .select({ calibratedDifficulty: questions.calibratedDifficulty, llmDifficulty: questions.llmDifficulty, correctCount: questions.correctCount, askedCount: questions.askedCount })
+          .from(questions)
+          .where(eq(questions.id, canonicalQuestionId))
+          .limit(1);
+        if (canonicalQ) {
+          const existingCredits = await countAuthorCreditEvents(canonicalQuestionId, persistedCreatorId);
+          const authorAward = creatorMasteryAwardForNthCorrect(
+            canonicalQ.correctCount,
+            canonicalQ.askedCount,
+            existingCredits + 1,
+            canonicalQ.calibratedDifficulty ?? canonicalQ.llmDifficulty,
+          );
+          if (authorAward.awardedPoints > 0) {
+            await writeMasteryEvent({
+              userId: persistedCreatorId,
+              questionId: canonicalQuestionId,
+              domain: persistedDomainForCreator,
+              pointsAwarded: authorAward.awardedPoints,
+              sourceType: 'author_credit',
+              sourceId: `catchup:${catchupItem.dailyQueueItemId}:${session.userId}`,
+              broadCategory: undefined,
+              eventQuestionId: canonicalQuestionId,
+              basePoints: authorAward.basePoints,
+              weight: authorAward.weight,
+              answeredByUserId: session.userId,
+            }).catch((err) => {
+              console.warn('[daily/catchup/answer] author_credit write failed', err);
+            });
+          }
+        }
       }
 
       await createFeedItemsForFriendsFromAnswer(

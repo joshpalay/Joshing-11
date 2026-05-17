@@ -12,10 +12,13 @@ import {
 } from '@/server/db';
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
+import { creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
+import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { type QueueSlot } from '@/server/daily/types';
+import { asQueueSlots } from '@/server/daily/catchup';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { computeAnswerState } from '@/server/answer-state';
@@ -34,10 +37,6 @@ type DailyAnswerErrorCode =
 
 function dailyAnswerErrorResponse(status: number, error: DailyAnswerErrorCode, message: string) {
   return NextResponse.json({ error, message }, { status });
-}
-
-function asQueueSlots(value: unknown): QueueSlot[] {
-  return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
 async function resolveCanonicalAnswer(question: typeof generatedQuestions.$inferSelect): Promise<string> {
@@ -166,22 +165,33 @@ export async function POST(request: NextRequest) {
     let canonicalQuestionId: string | null = null;
     let persistedCreatorId: string | null = null;
     let persistedDomainForCreator: string | null = null;
-    try {
-      const persisted = await persistGeneratedQuestion(question.id);
-      canonicalQuestionId = persisted.questionId;
-      const [persistedQuestion] = await db
-        .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
-        .from(questions)
-        .where(eq(questions.id, persisted.questionId))
-        .limit(1);
-      persistedCreatorId = persistedQuestion?.creatorId ?? null;
-      persistedDomainForCreator =
-        persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
-    } catch (error) {
-      console.warn('[daily/answer] failed to persist generated question; mastery event will skip canonical id', {
-        generatedQuestionId: question.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    let persistAttempt = 0;
+    while (persistAttempt < 2 && canonicalQuestionId === null) {
+      persistAttempt += 1;
+      try {
+        const persisted = await persistGeneratedQuestion(question.id, slot.domain);
+        canonicalQuestionId = persisted.questionId;
+        const [persistedQuestion] = await db
+          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+          .from(questions)
+          .where(eq(questions.id, persisted.questionId))
+          .limit(1);
+        persistedCreatorId = persistedQuestion?.creatorId ?? null;
+        persistedDomainForCreator =
+          persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+      } catch (error) {
+        const finalAttempt = persistAttempt >= 2;
+        console.warn(
+          finalAttempt
+            ? '[daily/answer] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
+            : '[daily/answer] persistGeneratedQuestion failed; retrying once',
+          {
+            generatedQuestionId: question.id,
+            attempt: persistAttempt,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
     }
 
     // Compute answer_state against masteryEvents history so first_correct
@@ -261,6 +271,40 @@ export async function POST(request: NextRequest) {
             triggeringFriendId: session.userId,
             questionId: canonicalQuestionId,
           });
+
+          // Author credit: windowed scheme, Moderate/Specialist only (PRD §8.32).
+          // We need the canonical question row to get difficulty and counts.
+          const [canonicalQ] = await db
+            .select({ calibratedDifficulty: questions.calibratedDifficulty, llmDifficulty: questions.llmDifficulty, correctCount: questions.correctCount, askedCount: questions.askedCount })
+            .from(questions)
+            .where(eq(questions.id, canonicalQuestionId))
+            .limit(1);
+          if (canonicalQ) {
+            const existingCredits = await countAuthorCreditEvents(canonicalQuestionId, persistedCreatorId);
+            const authorAward = creatorMasteryAwardForNthCorrect(
+              canonicalQ.correctCount,
+              canonicalQ.askedCount,
+              existingCredits + 1,
+              canonicalQ.calibratedDifficulty ?? canonicalQ.llmDifficulty,
+            );
+            if (authorAward.awardedPoints > 0) {
+              await writeMasteryEvent({
+                userId: persistedCreatorId,
+                questionId: canonicalQuestionId,
+                domain: persistedDomainForCreator,
+                pointsAwarded: authorAward.awardedPoints,
+                sourceType: 'author_credit',
+                sourceId: `daily:${question.id}:${session.userId}`,
+                broadCategory: undefined,
+                eventQuestionId: canonicalQuestionId,
+                basePoints: authorAward.basePoints,
+                weight: authorAward.weight,
+                answeredByUserId: session.userId,
+              }).catch((err) => {
+                console.warn('[daily/answer] author_credit write failed', err);
+              });
+            }
+          }
         }
 
         await createFeedItemsForFriendsFromAnswer(

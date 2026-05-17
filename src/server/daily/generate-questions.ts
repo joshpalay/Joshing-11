@@ -15,6 +15,7 @@ import { getKnowledgeBase, getRecentDailyQuestionTexts } from '@/server/db/queri
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
+import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { resolveDailyBasePoints } from './types';
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
@@ -187,6 +188,15 @@ function parseQuestions(raw: string): LlmQuestion[] {
     if (isGenericCanonicalAnswer(answer)) {
       continue;
     }
+    // Reject LLM responses that pick a bucket-level subcategory ("general",
+    // "general knowledge", "trivia", etc.) — those questions are not tied
+    // to any of the user's declared/demonstrated domains and must not be
+    // served. This is the upstream guard on the generated_questions write
+    // boundary; the LLM is told to use the exact domain it was given, so
+    // anything generic here is a prompt violation we discard.
+    if (isGenericSubcategory(canonical)) {
+      continue;
+    }
     result.push({
       canonical_subcategory: canonical,
       broad_category: broad,
@@ -306,6 +316,14 @@ export async function generateDailyQuestions(
       question.canonical_subcategory,
       userId,
     ).catch(() => ({ canonicalDomain: question.canonical_subcategory, reconciled: false }));
+
+    if (isGenericSubcategory(canonicalDomain)) {
+      console.warn('[daily/generate-questions] skipping question with generic canonical subcategory', {
+        proposed: question.canonical_subcategory,
+        reconciled: canonicalDomain,
+      });
+      continue;
+    }
 
     const basePoints = resolveDailyBasePoints(question.difficulty_estimate);
     const [row] = await db

@@ -1,5 +1,6 @@
 import {
   ANTHROPIC_MODEL,
+  HAIKU_MODEL,
   extractTextContent,
   getAnthropicClient,
   parseJsonObject,
@@ -30,7 +31,7 @@ export type CanonicalizedInterest = {
   explanation: string;
 };
 
-const CANONICALIZE_MODEL = 'claude-haiku-4-5';
+const CANONICALIZE_MODEL = HAIKU_MODEL;
 const WARMUP_LABELS: Record<keyof WarmupAnswers, string> = {
   deepDive: 'book, composer, or filmmaker you have gone deep on',
   hourLongTopic: 'topic you could talk about for an hour without preparation',

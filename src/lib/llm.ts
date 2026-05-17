@@ -48,7 +48,9 @@ export type AnswerSuggestionResult = {
 
 export const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 // Grading is a simple binary task — Haiku is ~5-10x faster than Sonnet with adequate accuracy.
-const GRADING_MODEL = 'claude-haiku-4-5';
+const GRADING_MODEL = 'claude-haiku-4-5-20251001';
+// Exported so other LLM modules (e.g. interests.ts) use the same canonical ID.
+export const HAIKU_MODEL = GRADING_MODEL;
 const GENERIC_SUBCATEGORY_NORMALIZED = new Set([
   'pop culture',
   'music',

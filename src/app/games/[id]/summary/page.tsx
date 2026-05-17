@@ -6,6 +6,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
+import { OverlapMap } from '@/components/OverlapMap';
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay';
 import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy';
 import MasteryMoment from '@/components/review/MasteryMoment';
@@ -13,8 +14,11 @@ import { getSession } from '@/server/auth/session';
 import { getDeliveredCreatorNotesForQuestions } from '@/server/creator-notes';
 import { db, masteryEvents, playerMastery } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
+import { computeOverlapCells, getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
 import { resolveTier } from '@/server/mastery/tiers';
+
+const CREATOR_COLOR = '#c0392b';
+const RECIPIENT_COLOR = '#1a6b8a';
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -57,10 +61,6 @@ function explanationFor(question: JoshingGameView['questions'][number]['question
     ?? question.explainerBrief
     ?? question.factualExplanation
     ?? 'No explanation available.';
-}
-
-function truncate(value: string, max = 48) {
-  return value.length > max ? `${value.slice(0, max - 1)}...` : value;
 }
 
 function responseKey(userId: string, questionId: string) {
@@ -179,7 +179,19 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
       .map((response) => response.questionId),
   );
   const impactCount = authoredQuestionsAnsweredCorrectly.size;
-  const showGroupProgress = view.recipients.length > 1;
+
+  // TODO: multi-recipient overlap visualization is a separate decision
+  // (force-directed web vs. per-recipient strip) — out of scope here.
+  const singleRecipient = view.recipients.length === 1 ? view.recipients[0] : null;
+  const overlapCells = singleRecipient
+    ? computeOverlapCells(view, view.game.creatorId, singleRecipient.userId)
+    : [];
+  const overlapPlayers = singleRecipient
+    ? ([
+        { id: view.creator.id, name: view.creator.displayName, color: CREATOR_COLOR },
+        { id: singleRecipient.userId, name: singleRecipient.displayName, color: RECIPIENT_COLOR },
+      ] as const)
+    : null;
 
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
@@ -329,55 +341,13 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         </p>
       </section>
 
-      {showGroupProgress ? (
-        <section className="card mt-4 p-5">
-          <h2 style={titleStyle}>Group Progress Recap</h2>
-          {viewerHasPlayed || isCreator ? (
-            <>
-              <p style={{ ...monoStyle, marginTop: '14px', color: 'var(--text-muted)' }}>How Everyone Did</p>
-              <div className="mt-3 space-y-2">
-                {view.recipients.map((recipient) => (
-                  <div key={recipient.userId} className="flex items-center justify-between rounded-md border p-3 text-sm">
-                    <span>{recipient.displayName}</span>
-                    <span>
-                      {recipient.score ?? view.responses.filter((response) => response.userId === recipient.userId && response.isCorrect).length}/{questionCount}
-                      {recipient.completedAt ? ' done' : ''}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-5 overflow-x-auto">
-                <table className="w-full min-w-[560px] border-collapse text-sm">
-                  <thead>
-                    <tr>
-                      <th className="border-b p-2 text-left">Question</th>
-                      {view.recipients.map((recipient) => (
-                        <th key={recipient.userId} className="border-b p-2 text-center">{recipient.displayName}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {view.questions.map((gameQuestion) => (
-                      <tr key={gameQuestion.questionId}>
-                        <td className="border-b p-2">{truncate(gameQuestion.question.questionText)}</td>
-                        {view.recipients.map((recipient) => {
-                          const response = responseByUserQuestion.get(responseKey(recipient.userId, gameQuestion.questionId));
-                          return (
-                            <td key={recipient.userId} className="border-b p-2 text-center">
-                              {response ? (response.isCorrect ? 'Y' : 'N') : '-'}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          ) : (
-            <p className="mt-3 text-sm text-muted-foreground">Play to unlock results.</p>
-          )}
-        </section>
+      {overlapPlayers ? (
+        <div className="mt-6">
+          <OverlapMap
+            players={[overlapPlayers[0], overlapPlayers[1]]}
+            cells={overlapCells}
+          />
+        </div>
       ) : null}
 
       <Link className="btn-ghost mt-4" href="/feed">Back to Feed</Link>

@@ -6,7 +6,8 @@ import { getSession } from '@/server/auth/session';
 import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, playerMastery, questions, users } from '@/server/db';
 import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
-import { getBasePoints } from '@/server/mastery/scoring';
+import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
+import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
@@ -120,6 +121,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
     return {
       domain,
+      broadCategory: question.broadCategory ?? null,
       points: pointsAwarded,
       previousTier,
       newTier: previousTier,
@@ -171,6 +173,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
       triggeringFriendId: session.userId,
       questionId: question.id,
     });
+
+    // Author credit: windowed scheme, Moderate/Specialist only (PRD §8.32).
+    const existingCredits = await countAuthorCreditEvents(question.id, question.creatorId);
+    const authorAward = creatorMasteryAwardForNthCorrect(
+      question.correctCount,
+      question.askedCount,
+      existingCredits + 1,
+      question.calibratedDifficulty ?? question.llmDifficulty,
+    );
+    if (authorAward.awardedPoints > 0) {
+      await writeMasteryEvent({
+        userId: question.creatorId,
+        questionId: question.id,
+        domain,
+        pointsAwarded: authorAward.awardedPoints,
+        sourceType: 'author_credit',
+        sourceId: feedItemId,
+        broadCategory: question.broadCategory,
+        eventQuestionId: question.id,
+        basePoints: authorAward.basePoints,
+        weight: authorAward.weight,
+        answeredByUserId: session.userId,
+      }).catch((err) => {
+        console.warn('[feed/answer] author_credit write failed', err);
+      });
+    }
   }
 
   // Only correct Feed answers are eligible to become public/social friend Feed cards.

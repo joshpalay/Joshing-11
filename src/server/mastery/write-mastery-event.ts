@@ -24,6 +24,7 @@ export type WriteMasteryEventParams = {
 
 export type MasteryEventWriteResult = {
   domain: string;
+  broadCategory: string | null;
   points: number;
   previousTier: MasteryTier;
   newTier: MasteryTier;
@@ -159,6 +160,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
 
   return {
     domain: params.domain,
+    broadCategory: broadCategory ?? null,
     points: params.pointsAwarded,
     previousTier,
     newTier: nextTier,

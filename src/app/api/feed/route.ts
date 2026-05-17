@@ -5,7 +5,7 @@ import { getSession } from '@/server/auth/session';
 import { db, feedItems, friendships, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getDismissedDomains, getFeedForUser, type CollapsedFeedItem, type FeedCursor, type FeedFilter } from '@/server/db/queries/feed';
-import { AUTHORED_SHARED_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE, socialFeedDomainLabel, visibleFeedSourcePredicate } from '@/server/feed/visibility';
+import { DIRECT_SENT_FEED_SOURCE_TYPE, socialFeedDomainLabel, visibleFeedSourcePredicate } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,7 +110,7 @@ function directSentAttribution(sourceName: string, domain: string | null): strin
 function feedFilterSourcePredicate(filter: FeedFilter) {
   if (filter === 'sent-to-me') return eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE);
   if (filter === 'from-friends') {
-    return inArray(feedItems.sourceType, ['friend_answered', AUTHORED_SHARED_FEED_SOURCE_TYPE, 'thumbs_upped']);
+    return inArray(feedItems.sourceType, ['friend_answered', 'authored_shared', 'thumbs_upped']);
   }
   return undefined;
 }
@@ -118,7 +118,7 @@ function feedFilterSourcePredicate(filter: FeedFilter) {
 function feedCardType(item: CollapsedFeedItem): 'direct_sent' | 'friend_answered' | 'friend_added' | 'friend_liked' | 'answered_by_you' {
   if (item.state === 'answered') return 'answered_by_you';
   if (item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE) return 'direct_sent';
-  if (item.sourceType === AUTHORED_SHARED_FEED_SOURCE_TYPE) return 'friend_added';
+  if (item.sourceType === 'authored_shared') return 'friend_added';
   if (item.sourceType === 'thumbs_upped') return 'friend_liked';
   return 'friend_answered';
 }
@@ -255,7 +255,9 @@ export async function GET(request: NextRequest) {
       const authorName = displayName(question?.creatorId ? userById.get(question.creatorId) : null, 'the author');
       const domain = socialFeedDomainLabel(question);
       const cardType = feedCardType(item);
-      const answerResult = item.answerResult ?? null;
+      // Fall back to viewer's mastery-event answer status when answerResult is null
+      // (legacy feed items answered before the answerResult column was added).
+      const answerResult = item.answerResult ?? item.viewerAnswerStatus?.result ?? null;
       const awardedPoints = typeof item.pointsAwarded === 'number' ? item.pointsAwarded : null;
 
       return {
@@ -270,12 +272,13 @@ export async function GET(request: NextRequest) {
         source_result: item.sourceResult ?? null,
         source_friend_display_name: sourceName,
         source_profile_href: `/users/${encodeURIComponent(item.sourceUserId)}`,
-        source_attribution: item.sourceType === AUTHORED_SHARED_FEED_SOURCE_TYPE
+        source_attribution: item.sourceType === 'authored_shared'
           ? authoredSharedAttribution(sourceName, domain)
           : item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE
             ? directSentAttribution(sourceName, domain)
             : friendAnsweredAttribution(item, userById, domain, authorName),
         friend_results: item.friendResults ?? null,
+        viewer_answer_status: item.viewerAnswerStatus ?? null,
         endorsement_count: item.thumbsUpCount ?? null,
         additional_endorsers: item.additionalEndorsers ?? null,
         source_event_at: item.sourceEventAt,
@@ -287,6 +290,7 @@ export async function GET(request: NextRequest) {
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
         domain_pill: domain,
+        broad_category: question?.broadCategory ?? null,
         game_title: null,
         difficulty: null,
         answer_result: answerResult,
@@ -296,6 +300,7 @@ export async function GET(request: NextRequest) {
         awarded_points: cardType === 'answered_by_you' ? awardedPoints : null,
         mastery_delta: cardType === 'answered_by_you' ? item.masteryDelta ?? null : null,
         unverified_answer: false,
+        viewer_is_author: question?.creatorId ? question.creatorId === session.userId : false,
       };
     }),
   });

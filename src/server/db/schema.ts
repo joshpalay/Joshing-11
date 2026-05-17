@@ -134,6 +134,7 @@ export const masterySourceTypeEnum = pgEnum('MasterySourceType', [
   'declared_promoted',
 ]);
 export const feedbackSignalEnum = pgEnum('FeedbackSignal', ['thumbs_up', 'thumbs_down']);
+export const territoryTypeEnum = pgEnum('TerritoryType', ['declared', 'demonstrated']);
 
 export const users = pgTable(
   'User',
@@ -306,7 +307,7 @@ export const playerMastery = pgTable(
     tier: masteryTierEnum('tier').notNull().default('establishing'),
     tierReachedAt: timestamp('tier_reached_at', { withTimezone: true }),
     seasonPointsStart: doublePrecision('season_points_start').notNull().default(0),
-    territoryType: text('territory_type').$type<'declared' | 'demonstrated'>().notNull().default('demonstrated'),
+    territoryType: territoryTypeEnum('territory_type').notNull().default('demonstrated'),
     updatedAt: updatedAt(),
   },
   (table) => [
@@ -680,7 +681,7 @@ export const feedItems = pgTable(
     joshingGameId: text('joshingGameId').references(() => joshingGames.id, { onDelete: 'set null' }),
     sourceType: text('sourceType').notNull(),
     sourceUserId: text('sourceUserId').notNull().references(() => users.id),
-    sourceResult: text('sourceResult'),
+    sourceResult: text('sourceResult').$type<'correct' | 'incorrect' | null>(),
     sourceEventAt: timestamp('sourceEventAt', { withTimezone: true }).notNull().defaultNow(),
     personalMessage: text('personalMessage'),
     submittedAnswer: text('submittedAnswer'),

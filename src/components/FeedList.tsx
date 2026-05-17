@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -48,6 +48,7 @@ type FeedApiItem = {
   source_attribution: string
   source_result: 'correct' | 'incorrect' | null
   friend_results: FriendResult[] | null
+  viewer_answer_status?: { result: 'correct' | 'incorrect' } | null
   endorsement_count?: number | null
   additional_endorsers?: Array<{ userId: string; displayName: string }> | null
   source_event_at: string
@@ -58,6 +59,7 @@ type FeedApiItem = {
   verified: boolean
   is_in_bank: boolean
   domain_pill: string | null
+  broad_category?: string | null
   difficulty: string | null
   explanation: string | null
   answer_result: 'correct' | 'incorrect' | null
@@ -68,6 +70,7 @@ type FeedApiItem = {
   pointsAwarded?: number | null
   mastery_delta: unknown | null
   unverified_answer: boolean
+  viewer_is_author?: boolean
 }
 
 type FeedMeta = {
@@ -128,33 +131,6 @@ function formatEventTime(value: string) {
   }).format(date)
 }
 
-function comparisonCopy(
-  playerCorrect: boolean | null,
-  friendResults: FriendResult[] | null,
-  sourceType?: string,
-  sourceFriendName?: string
-): string {
-  const primaryFriend = friendResults?.[0]
-  const friendIsAuthor =
-    !primaryFriend &&
-    (sourceType === 'direct_sent' || sourceType === 'authored_shared')
-  const friendName =
-    primaryFriend?.displayName ?? sourceFriendName ?? 'They'
-  const friendCorrect = primaryFriend?.result === 'correct'
-
-  if (playerCorrect === null) return 'You have already answered this question.'
-  if (friendIsAuthor) {
-    if (playerCorrect) return `You and ${friendName} have that in common.`
-    return `${friendName} knows this one. You might next time.`
-  }
-  if (playerCorrect && friendCorrect) return 'You both had it.'
-  if (playerCorrect && !friendCorrect)
-    return `You found a connection ${friendName} missed.`
-  if (!playerCorrect && friendCorrect)
-    return `${friendName} recognized this one. You might next time.`
-  return 'This one is still waiting for common ground.'
-}
-
 function profileHref(userId?: string | null) {
   return userId ? `/users/${encodeURIComponent(userId)}` : null
 }
@@ -168,10 +144,47 @@ function FeedPersonLink({
 }) {
   if (!href) return <>{name}</>
   return (
-    <Link href={href} className="underline-offset-2 hover:underline">
+    <Link
+      href={href}
+      className="font-semibold text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-stone-700"
+    >
       {name}
     </Link>
   )
+}
+
+function comparisonCopy(
+  playerCorrect: boolean | null,
+  friendResults: FriendResult[] | null,
+  sourceType?: string,
+  sourceFriendName?: string,
+  sourceUserId?: string | null
+): ReactNode {
+  const primaryFriend = friendResults?.[0]
+  const friendIsAuthor =
+    !primaryFriend &&
+    (sourceType === 'direct_sent' || sourceType === 'authored_shared')
+  const friendName =
+    primaryFriend?.displayName ?? sourceFriendName ?? 'They'
+  const friendUserId = primaryFriend?.userId ?? sourceUserId ?? null
+  const friendNode = (
+    <FeedPersonLink href={profileHref(friendUserId)} name={friendName} />
+  )
+  const friendCorrect = primaryFriend?.result === 'correct'
+
+  if (playerCorrect === null) return 'You have already answered this question.'
+  if (friendIsAuthor) {
+    if (playerCorrect)
+      return <>You and {friendNode} have that in common.</>
+    return <>{friendNode} knows this one. You might next time.</>
+  }
+  if (playerCorrect && friendCorrect)
+    return <>You and {friendNode} share this knowledge.</>
+  if (playerCorrect && !friendCorrect)
+    return <>You found a connection {friendNode} missed.</>
+  if (!playerCorrect && friendCorrect)
+    return <>{friendNode} has knowledge to share. You might next time.</>
+  return 'This one is still waiting for common ground.'
 }
 
 function feedMetadata(item: FeedApiItem, answered = false) {
@@ -209,6 +222,8 @@ function baseTypedFields(item: FeedApiItem, answered = false) {
     question: item.question_text ?? 'Untitled question',
     personalMessage: item.personal_message,
     isInBank: item.is_in_bank,
+    avatarName: item.source_friend_display_name,
+    avatarUserId: item.source_user_id,
   }
 }
 
@@ -256,6 +271,27 @@ function toTypedFeedItem(item: FeedApiItem) {
     } satisfies FriendLikedFeedItem
   }
 
+  const correctFriends = (item.friend_results ?? [])
+    .filter((friend) => friend.result === 'correct')
+    .map((friend) => ({
+      userId: friend.userId,
+      displayName: friend.displayName,
+      href: profileHref(friend.userId),
+    }))
+
+  // If we have no aggregated friend_results but the source friend got it right, synthesize one.
+  if (
+    correctFriends.length === 0 &&
+    item.source_result === 'correct' &&
+    item.source_user_id
+  ) {
+    correctFriends.push({
+      userId: item.source_user_id,
+      displayName: item.source_friend_display_name,
+      href: profileHref(item.source_user_id),
+    })
+  }
+
   return {
     ...base,
     type: 'friend_answered' as const,
@@ -268,15 +304,46 @@ function toTypedFeedItem(item: FeedApiItem) {
       item.friend_results?.[0]?.result === 'correct' ||
       item.source_result === 'correct',
     answerSummary: friendAnsweredSummary(item),
+    correctFriends,
+    viewerResult: item.viewer_answer_status?.result ?? null,
   } satisfies FriendAnsweredFeedItem
+}
+
+function normalizeMasteryDelta(
+  raw: unknown
+): AnsweredByYouFeedItem['masteryDelta'] {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const previousTier = typeof r.previousTier === 'string' ? r.previousTier : null
+  const newTier = typeof r.newTier === 'string' ? r.newTier : null
+  if (!previousTier || !newTier) return null
+  const tierChanged =
+    typeof r.tierChanged === 'boolean' ? r.tierChanged : previousTier !== newTier
+  return { previousTier, newTier, tierChanged }
+}
+
+function pickBroadCategory(
+  raw: unknown,
+  item: FeedApiItem
+): string | null {
+  if (raw && typeof raw === 'object') {
+    const r = raw as Record<string, unknown>
+    if (typeof r.broadCategory === 'string' && r.broadCategory.length > 0) {
+      return r.broadCategory
+    }
+  }
+  return item.broad_category ?? null
 }
 
 function toAnsweredByYouItem(
   item: FeedApiItem,
   result?: ResultState
 ): AnsweredByYouFeedItem {
+  const masteryDeltaRaw = result?.masteryDelta ?? item.mastery_delta
   return {
     ...baseTypedFields(item, true),
+    avatarName: null,
+    avatarUserId: null,
     type: 'answered_by_you',
     resultLabel:
       item.is_correct === false || result?.correct === false
@@ -287,13 +354,15 @@ function toAnsweredByYouItem(
           result.correct,
           item.friend_results,
           item.source_type,
-          item.source_friend_display_name
+          item.source_friend_display_name,
+          item.source_user_id
         )
       : comparisonCopy(
           item.is_correct,
           item.friend_results,
           item.source_type,
-          item.source_friend_display_name
+          item.source_friend_display_name,
+          item.source_user_id
         ),
     correctAnswer: result?.answer || item.correct_answer,
     submittedAnswer: item.submitted_answer || undefined,
@@ -302,6 +371,8 @@ function toAnsweredByYouItem(
     explanation: result?.explanation ?? item.explanation,
     quip: result?.quip ?? null,
     unverifiedAnswer: item.unverified_answer,
+    broadCategory: pickBroadCategory(masteryDeltaRaw, item),
+    masteryDelta: normalizeMasteryDelta(masteryDeltaRaw),
   }
 }
 
@@ -789,7 +860,7 @@ function FeedListContent({
               )
             }
 
-            const onAnswer = () => setAnswerSheetId(item.id)
+            const onAnswer = item.viewer_is_author ? undefined : () => setAnswerSheetId(item.id)
             const typedItem = toTypedFeedItem(item)
 
             if (typedItem.type === 'direct_sent') {

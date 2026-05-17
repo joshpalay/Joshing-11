@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
+import { Share2 } from 'lucide-react'
 import type { MasteryTier } from '@/types/db'
 import { DomainCircle } from '@/components/knowledge/DomainCircle'
 import { buildKnowledgeCardPublicUrl } from '@/lib/knowledge-card'
@@ -27,6 +28,7 @@ export interface KnowledgeCardProps {
   shareCardExpiresAt: string
   readOnly?: boolean
   highlightedSlug?: string | null
+  onShareClick?: () => void
 }
 
 function getCircleDiameter(
@@ -41,7 +43,6 @@ function getCircleDiameter(
 }
 
 export function KnowledgeCard(props: KnowledgeCardProps) {
-  const [copyLabel, setCopyLabel] = useState('Copy')
   const [shareLabel, setShareLabel] = useState('Share')
   const sorted = useMemo(
     () =>
@@ -59,13 +60,11 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
   )
   const circleSlotSize = Math.max(...visibleDomainDiameters, 0)
 
-  const onCopy = async () => {
-    await navigator.clipboard.writeText(props.shareText)
-    setCopyLabel('Copied ✓')
-    window.setTimeout(() => setCopyLabel('Copy'), 2000)
-  }
-
   const onShare = async () => {
+    if (props.onShareClick) {
+      props.onShareClick()
+      return
+    }
     const url = buildKnowledgeCardPublicUrl(props.shareCardToken)
     if (navigator.share) {
       await navigator.share({ text: props.shareText, url })
@@ -77,169 +76,158 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
   }
 
   return (
-    <section
-      style={{
-        background: '#f5f0e8',
-        border: '1px solid #e8e2d6',
-        borderRadius: 14,
-        overflow: 'hidden',
-      }}
-    >
-      <div style={{ padding: 20 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <p
-            style={{
-              fontSize: 11,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: '#8a8070',
-            }}
-          >
-            Your Knowledge Portrait
-          </p>
-          <p
-            style={{
-              fontFamily: 'var(--font-literata), serif',
-              fontStyle: 'italic',
-              fontSize: 15,
-              color: '#1a1208',
-            }}
-          >
-            Joshing
-          </p>
-        </div>
-        <p
-          style={{
-            marginTop: 6,
-            fontSize: 11,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: '#8a8070',
-          }}
-        >
-          {props.playerDisplayName} · Joshing
-        </p>
-      </div>
-
-      <div style={{ borderTop: '1px solid #e8e2d6', padding: '24px 20px' }}>
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            alignItems: 'flex-start',
-            columnGap: 16,
-            rowGap: 20,
-          }}
-        >
-          {visibleDomains.map((domain, index) => {
-            const diameter =
-              visibleDomainDiameters[index] ??
-              getCircleDiameter(
-                domain.lifetimePoints,
-                maxPoints,
-                isMobileViewport
-              )
-            return (
-              <DomainCircle
-                key={domain.canonicalSubcategorySlug}
-                id={`knowledge-portrait-circle-${domain.canonicalSubcategorySlug}`}
-                diameter={diameter}
-                iconKey={domain.iconKey}
-                canonicalSubcategory={domain.canonicalSubcategory}
-                broadCategory={domain.broadCategory}
-                currentTier={domain.currentTier}
-                highlighted={
-                  props.highlightedSlug === domain.canonicalSubcategorySlug
-                }
-                circleSlotSize={circleSlotSize}
-              />
-            )
-          })}
-        </div>
-        {totalOverflowCount > 0 && (
-          <p
-            style={{
-              marginTop: 14,
-              fontSize: 11,
-              color: '#8a8070',
-              textAlign: 'center',
-            }}
-          >
-            +{totalOverflowCount} more territories
-          </p>
-        )}
-      </div>
-
-      <div style={{ borderTop: '1px solid #e8e2d6', padding: 20 }}>
-        <p
-          style={{
-            fontFamily: 'var(--font-literata), serif',
-            fontStyle: 'italic',
-            fontSize: 18,
-            color: '#1a1208',
-          }}
-        >
-          {props.portraitStatement}
-        </p>
-        <p style={{ marginTop: 8, fontSize: 13, color: '#1a1208' }}>
-          {props.tierSignature}
-        </p>
-        {props.rarestTerritory && (
-          <p style={{ marginTop: 6, fontSize: 11, color: '#8a8070' }}>
-            Rarest territory: {props.rarestTerritory}
-            {props.rarestTerritorySolo ? " — you're the only one here" : ''}
-          </p>
-        )}
-        <p
-          style={{
-            marginTop: 8,
-            marginBottom: 20,
-            fontSize: 11,
-            color: '#8a8070',
-          }}
-        >
-          {props.playerDisplayName} on Joshing
-        </p>
+    <section style={boxStyle} aria-label="Your Knowledge Portrait">
+      <div style={headerStyle}>
+        <p style={wordmarkStyle}>Joshing</p>
         {!props.readOnly && (
-          <div
-            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
+          <button
+            type="button"
+            style={shareButtonStyle}
+            onClick={onShare}
+            data-portrait-share="true"
+            aria-label="Share your knowledge portrait"
           >
-            <button
-              type="button"
-              onClick={onCopy}
-              style={{
-                minHeight: 44,
-                borderRadius: 999,
-                border: '1px solid #1a1208',
-                background: 'transparent',
-                color: '#1a1208',
-              }}
-            >
-              {copyLabel}
-            </button>
-            <button
-              type="button"
-              onClick={onShare}
-              style={{
-                minHeight: 44,
-                borderRadius: 999,
-                border: '1px solid #1a1208',
-                background: '#1a1208',
-                color: '#f5f0e8',
-              }}
-            >
-              {shareLabel}
-            </button>
-          </div>
+            <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
+            <span>{shareLabel}</span>
+          </button>
         )}
       </div>
+      <h2 style={titleStyle}>Your Knowledge Portrait</h2>
+
+      <p style={statementStyle}>{props.portraitStatement}</p>
+
+      <div style={circlesWrapStyle}>
+        {visibleDomains.map((domain, index) => {
+          const diameter =
+            visibleDomainDiameters[index] ??
+            getCircleDiameter(
+              domain.lifetimePoints,
+              maxPoints,
+              isMobileViewport
+            )
+          return (
+            <DomainCircle
+              key={domain.canonicalSubcategorySlug}
+              id={`knowledge-portrait-circle-${domain.canonicalSubcategorySlug}`}
+              diameter={diameter}
+              iconKey={domain.iconKey}
+              canonicalSubcategory={domain.canonicalSubcategory}
+              broadCategory={domain.broadCategory}
+              currentTier={domain.currentTier}
+              highlighted={
+                props.highlightedSlug === domain.canonicalSubcategorySlug
+              }
+              circleSlotSize={circleSlotSize}
+            />
+          )
+        })}
+      </div>
+      {totalOverflowCount > 0 && (
+        <p style={overflowStyle}>+{totalOverflowCount} more territories</p>
+      )}
+
+      <p style={tierStyle}>{props.tierSignature}</p>
+      {props.rarestTerritory && (
+        <p style={rarestStyle}>
+          Rarest territory: {props.rarestTerritory}
+          {props.rarestTerritorySolo ? " — you're the only one here" : ''}
+        </p>
+      )}
+      <p style={attributionStyle}>{props.playerDisplayName} on Joshing</p>
     </section>
   )
+}
+
+const boxStyle: CSSProperties = {
+  background: '#fffdf8',
+  border: '1px solid #eee7dc',
+  borderRadius: 14,
+  boxShadow: '0 1px 8px rgba(26, 18, 8, 0.04)',
+  padding: '1.05rem 0.95rem 0.95rem',
+  display: 'grid',
+  gap: '0.85rem',
+}
+
+const headerStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '0.75rem',
+}
+
+const titleStyle: CSSProperties = {
+  margin: 0,
+  color: '#1a1208',
+  fontFamily: 'var(--font-literata), Georgia, serif',
+  fontSize: '1rem',
+  fontWeight: 700,
+}
+
+const wordmarkStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: 'var(--font-literata), serif',
+  fontStyle: 'italic',
+  fontSize: '0.78rem',
+  color: '#1a1208',
+  lineHeight: 1,
+}
+
+const shareButtonStyle: CSSProperties = {
+  minHeight: 38,
+  padding: '0 0.82rem',
+  border: '1px solid #ddd6c7',
+  borderRadius: 999,
+  background: '#fffdf8',
+  color: '#1a1208',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '0.35rem',
+  fontSize: '0.78rem',
+  fontWeight: 600,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+}
+
+const statementStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: 'var(--font-literata), serif',
+  fontStyle: 'italic',
+  fontSize: 18,
+  color: '#1a1208',
+  lineHeight: 1.4,
+}
+
+const circlesWrapStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  justifyContent: 'center',
+  alignItems: 'flex-start',
+  columnGap: 16,
+  rowGap: 20,
+}
+
+const overflowStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 11,
+  color: '#8a8070',
+  textAlign: 'center',
+}
+
+const tierStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  color: '#1a1208',
+}
+
+const rarestStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 11,
+  color: '#8a8070',
+}
+
+const attributionStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 11,
+  color: '#8a8070',
 }

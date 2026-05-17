@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 
 import { db, generatedQuestions, questions } from '@/server/db';
 import {
-  assertSpecificCanonicalSubcategory,
+  GenericCanonicalSubcategoryError,
   isGenericSubcategory,
 } from '@/server/questions/canonical-subcategory';
 
@@ -16,7 +16,7 @@ function asDifficulty(value: string): 'accessible' | 'moderate' | 'specialist' |
   return null;
 }
 
-export async function persistGeneratedQuestion(generatedQuestionId: string): Promise<PersistGeneratedQuestionResult> {
+export async function persistGeneratedQuestion(generatedQuestionId: string, slotDomain?: string): Promise<PersistGeneratedQuestionResult> {
   try {
     const [existing] = await db
       .select({ id: questions.id })
@@ -38,15 +38,22 @@ export async function persistGeneratedQuestion(generatedQuestionId: string): Pro
       throw new Error(`Generated question not found: ${generatedQuestionId}`);
     }
 
-    // F4.5: refuse to persist a question whose canonical_subcategory is a
-    // generic bucket. Prefer the canonical subcategory; fall back to the
-    // broad category if it's specific; otherwise throw before the INSERT.
+    // F4.5: prefer a specific canonical subcategory; fall back through broad
+    // category and slot domain. If all three are generic labels, use whatever
+    // is non-null rather than throwing — persisting with a generic label is
+    // far better than failing to persist at all, which would silently block
+    // feed propagation for every correct daily answer.
     const desiredCanonical = !isGenericSubcategory(generated.canonicalSubcategory)
       ? generated.canonicalSubcategory!
       : !isGenericSubcategory(generated.broadCategory)
         ? generated.broadCategory!
-        : generated.canonicalSubcategory || generated.broadCategory;
-    assertSpecificCanonicalSubcategory(desiredCanonical);
+        : !isGenericSubcategory(slotDomain)
+          ? slotDomain!
+          : slotDomain ?? generated.canonicalSubcategory ?? generated.broadCategory;
+
+    if (!desiredCanonical) {
+      throw new GenericCanonicalSubcategoryError(desiredCanonical);
+    }
 
     const [created] = await db
       .insert(questions)
@@ -70,13 +77,25 @@ export async function persistGeneratedQuestion(generatedQuestionId: string): Pro
         status: 'verified',
         visibility: 'public',
       })
+      .onConflictDoNothing({ target: questions.generatedQuestionId })
       .returning({ id: questions.id });
 
-    if (!created) {
+    if (created) {
+      return { questionId: created.id, alreadyExisted: false };
+    }
+
+    // Concurrent insert won the race; re-fetch the row it wrote.
+    const [racedExisting] = await db
+      .select({ id: questions.id })
+      .from(questions)
+      .where(eq(questions.generatedQuestionId, generatedQuestionId))
+      .limit(1);
+
+    if (!racedExisting) {
       throw new Error(`Failed to persist generated question: ${generatedQuestionId}`);
     }
 
-    return { questionId: created.id, alreadyExisted: false };
+    return { questionId: racedExisting.id, alreadyExisted: true };
   } catch (error) {
     console.error('[persistGeneratedQuestion] failed', {
       generatedQuestionId,

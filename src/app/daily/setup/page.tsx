@@ -91,6 +91,7 @@ function DailySetupContent() {
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(new Set());
   const [adaptiveLabel, setAdaptiveLabel] = useState<string | null>(null);
   const [hasUnstartedQueue, setHasUnstartedQueue] = useState(false);
+  const [roundComplete, setRoundComplete] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,10 +120,13 @@ function DailySetupContent() {
             : typeof status.answered === 'number'
               ? status.answered
               : 0;
-        if (status.queue_id && (status.complete || status.isComplete || questionsAnswered > 0)) {
-          router.replace(status.complete || status.isComplete ? '/daily/summary' : '/daily');
+        const isComplete = Boolean(status.complete || status.isComplete);
+        const inProgress = Boolean(status.queue_id) && !isComplete && questionsAnswered > 0;
+        if (inProgress) {
+          router.replace('/daily');
           return;
         }
+        setRoundComplete(isComplete);
 
         const body = (await preferencesResponse.json()) as PreferencesResponse;
         if (cancelled) return;
@@ -199,6 +203,11 @@ function DailySetupContent() {
         throw new Error(body?.message ?? 'Could not save your setup.');
       }
 
+      if (roundComplete) {
+        router.push('/');
+        return;
+      }
+
       if (hasUnstartedQueue) {
         const resetResponse = await fetch('/api/daily/reset', {
           method: 'POST',
@@ -231,7 +240,7 @@ function DailySetupContent() {
       setError(caught instanceof Error ? caught.message : 'Could not start your round.');
       setSubmitting(false);
     }
-  }, [canStart, difficulty, domainMode, hasUnstartedQueue, router, selectedDomains]);
+  }, [canStart, difficulty, domainMode, hasUnstartedQueue, roundComplete, router, selectedDomains]);
 
   if (loading) {
     return (
@@ -251,6 +260,12 @@ function DailySetupContent() {
           Set up your round
         </h1>
       </header>
+
+      {roundComplete ? (
+        <p className="mb-6 rounded-lg border bg-card p-3 text-sm text-muted-foreground">
+          Today&apos;s round is done. Changes save for your next round.
+        </p>
+      ) : null}
 
       <section className="border-b pb-7">
         <p className="mb-3 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
@@ -397,7 +412,13 @@ function DailySetupContent() {
             disabled={!canStart}
             onClick={() => void startRound()}
           >
-            {submitting ? 'Starting...' : 'Start round'}
+            {roundComplete
+              ? submitting
+                ? 'Saving...'
+                : 'Save for next round'
+              : submitting
+                ? 'Starting...'
+                : 'Start round'}
           </button>
         </div>
       </div>
