@@ -35,7 +35,8 @@ export function Nav() {
   const hidesNewGameShortcut =
     pathname.startsWith('/daily') ||
     pathname === '/replay' ||
-    pathname.startsWith('/games/');
+    pathname.startsWith('/games/') ||
+    pathname === '/friends';
   const showNewGameShortcut = !hidesNewGameShortcut;
 
   const loadCurrentUser = useCallback(async () => {
