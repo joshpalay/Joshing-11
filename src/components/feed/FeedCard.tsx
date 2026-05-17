@@ -45,49 +45,41 @@ export function FeedCard({
       )}
       style={{ borderLeftWidth: '4px', borderLeftColor: colorForCategory(item.category) }}
     >
-      <div className="p-3 pl-4">
-        {/* Header: avatar + social signal + overflow */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-2.5">
-            {item.avatarName ? (
-              <div
-                className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
-                style={{ backgroundColor: colorForUser(item.avatarUserId) }}
-              >
-                {initialsFor(item.avatarName)}
-              </div>
-            ) : null}
+      <div className="flex items-center gap-2.5 p-3 pl-4">
+        {item.avatarName ? (
+          <div
+            className="grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
+            style={{ backgroundColor: colorForUser(item.avatarUserId) }}
+          >
+            {initialsFor(item.avatarName)}
+          </div>
+        ) : null}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
             {socialSignal ? (
               <p className="text-sm font-medium leading-5 text-stone-700">
                 {socialSignal}
               </p>
             ) : null}
+            {overflow ? <div className="shrink-0">{overflow}</div> : null}
           </div>
-          {overflow ? <div className="shrink-0">{overflow}</div> : null}
-        </div>
 
-        {/* Question */}
-        <div className={cn('mt-2', item.avatarName ? 'pl-[2.625rem]' : '')}>
           <p
             className={cn(
-              'font-serif text-base leading-6',
+              'mt-2 font-serif text-base leading-6',
               dimQuestion ? 'text-stone-400' : 'text-foreground'
             )}
           >
             {item.question}
           </p>
-        </div>
 
-        {item.personalMessage ? (
-          <p
-            className={cn(
-              'text-muted-foreground mt-2 text-sm leading-6',
-              item.avatarName ? 'pl-[2.625rem]' : ''
-            )}
-          >
-            &ldquo;{item.personalMessage}&rdquo;
-          </p>
-        ) : null}
+          {item.personalMessage ? (
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              &ldquo;{item.personalMessage}&rdquo;
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {/* Bottom strip */}
