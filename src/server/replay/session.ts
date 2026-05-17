@@ -8,10 +8,17 @@ export type ReplayItem = {
   explanation: string | null;
   domain: string;
   domainDisplayName: string;
+  originalSubmittedAnswer: string | null;
 };
 
-export function selectReplaySession<T extends ReplayItem>(items: T[], max = 5): T[] {
+export function selectReplaySession<T extends ReplayItem>(
+  items: T[],
+  max = 5,
+  excludeIds: string[] = [],
+): T[] {
+  const exclude = new Set(excludeIds);
   return [...items]
+    .filter((item) => !exclude.has(item.dailyQueueItemId))
     .sort((a, b) => {
       const dateDelta = b.queueDate.localeCompare(a.queueDate);
       if (dateDelta !== 0) return dateDelta;

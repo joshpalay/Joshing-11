@@ -48,6 +48,7 @@ export async function getReplayWrongQuestions(userId: string): Promise<ReplayIte
         explanation: question.explainer,
         domain,
         domainDisplayName: categoryLabel(domain),
+        originalSubmittedAnswer: slot.submitted_answer ?? null,
       } satisfies ReplayItem;
     })
     .filter((item): item is ReplayItem => Boolean(item));
