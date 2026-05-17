@@ -80,6 +80,14 @@ export async function register() {
     // pieces present, "my questions" reads can fail before migrate() repairs them.
     // Add the columns, foreign key, and unique index idempotently before migrate().
     try {
+      // 0018 also drops NOT NULL on creator_id so daily_generated questions
+      // (which have no human author) can be persisted with creator_id=null.
+      // If that statement didn't take effect on a partially-recorded migration,
+      // every persistGeneratedQuestion call fails with 23502 and friend-feed
+      // propagation silently drops for the rest of time. Re-apply it idempotently.
+      await db.execute(sql`
+        ALTER TABLE "Question" ALTER COLUMN "creator_id" DROP NOT NULL
+      `);
       await db.execute(sql`
         ALTER TABLE "Question"
           ADD COLUMN IF NOT EXISTS "generated_question_id" text,
