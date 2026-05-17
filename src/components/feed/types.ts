@@ -36,7 +36,7 @@ export type FriendAnsweredFeedItem = FeedCardBaseItem & {
   friendName: string
   friendHref?: string | null
   friendCorrect?: boolean | null
-  answerSummary?: string | null
+  answerSummary?: ReactNode
   // Friends who got this question right, in order of recency.
   correctFriends?: FriendAnsweredParticipant[]
   // Viewer's own status on the underlying question, regardless of feed-item state.
@@ -60,7 +60,7 @@ export type FriendLikedFeedItem = FeedCardBaseItem & {
 export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   type: 'answered_by_you'
   resultLabel?: string | null
-  answerSummary?: string | null
+  answerSummary?: ReactNode
   correctAnswer?: string | null
   submittedAnswer?: string | null
   isCorrect?: boolean | null

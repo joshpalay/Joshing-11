@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -130,33 +130,6 @@ function formatEventTime(value: string) {
   }).format(date)
 }
 
-function comparisonCopy(
-  playerCorrect: boolean | null,
-  friendResults: FriendResult[] | null,
-  sourceType?: string,
-  sourceFriendName?: string
-): string {
-  const primaryFriend = friendResults?.[0]
-  const friendIsAuthor =
-    !primaryFriend &&
-    (sourceType === 'direct_sent' || sourceType === 'authored_shared')
-  const friendName =
-    primaryFriend?.displayName ?? sourceFriendName ?? 'They'
-  const friendCorrect = primaryFriend?.result === 'correct'
-
-  if (playerCorrect === null) return 'You have already answered this question.'
-  if (friendIsAuthor) {
-    if (playerCorrect) return `You and ${friendName} have that in common.`
-    return `${friendName} knows this one. You might next time.`
-  }
-  if (playerCorrect && friendCorrect) return 'You both had it.'
-  if (playerCorrect && !friendCorrect)
-    return `You found a connection ${friendName} missed.`
-  if (!playerCorrect && friendCorrect)
-    return `${friendName} recognized this one. You might next time.`
-  return 'This one is still waiting for common ground.'
-}
-
 function profileHref(userId?: string | null) {
   return userId ? `/users/${encodeURIComponent(userId)}` : null
 }
@@ -170,10 +143,47 @@ function FeedPersonLink({
 }) {
   if (!href) return <>{name}</>
   return (
-    <Link href={href} className="underline-offset-2 hover:underline">
+    <Link
+      href={href}
+      className="font-semibold text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-stone-700"
+    >
       {name}
     </Link>
   )
+}
+
+function comparisonCopy(
+  playerCorrect: boolean | null,
+  friendResults: FriendResult[] | null,
+  sourceType?: string,
+  sourceFriendName?: string,
+  sourceUserId?: string | null
+): ReactNode {
+  const primaryFriend = friendResults?.[0]
+  const friendIsAuthor =
+    !primaryFriend &&
+    (sourceType === 'direct_sent' || sourceType === 'authored_shared')
+  const friendName =
+    primaryFriend?.displayName ?? sourceFriendName ?? 'They'
+  const friendUserId = primaryFriend?.userId ?? sourceUserId ?? null
+  const friendNode = (
+    <FeedPersonLink href={profileHref(friendUserId)} name={friendName} />
+  )
+  const friendCorrect = primaryFriend?.result === 'correct'
+
+  if (playerCorrect === null) return 'You have already answered this question.'
+  if (friendIsAuthor) {
+    if (playerCorrect)
+      return <>You and {friendNode} have that in common.</>
+    return <>{friendNode} knows this one. You might next time.</>
+  }
+  if (playerCorrect && friendCorrect)
+    return <>You and {friendNode} share this knowledge.</>
+  if (playerCorrect && !friendCorrect)
+    return <>You found a connection {friendNode} missed.</>
+  if (!playerCorrect && friendCorrect)
+    return <>{friendNode} has knowledge to share. You might next time.</>
+  return 'This one is still waiting for common ground.'
 }
 
 function feedMetadata(item: FeedApiItem, answered = false) {
@@ -316,13 +326,15 @@ function toAnsweredByYouItem(
           result.correct,
           item.friend_results,
           item.source_type,
-          item.source_friend_display_name
+          item.source_friend_display_name,
+          item.source_user_id
         )
       : comparisonCopy(
           item.is_correct,
           item.friend_results,
           item.source_type,
-          item.source_friend_display_name
+          item.source_friend_display_name,
+          item.source_user_id
         ),
     correctAnswer: result?.answer || item.correct_answer,
     submittedAnswer: item.submitted_answer || undefined,
