@@ -179,7 +179,7 @@ export default function FriendsList() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-foreground font-medium">
+                        <h3 className="text-primary font-medium underline decoration-primary/40 underline-offset-4 hover:decoration-primary">
                           {friend.displayName}
                         </h3>
                         {interests ? (
