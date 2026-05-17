@@ -87,7 +87,11 @@ const ACTION_REQUIRED_FEED_STATES = ['active', 'skipped'] as const;
 const ROLLOFF_CAP = 50;
 
 function isFeedDebugEnabled() {
-  return process.env.NODE_ENV !== 'production' || process.env.FEED_DEBUG_ENABLED === 'true';
+  if (process.env.FEED_DEBUG_ENABLED === 'true') return true;
+  if (process.env.NODE_ENV !== 'production') return true;
+  // Vercel preview deploys run with NODE_ENV='production' but VERCEL_ENV='preview'.
+  // Auto-enable there so the route is reachable without flipping a flag for every preview.
+  return process.env.VERCEL_ENV !== undefined && process.env.VERCEL_ENV !== 'production';
 }
 
 function snippet(text: string | null | undefined, max = 120): string | null {
