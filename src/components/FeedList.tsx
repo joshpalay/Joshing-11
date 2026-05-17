@@ -884,6 +884,7 @@ function FeedListContent({
                   item={typedItem}
                   overflow={overflow}
                   onAnswer={onAnswer}
+                  onHideCategory={() => void hideCategory(item)}
                 />
               )
             }
