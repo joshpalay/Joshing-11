@@ -79,6 +79,89 @@ function sessionCloseCopy(slots: QueueSlot[]): string {
   return "That's today's round. See you tomorrow.";
 }
 
+function UnfamiliarDialog({
+  domain,
+  busy,
+  onExclude,
+  onSkipOnly,
+  onCancel,
+}: {
+  domain: string;
+  busy: boolean;
+  onExclude: () => void;
+  onSkipOnly: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="unfamiliar-dialog-title"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 60,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+        background: 'rgba(0,0,0,0.45)',
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '1.5rem',
+          maxWidth: '22rem',
+          width: '100%',
+        }}
+      >
+        <p id="unfamiliar-dialog-title" className="text-sm font-semibold text-[var(--text)]">
+          Not familiar with &ldquo;{domain}&rdquo;?
+        </p>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Remove it from your daily topics so you won&rsquo;t see these questions again.
+        </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            type="button"
+            className="btn-primary w-full"
+            disabled={busy}
+            onClick={onExclude}
+          >
+            {busy ? '...' : 'Remove from my topics'}
+          </button>
+          <button
+            type="button"
+            className="w-full rounded-[var(--radius-md)] border px-4 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--surface-raised)] transition-colors"
+            style={{ borderColor: 'var(--border)' }}
+            disabled={busy}
+            onClick={onSkipOnly}
+          >
+            Just skip this one
+          </button>
+          <button
+            type="button"
+            className="text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DailyPage() {
   const router = useRouter();
   const [queue, setQueue] = useState<QueueResponse | null>(null);
@@ -87,6 +170,8 @@ export default function DailyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
+  const [showUnfamiliarDialog, setShowUnfamiliarDialog] = useState(false);
+  const [excludingDomain, setExcludingDomain] = useState(false);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -191,6 +276,41 @@ export default function DailyPage() {
       setSubmitting(false);
     }
   }, [currentSlot, queue, submitting]);
+
+  const excludeDomainAndSkip = useCallback(async () => {
+    if (!currentSlot) return;
+    const domain = currentSlot.domain;
+    setExcludingDomain(true);
+    try {
+      const prefsResponse = await fetch('/api/daily/preferences', { credentials: 'include' });
+      if (prefsResponse.ok) {
+        const prefsBody = await prefsResponse.json().catch(() => null) as {
+          preferences: { domainMode: string; selectedDomains: string[] };
+          domains: Array<{ domain: string }>;
+        } | null;
+        if (prefsBody) {
+          const { preferences, domains } = prefsBody;
+          const allDomains = domains.map((d) => d.domain);
+          const base = preferences.domainMode === 'custom' ? preferences.selectedDomains : allDomains;
+          const nextDomains = base.filter((d) => d !== domain);
+          if (nextDomains.length > 0) {
+            await fetch('/api/daily/preferences', {
+              method: 'PATCH',
+              headers: { 'content-type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ domainMode: 'custom', selectedDomains: nextDomains }),
+            });
+          }
+        }
+      }
+    } catch {
+      // preference update is best-effort; skip regardless
+    } finally {
+      setExcludingDomain(false);
+    }
+    setShowUnfamiliarDialog(false);
+    void skipCurrent();
+  }, [currentSlot, skipCurrent]);
 
   const requestRecheck = useCallback(async (slotIndex: number): Promise<RecheckActionResult> => {
     if (!queue) throw new Error('No active queue');
@@ -457,11 +577,21 @@ export default function DailyPage() {
             type="button"
             className="mt-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
             disabled={submitting}
-            onClick={() => void skipCurrent()}
+            onClick={() => setShowUnfamiliarDialog(true)}
           >
-            Skip
+            Not familiar with this topic
           </button>
         </form>
+      ) : null}
+
+      {showUnfamiliarDialog && currentSlot ? (
+        <UnfamiliarDialog
+          domain={currentSlot.domain}
+          busy={excludingDomain || submitting}
+          onExclude={() => void excludeDomainAndSkip()}
+          onSkipOnly={() => { setShowUnfamiliarDialog(false); void skipCurrent(); }}
+          onCancel={() => setShowUnfamiliarDialog(false)}
+        />
       ) : null}
     </main>
   );
