@@ -14,40 +14,40 @@ export type BackfillResult = {
   errors: Array<{ masteryEventId: string; error: string }>;
 };
 
-// Postgres drivers (postgres-js, pg) attach the actual failure reason to
-// the error object as own properties — but the property naming differs by
-// driver/version (`code`, `severity_local`, `column_name` vs `column`, etc).
-// Rather than guess the right names, dump every own property on the error
-// so the diagnostic UI shows whatever the driver actually attached. Falls
-// back to truncated `.message` only when the error has no own properties.
+// Postgres drivers (postgres-js, pg) and drizzle wrappers attach the actual
+// failure reason to the error object — but the property naming differs by
+// version. Rather than guess, walk every own property on the error (and on
+// `cause` if present) and emit non-noisy primitives. Returns one line per
+// call site so the diagnostic UI shows whatever the driver actually wrote.
 function describeError(error: unknown): string {
-  if (!(error instanceof Error)) return String(error);
-  const e = error as Error & Record<string, unknown>;
-  const skip = new Set(['message', 'stack', 'name', 'query', 'sql', 'parameters', 'params']);
-  const parts: string[] = [];
-  for (const key of Object.getOwnPropertyNames(e)) {
-    if (skip.has(key)) continue;
-    const value = e[key];
-    if (value === undefined || value === null) continue;
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      const stringValue = String(value);
-      parts.push(`${key}=${stringValue.length > 200 ? `${stringValue.slice(0, 200)}…` : stringValue}`);
-    } else if (typeof value === 'object') {
-      // Nested error info from pg/postgres-js (e.g. `cause`, `originalError`).
-      try {
-        const json = JSON.stringify(value);
-        if (json && json !== '{}') {
-          parts.push(`${key}=${json.length > 200 ? `${json.slice(0, 200)}…` : json}`);
-        }
-      } catch {
-        // ignore non-serializable
+  const skip = new Set(['stack', 'name', 'query', 'sql', 'parameters', 'params']);
+  const lines: string[] = [];
+
+  const collect = (label: string, obj: unknown) => {
+    if (!obj || typeof obj !== 'object') return;
+    const record = obj as Record<string, unknown>;
+    const parts: string[] = [];
+    for (const key of Object.getOwnPropertyNames(record)) {
+      if (skip.has(key)) continue;
+      const value = record[key];
+      if (value === undefined || value === null) continue;
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        const stringValue = String(value);
+        parts.push(`${key}=${stringValue.length > 400 ? `${stringValue.slice(0, 400)}…` : stringValue}`);
       }
     }
+    if (parts.length > 0) lines.push(`${label}: ${parts.join(' · ')}`);
+  };
+
+  if (error instanceof Error) {
+    collect('error', error);
+    const cause = (error as Error & { cause?: unknown }).cause;
+    if (cause) collect('cause', cause);
+  } else {
+    return String(error);
   }
-  // Always include a snippet of message so we can tell which query failed.
-  const messageSnippet = e.message.length > 120 ? `${e.message.slice(0, 120)}…` : e.message;
-  parts.push(`message=${messageSnippet}`);
-  return parts.join(' · ');
+
+  return lines.join(' || ');
 }
 
 // Extracts the generated question id from a synthesized `answer_id`
