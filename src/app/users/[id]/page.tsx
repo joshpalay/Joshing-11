@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard'
 import { AuthoredQuestionsFeed } from '@/components/profile/AuthoredQuestionsFeed'
 import { SharedInterestsOverlap } from '@/components/profile/SharedInterestsOverlap'
 import { getSession } from '@/server/auth/session'
@@ -10,7 +11,10 @@ import {
 } from '@/server/db/queries/knowledge'
 import { getAuthoredQuestionsForUser } from '@/server/db/queries/questions'
 import { getFriendPortraitData } from '@/server/profile/friend'
-import { topPointPositiveDomains } from '@/server/profile/knowledge-view'
+import {
+  toKnowledgeCardDomain,
+  topPointPositiveDomains,
+} from '@/server/profile/knowledge-view'
 
 type UserProfilePageProps = {
   params: Promise<{ id: string }>
@@ -70,6 +74,9 @@ export default async function UserProfilePage({
       b.points - a.points || a.displayName.localeCompare(b.displayName),
   )
   const topDomains = topPointPositiveDomains(sortedDomains, 5)
+  const totalPointPositiveDomains = sortedDomains.filter(
+    (domain) => domain.points > 0,
+  ).length
   const mindStatement = buildMindStatement(portrait.user.displayName, topDomains)
   const tierSignature = `${new Intl.NumberFormat().format(
     Math.round(mastery.totalPoints),
@@ -129,21 +136,46 @@ export default async function UserProfilePage({
         />
       ) : null}
 
-      <section className="mt-5" aria-label="Knowledge map">
+      <section className="mt-5" aria-label="Knowledge portrait">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-          Knowledge map
+          Knowledge portrait
         </p>
-        <h2 className="mt-1 font-serif text-xl font-semibold">
-          {mindStatement}
-        </h2>
-        <p className="text-muted-foreground mt-2 text-sm leading-6">
-          {tierSignature}.
-        </p>
+        {!isSelf && topDomains.length > 0 ? (
+          <div className="mt-3">
+            <KnowledgeCard
+              playerDisplayName={portrait.user.displayName}
+              portraitStatement={mindStatement}
+              domains={topDomains.map(toKnowledgeCardDomain)}
+              overflowCount={Math.max(
+                0,
+                totalPointPositiveDomains - topDomains.length,
+              )}
+              tierSignature={tierSignature}
+              rarestTerritory={null}
+              rarestTerritorySolo={false}
+              shareText=""
+              shareCardToken=""
+              shareCardExpiresAt=""
+              readOnly
+            />
+          </div>
+        ) : (
+          <>
+            <h2 className="mt-1 font-serif text-xl font-semibold">
+              {mindStatement}
+            </h2>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              {tierSignature}.
+            </p>
+          </>
+        )}
         <Link
           href={`/users/${portrait.user.id}/knowledge`}
           className="mt-3 inline-flex text-sm font-semibold text-stone-950 underline-offset-4 hover:underline"
         >
-          View {friendFirstName}&rsquo;s full knowledge map →
+          {isSelf
+            ? 'View your full knowledge portrait →'
+            : `View ${friendFirstName}’s full knowledge portrait →`}
         </Link>
       </section>
 

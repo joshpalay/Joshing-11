@@ -8,6 +8,7 @@ import { CreateChooser } from '@/components/CreateChooser';
 
 type MeResponse = {
   user?: {
+    id?: string | null;
     display_name?: string | null;
   };
 };
@@ -30,13 +31,22 @@ function initialsFor(name: string): string {
 export function Nav() {
   const pathname = usePathname();
   const [accountInitials, setAccountInitials] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
+  const isOtherUserProfilePath = (() => {
+    if (!pathname.startsWith('/users/')) return false;
+    const rest = pathname.slice('/users/'.length);
+    const profileId = rest.split('/')[0] ?? '';
+    if (!profileId) return false;
+    return profileId !== currentUserId;
+  })();
   const hidesNewGameShortcut =
     pathname.startsWith('/daily') ||
     pathname === '/replay' ||
     pathname.startsWith('/games/') ||
-    pathname === '/friends';
+    pathname === '/friends' ||
+    isOtherUserProfilePath;
   const showNewGameShortcut = !hidesNewGameShortcut;
 
   const loadCurrentUser = useCallback(async () => {
@@ -44,13 +54,16 @@ export function Nav() {
       const response = await fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' });
       if (!response.ok) {
         setAccountInitials(null);
+        setCurrentUserId(null);
         return;
       }
       const body = await response.json().catch(() => null) as MeResponse | null;
       const initials = body?.user?.display_name ? initialsFor(body.user.display_name) : '';
       setAccountInitials(initials || null);
+      setCurrentUserId(body?.user?.id ?? null);
     } catch {
       setAccountInitials(null);
+      setCurrentUserId(null);
     }
   }, []);
 
