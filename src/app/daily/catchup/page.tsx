@@ -146,6 +146,18 @@ export default function DailyCatchupPage() {
               </div>
             ) : null}
             <GameplayChatThread messages={messages} />
+            {currentItem ? (
+              <div className="mt-1 pl-0.5">
+                <button
+                  type="button"
+                  className="text-xs text-[var(--text-muted)] underline underline-offset-4 disabled:opacity-50"
+                  disabled={submitting || isResolvingTurn}
+                  onClick={() => setConfirmingDismiss(true)}
+                >
+                  Not interested
+                </button>
+              </div>
+            ) : null}
           </>
         )}
       </section>
@@ -173,22 +185,14 @@ export default function DailyCatchupPage() {
               {submitting ? '...' : 'Send'}
             </button>
           </div>
-          <div className="mt-2 flex items-center justify-between gap-3">
+          <div className="mt-2 flex items-center gap-3">
             <button
               type="button"
-              className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)] underline-offset-4 hover:underline"
+              className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)] underline-offset-4 hover:underline disabled:opacity-50"
               disabled={submitting || isResolvingTurn}
               onClick={skipCurrent}
             >
-              Skip
-            </button>
-            <button
-              type="button"
-              className="text-xs text-[var(--text-muted)] underline underline-offset-4"
-              disabled={submitting || isResolvingTurn}
-              onClick={() => setConfirmingDismiss(true)}
-            >
-              Not interested
+              I give up
             </button>
           </div>
         </form>
