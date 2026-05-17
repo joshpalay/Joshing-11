@@ -437,29 +437,28 @@ function KnowledgePageContent() {
       </section>
 
       {topCardDomains.length > 0 && (
-        <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Knowledge card">
-          <KnowledgeCard
-            playerDisplayName={displayName}
-            portraitStatement={yourMind}
-            domains={topCardDomains.map((domain) => ({
-              canonicalSubcategory: domain.displayName,
-              canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
-              currentTier: asTier(domain.tier),
-              lifetimePoints: domain.points,
-              iconKey: domain.iconKey,
-              broadCategory: domain.broadCategory,
-            }))}
-            overflowCount={Math.max(0, sortedDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
-            tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${sortedDomains.length} territories`}
-            rarestTerritory={null}
-            rarestTerritorySolo={false}
-            shareText={`My Joshing knowledge portrait: ${topCardDomains.map((domain) => domain.displayName).join(', ')}`}
-            shareCardToken=""
-            shareCardExpiresAt=""
-            readOnly
-            highlightedSlug={activeSlug}
-          />
-        </section>
+        <KnowledgeCard
+          playerDisplayName={displayName}
+          portraitStatement={yourMind}
+          domains={topCardDomains.map((domain) => ({
+            canonicalSubcategory: domain.displayName,
+            canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
+            currentTier: asTier(domain.tier),
+            lifetimePoints: domain.points,
+            iconKey: domain.iconKey,
+            broadCategory: domain.broadCategory,
+          }))}
+          overflowCount={Math.max(0, sortedDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
+          tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${sortedDomains.length} territories`}
+          rarestTerritory={null}
+          rarestTerritorySolo={false}
+          shareText={`My Joshing knowledge portrait: ${topCardDomains.map((domain) => domain.displayName).join(', ')}`}
+          shareCardToken=""
+          shareCardExpiresAt=""
+          readOnly
+          highlightedSlug={activeSlug}
+          onShareClick={() => setShareModalOpen(true)}
+        />
       )}
 
       {hasAnything && (
