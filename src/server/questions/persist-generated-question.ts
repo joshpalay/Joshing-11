@@ -77,13 +77,25 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
         status: 'verified',
         visibility: 'public',
       })
+      .onConflictDoNothing({ target: questions.generatedQuestionId })
       .returning({ id: questions.id });
 
-    if (!created) {
+    if (created) {
+      return { questionId: created.id, alreadyExisted: false };
+    }
+
+    // Concurrent insert won the race; re-fetch the row it wrote.
+    const [racedExisting] = await db
+      .select({ id: questions.id })
+      .from(questions)
+      .where(eq(questions.generatedQuestionId, generatedQuestionId))
+      .limit(1);
+
+    if (!racedExisting) {
       throw new Error(`Failed to persist generated question: ${generatedQuestionId}`);
     }
 
-    return { questionId: created.id, alreadyExisted: false };
+    return { questionId: racedExisting.id, alreadyExisted: true };
   } catch (error) {
     console.error('[persistGeneratedQuestion] failed', {
       generatedQuestionId,

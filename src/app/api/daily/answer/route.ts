@@ -165,22 +165,33 @@ export async function POST(request: NextRequest) {
     let canonicalQuestionId: string | null = null;
     let persistedCreatorId: string | null = null;
     let persistedDomainForCreator: string | null = null;
-    try {
-      const persisted = await persistGeneratedQuestion(question.id, slot.domain);
-      canonicalQuestionId = persisted.questionId;
-      const [persistedQuestion] = await db
-        .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
-        .from(questions)
-        .where(eq(questions.id, persisted.questionId))
-        .limit(1);
-      persistedCreatorId = persistedQuestion?.creatorId ?? null;
-      persistedDomainForCreator =
-        persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
-    } catch (error) {
-      console.warn('[daily/answer] failed to persist generated question; mastery event will skip canonical id', {
-        generatedQuestionId: question.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    let persistAttempt = 0;
+    while (persistAttempt < 2 && canonicalQuestionId === null) {
+      persistAttempt += 1;
+      try {
+        const persisted = await persistGeneratedQuestion(question.id, slot.domain);
+        canonicalQuestionId = persisted.questionId;
+        const [persistedQuestion] = await db
+          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+          .from(questions)
+          .where(eq(questions.id, persisted.questionId))
+          .limit(1);
+        persistedCreatorId = persistedQuestion?.creatorId ?? null;
+        persistedDomainForCreator =
+          persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+      } catch (error) {
+        const finalAttempt = persistAttempt >= 2;
+        console.warn(
+          finalAttempt
+            ? '[daily/answer] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
+            : '[daily/answer] persistGeneratedQuestion failed; retrying once',
+          {
+            generatedQuestionId: question.id,
+            attempt: persistAttempt,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
     }
 
     // Compute answer_state against masteryEvents history so first_correct
