@@ -2,9 +2,57 @@
 
 import { useCallback, useState, type ReactNode } from 'react'
 
+import { KnowledgeCircle } from '@/components/knowledge/CategoryCircles'
+import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
+
 import { FeedCard } from './FeedCard'
 import { visibleFeedCategory } from './category'
 import type { AnsweredByYouFeedItem } from './types'
+
+const TIER_LABEL: Record<string, string> = {
+  establishing: 'Establishing',
+  familiar: 'Familiar',
+  solid: 'Solid',
+  mastery: 'Mastery',
+}
+
+function tierLabel(tier: string): string {
+  return TIER_LABEL[tier.toLowerCase()] ?? tier
+}
+
+function KnowledgeGainIndicator({ item }: { item: AnsweredByYouFeedItem }) {
+  const broad = item.broadCategory ?? item.category ?? 'General'
+  const tooltipArea = visibleFeedCategory(item.category) ?? broad
+  const dc = getPortraitDomainColor(broad)
+  const tierChanged = Boolean(item.masteryDelta?.tierChanged)
+  const tierLine = tierChanged && item.masteryDelta
+    ? `${tierLabel(item.masteryDelta.previousTier)} → ${tierLabel(item.masteryDelta.newTier)}`
+    : null
+
+  return (
+    <div
+      className="flex shrink-0 flex-col items-end gap-1"
+      title={`+ Knowledge in ${tooltipArea}`}
+      aria-label={`Knowledge gained in ${tooltipArea}${tierLine ? `, ${tierLine}` : ''}`}
+    >
+      <KnowledgeCircle
+        broadCategory={broad}
+        pointsAfter={1}
+        maxPoints={1}
+        animate
+        size={28}
+      />
+      {tierLine ? (
+        <span
+          className="font-mono text-[9px] uppercase tracking-[0.1em]"
+          style={{ color: dc.primary }}
+        >
+          {tierLine}
+        </span>
+      ) : null}
+    </div>
+  )
+}
 
 export type FeedRecheckAction = {
   onSubmit: () => Promise<{ accepted: boolean; message: string }>
@@ -53,11 +101,7 @@ function AnsweredResult({
           <span className={markerClass}>{marker}</span>{' '}
           {item.answerSummary ?? 'You answered this question.'}
         </p>
-        {item.isCorrect && typeof item.awardedPoints === 'number' ? (
-          <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-            +{item.awardedPoints} pts
-          </span>
-        ) : null}
+        {item.isCorrect ? <KnowledgeGainIndicator item={item} /> : null}
       </div>
       {!item.isCorrect && item.correctAnswer ? (
         <p className="text-sm text-stone-500 italic">{item.correctAnswer}</p>

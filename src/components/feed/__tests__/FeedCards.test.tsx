@@ -139,10 +139,30 @@ describe('Feed answered states', () => {
 
     expect(rendered).toContain('You both had it')
     expect(rendered).toContain('Barcelona')
-    expect(rendered).toContain('+5 pts')
   })
 
-  it('wrong answers show correct answer and avoid red Feed styling', () => {
+  it('shows the knowledge-gain circle (no raw points pill) on a correct answer that crosses a tier', () => {
+    const rendered = html(
+      <AnsweredByYouCard item={feedCardPreviewFixtures.answeredByYouCorrect} />
+    )
+
+    expect(rendered).not.toContain('+5 pts')
+    expect(rendered).toContain('+ Knowledge in Sports')
+    expect(rendered).toContain('Familiar → Solid')
+  })
+
+  it('correct answers without a tier change show the circle but no tier subtitle', () => {
+    const rendered = html(
+      <AnsweredByYouCard
+        item={feedCardPreviewFixtures.unverifiedAnsweredExplanationNote}
+      />
+    )
+
+    expect(rendered).toContain('+ Knowledge in Film')
+    expect(rendered).not.toMatch(/→/)
+  })
+
+  it('wrong answers show correct answer, avoid red Feed styling, and skip the knowledge circle', () => {
     const rendered = html(
       <AnsweredByYouCard item={feedCardPreviewFixtures.answeredByYouWrong} />
     )
@@ -151,6 +171,7 @@ describe('Feed answered states', () => {
     expect(rendered).not.toContain('bg-red')
     expect(rendered).not.toContain('text-red')
     expect(rendered).not.toContain('destructive')
+    expect(rendered).not.toContain('+ Knowledge')
   })
 })
 
