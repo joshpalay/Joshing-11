@@ -11,6 +11,7 @@ export type FeedCardBaseItem = {
   avatarUserId?: string | null
   authorHref?: string | null
   timestamp?: string | null
+  viewerIsAuthor?: boolean
 }
 
 export type DirectSentFeedItem = FeedCardBaseItem & {
@@ -57,6 +58,11 @@ export type AnsweredByYouMasteryDelta = {
   tierChanged: boolean
 }
 
+export type AnsweredByYouPairedFriend = {
+  displayName: string
+  userId: string | null
+}
+
 export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   type: 'answered_by_you'
   resultLabel?: string | null
@@ -70,6 +76,7 @@ export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   unverifiedAnswer?: boolean
   broadCategory?: string | null
   masteryDelta?: AnsweredByYouMasteryDelta | null
+  pairedFriend?: AnsweredByYouPairedFriend | null
 }
 
 export type TypedFeedItem =

@@ -227,6 +227,7 @@ function baseTypedFields(item: FeedApiItem, answered = false) {
     avatarUserId: item.source_user_id,
     authorHref: item.source_profile_href ?? profileHref(item.source_user_id),
     timestamp: formatRelativeTime(item.source_event_at),
+    viewerIsAuthor: item.viewer_is_author === true,
   }
 }
 
@@ -338,6 +339,27 @@ function pickBroadCategory(
   return item.broad_category ?? null
 }
 
+function pickPairedFriend(
+  item: FeedApiItem
+): { displayName: string; userId: string | null } | null {
+  const primary = item.friend_results?.[0]
+  if (primary?.displayName) {
+    return { displayName: primary.displayName, userId: primary.userId ?? null }
+  }
+  if (
+    item.source_type === 'direct_sent' ||
+    item.source_type === 'authored_shared'
+  ) {
+    if (item.source_friend_display_name) {
+      return {
+        displayName: item.source_friend_display_name,
+        userId: item.source_user_id ?? null,
+      }
+    }
+  }
+  return null
+}
+
 function toAnsweredByYouItem(
   item: FeedApiItem,
   result?: ResultState
@@ -376,6 +398,7 @@ function toAnsweredByYouItem(
     unverifiedAnswer: item.unverified_answer,
     broadCategory: pickBroadCategory(masteryDeltaRaw, item),
     masteryDelta: normalizeMasteryDelta(masteryDeltaRaw),
+    pairedFriend: pickPairedFriend(item),
   }
 }
 

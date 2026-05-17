@@ -18,9 +18,90 @@ export function FeedCard({ item, overflow, onAnswer, className }: FeedCardProps)
   const categoryColor = colorForCategory(item.category)
   const visibleCategory = visibleFeedCategory(item.category)
   const onDark = isDarkColor(categoryColor)
-  const initialsColor = onDark ? 'var(--cream)' : 'var(--ink)'
+  const fgOnCategory = onDark ? 'var(--cream)' : 'var(--ink)'
   const authorName = item.avatarName ?? 'Someone'
-  const initials = initialsFor(authorName)
+
+  if (item.viewerIsAuthor) {
+    return (
+      <article
+        className={cn(
+          'relative overflow-hidden rounded-2xl border border-[var(--border-warm)] bg-[var(--cream)]',
+          className,
+        )}
+      >
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-[2px]"
+          style={{ backgroundColor: categoryColor }}
+        />
+
+        <div className="p-[14px]">
+          <div className="flex items-center gap-3">
+            <div
+              aria-hidden
+              className="grid size-9 shrink-0 place-items-center rounded-full text-[11px] font-semibold"
+              style={{ backgroundColor: categoryColor, color: fgOnCategory }}
+            >
+              You
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p
+                className="text-[11px] uppercase leading-none tracking-[0.08em]"
+                style={{ color: 'var(--ink)', opacity: 0.7 }}
+              >
+                New question
+              </p>
+              {visibleCategory ? (
+                <p
+                  className="mt-1 truncate text-[12px] italic leading-tight"
+                  style={{
+                    fontFamily: 'var(--font-literata)',
+                    color: 'var(--ink)',
+                    opacity: 0.7,
+                  }}
+                >
+                  {visibleCategory}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              {item.timestamp ? (
+                <span
+                  className="text-[11px] leading-none"
+                  style={{ color: 'var(--ink)', opacity: 0.6 }}
+                >
+                  {item.timestamp}
+                </span>
+              ) : null}
+              {overflow ? overflow : null}
+            </div>
+          </div>
+
+          <p
+            className="mt-3 line-clamp-4 text-[17px] leading-snug text-[var(--ink)]"
+            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+          >
+            &ldquo;{item.question}&rdquo;
+          </p>
+
+          {item.personalMessage ? (
+            <p
+              className="mt-2 text-[13px] italic leading-snug"
+              style={{
+                fontFamily: 'var(--font-literata)',
+                color: 'var(--ink)',
+                opacity: 0.65,
+              }}
+            >
+              {item.personalMessage}
+            </p>
+          ) : null}
+        </div>
+      </article>
+    )
+  }
 
   return (
     <article
@@ -40,9 +121,9 @@ export function FeedCard({ item, overflow, onAnswer, className }: FeedCardProps)
           <div
             aria-hidden
             className="grid size-9 shrink-0 place-items-center rounded-full text-[12px] font-semibold tracking-wide"
-            style={{ backgroundColor: categoryColor, color: initialsColor }}
+            style={{ backgroundColor: categoryColor, color: fgOnCategory }}
           >
-            {initials}
+            {initialsFor(authorName)}
           </div>
 
           <div className="min-w-0 flex-1">

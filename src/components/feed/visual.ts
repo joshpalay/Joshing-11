@@ -9,6 +9,15 @@ const CATEGORY_COLORS = [
   '#0369a1',
 ] as const
 
+const AVATAR_COLORS = [
+  '#0f766e',
+  '#7c3aed',
+  '#be123c',
+  '#2563eb',
+  '#b45309',
+  '#15803d',
+] as const
+
 function hashString(str: string): number {
   return Array.from(str).reduce((sum, char) => sum + char.charCodeAt(0), 0)
 }
@@ -18,6 +27,11 @@ export function colorForCategory(category?: string | null): string {
   return CATEGORY_COLORS[
     hashString(category.toLowerCase()) % CATEGORY_COLORS.length
   ]!
+}
+
+export function colorForUser(userId?: string | null): string {
+  if (!userId) return '#9ca3af'
+  return AVATAR_COLORS[hashString(userId) % AVATAR_COLORS.length]!
 }
 
 export function isDarkColor(hex: string): boolean {

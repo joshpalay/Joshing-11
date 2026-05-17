@@ -93,6 +93,8 @@ export const mockTypedFeedItems: TypedFeedItem[] = [
       newTier: 'solid',
       tierChanged: true,
     },
+    timestamp: '6d ago',
+    pairedFriend: { displayName: 'Joshua P', userId: 'user-joshua' },
   },
   {
     type: 'answered_by_you',
@@ -106,6 +108,9 @@ export const mockTypedFeedItems: TypedFeedItem[] = [
     correctAnswer: 'Lisbon',
     isCorrect: false,
     awardedPoints: 0,
+    personalMessage: 'I always confuse this one with the Spanish capital.',
+    timestamp: '6d ago',
+    pairedFriend: { displayName: 'Maya', userId: 'user-maya' },
   },
   {
     type: 'friend_added',
@@ -154,6 +159,22 @@ export const mockTypedFeedItems: TypedFeedItem[] = [
       newTier: 'familiar',
       tierChanged: false,
     },
+    timestamp: '12d ago',
+    pairedFriend: null,
+  },
+  {
+    type: 'friend_added',
+    id: 'mock-authored-by-viewer-unanswered',
+    friendName: 'You',
+    friendHref: null,
+    metadata: 'You wrote a question · May 7',
+    category: 'Detroit Techno',
+    question: 'What Belleville trio helped define the first wave of Detroit techno?',
+    avatarName: 'You',
+    avatarUserId: 'viewer',
+    authorHref: null,
+    timestamp: '1h ago',
+    viewerIsAuthor: true,
   },
 ]
 
@@ -168,4 +189,5 @@ export const feedCardPreviewFixtures = {
   missingSuppressedCategory: mockTypedFeedItems[7],
   alreadyBankedItem: mockTypedFeedItems[8],
   unverifiedAnsweredExplanationNote: mockTypedFeedItems[9],
+  authoredByViewerUnanswered: mockTypedFeedItems[10],
 } satisfies Record<string, TypedFeedItem>
