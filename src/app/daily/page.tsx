@@ -7,6 +7,7 @@ import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionR
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
 
 function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
   const tier = difficultyEstimateToTierLabel(slot.difficulty_estimate);
@@ -66,16 +67,22 @@ function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
   return slots.find((slot) => !slot.answered && !slot.skipped) ?? null;
 }
 
-function sessionCloseCopy(slots: QueueSlot[]): string {
-  if (slots.length > 0 && slots.every((slot) => slot.skipped)) return "We'll come back to these.";
-  const answered = slots.filter((slot) => slot.answered);
-  if (answered.length > 0 && answered.every((slot) => slot.answer_state === 'correct')) {
-    return 'Five for five. See you tomorrow.';
+function sessionCloseLines(slots: QueueSlot[]): { scoreLine: string; interpretiveLine: string | null } {
+  if (slots.length > 0 && slots.every((slot) => slot.skipped)) {
+    return { scoreLine: "We'll come back to these.", interpretiveLine: null };
   }
-  if (answered.length > 0 && answered.every((slot) => slot.answer_state === 'incorrect')) {
-    return 'Tough round. The map grows anyway.';
-  }
-  return "That's today's round. See you tomorrow.";
+  // PRD §8.1.13 (v11.1) — score line + interpretive line. Tier-crossing and
+  // new-demonstrated-domain interpretive cases need server-side mastery delta
+  // plumbing that doesn't exist on the daily page yet; for now we only
+  // populate the slot fields needed for the slot-derived priority levels
+  // (sweep, wipeout, streaks, all-wrong-in-domain).
+  const summaries: SessionSlotSummary[] = slots
+    .filter((slot) => slot.answered)
+    .map((slot) => ({
+      domain: slot.domain ?? null,
+      answer_state: slot.answer_state ?? null,
+    }));
+  return buildSessionCloseLines(summaries);
 }
 
 function UnfamiliarDialog({
@@ -431,10 +438,12 @@ export default function DailyPage() {
     }
 
     if (allDone) {
+      const { scoreLine, interpretiveLine } = sessionCloseLines(queue.slots);
       rows.push({
         id: 'session-close',
         kind: 'session_close',
-        text: sessionCloseCopy(queue.slots),
+        scoreLine,
+        interpretiveLine,
         summaryHref: '/daily/summary',
       });
     }

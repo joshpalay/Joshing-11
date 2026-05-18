@@ -1,15 +1,42 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 type SessionCloseMessageProps = {
-  closeCopy: string;
+  /** PRD §8.1.13 Layer 1 — score-based line, always present. */
+  scoreLine: string;
+  /** PRD §8.1.13 Layer 2 — interpretive line, appears ~300ms after Layer 1. */
+  interpretiveLine?: string | null;
   reviewLink?: string;
   knowledgeLink?: string;
 };
 
-export function SessionCloseMessage({ closeCopy, reviewLink, knowledgeLink }: SessionCloseMessageProps) {
+export function SessionCloseMessage({
+  scoreLine,
+  interpretiveLine,
+  reviewLink,
+  knowledgeLink,
+}: SessionCloseMessageProps) {
+  const [showInterpretive, setShowInterpretive] = useState(false);
+
+  useEffect(() => {
+    if (!interpretiveLine) return;
+    const timer = window.setTimeout(() => setShowInterpretive(true), 300);
+    return () => window.clearTimeout(timer);
+  }, [interpretiveLine]);
+
   return (
     <>
-      <p className="text-[1.22rem] text-[var(--text)] leading-relaxed">{closeCopy}</p>
+      <p className="text-[1.22rem] text-[var(--text)] leading-relaxed">{scoreLine}</p>
+      {interpretiveLine ? (
+        <p
+          className="mt-1 text-[1.05rem] text-[var(--text-muted)] leading-relaxed"
+          style={{ opacity: showInterpretive ? 1 : 0, transition: 'opacity 0.25s ease' }}
+        >
+          {interpretiveLine}
+        </p>
+      ) : null}
       {reviewLink ? (
         <div className="pt-2">
           <Link href={reviewLink} className="btn-primary inline-flex">

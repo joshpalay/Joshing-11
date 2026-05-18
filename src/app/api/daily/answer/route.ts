@@ -8,6 +8,7 @@ import {
   dailyQueues,
   db,
   generatedQuestions,
+  playerMastery,
   questions,
 } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
@@ -201,12 +202,38 @@ export async function POST(request: NextRequest) {
       priorAnswers,
     );
     const basePoints = Math.round(question.basePoints);
-    const pointsAwarded =
+    const uncheckedPointsAwarded =
       masteryAnswerState === 'first_correct'
         ? basePoints
         : masteryAnswerState === 'first_correct_after_wrong'
           ? Math.round(basePoints * RECOVERY_STATE_WEIGHT)
           : 0;
+
+    // PRD §8.4.3 — LLM-generated Daily Five questions can only deepen mastery
+    // in existing Knowledge base domains; they cannot open new ones. For a
+    // bot-source question whose domain isn't in the player's playerMastery,
+    // skip the mastery event and award 0 points rather than letting
+    // ON CONFLICT DO UPDATE silently insert a ghost domain row.
+    let skipMasteryForUnknownDomain = false;
+    if (slot.source === 'bot' && uncheckedPointsAwarded > 0) {
+      const [existingDomain] = await db
+        .select({ canonicalSubcategory: playerMastery.canonicalSubcategory })
+        .from(playerMastery)
+        .where(and(
+          eq(playerMastery.userId, session.userId),
+          eq(playerMastery.canonicalSubcategory, question.canonicalSubcategory),
+        ))
+        .limit(1);
+      if (!existingDomain) {
+        skipMasteryForUnknownDomain = true;
+        console.warn('[daily/answer] bot question domain not in player KB; skipping mastery write', {
+          userId: session.userId,
+          domain: question.canonicalSubcategory,
+          generatedQuestionId: question.id,
+        });
+      }
+    }
+    const pointsAwarded = skipMasteryForUnknownDomain ? 0 : uncheckedPointsAwarded;
 
     const nextSlots = slots.map((item) => {
       if (item.slot_index !== parsed.slotIndex) return item;
@@ -229,22 +256,24 @@ export async function POST(request: NextRequest) {
       .where(eq(dailyQueues.id, queue.id));
 
     let masteryDelta = null;
-    try {
-      masteryDelta = await writeMasteryEvent({
-        userId: session.userId,
-        questionId: question.id,
-        domain: question.canonicalSubcategory,
-        answerState: masteryAnswerState,
-        pointsAwarded,
-        sourceType: 'daily',
-        sourceId: `${queue.id}:${parsed.slotIndex}`,
-        broadCategory: question.broadCategory,
-        eventQuestionId: canonicalQuestionId,
-        basePoints,
-        weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
-      });
-    } catch (error) {
-      console.warn('[daily/answer] writeMasteryEvent failed', error);
+    if (!skipMasteryForUnknownDomain) {
+      try {
+        masteryDelta = await writeMasteryEvent({
+          userId: session.userId,
+          questionId: question.id,
+          domain: question.canonicalSubcategory,
+          answerState: masteryAnswerState,
+          pointsAwarded,
+          sourceType: 'daily',
+          sourceId: `${queue.id}:${parsed.slotIndex}`,
+          broadCategory: question.broadCategory,
+          eventQuestionId: canonicalQuestionId,
+          basePoints,
+          weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
+        });
+      } catch (error) {
+        console.warn('[daily/answer] writeMasteryEvent failed', error);
+      }
     }
 
     await updateDomainDifficultyOnAnswer(

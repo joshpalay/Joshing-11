@@ -129,6 +129,51 @@ function profileHref(userId?: string | null) {
   return userId ? `/users/${encodeURIComponent(userId)}` : null
 }
 
+/**
+ * PRD §8.2.10 — transient confirmation line that replaces a feed card after
+ * a thumbs-down (or its undo). Auto-dismisses on a 4s timer set by the
+ * caller; tap-to-dismiss-early is wired to onDismiss.
+ */
+function ThumbsdownConfirmRow({
+  phase,
+  onDismiss,
+  onUndo,
+  disabled,
+}: {
+  phase: 'removed' | 'restored'
+  onDismiss: () => void
+  onUndo: () => void
+  disabled?: boolean
+}) {
+  const message =
+    phase === 'removed'
+      ? "Removed from your feed. Won't pass to your friends."
+      : 'Restored. This may pass to your friends.'
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      onClick={onDismiss}
+      className="text-muted-foreground flex items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2 text-sm italic"
+    >
+      <span>{message}</span>
+      {phase === 'removed' ? (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={(event) => {
+            event.stopPropagation()
+            onUndo()
+          }}
+          className="text-foreground text-xs font-medium underline-offset-4 hover:underline disabled:opacity-50"
+        >
+          Undo
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 function FeedPersonLink({
   href,
   name,
@@ -464,6 +509,12 @@ function FeedListContent({
   )
   const [results, setResults] = useState<Record<string, ResultState>>({})
   const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({})
+  // PRD §8.2.10 — after a thumbs-down or its undo, replace the card with a
+  // transient inline confirmation line for ~4s. Tracks the per-item phase.
+  const [thumbsdownConfirm, setThumbsdownConfirm] = useState<
+    Record<string, 'removed' | 'restored'>
+  >({})
+  const thumbsdownTimersRef = useRef<Record<string, number>>({})
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
   const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -571,7 +622,7 @@ function FeedListContent({
     if (loadingInitial) return 'Loading your Feed...'
     if (error) return error
     if (!feedMeta?.has_friends)
-      return 'When friends recognize each other’s questions, those moments will appear here.'
+      return 'When your friends play, their questions will show up here.'
     // pre_filter_active_count > 0 means items exist in active/skipped state but are hidden by domain filters
     if (
       feedMeta.has_dismissed_domains &&
@@ -579,10 +630,11 @@ function FeedListContent({
     ) {
       return "You've focused your Feed. You can re-open domains from your Knowledge page."
     }
-    if (feedMeta.total_item_count > 0)
-      return "You're caught up. Answer questions to reveal more common ground."
-    return 'Answer questions to reveal common ground.'
+    if (feedMeta.total_item_count > 0) return "You're caught up."
+    return 'Quiet today. Check back when your friends have played.'
   }, [error, feedMeta, loadingInitial])
+
+  const showInviteFriendCta = !loadingInitial && !error && feedMeta && !feedMeta.has_friends
 
   const emptyDiagnostics = useMemo(() => {
     if (process.env.NODE_ENV === 'production' || !feedMeta) return null
@@ -668,6 +720,47 @@ function FeedListContent({
     }
   }, [])
 
+  const clearThumbsdownTimer = useCallback((itemId: string) => {
+    const timer = thumbsdownTimersRef.current[itemId]
+    if (timer) {
+      window.clearTimeout(timer)
+      delete thumbsdownTimersRef.current[itemId]
+    }
+  }, [])
+
+  const dismissThumbsdownConfirm = useCallback(
+    (itemId: string) => {
+      clearThumbsdownTimer(itemId)
+      const phase = thumbsdownConfirm[itemId]
+      setThumbsdownConfirm((current) => {
+        const next = { ...current }
+        delete next[itemId]
+        return next
+      })
+      if (phase === 'removed') {
+        removeItem(itemId)
+      }
+    },
+    [clearThumbsdownTimer, removeItem, thumbsdownConfirm]
+  )
+
+  useEffect(() => {
+    return () => {
+      Object.values(thumbsdownTimersRef.current).forEach((t) => window.clearTimeout(t))
+      thumbsdownTimersRef.current = {}
+    }
+  }, [])
+
+  const scheduleThumbsdownAutoDismiss = useCallback(
+    (itemId: string) => {
+      clearThumbsdownTimer(itemId)
+      thumbsdownTimersRef.current[itemId] = window.setTimeout(() => {
+        dismissThumbsdownConfirm(itemId)
+      }, 4000)
+    },
+    [clearThumbsdownTimer, dismissThumbsdownConfirm]
+  )
+
   const reportItem = useCallback(
     async (item: FeedApiItem) => {
       setBusyId(item.id)
@@ -681,7 +774,8 @@ function FeedListContent({
           const body = await response.json().catch(() => null)
           throw new Error(body?.message ?? 'Could not report that question.')
         }
-        removeItem(item.id)
+        setThumbsdownConfirm((current) => ({ ...current, [item.id]: 'removed' }))
+        scheduleThumbsdownAutoDismiss(item.id)
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -692,7 +786,34 @@ function FeedListContent({
         setBusyId(null)
       }
     },
-    [removeItem]
+    [scheduleThumbsdownAutoDismiss]
+  )
+
+  const undoThumbsdown = useCallback(
+    async (itemId: string) => {
+      setBusyId(itemId)
+      setError(null)
+      try {
+        const response = await fetch(`/api/feed/${itemId}/thumbsdown`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+        if (!response.ok) {
+          const body = await response.json().catch(() => null)
+          throw new Error(body?.message ?? 'Could not undo that.')
+        }
+        clearThumbsdownTimer(itemId)
+        setThumbsdownConfirm((current) => ({ ...current, [itemId]: 'restored' }))
+        scheduleThumbsdownAutoDismiss(itemId)
+      } catch (caught) {
+        setError(
+          caught instanceof Error ? caught.message : 'Could not undo that.'
+        )
+      } finally {
+        setBusyId(null)
+      }
+    },
+    [clearThumbsdownTimer, scheduleThumbsdownAutoDismiss]
   )
 
   const submitAnswer = useCallback(
@@ -843,6 +964,14 @@ function FeedListContent({
           >
             {emptyCopy}
           </p>
+          {showInviteFriendCta ? (
+            <Link
+              href="/friends"
+              className="text-primary text-sm font-medium underline-offset-4 hover:underline"
+            >
+              Invite a friend
+            </Link>
+          ) : null}
           {emptyDiagnostics ? (
             <p className="bg-muted text-muted-foreground max-w-xl rounded px-3 py-2 font-mono text-xs break-words">
               {emptyDiagnostics}
@@ -863,6 +992,19 @@ function FeedListContent({
                   (item.state === 'answered' ? 'answered' : 'unanswered')
                 const isAnswered = cardState === 'answered'
                 const isBusy = busyId === item.id
+                const confirmPhase = thumbsdownConfirm[item.id]
+
+                if (confirmPhase) {
+                  return (
+                    <ThumbsdownConfirmRow
+                      key={item.id}
+                      phase={confirmPhase}
+                      onDismiss={() => dismissThumbsdownConfirm(item.id)}
+                      onUndo={() => void undoThumbsdown(item.id)}
+                      disabled={isBusy}
+                    />
+                  )
+                }
 
                 const overflow = (
                   <FeedOverflowMenu
