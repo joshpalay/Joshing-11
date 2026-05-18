@@ -137,7 +137,10 @@ export async function POST(request: Request) {
         })
       }
 
-      await createSession(existingUser.id, { invitationAccepted: true })
+      await createSession(existingUser.id, {
+        invitationAccepted: true,
+        onboardingComplete: false,
+      })
 
       return NextResponse.json({
         user: {
@@ -183,7 +186,10 @@ export async function POST(request: Request) {
       return invitationRejection()
     }
 
-    await createSession(user.id, { invitationAccepted: true })
+    await createSession(user.id, {
+      invitationAccepted: true,
+      onboardingComplete: false,
+    })
 
     return NextResponse.json({
       user: {

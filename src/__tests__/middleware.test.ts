@@ -70,11 +70,85 @@ describe('proxy (invitation gate)', () => {
         userId: 'u1',
         sessionId: 's1',
         invitationAccepted: true,
+        onboardingComplete: true,
       })
       const res = await proxy(
         makeRequest('/api/feed', { cookie: 'valid.jwt' }),
       )
       expect(res.status).toBe(200)
+    })
+
+    it('passes onboarded users through to the requested page', async () => {
+      readSessionClaimsMock.mockResolvedValueOnce({
+        userId: 'u1',
+        sessionId: 's1',
+        invitationAccepted: true,
+        onboardingComplete: true,
+      })
+      const res = await proxy(
+        makeRequest('/knowledge', { cookie: 'valid.jwt' }),
+      )
+      expect(res.status).toBe(200)
+      expect(res.headers.get('x-middleware-next')).toBe('1')
+    })
+
+    it('redirects an onboarded user away from /login', async () => {
+      readSessionClaimsMock.mockResolvedValueOnce({
+        userId: 'u1',
+        sessionId: 's1',
+        invitationAccepted: true,
+        onboardingComplete: true,
+      })
+      const res = await proxy(makeRequest('/login', { cookie: 'valid.jwt' }))
+      expect(res.status).toBe(307)
+      expect(res.headers.get('location')).toMatch(/\/$/)
+    })
+
+    it('redirects an onboarded user away from /onboarding', async () => {
+      readSessionClaimsMock.mockResolvedValueOnce({
+        userId: 'u1',
+        sessionId: 's1',
+        invitationAccepted: true,
+        onboardingComplete: true,
+      })
+      const res = await proxy(
+        makeRequest('/onboarding', { cookie: 'valid.jwt' }),
+      )
+      expect(res.status).toBe(307)
+      expect(res.headers.get('location')).toMatch(/\/$/)
+    })
+  })
+
+  describe('authenticated but onboarding not yet complete', () => {
+    it('lets the user reach /onboarding without bouncing', async () => {
+      readSessionClaimsMock.mockResolvedValueOnce({
+        userId: 'u1',
+        sessionId: 's1',
+        invitationAccepted: true,
+        onboardingComplete: false,
+      })
+      const res = await proxy(
+        makeRequest('/onboarding', { cookie: 'valid.jwt' }),
+      )
+      expect(res.status).toBe(200)
+      expect(res.headers.get('x-middleware-next')).toBe('1')
+    })
+
+    it('redirects any other page to the onboarding-claim refresh endpoint with a next param', async () => {
+      readSessionClaimsMock.mockResolvedValueOnce({
+        userId: 'u1',
+        sessionId: 's1',
+        invitationAccepted: true,
+        onboardingComplete: false,
+      })
+      const res = await proxy(
+        makeRequest('/knowledge', { cookie: 'valid.jwt' }),
+      )
+      expect(res.status).toBe(307)
+      expect(res.headers.get('location')).toContain(
+        '/api/auth/refresh-onboarding-claim',
+      )
+      expect(res.headers.get('location')).toContain('next=%2Fknowledge')
     })
   })
 
@@ -84,6 +158,7 @@ describe('proxy (invitation gate)', () => {
         userId: 'u1',
         sessionId: 's1',
         invitationAccepted: false,
+        onboardingComplete: false,
       })
       const res = await proxy(
         makeRequest('/knowledge', { cookie: 'legacy.jwt' }),
@@ -100,6 +175,7 @@ describe('proxy (invitation gate)', () => {
         userId: 'u1',
         sessionId: 's1',
         invitationAccepted: false,
+        onboardingComplete: false,
       })
       const res = await proxy(
         makeRequest('/api/feed', { cookie: 'legacy.jwt' }),

@@ -4,35 +4,13 @@ import { readSessionClaims } from '@/server/auth/session'
 
 const SESSION_COOKIE_NAME = 'joshing_session'
 
-type AuthMeResponse = {
-  user?: {
-    onboardingComplete?: boolean
-  }
-}
-
-async function getAuthenticatedUser(
-  request: NextRequest,
-): Promise<AuthMeResponse['user'] | null> {
-  const response = await fetch(new URL('/api/auth/me', request.url), {
-    headers: {
-      cookie: request.headers.get('cookie') ?? '',
-    },
-    cache: 'no-store',
-  }).catch(() => null)
-
-  if (!response?.ok) return null
-
-  const data = (await response
-    .json()
-    .catch(() => null)) as AuthMeResponse | null
-  return data?.user ?? null
-}
-
 /**
- * Combined edge proxy:
- *  1. Defense-in-depth JWT gate (edge-safe, only verifies signature + `inv` claim).
- *  2. Onboarding/login routing for authenticated page requests (calls
- *     `/api/auth/me` in the Node runtime to read onboarding state).
+ * Edge proxy: defense-in-depth JWT gate plus onboarding/login routing for
+ * authenticated page requests. Reads `inv` and `onb` directly from the JWT
+ * so no DB lookup or self-fetch happens on the steady-state path. Legacy
+ * sessions missing `onb` are redirected once to
+ * /api/auth/refresh-onboarding-claim, which does a single DB read and
+ * re-mints the cookie.
  *
  * Route handlers MUST keep their own `getSession()` checks — this is an
  * additional fence, not a replacement.
@@ -91,31 +69,26 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/onboarding/') ||
     pathname.startsWith('/api/auth/')
 
-  const user = await getAuthenticatedUser(request)
-
-  if (!user) {
-    if (isLoginPage || isInvitePage) return NextResponse.next()
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = '/login'
-    loginUrl.search = ''
-    return NextResponse.redirect(loginUrl)
+  if (claims.onboardingComplete) {
+    if (isLoginPage || isOnboardingPage) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+    return NextResponse.next()
   }
 
-  if (!user.onboardingComplete && !isAllowedOnboardingPath) {
-    const onboardingUrl = request.nextUrl.clone()
-    onboardingUrl.pathname = '/onboarding'
-    onboardingUrl.search = ''
-    return NextResponse.redirect(onboardingUrl)
-  }
+  // claims.onboardingComplete is false: either the user genuinely hasn't
+  // finished onboarding, or they did so before the `onb` claim existed and
+  // their JWT is missing the field. Allow onboarding/auth paths through and
+  // route everything else to the refresh endpoint, which does one DB read,
+  // re-mints the JWT if needed, and bounces back. Steady-state is JWT-only.
+  if (isAllowedOnboardingPath) return NextResponse.next()
 
-  if (user.onboardingComplete && (isLoginPage || isOnboardingPage)) {
-    const homeUrl = request.nextUrl.clone()
-    homeUrl.pathname = '/'
-    homeUrl.search = ''
-    return NextResponse.redirect(homeUrl)
-  }
-
-  return NextResponse.next()
+  const refreshUrl = new URL(
+    '/api/auth/refresh-onboarding-claim',
+    request.url,
+  )
+  refreshUrl.searchParams.set('next', pathname + search)
+  return NextResponse.redirect(refreshUrl)
 }
 
 /**

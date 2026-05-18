@@ -1,5 +1,6 @@
 import type { InferSelectModel } from 'drizzle-orm';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { cache } from 'react';
 
 import { db, declaredInterests, friendInvitations, users } from '@/server/db';
 
@@ -155,7 +156,10 @@ export async function markOnboardingComplete(userId: string) {
     .where(eq(users.id, userId));
 }
 
-export async function getUserOnboardingProfile(userId: string) {
+// React.cache dedupes calls within a single server request, so the root
+// layout's lookup is shared with any other server component (e.g. the
+// onboarding page) that asks for the same profile during the same render.
+export const getUserOnboardingProfile = cache(async (userId: string) => {
   const [user] = await db
     .select({
       id: users.id,
@@ -170,7 +174,7 @@ export async function getUserOnboardingProfile(userId: string) {
     .limit(1);
 
   return user ?? null;
-}
+});
 
 function normalizeInviterName(value: string | null | undefined) {
   const normalized = value?.trim().replace(/\s+/g, ' ');

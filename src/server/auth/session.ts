@@ -28,6 +28,14 @@ type SessionJwtPayload = {
    * /api/auth/refresh-session.
    */
   inv?: boolean;
+  /**
+   * Set to true when the user has completed onboarding. Middleware reads
+   * this directly from the JWT to decide whether to redirect to /onboarding,
+   * avoiding a per-navigation DB read. Sessions issued before this claim
+   * existed omit the field and are refreshed via
+   * /api/auth/refresh-onboarding-claim on first need.
+   */
+  onb?: boolean;
 };
 
 export type Session = {
@@ -39,6 +47,7 @@ export type SessionJwtClaims = {
   userId: string;
   sessionId: string;
   invitationAccepted: boolean;
+  onboardingComplete: boolean;
 };
 
 function readConfiguredSessionSecret(): string | null {
@@ -88,7 +97,7 @@ function getJwtSecret(): Uint8Array {
  */
 export async function createSession(
   userId: string,
-  options: { invitationAccepted: true },
+  options: { invitationAccepted: true; onboardingComplete: boolean },
 ): Promise<string> {
   const sessionId = randomBytes(24).toString('hex');
   const expiresAt = new Date();
@@ -97,6 +106,7 @@ export async function createSession(
   const payload: SessionJwtPayload = {
     sid: sessionId,
     inv: options.invitationAccepted,
+    onb: options.onboardingComplete,
   };
 
   const token = await new SignJWT(payload)
@@ -132,12 +142,13 @@ export async function readSessionClaims(
 
   try {
     const verified = await jwtVerify<SessionJwtPayload>(token, getJwtSecret());
-    const { sub, sid, inv } = verified.payload;
+    const { sub, sid, inv, onb } = verified.payload;
     if (!sub || typeof sid !== 'string') return null;
     return {
       userId: sub,
       sessionId: sid,
       invitationAccepted: inv === true,
+      onboardingComplete: onb === true,
     };
   } catch {
     return null;
@@ -159,6 +170,7 @@ export async function refreshSessionInvitationClaim(): Promise<boolean> {
 
   let userId: string;
   let sessionId: string;
+  let onb: boolean;
   try {
     const verified = await jwtVerify<SessionJwtPayload>(
       existingToken,
@@ -169,6 +181,7 @@ export async function refreshSessionInvitationClaim(): Promise<boolean> {
     }
     userId = verified.payload.sub;
     sessionId = verified.payload.sid;
+    onb = verified.payload.onb === true;
   } catch {
     return false;
   }
@@ -181,7 +194,72 @@ export async function refreshSessionInvitationClaim(): Promise<boolean> {
 
   if (!existingRow || existingRow.expiresAt < new Date()) return false;
 
-  const payload: SessionJwtPayload = { sid: sessionId, inv: true };
+  const payload: SessionJwtPayload = { sid: sessionId, inv: true, onb };
+  const newToken = await new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setExpirationTime(`${SESSION_DAYS}d`)
+    .sign(getJwtSecret());
+
+  await db
+    .update(userSessions)
+    .set({ token: newToken })
+    .where(eq(userSessions.id, existingRow.id));
+
+  cookieStore.set(SESSION_COOKIE_NAME, newToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: SESSION_DAYS * 24 * 60 * 60,
+    path: '/',
+  });
+
+  return true;
+}
+
+/**
+ * Re-sign the current session JWT with `onb: true`. Used by
+ * /api/auth/refresh-onboarding-claim to upgrade sessions that completed
+ * onboarding before the JWT claim existed, and by the onboarding-complete
+ * flow so the very next request sees the new state without a DB lookup.
+ *
+ * The existing `inv` value is preserved so this never downgrades the
+ * invitation gate. The DB row's `token` column is updated to match the new
+ * JWT so `validateSessionToken` continues to find the row.
+ */
+export async function refreshSessionOnboardingClaim(): Promise<boolean> {
+  const cookieStore = await cookies();
+  const existingToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!existingToken) return false;
+
+  let userId: string;
+  let sessionId: string;
+  let inv: boolean;
+  try {
+    const verified = await jwtVerify<SessionJwtPayload>(
+      existingToken,
+      getJwtSecret(),
+    );
+    if (!verified.payload.sub || typeof verified.payload.sid !== 'string') {
+      return false;
+    }
+    userId = verified.payload.sub;
+    sessionId = verified.payload.sid;
+    inv = verified.payload.inv === true;
+  } catch {
+    return false;
+  }
+
+  const [existingRow] = await db
+    .select({ id: userSessions.id, expiresAt: userSessions.expiresAt })
+    .from(userSessions)
+    .where(eq(userSessions.token, existingToken))
+    .limit(1);
+
+  if (!existingRow || existingRow.expiresAt < new Date()) return false;
+
+  const payload: SessionJwtPayload = { sid: sessionId, inv, onb: true };
   const newToken = await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId)
