@@ -41,8 +41,12 @@ Two items remain unresolved and are deliberately not locked here. They are carri
 | 16 | §8.4.11 | "Grow your map" copy updated to surface all three growth paths |
 | 17 | §10 | Schema clarifications: `source_result` enum, `territory_type` text-with-typecast, quip storage |
 | 18 | §16 | Four new open questions carried forward (16.16–16.19) |
+| v11.3 | §7.3, §16.19 | Onboarding "Keep all" rewritten to a binary contract; cultural anchor at the route resolved as optional |
+| v11.4 | line 45, §16.16, §16.17 | Tier labels locked to Curious / Versed / Fluent / Master; author credit windowed model locked; catch-up + recovery MAX rule locked |
 
-**Tier name confirmation.** v11.1 §8.4.8 named the tiers Establishing / Familiar / Solid / Mastery. Earlier audit briefs used Curious / Versed / Fluent / Master. Code matches v11.1. v11.2 reaffirms **Establishing / Familiar / Solid / Mastery as canonical.** The earlier names are retired.
+**Tier name confirmation (v11.4 revision).** v11.1 §8.4.8 named the tiers Establishing / Familiar / Solid / Mastery and v11.2 reaffirmed those names. The 2026-05-18 learning-and-shared-knowledge audit identified a three-way fork in shipped UI copy (`Establishing / Familiar / Solid / Mastery` in shared helpers, `Curious / Explorer / Scholar / Sage` on the profile and domain pages, `Familiar / Solid / Mastery` in the in-session `MasteryMoment`) and recommended unifying on **Curious / Versed / Fluent / Master** because that vocabulary frames the player's relationship to a domain as an interior learning journey rather than a credentialing ladder. PR #302 unified every user-facing surface on that vocabulary; v11.4 ratifies it.
+
+**Canonical tier labels (v11.4):** **Curious → Versed → Fluent → Master.** The Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired from user-facing copy. The internal enum keys `establishing | familiar | solid | mastery` (in `src/types/db.ts`) are preserved as opaque identifiers — they map 1-to-1 onto the new user-facing labels and need not be migrated. See §8.4.8 for the per-tier visual treatment.
 
 **No new killed features** beyond what v11.1 already killed. The Activities Tab, Joshing Game, Personal Rounds, and Archive are *deferred*, not killed — implementations exist for the first two and can be re-enabled when their entry points return.
 
@@ -399,30 +403,45 @@ Neither blocks the v11.2 spec.
 
 ## §16 — Open Questions (additions)
 
-### §16.16 Author credit model — UNRESOLVED
+### §16.16 Author credit model — RESOLVED (v11.4)
 
-**Status:** unresolved. v11.1 §8.32 specifies "Author credit = 0.5× of the question's calibrated difficulty, awarded only on Moderate/Specialist questions, one credit per question per answering player ever." Code in `src/server/mastery/scoring.ts:70–94` implements an empirical-rate windowed scheme: 25/50/100 points base, full credit for the first 2–5 correct answers globally, half for the next 2–5, zero after, no difficulty filter.
+**Status:** resolved. v11.4 locks the **empirical-rate windowed model** (Option B) as canonical. The v11.1 §8.32 PRD-locked formulation (`0.5× calibrated difficulty per unique answerer`) is **retired** and superseded by the §8.32 v11.4 revision below.
 
-**Two models to choose between:**
+**The rule (v11.4 §8.32 replacement for author credit):**
 
-- **PRD-locked model.** Simple. 0.5× calibrated difficulty per unique answerer. Skip Accessible. The DB unique constraint on `(source_type, question_id, answered_by_user_id)` already enforces the one-per-answerer rule. Engineering: add `difficulty` parameter to `creatorMasteryAwardForNthCorrect`, add the Accessible skip, reference `AUTHOR_CREDIT_WEIGHT = 0.5`.
-- **Windowed model (currently shipping).** Complex. Rewards effort-to-create via difficulty-rate correlation but caps total author credit per question at ~10 unique answerers regardless of how widely the question circulates. Engineering: rewrite the PRD §8.32 author-credit text to match.
+> Author credit for a question is awarded from the question's **empirical difficulty rate** (correct answers / asked answers, across all surfaces and players), not from its `calibratedDifficulty` label. The award schedule is:
+>
+> | Empirical correct rate | Base points | Full-credit window | Reduced-credit window |
+> |---|---|---|---|
+> | rate > 0.70 (easy) | 25 | first 2 answerers | next 2 answerers |
+> | 0.40 ≤ rate ≤ 0.70 (moderate) | 50 | first 3 answerers | next 3 answerers |
+> | rate < 0.40 (hard) | 100 | first 5 answerers | next 5 answerers |
+>
+> Within the full-credit window, the author earns `basePoints × 1.0` per answerer. Within the reduced-credit window, the author earns `basePoints × 0.5` per answerer. After the combined window closes (4 / 6 / 10 answerers depending on band), no further author credit is awarded for that question.
+>
+> **Accessible-difficulty questions earn no author credit at all,** regardless of empirical rate. The Accessible-skip rule survives from the PRD-locked model and is the only difficulty-label gate in the v11.4 system.
+>
+> **Idempotency:** at most one `author_credit` mastery event per `(questionId, answeredByUserId)` pair, enforced by the `MASTERY_EVENTS` unique constraint on `(sourceType, questionId, answeredByUserId)`.
+>
+> **Surface coverage:** the rule applies uniformly across Daily Five, Catch-up, Feed, and Joshing Game answer surfaces. The author of an authored question earns credit on the first correct answer recorded *from any surface*, then the window-based reductions continue across all surfaces collectively.
 
-**Cross-cutting:** under either model, F1.1 from Phase 2 also needs fixing — author credit currently only fires from Joshing Game answers, not from Feed or Daily Five answers. The right fix is to factor the author-credit write into a shared helper and call it from all three surfaces.
+**Why this model (preserved from the original §16.16 framing):** the windowed model rewards effort-to-create via the difficulty-rate correlation (harder questions earn more per answerer and across a wider answerer window), caps total author credit per question at ~4–10 unique answerers regardless of how widely the question circulates (so a single viral question cannot dominate a player's author-credit share), and produces a meaningful relationship between question quality and lifetime author credit. The PRD-locked alternative (a flat 0.5× difficulty multiplier per unique answerer) was simpler but unbounded, which made Master-tier (≥20% author-credit share) attainability dominated by a few high-circulation questions rather than by a body of well-crafted ones.
 
-**v11.2 does not lock either model.** No spec text changes in §8.32. Decision deferred to product.
+**Resolved by:** product decision 2026-05-16; code already implements this model (`src/server/mastery/scoring.ts:38-100`) including the Accessible skip; cross-surface coverage (F1.1) shipped on Daily / Catch-up / Feed / Joshing Game routes. The `AUTHOR_CREDIT_WEIGHT = 0.5` constant in `src/server/mastery/constants.ts` is **vestigial** under v11.4 and may be removed in a future cleanup pass; the live system does not reference it.
 
-### §16.17 Catch-up + recovery combination — UNRESOLVED
+### §16.17 Catch-up + recovery combination — RESOLVED (v11.4)
 
-**Status:** unresolved. v11.1 specifies catch-up = 25% of live base and recovery (`first_correct_after_wrong`) = 25% but is silent on the compound case. Code compounds them: `CATCHUP_WEIGHT × RECOVERY_WEIGHT = 6.25%` of live base (`src/app/api/daily/catchup/answer/route.ts:122–128`).
+**Status:** resolved. v11.4 locks **MAX of the two reductions** as canonical. The compound interpretation (6.25%) and the "catch-up-takes-precedence" interpretation are both rejected.
 
-**Three options:**
+**The rule (v11.4 §8.32 addition for catch-up answers):**
 
-- **Adopt the compound (current code).** 6.25% feels right as "the lowest-credit path" — you missed it the first day *and* you originally got it wrong. PRD adds one sentence to §8.32 to lock the compound.
-- **Adopt MAX of the two.** Player earns 25% (the higher of the two reductions), not 6.25%. Simpler to reason about. Code changes one multiplication to a Math.max.
-- **Adopt only one reduction at a time.** Catch-up takes precedence (because the recovery state was set on the wrong-day answer, not the catch-up answer). Player earns 25%.
+> When a Daily Five Catch-up answer is the first correct answer after a prior wrong answer on the same question (`first_correct_after_wrong`), the recovery multiplier **replaces** the catch-up multiplier rather than compounding with it. The award is `liveBasePoints × RECOVERY_STATE_WEIGHT (0.25) = 25%` of live base, not `liveBasePoints × CATCHUP_SURFACE_WEIGHT × RECOVERY_STATE_WEIGHT (0.0625) = 6.25%`.
+>
+> The intuition: a player who originally got the question wrong *and* missed the original day deserves the recovery credit (25%) for finally getting it right, not a doubly-discounted (6.25%) credit that would make the path practically pointless. Catch-up's own 25% discount applies to fresh-correct and repeat-correct Catch-up answers; recovery on Catch-up uses the recovery weight alone.
 
-**v11.2 does not lock a choice.** No spec text changes in §8.32. Decision deferred.
+**v11.4 §8.32 also clarifies, for symmetry:** the same MAX-of-multipliers rule applies to author credit on Catch-up answers — the author-credit window/base from §16.16 above is applied to the live base, not the catch-up-reduced base. This keeps author credit consistent across surfaces: the author earns the same window-position-driven credit regardless of which surface delivered the answer.
+
+**Resolved by:** product decision 2026-05-16; code already implements this rule (`src/app/api/daily/catchup/answer/route.ts:134` computes `Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)`).
 
 ### §16.18 Thumbs-up surface ordering — formula unresolved
 
@@ -477,6 +496,10 @@ The following items from `audits/2026-05-16-phase2-findings.md` either confirm c
 
 **Source of changes:** the 2026-05-16 PRD-vs-code audit (Phase 1 update queue + `PRD_BACKLOG.md` 2026-05-16 entries + Phase 2 findings).
 
-**Next planned revision:** v11.3, when one or both of §16.16 (author credit model) and §16.17 (catch-up + recovery) are resolved, or when Activities / Joshing Game / Personal Rounds / Archive are re-enabled.
+**v11.3 revisions folded in (2026-05-18):** §7.3 — Onboarding "Keep all" fast path rewritten to a binary contract (skip cultural anchor on "These look good"; full four-step flow on "Let me adjust them" or "Start fresh"). §16.19 — Cultural anchor at the route marked RESOLVED as optional, in line with the §7.3 revision.
+
+**v11.4 revisions folded in (2026-05-18):** Tier name confirmation (line 45) rewritten to ratify **Curious / Versed / Fluent / Master** as canonical; the Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired. §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline.
+
+**Next planned revision:** v11.5, when §16.18 (thumbs-up → surface-priority ordering formula) is resolved, or when Activities / Joshing Game / Personal Rounds / Archive are re-enabled.
 
 **Code-side companion:** `audits/2026-05-16-remediation-prompt.md` lists every code-side fix that does not require a PRD change. It is the working document for engineering; v11.2 is the working document for product.
