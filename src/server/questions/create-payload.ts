@@ -1,3 +1,5 @@
+import { questionContainsAnswer } from '@/server/questions/self-answering';
+
 function readBoolean(value: unknown): boolean {
   if (value === true) return true;
   if (typeof value !== 'string') return false;
@@ -64,6 +66,9 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
   if (verified === null) errors.push('verified');
   if (!Number.isInteger(critiqueIterations) || critiqueIterations < 0) errors.push('critiqueIterations');
   if (shareToFeed && rawSendToFriendIds.length > 0) errors.push('shareToFeed');
+  if (text && correctAnswer && questionContainsAnswer(text, correctAnswer, alternateAnswers)) {
+    errors.push('answerInQuestion');
+  }
 
   return {
     value: {

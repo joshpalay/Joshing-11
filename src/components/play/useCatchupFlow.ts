@@ -182,6 +182,7 @@ export function useCatchupFlow() {
     setIsResolvingTurn(true);
     setMessages((existing) => [
       ...existing,
+      { id: newMessageId(), kind: 'user', text: 'i give up' },
       {
         id: newMessageId(),
         kind: 'result',

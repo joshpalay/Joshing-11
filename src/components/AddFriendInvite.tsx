@@ -229,26 +229,7 @@ export default function AddFriendInvite() {
   }
 
   if (!expanded) {
-    return (
-      <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-sm">
-        <p className="text-foreground text-sm font-medium">
-          Bring a friend into Joshing.
-        </p>
-        <p className="text-muted-foreground mt-1 text-sm leading-6">
-          Send a warm note with just a few ideas they can keep, edit, or ignore.
-        </p>
-        <button
-          type="button"
-          className="btn-primary mt-4 min-h-12 w-full rounded-full"
-          onClick={() => {
-            sendTelemetry('add_friend_started', { source: 'inline_card' })
-            setExpanded(true)
-          }}
-        >
-          Add friend
-        </button>
-      </section>
-    )
+    return null
   }
 
   return (

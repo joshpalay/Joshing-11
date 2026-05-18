@@ -4,12 +4,15 @@ import Link from 'next/link'
 import { CheckCircle2, Clock, MessageCircleQuestion, Settings } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+export type SlotOutcome = 'correct' | 'incorrect' | 'skipped' | 'unanswered'
+
 export type DailyStatus = {
   questionsRemaining: number
   questionsAnswered: number
   isComplete: boolean
   nextRoundAt: string
   queueId: string | null
+  slotOutcomes: SlotOutcome[]
 }
 
 export type DailyPreferences = {
@@ -48,6 +51,25 @@ const FALLBACK_STATUS: DailyStatus = {
   isComplete: false,
   nextRoundAt: new Date().toISOString(),
   queueId: null,
+  slotOutcomes: ['unanswered', 'unanswered', 'unanswered', 'unanswered', 'unanswered'],
+}
+
+const VALID_OUTCOMES: ReadonlySet<SlotOutcome> = new Set<SlotOutcome>([
+  'correct',
+  'incorrect',
+  'skipped',
+  'unanswered',
+])
+
+function normalizeSlotOutcomes(value: unknown): SlotOutcome[] {
+  const fallback: SlotOutcome[] = ['unanswered', 'unanswered', 'unanswered', 'unanswered', 'unanswered']
+  if (!Array.isArray(value)) return fallback
+  return fallback.map((unanswered, index) => {
+    const candidate = value[index]
+    return typeof candidate === 'string' && VALID_OUTCOMES.has(candidate as SlotOutcome)
+      ? (candidate as SlotOutcome)
+      : unanswered
+  })
 }
 
 function formatCountdown(targetIso: string, nowMs: number): string {
@@ -117,6 +139,7 @@ export default function TodaysFiveCard({
               ? body.nextRoundAt
               : FALLBACK_STATUS.nextRoundAt,
           queueId: typeof body.queue_id === 'string' ? body.queue_id : null,
+          slotOutcomes: normalizeSlotOutcomes(body.slotOutcomes),
         })
         if (prefsResponse.ok) {
           const prefsBody = await prefsResponse.json()
@@ -228,19 +251,38 @@ export default function TodaysFiveCard({
             aria-label={`${answered} of 5 answered`}
           >
             {Array.from({ length: 5 }, (_, index) => {
-              const filled = index < answered
+              const outcome = effectiveStatus.slotOutcomes[index] ?? 'unanswered'
+              const isFilled = outcome !== 'unanswered'
+              const background =
+                outcome === 'correct'
+                  ? 'var(--success)'
+                  : outcome === 'incorrect'
+                    ? 'var(--destructive)'
+                    : outcome === 'skipped'
+                      ? 'color-mix(in srgb, var(--foreground) 35%, transparent)'
+                      : 'transparent'
+              const label =
+                outcome === 'correct'
+                  ? 'Correct'
+                  : outcome === 'incorrect'
+                    ? 'Wrong'
+                    : outcome === 'skipped'
+                      ? 'Skipped'
+                      : 'Not answered'
               return (
                 <span
                   key={index}
                   className="block rounded-full"
+                  aria-label={label}
+                  title={label}
                   style={{
-                    width: filled ? 9 : 8,
-                    height: filled ? 9 : 8,
-                    background: filled ? 'var(--foreground)' : 'transparent',
-                    border: filled
+                    width: isFilled ? 9 : 8,
+                    height: isFilled ? 9 : 8,
+                    background,
+                    border: isFilled
                       ? 'none'
                       : '1px solid color-mix(in srgb, var(--foreground) 35%, transparent)',
-                    opacity: filled ? 0.85 : 0.7,
+                    opacity: isFilled ? 0.95 : 0.7,
                   }}
                 />
               )

@@ -7,6 +7,7 @@ import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionR
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
 
 function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
   const tier = difficultyEstimateToTierLabel(slot.difficulty_estimate);
@@ -66,16 +67,22 @@ function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
   return slots.find((slot) => !slot.answered && !slot.skipped) ?? null;
 }
 
-function sessionCloseCopy(slots: QueueSlot[]): string {
-  if (slots.length > 0 && slots.every((slot) => slot.skipped)) return "We'll come back to these.";
-  const answered = slots.filter((slot) => slot.answered);
-  if (answered.length > 0 && answered.every((slot) => slot.answer_state === 'correct')) {
-    return 'Five for five. See you tomorrow.';
+function sessionCloseLines(slots: QueueSlot[]): { scoreLine: string; interpretiveLine: string | null } {
+  if (slots.length > 0 && slots.every((slot) => slot.skipped)) {
+    return { scoreLine: "We'll come back to these.", interpretiveLine: null };
   }
-  if (answered.length > 0 && answered.every((slot) => slot.answer_state === 'incorrect')) {
-    return 'Tough round. The map grows anyway.';
-  }
-  return "That's today's round. See you tomorrow.";
+  // PRD §8.1.13 (v11.1) — score line + interpretive line. Tier-crossing and
+  // new-demonstrated-domain interpretive cases need server-side mastery delta
+  // plumbing that doesn't exist on the daily page yet; for now we only
+  // populate the slot fields needed for the slot-derived priority levels
+  // (sweep, wipeout, streaks, all-wrong-in-domain).
+  const summaries: SessionSlotSummary[] = slots
+    .filter((slot) => slot.answered)
+    .map((slot) => ({
+      domain: slot.domain ?? null,
+      answer_state: slot.answer_state ?? null,
+    }));
+  return buildSessionCloseLines(summaries);
 }
 
 function UnfamiliarDialog({
@@ -171,6 +178,7 @@ export default function DailyPage() {
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [showUnfamiliarDialog, setShowUnfamiliarDialog] = useState(false);
   const [excludingDomain, setExcludingDomain] = useState(false);
+  const [pendingGiveUp, setPendingGiveUp] = useState(false);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -378,6 +386,8 @@ export default function DailyPage() {
         });
         if (slot.submitted_answer) {
           rows.push({ id: `u-${slot.slot_index}`, kind: 'user', text: slot.submitted_answer });
+        } else if (gaveUp) {
+          rows.push({ id: `u-${slot.slot_index}`, kind: 'user', text: 'show me the answer' });
         }
         rows.push({
           id: `r-${slot.slot_index}`,
@@ -419,16 +429,21 @@ export default function DailyPage() {
         if (submitting && answer.trim()) {
           rows.push({ id: 'u-pending', kind: 'user', text: answer.trim() });
           rows.push({ id: 'grading', kind: 'typing' });
+        } else if (pendingGiveUp) {
+          rows.push({ id: 'u-pending-giveup', kind: 'user', text: 'show me the answer' });
+          rows.push({ id: 'grading', kind: 'typing' });
         }
         break;
       }
     }
 
     if (allDone) {
+      const { scoreLine, interpretiveLine } = sessionCloseLines(queue.slots);
       rows.push({
         id: 'session-close',
         kind: 'session_close',
-        text: sessionCloseCopy(queue.slots),
+        scoreLine,
+        interpretiveLine,
         summaryHref: '/daily/summary',
       });
     }
@@ -436,7 +451,7 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer]);
+  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer, pendingGiveUp]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -544,7 +559,12 @@ export default function DailyPage() {
   }, [answer, postAnswer]);
 
   const giveUpCurrent = useCallback(async () => {
-    await postAnswer({ submittedAnswer: '', gaveUp: true });
+    setPendingGiveUp(true);
+    try {
+      await postAnswer({ submittedAnswer: '', gaveUp: true });
+    } finally {
+      setPendingGiveUp(false);
+    }
   }, [postAnswer]);
 
   return (

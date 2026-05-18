@@ -4,6 +4,7 @@ import FeedList from '@/components/FeedList'
 import TodaysFiveCard, {
   type DailyPreferences,
   type DailyStatus,
+  type SlotOutcome,
 } from '@/components/TodaysFiveCard'
 import { getSession } from '@/server/auth/session'
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types'
@@ -107,6 +108,20 @@ async function FeedSection({ userId }: { userId: string }) {
   )
 }
 
+function buildSlotOutcomes(slots: QueueSlot[]): SlotOutcome[] {
+  const outcomes: SlotOutcome[] = Array.from({ length: DAILY_QUEUE_SIZE }, () => 'unanswered')
+  for (const slot of slots) {
+    const idx = slot.slot_index
+    if (!Number.isInteger(idx) || idx < 0 || idx >= DAILY_QUEUE_SIZE) continue
+    if (slot.answered) {
+      outcomes[idx] = slot.answer_state === 'incorrect' ? 'incorrect' : 'correct'
+    } else if (slot.skipped) {
+      outcomes[idx] = 'skipped'
+    }
+  }
+  return outcomes
+}
+
 function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDailyQueue>>): DailyStatus {
   const nextRoundAt = getNextDailyResetBoundary().toISOString()
   if (!queue) {
@@ -116,6 +131,7 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
       isComplete: false,
       nextRoundAt,
       queueId: null,
+      slotOutcomes: buildSlotOutcomes([]),
     }
   }
 
@@ -130,6 +146,7 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
     isComplete,
     nextRoundAt,
     queueId: queue.id,
+    slotOutcomes: buildSlotOutcomes(slots),
   }
 }
 

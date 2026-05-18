@@ -26,7 +26,9 @@ describe('Friends page QA surface', () => {
 
     expect(html).toContain('Friends')
     expect(html).toContain('Add friend')
-    expect(html).toContain('Bring a friend into Joshing.')
+    expect(html).not.toContain('Joshing</p>')
+    expect(html).not.toContain('Invite your people')
+    expect(html).not.toContain('Send a warm note')
     expect(html).not.toMatch(forbiddenGamificationCopy)
   })
 

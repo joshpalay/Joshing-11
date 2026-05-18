@@ -80,7 +80,7 @@ On the way out she taps thumbs-up on the Sondheim question — it was a great qu
 
 ### §6.6 The biweekly ceremony (v11.4)
 
-Two weeks into using Joshing, **Greg** opens the app one Sunday morning and finds a quiet banner above his Feed: *"Two weeks of Joshing. Here's what you've been up to."* He taps in. Up to four cinematic beats, ~30 seconds total: *Crossed to Solid in James Joyce's Ulysses. New ground in Late-Period Bowie and Italian Renaissance Painting. Maya's questions gave you 7 you got right — she's been part of your last two weeks. You and Maya are most aligned in Modernist Literature this cycle.* The ceremony ends with a shareable card. He saves it.
+Two weeks into using Joshing, **Greg** opens the app one Sunday morning and finds a quiet banner above his Feed: *"Two weeks of Joshing. Here's what you've been up to."* He taps in. Up to five cinematic beats, ~30 seconds total: *Crossed to Solid in James Joyce's Ulysses. New ground in Late-Period Bowie and Italian Renaissance Painting. Maya's questions gave you 7 you got right — she's been part of your last two weeks. You and Maya are most aligned in Modernist Literature this cycle. Your questions earned 4.2 points for others — your most-played was the Sondheim notebooks one.* The ceremony ends with a shareable card. He saves it.
 
 The ceremony is fired by a biweekly personal cron (§8.1.30). Greg wasn't pinged; he discovered the banner because he opened the app.
 
@@ -173,18 +173,26 @@ The ceremony renders in one of two modes, computed at fire time:
 - **Solo** — no friend activity touched the user's mastery in the cycle.
 - **Group** — at least one friend's answers, sends, or reactions touched the user's mastery in the cycle.
 
-Mode is stored on the ceremony row (`BiweeklyCeremony.payload.mode`) and drives copy register on the ceremony page. Beat 3 (Shaped — who contributed to your learning) and Beat 4 (Alignment — best-aligned friend) are suppressed in solo mode regardless of all-time alignment scores. Beat 4 in particular must be cycle-scoped: a lifetime-overlap Beat 4 reaching the screen with a friend who hasn't played in months is wrong and will be removed.
+Mode is stored on the ceremony row (`BiweeklyCeremony.payload.mode`) and drives copy register on the ceremony page. Beat 3 (Shaped — who contributed to your learning) and Beat 4 (Alignment — best-aligned friend) are suppressed in solo mode regardless of all-time alignment scores. Beat 4 in particular must be cycle-scoped: a lifetime-overlap Beat 4 reaching the screen with a friend who hasn't played in months is wrong and will be removed. Beat 5 (Gave — author credit earned from your questions) is **not** suppressed in solo mode: authoring is a personal output, and a user with no active friends can still have written questions that others answered.
 
 ### §8.1.33 Beats
 
-The biweekly ceremony renders up to four beats in order:
+The biweekly ceremony renders up to five beats in order:
 
 1. **Crossed** — tier crossings during the cycle.
 2. **Discovered** — new demonstrated domains during the cycle, with source copy distinguishing friend-mediated, authored declared, and authored-promoted-to-demonstrated paths (per §8.4.3).
 3. **Shaped** — which friends contributed to the user's learning this cycle (suppressed in solo mode).
 4. **Aligned** — best-aligned friend this cycle (suppressed in solo mode).
+5. **Gave** — author credit the user earned this cycle when other users answered questions the user wrote. Renders the total creator-points (rounded to one decimal, computed from `mastery_events` rows of `sourceType = 'author_credit'` where `answeredByUserId != userId`) and, when available, the most-answered authored question text. Self-answers do not contribute. This beat is personal output, not friendship state, so it renders in solo, duo, and group mode.
 
-Each beat returns `null` if it has nothing to say. A ceremony with all four nulls is not shown.
+Each beat returns `null` if it has nothing to say. A ceremony with all five nulls is not shown.
+
+**Friend fallbacks.** When the user's own activity produces `null` for Beat 1 or Beat 5, the ceremony may surface a friend-fallback view in that slot so the screen does not open blank:
+
+- **Beat 1 friend fallback** — when the user had zero tier progressions in the cycle, surface the friend with the most progressions and the domain list (respecting per-domain visibility; `private` domains are excluded from both the count and the listed names). Skipped when the user has no friends or no friend has any in-cycle progressions.
+- **Beat 5 friend fallback** — when the user earned zero author credit in the cycle, surface the friend whose authored questions earned the most creator-points. Aggregate only — no domain or question text — so no per-domain privacy filtering is required. Skipped when the user has no friends or no friend earned positive author credit.
+
+Fallback views are rendered as a distinct beat (framed as "your friends were busy"), not as the user's own activity. They are stored on the payload as `beat1FriendFallback` and `beat5FriendFallback` and are only populated when the corresponding primary beat is `null`.
 
 ### §8.1.34 Storage and idempotency
 
