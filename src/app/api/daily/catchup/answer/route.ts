@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      await createFeedItemsForFriendsFromAnswer(
+      void createFeedItemsForFriendsFromAnswer(
         session.userId,
         canonicalQuestionId,
         isCorrect ? 'correct' : 'incorrect',

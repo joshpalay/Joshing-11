@@ -175,7 +175,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (isCorrect) {
-    await createFeedItemsForFriendsFromAnswer(
+    void createFeedItemsForFriendsFromAnswer(
       session.userId,
       question.id,
       'correct',

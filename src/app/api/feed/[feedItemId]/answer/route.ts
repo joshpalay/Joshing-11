@@ -204,7 +204,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Only correct Feed answers are eligible to become public/social friend Feed cards.
   // Incorrect answers persist privately on this viewer's Feed item as answered_by_you.
   if (isCorrect) {
-    await createFeedItemsForFriendsFromAnswer(
+    void createFeedItemsForFriendsFromAnswer(
       session.userId,
       question.id,
       'correct',
