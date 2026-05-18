@@ -221,9 +221,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
+  const explanation = isCorrect
+    ? (question.explainerFullCorrect ?? question.explainerFull ?? question.explainerBrief ?? question.factualExplanation)
+    : (question.explainerFullWrong ?? question.explainerFull ?? question.explainerBrief ?? question.factualExplanation);
+
   return NextResponse.json({
     isCorrect,
-    explanation: question.explainerFull ?? question.explainerBrief ?? question.factualExplanation,
+    explanation,
     pointsAwarded,
     answerState,
     breadcrumb,
