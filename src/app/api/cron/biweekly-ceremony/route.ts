@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
 
   let fired = 0;
   let skipped = 0;
+  let skippedNoActivity = 0;
 
   for (const user of onboardedUsers) {
     const accountAgeDays = daysBetweenNewYorkDates(user.createdAt, today);
@@ -67,9 +68,13 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    await fireCeremony(user.id);
-    fired += 1;
+    const ceremonyId = await fireCeremony(user.id);
+    if (ceremonyId) {
+      fired += 1;
+    } else {
+      skippedNoActivity += 1;
+    }
   }
 
-  return NextResponse.json({ fired, skipped });
+  return NextResponse.json({ fired, skipped, skippedNoActivity });
 }
