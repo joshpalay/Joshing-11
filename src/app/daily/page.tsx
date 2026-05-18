@@ -22,6 +22,7 @@ type QueueResponse = {
 type AnswerResponse = {
   isCorrect?: boolean;
   correct?: boolean;
+  gaveUp?: boolean;
   explanation?: string;
   explainer?: string;
   pointsAwarded?: number;
@@ -363,6 +364,7 @@ export default function DailyPage() {
     const rows: ChatMessage[] = [];
     for (const slot of queue.slots) {
       if (slot.answered) {
+        const gaveUp = slot.answer_state === 'incorrect' && !slot.submitted_answer;
         rows.push({
           id: `q-${slot.slot_index}`,
           kind: 'question',
@@ -379,7 +381,7 @@ export default function DailyPage() {
           kind: 'result',
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
-          result: slot.answer_state === 'correct' ? 'correct' : 'wrong',
+          result: slot.answer_state === 'correct' ? 'correct' : gaveUp ? 'gave_up' : 'wrong',
           submitted: slot.submitted_answer ?? '',
           correctAnswer: slot.answer_state === 'correct' ? null : slot.reveal_canonical_answer ?? null,
           consolation: slot.reveal_quip ?? null,
@@ -387,7 +389,7 @@ export default function DailyPage() {
           copyVariant: slot.slot_index,
           creatorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
           canonicalSubcategory: slot.domain,
-          recheckAction: slot.answer_state === 'incorrect' && !slot.recheck_status
+          recheckAction: slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
             ? { onSubmit: () => requestRecheck(slot.slot_index) }
             : null,
         });
@@ -431,7 +433,6 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer]);
 
   const results = useMemo(() => {
@@ -443,9 +444,8 @@ export default function DailyPage() {
     return map;
   }, [queue?.slots]);
 
-  const submitAnswer = useCallback(async () => {
-    if (!queue || !currentSlot || submitting || !answer.trim()) return;
-    const submittedAnswer = answer.trim();
+  const postAnswer = useCallback(async (opts: { submittedAnswer: string; gaveUp: boolean }) => {
+    if (!queue || !currentSlot || submitting) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -456,7 +456,8 @@ export default function DailyPage() {
         body: JSON.stringify({
           queue_id: queue.queue_id,
           slot_index: currentSlot.slot_index,
-          submitted_answer: submittedAnswer,
+          submitted_answer: opts.submittedAnswer,
+          gave_up: opts.gaveUp,
         }),
       });
       if (!response.ok) {
@@ -479,12 +480,12 @@ export default function DailyPage() {
                     ...slot,
                     answered: true,
                     answer_state: isCorrect ? 'correct' : 'incorrect',
-                    submitted_answer: submittedAnswer,
+                    submitted_answer: opts.gaveUp ? '' : opts.submittedAnswer,
                     awarded_points: body.pointsAwarded ?? body.awarded_points ?? 0,
                     reveal_canonical_answer: body.correctAnswer ?? body.answer,
                     reveal_explainer: body.explanation ?? body.explainer,
                     reveal_breadcrumb: body.breadcrumb ?? null,
-                    reveal_quip: body.consolation ?? body.quip ?? null,
+                    reveal_quip: opts.gaveUp ? null : body.consolation ?? body.quip ?? null,
                   }
                 : slot
             ),
@@ -498,7 +499,17 @@ export default function DailyPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [answer, currentSlot, queue, submitting]);
+  }, [currentSlot, queue, submitting]);
+
+  const submitAnswer = useCallback(async () => {
+    const trimmed = answer.trim();
+    if (!trimmed) return;
+    await postAnswer({ submittedAnswer: trimmed, gaveUp: false });
+  }, [answer, postAnswer]);
+
+  const giveUpCurrent = useCallback(async () => {
+    await postAnswer({ submittedAnswer: '', gaveUp: true });
+  }, [postAnswer]);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col px-0">
@@ -564,14 +575,24 @@ export default function DailyPage() {
               {submitting ? '...' : 'Send'}
             </button>
           </div>
-          <button
-            type="button"
-            className="mt-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
-            disabled={submitting}
-            onClick={() => setShowUnfamiliarDialog(true)}
-          >
-            Not familiar with this topic
-          </button>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
+              disabled={submitting}
+              onClick={() => setShowUnfamiliarDialog(true)}
+            >
+              Not familiar with this topic
+            </button>
+            <button
+              type="button"
+              className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
+              disabled={submitting}
+              onClick={() => void giveUpCurrent()}
+            >
+              Show me the answer
+            </button>
+          </div>
         </form>
       ) : null}
 
