@@ -134,6 +134,14 @@ function friendAnsweredAttribution(
   return domain ? `Common ground in ${domain}: ${names}` : `${names} share this one`;
 }
 
+function compactNulls<T extends Record<string, unknown>>(obj: T): T {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== null) result[key] = value;
+  }
+  return result as T;
+}
+
 export type FeedPageOptions = {
   limit: number;
   cursor: FeedCursor | null;
@@ -227,7 +235,13 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
       const answerResult = item.answerResult ?? item.viewerAnswerStatus?.result ?? null;
       const awardedPoints = typeof item.pointsAwarded === 'number' ? item.pointsAwarded : null;
 
-      return {
+      // compactNulls strips `"field":null` from the wire; the client treats
+      // absent fields and null fields identically (verified by grep:
+      // no `=== null` checks on these fields, only `??`, optional chaining,
+      // and truthy checks). Card-discriminated fields are the bulk of the
+      // saving — `joshing_game_id`, `endorsement_count`, `correct_answer`
+      // etc. are null on 4 of 5 card types each.
+      return compactNulls({
         id: item.id,
         kind: 'question' as const,
         card_type: cardType,
@@ -265,7 +279,7 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         awarded_points: cardType === 'answered_by_you' ? awardedPoints : null,
         mastery_delta: cardType === 'answered_by_you' ? item.masteryDelta ?? null : null,
         viewer_is_author: question?.creatorId ? question.creatorId === viewerUserId : false,
-      };
+      });
     }),
   };
 }

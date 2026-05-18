@@ -42,26 +42,29 @@ type FeedApiItem = {
   source_friend_display_name: string
   source_profile_href?: string | null
   source_attribution: string
-  source_result: 'correct' | 'incorrect' | null
-  friend_results: FriendResult[] | null
+  // Fields the server omits when null (see compactNulls in get-feed-page.ts).
+  // Optional + nullable here because the client also constructs FeedApiItem
+  // values locally (after answer submit) and sometimes writes null explicitly.
+  source_result?: 'correct' | 'incorrect' | null
+  friend_results?: FriendResult[] | null
   viewer_answer_status?: { result: 'correct' | 'incorrect' } | null
   endorsement_count?: number | null
   additional_endorsers?: Array<{ userId: string; displayName: string }> | null
   source_event_at: string
-  personal_message: string | null
+  personal_message?: string | null
   state: string
   is_pinned: boolean
-  question_text: string | null
+  question_text?: string | null
   is_in_bank: boolean
-  domain_pill: string | null
+  domain_pill?: string | null
   broad_category?: string | null
-  explanation: string | null
-  answer_result: 'correct' | 'incorrect' | null
-  is_correct: boolean | null
-  correct_answer: string | null
-  submitted_answer: string | null
-  awarded_points: number | null
-  mastery_delta: unknown | null
+  explanation?: string | null
+  answer_result?: 'correct' | 'incorrect' | null
+  is_correct?: boolean | null
+  correct_answer?: string | null
+  submitted_answer?: string | null
+  awarded_points?: number | null
+  mastery_delta?: unknown | null
   viewer_is_author?: boolean
 }
 
@@ -367,14 +370,14 @@ function toAnsweredByYouItem(
     answerSummary: result
       ? comparisonCopy(
           result.correct,
-          item.friend_results,
+          item.friend_results ?? null,
           item.source_type,
           item.source_friend_display_name,
           item.source_user_id
         )
       : comparisonCopy(
-          item.is_correct,
-          item.friend_results,
+          item.is_correct ?? null,
+          item.friend_results ?? null,
           item.source_type,
           item.source_friend_display_name,
           item.source_user_id
