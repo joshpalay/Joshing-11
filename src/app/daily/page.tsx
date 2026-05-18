@@ -171,6 +171,7 @@ export default function DailyPage() {
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [showUnfamiliarDialog, setShowUnfamiliarDialog] = useState(false);
   const [excludingDomain, setExcludingDomain] = useState(false);
+  const [pendingGiveUp, setPendingGiveUp] = useState(false);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -378,6 +379,8 @@ export default function DailyPage() {
         });
         if (slot.submitted_answer) {
           rows.push({ id: `u-${slot.slot_index}`, kind: 'user', text: slot.submitted_answer });
+        } else if (gaveUp) {
+          rows.push({ id: `u-${slot.slot_index}`, kind: 'user', text: 'show me the answer' });
         }
         rows.push({
           id: `r-${slot.slot_index}`,
@@ -419,6 +422,9 @@ export default function DailyPage() {
         if (submitting && answer.trim()) {
           rows.push({ id: 'u-pending', kind: 'user', text: answer.trim() });
           rows.push({ id: 'grading', kind: 'typing' });
+        } else if (pendingGiveUp) {
+          rows.push({ id: 'u-pending-giveup', kind: 'user', text: 'show me the answer' });
+          rows.push({ id: 'grading', kind: 'typing' });
         }
         break;
       }
@@ -436,7 +442,7 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer]);
+  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer, pendingGiveUp]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -544,7 +550,12 @@ export default function DailyPage() {
   }, [answer, postAnswer]);
 
   const giveUpCurrent = useCallback(async () => {
-    await postAnswer({ submittedAnswer: '', gaveUp: true });
+    setPendingGiveUp(true);
+    try {
+      await postAnswer({ submittedAnswer: '', gaveUp: true });
+    } finally {
+      setPendingGiveUp(false);
+    }
   }, [postAnswer]);
 
   return (

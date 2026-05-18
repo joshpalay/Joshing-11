@@ -629,12 +629,26 @@ function ResultRow({
           </>
         ) : gaveUp ? (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--text-muted)' }}>
-              Here&rsquo;s the answer.
+            <p
+              style={{
+                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+                fontSize: '0.82rem',
+                color: 'var(--text-muted)',
+              }}
+            >
+              <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>—</span>
+              For the record.
             </p>
             {correctAnswer ? (
-              <p style={{ marginTop: '8px', fontSize: '0.9rem', color: 'var(--text)' }}>
-                <span style={{ fontWeight: 600 }}>Answer:</span> {correctAnswer}
+              <p
+                style={{
+                  marginTop: '6px',
+                  fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+                  fontSize: '0.95rem',
+                  color: 'var(--text)',
+                }}
+              >
+                {correctAnswer}
               </p>
             ) : null}
           </>
