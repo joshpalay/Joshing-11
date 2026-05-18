@@ -9,8 +9,8 @@ type SharedInterestsOverlapProps = {
   friendFirstName: string
 }
 
-const MAX_CHIPS_PER_SIDE = 5
-const MAX_SHARED_CHIPS = 6
+const MAX_CHIPS_PER_SIDE = 8
+const MAX_SHARED_CHIPS = 10
 
 export function SharedInterestsOverlap({
   viewerSoloInterests,
