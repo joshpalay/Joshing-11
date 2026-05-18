@@ -74,7 +74,6 @@ type ActiveModal =
   | null
   | { type: 'interests'; slotIndex: number; currentDomain: string | null }
   | { type: 'manage-interests' }
-  | { type: 'send-question' }
   | { type: 'write-question' }
   | { type: 'tidy' };
 
@@ -584,20 +583,11 @@ function KnowledgePageContent() {
       <section className="bg-[var(--cream)] border border-[var(--border-warm)] px-[0.95rem] py-5">
         <h2 className="m-0 text-[1.1rem] font-[var(--font-literata)] text-[var(--ink)]">Grow your map</h2>
         <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
-          Your map grows whenever you correctly answer a question that came through a friend — from your Feed, from a direct send, or from a Joshing Game.
-        </p>
-        <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
-          It also grows when you write a question yourself. The domain you wrote in opens as declared territory on your map. When a friend answers it correctly, it becomes proven.
-        </p>
-        <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
-          One way to start: ask a friend about something you&apos;d love to learn from them — Disney World, 1970s BBC Drama, the 1956 Hungarian Uprising. The ask itself plants the seed.
+          Answer a friend&apos;s question correctly, or write your own — writing opens new territory; a friend&apos;s correct answer proves it.
         </p>
         <div className="flex flex-wrap gap-[10px] mt-5">
-          <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'send-question' })}>
-            Send a friend a question
-          </button>
-          <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
-            Write a question
+          <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
+            Ask a question
           </button>
         </div>
       </section>
@@ -783,27 +773,6 @@ function KnowledgePageContent() {
             </div>
             <div className="flex justify-start gap-2 mt-4">
               <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)}>Done</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {activeModal?.type === 'send-question' ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
-            <div className="flex justify-between gap-4">
-              <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Send a friend a question</h2>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
-                <X className="size-4" />
-              </button>
-            </div>
-            <div className="mt-5">
-              <QuestionForm
-                initialSpecificMode
-                onSubmit={submitQuestion}
-                submitLabel="Send question"
-                onCancel={() => setActiveModal(null)}
-              />
             </div>
           </div>
         </div>
