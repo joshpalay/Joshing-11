@@ -55,11 +55,9 @@ export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotic
           [data-expanding-proof="true"] { grid-column: 2; border-left: 0; padding-left: 0; justify-self: start; text-align: left; }
         }
       `}</style>
+      <p style={wordmarkStyle}>Joshing</p>
       <div style={headerStyle}>
-        <div>
-          <h2 style={titleStyle}>Recently Expanding</h2>
-          <p style={helperStyle}>Territories where your knowledge is growing.</p>
-        </div>
+        <h2 style={titleStyle}>Recently Expanding</h2>
         {visibleDomains.length > 0 ? (
           <button
             type="button"
@@ -238,9 +236,18 @@ const boxStyle: CSSProperties = {
 
 const headerStyle: CSSProperties = {
   display: 'flex',
-  alignItems: 'flex-start',
+  alignItems: 'center',
   justifyContent: 'space-between',
   gap: '0.75rem',
+};
+
+const wordmarkStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: 'var(--font-literata), serif',
+  fontStyle: 'italic',
+  fontSize: '0.78rem',
+  color: '#1a1208',
+  lineHeight: 1,
 };
 
 const titleStyle: CSSProperties = {
@@ -249,14 +256,6 @@ const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-literata), Georgia, serif',
   fontSize: '1rem',
   fontWeight: 700,
-};
-
-const helperStyle: CSSProperties = {
-  margin: '0.15rem 0 0',
-  color: '#696257',
-  fontSize: '0.74rem',
-  lineHeight: 1.35,
-  maxWidth: 230,
 };
 
 const shareButtonStyle: CSSProperties = {
