@@ -79,7 +79,7 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
   }
 
   if (item.type === 'ceremony_ready') {
-    return <>Your two-week reflection is ready</>
+    return <>Your weekly reflection is ready</>
   }
 
   if (item.type === 'friend_request') {

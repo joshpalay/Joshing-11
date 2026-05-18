@@ -16,7 +16,7 @@ import {
   questions,
   skippedDailyQuestions,
 } from '@/server/db';
-import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, parseJsonObject } from '@/lib/llm';
+import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 import { effectiveTier, resolveTier } from '@/server/mastery/tiers';
 import type { MasteryTier } from '@/types/db';
@@ -491,7 +491,7 @@ If no merges are needed: { "merges": [] }`;
 
   let response;
   try {
-    response = await client.messages.create({
+    response = await loggedMessagesCreate(client, 'ceremony-narrative', {
       model: ANTHROPIC_MODEL,
       max_tokens: 1200,
       temperature: 0,

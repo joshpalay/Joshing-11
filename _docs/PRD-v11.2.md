@@ -32,7 +32,7 @@ Two items remain unresolved and are deliberately not locked here. They are carri
 | 7 | §8.5.2 | Reinstate the "Share with all friends" broadcast destination; simplify save-to-bank confirmation copy |
 | 8 | §8.7 | Archive deferred; split Catch-up out as a separate, active feature |
 | 9 | §8.8a | Breadcrumb length is 1–2 sentences (LLM-generated); separated from §8.1.14 per-answer quips |
-| 10 | §8.10 | Star voting replaced by thumbs up / thumbs down — no daily budget, no SMS to author |
+| 10 | §8.10 | Star voting replaced by thumbs-down only; thumbs-up deferred to a later phase pending a product decision on whether to ship |
 | 11 | §8.10b | Reaction custom-message cap raised from 100 to 160 characters |
 | 12 | §8.11 | Remove "Friend answered your question" and thumbs-up SMS triggers |
 | 13 | §8.12 | Navigation is Home / Friends / Questions / Knowledge / Account (Feed and Activities are not primary nav) |
@@ -41,10 +41,48 @@ Two items remain unresolved and are deliberately not locked here. They are carri
 | 16 | §8.4.11 | "Grow your map" copy updated to surface all three growth paths |
 | 17 | §10 | Schema clarifications: `source_result` enum, `territory_type` text-with-typecast, quip storage |
 | 18 | §16 | Four new open questions carried forward (16.16–16.19) |
+| v11.3 | §7.3, §16.19 | Onboarding "Keep all" rewritten to a binary contract; cultural anchor at the route resolved as optional |
+| v11.4 | line 45, §16.16, §16.17, §8.4.8, §16.12, §8.11, §7.1, §6.1–§6.6 | Tier labels locked to Establishing / Familiar / Solid / Mastery (v11.5 reversal of the v11.4 Curious/Versed/Fluent/Master pivot); author credit windowed model locked; catch-up + recovery MAX rule locked; declared-territory visual distinction withdrawn; first-question orientation panel copy locked and shipped; SMS deferred entirely in Phase 1 (OTP hardcoded to `000000`); §7.1 auth locked to Phase-1 hardcoded code + invite-required gate, with Phase-2 SMS-OTP re-enable checklist; §6.1 / §6.2 / §6.3 / §6.4 / §6.6 user stories rewritten to reflect v11.1+ mechanics and the SMS-deferred rule |
 
-**Tier name confirmation.** v11.1 §8.4.8 named the tiers Establishing / Familiar / Solid / Mastery. Earlier audit briefs used Curious / Versed / Fluent / Master. Code matches v11.1. v11.2 reaffirms **Establishing / Familiar / Solid / Mastery as canonical.** The earlier names are retired.
+**Tier name confirmation (v11.5 revision).** v11.1 §8.4.8 named the tiers Establishing / Familiar / Solid / Mastery; v11.2 reaffirmed those names. The 2026-05-18 audit identified a three-way fork in shipped UI copy (`Establishing / Familiar / Solid / Mastery` in shared helpers, `Curious / Explorer / Scholar / Sage` on profile/domain pages, `Familiar / Solid / Mastery` in `MasteryMoment`) and v11.4 attempted to unify everything on **Curious / Versed / Fluent / Master**. v11.5 reverses that pivot: the canonical labels return to the original **Establishing / Familiar / Solid / Mastery**, mirroring the internal enum keys 1-to-1. The Curious/Versed/Fluent/Master and Curious/Explorer/Scholar/Sage label sets are retired. Difficulty surfaces (Daily setup, Daily summary, TodaysFive, Questions page badges, `difficulty-copy.ts`) also use this vocabulary so the language is consistent across mastery and difficulty UI.
+
+**Canonical tier labels (v11.5):** **Establishing → Familiar → Solid → Mastery.** The internal enum keys `establishing | familiar | solid | mastery` (in `src/types/db.ts`) map 1-to-1 onto the user-facing labels. See §8.4.8 for the per-tier visual treatment.
 
 **No new killed features** beyond what v11.1 already killed. The Activities Tab, Joshing Game, Personal Rounds, and Archive are *deferred*, not killed — implementations exist for the first two and can be re-enabled when their entry points return.
+
+---
+
+## §6 — User Stories (v11.4 rewrite of §6.1, §6.2, §6.3, §6.4, §6.6)
+
+v11.1 flagged that §6.1 (Maya's onboarding) and §6.3 (the Feed moment) no longer matched the v11.1 mechanics. Neither was rewritten in v11.2 / v11.3. v11.4 also retires every non-OTP SMS trigger (§8.11 rewrite below), which means the §6.2, §6.4, and §6.6 narratives — each of which open with an SMS — also need updating. The five stories below replace their PRD11 originals in full. §6.5, §6.7, and §6.8 stand as written.
+
+### §6.1 New player onboarding (v11.4)
+
+**Maya** receives a text from her friend Greg: *"I think you'd like this — try it tonight."* She taps the link. Joshing asks for her phone, then for a 6-digit code. The Phase 1 product hardcodes the code to `000000` (see §7.1 / §8.11) — she enters it and she's in. Greg has pre-seeded three interests for her: Sondheim Musicals, Modernist Poetry, Italian Cinema. The invite-suggestions screen offers a binary choice: **These look good** or **Let me adjust them**.
+
+She taps **These look good** — the three seeded interests become her starting Knowledge base and she lands on home. No further questions. (If she had tapped **Let me adjust them**, Joshing would have walked her through the full four-step flow: a compact cultural-anchor step asking when she was born and where she grew up; two warm-up questions; and a final review step where she could edit the seeded set, accept LLM-proposed additions, and lock her five.)
+
+She receives a quiet on-screen confirmation: *"Tomorrow at noon, your first five questions arrive."* No SMS. Tomorrow she'll discover them when she opens the app.
+
+### §6.2 The daily ritual (v11.4)
+
+**Greg** opens Joshing during a quiet moment after lunch. The Home screen shows today's five waiting — no ping pulled him here, he just chose to open the app. Five questions appear in a chat-thread interface. He answers four, gets three right, skips the fifth. The session closes with a quiet summary: *"3 of 4. You moved closer to Familiar in Late Tchaikovsky."* He exits. Total time: 4 minutes.
+
+### §6.3 The Feed moment (v11.4)
+
+**Maya**, later that evening, opens Joshing again and scrolls down past her Daily Five card on Home — there's an inline Feed below. There are 8 items. The top is pinned: *"Greg sent this to you — about Sondheim."* She answers it — gets it right. Below, *"Robyn got this right — W.H. Auden."* She skips. *"Robyn couldn't get this — Weimar Cinema."* She answers it and gets it wrong; the card updates in place with both their results side by side. She dismisses one more, leaves the rest for tomorrow.
+
+On the way out she taps thumbs-up on the Sondheim question — it was a great question, and her signal contributes to its surface priority in friends' Feeds. She does not need to do anything to share the questions she answered; those propagated to her friends' Feeds the moment she answered them. Thumbs-up is a quality signal only — propagation happens through friendship, not endorsement.
+
+### §6.4 The send-to-friend gesture (v11.4)
+
+**Greg** is reading something online about Stephen Sondheim's working method. He thinks of Maya. He opens Joshing, taps "Write a question" on the Knowledge page, writes a question about Sondheim's notebooks, toggles **Send to specific friends only**, picks Maya, taps Save. Joshing confirms inline: *"Sent to 1 friend."* Total time: 90 seconds. No SMS to Maya — she'll see the question pinned at the top of her Feed the next time she opens the app, with attribution: *"Greg sent this to you."*
+
+### §6.6 The biweekly ceremony (v11.4)
+
+Two weeks into using Joshing, **Greg** opens the app one Sunday morning and finds a quiet banner above his Feed: *"Two weeks of Joshing. Here's what you've been up to."* He taps in. Up to four cinematic beats, ~30 seconds total: *Crossed to Solid in James Joyce's Ulysses. New ground in Late-Period Bowie and Italian Renaissance Painting. Maya's questions gave you 7 you got right — she's been part of your last two weeks. You and Maya are most aligned in Modernist Literature this cycle.* The ceremony ends with a shareable card. He saves it.
+
+The ceremony is fired by a biweekly personal cron (§8.1.30). Greg wasn't pinged; he discovered the banner because he opened the app.
 
 ---
 
@@ -80,19 +118,39 @@ Each has a dedicated section below (§8.7, §8.14, §8.15). Listed here so §5's
 
 ---
 
-## §7.3 — Onboarding "Keep all" fast path (addition)
+## §7.1 — Authentication (v11.4 — OTP-via-SMS deferred to Phase 2)
 
-v11.1 §7.3 describes a four-step flow that always includes Step 2 (birth year + geography). The implementation's "Keep all" invite-suggestions path skips Step 2 entirely and redirects to home, so a pre-seeded cohort never has a cultural anchor recorded. Neither end is correct: the PRD flow is too long for a pre-seeded user; the code's hard-skip permanently strips a useful signal.
+PRD11 §7.1 specified: *"Authentication is via US mobile phone number + SMS one-time code. There are no passwords, no email, no third-party sign-on. Phone number is the unique account identifier."* v11.4 narrows this for Phase 1.
 
-**v11.2 resolution.** When a user taps "Keep all" on the invite-suggestions step, accept the interests, then route them to a compact one-screen step collecting birth year and country only, before reaching home.
+**Phase 1 (current).** The phone number remains the account identifier and the only login surface. The 6-digit verification code is **hardcoded to `000000`** for every account, every environment. No SMS is sent — see §8.11 for the full SMS-deferred rationale. `verifyOtp` accepts `000000` unconditionally (`src/server/auth/otp-store.ts:37-39`, commit `c5629d0`).
 
-**Step 1 (updated):**
+**Invite-required gate stays.** Phase 1's hardcoded code does *not* loosen the invite-required check. `POST /api/auth/request-otp` still rejects phone numbers without a valid pending invitation (`hasValidPendingInvitationForPhone`). The combination — invite-required pre-check + `000000` post-check — is the working Phase 1 login gate. A bad actor who guesses `000000` still needs an accepted invitation on file to provision an account.
 
-> If the user accepts all pre-seeded interests, proceed to a compact Step 2 screen (birth year + country only) before reaching home. Region is omitted on this fast path — the two-field minimum is enough for future re-personalization without lengthening the gate.
+**Phase 2 (deferred).** Real per-user OTP-via-SMS delivery returns when (a) the product moves beyond closed-beta scale and (b) the §8.11 re-enable checklist is executed. The Phase 2 OTP flow is the only SMS trigger the product will ever ship; every other historical SMS trigger is permanently retired (§8.11).
 
-The full four-step flow remains the path for users who skip invite suggestions or have no pre-seeded interests. **The cultural anchor is required for everyone — there is no skip path that bypasses both fields.** See §16.19 for the open question on whether the route should hard-reject a request without a cultural anchor payload.
+**Login flow as it stands today:**
 
-The Knowledge-base candidates returned to the user remain LLM-generated from birth year + country + (region if collected) + warm-up answers, exactly as in v11.1.
+1. User enters US phone number on `/login`.
+2. `POST /api/auth/request-otp` validates the phone and checks for an invitation (or an existing account).
+3. The route returns `{ ok: true, phone }`. In non-production it also returns `debugCode: "000000"` for testing convenience; in production this field is omitted.
+4. User enters `000000` (told to them out-of-band — via the invite SMS that brought them to the app, an admin handoff, or community knowledge during closed beta).
+5. `POST /api/auth/verify-otp` accepts the code and mints a JWT session with the `inv: true` claim.
+
+---
+
+## §7.3 — Onboarding "Keep all" fast path (v11.3 revision)
+
+v11.1 §7.3 described a four-step flow that always included Step 2 (birth year + geography). v11.2 attempted a middle ground — a compact two-field Step 2 on the "Keep all" path — but on review, the friction of even a two-field gate against the highest-intent cohort was judged net-negative for activation. v11.3 supersedes both.
+
+**v11.3 resolution.** The contract on the invite-suggestions screen is now binary:
+
+1. **Seeded set untouched ("These look good") → straight to home.** No cultural anchor is collected on this path. Speed of activation is prioritized for the invited cohort, who have the strongest signal of intent (a friend hand-picked their interests). Personalization on this cohort falls back to the seeded interests themselves, which are richer than any two-field anchor.
+2. **Any deviation ("Let me adjust them" — edit, add, or remove any seeded interest) → full four-step flow** (background → warmup → review). The user's edited seeded set is carried into the final review screen alongside any LLM-proposed additions. Tapping the adjust button is treated as the deviation signal; we do not require the user to actually change anything past that point.
+3. **Skip seeded entirely ("Start fresh") → full four-step flow** with the seeded set cleared. Unchanged from prior versions.
+
+The cultural anchor (`birth_year`, `grew_up_country`, optional `grew_up_region`) is collected on paths (2) and (3) only. The "anchor required for everyone" rule from v11.2 is **withdrawn**.
+
+The Knowledge-base candidates returned to the user remain LLM-generated from birth year + country + (region if collected) + warm-up answers when those fields are present; for the fast path, KB generation falls back to the seeded interests directly.
 
 ---
 
@@ -138,11 +196,13 @@ All v11.1 ceremony copy referencing Act 1, Act 2, per-game triggers, all-players
 
 ---
 
-## §8.1.11 — Thumbs-up as quality signal (clarified; PRD unchanged)
+## §8.1.11 — Thumbs-up as quality signal (deferred)
 
-v11.1 §8.1.11 specifies that thumbs-up "Contributes to its surface priority in friends' Feeds — heavily thumbed questions surface earlier in friends' Feeds, all else equal." Code records the signal but does not currently update `surface_priority_score` and the Feed query does not order by it. The signal is a no-op today.
+v11.1 §8.1.11 specified that thumbs-up on a question contributes to its "surface priority in friends' Feeds — heavily thumbed questions surface earlier in friends' Feeds, all else equal." The signal is recorded today (`question_feedback`, `question_ratings`), and `questions.surface_priority_score` is written by `src/server/db/queries/ratings.ts` (via `QuestionRatingButtons` on the deferred Joshing Game / Archive surfaces) and by an orphan `/api/feed/[feedItemId]/thumbsup` endpoint that no UI calls. The Feed query (`src/server/db/queries/feed.ts`) does not read the column.
 
-**v11.2 leaves the spec unchanged.** The PRD describes the intended behavior correctly. The implementation gap is a code-side TODO, tracked in the remediation prompt and as open question §16.18 (which surfaces the still-undecided weighting formula).
+**v11.2 defers the thumbs-up surface-priority behavior to a later phase.** Whether the feature ships at all is unresolved (see §16.18). Until that decision, §8.1.11 is **dormant**: no PRD claim is made about thumbs-up affecting Feed ordering, and the existing writes to `surface_priority_score` are spec-irrelevant. The column stays in the schema; the signal remains a no-op on the Feed read path by design, not by oversight.
+
+Thumbs-down is unaffected by this deferral — see the revised §8.10 below.
 
 ---
 
@@ -265,7 +325,7 @@ v11.1 §8.10 described a star-voting mechanic: 2 stars per player per day per gr
 
 **v11.2 replacement for §8.10:**
 
-> Players may give thumbs-up or thumbs-down on any question in the End of Session Review. Thumbs-up increments the question's surface priority score (subject to the formula resolution in §16.18); thumbs-down decrements it and removes the question from the player's own Feed and from propagation to their friends (§8.2.10). No daily budget applies. The star mechanic is removed entirely; the "star_notification" SMS trigger is removed (see §8.11).
+> Players may give thumbs-down on any question in the End of Session Review. Thumbs-down removes the question from the player's own Feed and suppresses propagation to their friends (§8.2.10). No daily budget applies. Thumbs-up is **deferred to a later phase** (see §8.1.11 and §16.18); the gesture may continue to appear in UI for surfaces that are themselves deferred (Joshing Game, Archive), but has no PRD-documented effect in v11.2. The star mechanic is removed entirely; the "star_notification" SMS trigger is removed (see §8.11).
 
 ---
 
@@ -277,26 +337,36 @@ v11.1 §8.10b said reactions allow "Optional personal note up to 100 characters.
 
 ---
 
-## §8.11 — SMS Notifications (revised)
+## §8.11 — SMS Notifications (v11.4 rewrite — SMS fully deferred)
 
-Two opt-in triggers from v11.1 are **removed** because the code does not fire them and the product has decided neither is SMS-worthy:
+**v11.4 lock: SMS is deferred entirely in Phase 1.** Joshing sends no SMS messages at all — not for OTP, not for notifications, not for any reason. The phone number remains the account identifier but never receives a message from the product.
 
-- "Friend answered your question" — `'friend_answered_question'` enum value exists but is never triggered.
-- "Friend thought your question was excellent (thumbs-up)" — `'star_notification'` is explicitly excluded from `SmsMessageType`.
+**Phase 1 login (see §7.1 v11.4 below):** the OTP verification code is hardcoded to `000000` for every account, every environment. A real per-user OTP-via-SMS delivery is **Phase 2** work.
 
-**v11.2 SMS trigger table:**
+**v11.4 SMS trigger table (Phase 1):**
 
-| Trigger | Copy | Default |
-|---|---|---|
-| OTP for auth | Your Joshing code: NNNNNN | Always |
-| Daily Five ready | Your five for today. [link] | ON, opt-out |
-| Friend sent you a question | Greg sent you a question. [link] | ON, opt-out |
-| Friend reaction to your question | Greg reacted to your question. | OFF, opt-in |
-| Friend invitation accepted | Maya joined Joshing — you're now friends. | ON, opt-out |
-| Friend request received | Greg wants to be friends on Joshing. [link] | ON, opt-out |
-| Biweekly ceremony ready | Two weeks of Joshing. Here's what you've been up to. [link] | ON, opt-out |
+| Trigger | Status |
+|---|---|
+| Everything | Deferred to Phase 2 |
 
-Author-side notifications about who answered or thumbed their questions are intentionally absent. The Knowledge page and (eventually) Activities tab will surface those events without SMS noise.
+**Phase 2 SMS triggers — for future reference, not Phase 1 spec.** When SMS is re-enabled in Phase 2, the only trigger that will be added back is the OTP. The product has explicitly decided that *no other SMS triggers will ever ship.* Daily-reminder, direct-send, reaction, creator-note, Joshing Game, and ceremony SMS are all permanently retired. Re-engagement happens because the player opens the app, not because the app pings them.
+
+**Rationale.** Every non-OTP SMS is a tap that pulls a player back to the app on a schedule the app picked, not on a schedule the player chose. The product's animating idea — quiet, presence-not-curation, no urgency — does not survive a notification stream. The Phase 1 deferral of OTP itself is a pragmatic call: a hardcoded `000000` keeps the invite-required login gate intact (see §7.1) without requiring Twilio production wiring, deliverability tuning, or carrier compliance work for a closed-beta-scale user base.
+
+**What this means in code today:**
+
+- `verifyOtp` accepts `000000` unconditionally in all environments (`src/server/auth/otp-store.ts:37-39`, commit `c5629d0`).
+- `requestOtp` generates and stores a per-request 6-digit code (`src/server/auth/otp-store.ts:22-32`). Under Phase 1 this is dead state — no one ever sees the code, no SMS is sent. The OtpCode rows accumulate harmlessly; a cleanup pass can drop the write entirely, but it's not urgent.
+- The non-OTP `sendSms` call sites in code (cron daily reminder, creator notes, reactions, Joshing Game, ceremony) are still wired up. Under the v11.4 lock they are **dead spec**; ripping them out is a code-cleanup task tracked separately from this PRD revision.
+- The `smsMessageTypeEnum` Postgres enum retains all historical values for migration safety. No rows are written by application code under the Phase 1 deferral.
+
+**Phase 2 re-enable checklist (when product is ready):**
+
+1. Wire `sendSms(phone, 'Your Joshing code: NNNNNN', 'otp', userId)` into `requestOtp` (or its caller).
+2. Remove or gate the `000000` shortcut in `verifyOtp` — at minimum require it to be a non-production environment.
+3. Confirm rate-limiting on `request-otp` (the route should already have basic rate-limit infra; verify before re-enable).
+4. Confirm Twilio production credentials and messaging-service SID are in place.
+5. Update §7.1 below and this §8.11 entry to remove the deferral.
 
 ---
 
@@ -366,6 +436,50 @@ Action buttons remain `[Send a friend a question]` and `[Write a question]`. Vis
 
 ---
 
+## §8.4.8 — Visual treatment for declared territory (v11.4 withdrawal)
+
+v11.1 §8.4.8 last paragraph specified: *"Visual treatment for declared territory: authored declared domains render with a muted or outlined fill to distinguish them from full-color demonstrated domains. Promotion to demonstrated turns the fill to full color."*
+
+**v11.4 withdraws this.** The declared/demonstrated distinction is **structural** (a `territory_type` column on `knowledge_base_domains`, driving the §8.4.3 expansion rules and the §8.4.4 1-question-floor) but is **no longer surfaced visually** on the Knowledge map. Declared and demonstrated circles render identically.
+
+**What stays:**
+- §8.4.3 — the two expansion paths (friend-mediated → demonstrated; authorship → declared) and the promotion-to-demonstrated rule when a friend correctly answers an authored question. Unchanged.
+- §8.4.4 — the 1-question floor applies equally to both paths. Unchanged.
+- §10 schema — `territory_type` text-with-typecast column on KB domains. Unchanged.
+- §16.12 — first-time-author orientation copy. Unchanged (still open).
+
+**What's removed:**
+- The "muted or outlined fill" rendering rule for declared circles in `DomainCircle.tsx`. The current behavior — circles render with their category color regardless of `territoryType` — is now spec-compliant.
+- The "fill flips to full color on promotion" animation moment.
+
+**Rationale.** The visual distinction was meant to make the §8.4.3 authorship→promotion arc legible on the map, but in practice the muted treatment risked reading as "this domain is weaker" rather than "this domain is fresh-from-authorship." The promotion moment is better carried by the mastery-event toast and the Knowledge page's per-domain detail surfaces than by a circle-fill change that requires the player to remember a visual convention.
+
+The `territoryType` prop on `DomainCircle` may remain plumbed for future use (e.g., a hover tooltip, a domain-detail page badge) but should not drive the circle's primary visual rendering. No code change is *required* by this withdrawal — the current rendering is now correct.
+
+---
+
+## §16.12 — First-question orientation panel (v11.4 lock)
+
+v11.1 §16.12 specified that the first time a player writes a question, a one-time orientation panel should appear to surface the §8.4.3 authorship-opens-territory mechanic. v11.1 marked the copy as "needs a final pass." The §8.4.8 withdrawal above retired the "on your map" visual claim; the orientation copy is adjusted accordingly.
+
+**v11.4 locked copy:**
+
+> Heads up: writing a question opens it as a new domain in your Knowledge base. When a friend answers it correctly, it counts toward your mastery there too. You can also send it directly to specific friends — toggle that on the destinations panel below.
+
+**Display rules:**
+- Shown at the top of `QuestionForm` in `mode === 'create'` only.
+- Eligibility is server-derived: the panel renders when the current user has zero non-deleted authored questions (`hasUserAuthoredAnyQuestion` returns `false`). The check fires via `GET /api/me/has-authored-question` on form mount.
+- Dismissible by tap on "Got it." Dismissal is session-local; if a user closes the page without saving, the panel re-appears next time they open the form. Once the user saves their first question the count flips to ≥1 and the panel never shows again.
+- No new schema. No `has_seen_first_question_orientation` flag is added — the derived signal (`hasAuthored`) is the persistence mechanism, and it self-cleans the moment the user engages with the mechanic.
+
+**What's intentionally not in the copy:**
+- The phrase "on your map" — retired alongside the §8.4.8 visual withdrawal.
+- The "declared territory → proven territory" framing from the v11.1 draft — replaced with "counts toward your mastery there too," which is the actual mechanic (mastery accrual via §8.32) without the now-invisible territory-type vocabulary.
+
+§16.12 is marked **RESOLVED** in v11.4. Code: `src/components/QuestionForm.tsx` (panel render), `src/app/api/me/has-authored-question/route.ts` (endpoint), `src/server/db/queries/questions.ts` (`hasUserAuthoredAnyQuestion` helper).
+
+---
+
 ## §10 — Data Model (clarifications, no migrations)
 
 ### §10.1 `feed_items.source_result` enum
@@ -386,7 +500,7 @@ See §8.1.14 above. Daily Five quips are stored in the JSONB queue slot; Feed an
 
 ### §10.4 Schema changes net of v11.2
 
-**No new tables. No new columns.** v11.2 is a spec-and-copy revision; the schema additions from v11.1 (cultural anchor fields on users, `territory_type` on KB domains, `quip` columns, `FeedDismissedDomain`, `surface_priority_score`) are all already shipped per the Phase 1 triage.
+**No new tables. No new columns.** v11.2 is a spec-and-copy revision; the schema additions from v11.1 (cultural anchor fields on users, `territory_type` on KB domains, `quip` columns, `FeedDismissedDomain`, `surface_priority_score` — the last of these is shipped but dormant per the §8.1.11 / §16.18 deferral) are all already shipped per the Phase 1 triage.
 
 The only schema-shaped TODOs are:
 
@@ -399,52 +513,63 @@ Neither blocks the v11.2 spec.
 
 ## §16 — Open Questions (additions)
 
-### §16.16 Author credit model — UNRESOLVED
+### §16.16 Author credit model — RESOLVED (v11.4)
 
-**Status:** unresolved. v11.1 §8.32 specifies "Author credit = 0.5× of the question's calibrated difficulty, awarded only on Moderate/Specialist questions, one credit per question per answering player ever." Code in `src/server/mastery/scoring.ts:70–94` implements an empirical-rate windowed scheme: 25/50/100 points base, full credit for the first 2–5 correct answers globally, half for the next 2–5, zero after, no difficulty filter.
+**Status:** resolved. v11.4 locks the **empirical-rate windowed model** (Option B) as canonical. The v11.1 §8.32 PRD-locked formulation (`0.5× calibrated difficulty per unique answerer`) is **retired** and superseded by the §8.32 v11.4 revision below.
 
-**Two models to choose between:**
+**The rule (v11.4 §8.32 replacement for author credit):**
 
-- **PRD-locked model.** Simple. 0.5× calibrated difficulty per unique answerer. Skip Accessible. The DB unique constraint on `(source_type, question_id, answered_by_user_id)` already enforces the one-per-answerer rule. Engineering: add `difficulty` parameter to `creatorMasteryAwardForNthCorrect`, add the Accessible skip, reference `AUTHOR_CREDIT_WEIGHT = 0.5`.
-- **Windowed model (currently shipping).** Complex. Rewards effort-to-create via difficulty-rate correlation but caps total author credit per question at ~10 unique answerers regardless of how widely the question circulates. Engineering: rewrite the PRD §8.32 author-credit text to match.
+> Author credit for a question is awarded from the question's **empirical difficulty rate** (correct answers / asked answers, across all surfaces and players), not from its `calibratedDifficulty` label. The award schedule is:
+>
+> | Empirical correct rate | Base points | Full-credit window | Reduced-credit window |
+> |---|---|---|---|
+> | rate > 0.70 (easy) | 25 | first 2 answerers | next 2 answerers |
+> | 0.40 ≤ rate ≤ 0.70 (moderate) | 50 | first 3 answerers | next 3 answerers |
+> | rate < 0.40 (hard) | 100 | first 5 answerers | next 5 answerers |
+>
+> Within the full-credit window, the author earns `basePoints × 1.0` per answerer. Within the reduced-credit window, the author earns `basePoints × 0.5` per answerer. After the combined window closes (4 / 6 / 10 answerers depending on band), no further author credit is awarded for that question.
+>
+> **Accessible-difficulty questions earn no author credit at all,** regardless of empirical rate. The Accessible-skip rule survives from the PRD-locked model and is the only difficulty-label gate in the v11.4 system.
+>
+> **Idempotency:** at most one `author_credit` mastery event per `(questionId, answeredByUserId)` pair, enforced by the `MASTERY_EVENTS` unique constraint on `(sourceType, questionId, answeredByUserId)`.
+>
+> **Surface coverage:** the rule applies uniformly across Daily Five, Catch-up, Feed, and Joshing Game answer surfaces. The author of an authored question earns credit on the first correct answer recorded *from any surface*, then the window-based reductions continue across all surfaces collectively.
 
-**Cross-cutting:** under either model, F1.1 from Phase 2 also needs fixing — author credit currently only fires from Joshing Game answers, not from Feed or Daily Five answers. The right fix is to factor the author-credit write into a shared helper and call it from all three surfaces.
+**Why this model (preserved from the original §16.16 framing):** the windowed model rewards effort-to-create via the difficulty-rate correlation (harder questions earn more per answerer and across a wider answerer window), caps total author credit per question at ~4–10 unique answerers regardless of how widely the question circulates (so a single viral question cannot dominate a player's author-credit share), and produces a meaningful relationship between question quality and lifetime author credit. The PRD-locked alternative (a flat 0.5× difficulty multiplier per unique answerer) was simpler but unbounded, which made Master-tier (≥20% author-credit share) attainability dominated by a few high-circulation questions rather than by a body of well-crafted ones.
 
-**v11.2 does not lock either model.** No spec text changes in §8.32. Decision deferred to product.
+**Resolved by:** product decision 2026-05-16; code already implements this model (`src/server/mastery/scoring.ts:38-100`) including the Accessible skip; cross-surface coverage (F1.1) shipped on Daily / Catch-up / Feed / Joshing Game routes. The `AUTHOR_CREDIT_WEIGHT = 0.5` constant in `src/server/mastery/constants.ts` is **vestigial** under v11.4 and may be removed in a future cleanup pass; the live system does not reference it.
 
-### §16.17 Catch-up + recovery combination — UNRESOLVED
+### §16.17 Catch-up + recovery combination — RESOLVED (v11.4)
 
-**Status:** unresolved. v11.1 specifies catch-up = 25% of live base and recovery (`first_correct_after_wrong`) = 25% but is silent on the compound case. Code compounds them: `CATCHUP_WEIGHT × RECOVERY_WEIGHT = 6.25%` of live base (`src/app/api/daily/catchup/answer/route.ts:122–128`).
+**Status:** resolved. v11.4 locks **MAX of the two reductions** as canonical. The compound interpretation (6.25%) and the "catch-up-takes-precedence" interpretation are both rejected.
 
-**Three options:**
+**The rule (v11.4 §8.32 addition for catch-up answers):**
 
-- **Adopt the compound (current code).** 6.25% feels right as "the lowest-credit path" — you missed it the first day *and* you originally got it wrong. PRD adds one sentence to §8.32 to lock the compound.
-- **Adopt MAX of the two.** Player earns 25% (the higher of the two reductions), not 6.25%. Simpler to reason about. Code changes one multiplication to a Math.max.
-- **Adopt only one reduction at a time.** Catch-up takes precedence (because the recovery state was set on the wrong-day answer, not the catch-up answer). Player earns 25%.
+> When a Daily Five Catch-up answer is the first correct answer after a prior wrong answer on the same question (`first_correct_after_wrong`), the recovery multiplier **replaces** the catch-up multiplier rather than compounding with it. The award is `liveBasePoints × RECOVERY_STATE_WEIGHT (0.25) = 25%` of live base, not `liveBasePoints × CATCHUP_SURFACE_WEIGHT × RECOVERY_STATE_WEIGHT (0.0625) = 6.25%`.
+>
+> The intuition: a player who originally got the question wrong *and* missed the original day deserves the recovery credit (25%) for finally getting it right, not a doubly-discounted (6.25%) credit that would make the path practically pointless. Catch-up's own 25% discount applies to fresh-correct and repeat-correct Catch-up answers; recovery on Catch-up uses the recovery weight alone.
 
-**v11.2 does not lock a choice.** No spec text changes in §8.32. Decision deferred.
+**v11.4 §8.32 also clarifies, for symmetry:** the same MAX-of-multipliers rule applies to author credit on Catch-up answers — the author-credit window/base from §16.16 above is applied to the live base, not the catch-up-reduced base. This keeps author credit consistent across surfaces: the author earns the same window-position-driven credit regardless of which surface delivered the answer.
 
-### §16.18 Thumbs-up surface ordering — formula unresolved
+**Resolved by:** product decision 2026-05-16; code already implements this rule (`src/app/api/daily/catchup/answer/route.ts:134` computes `Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)`).
 
-**Status:** code gap, not spec drift. v11.1 §8.1.11 specifies that thumbs-up contributes to surface priority. The signal is recorded in `question_feedback`, but `questions.surface_priority_score` is never updated and the feed query does not order by it. The signal is a no-op.
+### §16.18 Thumbs-up surface ordering — feature deferred
 
-**Decision needed before the code fix can land:**
+**Status:** deferred to a later phase. v11.1 §8.1.11 described thumbs-up as a Feed-ordering signal. Triage in the 2026-05-16 audit found the read side never consumes the score, the write side is split across two tables (`question_feedback`, `question_ratings`) on three surfaces that don't align with the live product, and the product is unsure whether the feature is worth shipping at all.
 
-- Eager update to `surface_priority_score` when feedback is recorded, or dynamic computation in the feed query joining `question_feedback`?
-- Weighting formula: each thumbs-up adds X to the priority score? Subject to decay over time? Capped per question?
+**Decisions deferred (in order):**
 
-**v11.2 leaves the spec unchanged.** This is tracked as a code-side TODO blocked on a small product call about the formula.
+1. Does Joshing want thumbs-up on questions as a product feature?
+2. If yes — which surface owns the gesture (Feed item, End of Session Review, both)?
+3. If yes — eager vs. dynamic computation; weighting / decay / cap.
+
+**v11.2 takes no position on (1)–(3).** §8.1.11 and §8.10 are revised above to reflect the deferral. The `surface_priority_score` column and the two ratings tables remain in place; code cleanup of dormant writes is tracked separately and is not blocked on the product decision.
 
 ### §16.19 Cultural anchor — required or skippable at the route?
 
-**Status:** see §7.3 above. `src/app/api/onboarding/propose-interests/route.ts:86–105` accepts a request body without a `culturalAnchor` field and silently proceeds with `culturalAnchor = undefined`, which makes the LLM use warm-up answers only. The PRD presents Step 2 as required.
+**Resolved (v11.3):** Optional at the route. `src/app/api/onboarding/propose-interests/route.ts` accepts a request body without a `culturalAnchor` field and proceeds with `culturalAnchor = undefined`, which makes the LLM use warm-up answers only. This is the intended behavior under the §7.3 v11.3 binary contract: the "These look good" fast path bypasses the anchor entirely, and only users who tap "Let me adjust them" or "Start fresh" reach a flow where the anchor is collected. No route change required.
 
-**Decision needed:**
-
-- Make `culturalAnchor` required at the route — return 400 if absent. Tightest fit with §7.3 as written.
-- Allow it to be optional and explicitly document the skip semantics in §7.3 (e.g., users born before 1920, users unwilling to share geography).
-
-**v11.2 leans toward "required."** The compact step on the "Keep all" fast path (§7.3 above) reduces friction enough that mandating both fields is reasonable. But the lock is deferred to product.
+The v11.2 "lean toward required" is withdrawn in line with the §7.3 revision above.
 
 ---
 
@@ -482,6 +607,10 @@ The following items from `audits/2026-05-16-phase2-findings.md` either confirm c
 
 **Source of changes:** the 2026-05-16 PRD-vs-code audit (Phase 1 update queue + `PRD_BACKLOG.md` 2026-05-16 entries + Phase 2 findings).
 
-**Next planned revision:** v11.3, when one or both of §16.16 (author credit model) and §16.17 (catch-up + recovery) are resolved, or when Activities / Joshing Game / Personal Rounds / Archive are re-enabled.
+**v11.3 revisions folded in (2026-05-18):** §7.3 — Onboarding "Keep all" fast path rewritten to a binary contract (skip cultural anchor on "These look good"; full four-step flow on "Let me adjust them" or "Start fresh"). §16.19 — Cultural anchor at the route marked RESOLVED as optional, in line with the §7.3 revision.
+
+**v11.4 revisions folded in (2026-05-18):** Tier name confirmation originally ratified **Curious / Versed / Fluent / Master** as canonical; **v11.5 reverses that pivot** and restores **Establishing / Familiar / Solid / Mastery** as canonical (Curious/Versed/Fluent/Master and Curious/Explorer/Scholar/Sage label sets are now retired). §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline. §8.4.8 — visual treatment for declared territory withdrawn; declared and demonstrated circles render identically, the data-model distinction stays. §16.12 — first-question orientation panel copy locked and shipped; "on your map" framing replaced with "in your Knowledge base" + "counts toward your mastery there too" to match the §8.4.8 withdrawal. §8.11 — SMS deferred entirely in Phase 1. No SMS sends at all — not for OTP, not for notifications. Daily-reminder, direct-send, reaction, creator-note, Joshing Game, and biweekly-ceremony triggers all permanently retired; OTP-via-SMS deferred to Phase 2 with a re-enable checklist documented. §7.1 — authentication locked to a hardcoded `000000` code for Phase 1, behind the invite-required gate; real per-user OTP delivery is Phase 2. §6.1 / §6.2 / §6.3 / §6.4 / §6.6 user stories rewritten to reflect v11.1+ mechanics (binary onboarding fast path, inline Feed on Home, thumbs as quality signal, no-SMS opens for daily / send / ceremony, hardcoded login code in §6.1).
+
+**Next planned revision:** v11.5, when §16.18 (thumbs-up → surface-priority ordering formula) is resolved, or when Activities / Joshing Game / Personal Rounds / Archive are re-enabled.
 
 **Code-side companion:** `audits/2026-05-16-remediation-prompt.md` lists every code-side fix that does not require a PRD change. It is the working document for engineering; v11.2 is the working document for product.

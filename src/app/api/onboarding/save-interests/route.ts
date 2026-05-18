@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 
-import { getSession } from '@/server/auth/session';
+import {
+  getSession,
+  refreshSessionOnboardingClaim,
+} from '@/server/auth/session';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { logTelemetry } from '@/server/telemetry';
 import {
@@ -85,6 +88,7 @@ export async function POST(request: Request) {
   try {
     await saveDeclaredInterests(session.userId, interests);
     await markOnboardingComplete(session.userId);
+    await refreshSessionOnboardingClaim();
 
     if (telemetry.inviteInterestCount > 0) {
       const event = telemetry.inviteSelectedCount === 0

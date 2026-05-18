@@ -31,7 +31,7 @@ type RequestAction = 'accept' | 'ignore'
 
 function previewInterests(interests: string[]) {
   if (interests.length === 0) return null
-  return interests.slice(0, 5).join(', ')
+  return interests.join(', ')
 }
 
 export default function FriendsList() {
@@ -184,7 +184,7 @@ export default function FriendsList() {
                         </h3>
                         {interests ? (
                           <p className="text-muted-foreground mt-1 text-sm leading-6">
-                            A mind into {interests}…
+                            A mind into {interests}
                           </p>
                         ) : (
                           <p className="text-muted-foreground mt-1 text-sm leading-6">

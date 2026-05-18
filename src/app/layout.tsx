@@ -3,6 +3,7 @@ import { Caveat, Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
+import { getUserOnboardingProfile } from '@/server/db/queries/users';
 
 
 // Intentional product choice (2026-05-16): Montserrat is the body font.
@@ -10,6 +11,7 @@ import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 const montserrat = Montserrat({
   subsets: ['latin'],
   variable: '--font-sans-body',
+  display: 'swap',
 })
 
 // F5.1: handwriting register (Personal Record, annotations, signature-style microcopy).
@@ -41,13 +43,17 @@ export default async function RootLayout({
 }) {
   const sessionToken = await getSessionToken()
   const claims = await readSessionClaims(sessionToken)
+  const profile = claims ? await getUserOnboardingProfile(claims.userId) : null
   return (
     <html
       lang="en"
       className={`font-sans ${caveat.variable} ${playfair.variable}`}
     >
       <body className={montserrat.className}>
-        <Nav initialUserId={claims?.userId ?? null} />
+        <Nav
+          initialUserId={claims?.userId ?? null}
+          initialDisplayName={profile?.displayName ?? null}
+        />
         {children}
       </body>
     </html>

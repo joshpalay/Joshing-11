@@ -27,9 +27,9 @@ type FeedbackSignal = 'thumbs_up' | 'thumbs_down'
 
 const DAILY_DIFFICULTY_LABELS: Record<string, string> = {
   normal: 'Establishing',
-  moderate: 'Solid',
-  challenging: 'Skilled',
-  ridiculous: 'Master',
+  moderate: 'Familiar',
+  challenging: 'Solid',
+  ridiculous: 'Mastery',
   adaptive: 'Adaptive',
 }
 
@@ -404,8 +404,41 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
               : 'WRONG'}
         </span>
         <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          JOSHING BOT · {question.domainDisplayName.toUpperCase()}
+          {question.creatorNote ? null : `JOSHING BOT · ${question.domainDisplayName.toUpperCase()}`}
         </p>
+        {question.creatorNote ? (
+          <p
+            className="pt-1"
+            style={{
+              fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+              fontSize: '0.86rem',
+              color: 'var(--text)',
+              lineHeight: 1.3,
+              opacity: 0.92,
+            }}
+          >
+            <span
+              style={{
+                ...monoStyle,
+                fontSize: '0.55rem',
+                color: 'var(--text-muted)',
+                marginRight: '6px',
+              }}
+            >
+              FROM
+            </span>
+            <span style={{ fontWeight: 600 }}>{question.creatorNote.authorName}</span>
+            <span
+              style={{
+                ...monoStyle,
+                color: 'var(--text-muted)',
+                marginLeft: '8px',
+              }}
+            >
+              · {question.domainDisplayName.toUpperCase()}
+            </span>
+          </p>
+        ) : null}
       </div>
 
       <button

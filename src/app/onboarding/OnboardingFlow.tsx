@@ -452,7 +452,7 @@ export default function OnboardingFlow({
         })
         .slice(0, 5)
     )
-    setCurrentStep('review')
+    setCurrentStep('background')
   }
 
   function skipInviteInterests() {
@@ -598,7 +598,7 @@ export default function OnboardingFlow({
                   onClick={keepInviteInterests}
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Saving...' : 'Keep all'}
+                  {isLoading ? 'Saving...' : 'These look good'}
                 </button>
                 <button
                   type="button"
@@ -606,7 +606,7 @@ export default function OnboardingFlow({
                   onClick={reviewInviteInterests}
                   disabled={isLoading}
                 >
-                  Choose/edit
+                  Let me adjust them
                 </button>
                 <button
                   type="button"
@@ -614,7 +614,7 @@ export default function OnboardingFlow({
                   onClick={skipInviteInterests}
                   disabled={isLoading}
                 >
-                  Skip
+                  Start fresh
                 </button>
               </div>
             </div>
@@ -688,7 +688,7 @@ export default function OnboardingFlow({
                 ) : null}
               </div>
 
-              <div className="mt-auto pt-2">
+              <div className="mt-auto space-y-3 pt-2">
                 <button
                   type="button"
                   className="btn-primary h-12 w-full"
@@ -697,6 +697,15 @@ export default function OnboardingFlow({
                 >
                   Continue
                 </button>
+                {inviteInterests.length > 0 ? (
+                  <button
+                    type="button"
+                    className="btn-ghost h-12 w-full"
+                    onClick={() => setCurrentStep('invite-suggestions')}
+                  >
+                    Back
+                  </button>
+                ) : null}
               </div>
             </div>
           ) : null}

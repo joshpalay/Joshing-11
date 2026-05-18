@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useReducer, useRef } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 export type QuestionFormValues = {
   text: string;
@@ -220,6 +220,24 @@ export function QuestionForm({
   const questionRef = useRef<HTMLTextAreaElement | null>(null);
   const lastSuggestionQuestionTextRef = useRef<string | null>(initialValues?.llmSuggestedAnswer ? (initialValues.text ?? '').trim() : null);
 
+  // PRD §16.12: first-time-author orientation panel. Shown on the first
+  // create-mode mount for an account that has never authored a non-deleted
+  // question. Dismissed by tap or naturally hidden once the user saves their
+  // first question (the count becomes 1).
+  const [orientationVisible, setOrientationVisible] = useState(false);
+  useEffect(() => {
+    if (mode !== 'create') return;
+    let cancelled = false;
+    void fetch('/api/me/has-authored-question', { cache: 'no-store', credentials: 'include' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((body: { hasAuthored?: boolean } | null) => {
+        if (cancelled) return;
+        if (body && body.hasAuthored === false) setOrientationVisible(true);
+      })
+      .catch(() => { /* swallow — orientation is optional */ });
+    return () => { cancelled = true };
+  }, [mode]);
+
   useEffect(() => {
     lastSuggestionQuestionTextRef.current = initialValues?.llmSuggestedAnswer ? (initialValues.text ?? '').trim() : null;
     dispatch({ type: 'RESET', state: initialState(initialValues, initialSpecificMode) });
@@ -378,6 +396,20 @@ export function QuestionForm({
 
   return (
     <div className="space-y-5">
+      {orientationVisible ? (
+        <div className="rounded-md border border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 text-[0.88rem] leading-[1.55] text-[var(--ink)]">
+          <p className="m-0">
+            Heads up: writing a question opens it as a new domain in your Knowledge base. When a friend answers it correctly, it counts toward your mastery there too. You can also send it directly to specific friends — toggle that on the destinations panel below.
+          </p>
+          <button
+            type="button"
+            onClick={() => setOrientationVisible(false)}
+            className="mt-2 text-[0.78rem] uppercase tracking-[0.08em] text-[var(--text-muted-warm)] underline-offset-2 hover:underline cursor-pointer bg-transparent border-0 p-0"
+          >
+            Got it
+          </button>
+        </div>
+      ) : null}
       {state.error ? <p className="rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p> : null}
       {state.limitReachedThisSession ? (
         <p className="text-xs italic text-muted-foreground">5/5 question reviews used today. You can still save your question; AI review returns tomorrow.</p>

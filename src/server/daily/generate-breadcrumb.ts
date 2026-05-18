@@ -1,4 +1,4 @@
-import { extractTextContent, getAnthropicClient } from '@/lib/llm';
+import { extractTextContent, getAnthropicClient, loggedMessagesCreate } from '@/lib/llm';
 
 const BREADCRUMB_MODEL = 'claude-haiku-4-5';
 const BREADCRUMB_TIMEOUT_MS = 3000;
@@ -12,11 +12,22 @@ type GenerateBreadcrumbParams = {
   domain: string;
 };
 
+const BREADCRUMB_CACHE_MAX = 500;
 const breadcrumbCache = new Map<string, string | null>();
 
 function cacheKey(params: GenerateBreadcrumbParams): string {
   const questionKey = params.questionId?.trim() || params.questionText.trim().toLowerCase();
   return `${questionKey}:${params.isCorrect ? 'correct' : 'wrong'}`;
+}
+
+function setCacheEntry(key: string, value: string | null): void {
+  if (breadcrumbCache.has(key)) breadcrumbCache.delete(key);
+  breadcrumbCache.set(key, value);
+  while (breadcrumbCache.size > BREADCRUMB_CACHE_MAX) {
+    const oldest = breadcrumbCache.keys().next().value;
+    if (oldest === undefined) break;
+    breadcrumbCache.delete(oldest);
+  }
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
@@ -45,7 +56,7 @@ export async function generateBreadcrumb(params: GenerateBreadcrumbParams): Prom
 
   const client = getAnthropicClient();
   if (!client) {
-    breadcrumbCache.set(key, null);
+    setCacheEntry(key, null);
     return null;
   }
 
@@ -53,11 +64,15 @@ export async function generateBreadcrumb(params: GenerateBreadcrumbParams): Prom
     ? 'The user got it right.'
     : `The user answered "${params.submittedAnswer}" instead of the correct answer "${params.correctAnswer}".`;
 
-  const request = client.messages.create({
+  const request = loggedMessagesCreate(client, 'breadcrumb', {
     model: BREADCRUMB_MODEL,
     max_tokens: 120,
     temperature: 0.55,
-    system: 'You write tiny contextual breadcrumbs for a warm trivia chat. Return plain text only, no markdown.',
+    system: [{
+      type: 'text',
+      text: 'You write tiny contextual breadcrumbs for a warm trivia chat. Return plain text only, no markdown.',
+      cache_control: { type: 'ephemeral' },
+    }],
     messages: [
       {
         role: 'user',
@@ -73,6 +88,6 @@ Correct answer: ${params.correctAnswer}`,
 
   const response = await withTimeout(request, BREADCRUMB_TIMEOUT_MS);
   const text = response ? cleanBreadcrumb(extractTextContent(response.content)) : null;
-  breadcrumbCache.set(key, text);
+  setCacheEntry(key, text);
   return text;
 }

@@ -362,6 +362,17 @@ export const masteryEvents = pgTable(
     index('MASTERY_EVENTS_canonical_subcategory_idx').on(table.canonicalSubcategory),
     index('MASTERY_EVENTS_question_id_idx').on(table.questionId),
     index('MASTERY_EVENTS_answered_by_user_id_idx').on(table.answeredByUserId),
+    // Composite covers the hot viewer-status lookup at
+    // src/server/db/queries/feed.ts:478 (getViewerAnswerStatusForQuestions,
+    // called on every feed render) and the archive timeline reader at
+    // src/server/db/queries/archive.ts:241 — both filter on userId +
+    // answeredByUserId and then by question. Single-column indexes were forcing
+    // bitmap-AND merges of two separate scans.
+    index('MASTERY_EVENTS_user_id_answered_by_user_id_question_id_idx').on(
+      table.userId,
+      table.answeredByUserId,
+      table.questionId,
+    ),
   ],
 );
 

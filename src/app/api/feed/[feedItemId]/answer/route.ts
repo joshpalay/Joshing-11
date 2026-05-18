@@ -5,9 +5,8 @@ import { gradeAnswer, selectQuip } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, playerMastery, questions, users } from '@/server/db';
-import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
-import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
-import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
+import { getBasePoints } from '@/server/mastery/scoring';
+import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
@@ -95,14 +94,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     : 0;
   const pointsAwarded = basePoints;
   const awardsMasteryCredit = pointsAwarded > 0;
-  const breadcrumb = await generateBreadcrumb({
-    questionId: question.id,
-    questionText: question.questionText,
-    correctAnswer: question.answerText,
-    submittedAnswer: parsed.submittedAnswer,
-    isCorrect,
-    domain,
-  }).catch(() => null);
   const masteryDelta = await writeMasteryEvent({
     userId: session.userId,
     questionId: question.id,
@@ -174,37 +165,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
       questionId: question.id,
     });
 
-    // Author credit: windowed scheme, Moderate/Specialist only (PRD §8.32).
-    const existingCredits = await countAuthorCreditEvents(question.id, question.creatorId);
-    const authorAward = creatorMasteryAwardForNthCorrect(
-      question.correctCount,
-      question.askedCount,
-      existingCredits + 1,
-      question.calibratedDifficulty ?? question.llmDifficulty,
-    );
-    if (authorAward.awardedPoints > 0) {
-      await writeMasteryEvent({
-        userId: question.creatorId,
-        questionId: question.id,
-        domain,
-        pointsAwarded: authorAward.awardedPoints,
-        sourceType: 'author_credit',
-        sourceId: feedItemId,
-        broadCategory: question.broadCategory,
-        eventQuestionId: question.id,
-        basePoints: authorAward.basePoints,
-        weight: authorAward.weight,
-        answeredByUserId: session.userId,
-      }).catch((err) => {
-        console.warn('[feed/answer] author_credit write failed', err);
-      });
-    }
+    // Author credit (PRD §8.32): off the user's hot path. We pass the
+    // question row we already loaded so the helper doesn't re-fetch it.
+    void awardAuthorCredit({
+      creatorUserId: question.creatorId,
+      answererUserId: session.userId,
+      questionId: question.id,
+      domain,
+      sourceId: feedItemId,
+      broadCategory: question.broadCategory,
+      questionStats: {
+        correctCount: question.correctCount,
+        askedCount: question.askedCount,
+        calibratedDifficulty: question.calibratedDifficulty,
+        llmDifficulty: question.llmDifficulty,
+      },
+      scope: 'feed/answer',
+    });
   }
 
   // Only correct Feed answers are eligible to become public/social friend Feed cards.
   // Incorrect answers persist privately on this viewer's Feed item as answered_by_you.
   if (isCorrect) {
-    await createFeedItemsForFriendsFromAnswer(
+    void createFeedItemsForFriendsFromAnswer(
       session.userId,
       question.id,
       'correct',
@@ -230,7 +213,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     explanation,
     pointsAwarded,
     answerState,
-    breadcrumb,
+    breadcrumb: null,
     masteryDelta,
     correctAnswer: question.answerText,
     quip,

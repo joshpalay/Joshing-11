@@ -1,4 +1,4 @@
-import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, parseJsonObject } from '@/lib/llm';
+import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
 
 export type AnswerRecheckDecision = 'accept' | 'reject' | 'needs_human';
 
@@ -88,11 +88,11 @@ Question type: ${params.questionType}
 Should this challenged answer count? Return JSON only.`;
 
   try {
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'recheck', {
       model: ANTHROPIC_MODEL,
       max_tokens: 400,
       temperature: 0,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 

@@ -3,15 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   getSessionMock,
   markOnboardingCompleteMock,
+  refreshSessionOnboardingClaimMock,
   saveDeclaredInterestsMock,
 } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   markOnboardingCompleteMock: vi.fn(),
+  refreshSessionOnboardingClaimMock: vi.fn(),
   saveDeclaredInterestsMock: vi.fn(),
 }))
 
 vi.mock('@/server/auth/session', () => ({
   getSession: getSessionMock,
+  refreshSessionOnboardingClaim: refreshSessionOnboardingClaimMock,
 }))
 
 vi.mock('@/server/db/queries/users', () => ({
@@ -35,6 +38,7 @@ describe('POST /api/onboarding/save-interests', () => {
     getSessionMock.mockResolvedValue({ userId: 'user-invitee' })
     saveDeclaredInterestsMock.mockResolvedValue(undefined)
     markOnboardingCompleteMock.mockResolvedValue(undefined)
+    refreshSessionOnboardingClaimMock.mockResolvedValue(true)
   })
 
   it('accept all saves selected invited interests', async () => {
@@ -142,6 +146,7 @@ describe('POST /api/onboarding/save-interests', () => {
       getSessionMock.mockResolvedValue({ userId: 'user-jaime' })
       saveDeclaredInterestsMock.mockResolvedValue(undefined)
       markOnboardingCompleteMock.mockResolvedValue(undefined)
+      refreshSessionOnboardingClaimMock.mockResolvedValue(true)
 
       const response = await POST(
         jsonRequest(choice.interests, {
@@ -176,6 +181,19 @@ describe('POST /api/onboarding/save-interests', () => {
     expect(response.status).toBe(400)
     expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
     expect(markOnboardingCompleteMock).not.toHaveBeenCalled()
+  })
+
+  it('re-mints the session cookie so the next request sees onboardingComplete=true', async () => {
+    const response = await POST(
+      jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }])
+    )
+
+    expect(response.status).toBe(200)
+    expect(markOnboardingCompleteMock).toHaveBeenCalledWith('user-invitee')
+    expect(refreshSessionOnboardingClaimMock).toHaveBeenCalledTimes(1)
+    const markOrder = markOnboardingCompleteMock.mock.invocationCallOrder[0]
+    const refreshOrder = refreshSessionOnboardingClaimMock.mock.invocationCallOrder[0]
+    expect(refreshOrder).toBeGreaterThan(markOrder)
   })
 
   it('does not silently save rejected interests from an empty non-invite selection', async () => {

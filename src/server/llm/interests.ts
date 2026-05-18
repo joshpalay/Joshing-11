@@ -3,6 +3,7 @@ import {
   HAIKU_MODEL,
   extractTextContent,
   getAnthropicClient,
+  loggedMessagesCreate,
   parseJsonObject,
 } from '@/lib/llm';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
@@ -225,11 +226,11 @@ Propose candidate interests. Return JSON array only.`;
   const client = getAnthropicClient();
   if (!client) return fallbackInterests(cleanAnswers);
 
-  const response = await client.messages.create({
+  const response = await loggedMessagesCreate(client, 'interests-suggest', {
     model: ANTHROPIC_MODEL,
     max_tokens: 1600,
     temperature: 0.65,
-    system: systemPrompt,
+    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: userMessage }],
   });
 
@@ -285,11 +286,11 @@ Avoid broad categories like "Music", "Literature", "History". Prefer forms like 
 Never return "Other" as broadCategory; use "General Knowledge" only when no precise top-level bucket applies.
 Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation": "..." }`;
 
-  const response = await client.messages.create({
+  const response = await loggedMessagesCreate(client, 'interests-canonicalize', {
     model: CANONICALIZE_MODEL,
     max_tokens: 260,
     temperature: 0.2,
-    system: systemPrompt,
+    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: cleanInput }],
   });
 

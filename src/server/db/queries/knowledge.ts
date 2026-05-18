@@ -36,6 +36,7 @@ export type DomainMastery = {
   isDeclaredInterest: boolean;
   isDemonstrated: boolean;
   territoryType: 'declared' | 'demonstrated';
+  isHidden: boolean;
 };
 
 export type ExpandingDomain = {
@@ -357,6 +358,7 @@ function toDomainMasteryRow(
   },
   masteryByDomain: Map<string, typeof playerMastery.$inferSelect>,
   statsByDomain: Map<string, AnswerStats>,
+  hiddenDomainKeys: Set<string>,
 ): DomainMastery {
   const domain = knowledgeDomain.domain;
   const row = masteryByDomain.get(domainKey(domain));
@@ -384,11 +386,12 @@ function toDomainMasteryRow(
     isDeclaredInterest: knowledgeDomain.isDeclared,
     isDemonstrated: knowledgeDomain.isDemonstrated,
     territoryType,
+    isHidden: hiddenDomainKeys.has(domainKey(domain)),
   };
 }
 
 export async function getUserMasteryOverview(userId: string): Promise<MasteryOverview> {
-  const [declaredRows, masteryRows, eventRows, recentRows] = await Promise.all([
+  const [declaredRows, masteryRows, eventRows, recentRows, hiddenDomainKeys] = await Promise.all([
     getActiveDeclaredInterests(userId),
     getPlayerMasteryRows(userId, true),
     db
@@ -417,6 +420,7 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
       .where(eq(masteryEvents.userId, userId))
       .orderBy(desc(masteryEvents.createdAt))
       .limit(10),
+    getHiddenDomainKeys(userId),
   ]);
 
   const totalPoints = masteryRows.reduce((sum, row) => sum + Number(row.totalPoints ?? 0), 0);
@@ -485,7 +489,7 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
   }
 
   const domains = [...knowledgeDomainNames.values()]
-    .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain))
+    .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain, hiddenDomainKeys))
     .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
 
   return {
@@ -506,7 +510,7 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
 }
 
 export async function getKnowledgePageData(userId: string): Promise<KnowledgePageData> {
-  const [declaredRows, masteryRows, eventRows] = await Promise.all([
+  const [declaredRows, masteryRows, eventRows, hiddenDomainKeys] = await Promise.all([
     getActiveDeclaredInterests(userId),
     getPlayerMasteryRows(userId, true),
     db
@@ -520,6 +524,7 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
       })
       .from(masteryEvents)
       .where(eq(masteryEvents.userId, userId)),
+    getHiddenDomainKeys(userId),
   ]);
 
   const statsByDomain = new Map<string, AnswerStats>();
@@ -588,7 +593,7 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
   }
 
   const allDomains = [...knowledgeDomainNames.values()]
-    .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain))
+    .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain, hiddenDomainKeys))
     .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
 
   return {
@@ -786,6 +791,27 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
     })),
     questionHistory,
   };
+}
+
+export async function getHiddenDomainKeys(userId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({
+      domain: profileDomainVisibility.domain,
+      canonicalSubcategory: profileDomainVisibility.canonicalSubcategory,
+      visibility: profileDomainVisibility.visibility,
+      isVisible: profileDomainVisibility.isVisible,
+    })
+    .from(profileDomainVisibility)
+    .where(eq(profileDomainVisibility.userId, userId));
+
+  const hidden = new Set<string>();
+  for (const row of rows) {
+    const isHidden = row.visibility === 'private' || row.isVisible === false;
+    if (!isHidden) continue;
+    const label = row.domain ?? row.canonicalSubcategory;
+    if (label) hidden.add(domainKey(label));
+  }
+  return hidden;
 }
 
 export async function setDomainVisibility(

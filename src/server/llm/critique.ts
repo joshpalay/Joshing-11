@@ -1,4 +1,4 @@
-import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, parseJsonObject } from '@/lib/llm';
+import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
 
 export type CritiqueResult =
   | { ok: true }
@@ -63,7 +63,7 @@ Reformulations should preserve the author's apparent intent while fixing the iss
 
   try {
     const response = await Promise.race([
-      client.messages.create({
+      loggedMessagesCreate(client, 'critique', {
         model: ANTHROPIC_MODEL,
         max_tokens: 700,
         temperature: 0.2,

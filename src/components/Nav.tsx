@@ -1,17 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Brain, Home, Menu, Pencil, Plus, Rss, User, X } from 'lucide-react';
 import { CreateChooser } from '@/components/CreateChooser';
-
-type MeResponse = {
-  user?: {
-    id?: string | null;
-    display_name?: string | null;
-  };
-};
 
 const navItems = [
   { href: '/', label: 'Home', Icon: Home },
@@ -28,10 +21,16 @@ function initialsFor(name: string): string {
   return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase();
 }
 
-export function Nav({ initialUserId = null }: { initialUserId?: string | null }) {
+export function Nav({
+  initialUserId = null,
+  initialDisplayName = null,
+}: {
+  initialUserId?: string | null;
+  initialDisplayName?: string | null;
+}) {
   const pathname = usePathname();
-  const [accountInitials, setAccountInitials] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(initialUserId);
+  const accountInitials = initialDisplayName ? initialsFor(initialDisplayName) || null : null;
+  const currentUserId = initialUserId;
   const [menuOpen, setMenuOpen] = useState(false);
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
   const isOtherUserProfilePath = (() => {
@@ -48,34 +47,6 @@ export function Nav({ initialUserId = null }: { initialUserId?: string | null })
     pathname === '/friends' ||
     isOtherUserProfilePath;
   const showNewGameShortcut = !hidesNewGameShortcut;
-
-  const loadCurrentUser = useCallback(async () => {
-    try {
-      const response = await fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' });
-      if (!response.ok) {
-        setAccountInitials(null);
-        setCurrentUserId(null);
-        return;
-      }
-      const body = await response.json().catch(() => null) as MeResponse | null;
-      const initials = body?.user?.display_name ? initialsFor(body.user.display_name) : '';
-      setAccountInitials(initials || null);
-      setCurrentUserId(body?.user?.id ?? null);
-    } catch {
-      setAccountInitials(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (pathname === '/onboarding') return;
-
-    const initialTimer = window.setTimeout(() => {
-      void loadCurrentUser();
-    }, 0);
-    return () => {
-      window.clearTimeout(initialTimer);
-    };
-  }, [loadCurrentUser, pathname]);
 
   if (pathname === '/onboarding') {
     return null;

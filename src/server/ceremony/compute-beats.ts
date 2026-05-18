@@ -63,6 +63,21 @@ const beat5Schema = z.object({
     .nullable(),
 });
 
+// Friend-fallback shapes: when a user has zero activity for Beat1/Beat5 in the
+// 7-day window, we surface the friend who did the most in that area instead.
+// Only computed when the primary beat is null; rendered as a distinct beat
+// view ("Your friends were busy"-style) rather than masquerading as the user's.
+const beat1FallbackSchema = z.object({
+  friendName: z.string(),
+  count: z.number(),
+  domains: z.array(z.string()),
+});
+
+const beat5FallbackSchema = z.object({
+  friendName: z.string(),
+  totalCreatorPoints: z.number(),
+});
+
 export const beatsPayloadSchema = z.object({
   cycleStart: z.string(),
   cycleEnd: z.string(),
@@ -80,10 +95,12 @@ export const beatsPayloadSchema = z.object({
     })
     .optional(),
   beat1: beat1Schema.nullable(),
+  beat1FriendFallback: beat1FallbackSchema.nullable().optional(),
   beat2: beat2Schema.nullable(),
   beat3: beat3Schema.nullable(),
   beat4: beat4Schema.nullable(),
   beat5: beat5Schema.nullable(),
+  beat5FriendFallback: beat5FallbackSchema.nullable().optional(),
 });
 
 export type Beat1Mastered = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
@@ -99,6 +116,9 @@ export type Beat5Gave = {
   totalCreatorPoints: number;
   topQuestion: { text: string; answeredCount: number } | null;
 };
+
+export type Beat1FriendFallback = { friendName: string; count: number; domains: string[] };
+export type Beat5FriendFallback = { friendName: string; totalCreatorPoints: number };
 
 export type BeatsPayload = {
   cycleStart: string;
@@ -116,10 +136,12 @@ export type BeatsPayload = {
     details: Array<{ sources: string[]; target: string; rationale: string }>;
   };
   beat1: Beat1Mastered | null;
+  beat1FriendFallback?: Beat1FriendFallback | null;
   beat2: Beat2Discovered | null;
   beat3: Beat3Shaped | null;
   beat4: Beat4Alignment | null;
   beat5: Beat5Gave | null;
+  beat5FriendFallback?: Beat5FriendFallback | null;
 };
 
 const TIER_ORDER: MasteryTier[] = ['establishing', 'familiar', 'solid', 'mastery'];
@@ -412,6 +434,110 @@ async function computeBeat5(userId: string, cycleStart: Date, cycleEndExclusive:
 }
 
 /**
+ * Friend fallback for Beat1 (Mastered). When the user themselves had no tier
+ * progressions in the cycle, surface the friend who progressed the most so
+ * the ceremony doesn't open on a blank screen. Returns null when no friend
+ * has any progressions either. Respects per-domain privacy: a friend's
+ * domain marked private is excluded from the count and the listed domains.
+ */
+async function computeBeat1FriendFallback(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+): Promise<Beat1FriendFallback | null> {
+  const friends = await getFriends(userId);
+  if (friends.length === 0) return null;
+  const friendIds = friends.map((friend) => friend.id);
+
+  const rows = await db
+    .select({
+      friendId: playerMastery.userId,
+      friendName: users.displayName,
+      domain: playerMastery.canonicalSubcategory,
+      visibility: profileDomainVisibility.visibility,
+    })
+    .from(playerMastery)
+    .innerJoin(users, eq(playerMastery.userId, users.id))
+    .leftJoin(
+      profileDomainVisibility,
+      and(
+        eq(profileDomainVisibility.userId, playerMastery.userId),
+        eq(profileDomainVisibility.canonicalSubcategory, playerMastery.canonicalSubcategory),
+      ),
+    )
+    .where(and(
+      inArray(playerMastery.userId, friendIds),
+      isNotNull(playerMastery.tierReachedAt),
+      gte(playerMastery.tierReachedAt, cycleStart),
+      lt(playerMastery.tierReachedAt, cycleEndExclusive),
+    ));
+
+  const byFriend = new Map<string, { friendName: string; domains: string[] }>();
+  rows.forEach((row) => {
+    if (row.visibility === 'private') return;
+    const entry = byFriend.get(row.friendId) ?? {
+      friendName: row.friendName?.trim() || 'A friend',
+      domains: [],
+    };
+    entry.domains.push(row.domain);
+    byFriend.set(row.friendId, entry);
+  });
+
+  const [top] = [...byFriend.values()].sort((a, b) => b.domains.length - a.domains.length);
+  if (!top || top.domains.length === 0) return null;
+  return { friendName: top.friendName, count: top.domains.length, domains: top.domains.sort() };
+}
+
+/**
+ * Friend fallback for Beat5 (Gave). When the user themselves earned no author
+ * credit in the cycle, surface the friend whose questions earned the most.
+ * Aggregate only — no domain or question text — so no per-domain privacy
+ * filtering is needed.
+ */
+async function computeBeat5FriendFallback(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+): Promise<Beat5FriendFallback | null> {
+  const friends = await getFriends(userId);
+  if (friends.length === 0) return null;
+  const friendIds = friends.map((friend) => friend.id);
+
+  const rows = await db
+    .select({
+      friendId: masteryEvents.userId,
+      friendName: users.displayName,
+      awardedPoints: masteryEvents.awardedPoints,
+    })
+    .from(masteryEvents)
+    .innerJoin(users, eq(masteryEvents.userId, users.id))
+    .where(and(
+      inArray(masteryEvents.userId, friendIds),
+      eq(masteryEvents.sourceType, 'author_credit'),
+      ne(masteryEvents.answeredByUserId, masteryEvents.userId),
+      gte(masteryEvents.createdAt, cycleStart),
+      lt(masteryEvents.createdAt, cycleEndExclusive),
+    ));
+
+  const byFriend = new Map<string, { friendName: string; total: number }>();
+  rows.forEach((row) => {
+    const entry = byFriend.get(row.friendId) ?? {
+      friendName: row.friendName?.trim() || 'A friend',
+      total: 0,
+    };
+    entry.total += Number(row.awardedPoints ?? 0);
+    byFriend.set(row.friendId, entry);
+  });
+
+  const [top] = [...byFriend.values()].sort((a, b) => b.total - a.total);
+  if (!top || top.total <= 0) return null;
+  return {
+    friendName: top.friendName,
+    totalCreatorPoints: Math.round(top.total * 10) / 10,
+  };
+}
+
+/**
  * F3.2 — count friends who answered at least one question in the cycle.
  * Plus the user themselves (always 1). Used to derive ceremony mode.
  */
@@ -448,6 +574,14 @@ export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: D
     countActiveAnsweringPlayers(userId, cycleStart, cycleEndExclusive),
   ]);
 
+  // Friend fallbacks only when the user themselves had nothing for that beat
+  // in the cycle; avoids the extra queries (and the awkward "your friend did X
+  // and so did you" double-render) when the primary beat is present.
+  const [beat1FriendFallback, beat5FriendFallback] = await Promise.all([
+    beat1 ? Promise.resolve(null) : computeBeat1FriendFallback(userId, cycleStart, cycleEndExclusive),
+    beat5 ? Promise.resolve(null) : computeBeat5FriendFallback(userId, cycleStart, cycleEndExclusive),
+  ]);
+
   const mode = ceremonyModeFromAnsweringCount(activeAnsweringPlayers);
   // Beat 3 (Shaped) and Beat 4 (Alignment) require at least one active friend;
   // suppress both in solo mode so the ceremony doesn't reference absent friends.
@@ -459,9 +593,11 @@ export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: D
     cycleEnd: toIsoDate(cycleEnd),
     mode,
     beat1,
+    beat1FriendFallback,
     beat2,
     beat3: beat3Final,
     beat4: beat4Final,
     beat5,
+    beat5FriendFallback,
   };
 }

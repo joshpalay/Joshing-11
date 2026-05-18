@@ -16,10 +16,14 @@ export type PortraitEntry = {
   totalMasteryPoints: number
   tier: PortraitTier
   authoredAnsweredCount: number
+  isHidden?: boolean
 }
 
 type PortraitCirclesProps = {
   entries: PortraitEntry[]
+  editMode?: boolean
+  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
+  pendingDomain?: string | null
 }
 
 const TIER_ORDER: PortraitTier[] = [
@@ -176,6 +180,9 @@ export function PortraitDomainCircle({
   circleScale = 1,
   selected = false,
   circleSlotSize,
+  editMode = false,
+  onToggleHidden,
+  pending = false,
 }: {
   entry: PortraitEntry
   maxPointsForTier: number
@@ -184,6 +191,9 @@ export function PortraitDomainCircle({
   circleScale?: number
   selected?: boolean
   circleSlotSize?: number
+  editMode?: boolean
+  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
+  pending?: boolean
 }) {
   const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge'
   const dc = getPortraitDomainColor(broadCategory)
@@ -194,22 +204,55 @@ export function PortraitDomainCircle({
       maxPointsForTier
     ) * circleScale
   )
-  const opacity = forceFullOpacity
+  const baseOpacity = forceFullOpacity
     ? 1
     : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier)
+  const isHidden = Boolean(entry.isHidden)
+  const dimForHidden = editMode && isHidden
+  const opacity = dimForHidden ? baseOpacity * 0.35 : baseOpacity
   const labelOpacity =
-    0.5 + (entry.totalMasteryPoints / Math.max(maxPointsForTier, 1)) * 0.5
+    (0.5 + (entry.totalMasteryPoints / Math.max(maxPointsForTier, 1)) * 0.5) *
+    (dimForHidden ? 0.5 : 1)
   const showMasteryCount =
     showCount &&
     entry.tier !== 'establishing' &&
     entry.authoredAnsweredCount > 0
   const resolvedCircleSlotSize = Math.max(circleSlotSize ?? size, size)
 
+  const handleClick = () => {
+    if (!editMode || !onToggleHidden || pending) return
+    onToggleHidden(entry.canonicalSubcategory, !isHidden)
+  }
+
+  const interactive = editMode && Boolean(onToggleHidden)
+
   return (
     <div
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-pressed={interactive ? isHidden : undefined}
+      aria-label={
+        interactive
+          ? `${isHidden ? 'Show' : 'Hide'} ${entry.canonicalSubcategory} ${isHidden ? 'on your portrait' : 'from friends'}`
+          : undefined
+      }
+      onClick={interactive ? handleClick : undefined}
+      onKeyDown={
+        interactive
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleClick()
+              }
+            }
+          : undefined
+      }
       style={{
         ...circleItemStyle,
         width: Math.max(90, resolvedCircleSlotSize + 8),
+        cursor: interactive ? (pending ? 'wait' : 'pointer') : undefined,
+        userSelect: interactive ? 'none' : undefined,
+        opacity: pending ? 0.6 : 1,
       }}
     >
       <div
@@ -231,6 +274,7 @@ export function PortraitDomainCircle({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              filter: dimForHidden ? 'grayscale(0.6)' : undefined,
             }}
           >
             {showMasteryCount && (
@@ -273,6 +317,31 @@ export function PortraitDomainCircle({
               </span>
             </div>
           )}
+          {editMode && (
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                width: 22,
+                height: 22,
+                borderRadius: '50%',
+                background: isHidden ? '#faf8f2' : '#1a1208',
+                color: isHidden ? '#1a1208' : '#faf8f2',
+                border: `1.5px solid ${isHidden ? '#1a1208' : '#1a1208'}`,
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: 12,
+                fontWeight: 700,
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                lineHeight: 1,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+              }}
+            >
+              {isHidden ? '+' : '×'}
+            </div>
+          )}
         </div>
       </div>
       <span
@@ -285,6 +354,7 @@ export function PortraitDomainCircle({
           maxWidth: 90,
           wordWrap: 'break-word',
           opacity: labelOpacity,
+          textDecoration: dimForHidden ? 'line-through' : undefined,
         }}
       >
         {entry.canonicalSubcategory}
@@ -306,7 +376,7 @@ function getPortraitEntryCircleSize(
   )
 }
 
-export function PortraitCircles({ entries }: PortraitCirclesProps) {
+export function PortraitCircles({ entries, editMode = false, onToggleHidden, pendingDomain = null }: PortraitCirclesProps) {
   const [sortMode, setSortMode] = useState<SortMode>('domain')
 
   const validEntries = useMemo(
@@ -452,6 +522,9 @@ export function PortraitCircles({ entries }: PortraitCirclesProps) {
                     entry={entry}
                     maxPointsForTier={maxPointsByTier[entry.tier] ?? 1}
                     circleSlotSize={circleSlotSize}
+                    editMode={editMode}
+                    onToggleHidden={onToggleHidden}
+                    pending={pendingDomain === entry.canonicalSubcategory}
                   />
                 ))}
               </div>

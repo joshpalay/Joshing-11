@@ -1,14 +1,22 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import FeedList from '@/components/FeedList'
-import TodaysFiveCard from '@/components/TodaysFiveCard'
+import TodaysFiveCard, {
+  type DailyPreferences,
+  type DailyStatus,
+} from '@/components/TodaysFiveCard'
 import { getSession } from '@/server/auth/session'
-import { getCatchupQuestions } from '@/server/db/queries/daily'
+import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types'
+import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
+import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
+import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
+import { getFeedPagePayload } from '@/server/feed/get-feed-page'
+import { getNextDailyResetBoundary } from '@/lib/games/timezone'
+
+const FEED_PAGE_SIZE = 20
 
 export default async function Home() {
   const session = await getSession()
-  const catchupItems = session ? await getCatchupQuestions(session.userId) : []
-  const catchupCount = catchupItems.length
-  const expiringCount = catchupItems.filter((item) => item.expiresSoon).length
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-24 md:py-10">
@@ -19,20 +27,127 @@ export default async function Home() {
           </h1>
         </div>
         <div className="w-full space-y-3">
-          <TodaysFiveCard />
-          <MissedQuestionsCard
-            count={catchupCount}
-            expiringCount={expiringCount}
-          />
+          {session ? (
+            <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
+              <TodaysFiveSection userId={session.userId} />
+            </Suspense>
+          ) : (
+            <TodaysFiveCard />
+          )}
+          {session ? (
+            <Suspense fallback={null}>
+              <MissedQuestionsSection userId={session.userId} />
+            </Suspense>
+          ) : null}
           <div>
             <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
               What&apos;s happening
             </p>
-            <FeedList pageSize={20} infinite />
+            {session ? (
+              <Suspense fallback={<FeedSkeleton />}>
+                <FeedSection userId={session.userId} />
+              </Suspense>
+            ) : (
+              <FeedList pageSize={FEED_PAGE_SIZE} infinite />
+            )}
           </div>
         </div>
       </section>
     </main>
+  )
+}
+
+async function TodaysFiveSection({ userId }: { userId: string }) {
+  const [queue, preferences] = await Promise.all([
+    getTodaysDailyQueue(userId),
+    getDailyPreferences(userId),
+  ])
+
+  const status = buildDailyStatusSnapshot(queue)
+  const cardPreferences: DailyPreferences = {
+    difficulty: preferences.difficulty,
+    domainMode: preferences.domainMode,
+    selectedDomains: preferences.selectedDomains,
+  }
+
+  return (
+    <TodaysFiveCard
+      initialStatus={status}
+      initialPreferences={cardPreferences}
+    />
+  )
+}
+
+async function MissedQuestionsSection({ userId }: { userId: string }) {
+  const catchupItems = await getCatchupQuestions(userId)
+  const count = catchupItems.length
+  if (count === 0) return null
+  const expiringCount = catchupItems.filter((item) => item.expiresSoon).length
+  return <MissedQuestionsCard count={count} expiringCount={expiringCount} />
+}
+
+async function FeedSection({ userId }: { userId: string }) {
+  const [feedPage, latestUnviewed] = await Promise.all([
+    getFeedPagePayload(userId, { limit: FEED_PAGE_SIZE, cursor: null, filter: 'all' }),
+    getLatestUnviewedCeremony(userId),
+  ])
+
+  return (
+    <FeedList
+      pageSize={FEED_PAGE_SIZE}
+      infinite
+      initialPage={feedPage}
+      initialCeremonyStatus={{
+        nextFireAt: getNextCeremonyAt().toISOString(),
+        latestUnviewed: latestUnviewed
+          ? { id: latestUnviewed.id, firedAt: latestUnviewed.firedAt.toISOString() }
+          : null,
+      }}
+    />
+  )
+}
+
+function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDailyQueue>>): DailyStatus {
+  const nextRoundAt = getNextDailyResetBoundary().toISOString()
+  if (!queue) {
+    return {
+      questionsRemaining: DAILY_QUEUE_SIZE,
+      questionsAnswered: 0,
+      isComplete: false,
+      nextRoundAt,
+      queueId: null,
+    }
+  }
+
+  const slots: QueueSlot[] = Array.isArray(queue.slots) ? (queue.slots as QueueSlot[]) : []
+  const answered = slots.filter((slot) => slot.answered).length
+  const questionsAnswered = Math.min(answered, DAILY_QUEUE_SIZE)
+  const questionsRemaining = Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0)
+  const isComplete = questionsAnswered >= DAILY_QUEUE_SIZE
+  return {
+    questionsRemaining,
+    questionsAnswered,
+    isComplete,
+    nextRoundAt,
+    queueId: queue.id,
+  }
+}
+
+function CardSkeleton({ minHeight }: { minHeight: string }) {
+  return (
+    <div
+      className="bg-card rounded-lg border p-4"
+      style={{ minHeight }}
+      aria-hidden="true"
+    />
+  )
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
+      Loading feed…
+    </div>
   )
 }
 

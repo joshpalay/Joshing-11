@@ -10,10 +10,8 @@ import {
   generatedQuestions,
   questions,
 } from '@/server/db';
-import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
-import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
+import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
@@ -152,16 +150,6 @@ export async function POST(request: NextRequest) {
     const isCorrect = grade.result === 'correct';
     const answerState = isCorrect ? 'correct' : 'incorrect';
     const quip = parsed.gaveUp ? null : selectQuip({ isCorrect, surface: 'daily', friendResult: null });
-    const breadcrumb = parsed.gaveUp
-      ? null
-      : await generateBreadcrumb({
-          questionId: question.id,
-          questionText: question.questionText,
-          correctAnswer: canonicalAnswer,
-          submittedAnswer: parsed.submittedAnswer,
-          isCorrect,
-          domain: question.canonicalSubcategory,
-        }).catch(() => null);
 
     // Promote the bot question to a canonical row BEFORE writing the mastery
     // event so cross-surface dedup can key on the canonical Question.id
@@ -230,7 +218,6 @@ export async function POST(request: NextRequest) {
         awarded_points: pointsAwarded,
         reveal_canonical_answer: canonicalAnswer,
         reveal_explainer: question.explainer,
-        reveal_breadcrumb: breadcrumb,
         reveal_quip: grade.consolation,
         quip,
       } satisfies QueueSlot;
@@ -278,42 +265,22 @@ export async function POST(request: NextRequest) {
             questionId: canonicalQuestionId,
           });
 
-          // Author credit: windowed scheme, Moderate/Specialist only (PRD §8.32).
-          // We need the canonical question row to get difficulty and counts.
-          const [canonicalQ] = await db
-            .select({ calibratedDifficulty: questions.calibratedDifficulty, llmDifficulty: questions.llmDifficulty, correctCount: questions.correctCount, askedCount: questions.askedCount })
-            .from(questions)
-            .where(eq(questions.id, canonicalQuestionId))
-            .limit(1);
-          if (canonicalQ) {
-            const existingCredits = await countAuthorCreditEvents(canonicalQuestionId, persistedCreatorId);
-            const authorAward = creatorMasteryAwardForNthCorrect(
-              canonicalQ.correctCount,
-              canonicalQ.askedCount,
-              existingCredits + 1,
-              canonicalQ.calibratedDifficulty ?? canonicalQ.llmDifficulty,
-            );
-            if (authorAward.awardedPoints > 0) {
-              await writeMasteryEvent({
-                userId: persistedCreatorId,
-                questionId: canonicalQuestionId,
-                domain: persistedDomainForCreator,
-                pointsAwarded: authorAward.awardedPoints,
-                sourceType: 'author_credit',
-                sourceId: `daily:${question.id}:${session.userId}`,
-                broadCategory: undefined,
-                eventQuestionId: canonicalQuestionId,
-                basePoints: authorAward.basePoints,
-                weight: authorAward.weight,
-                answeredByUserId: session.userId,
-              }).catch((err) => {
-                console.warn('[daily/answer] author_credit write failed', err);
-              });
-            }
-          }
+          // Author credit (PRD §8.32): off the user's hot path — three queries
+          // the answerer never sees in their response.
+          void awardAuthorCredit({
+            creatorUserId: persistedCreatorId,
+            answererUserId: session.userId,
+            questionId: canonicalQuestionId,
+            domain: persistedDomainForCreator,
+            sourceId: `daily:${question.id}:${session.userId}`,
+            scope: 'daily/answer',
+          });
         }
 
-        await createFeedItemsForFriendsFromAnswer(
+        // Fan-out runs after the response is sent: the user-visible reveal does
+        // not depend on this work, and the propagation function swallows its
+        // own errors (see create-feed-items-for-answer.ts).
+        void createFeedItemsForFriendsFromAnswer(
           session.userId,
           canonicalQuestionId,
           isCorrect ? 'correct' : 'incorrect',
@@ -334,7 +301,7 @@ export async function POST(request: NextRequest) {
       explanation: question.explainer,
       pointsAwarded,
       answerState,
-      breadcrumb,
+      breadcrumb: null,
       masteryDelta,
       correctAnswer: canonicalAnswer,
       consolation: grade.consolation,

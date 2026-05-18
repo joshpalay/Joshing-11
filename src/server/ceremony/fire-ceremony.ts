@@ -1,8 +1,8 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gte, lte } from 'drizzle-orm';
 
 import { writeActivity } from '@/server/activity/write-activity';
 import { beatsPayloadSchema, computeBeats } from '@/server/ceremony/compute-beats';
-import { biweeklyCeremonies, db, users } from '@/server/db';
+import { biweeklyCeremonies, db, masteryEvents, users } from '@/server/db';
 import { runDomainMergesForUser } from '@/server/mastery/ceremony';
 import { sendSms } from '@/server/sms';
 
@@ -31,10 +31,27 @@ async function findExistingCeremony(
   return row?.id ?? null;
 }
 
-export async function fireCeremony(userId: string): Promise<string> {
+async function hasMasteryEventInCycle(
+  userId: string,
+  cycleStart: Date,
+  cycleEnd: Date,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: masteryEvents.id })
+    .from(masteryEvents)
+    .where(and(
+      eq(masteryEvents.userId, userId),
+      gte(masteryEvents.createdAt, cycleStart),
+      lte(masteryEvents.createdAt, cycleEnd),
+    ))
+    .limit(1);
+  return Boolean(row);
+}
+
+export async function fireCeremony(userId: string): Promise<string | null> {
   const cycleEnd = new Date();
   const cycleStart = new Date(cycleEnd);
-  cycleStart.setDate(cycleStart.getDate() - 14);
+  cycleStart.setDate(cycleStart.getDate() - 7);
   const cycleStartIso = isoDate(cycleStart);
   const cycleEndIso = isoDate(cycleEnd);
 
@@ -45,6 +62,13 @@ export async function fireCeremony(userId: string): Promise<string> {
   // the common case.
   const existingId = await findExistingCeremony(userId, cycleStartIso, cycleEndIso);
   if (existingId) return existingId;
+
+  // PRD §8.1.31 eligibility: a ceremony is the climax of activity, not a
+  // scheduled empty notification. Users with zero mastery events in the
+  // cycle window receive silence — no ceremony row, no activity item,
+  // no SMS.
+  const hasActivity = await hasMasteryEventInCycle(userId, cycleStart, cycleEnd);
+  if (!hasActivity) return null;
 
   const mergeResult = await runDomainMergesForUser(userId);
   const beatsPayload = await computeBeats(userId, cycleStart, cycleEnd);
@@ -101,7 +125,7 @@ export async function fireCeremony(userId: string): Promise<string> {
   if (user?.phoneNumber && user.smsOptIn !== 'opted_out') {
     await sendSms(
       user.phoneNumber,
-      `Two weeks of Joshing. Here's what you've been up to. ${appUrl()}/ceremony/${ceremonyId}`,
+      `A week of Joshing. Here's what you've been up to. ${appUrl()}/ceremony/${ceremonyId}`,
       'ceremony_ready',
       userId,
     );

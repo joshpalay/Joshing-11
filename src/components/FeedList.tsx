@@ -37,41 +37,34 @@ type FeedApiItem = {
     | 'friend_added'
     | 'friend_liked'
     | 'answered_by_you'
-  type?:
-    | 'direct_sent'
-    | 'friend_answered'
-    | 'friend_added'
-    | 'friend_liked'
-    | 'answered_by_you'
   source_type: string
   source_user_id: string
   source_friend_display_name: string
   source_profile_href?: string | null
   source_attribution: string
-  source_result: 'correct' | 'incorrect' | null
-  friend_results: FriendResult[] | null
+  // Fields the server omits when null (see compactNulls in get-feed-page.ts).
+  // Optional + nullable here because the client also constructs FeedApiItem
+  // values locally (after answer submit) and sometimes writes null explicitly.
+  source_result?: 'correct' | 'incorrect' | null
+  friend_results?: FriendResult[] | null
   viewer_answer_status?: { result: 'correct' | 'incorrect' } | null
   endorsement_count?: number | null
   additional_endorsers?: Array<{ userId: string; displayName: string }> | null
   source_event_at: string
-  personal_message: string | null
+  personal_message?: string | null
   state: string
   is_pinned: boolean
-  question_text: string | null
-  verified: boolean
+  question_text?: string | null
   is_in_bank: boolean
-  domain_pill: string | null
+  domain_pill?: string | null
   broad_category?: string | null
-  difficulty: string | null
-  explanation: string | null
-  answer_result: 'correct' | 'incorrect' | null
-  is_correct: boolean | null
-  correct_answer: string | null
-  submitted_answer: string | null
-  awarded_points: number | null
-  pointsAwarded?: number | null
-  mastery_delta: unknown | null
-  unverified_answer: boolean
+  explanation?: string | null
+  answer_result?: 'correct' | 'incorrect' | null
+  is_correct?: boolean | null
+  correct_answer?: string | null
+  submitted_answer?: string | null
+  awarded_points?: number | null
+  mastery_delta?: unknown | null
   viewer_is_author?: boolean
 }
 
@@ -99,9 +92,9 @@ type FeedResponse = {
   items: FeedApiItem[]
 }
 
-type CeremonyBanner = {
-  id: string
-  firedAt: string
+type CeremonyStatus = {
+  nextFireAt: string
+  latestUnviewed: { id: string; firedAt: string } | null
 }
 
 type AnswerResponse = {
@@ -109,7 +102,6 @@ type AnswerResponse = {
   correctAnswer?: string
   explanation?: string | null
   quip?: string | null
-  breadcrumb?: string | null
   pointsAwarded?: number | null
   masteryDelta?: unknown | null
 }
@@ -120,7 +112,6 @@ type ResultState = {
   submittedAnswer: string
   explanation: string | null
   quip: string | null
-  breadcrumb: string | null
   awardedPoints: number | null
   masteryDelta: unknown | null
 }
@@ -379,14 +370,14 @@ function toAnsweredByYouItem(
     answerSummary: result
       ? comparisonCopy(
           result.correct,
-          item.friend_results,
+          item.friend_results ?? null,
           item.source_type,
           item.source_friend_display_name,
           item.source_user_id
         )
       : comparisonCopy(
-          item.is_correct,
-          item.friend_results,
+          item.is_correct ?? null,
+          item.friend_results ?? null,
           item.source_type,
           item.source_friend_display_name,
           item.source_user_id
@@ -397,7 +388,6 @@ function toAnsweredByYouItem(
     awardedPoints: result?.awardedPoints ?? item.awarded_points,
     explanation: result?.explanation ?? item.explanation,
     quip: result?.quip ?? null,
-    unverifiedAnswer: item.unverified_answer,
     broadCategory: pickBroadCategory(masteryDeltaRaw, item),
     masteryDelta: normalizeMasteryDelta(masteryDeltaRaw),
     pairedFriend: pickPairedFriend(item),
@@ -407,6 +397,15 @@ function toAnsweredByYouItem(
 type FeedListProps = {
   pageSize?: number
   infinite?: boolean
+  /**
+   * Server-rendered first page. When supplied, the initial client fetch is
+   * skipped — items, cursor, and meta are seeded from this prop so the user
+   * sees the feed on first paint with no client round-trip. Subsequent filter
+   * changes and infinite-scroll pages still fetch via /api/feed.
+   */
+  initialPage?: FeedResponse | null
+  /** Server-rendered ceremony status (countdown + unviewed); same rationale as initialPage. */
+  initialCeremonyStatus?: CeremonyStatus | null
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
@@ -430,6 +429,8 @@ function FeedListLoading() {
 function FeedListContent({
   pageSize = 20,
   infinite = false,
+  initialPage = null,
+  initialCeremonyStatus = null,
 }: FeedListProps) {
   const searchParams = useSearchParams()
   const initialFilterParam =
@@ -438,21 +439,39 @@ function FeedListContent({
     initialFilterParam === 'sent-to-me' || initialFilterParam === 'from-friends'
       ? initialFilterParam
       : 'all'
+  // initialPage is only valid for the 'all' filter (that's what the server
+  // pre-fetches). If the URL pins a different filter, fall back to client fetch.
+  const initialPageMatchesFilter = initialPage !== null && initialFilter === 'all'
   const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
-  const [items, setItems] = useState<FeedApiItem[]>([])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingInitial, setLoadingInitial] = useState(true)
+  const [items, setItems] = useState<FeedApiItem[]>(
+    initialPageMatchesFilter ? initialPage!.items : []
+  )
+  const [nextCursor, setNextCursor] = useState<string | null>(
+    initialPageMatchesFilter
+      ? initialPage!.next_cursor ?? initialPage!.meta?.next_cursor ?? null
+      : null
+  )
+  const [hasMore, setHasMore] = useState(
+    initialPageMatchesFilter
+      ? Boolean(initialPage!.has_more ?? initialPage!.meta?.has_more)
+      : false
+  )
+  const [loadingInitial, setLoadingInitial] = useState(!initialPageMatchesFilter)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null)
+  const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(
+    initialPageMatchesFilter ? initialPage!.meta ?? null : null
+  )
   const [results, setResults] = useState<Record<string, ResultState>>({})
   const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({})
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
   const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null)
+  const [ceremonyStatus, setCeremonyStatus] = useState<CeremonyStatus | null>(initialCeremonyStatus)
+  // True for the very first render path when we already have server-rendered
+  // data; the initial-fetch useEffect skips its work once.
+  const skipInitialFetchRef = useRef(initialPageMatchesFilter)
 
   const loadFeed = useCallback(
     async (cursor?: string | null) => {
@@ -492,15 +511,15 @@ function FeedListContent({
         setHasMore(Boolean(body.has_more ?? body.meta?.has_more))
 
         if (!isNextPage) {
-          const bannerResponse = await fetch('/api/ceremony/banner', {
+          const statusResponse = await fetch('/api/ceremony/status', {
             cache: 'no-store',
             credentials: 'include',
           })
-          const bannerBody = (await bannerResponse
+          const statusBody = (await statusResponse
             .json()
-            .catch(() => null)) as { ceremony?: CeremonyBanner | null } | null
-          setCeremonyBanner(
-            bannerResponse.ok ? (bannerBody?.ceremony ?? null) : null
+            .catch(() => null)) as CeremonyStatus | null
+          setCeremonyStatus(
+            statusResponse.ok && statusBody && 'nextFireAt' in statusBody ? statusBody : null
           )
         }
       } catch (caught) {
@@ -516,6 +535,10 @@ function FeedListContent({
   )
 
   useEffect(() => {
+    if (skipInitialFetchRef.current) {
+      skipInitialFetchRef.current = false
+      return
+    }
     const timer = window.setTimeout(() => {
       void loadFeed()
     }, 0)
@@ -702,7 +725,6 @@ function FeedListContent({
             submittedAnswer,
             explanation: body.explanation ?? null,
             quip: body.quip ?? null,
-            breadcrumb: body.breadcrumb ?? null,
             awardedPoints: body.pointsAwarded ?? null,
             masteryDelta: body.masteryDelta ?? null,
           },
@@ -808,24 +830,7 @@ function FeedListContent({
           </button>
         ))}
       </nav>
-      {ceremonyBanner ? (
-        <Link
-          href={`/ceremony/${ceremonyBanner.id}`}
-          className="mb-4 block rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-stone-950 shadow-sm"
-        >
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 text-lg" aria-hidden>
-              ✦
-            </span>
-            <div>
-              <p className="font-medium">Your two-week reflection is ready</p>
-              <p className="mt-1 text-sm text-stone-700">
-                See what you&rsquo;ve been up to {'->'}
-              </p>
-            </div>
-          </div>
-        </Link>
-      ) : null}
+      <CeremonyTopOfFeed status={ceremonyStatus} />
 
       {items.length === 0 ? (
         <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
@@ -992,5 +997,66 @@ function FeedListContent({
         )
       })() : null}
     </>
+  )
+}
+
+/**
+ * Top-of-feed ceremony row. Three states share the same slot so the layout
+ * doesn't jump on Sunday morning:
+ *   1. Unviewed ceremony exists  → pinned card linking to /ceremony/:id
+ *   2. Today is Sunday (UTC)     → hidden (cron is firing; nothing to nag about
+ *                                  pre-fire, the pinned card will appear once it
+ *                                  fires and the next /status fetch lands)
+ *   3. Otherwise                 → countdown "Ceremony in N days"
+ *
+ * "N days" is whole-day-rounded by UTC date so the number doesn't tick down
+ * mid-day as the user reads.
+ */
+function CeremonyTopOfFeed({ status }: { status: CeremonyStatus | null }) {
+  if (!status) return null
+
+  if (status.latestUnviewed) {
+    return (
+      <Link
+        href={`/ceremony/${status.latestUnviewed.id}`}
+        className="mb-4 block rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-stone-950 shadow-sm"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 text-lg" aria-hidden>
+            ✦
+          </span>
+          <div>
+            <p className="font-medium">Your weekly reflection is ready</p>
+            <p className="mt-1 text-sm text-stone-700">
+              See what you&rsquo;ve been up to {'->'}
+            </p>
+          </div>
+        </div>
+      </Link>
+    )
+  }
+
+  const now = new Date()
+  if (now.getUTCDay() === 0) return null
+
+  const nextFireAt = new Date(status.nextFireAt)
+  const todayUtcMidnight = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  )
+  const fireUtcMidnight = Date.UTC(
+    nextFireAt.getUTCFullYear(),
+    nextFireAt.getUTCMonth(),
+    nextFireAt.getUTCDate(),
+  )
+  const daysUntil = Math.max(1, Math.round((fireUtcMidnight - todayUtcMidnight) / 86_400_000))
+  const label = daysUntil === 1 ? 'Ceremony tomorrow' : `Ceremony in ${daysUntil} days`
+
+  return (
+    <div className="text-muted-foreground mb-4 flex items-center gap-2 px-1 text-xs font-medium tracking-[0.08em] uppercase">
+      <span aria-hidden>✦</span>
+      <span>{label}</span>
+    </div>
   )
 }

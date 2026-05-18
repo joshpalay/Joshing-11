@@ -139,6 +139,7 @@ describe('/api/auth/verify-otp invitation gate', () => {
       expect(body.invitation).toEqual({ accepted: false })
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
+        onboardingComplete: false,
       })
       expect(acceptFriendInvitationMock).not.toHaveBeenCalled()
     })
@@ -156,6 +157,7 @@ describe('/api/auth/verify-otp invitation gate', () => {
       expect(body.invitation).toEqual({ accepted: false })
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
+        onboardingComplete: false,
       })
       expect(hasAcceptedInvitationForUserMock).not.toHaveBeenCalled()
     })
@@ -182,6 +184,7 @@ describe('/api/auth/verify-otp invitation gate', () => {
       })
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
+        onboardingComplete: false,
       })
     })
 
@@ -203,6 +206,7 @@ describe('/api/auth/verify-otp invitation gate', () => {
       expect(response.status).toBe(200)
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
+        onboardingComplete: false,
       })
     })
   })
@@ -324,6 +328,7 @@ describe('/api/auth/verify-otp invitation gate', () => {
       })
       expect(createSessionMock).toHaveBeenCalledWith('user-2', {
         invitationAccepted: true,
+        onboardingComplete: false,
       })
     })
 

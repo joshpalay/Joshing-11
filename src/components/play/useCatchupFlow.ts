@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
@@ -62,6 +62,33 @@ function formatQuestionSubhead(item: CatchupQueueItem): string {
   const date = new Date(`${item.queueDate}T12:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return 'FROM EARLIER';
   return `FROM ${new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(date).toUpperCase()}`;
+}
+
+async function fetchBreadcrumbForCatchupMessage(
+  queueId: string,
+  slotIndex: number,
+  messageId: string,
+  setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
+): Promise<void> {
+  try {
+    const response = await fetch('/api/breadcrumb', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ source: 'daily', queueId, slotIndex }),
+    });
+    if (!response.ok) return;
+    const body = await response.json().catch(() => null) as { breadcrumb?: string | null } | null;
+    const breadcrumb = body?.breadcrumb ?? null;
+    if (!breadcrumb) return;
+    setMessages((existing) => existing.map((message) =>
+      message.id === messageId && message.kind === 'result'
+        ? { ...message, breadcrumb }
+        : message,
+    ));
+  } catch {
+    // Breadcrumb is purely additive context; failure is silently ignored.
+  }
 }
 
 function questionMessage(item: CatchupQueueItem): ChatMessage {
@@ -229,6 +256,7 @@ export function useCatchupFlow() {
       const data = raw as CatchupAnswerResponse;
       const isCorrect = Boolean(data.isCorrect ?? data.correct ?? data.result === 'correct');
       const pointsAwarded = Number(data.pointsAwarded ?? data.awarded_points ?? 0);
+      const resultMessageId = newMessageId();
       resultPostedItemIdsRef.current.add(item.dailyQueueItemId);
       setStats((existing) => ({
         answered: existing.answered + 1,
@@ -239,7 +267,7 @@ export function useCatchupFlow() {
         ...existing,
         { id: newMessageId(), kind: 'user', text: trimmedAnswer },
         {
-          id: newMessageId(),
+          id: resultMessageId,
           kind: 'result',
           assignmentId: item.dailyQueueItemId,
           questionText: item.questionText,
@@ -247,7 +275,7 @@ export function useCatchupFlow() {
           submitted: trimmedAnswer,
           correctAnswer: isCorrect ? null : data.correctAnswer ?? data.answer ?? item.correctAnswer,
           consolation: data.consolation ?? data.quip ?? null,
-          breadcrumb: data.breadcrumb ?? null,
+          breadcrumb: null,
           copyVariant: item.queueAge,
           creatorName: 'Joshing',
           canonicalSubcategory: item.domain,
@@ -255,6 +283,12 @@ export function useCatchupFlow() {
           pointsLabel: 'Catch-up - 0.25x points',
         },
       ]);
+
+      const [queueId, slotIndexValue] = item.dailyQueueItemId.split(':');
+      const slotIndex = Number(slotIndexValue);
+      if (queueId && Number.isInteger(slotIndex)) {
+        void fetchBreadcrumbForCatchupMessage(queueId, slotIndex, resultMessageId, setMessages);
+      }
 
       window.setTimeout(() => {
         advancePast(item.dailyQueueItemId);

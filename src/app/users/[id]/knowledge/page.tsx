@@ -51,12 +51,16 @@ export default async function FriendKnowledgePage({
   const portrait = await getFriendPortraitData(id, session.userId)
   if (!portrait) notFound()
 
+  const isOwner = portrait.visibility === 'self'
   const [mastery, pageData] = await Promise.all([
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
   ])
 
-  const sortedDomains = [...pageData.allDomains].sort(
+  const visibleDomains = isOwner
+    ? pageData.allDomains
+    : pageData.allDomains.filter((domain) => !domain.isHidden)
+  const sortedDomains = [...visibleDomains].sort(
     (a, b) =>
       b.points - a.points || a.displayName.localeCompare(b.displayName),
   )
@@ -67,8 +71,11 @@ export default async function FriendKnowledgePage({
   ).length
   const hasKnowledge = sortedDomains.length > 0
   const mindStatement = buildMindStatement(portrait.user.displayName, topDomains)
+  const visibleTotalPoints = isOwner
+    ? mastery.totalPoints
+    : sortedDomains.reduce((sum, domain) => sum + domain.points, 0)
   const tierSignature = `${new Intl.NumberFormat().format(
-    Math.round(mastery.totalPoints),
+    Math.round(visibleTotalPoints),
   )} knowledge points across ${sortedDomains.length} territories`
   const friendFirstName = firstName(portrait.user.displayName)
 

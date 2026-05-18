@@ -4,42 +4,29 @@ import { readSessionClaims } from '@/server/auth/session'
 
 const SESSION_COOKIE_NAME = 'joshing_session'
 
-type AuthMeResponse = {
-  user?: {
-    onboardingComplete?: boolean
-  }
-}
-
-async function getAuthenticatedUser(
-  request: NextRequest,
-): Promise<AuthMeResponse['user'] | null> {
-  const response = await fetch(new URL('/api/auth/me', request.url), {
-    headers: {
-      cookie: request.headers.get('cookie') ?? '',
-    },
-    cache: 'no-store',
-  }).catch(() => null)
-
-  if (!response?.ok) return null
-
-  const data = (await response
-    .json()
-    .catch(() => null)) as AuthMeResponse | null
-  return data?.user ?? null
+function tagTiming(response: NextResponse, startedAt: number): NextResponse {
+  response.headers.set('Server-Timing', `proxy;dur=${Date.now() - startedAt}`)
+  return response
 }
 
 /**
- * Combined edge proxy:
- *  1. Defense-in-depth JWT gate (edge-safe, only verifies signature + `inv` claim).
- *  2. Onboarding/login routing for authenticated page requests (calls
- *     `/api/auth/me` in the Node runtime to read onboarding state).
+ * Edge proxy: defense-in-depth JWT gate plus onboarding/login routing for
+ * authenticated page requests. Reads `inv` and `onb` directly from the JWT
+ * so no DB lookup or self-fetch happens on the steady-state path. Legacy
+ * sessions missing `onb` are redirected once to
+ * /api/auth/refresh-onboarding-claim, which does a single DB read and
+ * re-mints the cookie.
+ *
+ * Every response is tagged with a Server-Timing header so middleware cost
+ * shows up in the DevTools Network panel and on Vercel function logs.
  *
  * Route handlers MUST keep their own `getSession()` checks — this is an
  * additional fence, not a replacement.
  */
 export async function middleware(request: NextRequest) {
+  const startedAt = Date.now()
   if (request.method === 'OPTIONS') {
-    return new NextResponse(null, { status: 200 })
+    return tagTiming(new NextResponse(null, { status: 200 }), startedAt)
   }
 
   const { pathname, search } = request.nextUrl
@@ -52,37 +39,43 @@ export async function middleware(request: NextRequest) {
 
   if (!claims) {
     if (isApi) {
-      return NextResponse.json(
-        { error: 'unauthenticated', message: 'Sign in required.' },
-        { status: 401 },
+      return tagTiming(
+        NextResponse.json(
+          { error: 'unauthenticated', message: 'Sign in required.' },
+          { status: 401 },
+        ),
+        startedAt,
       )
     }
-    if (isLoginPage || isInvitePage) return NextResponse.next()
+    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt)
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', pathname + search)
-    return NextResponse.redirect(loginUrl)
+    return tagTiming(NextResponse.redirect(loginUrl), startedAt)
   }
 
   // Legacy session: valid JWT but no `inv` claim. Trigger graceful refresh.
   if (!claims.invitationAccepted) {
     if (isApi) {
-      return NextResponse.json(
-        {
-          error: 'session_refresh_required',
-          message: 'Session needs to be refreshed.',
-        },
-        { status: 401 },
+      return tagTiming(
+        NextResponse.json(
+          {
+            error: 'session_refresh_required',
+            message: 'Session needs to be refreshed.',
+          },
+          { status: 401 },
+        ),
+        startedAt,
       )
     }
-    if (isLoginPage || isInvitePage) return NextResponse.next()
+    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt)
     const refreshUrl = new URL('/api/auth/refresh-session', request.url)
     refreshUrl.searchParams.set('next', pathname + search)
-    return NextResponse.redirect(refreshUrl)
+    return tagTiming(NextResponse.redirect(refreshUrl), startedAt)
   }
 
   // Authenticated with valid invitation. API requests pass through; page
   // requests get the onboarding/login routing pass.
-  if (isApi) return NextResponse.next()
+  if (isApi) return tagTiming(NextResponse.next(), startedAt)
 
   const isOnboardingPage = pathname === '/onboarding'
   const isAllowedOnboardingPath =
@@ -91,31 +84,26 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/onboarding/') ||
     pathname.startsWith('/api/auth/')
 
-  const user = await getAuthenticatedUser(request)
-
-  if (!user) {
-    if (isLoginPage || isInvitePage) return NextResponse.next()
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = '/login'
-    loginUrl.search = ''
-    return NextResponse.redirect(loginUrl)
+  if (claims.onboardingComplete) {
+    if (isLoginPage || isOnboardingPage) {
+      return tagTiming(NextResponse.redirect(new URL('/', request.url)), startedAt)
+    }
+    return tagTiming(NextResponse.next(), startedAt)
   }
 
-  if (!user.onboardingComplete && !isAllowedOnboardingPath) {
-    const onboardingUrl = request.nextUrl.clone()
-    onboardingUrl.pathname = '/onboarding'
-    onboardingUrl.search = ''
-    return NextResponse.redirect(onboardingUrl)
-  }
+  // claims.onboardingComplete is false: either the user genuinely hasn't
+  // finished onboarding, or they did so before the `onb` claim existed and
+  // their JWT is missing the field. Allow onboarding/auth paths through and
+  // route everything else to the refresh endpoint, which does one DB read,
+  // re-mints the JWT if needed, and bounces back. Steady-state is JWT-only.
+  if (isAllowedOnboardingPath) return tagTiming(NextResponse.next(), startedAt)
 
-  if (user.onboardingComplete && (isLoginPage || isOnboardingPage)) {
-    const homeUrl = request.nextUrl.clone()
-    homeUrl.pathname = '/'
-    homeUrl.search = ''
-    return NextResponse.redirect(homeUrl)
-  }
-
-  return NextResponse.next()
+  const refreshUrl = new URL(
+    '/api/auth/refresh-onboarding-claim',
+    request.url,
+  )
+  refreshUrl.searchParams.set('next', pathname + search)
+  return tagTiming(NextResponse.redirect(refreshUrl), startedAt)
 }
 
 /**
