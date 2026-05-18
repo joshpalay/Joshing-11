@@ -6,6 +6,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check } from 'lucide-react';
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 
 type Difficulty = 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive';
 type DomainMode = 'random' | 'custom';
@@ -34,9 +35,9 @@ type AdaptiveLevelResponse = {
 
 const DIFFICULTIES: { value: Difficulty; label: string; copy: string }[] = [
   { value: 'normal', label: 'Establishing', copy: 'Approachable, core-recognition questions.' },
-  { value: 'moderate', label: 'Solid', copy: 'Familiar questions for anyone reasonably engaged with the domain.' },
-  { value: 'challenging', label: 'Skilled', copy: 'Deeper-domain questions with more specific recall.' },
-  { value: 'ridiculous', label: 'Master', copy: 'Master-level deep cuts within the domain.' },
+  { value: 'moderate', label: 'Familiar', copy: 'Recognizable questions for anyone reasonably engaged with the domain.' },
+  { value: 'challenging', label: 'Solid', copy: 'Deeper-domain questions with more specific recall.' },
+  { value: 'ridiculous', label: 'Mastery', copy: 'Mastery-level deep cuts within the domain.' },
   { value: 'adaptive', label: 'Adaptive', copy: 'Calibrated to your recent performance.' },
 ];
 
@@ -452,8 +453,8 @@ function DomainOption({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-foreground">{domain.domain}</span>
-        <span className="mt-0.5 block text-xs capitalize text-muted-foreground">
-          {domain.tier} {Number.isFinite(masteryDistance(domain)) ? `, ${Math.ceil(masteryDistance(domain))} pts to next tier` : ''}
+        <span className="mt-0.5 block text-xs text-muted-foreground">
+          {KNOWLEDGE_TIER_LABEL[domain.tier]} {Number.isFinite(masteryDistance(domain)) ? `, ${Math.ceil(masteryDistance(domain))} pts to next tier` : ''}
         </span>
       </span>
     </button>

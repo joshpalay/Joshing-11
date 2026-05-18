@@ -174,7 +174,7 @@ describe('Feed answered states', () => {
 
     expect(rendered).not.toContain('+5 pts')
     expect(rendered).toContain('+ Knowledge in Sports')
-    expect(rendered).toContain('Versed → Fluent')
+    expect(rendered).toContain('Familiar → Solid')
   })
 
   it('correct answers without a tier change show the circle but no tier subtitle', () => {

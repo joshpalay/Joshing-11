@@ -21,9 +21,9 @@ describe('question LLM difficulty assessment', () => {
   it('uses tier names for persisted numeric difficulty display copy', () => {
     expect(DIFFICULTY_COPY).toMatchObject({
       1: 'Establishing',
-      3: 'Solid',
-      4: 'Skilled',
-      5: 'Master',
+      3: 'Familiar',
+      4: 'Solid',
+      5: 'Mastery',
     });
   });
 });

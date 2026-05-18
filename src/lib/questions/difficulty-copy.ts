@@ -4,22 +4,22 @@ export type DifficultyEstimateValue = 'accessible' | 'moderate' | 'specialist';
 export const DIFFICULTY_COPY: Record<number, string> = {
   1: 'Establishing',
   2: 'Establishing',
-  3: 'Solid',
-  4: 'Skilled',
-  5: 'Master',
+  3: 'Familiar',
+  4: 'Solid',
+  5: 'Mastery',
 };
 
 const TIER_COPY: Record<QuestionDifficultyTier, string> = {
   establishing: 'Establishing',
-  solid: 'Solid',
-  skilled: 'Skilled',
-  master: 'Master',
+  solid: 'Familiar',
+  skilled: 'Solid',
+  master: 'Mastery',
 };
 
 const ESTIMATE_COPY: Record<DifficultyEstimateValue, string> = {
   accessible: 'Establishing',
   moderate: 'Solid',
-  specialist: 'Master',
+  specialist: 'Mastery',
 };
 
 export function difficultyCopyFromValue(value: number | null | undefined): string | null {

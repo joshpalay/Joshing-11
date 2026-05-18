@@ -27,9 +27,9 @@ type FeedbackSignal = 'thumbs_up' | 'thumbs_down'
 
 const DAILY_DIFFICULTY_LABELS: Record<string, string> = {
   normal: 'Establishing',
-  moderate: 'Solid',
-  challenging: 'Skilled',
-  ridiculous: 'Master',
+  moderate: 'Familiar',
+  challenging: 'Solid',
+  ridiculous: 'Mastery',
   adaptive: 'Adaptive',
 }
 
