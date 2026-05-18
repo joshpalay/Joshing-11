@@ -257,8 +257,12 @@ export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByY
         </div>
 
         <p
-          className="mt-3 text-[16px] leading-snug text-[var(--ink)]"
-          style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+          className="mt-3 text-[16px] leading-snug"
+          style={{
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            color: 'var(--ink)',
+            opacity: 0.65,
+          }}
         >
           &ldquo;{item.question}&rdquo;
         </p>
