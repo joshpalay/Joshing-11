@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
   AnsweredByYouCard,
+  AnswerFeedbackSheet,
   AnswerSheet,
   DirectSentCard,
   FeedOverflowMenu,
@@ -116,6 +117,7 @@ type AnswerResponse = {
 type ResultState = {
   correct: boolean
   answer: string
+  submittedAnswer: string
   explanation: string | null
   quip: string | null
   breadcrumb: string | null
@@ -447,6 +449,7 @@ function FeedListContent({
   const [results, setResults] = useState<Record<string, ResultState>>({})
   const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({})
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
+  const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null)
@@ -696,6 +699,7 @@ function FeedListContent({
           [item.id]: {
             correct: isCorrect,
             answer: body.correctAnswer ?? '',
+            submittedAnswer,
             explanation: body.explanation ?? null,
             quip: body.quip ?? null,
             breadcrumb: body.breadcrumb ?? null,
@@ -724,6 +728,7 @@ function FeedListContent({
         )
         setCardStates((s) => ({ ...s, [item.id]: 'answered' }))
         setAnswerSheetId(null)
+        setFeedbackSheetId(item.id)
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -962,6 +967,27 @@ function FeedListContent({
             onSubmit={(answer) => void submitAnswer(sheetItem, answer)}
             onClose={() => setAnswerSheetId(null)}
             loading={busyId === sheetItem.id}
+          />
+        )
+      })() : null}
+
+      {feedbackSheetId ? (() => {
+        const sheetItem = items.find((item) => item.id === feedbackSheetId)
+        const result = results[feedbackSheetId]
+        if (!sheetItem || !result || !sheetItem.question_id) return null
+        return (
+          <AnswerFeedbackSheet
+            question={sheetItem.question_text ?? ''}
+            category={sheetItem.domain_pill}
+            isCorrect={result.correct}
+            pointsAwarded={result.awardedPoints}
+            correctAnswer={result.answer}
+            submittedAnswer={result.submittedAnswer}
+            explanation={result.explanation}
+            quip={result.quip}
+            questionId={sheetItem.question_id}
+            feedItemId={sheetItem.id}
+            onClose={() => setFeedbackSheetId(null)}
           />
         )
       })() : null}
