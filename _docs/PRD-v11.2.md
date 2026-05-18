@@ -42,7 +42,7 @@ Two items remain unresolved and are deliberately not locked here. They are carri
 | 17 | §10 | Schema clarifications: `source_result` enum, `territory_type` text-with-typecast, quip storage |
 | 18 | §16 | Four new open questions carried forward (16.16–16.19) |
 | v11.3 | §7.3, §16.19 | Onboarding "Keep all" rewritten to a binary contract; cultural anchor at the route resolved as optional |
-| v11.4 | line 45, §16.16, §16.17 | Tier labels locked to Curious / Versed / Fluent / Master; author credit windowed model locked; catch-up + recovery MAX rule locked |
+| v11.4 | line 45, §16.16, §16.17, §8.4.8 | Tier labels locked to Curious / Versed / Fluent / Master; author credit windowed model locked; catch-up + recovery MAX rule locked; declared-territory visual distinction withdrawn |
 
 **Tier name confirmation (v11.4 revision).** v11.1 §8.4.8 named the tiers Establishing / Familiar / Solid / Mastery and v11.2 reaffirmed those names. The 2026-05-18 learning-and-shared-knowledge audit identified a three-way fork in shipped UI copy (`Establishing / Familiar / Solid / Mastery` in shared helpers, `Curious / Explorer / Scholar / Sage` on the profile and domain pages, `Familiar / Solid / Mastery` in the in-session `MasteryMoment`) and recommended unifying on **Curious / Versed / Fluent / Master** because that vocabulary frames the player's relationship to a domain as an interior learning journey rather than a credentialing ladder. PR #302 unified every user-facing surface on that vocabulary; v11.4 ratifies it.
 
@@ -370,6 +370,28 @@ Action buttons remain `[Send a friend a question]` and `[Write a question]`. Vis
 
 ---
 
+## §8.4.8 — Visual treatment for declared territory (v11.4 withdrawal)
+
+v11.1 §8.4.8 last paragraph specified: *"Visual treatment for declared territory: authored declared domains render with a muted or outlined fill to distinguish them from full-color demonstrated domains. Promotion to demonstrated turns the fill to full color."*
+
+**v11.4 withdraws this.** The declared/demonstrated distinction is **structural** (a `territory_type` column on `knowledge_base_domains`, driving the §8.4.3 expansion rules and the §8.4.4 1-question-floor) but is **no longer surfaced visually** on the Knowledge map. Declared and demonstrated circles render identically.
+
+**What stays:**
+- §8.4.3 — the two expansion paths (friend-mediated → demonstrated; authorship → declared) and the promotion-to-demonstrated rule when a friend correctly answers an authored question. Unchanged.
+- §8.4.4 — the 1-question floor applies equally to both paths. Unchanged.
+- §10 schema — `territory_type` text-with-typecast column on KB domains. Unchanged.
+- §16.12 — first-time-author orientation copy. Unchanged (still open).
+
+**What's removed:**
+- The "muted or outlined fill" rendering rule for declared circles in `DomainCircle.tsx`. The current behavior — circles render with their category color regardless of `territoryType` — is now spec-compliant.
+- The "fill flips to full color on promotion" animation moment.
+
+**Rationale.** The visual distinction was meant to make the §8.4.3 authorship→promotion arc legible on the map, but in practice the muted treatment risked reading as "this domain is weaker" rather than "this domain is fresh-from-authorship." The promotion moment is better carried by the mastery-event toast and the Knowledge page's per-domain detail surfaces than by a circle-fill change that requires the player to remember a visual convention.
+
+The `territoryType` prop on `DomainCircle` may remain plumbed for future use (e.g., a hover tooltip, a domain-detail page badge) but should not drive the circle's primary visual rendering. No code change is *required* by this withdrawal — the current rendering is now correct.
+
+---
+
 ## §10 — Data Model (clarifications, no migrations)
 
 ### §10.1 `feed_items.source_result` enum
@@ -498,7 +520,7 @@ The following items from `audits/2026-05-16-phase2-findings.md` either confirm c
 
 **v11.3 revisions folded in (2026-05-18):** §7.3 — Onboarding "Keep all" fast path rewritten to a binary contract (skip cultural anchor on "These look good"; full four-step flow on "Let me adjust them" or "Start fresh"). §16.19 — Cultural anchor at the route marked RESOLVED as optional, in line with the §7.3 revision.
 
-**v11.4 revisions folded in (2026-05-18):** Tier name confirmation (line 45) rewritten to ratify **Curious / Versed / Fluent / Master** as canonical; the Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired. §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline.
+**v11.4 revisions folded in (2026-05-18):** Tier name confirmation (line 45) rewritten to ratify **Curious / Versed / Fluent / Master** as canonical; the Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired. §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline. §8.4.8 — visual treatment for declared territory withdrawn; declared and demonstrated circles render identically, the data-model distinction stays.
 
 **Next planned revision:** v11.5, when §16.18 (thumbs-up → surface-priority ordering formula) is resolved, or when Activities / Joshing Game / Personal Rounds / Archive are re-enabled.
 
