@@ -78,64 +78,76 @@ async function _createFeedItemsForFriendsFromAnswer(
   if (!domain) return;
 
   const friends = await getFriends(userId);
-  if (friends.length === 0) return;
-
-  for (const friend of friends) {
-    // Skip if friend has dismissed this domain
-    const [dismissed] = await db
-      .select({ id: feedDismissedDomains.id })
-      .from(feedDismissedDomains)
-      .where(and(
-        eq(feedDismissedDomains.userId, friend.id),
-        eq(feedDismissedDomains.canonicalSubcategory, domain),
-        isNull(feedDismissedDomains.reinstatedAt),
-      ))
-      .limit(1);
-
-    if (dismissed) continue;
-
-    // Idempotency: skip if this exact source user already created an item for this friend+question
-    const [existing] = await db
-      .select({ id: feedItems.id })
-      .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, friend.id),
-        eq(feedItems.questionId, questionId),
-        eq(feedItems.sourceUserId, userId),
-      ))
-      .limit(1);
-
-    if (existing) continue;
-
-    if (sourceAnswerId) {
-      const [answerEvent] = await db
-        .select({ id: feedItems.id })
-        .from(feedItems)
-        .where(and(
-          eq(feedItems.recipientUserId, friend.id),
-          eq(feedItems.sourceAnswerId, sourceAnswerId),
-        ))
-        .limit(1);
-
-      if (answerEvent) continue;
-    }
-
-    await db.insert(feedItems).values({
-      recipientUserId: friend.id,
-      questionId,
-      sourceType: SOCIAL_FEED_SOURCE_TYPE,
-      sourceUserId: userId,
-      sourceResult: result,
-      sourceEventAt: new Date(),
-      sourceAnswerId,
-      state: 'active',
-      isPinned: false,
-    });
-
-    await rollOffOldItems(friend.id);
+  if (friends.length === 0) {
+    await notifyPreviousAnswerers(userId, questionId);
+    return;
   }
 
-  // Notify users who previously answered this question (Activity tab)
+  const friendIds = friends.map((f) => f.id);
+
+  // Batched eligibility checks — one set-based query per filter instead of N
+  // sequential round-trips per friend.
+  const [dismissedRows, existingRows, answerEventRows] = await Promise.all([
+    db
+      .select({ userId: feedDismissedDomains.userId })
+      .from(feedDismissedDomains)
+      .where(and(
+        inArray(feedDismissedDomains.userId, friendIds),
+        eq(feedDismissedDomains.canonicalSubcategory, domain),
+        isNull(feedDismissedDomains.reinstatedAt),
+      )),
+    db
+      .select({ recipientUserId: feedItems.recipientUserId })
+      .from(feedItems)
+      .where(and(
+        inArray(feedItems.recipientUserId, friendIds),
+        eq(feedItems.questionId, questionId),
+        eq(feedItems.sourceUserId, userId),
+      )),
+    sourceAnswerId
+      ? db
+          .select({ recipientUserId: feedItems.recipientUserId })
+          .from(feedItems)
+          .where(and(
+            inArray(feedItems.recipientUserId, friendIds),
+            eq(feedItems.sourceAnswerId, sourceAnswerId),
+          ))
+      : Promise.resolve([] as Array<{ recipientUserId: string }>),
+  ]);
+
+  const dismissedSet = new Set(dismissedRows.map((r) => r.userId));
+  const existingSet = new Set(existingRows.map((r) => r.recipientUserId));
+  const answerEventSet = new Set(answerEventRows.map((r) => r.recipientUserId));
+
+  const eligibleRecipientIds = friendIds.filter(
+    (id) => !dismissedSet.has(id) && !existingSet.has(id) && !answerEventSet.has(id),
+  );
+
+  if (eligibleRecipientIds.length > 0) {
+    const eventAt = new Date();
+    await db.insert(feedItems).values(
+      eligibleRecipientIds.map((recipientId) => ({
+        recipientUserId: recipientId,
+        questionId,
+        sourceType: SOCIAL_FEED_SOURCE_TYPE,
+        sourceUserId: userId,
+        sourceResult: result,
+        sourceEventAt: eventAt,
+        sourceAnswerId,
+        state: 'active',
+        isPinned: false,
+      })),
+    );
+
+    // rollOff stays per-recipient (it's keyed on a per-user "first 50" window)
+    // but runs in parallel rather than sequentially.
+    await Promise.all(eligibleRecipientIds.map((id) => rollOffOldItems(id)));
+  }
+
+  await notifyPreviousAnswerers(userId, questionId);
+}
+
+async function notifyPreviousAnswerers(userId: string, questionId: string): Promise<void> {
   const previousAnswerers = await db
     .select({ userId: masteryEvents.userId })
     .from(masteryEvents)

@@ -313,7 +313,10 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        await createFeedItemsForFriendsFromAnswer(
+        // Fan-out runs after the response is sent: the user-visible reveal does
+        // not depend on this work, and the propagation function swallows its
+        // own errors (see create-feed-items-for-answer.ts).
+        void createFeedItemsForFriendsFromAnswer(
           session.userId,
           canonicalQuestionId,
           isCorrect ? 'correct' : 'incorrect',
