@@ -80,19 +80,19 @@ Each has a dedicated section below (§8.7, §8.14, §8.15). Listed here so §5's
 
 ---
 
-## §7.3 — Onboarding "Keep all" fast path (addition)
+## §7.3 — Onboarding "Keep all" fast path (v11.3 revision)
 
-v11.1 §7.3 describes a four-step flow that always includes Step 2 (birth year + geography). The implementation's "Keep all" invite-suggestions path skips Step 2 entirely and redirects to home, so a pre-seeded cohort never has a cultural anchor recorded. Neither end is correct: the PRD flow is too long for a pre-seeded user; the code's hard-skip permanently strips a useful signal.
+v11.1 §7.3 described a four-step flow that always included Step 2 (birth year + geography). v11.2 attempted a middle ground — a compact two-field Step 2 on the "Keep all" path — but on review, the friction of even a two-field gate against the highest-intent cohort was judged net-negative for activation. v11.3 supersedes both.
 
-**v11.2 resolution.** When a user taps "Keep all" on the invite-suggestions step, accept the interests, then route them to a compact one-screen step collecting birth year and country only, before reaching home.
+**v11.3 resolution.** The contract on the invite-suggestions screen is now binary:
 
-**Step 1 (updated):**
+1. **Seeded set untouched ("These look good") → straight to home.** No cultural anchor is collected on this path. Speed of activation is prioritized for the invited cohort, who have the strongest signal of intent (a friend hand-picked their interests). Personalization on this cohort falls back to the seeded interests themselves, which are richer than any two-field anchor.
+2. **Any deviation ("Let me adjust them" — edit, add, or remove any seeded interest) → full four-step flow** (background → warmup → review). The user's edited seeded set is carried into the final review screen alongside any LLM-proposed additions. Tapping the adjust button is treated as the deviation signal; we do not require the user to actually change anything past that point.
+3. **Skip seeded entirely ("Start fresh") → full four-step flow** with the seeded set cleared. Unchanged from prior versions.
 
-> If the user accepts all pre-seeded interests, proceed to a compact Step 2 screen (birth year + country only) before reaching home. Region is omitted on this fast path — the two-field minimum is enough for future re-personalization without lengthening the gate.
+The cultural anchor (`birth_year`, `grew_up_country`, optional `grew_up_region`) is collected on paths (2) and (3) only. The "anchor required for everyone" rule from v11.2 is **withdrawn**.
 
-The full four-step flow remains the path for users who skip invite suggestions or have no pre-seeded interests. **The cultural anchor is required for everyone — there is no skip path that bypasses both fields.** See §16.19 for the open question on whether the route should hard-reject a request without a cultural anchor payload.
-
-The Knowledge-base candidates returned to the user remain LLM-generated from birth year + country + (region if collected) + warm-up answers, exactly as in v11.1.
+The Knowledge-base candidates returned to the user remain LLM-generated from birth year + country + (region if collected) + warm-up answers when those fields are present; for the fast path, KB generation falls back to the seeded interests directly.
 
 ---
 
@@ -437,14 +437,9 @@ Neither blocks the v11.2 spec.
 
 ### §16.19 Cultural anchor — required or skippable at the route?
 
-**Status:** see §7.3 above. `src/app/api/onboarding/propose-interests/route.ts:86–105` accepts a request body without a `culturalAnchor` field and silently proceeds with `culturalAnchor = undefined`, which makes the LLM use warm-up answers only. The PRD presents Step 2 as required.
+**Resolved (v11.3):** Optional at the route. `src/app/api/onboarding/propose-interests/route.ts` accepts a request body without a `culturalAnchor` field and proceeds with `culturalAnchor = undefined`, which makes the LLM use warm-up answers only. This is the intended behavior under the §7.3 v11.3 binary contract: the "These look good" fast path bypasses the anchor entirely, and only users who tap "Let me adjust them" or "Start fresh" reach a flow where the anchor is collected. No route change required.
 
-**Decision needed:**
-
-- Make `culturalAnchor` required at the route — return 400 if absent. Tightest fit with §7.3 as written.
-- Allow it to be optional and explicitly document the skip semantics in §7.3 (e.g., users born before 1920, users unwilling to share geography).
-
-**v11.2 leans toward "required."** The compact step on the "Keep all" fast path (§7.3 above) reduces friction enough that mandating both fields is reasonable. But the lock is deferred to product.
+The v11.2 "lean toward required" is withdrawn in line with the §7.3 revision above.
 
 ---
 
