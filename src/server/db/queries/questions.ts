@@ -56,6 +56,7 @@ export type QuestionView = {
   verified: boolean;
   llmSuggestedAnswer: string | null;
   critiqueIterations: number;
+  answerers?: { names: string[]; total: number };
 };
 
 export type QuestionMutationResult = { ok: boolean; reason?: 'not_found' | 'in_use' };

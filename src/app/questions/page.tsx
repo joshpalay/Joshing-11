@@ -145,6 +145,16 @@ function CardOverflowMenu({
   );
 }
 
+function formatAnswerersLine(answerers: { names: string[]; total: number }): string | null {
+  const { names, total } = answerers;
+  if (total <= 0 || names.length === 0) return null;
+  const [first, second] = names;
+  if (total === 1) return `${first} answered your question`;
+  if (total === 2 && second) return `${first} and ${second} answered your question`;
+  const others = total - 1;
+  return `${first} and ${others} ${others === 1 ? 'other' : 'others'} answered your question`;
+}
+
 function initialValues(question: QuestionView): QuestionFormValues {
   return {
     text: question.text,
@@ -430,6 +440,10 @@ function QuestionsPageContent() {
                 <p className="mt-4 text-sm text-muted-foreground">
                   {question.timesAnswered} answers · {question.correctRate}% correct · {question.usedInGamesCount} games
                 </p>
+                {question.isOwnAuthored && question.answerers ? (() => {
+                  const line = formatAnswerersLine(question.answerers);
+                  return line ? <p className="mt-1 text-sm text-muted-foreground">{line}</p> : null;
+                })() : null}
                 {cardError[question.id] ? <p className="mt-3 text-sm text-destructive">{cardError[question.id]}</p> : null}
                 <div className="mt-4 flex items-center gap-2">
                   {confirmingId === question.id ? (
