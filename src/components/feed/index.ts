@@ -1,6 +1,7 @@
 export { FeedOverflowMenu, getFeedOverflowMenuLabels } from './FeedActions'
 export { AnsweredByYouCard, type FeedRecheckAction } from './AnsweredByYouCard'
 export { AnswerSheet } from './AnswerSheet'
+export { AnswerFeedbackSheet } from './AnswerFeedbackSheet'
 export { DirectSentCard } from './DirectSentCard'
 export { FeedCard } from './FeedCard'
 export { FriendAddedCard } from './FriendAddedCard'
@@ -12,8 +13,6 @@ export type {
   AnsweredByYouFeedItem,
   DirectSentFeedItem,
   FeedCardBaseItem,
-  FeedCardShellProps,
-  FeedCardTone,
   FriendAddedFeedItem,
   FriendAnsweredFeedItem,
   FriendLikedFeedItem,

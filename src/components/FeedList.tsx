@@ -1,10 +1,11 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
   AnsweredByYouCard,
+  AnswerFeedbackSheet,
   AnswerSheet,
   DirectSentCard,
   FeedOverflowMenu,
@@ -18,6 +19,7 @@ import {
   type FriendAnsweredFeedItem,
   type FriendLikedFeedItem,
 } from '@/components/feed'
+import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 
 type FriendResult = {
   userId: string
@@ -115,6 +117,7 @@ type AnswerResponse = {
 type ResultState = {
   correct: boolean
   answer: string
+  submittedAnswer: string
   explanation: string | null
   quip: string | null
   breadcrumb: string | null
@@ -224,6 +227,9 @@ function baseTypedFields(item: FeedApiItem, answered = false) {
     isInBank: item.is_in_bank,
     avatarName: item.source_friend_display_name,
     avatarUserId: item.source_user_id,
+    authorHref: item.source_profile_href ?? profileHref(item.source_user_id),
+    timestamp: formatRelativeTime(item.source_event_at),
+    viewerIsAuthor: item.viewer_is_author === true,
   }
 }
 
@@ -335,6 +341,27 @@ function pickBroadCategory(
   return item.broad_category ?? null
 }
 
+function pickPairedFriend(
+  item: FeedApiItem
+): { displayName: string; userId: string | null } | null {
+  const primary = item.friend_results?.[0]
+  if (primary?.displayName) {
+    return { displayName: primary.displayName, userId: primary.userId ?? null }
+  }
+  if (
+    item.source_type === 'direct_sent' ||
+    item.source_type === 'authored_shared'
+  ) {
+    if (item.source_friend_display_name) {
+      return {
+        displayName: item.source_friend_display_name,
+        userId: item.source_user_id ?? null,
+      }
+    }
+  }
+  return null
+}
+
 function toAnsweredByYouItem(
   item: FeedApiItem,
   result?: ResultState
@@ -373,6 +400,7 @@ function toAnsweredByYouItem(
     unverifiedAnswer: item.unverified_answer,
     broadCategory: pickBroadCategory(masteryDeltaRaw, item),
     masteryDelta: normalizeMasteryDelta(masteryDeltaRaw),
+    pairedFriend: pickPairedFriend(item),
   }
 }
 
@@ -421,6 +449,7 @@ function FeedListContent({
   const [results, setResults] = useState<Record<string, ResultState>>({})
   const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({})
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
+  const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null)
@@ -670,6 +699,7 @@ function FeedListContent({
           [item.id]: {
             correct: isCorrect,
             answer: body.correctAnswer ?? '',
+            submittedAnswer,
             explanation: body.explanation ?? null,
             quip: body.quip ?? null,
             breadcrumb: body.breadcrumb ?? null,
@@ -698,6 +728,7 @@ function FeedListContent({
         )
         setCardStates((s) => ({ ...s, [item.id]: 'answered' }))
         setAnswerSheetId(null)
+        setFeedbackSheetId(item.id)
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -815,96 +846,104 @@ function FeedListContent({
         </section>
       ) : (
         <section className="space-y-3 pb-8">
-          {items.map((item) => {
-            const result = results[item.id]
-            const cardState =
-              cardStates[item.id] ??
-              (item.state === 'answered' ? 'answered' : 'unanswered')
-            const isAnswered = cardState === 'answered'
-            const isBusy = busyId === item.id
+          {groupItemsByRecency(items).map((group) => (
+            <Fragment key={group.key}>
+              <h2 className="text-muted-foreground pt-4 text-xs font-semibold tracking-[0.18em] uppercase first:pt-0">
+                {group.label}
+              </h2>
+              {group.items.map((item) => {
+                const result = results[item.id]
+                const cardState =
+                  cardStates[item.id] ??
+                  (item.state === 'answered' ? 'answered' : 'unanswered')
+                const isAnswered = cardState === 'answered'
+                const isBusy = busyId === item.id
 
-            const overflow = (
-              <FeedOverflowMenu
-                sourceName={item.source_friend_display_name}
-                category={item.domain_pill}
-                question={
-                  item.question_id && item.question_text
-                    ? {
-                        id: item.question_id,
-                        text: item.question_text,
-                        domain: item.domain_pill,
-                      }
+                const overflow = (
+                  <FeedOverflowMenu
+                    sourceName={item.source_friend_display_name}
+                    category={item.domain_pill}
+                    question={
+                      item.question_id && item.question_text
+                        ? {
+                            id: item.question_id,
+                            text: item.question_text,
+                            domain: item.domain_pill,
+                          }
+                        : null
+                    }
+                    isInBank={item.is_in_bank}
+                    disabled={isBusy}
+                    onHideCategory={() => void hideCategory(item)}
+                    onHidePerson={() => void hidePerson(item)}
+                    onReport={() => void reportItem(item)}
+                  />
+                )
+
+                if (isAnswered) {
+                  const answeredItem = toAnsweredByYouItem(item, result)
+                  const isIncorrect = answeredItem.isCorrect === false
+                  const recheckAction: FeedRecheckAction | null = isIncorrect
+                    ? { onSubmit: () => submitRecheck(item) }
                     : null
+                  return (
+                    <AnsweredByYouCard
+                      key={item.id}
+                      item={answeredItem}
+                      recheckAction={recheckAction}
+                      overflow={overflow}
+                    />
+                  )
                 }
-                isInBank={item.is_in_bank}
-                disabled={isBusy}
-                onHideCategory={() => void hideCategory(item)}
-                onHidePerson={() => void hidePerson(item)}
-                onReport={() => void reportItem(item)}
-              />
-            )
 
-            if (isAnswered) {
-              const answeredItem = toAnsweredByYouItem(item, result)
-              const isIncorrect = answeredItem.isCorrect === false
-              const recheckAction: FeedRecheckAction | null = isIncorrect
-                ? { onSubmit: () => submitRecheck(item) }
-                : null
-              return (
-                <AnsweredByYouCard
-                  key={item.id}
-                  item={answeredItem}
-                  recheckAction={recheckAction}
-                  overflow={overflow}
-                />
-              )
-            }
+                const onAnswer = item.viewer_is_author ? undefined : () => setAnswerSheetId(item.id)
+                const typedItem = toTypedFeedItem(item)
 
-            const onAnswer = item.viewer_is_author ? undefined : () => setAnswerSheetId(item.id)
-            const typedItem = toTypedFeedItem(item)
+                if (typedItem.type === 'direct_sent') {
+                  return (
+                    <DirectSentCard
+                      key={item.id}
+                      item={typedItem}
+                      overflow={overflow}
+                      onAnswer={onAnswer}
+                    />
+                  )
+                }
 
-            if (typedItem.type === 'direct_sent') {
-              return (
-                <DirectSentCard
-                  key={item.id}
-                  item={typedItem}
-                  overflow={overflow}
-                  onAnswer={onAnswer}
-                />
-              )
-            }
+                if (typedItem.type === 'friend_added') {
+                  return (
+                    <FriendAddedCard
+                      key={item.id}
+                      item={typedItem}
+                      overflow={overflow}
+                      onAnswer={onAnswer}
+                      onHideCategory={() => void hideCategory(item)}
+                    />
+                  )
+                }
 
-            if (typedItem.type === 'friend_added') {
-              return (
-                <FriendAddedCard
-                  key={item.id}
-                  item={typedItem}
-                  overflow={overflow}
-                  onAnswer={onAnswer}
-                />
-              )
-            }
+                if (typedItem.type === 'friend_liked') {
+                  return (
+                    <FriendLikedCard
+                      key={item.id}
+                      item={typedItem}
+                      overflow={overflow}
+                      onAnswer={onAnswer}
+                    />
+                  )
+                }
 
-            if (typedItem.type === 'friend_liked') {
-              return (
-                <FriendLikedCard
-                  key={item.id}
-                  item={typedItem}
-                  overflow={overflow}
-                  onAnswer={onAnswer}
-                />
-              )
-            }
-
-            return (
-              <FriendAnsweredCard
-                key={item.id}
-                item={typedItem}
-                overflow={overflow}
-                onAnswer={onAnswer}
-              />
-            )
-          })}
+                return (
+                  <FriendAnsweredCard
+                    key={item.id}
+                    item={typedItem}
+                    overflow={overflow}
+                    onAnswer={onAnswer}
+                  />
+                )
+              })}
+            </Fragment>
+          ))}
         </section>
       )}
 
@@ -928,6 +967,27 @@ function FeedListContent({
             onSubmit={(answer) => void submitAnswer(sheetItem, answer)}
             onClose={() => setAnswerSheetId(null)}
             loading={busyId === sheetItem.id}
+          />
+        )
+      })() : null}
+
+      {feedbackSheetId ? (() => {
+        const sheetItem = items.find((item) => item.id === feedbackSheetId)
+        const result = results[feedbackSheetId]
+        if (!sheetItem || !result || !sheetItem.question_id) return null
+        return (
+          <AnswerFeedbackSheet
+            question={sheetItem.question_text ?? ''}
+            category={sheetItem.domain_pill}
+            isCorrect={result.correct}
+            pointsAwarded={result.awardedPoints}
+            correctAnswer={result.answer}
+            submittedAnswer={result.submittedAnswer}
+            explanation={result.explanation}
+            quip={result.quip}
+            questionId={sheetItem.question_id}
+            feedItemId={sheetItem.id}
+            onClose={() => setFeedbackSheetId(null)}
           />
         )
       })() : null}

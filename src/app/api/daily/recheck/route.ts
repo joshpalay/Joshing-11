@@ -9,6 +9,8 @@ import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { recheckAnswerWithLLM } from '@/server/llm/recheck';
+import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
+import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 
 export const dynamic = 'force-dynamic';
 
@@ -167,6 +169,33 @@ export async function POST(request: NextRequest) {
 
     let masteryDelta = null;
     if (accepted) {
+      // Promote the bot question to a canonical row BEFORE writing the
+      // mastery event so the question_id column links to questions.id and
+      // friend-feed propagation has a canonical id to key on. Without this
+      // the mastery event records question_id=NULL and friend feeds never
+      // see the answer — same failure mode that the daily/answer route had.
+      let canonicalQuestionId: string | null = null;
+      let persistAttempt = 0;
+      while (persistAttempt < 2 && canonicalQuestionId === null) {
+        persistAttempt += 1;
+        try {
+          const persisted = await persistGeneratedQuestion(question.id, question.canonicalSubcategory);
+          canonicalQuestionId = persisted.questionId;
+        } catch (error) {
+          const finalAttempt = persistAttempt >= 2;
+          console.warn(
+            finalAttempt
+              ? '[daily/recheck] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
+              : '[daily/recheck] persistGeneratedQuestion failed; retrying once',
+            {
+              generatedQuestionId: question.id,
+              attempt: persistAttempt,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          );
+        }
+      }
+
       masteryDelta = await writeMasteryEvent({
         userId: session.userId,
         questionId: question.id,
@@ -176,7 +205,7 @@ export async function POST(request: NextRequest) {
         sourceType: 'daily',
         sourceId: `${queue.id}:${parsed.slotIndex}:recheck`,
         broadCategory: question.broadCategory,
-        eventQuestionId: null,
+        eventQuestionId: canonicalQuestionId,
         basePoints: question.basePoints,
         weight: 1,
       }).catch((error) => {
@@ -187,6 +216,23 @@ export async function POST(request: NextRequest) {
       await updateDomainDifficultyOnAnswer(session.userId, question.canonicalSubcategory, true).catch((error) => {
         console.warn('[daily/recheck] updateDomainDifficultyOnAnswer failed', error);
       });
+
+      if (canonicalQuestionId) {
+        try {
+          await createFeedItemsForFriendsFromAnswer(
+            session.userId,
+            canonicalQuestionId,
+            'correct',
+            `daily:${question.id}:${session.userId}`,
+          );
+        } catch (error) {
+          console.warn('[daily/recheck] feed propagation failed', {
+            generatedQuestionId: question.id,
+            canonicalQuestionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
 
     return NextResponse.json({

@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Settings } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
@@ -244,7 +242,7 @@ export default function DailyPage() {
 
   const actualCurrentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
   const currentSlot = pausedAfterSlotIndex === null ? actualCurrentSlot : null;
-  const completedCount = queue?.slots.filter((slot) => slot.answered || slot.skipped).length ?? 0;
+  const completedCount = queue?.slots.filter((slot) => slot.answered).length ?? 0;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
 
 
@@ -259,18 +257,21 @@ export default function DailyPage() {
         credentials: 'include',
         body: JSON.stringify({ queue_id: queue.queue_id, slot_index: currentSlot.slot_index }),
       });
+      const body = await response.json().catch(() => null);
       if (!response.ok) {
-        const body = await response.json().catch(() => null);
         throw new Error(body?.message ?? 'Could not skip that question.');
       }
-      setQueue((existing) => existing
-        ? {
-            ...existing,
-            slots: existing.slots.map((slot) =>
-              slot.slot_index === currentSlot.slot_index ? { ...slot, skipped: true } : slot
-            ),
-          }
-        : existing);
+      const nextSlots = Array.isArray(body?.slots) ? (body.slots as QueueSlot[]) : null;
+      setQueue((existing) => {
+        if (!existing) return existing;
+        if (nextSlots) return { ...existing, slots: nextSlots };
+        return {
+          ...existing,
+          slots: existing.slots.map((slot) =>
+            slot.slot_index === currentSlot.slot_index ? { ...slot, skipped: true } : slot
+          ),
+        };
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not skip that question.');
     } finally {
@@ -439,9 +440,11 @@ export default function DailyPage() {
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
-    for (const slot of queue?.slots ?? []) {
+    let position = 1;
+    for (const slot of [...(queue?.slots ?? [])].sort((a, b) => a.slot_index - b.slot_index)) {
       if (!slot.answered) continue;
-      map[slot.slot_index + 1] = slot.answer_state === 'correct' ? 'correct' : 'wrong';
+      map[position] = slot.answer_state === 'correct' ? 'correct' : 'wrong';
+      position += 1;
     }
     return map;
   }, [queue?.slots]);
@@ -528,17 +531,10 @@ export default function DailyPage() {
             <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Daily Five</p>
             <h1 className="font-serif text-xl font-semibold text-[var(--text)]">Today&apos;s five</h1>
           </div>
-          <Link
-            href="/daily/setup"
-            className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-            aria-label="Set up daily round"
-          >
-            <Settings className="size-4" aria-hidden="true" />
-          </Link>
         </div>
         <GeometricProgress
-          total={queue?.slots.length || DAILY_QUEUE_SIZE}
-          current={(currentSlot?.slot_index ?? completedCount) + 1}
+          total={DAILY_QUEUE_SIZE}
+          current={Math.min(completedCount + 1, DAILY_QUEUE_SIZE)}
           results={results}
         />
       </header>

@@ -9,6 +9,9 @@ import { hashTelemetryValue, logTelemetry } from '@/server/telemetry'
 export const INVITATION_ACCEPTANCE_ERROR_MESSAGE =
   'This invitation could not be accepted.'
 
+export const INVITE_REQUIRED_MESSAGE =
+  "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite."
+
 const DEFAULT_INVITATION_TTL_MS = 1000 * 60 * 60 * 24 * 14
 
 export type FriendInvitation = typeof friendInvitations.$inferSelect
@@ -240,6 +243,28 @@ export async function hasAcceptedInvitationForUser(
       and(
         eq(friendInvitations.inviteeUserId, inviteeUserId),
         isNotNull(friendInvitations.acceptedAt)
+      )
+    )
+    .limit(1)
+
+  return !!row
+}
+
+export async function hasValidPendingInvitationForPhone(
+  phoneNumber: string,
+  now: Date = new Date()
+): Promise<boolean> {
+  if (!phoneNumber) return false
+
+  const [row] = await db
+    .select({ id: friendInvitations.id })
+    .from(friendInvitations)
+    .where(
+      and(
+        eq(friendInvitations.inviteePhone, phoneNumber),
+        isNull(friendInvitations.acceptedAt),
+        isNull(friendInvitations.cancelledAt),
+        gt(friendInvitations.expiresAt, now)
       )
     )
     .limit(1)

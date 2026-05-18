@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { dailyQueues, db, skippedDailyQuestions } from '@/server/db';
-import { DAILY_SKIP_LIMIT, type QueueSlot } from '@/server/daily/types';
+import { DAILY_QUEUE_SIZE, DAILY_SKIP_LIMIT, type QueueSlot } from '@/server/daily/types';
+import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
+import { createDailyQueueItem } from '@/server/db/queries/daily';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,9 +80,43 @@ export async function POST(request: NextRequest) {
       .where(eq(dailyQueues.id, queue.id));
   });
 
+  const answeredCount = nextSlots.filter((item) => item.answered).length;
+  const pendingCount = nextSlots.filter((item) => !item.answered && !item.skipped).length;
+  const needsReplacement = answeredCount + pendingCount < DAILY_QUEUE_SIZE;
+
+  let finalSlots: QueueSlot[] = nextSlots;
+  let replacementAdded = false;
+
+  if (needsReplacement) {
+    try {
+      const [generated] = await generateDailyQuestionsFromKnowledgeBase(session.userId, 1);
+      if (generated) {
+        const maxSlotIndex = nextSlots.reduce(
+          (max, item) => (item.slot_index > max ? item.slot_index : max),
+          -1,
+        );
+        const updatedQueue = await createDailyQueueItem(
+          session.userId,
+          generated.id,
+          maxSlotIndex + 1,
+        );
+        finalSlots = Array.isArray(updatedQueue.slots)
+          ? (updatedQueue.slots as QueueSlot[])
+          : nextSlots;
+        replacementAdded = true;
+      }
+    } catch (error) {
+      console.error('[daily/skip] replacement generation failed', error);
+    }
+  }
+
   return NextResponse.json({
     skipped: true,
     skip_count: currentSkipCount + 1,
     skip_limit: DAILY_SKIP_LIMIT,
+    replacement_added: replacementAdded,
+    queue_id: queue.id,
+    queue_date: queue.queueDate,
+    slots: finalSlots,
   });
 }

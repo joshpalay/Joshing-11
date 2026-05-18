@@ -1,13 +1,5 @@
 import type { ReactNode } from 'react'
 
-export type FeedCardTone = 'cream' | 'white' | 'green' | 'amber' | 'gray' | 'muted'
-
-export type FeedCardActionState =
-  | 'unanswered'
-  | 'answering'
-  | 'answered'
-  | 'seen'
-
 export type FeedCardBaseItem = {
   id: string
   metadata: ReactNode
@@ -17,6 +9,9 @@ export type FeedCardBaseItem = {
   isInBank?: boolean
   avatarName?: string | null
   avatarUserId?: string | null
+  authorHref?: string | null
+  timestamp?: string | null
+  viewerIsAuthor?: boolean
 }
 
 export type DirectSentFeedItem = FeedCardBaseItem & {
@@ -63,6 +58,11 @@ export type AnsweredByYouMasteryDelta = {
   tierChanged: boolean
 }
 
+export type AnsweredByYouPairedFriend = {
+  displayName: string
+  userId: string | null
+}
+
 export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   type: 'answered_by_you'
   resultLabel?: string | null
@@ -76,6 +76,7 @@ export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   unverifiedAnswer?: boolean
   broadCategory?: string | null
   masteryDelta?: AnsweredByYouMasteryDelta | null
+  pairedFriend?: AnsweredByYouPairedFriend | null
 }
 
 export type TypedFeedItem =
@@ -84,16 +85,3 @@ export type TypedFeedItem =
   | FriendAddedFeedItem
   | FriendLikedFeedItem
   | AnsweredByYouFeedItem
-
-export type FeedCardShellProps = {
-  item: FeedCardBaseItem
-  tone: FeedCardTone
-  socialSignal?: ReactNode
-  overflow?: ReactNode
-  onAnswer?: () => void
-  resultContent?: ReactNode
-  className?: string
-  // When true, the question text is rendered dimmed so the social signal
-  // becomes the visual focus. Used when the viewer has already answered.
-  dimQuestion?: boolean
-}

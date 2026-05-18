@@ -1,108 +1,205 @@
+import type { ReactNode } from 'react'
+import Link from 'next/link'
+
 import { cn } from '@/lib/utils'
 
-import type { FeedCardShellProps } from './types'
+import { visibleFeedCategory } from './category'
+import type { FeedCardBaseItem } from './types'
+import { colorForCategory, initialsFor, isDarkColor } from './visual'
 
-const AVATAR_COLORS = ['#0f766e', '#7c3aed', '#be123c', '#2563eb', '#b45309', '#15803d']
-const CATEGORY_COLORS = ['#0f766e', '#7c3aed', '#be123c', '#2563eb', '#b45309', '#15803d', '#c2410c', '#0369a1']
-
-function hashString(str: string): number {
-  return Array.from(str).reduce((sum, char) => sum + char.charCodeAt(0), 0)
+type FeedCardProps = {
+  item: FeedCardBaseItem
+  overflow?: ReactNode
+  onAnswer?: () => void
+  className?: string
 }
 
-function colorForUser(userId?: string | null): string {
-  if (!userId) return '#9ca3af'
-  return AVATAR_COLORS[hashString(userId) % AVATAR_COLORS.length]!
-}
+export function FeedCard({ item, overflow, onAnswer, className }: FeedCardProps) {
+  const categoryColor = colorForCategory(item.category)
+  const visibleCategory = visibleFeedCategory(item.category)
+  const onDark = isDarkColor(categoryColor)
+  const fgOnCategory = onDark ? 'var(--cream)' : 'var(--ink)'
+  const authorName = item.avatarName ?? 'Someone'
 
-function colorForCategory(category?: string | null): string {
-  if (!category) return '#e5e7eb'
-  return CATEGORY_COLORS[hashString(category.toLowerCase()) % CATEGORY_COLORS.length]!
-}
+  if (item.viewerIsAuthor) {
+    return (
+      <article
+        className={cn(
+          'relative overflow-hidden rounded-2xl border border-[var(--border-warm)] bg-[var(--cream)]',
+          className,
+        )}
+      >
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-[2px]"
+          style={{ backgroundColor: categoryColor }}
+        />
 
-function initialsFor(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return '?'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase()
-}
+        <div className="p-[14px]">
+          <div className="flex items-center gap-3">
+            <div
+              aria-hidden
+              className="grid size-9 shrink-0 place-items-center rounded-full text-[11px] font-semibold"
+              style={{ backgroundColor: categoryColor, color: fgOnCategory }}
+            >
+              You
+            </div>
 
-export function FeedCard({
-  item,
-  socialSignal,
-  overflow,
-  onAnswer,
-  resultContent,
-  className,
-  dimQuestion,
-}: FeedCardShellProps) {
-  const hasBottom = Boolean(resultContent ?? onAnswer)
+            <div className="min-w-0 flex-1">
+              <p
+                className="text-[11px] uppercase leading-none tracking-[0.08em]"
+                style={{ color: 'var(--ink)', opacity: 0.7 }}
+              >
+                New question
+              </p>
+              {visibleCategory ? (
+                <p
+                  className="mt-1 truncate text-[12px] italic leading-tight"
+                  style={{
+                    fontFamily: 'var(--font-literata)',
+                    color: 'var(--ink)',
+                    opacity: 0.7,
+                  }}
+                >
+                  {visibleCategory}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              {item.timestamp ? (
+                <span
+                  className="text-[11px] leading-none"
+                  style={{ color: 'var(--ink)', opacity: 0.6 }}
+                >
+                  {item.timestamp}
+                </span>
+              ) : null}
+              {overflow ? overflow : null}
+            </div>
+          </div>
+
+          <p
+            className="mt-3 line-clamp-4 text-[17px] leading-snug text-[var(--ink)]"
+            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+          >
+            &ldquo;{item.question}&rdquo;
+          </p>
+
+          {item.personalMessage ? (
+            <p
+              className="mt-2 text-[13px] italic leading-snug"
+              style={{
+                fontFamily: 'var(--font-literata)',
+                color: 'var(--ink)',
+                opacity: 0.65,
+              }}
+            >
+              {item.personalMessage}
+            </p>
+          ) : null}
+        </div>
+      </article>
+    )
+  }
 
   return (
     <article
       className={cn(
-        'overflow-hidden rounded-2xl border border-stone-200 bg-white transition-colors',
-        className
+        'relative overflow-hidden rounded-2xl border border-[var(--border-warm)] bg-[var(--cream)]',
+        className,
       )}
-      style={{ borderLeftWidth: '4px', borderLeftColor: colorForCategory(item.category) }}
     >
-      <div className="flex items-center gap-2.5 p-3 pl-4">
-        {item.avatarName ? (
-          <div
-            className="grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
-            style={{ backgroundColor: colorForUser(item.avatarUserId) }}
-          >
-            {initialsFor(item.avatarName)}
-          </div>
-        ) : null}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-[2px]"
+        style={{ backgroundColor: categoryColor }}
+      />
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            {socialSignal ? (
-              <p className="text-sm font-medium leading-5 text-stone-700">
-                {socialSignal}
+      <div className="p-[14px]">
+        <div className="flex items-center gap-3">
+          <div
+            aria-hidden
+            className="grid size-9 shrink-0 place-items-center rounded-full text-[12px] font-semibold tracking-wide"
+            style={{ backgroundColor: categoryColor, color: fgOnCategory }}
+          >
+            {initialsFor(authorName)}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            {item.authorHref ? (
+              <Link
+                href={item.authorHref}
+                className="block truncate text-[16px] leading-tight text-[var(--ink)] underline underline-offset-2"
+                style={{ textDecorationColor: 'rgb(0 0 0 / 0.35)' }}
+              >
+                {authorName}
+              </Link>
+            ) : (
+              <span className="block truncate text-[16px] leading-tight text-[var(--ink)]">
+                {authorName}
+              </span>
+            )}
+            {visibleCategory ? (
+              <p
+                className="mt-0.5 truncate text-[12px] italic leading-tight"
+                style={{
+                  fontFamily: 'var(--font-literata)',
+                  color: 'var(--ink)',
+                  opacity: 0.7,
+                }}
+              >
+                {visibleCategory}
               </p>
             ) : null}
-            {overflow ? <div className="shrink-0">{overflow}</div> : null}
           </div>
 
+          <div className="flex shrink-0 items-center gap-2">
+            {item.timestamp ? (
+              <span
+                className="text-[11px] leading-none"
+                style={{ color: 'var(--ink)', opacity: 0.6 }}
+              >
+                {item.timestamp}
+              </span>
+            ) : null}
+            {overflow ? overflow : null}
+          </div>
+        </div>
+
+        <p
+          className="mt-3 line-clamp-4 text-[17px] leading-snug text-[var(--ink)]"
+          style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+        >
+          {item.question}
+        </p>
+
+        {item.personalMessage ? (
           <p
-            className={cn(
-              'mt-2 font-serif text-base leading-6',
-              dimQuestion ? 'text-stone-400' : 'text-foreground'
-            )}
+            className="mt-2 text-[13px] italic leading-snug"
+            style={{
+              fontFamily: 'var(--font-literata)',
+              color: 'var(--ink)',
+              opacity: 0.65,
+            }}
           >
-            {item.question}
+            {item.personalMessage}
           </p>
+        ) : null}
 
-          {item.personalMessage ? (
-            <p className="text-muted-foreground mt-2 text-sm leading-6">
-              &ldquo;{item.personalMessage}&rdquo;
-            </p>
-          ) : null}
-        </div>
+        {onAnswer ? (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={onAnswer}
+              className="inline-flex items-center border-[1.5px] border-[var(--ink)] bg-[var(--cream)] px-[10px] py-[6px] text-[14px] text-[var(--ink)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none"
+              style={{ boxShadow: '4px 4px 0 var(--ink)' }}
+            >
+              Answer →
+            </button>
+          </div>
+        ) : null}
       </div>
-
-      {/* Bottom strip */}
-      {hasBottom ? (
-        <div className="flex items-center gap-3 border-t border-stone-200 px-3 py-2.5">
-          {resultContent ? (
-            <div className="flex-1 text-sm leading-6 text-stone-700">{resultContent}</div>
-          ) : (
-            <>
-              <div className="flex-1" />
-              {onAnswer ? (
-                <button
-                  type="button"
-                  onClick={onAnswer}
-                  className="shrink-0 text-sm font-semibold text-stone-950 transition hover:opacity-70"
-                >
-                  Answer →
-                </button>
-              ) : null}
-            </>
-          )}
-        </div>
-      ) : null}
     </article>
   )
 }

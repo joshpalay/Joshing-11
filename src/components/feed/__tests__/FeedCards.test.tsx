@@ -64,31 +64,57 @@ describe('Feed card preview fixtures', () => {
       'missingSuppressedCategory',
       'alreadyBankedItem',
       'unverifiedAnsweredExplanationNote',
+      'authoredByViewerUnanswered',
     ])
   })
 
-  it('renders each typed Feed card variant with social signal text', () => {
+  it('renders the author name, category, and question for each typed Feed card variant', () => {
     const fixtures = feedCardPreviewFixtures
-    expect(
-      html(<DirectSentCard item={fixtures.directSentUnanswered} />)
-    ).toContain("thought you")
-    expect(
-      html(<FriendAnsweredCard item={fixtures.friendAnsweredRight} />)
-    ).toContain('recognized this one')
-    expect(
-      html(<FriendAddedCard item={fixtures.friendAddedWroteQuestion} />)
-    ).toContain('added a question')
-    expect(
-      html(<FriendLikedCard item={fixtures.friendLikedShared} />)
-    ).toContain('liked this question')
-    expect(
-      html(<AnsweredByYouCard item={fixtures.answeredByYouCorrect} />)
-    ).toContain('You both had it')
+
+    const directSent = html(<DirectSentCard item={fixtures.directSentUnanswered} />)
+    expect(directSent).toContain('Maya')
+    expect(directSent).toContain('Food &amp; Drink')
+    expect(directSent).toContain('SCOBY')
+
+    const friendAnswered = html(<FriendAnsweredCard item={fixtures.friendAnsweredRight} />)
+    expect(friendAnswered).toContain('Noah')
+    expect(friendAnswered).toContain('Science')
+    expect(friendAnswered).toContain('magnetar')
+
+    const friendAdded = html(<FriendAddedCard item={fixtures.friendAddedWroteQuestion} />)
+    expect(friendAdded).toContain('Ari')
+    expect(friendAdded).toContain('History')
+
+    const friendLiked = html(<FriendLikedCard item={fixtures.friendLikedShared} />)
+    expect(friendLiked).toContain('Sam')
+    expect(friendLiked).toContain('Music')
+
+    const answeredByYou = html(<AnsweredByYouCard item={fixtures.answeredByYouCorrect} />)
+    expect(answeredByYou).toContain('You both had it')
+  })
+
+  it('drops the "has knowledge to share" phrasing from the unanswered question card', () => {
+    const variants = [
+      html(<DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />),
+      html(<FriendAnsweredCard item={feedCardPreviewFixtures.friendAnsweredRight} />),
+      html(<FriendAddedCard item={feedCardPreviewFixtures.friendAddedWroteQuestion} />),
+      html(<FriendLikedCard item={feedCardPreviewFixtures.friendLikedShared} />),
+    ]
+    for (const rendered of variants) {
+      expect(rendered).not.toContain('has knowledge to share')
+    }
+  })
+
+  it('renders the author name as a link to their profile when authorHref is provided', () => {
+    const rendered = html(
+      <DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />
+    )
+    expect(rendered).toMatch(/<a[^>]*href="\/users\/maya"[^>]*>Maya<\/a>/)
   })
 })
 
 describe('Feed unanswered card actions', () => {
-  it('shows Answer button in the card bottom strip when onAnswer is provided', () => {
+  it('shows the Answer button when onAnswer is provided', () => {
     const rendered = html(
       <DirectSentCard
         item={feedCardPreviewFixtures.directSentUnanswered}
@@ -96,7 +122,7 @@ describe('Feed unanswered card actions', () => {
       />
     )
 
-    expect(rendered).toContain('Answer')
+    expect(rendered).toContain('Answer →')
     expect(rendered).not.toContain('Skip')
     expect(rendered).not.toContain('Not my focus')
     expect(rendered).not.toContain('Bookmark')
@@ -132,13 +158,13 @@ describe('Feed unanswered card actions', () => {
 })
 
 describe('Feed answered states', () => {
-  it('submitting an answer resolves to an answered card with comparison copy and correct answer', () => {
+  it('submitting an answer resolves to an answered card with comparison copy', () => {
     const rendered = html(
       <AnsweredByYouCard item={feedCardPreviewFixtures.answeredByYouCorrect} />
     )
 
     expect(rendered).toContain('You both had it')
-    expect(rendered).toContain('Barcelona')
+    expect(rendered).toContain('Which city hosted the 1992 Summer Olympics?')
   })
 
   it('shows the knowledge-gain circle (no raw points pill) on a correct answer that crosses a tier', () => {
@@ -172,6 +198,84 @@ describe('Feed answered states', () => {
     expect(rendered).not.toContain('text-red')
     expect(rendered).not.toContain('destructive')
     expect(rendered).not.toContain('+ Knowledge')
+  })
+
+  it('reintroduces the personal-message line that the previous redesign dropped', () => {
+    const rendered = html(
+      <AnsweredByYouCard item={feedCardPreviewFixtures.answeredByYouWrong} />
+    )
+    expect(rendered).toContain('I always confuse this one with the Spanish capital.')
+  })
+
+  it('renders the "You answered" eyebrow with the italic category', () => {
+    const rendered = html(
+      <AnsweredByYouCard item={feedCardPreviewFixtures.answeredByYouCorrect} />
+    )
+    expect(rendered).toContain('You answered')
+    expect(rendered).toContain('Sports')
+  })
+
+  it('renders an overlapping pair of avatars when a paired friend is present', () => {
+    const rendered = html(
+      <AnsweredByYouCard item={feedCardPreviewFixtures.answeredByYouCorrect} />
+    )
+    // Viewer disc shows "You", friend disc shows initials "JP" (Joshua P).
+    expect(rendered).toContain('>You<')
+    expect(rendered).toContain('>JP<')
+  })
+
+  it('falls back to a single avatar disc when no paired friend is set', () => {
+    const rendered = html(
+      <AnsweredByYouCard
+        item={feedCardPreviewFixtures.unverifiedAnsweredExplanationNote}
+      />
+    )
+    // Only the viewer disc renders; no paired-friend initials.
+    expect(rendered).toContain('>You<')
+  })
+
+  it('uses the Joshing offset-shadow recheck button on wrong answers', () => {
+    const recheckAction = { onSubmit: async () => ({ accepted: false, message: '' }) }
+    const rendered = html(
+      <AnsweredByYouCard
+        item={feedCardPreviewFixtures.answeredByYouWrong}
+        recheckAction={recheckAction}
+      />
+    )
+    expect(rendered).toContain('Recheck →')
+    expect(rendered).toContain('3px 3px 0 var(--ink)')
+  })
+})
+
+describe('Authored-by-viewer card', () => {
+  it('renders a "New question" eyebrow with the italic category', () => {
+    const rendered = html(
+      <FriendAddedCard
+        item={feedCardPreviewFixtures.authoredByViewerUnanswered}
+      />
+    )
+    expect(rendered).toContain('New question')
+    expect(rendered).toContain('Detroit Techno')
+  })
+
+  it('renders the identity slot as plain text "You" with no profile link', () => {
+    const rendered = html(
+      <FriendAddedCard
+        item={feedCardPreviewFixtures.authoredByViewerUnanswered}
+      />
+    )
+    expect(rendered).toContain('>You<')
+    expect(rendered).not.toMatch(/<a[^>]*>You<\/a>/)
+  })
+
+  it('hides the Answer button on authored cards even if onAnswer is provided', () => {
+    const rendered = html(
+      <FriendAddedCard
+        item={feedCardPreviewFixtures.authoredByViewerUnanswered}
+        onAnswer={() => undefined}
+      />
+    )
+    expect(rendered).not.toContain('Answer →')
   })
 })
 
@@ -207,7 +311,7 @@ describe('Feed card category and overflow affordances', () => {
     ])
   })
 
-  it('renders collapsed multi-endorsement friend-liked copy', () => {
+  it('renders the friend-liked author once on a collapsed multi-endorsement card', () => {
     const rendered = html(
       <FriendLikedCard
         item={feedCardPreviewFixtures.friendLikedCollapsedMultiEndorsement}
@@ -215,7 +319,6 @@ describe('Feed card category and overflow affordances', () => {
     )
 
     expect(rendered).toContain('Sam')
-    expect(rendered).toContain('2 friends liked this question')
-    expect(rendered).toContain('Lena, Kai')
+    expect(rendered).toContain('Music')
   })
 })
