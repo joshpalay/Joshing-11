@@ -88,9 +88,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Cultural anchor (birth year + geography) is intentionally optional (2026-05-16).
-  // PRD §7.3 presents it as Step 2, but skipping it is a valid path — the route
-  // falls back gracefully to warm-up answers alone when anchor data is absent.
+  // Cultural anchor is optional per PRD v11.2 §7.3 / §16.19; missing payload falls back to warm-up answers alone.
   const culturalAnchorResult = parseCulturalAnchor(body?.culturalAnchor);
   if (culturalAnchorResult === 'invalid') {
     return NextResponse.json(

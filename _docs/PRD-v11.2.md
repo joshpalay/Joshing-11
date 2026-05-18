@@ -90,7 +90,7 @@ v11.1 §7.3 describes a four-step flow that always includes Step 2 (birth year +
 
 > If the user accepts all pre-seeded interests, proceed to a compact Step 2 screen (birth year + country only) before reaching home. Region is omitted on this fast path — the two-field minimum is enough for future re-personalization without lengthening the gate.
 
-The full four-step flow remains the path for users who skip invite suggestions or have no pre-seeded interests. **The cultural anchor is required for everyone — there is no skip path that bypasses both fields.** See §16.19 for the open question on whether the route should hard-reject a request without a cultural anchor payload.
+The full four-step flow remains the path for users who skip invite suggestions or have no pre-seeded interests. **The cultural anchor is collected when offered but not enforced at the API.** A user who reaches the route without an anchor payload is accepted; the LLM falls back to warm-up answers alone. The compact "Keep all" Step 2 above is the soft gate — it is the only place the fast-path user sees the anchor question, and there is no client path that surfaces the question and then submits without it. §16.19 is resolved by this paragraph.
 
 The Knowledge-base candidates returned to the user remain LLM-generated from birth year + country + (region if collected) + warm-up answers, exactly as in v11.1.
 
@@ -435,16 +435,11 @@ Neither blocks the v11.2 spec.
 
 **v11.2 leaves the spec unchanged.** This is tracked as a code-side TODO blocked on a small product call about the formula.
 
-### §16.19 Cultural anchor — required or skippable at the route?
+### §16.19 Cultural anchor — required or skippable at the route? — RESOLVED
 
-**Status:** see §7.3 above. `src/app/api/onboarding/propose-interests/route.ts:86–105` accepts a request body without a `culturalAnchor` field and silently proceeds with `culturalAnchor = undefined`, which makes the LLM use warm-up answers only. The PRD presents Step 2 as required.
+**Resolved (v11.2): skippable.** The route at `src/app/api/onboarding/propose-interests/route.ts` accepts requests without a `culturalAnchor` payload and falls back to warm-up answers alone. The compact Step 2 on the "Keep all" fast path (§7.3) is the only place the anchor question is surfaced; users who reach it answer both fields, but the API does not reject anchor-less requests from other callers (e.g. post-onboarding interest canonicalization in `src/app/knowledge/page.tsx`).
 
-**Decision needed:**
-
-- Make `culturalAnchor` required at the route — return 400 if absent. Tightest fit with §7.3 as written.
-- Allow it to be optional and explicitly document the skip semantics in §7.3 (e.g., users born before 1920, users unwilling to share geography).
-
-**v11.2 leans toward "required."** The compact step on the "Keep all" fast path (§7.3 above) reduces friction enough that mandating both fields is reasonable. But the lock is deferred to product.
+**Rationale.** Making the anchor a hard server-side requirement would either (a) force a re-prompt flow for legacy users with `birth_year = NULL`, or (b) lock pre-1920 users and users unwilling to share geography out of the canonicalization path. v11.2 declines both costs and treats the anchor as a useful signal rather than a gate.
 
 ---
 
@@ -468,7 +463,7 @@ The following items from `audits/2026-05-16-phase2-findings.md` either confirm c
 | F4.4 — Circle sizing | Confirmed correct. |
 | F4.5 — "Grow your map" copy | Addressed in §8.4.11 above. |
 | F5.1 — Cultural anchor LLM prompt | Confirmed correct. |
-| F5.2 — Cultural anchor optional at route | Carried to §16.19. |
+| F5.2 — Cultural anchor optional at route | Resolved in §16.19 (skippable). |
 | F5.3 — Fallback interests weakly specific | Code-side, low priority. |
 | F5.4 — `claude-haiku-4-5` informal alias | Code-side TODO: pin to `claude-haiku-4-5-20251001` per CLAUDE.md. |
 
