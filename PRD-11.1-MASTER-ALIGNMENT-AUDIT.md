@@ -443,3 +443,40 @@ Files requested by the prompt but not found in `/workspace`:
 - `CLAUDE.md`
 - `AGENTS.md`
 
+---
+
+## 14. Surfaces & Copy Disposition (2026-05-18)
+
+Resolutions for brief-referenced surfaces flagged as "missing in code." Group-game-adjacent items are withdrawn now that group games are out of Phase 1 (parallel to the declared-territory visual withdrawal in commit `629cedb`).
+
+### Withdrawn
+
+| Item | Reason |
+|---|---|
+| Standout moments / "only you got this" | No peer set without group games — no referent to be the standout against. |
+| Game Summary "Group Story" section | Group-game artifact. |
+| Friend Play | Group-game artifact. |
+| Challenge Worlds | Group-game-adjacent feature; not on Phase 1 roadmap. |
+| Share-card emoji grid (Wordle-style) | Numeric highlights in `ShareCard.tsx` stay on-brand; no plan to add an emoji grid. |
+
+### Resolved (already in code)
+
+| Item | Where |
+|---|---|
+| "common ground +" sub-label rotation | `src/components/play/GameplayChat.tsx:87-90` — four-step rotation (`common ground`, `+`, `++`, `+++`). |
+| Accepted-variant near-miss feedback | Handled by the consolation line for in-ballpark wrong answers: `src/lib/llm.ts:446-450`, surfaced via `gradeAnswer` in `src/server/grading.ts`. Accepted alternatives are silently correct; no separate "near-miss" UI state. |
+| Next-questions countdown | `src/components/TodaysFiveCard.tsx:164` — time-to-next-round countdown satisfies the brief. No per-session "X of 5" indicator planned. |
+
+### Removed
+
+| Item | Where |
+|---|---|
+| "Now it's in yours too." wrong-reveal variant | Removed from the `wrongHeadline` rotation in `src/components/play/GameplayChat.tsx` — read as conciliatory ownership-transfer rather than honest miss feedback. Rotation dropped from 4 to 3 variants. |
+
+### Author identity (Top 10 items 3, 7, 11, 14) — Phase 1 status
+
+| Surface | Status | Reference |
+|---|---|---|
+| In-session question card byline | ✅ Promoted — `0.86rem / weight 600` serif name with `0.55rem` mono "FROM" label | `src/components/play/GameplayChat.tsx:178-198`; commit `70399ba`. |
+| End-of-session review card byline | ✅ Promoted — same in-session pattern when `creatorNote` exists; system questions retain "JOSHING BOT · DOMAIN" | `src/app/daily/summary/page.tsx` (this PR). |
+
