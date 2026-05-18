@@ -45,10 +45,10 @@ type BeatView =
   | { id: 5; content: Beat5 };
 
 const TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
+  establishing: 'Curious',
+  familiar: 'Versed',
+  solid: 'Fluent',
+  mastery: 'Master',
 };
 
 function joinList(values: string[]) {

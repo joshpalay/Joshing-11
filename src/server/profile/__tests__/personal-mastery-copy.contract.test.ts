@@ -78,7 +78,7 @@ describe('B5 personal mastery copy contract', () => {
           "gainedThisSeason": [Function],
         },
         "tierBar": {
-          "masterPeak": "Mastery",
+          "masterPeak": "Master",
           "toNext": [Function],
         },
         "unexplored": {
@@ -104,8 +104,8 @@ describe('B5 personal mastery copy contract', () => {
     expect(B5_PERSONAL_MASTERY_COPY.card.tierLines.familiar('Late Bach')).toBe("Late Bach. You're finding your ground.");
     expect(B5_PERSONAL_MASTERY_COPY.card.tierLines.solid('Late Bach')).toBe('Late Bach. You move through this naturally now.');
     expect(B5_PERSONAL_MASTERY_COPY.card.tierLines.mastery('Late Bach')).toBe("Late Bach. This one's yours.");
-    expect(B5_PERSONAL_MASTERY_COPY.tierBar.toNext(4, 'Familiar')).toBe('4 pts to Familiar');
-    expect(B5_PERSONAL_MASTERY_COPY.tierBar.masterPeak).toBe('Mastery');
+    expect(B5_PERSONAL_MASTERY_COPY.tierBar.toNext(4, 'Versed')).toBe('4 pts to Versed');
+    expect(B5_PERSONAL_MASTERY_COPY.tierBar.masterPeak).toBe('Master');
     expect(B5_PERSONAL_MASTERY_COPY.portraitBars.createdPts('3')).toBe('3 pts created');
     expect(B5_PERSONAL_MASTERY_COPY.portraitBars.answeredPts('2.5')).toBe('2.5 pts answered');
     expect(B5_PERSONAL_MASTERY_COPY.overlapLabels.overlapTopPeer('Sam')).toBe('You overlap most with Sam here');

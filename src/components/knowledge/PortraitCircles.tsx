@@ -30,10 +30,10 @@ const TIER_ORDER: PortraitTier[] = [
 ]
 
 const TIER_DISPLAY: Record<PortraitTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
+  establishing: 'Curious',
+  familiar: 'Versed',
+  solid: 'Fluent',
+  mastery: 'Master',
 }
 
 type DomainColor = {

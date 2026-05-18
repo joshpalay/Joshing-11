@@ -27,10 +27,10 @@ export type ShareCardProps = {
 };
 
 const TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
+  establishing: 'Curious',
+  familiar: 'Versed',
+  solid: 'Fluent',
+  mastery: 'Master',
 };
 
 const TIER_POINTS: Record<MasteryTier, number> = {

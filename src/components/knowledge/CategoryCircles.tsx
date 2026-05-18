@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
+import type { MasteryTier } from '@/types/db';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,14 +50,26 @@ function getCircleOpacity(pts: number, maxPts: number): number {
 
 // ── Tier helpers ──────────────────────────────────────────────────────────────
 
-const TIER_ORDER = ['Establishing', 'Familiar', 'Solid', 'Mastery'] as const;
-type TierLabel = (typeof TIER_ORDER)[number];
+const TIER_ORDER: MasteryTier[] = ['establishing', 'familiar', 'solid', 'mastery'];
 
-function tierProgression(tierAfter: string): string {
-  const idx = TIER_ORDER.indexOf(tierAfter as TierLabel);
-  if (idx < 0) return tierAfter;
+function tierKey(raw: string): MasteryTier | null {
+  const lower = raw.trim().toLowerCase();
+  return (TIER_ORDER as readonly string[]).includes(lower) ? (lower as MasteryTier) : null;
+}
+
+function displayTier(raw: string): string {
+  const key = tierKey(raw);
+  return key ? KNOWLEDGE_TIER_LABEL[key] : raw;
+}
+
+function tierProgression(rawTier: string): string {
+  const key = tierKey(rawTier);
+  if (!key) return rawTier;
+  const idx = TIER_ORDER.indexOf(key);
   const next = TIER_ORDER[idx + 1];
-  return next ? `${tierAfter} → ${next}` : 'Mastery';
+  return next
+    ? `${KNOWLEDGE_TIER_LABEL[key]} → ${KNOWLEDGE_TIER_LABEL[next]}`
+    : KNOWLEDGE_TIER_LABEL.mastery;
 }
 
 // ── Animated knowledge circle — matches PortraitDomainCircle visual style ─────
@@ -225,7 +239,7 @@ function GameCircleRow({
           }}
         >
           {tierChanged
-            ? `${item.tier_before} → ${item.tier_after}`
+            ? `${displayTier(item.tier_before)} → ${displayTier(item.tier_after)}`
             : tierProgression(item.tier_after)}
         </div>
       </div>
@@ -277,9 +291,7 @@ function RoundCircleRow({
     return () => clearTimeout(t);
   }, [index]);
 
-  const dc = getPortraitDomainColor(item.broad_category);
-  const tierLabel = item.tier_current.charAt(0).toUpperCase() + item.tier_current.slice(1);
-  const isMastery = tierLabel === 'Mastery';
+  const isMastery = tierKey(item.tier_current) === 'mastery';
 
   return (
     <div
@@ -322,7 +334,7 @@ function RoundCircleRow({
             color: 'var(--text-muted)',
           }}
         >
-          {isMastery ? 'Mastery' : tierProgression(tierLabel)}
+          {isMastery ? KNOWLEDGE_TIER_LABEL.mastery : tierProgression(item.tier_current)}
         </div>
         <div
           style={{

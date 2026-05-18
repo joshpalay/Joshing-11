@@ -149,32 +149,32 @@ function getRowContent(domain: ExpandingDomain, index: number): {
 
   switch (domain.reason) {
     case 'new-discovery':
-      return { activity: '+1 new territory this week', from: 'Establishing', to: 'Familiar', proof: '1 discovery this week' };
+      return { activity: '+1 new territory this week', from: 'Curious', to: 'Versed', proof: '1 discovery this week' };
     case 'social-overlap':
-      return { activity: 'People answered yours', from: 'Establishing', to: 'Familiar', proof: '2 people answered yours' };
+      return { activity: 'People answered yours', from: 'Curious', to: 'Versed', proof: '2 people answered yours' };
     case 'saved-questions':
-      return { activity: 'New questions explored', from: 'Establishing', to: 'Familiar', proof: '2 saved questions' };
+      return { activity: 'New questions explored', from: 'Curious', to: 'Versed', proof: '2 saved questions' };
     case 'mastery-shift':
-      return { activity: '+2 levels this week', from: 'Familiar', to: 'Solid', proof: index === 2 ? 'Biggest jump this week' : '3 discoveries this week' };
+      return { activity: '+2 levels this week', from: 'Versed', to: 'Fluent', proof: index === 2 ? 'Biggest jump this week' : '3 discoveries this week' };
     case 'active-play':
     default:
-      return { activity: 'Revisited and growing', from: 'Familiar', to: 'Solid', proof: 'Fastest growth' };
+      return { activity: 'Revisited and growing', from: 'Versed', to: 'Fluent', proof: 'Fastest growth' };
   }
 }
 
 function growthFor(reason: ExpandingDomain['reason'], index: number): { from: string; to: string; proof: string } {
   switch (reason) {
     case 'new-discovery':
-      return { from: 'Establishing', to: 'Familiar', proof: '1 discovery this week' };
+      return { from: 'Curious', to: 'Versed', proof: '1 discovery this week' };
     case 'social-overlap':
-      return { from: 'Establishing', to: 'Familiar', proof: '2 people answered yours' };
+      return { from: 'Curious', to: 'Versed', proof: '2 people answered yours' };
     case 'saved-questions':
-      return { from: 'Establishing', to: 'Familiar', proof: '2 saved questions' };
+      return { from: 'Curious', to: 'Versed', proof: '2 saved questions' };
     case 'mastery-shift':
-      return { from: 'Familiar', to: 'Solid', proof: index === 2 ? 'Biggest jump this week' : '3 discoveries this week' };
+      return { from: 'Versed', to: 'Fluent', proof: index === 2 ? 'Biggest jump this week' : '3 discoveries this week' };
     case 'active-play':
     default:
-      return { from: 'Familiar', to: 'Solid', proof: 'Fastest growth' };
+      return { from: 'Versed', to: 'Fluent', proof: 'Fastest growth' };
   }
 }
 

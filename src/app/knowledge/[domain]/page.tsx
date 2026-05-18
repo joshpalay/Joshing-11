@@ -51,9 +51,9 @@ type DomainDetail = {
 
 const TIER_LABEL: Record<MasteryTier, string> = {
   establishing: 'Curious',
-  familiar: 'Explorer',
-  solid: 'Scholar',
-  mastery: 'Sage',
+  familiar: 'Versed',
+  solid: 'Fluent',
+  mastery: 'Master',
 };
 
 const VISIBILITY_HELP: Record<DomainVisibility, string> = {
