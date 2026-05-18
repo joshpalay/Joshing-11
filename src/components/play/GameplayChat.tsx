@@ -74,7 +74,7 @@ export type ChatMessage =
       roundsRemaining: number;
       nextRoundOpensAt: string | null;
     }
-  | { id: string; kind: 'session_close'; text: string; summaryHref?: string }
+  | { id: string; kind: 'session_close'; scoreLine: string; interpretiveLine: string | null; summaryHref?: string }
   | {
       id: string;
       kind: 'bonus_offer';
@@ -712,7 +712,15 @@ function ResultRow({
   );
 }
 
-function SessionCloseRow({ text, summaryHref }: { text: string; summaryHref?: string }) {
+function SessionCloseRow({
+  scoreLine,
+  interpretiveLine,
+  summaryHref,
+}: {
+  scoreLine: string;
+  interpretiveLine: string | null;
+  summaryHref?: string;
+}) {
   return (
     <div
       className="mt-4"
@@ -725,7 +733,7 @@ function SessionCloseRow({ text, summaryHref }: { text: string; summaryHref?: st
         padding: '14px 16px',
       }}
     >
-      <SessionCloseMessage closeCopy={text} />
+      <SessionCloseMessage scoreLine={scoreLine} interpretiveLine={interpretiveLine} />
       {summaryHref ? (
         <div className="pt-3">
           <Link href={summaryHref} className="btn-primary inline-flex">
@@ -928,7 +936,14 @@ export function GameplayChatThread({
               />
             );
           case 'session_close':
-            return <SessionCloseRow key={m.id} text={m.text} summaryHref={m.summaryHref} />;
+            return (
+              <SessionCloseRow
+                key={m.id}
+                scoreLine={m.scoreLine}
+                interpretiveLine={m.interpretiveLine}
+                summaryHref={m.summaryHref}
+              />
+            );
           case 'bonus_offer':
             return (
               <BonusOfferRow
