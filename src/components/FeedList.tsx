@@ -37,12 +37,6 @@ type FeedApiItem = {
     | 'friend_added'
     | 'friend_liked'
     | 'answered_by_you'
-  type?:
-    | 'direct_sent'
-    | 'friend_answered'
-    | 'friend_added'
-    | 'friend_liked'
-    | 'answered_by_you'
   source_type: string
   source_user_id: string
   source_friend_display_name: string
@@ -58,20 +52,16 @@ type FeedApiItem = {
   state: string
   is_pinned: boolean
   question_text: string | null
-  verified: boolean
   is_in_bank: boolean
   domain_pill: string | null
   broad_category?: string | null
-  difficulty: string | null
   explanation: string | null
   answer_result: 'correct' | 'incorrect' | null
   is_correct: boolean | null
   correct_answer: string | null
   submitted_answer: string | null
   awarded_points: number | null
-  pointsAwarded?: number | null
   mastery_delta: unknown | null
-  unverified_answer: boolean
   viewer_is_author?: boolean
 }
 
@@ -395,7 +385,6 @@ function toAnsweredByYouItem(
     awardedPoints: result?.awardedPoints ?? item.awarded_points,
     explanation: result?.explanation ?? item.explanation,
     quip: result?.quip ?? null,
-    unverifiedAnswer: item.unverified_answer,
     broadCategory: pickBroadCategory(masteryDeltaRaw, item),
     masteryDelta: normalizeMasteryDelta(masteryDeltaRaw),
     pairedFriend: pickPairedFriend(item),
