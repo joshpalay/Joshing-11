@@ -85,4 +85,27 @@ describe('beatsPayloadSchema (F3.5)', () => {
     expect(beatsPayloadSchema.safeParse('not a payload').success).toBe(false)
     expect(beatsPayloadSchema.safeParse(null).success).toBe(false)
   })
+
+  it('accepts a payload with friend fallbacks for empty Beat1 and Beat5', () => {
+    const result = beatsPayloadSchema.safeParse({
+      cycleStart: '2026-05-10',
+      cycleEnd: '2026-05-17',
+      beat1: null,
+      beat1FriendFallback: { friendName: 'Sara', count: 2, domains: ['jazz', 'poetry'] },
+      beat2: null,
+      beat3: null,
+      beat4: null,
+      beat5: null,
+      beat5FriendFallback: { friendName: 'Marcus', totalCreatorPoints: 14.5 },
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects malformed friend fallback shapes', () => {
+    const result = beatsPayloadSchema.safeParse({
+      ...WELL_FORMED,
+      beat1FriendFallback: { friendName: 'Sara', count: 'two', domains: [] },
+    })
+    expect(result.success).toBe(false)
+  })
 })
