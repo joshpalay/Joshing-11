@@ -1,4 +1,4 @@
-import { extractTextContent, getAnthropicClient, parseJsonObject } from '@/lib/llm';
+import { extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
 import { getKnowledgeBase } from '@/server/db/queries/daily';
 
 const RECONCILE_MODEL = 'claude-haiku-4-5';
@@ -49,7 +49,7 @@ ${existingDomains.map((d) => `- ${d}`).join('\n')}`;
       setTimeout(() => reject(new Error('reconcile timeout')), RECONCILE_TIMEOUT_MS),
     );
 
-    const responsePromise = client.messages.create({
+    const responsePromise = loggedMessagesCreate(client, 'reconcile-subcategory', {
       model: RECONCILE_MODEL,
       max_tokens: 256,
       temperature: 0,

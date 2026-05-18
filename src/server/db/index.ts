@@ -27,4 +27,26 @@ globalForDb.pool = pool;
 
 export const db = drizzle(pool, { schema });
 
+// Periodic pool-saturation logger. Logs only when there's actual contention
+// (a request was waiting on a connection) or the pool is near its cap, so
+// the log stays quiet during normal operation and screams when the
+// 5-connection ceiling is biting. unref() prevents the interval from keeping
+// the Node process alive in scripts/tests, and the global cache prevents
+// dev-mode hot-reload from spawning duplicates.
+const globalForPoolLogger = globalThis as unknown as {
+  __joshingPoolLogger?: NodeJS.Timeout;
+};
+if (!globalForPoolLogger.__joshingPoolLogger) {
+  const timer = setInterval(() => {
+    const total = pool.totalCount;
+    const idle = pool.idleCount;
+    const waiting = pool.waitingCount;
+    if (waiting > 0 || total >= 4) {
+      console.info('[db-pool]', { total, idle, waiting, max: 5 });
+    }
+  }, 30_000);
+  timer.unref();
+  globalForPoolLogger.__joshingPoolLogger = timer;
+}
+
 export * from './schema';

@@ -2,6 +2,7 @@ import {
   ANTHROPIC_MODEL,
   extractTextContent,
   getAnthropicClient,
+  loggedMessagesCreate,
   parseJsonObject,
 } from '@/lib/llm';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
@@ -221,7 +222,7 @@ async function callLlmOnce(
   const client = getAnthropicClient();
   if (!client) return [];
 
-  const response = await client.messages.create({
+  const response = await loggedMessagesCreate(client, 'generate-questions', {
     model: ANTHROPIC_MODEL,
     max_tokens: 2000,
     temperature: 0.8,
