@@ -283,11 +283,11 @@ function UserRow({ text }: { text: string }) {
       <div
         style={{
           maxWidth: '88%',
-          background: 'var(--accent)',
+          background: 'var(--user-bubble)',
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
           padding: '10px 14px',
           fontSize: '0.9rem',
-          color: 'var(--accent-foreground)',
+          color: 'var(--user-bubble-foreground)',
         }}
       >
         {text}
