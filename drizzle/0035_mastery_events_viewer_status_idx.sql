@@ -1,0 +1,21 @@
+-- Migration: composite index on MASTERY_EVENTS (user_id, answered_by_user_id, question_id).
+--
+-- The two hot paths that filter on all three columns are:
+--   1. getViewerAnswerStatusForQuestions (src/server/db/queries/feed.ts:478) —
+--      called on every feed render to determine the viewer's prior result on
+--      each question shown.
+--   2. The archive timeline reader (src/server/db/queries/archive.ts:241) —
+--      called whenever a user opens /archive.
+--
+-- Before this index, Postgres had to bitmap-AND two single-column index scans
+-- (user_id + answered_by_user_id, then intersect with question_id IN (...)).
+-- The composite turns it into a single index lookup keyed on the leading
+-- prefix (user_id, answered_by_user_id) with the question_id check served by
+-- the third column.
+--
+-- IF NOT EXISTS keeps the migration idempotent if it has already been applied
+-- out-of-band (e.g. via a CONCURRENTLY one-liner against a large production
+-- table to avoid the brief write lock that a non-concurrent CREATE INDEX takes
+-- inside the migration transaction).
+CREATE INDEX IF NOT EXISTS "MASTERY_EVENTS_user_id_answered_by_user_id_question_id_idx"
+  ON "MASTERY_EVENTS" ("user_id", "answered_by_user_id", "question_id");
