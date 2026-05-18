@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { readCreateQuestionPayload } from '@/server/questions/create-payload';
+import { textContainsAnswer } from '@/server/questions/self-answering';
 
 describe('create question payload categorization', () => {
   const basePayload = {
@@ -182,6 +183,26 @@ describe('create question payload categorization', () => {
 
       expect(result.errors).not.toContain('answerInQuestion');
     });
+  });
+});
+
+describe('textContainsAnswer (category leak guard)', () => {
+  it('flags when a category equals the answer', () => {
+    expect(textContainsAnswer('Paradise Lost', 'Paradise Lost')).toBe(true);
+    expect(textContainsAnswer('paradise lost', 'Paradise Lost')).toBe(true);
+  });
+
+  it('flags when a category contains the answer as a token', () => {
+    expect(textContainsAnswer('John Milton', 'Milton')).toBe(true);
+  });
+
+  it('does not flag when the category is broader than the answer', () => {
+    expect(textContainsAnswer('British Poetry', 'Paradise Lost')).toBe(false);
+    expect(textContainsAnswer('17th Century Literature', 'John Milton')).toBe(false);
+  });
+
+  it('flags via an alternate answer', () => {
+    expect(textContainsAnswer('Empire State', 'New York', ['Empire State'])).toBe(true);
   });
 });
 

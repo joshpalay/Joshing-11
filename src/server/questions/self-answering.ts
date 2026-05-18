@@ -17,16 +17,18 @@ function answerLeaksIntoQuestion(normalizedQuestion: string, candidate: string):
   return ` ${normalizedQuestion} `.includes(` ${normalizedAnswer} `);
 }
 
-export function questionContainsAnswer(
-  questionText: string,
+export function textContainsAnswer(
+  text: string,
   answer: string,
   alternateAnswers: readonly string[] = [],
 ): boolean {
-  const normalizedQuestion = normalize(questionText);
-  if (!normalizedQuestion) return false;
-  if (answerLeaksIntoQuestion(normalizedQuestion, answer)) return true;
+  const normalizedText = normalize(text);
+  if (!normalizedText) return false;
+  if (answerLeaksIntoQuestion(normalizedText, answer)) return true;
   for (const alt of alternateAnswers) {
-    if (answerLeaksIntoQuestion(normalizedQuestion, alt)) return true;
+    if (answerLeaksIntoQuestion(normalizedText, alt)) return true;
   }
   return false;
 }
+
+export const questionContainsAnswer = textContainsAnswer;

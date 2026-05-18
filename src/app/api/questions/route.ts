@@ -20,6 +20,7 @@ import { openKBDomain } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import { readCreateQuestionPayload } from '@/server/questions/create-payload';
+import { textContainsAnswer } from '@/server/questions/self-answering';
 import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
@@ -93,6 +94,20 @@ export async function POST(request: NextRequest) {
         error: 'category_too_generic',
         message:
           "We couldn't pin a specific category for this question. Try rephrasing with a more specific topic.",
+      },
+      { status: 422 },
+    );
+  }
+  if (textContainsAnswer(normalizedSubcategory, value.correctAnswer, value.alternateAnswers)) {
+    console.warn('[questions/create] rejected category that leaks answer', {
+      subcategory: normalizedSubcategory,
+      answer: value.correctAnswer,
+    });
+    return NextResponse.json(
+      {
+        error: 'category_leaks_answer',
+        message:
+          "This question's category would give away the answer. Try rephrasing the question so a different category fits.",
       },
       { status: 422 },
     );
