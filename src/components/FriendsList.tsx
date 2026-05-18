@@ -184,7 +184,7 @@ export default function FriendsList() {
                         </h3>
                         {interests ? (
                           <p className="text-muted-foreground mt-1 text-sm leading-6">
-                            A mind into {interests}…
+                            A mind into {interests}
                           </p>
                         ) : (
                           <p className="text-muted-foreground mt-1 text-sm leading-6">
