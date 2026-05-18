@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Combine, Plus, Repeat2, X } from 'lucide-react';
+import { Plus, Repeat2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
@@ -51,13 +51,6 @@ type ProposedInterest = {
   broadCategory?: string | null;
 };
 
-type TidyResult = {
-  mergesApplied: number;
-  domainsBefore: number;
-  domainsAfter: number;
-  details: Array<{ sources: string[]; target: string; rationale: string }>;
-};
-
 type CreateQuestionResponse = {
   message?: string;
   feedShare?: {
@@ -74,8 +67,7 @@ type ActiveModal =
   | null
   | { type: 'interests'; slotIndex: number; currentDomain: string | null }
   | { type: 'manage-interests' }
-  | { type: 'write-question' }
-  | { type: 'tidy' };
+  | { type: 'write-question' };
 
 function asTier(value: string): MasteryTier {
   if (value === 'familiar' || value === 'solid' || value === 'mastery') return value;
@@ -165,8 +157,6 @@ function KnowledgePageContent() {
   const [canonicalizing, setCanonicalizing] = useState(false);
   const [savingInterests, setSavingInterests] = useState(false);
   const [interestError, setInterestError] = useState<string | null>(null);
-  const [tidying, setTidying] = useState(false);
-  const [tidyNotice, setTidyNotice] = useState<string | null>(null);
   const [dismissedDomains, setDismissedDomains] = useState<string[]>([]);
   const [reinstating, setReinstating] = useState<string | null>(null);
   const [questionToast, setQuestionToast] = useState<string | null>(null);
@@ -438,26 +428,6 @@ function KnowledgePageContent() {
     }
   };
 
-  const confirmTidy = async () => {
-    setTidying(true);
-    try {
-      const response = await fetch('/api/knowledge/tidy', { method: 'POST', credentials: 'include' });
-      const body = await response.json().catch(() => null) as TidyResult | { message?: string } | null;
-      if (!response.ok || !body || !('mergesApplied' in body)) {
-        throw new Error((body as { message?: string } | null)?.message ?? 'Could not tidy your map.');
-      }
-      await loadKnowledge();
-      setActiveModal(null);
-      setTidyNotice(body.mergesApplied > 0 ? `${body.mergesApplied} domains combined` : 'Nothing to combine');
-      window.setTimeout(() => setTidyNotice(null), 3600);
-    } catch (caught) {
-      setTidyNotice(caught instanceof Error ? caught.message : 'Could not tidy your map.');
-      window.setTimeout(() => setTidyNotice(null), 4200);
-    } finally {
-      setTidying(false);
-    }
-  };
-
   if (loading) return <LoadingSkeleton />;
 
   if (error || !data) {
@@ -614,14 +584,6 @@ function KnowledgePageContent() {
         </section>
       )}
 
-      <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] pt-[0.85rem] px-[0.2rem]">
-        <p className="m-0 text-[var(--text-muted-warm)]">Map maintenance</p>
-        <button type="button" className="min-h-9 border border-[var(--border-warm)] bg-white text-[var(--ink)] inline-flex items-center justify-center gap-2 px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => setActiveModal({ type: 'tidy' })} disabled={tidying}>
-          <Combine className="size-3.5" />
-          Tidy up my map
-        </button>
-      </section>
-
       {shareModalOpen && (
         <SharePortraitModal entries={sharePortraitEntries} playerDisplayName={displayName} onClose={() => setShareModalOpen(false)} />
       )}
@@ -704,34 +666,8 @@ function KnowledgePageContent() {
         </div>
       ) : null}
 
-      {activeModal?.type === 'tidy' ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
-            <div className="flex justify-between gap-4">
-              <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Tidy up your map?</h2>
-                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
-              </div>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close" disabled={tidying}>
-                <X className="size-4" />
-              </button>
-            </div>
-            <div className="flex justify-end gap-2 mt-5">
-              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)} disabled={tidying}>Cancel</button>
-              <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" onClick={() => void confirmTidy()} disabled={tidying}>
-                {tidying ? 'Tidying...' : 'Confirm tidy'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">{tidyNotice}</div> : null}
       {questionToast ? (
-        <div
-          style={{ bottom: tidyNotice ? 64 : 20 }}
-          className="fixed left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]"
-        >
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">
           {questionToast}
         </div>
       ) : null}
