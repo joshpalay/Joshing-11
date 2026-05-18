@@ -72,21 +72,23 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
   return repairedAnswer;
 }
 
-function parseBody(value: unknown): { queueId: string; slotIndex: number; submittedAnswer: string } | null {
+function parseBody(value: unknown): { queueId: string; slotIndex: number; submittedAnswer: string; gaveUp: boolean } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const queueId = typeof record.queue_id === 'string' ? record.queue_id : null;
   const slotIndex = typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
     ? record.slot_index
     : null;
+  const gaveUp = record.gave_up === true;
   const submittedAnswer = typeof record.submitted_answer === 'string'
     ? record.submitted_answer.trim()
     : typeof record.answer === 'string'
       ? record.answer.trim()
-      : null;
+      : '';
 
-  if (!queueId || slotIndex === null || !submittedAnswer) return null;
-  return { queueId, slotIndex, submittedAnswer };
+  if (!queueId || slotIndex === null) return null;
+  if (!gaveUp && !submittedAnswer) return null;
+  return { queueId, slotIndex, submittedAnswer, gaveUp };
 }
 
 export async function POST(request: NextRequest) {
@@ -138,24 +140,28 @@ export async function POST(request: NextRequest) {
 
     const canonicalAnswer = await resolveCanonicalAnswer(question);
 
-    const grade = await gradeAnswer(
-      parsed.submittedAnswer,
-      canonicalAnswer,
-      [],
-      question.questionText,
-      'factual',
-    );
+    const grade = parsed.gaveUp
+      ? { result: 'wrong' as const, consolation: null }
+      : await gradeAnswer(
+          parsed.submittedAnswer,
+          canonicalAnswer,
+          [],
+          question.questionText,
+          'factual',
+        );
     const isCorrect = grade.result === 'correct';
     const answerState = isCorrect ? 'correct' : 'incorrect';
-    const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
-    const breadcrumb = await generateBreadcrumb({
-      questionId: question.id,
-      questionText: question.questionText,
-      correctAnswer: canonicalAnswer,
-      submittedAnswer: parsed.submittedAnswer,
-      isCorrect,
-      domain: question.canonicalSubcategory,
-    }).catch(() => null);
+    const quip = parsed.gaveUp ? null : selectQuip({ isCorrect, surface: 'daily', friendResult: null });
+    const breadcrumb = parsed.gaveUp
+      ? null
+      : await generateBreadcrumb({
+          questionId: question.id,
+          questionText: question.questionText,
+          correctAnswer: canonicalAnswer,
+          submittedAnswer: parsed.submittedAnswer,
+          isCorrect,
+          domain: question.canonicalSubcategory,
+        }).catch(() => null);
 
     // Promote the bot question to a canonical row BEFORE writing the mastery
     // event so cross-surface dedup can key on the canonical Question.id
@@ -220,7 +226,7 @@ export async function POST(request: NextRequest) {
         ...item,
         answered: true,
         answer_state: answerState,
-        submitted_answer: parsed.submittedAnswer,
+        submitted_answer: parsed.gaveUp ? '' : parsed.submittedAnswer,
         awarded_points: pointsAwarded,
         reveal_canonical_answer: canonicalAnswer,
         reveal_explainer: question.explainer,
@@ -262,7 +268,7 @@ export async function POST(request: NextRequest) {
       console.warn('[daily/answer] updateDomainDifficultyOnAnswer failed', err);
     });
 
-    if (canonicalQuestionId) {
+    if (canonicalQuestionId && !parsed.gaveUp) {
       try {
         if (isCorrect && persistedCreatorId && persistedCreatorId !== session.userId && persistedDomainForCreator) {
           void promoteDeclaredToDemonstrated({
@@ -324,6 +330,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       isCorrect,
+      gaveUp: parsed.gaveUp,
       explanation: question.explainer,
       pointsAwarded,
       answerState,
