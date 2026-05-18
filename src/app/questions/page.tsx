@@ -1,8 +1,8 @@
 'use client';
 
-import { Lock, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { Lock, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { difficultyCopyFromValue } from '@/lib/questions/difficulty-copy';
@@ -61,20 +61,88 @@ const DOMAIN_COLORS: Record<string, string> = {
   general_knowledge: '#64748b',
 };
 
-function relativeTime(value: string | null): string {
-  if (!value) return 'Unused';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Unused';
-  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return 'yesterday';
-  if (days < 30) return `${days}d ago`;
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+function CardOverflowMenu({
+  inUse,
+  onEdit,
+  onDelete,
+}: {
+  inUse: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const handleKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [open]);
+
+  const lockedTitle = 'Used in a game — cannot be edited';
+
+  return (
+    <div className="relative ml-auto" ref={containerRef}>
+      <button
+        type="button"
+        aria-label="More actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen((current) => !current)}
+        className="-mr-1 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+      {open ? (
+        <div
+          id={menuId}
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 w-44 rounded-md border bg-background p-1 shadow-md"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            disabled={inUse}
+            title={inUse ? lockedTitle : undefined}
+            onClick={() => {
+              setOpen(false);
+              onEdit();
+            }}
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {inUse ? <Lock className="size-4" /> : <Pencil className="size-4" />}
+            Edit
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={inUse}
+            title={inUse ? lockedTitle : undefined}
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {inUse ? <Lock className="size-4" /> : <Trash2 className="size-4" />}
+            Delete
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function initialValues(question: QuestionView): QuestionFormValues {
@@ -352,12 +420,16 @@ function QuestionsPageContent() {
                   <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground" aria-label={`LLM-rated difficulty: ${difficultyLabel}`}>
                     {difficultyLabel}
                   </span>
+                  <CardOverflowMenu
+                    inUse={inUse}
+                    onEdit={() => setDrawer({ mode: 'edit', question })}
+                    onDelete={() => setConfirmingId(question.id)}
+                  />
                 </div>
                 <p className="line-clamp-2 text-base font-medium leading-7">{question.text}</p>
-                <div className="mt-4 grid gap-1 text-sm text-muted-foreground sm:grid-cols-2">
-                  <p>{question.timesAnswered} answers · {question.correctRate}% correct · {question.usedInGamesCount} games</p>
-                  <p className="sm:text-right">Last used: {relativeTime(question.lastUsedAt)}</p>
-                </div>
+                <p className="mt-4 text-sm text-muted-foreground">
+                  {question.timesAnswered} answers · {question.correctRate}% correct · {question.usedInGamesCount} games
+                </p>
                 {cardError[question.id] ? <p className="mt-3 text-sm text-destructive">{cardError[question.id]}</p> : null}
                 <div className="mt-4 flex items-center gap-2">
                   {confirmingId === question.id ? (
@@ -371,33 +443,11 @@ function QuestionsPageContent() {
                       </button>
                     </>
                   ) : (
-                    <>
-                      {inUse ? (
-                        <span className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground" title="Used in a game - cannot be edited">
-                          <Lock className="size-4" />
-                          Edit
-                        </span>
-                      ) : (
-                        <button className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" type="button" onClick={() => setDrawer({ mode: 'edit', question })}>
-                          <Pencil className="size-4" />
-                          Edit
-                        </button>
-                      )}
-                      {inUse ? (
-                        <span className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground" title="Used in a game - cannot be edited">
-                          <Lock className="size-4" />
-                          Delete
-                        </span>
-                      ) : (
-                        <button className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" type="button" onClick={() => setConfirmingId(question.id)}>
-                          <Trash2 className="size-4" />
-                          Delete
-                        </button>
-                      )}
+                    <div className="ml-auto">
                       <SendQuestionAction
                         question={{ id: question.id, text: question.text, domain: question.domainDisplayName }}
                       />
-                    </>
+                    </div>
                   )}
                 </div>
               </article>
