@@ -42,13 +42,47 @@ Two items remain unresolved and are deliberately not locked here. They are carri
 | 17 | §10 | Schema clarifications: `source_result` enum, `territory_type` text-with-typecast, quip storage |
 | 18 | §16 | Four new open questions carried forward (16.16–16.19) |
 | v11.3 | §7.3, §16.19 | Onboarding "Keep all" rewritten to a binary contract; cultural anchor at the route resolved as optional |
-| v11.4 | line 45, §16.16, §16.17, §8.4.8, §16.12 | Tier labels locked to Curious / Versed / Fluent / Master; author credit windowed model locked; catch-up + recovery MAX rule locked; declared-territory visual distinction withdrawn; first-question orientation panel copy locked and shipped |
+| v11.4 | line 45, §16.16, §16.17, §8.4.8, §16.12, §8.11, §6.1–§6.6 | Tier labels locked to Curious / Versed / Fluent / Master; author credit windowed model locked; catch-up + recovery MAX rule locked; declared-territory visual distinction withdrawn; first-question orientation panel copy locked and shipped; SMS locked to OTP only (all notification-class triggers retired); §6.1 / §6.2 / §6.3 / §6.4 / §6.6 user stories rewritten to reflect v11.1+ mechanics and the SMS-OTP-only rule |
 
 **Tier name confirmation (v11.4 revision).** v11.1 §8.4.8 named the tiers Establishing / Familiar / Solid / Mastery and v11.2 reaffirmed those names. The 2026-05-18 learning-and-shared-knowledge audit identified a three-way fork in shipped UI copy (`Establishing / Familiar / Solid / Mastery` in shared helpers, `Curious / Explorer / Scholar / Sage` on the profile and domain pages, `Familiar / Solid / Mastery` in the in-session `MasteryMoment`) and recommended unifying on **Curious / Versed / Fluent / Master** because that vocabulary frames the player's relationship to a domain as an interior learning journey rather than a credentialing ladder. PR #302 unified every user-facing surface on that vocabulary; v11.4 ratifies it.
 
 **Canonical tier labels (v11.4):** **Curious → Versed → Fluent → Master.** The Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired from user-facing copy. The internal enum keys `establishing | familiar | solid | mastery` (in `src/types/db.ts`) are preserved as opaque identifiers — they map 1-to-1 onto the new user-facing labels and need not be migrated. See §8.4.8 for the per-tier visual treatment.
 
 **No new killed features** beyond what v11.1 already killed. The Activities Tab, Joshing Game, Personal Rounds, and Archive are *deferred*, not killed — implementations exist for the first two and can be re-enabled when their entry points return.
+
+---
+
+## §6 — User Stories (v11.4 rewrite of §6.1, §6.2, §6.3, §6.4, §6.6)
+
+v11.1 flagged that §6.1 (Maya's onboarding) and §6.3 (the Feed moment) no longer matched the v11.1 mechanics. Neither was rewritten in v11.2 / v11.3. v11.4 also retires every non-OTP SMS trigger (§8.11 rewrite below), which means the §6.2, §6.4, and §6.6 narratives — each of which open with an SMS — also need updating. The five stories below replace their PRD11 originals in full. §6.5, §6.7, and §6.8 stand as written.
+
+### §6.1 New player onboarding (v11.4)
+
+**Maya** receives a text from her friend Greg: *"I think you'd like this — try it tonight."* She taps the link. Joshing asks for her phone, sends a 6-digit code via SMS, she verifies. Greg has pre-seeded three interests for her: Sondheim Musicals, Modernist Poetry, Italian Cinema. The invite-suggestions screen offers a binary choice: **These look good** or **Let me adjust them**.
+
+She taps **These look good** — the three seeded interests become her starting Knowledge base and she lands on home. No further questions. (If she had tapped **Let me adjust them**, Joshing would have walked her through the full four-step flow: a compact cultural-anchor step asking when she was born and where she grew up; two warm-up questions; and a final review step where she could edit the seeded set, accept LLM-proposed additions, and lock her five.)
+
+She receives a quiet on-screen confirmation: *"Tomorrow at noon, your first five questions arrive."* No SMS. Tomorrow she'll discover them when she opens the app.
+
+### §6.2 The daily ritual (v11.4)
+
+**Greg** opens Joshing during a quiet moment after lunch. The Home screen shows today's five waiting — no ping pulled him here, he just chose to open the app. Five questions appear in a chat-thread interface. He answers four, gets three right, skips the fifth. The session closes with a quiet summary: *"3 of 4. You moved closer to Versed in Late Tchaikovsky."* He exits. Total time: 4 minutes.
+
+### §6.3 The Feed moment (v11.4)
+
+**Maya**, later that evening, opens Joshing again and scrolls down past her Daily Five card on Home — there's an inline Feed below. There are 8 items. The top is pinned: *"Greg sent this to you — about Sondheim."* She answers it — gets it right. Below, *"Robyn got this right — W.H. Auden."* She skips. *"Robyn couldn't get this — Weimar Cinema."* She answers it and gets it wrong; the card updates in place with both their results side by side. She dismisses one more, leaves the rest for tomorrow.
+
+On the way out she taps thumbs-up on the Sondheim question — it was a great question, and her signal contributes to its surface priority in friends' Feeds. She does not need to do anything to share the questions she answered; those propagated to her friends' Feeds the moment she answered them. Thumbs-up is a quality signal only — propagation happens through friendship, not endorsement.
+
+### §6.4 The send-to-friend gesture (v11.4)
+
+**Greg** is reading something online about Stephen Sondheim's working method. He thinks of Maya. He opens Joshing, taps "Write a question" on the Knowledge page, writes a question about Sondheim's notebooks, toggles **Send to specific friends only**, picks Maya, taps Save. Joshing confirms inline: *"Sent to 1 friend."* Total time: 90 seconds. No SMS to Maya — she'll see the question pinned at the top of her Feed the next time she opens the app, with attribution: *"Greg sent this to you."*
+
+### §6.6 The biweekly ceremony (v11.4)
+
+Two weeks into using Joshing, **Greg** opens the app one Sunday morning and finds a quiet banner above his Feed: *"Two weeks of Joshing. Here's what you've been up to."* He taps in. Up to four cinematic beats, ~30 seconds total: *Crossed to Fluent in James Joyce's Ulysses. New ground in Late-Period Bowie and Italian Renaissance Painting. Maya's questions gave you 7 you got right — she's been part of your last two weeks. You and Maya are most aligned in Modernist Literature this cycle.* The ceremony ends with a shareable card. He saves it.
+
+The ceremony is fired by a biweekly personal cron (§8.1.30). Greg wasn't pinged; he discovered the banner because he opened the app.
 
 ---
 
@@ -281,26 +315,35 @@ v11.1 §8.10b said reactions allow "Optional personal note up to 100 characters.
 
 ---
 
-## §8.11 — SMS Notifications (revised)
+## §8.11 — SMS Notifications (v11.4 rewrite — OTP only)
 
-Two opt-in triggers from v11.1 are **removed** because the code does not fire them and the product has decided neither is SMS-worthy:
+**v11.4 lock: SMS is for authentication only.** All notification-class SMS triggers are removed from the product. The phone number remains the account identifier and the OTP code is the single piece of SMS communication Joshing sends.
 
-- "Friend answered your question" — `'friend_answered_question'` enum value exists but is never triggered.
-- "Friend thought your question was excellent (thumbs-up)" — `'star_notification'` is explicitly excluded from `SmsMessageType`.
-
-**v11.2 SMS trigger table:**
+**v11.4 SMS trigger table:**
 
 | Trigger | Copy | Default |
 |---|---|---|
-| OTP for auth | Your Joshing code: NNNNNN | Always |
-| Daily Five ready | Your five for today. [link] | ON, opt-out |
-| Friend sent you a question | Greg sent you a question. [link] | ON, opt-out |
-| Friend reaction to your question | Greg reacted to your question. | OFF, opt-in |
-| Friend invitation accepted | Maya joined Joshing — you're now friends. | ON, opt-out |
-| Friend request received | Greg wants to be friends on Joshing. [link] | ON, opt-out |
-| Biweekly ceremony ready | Two weeks of Joshing. Here's what you've been up to. [link] | ON, opt-out |
+| OTP for auth | Your Joshing code: NNNNNN | Always (cannot be opted out) |
 
-Author-side notifications about who answered or thumbed their questions are intentionally absent. The Knowledge page and (eventually) Activities tab will surface those events without SMS noise.
+**Rationale.** Every non-OTP SMS is a tap that pulls a player back to the app on a schedule the app picked, not on a schedule the player chose. The product's animating idea — quiet, presence-not-curation, no urgency — does not survive a notification stream. Daily-Five SMS, direct-send SMS, ceremony SMS, reaction SMS, and friend-request SMS are all retired. Re-engagement happens because the player opens the app, not because the app pings their phone.
+
+**What this removes from earlier specs:**
+
+- `'daily_questions'` and `'daily_questions_batched'` — noon "Your five for today" reminder. Retired.
+- `'question_reaction'` — used for both "friend sent you a question" and reaction notifications. Retired.
+- `'creator_note_prompt'` and `'creator_note_received'` — creator-note follow-ups. Retired.
+- `'joshing_game_received'`, `'joshing_game_progress'`, `'joshing_game_complete'` — Joshing Game flow. (Joshing Games are already deferred per §8.14; these triggers stay retired when Joshing Games are re-enabled unless §8.11 is reopened.)
+- `'ceremony_ready'` — biweekly ceremony notification. Retired. Ceremony fires on the cron; the user discovers it the next time they open the app.
+
+**What stays:**
+
+- `'otp'` — the only active SMS message type. Generated by `requestOtp`, delivered by `sendSms`, logged in `SmsLog`.
+
+**Behavior in-app replaces the retired SMS surfaces.** Daily-Five readiness is surfaced on the Home screen on entry. New direct-sends and reactions appear in the Feed and on Knowledge (per the §8.15 Activities-deferred substitute-surfacing rule from §8.12). The biweekly ceremony surfaces as a banner on Home the first time the user opens the app after the cron has fired.
+
+**Schema:** the `smsMessageTypeEnum` Postgres enum retains the retired values for migration safety. No rows referencing the retired values are written by application code under v11.4. A future enum migration may drop the unused values; not blocking.
+
+**Code-side note (separately tracked, not a PRD change).** As of 2026-05-18, the production OTP delivery path itself is incomplete — `requestOtp` (`src/server/auth/otp-store.ts:22-32`) generates and stores the 6-digit code but does not call `sendSms`. The route at `src/app/api/auth/request-otp/route.ts:48` returns the code as `debugCode` only in non-production. Adding the SMS-delivery call to `requestOtp` (or to the route) is required to make OTP work in production; that is a code-side fix, not a PRD revision. The §8.11 v11.4 lock above defines the *intended* SMS surface; the missing send is tracked separately.
 
 ---
 
@@ -542,7 +585,7 @@ The following items from `audits/2026-05-16-phase2-findings.md` either confirm c
 
 **v11.3 revisions folded in (2026-05-18):** §7.3 — Onboarding "Keep all" fast path rewritten to a binary contract (skip cultural anchor on "These look good"; full four-step flow on "Let me adjust them" or "Start fresh"). §16.19 — Cultural anchor at the route marked RESOLVED as optional, in line with the §7.3 revision.
 
-**v11.4 revisions folded in (2026-05-18):** Tier name confirmation (line 45) rewritten to ratify **Curious / Versed / Fluent / Master** as canonical; the Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired. §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline. §8.4.8 — visual treatment for declared territory withdrawn; declared and demonstrated circles render identically, the data-model distinction stays. §16.12 — first-question orientation panel copy locked and shipped; "on your map" framing replaced with "in your Knowledge base" + "counts toward your mastery there too" to match the §8.4.8 withdrawal.
+**v11.4 revisions folded in (2026-05-18):** Tier name confirmation (line 45) rewritten to ratify **Curious / Versed / Fluent / Master** as canonical; the Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired. §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline. §8.4.8 — visual treatment for declared territory withdrawn; declared and demonstrated circles render identically, the data-model distinction stays. §16.12 — first-question orientation panel copy locked and shipped; "on your map" framing replaced with "in your Knowledge base" + "counts toward your mastery there too" to match the §8.4.8 withdrawal. §8.11 — SMS locked to OTP only; daily-reminder, direct-send, reaction, creator-note, Joshing Game, and biweekly-ceremony triggers all retired. §6.1 / §6.2 / §6.3 / §6.4 / §6.6 user stories rewritten to reflect v11.1+ mechanics (binary onboarding fast path, inline Feed on Home, thumbs as quality signal, no-SMS opens for daily / send / ceremony).
 
 **Next planned revision:** v11.5, when §16.18 (thumbs-up → surface-priority ordering formula) is resolved, or when Activities / Joshing Game / Personal Rounds / Archive are re-enabled.
 
