@@ -42,7 +42,7 @@ Two items remain unresolved and are deliberately not locked here. They are carri
 | 17 | §10 | Schema clarifications: `source_result` enum, `territory_type` text-with-typecast, quip storage |
 | 18 | §16 | Four new open questions carried forward (16.16–16.19) |
 | v11.3 | §7.3, §16.19 | Onboarding "Keep all" rewritten to a binary contract; cultural anchor at the route resolved as optional |
-| v11.4 | line 45, §16.16, §16.17, §8.4.8 | Tier labels locked to Curious / Versed / Fluent / Master; author credit windowed model locked; catch-up + recovery MAX rule locked; declared-territory visual distinction withdrawn |
+| v11.4 | line 45, §16.16, §16.17, §8.4.8, §16.12 | Tier labels locked to Curious / Versed / Fluent / Master; author credit windowed model locked; catch-up + recovery MAX rule locked; declared-territory visual distinction withdrawn; first-question orientation panel copy locked and shipped |
 
 **Tier name confirmation (v11.4 revision).** v11.1 §8.4.8 named the tiers Establishing / Familiar / Solid / Mastery and v11.2 reaffirmed those names. The 2026-05-18 learning-and-shared-knowledge audit identified a three-way fork in shipped UI copy (`Establishing / Familiar / Solid / Mastery` in shared helpers, `Curious / Explorer / Scholar / Sage` on the profile and domain pages, `Familiar / Solid / Mastery` in the in-session `MasteryMoment`) and recommended unifying on **Curious / Versed / Fluent / Master** because that vocabulary frames the player's relationship to a domain as an interior learning journey rather than a credentialing ladder. PR #302 unified every user-facing surface on that vocabulary; v11.4 ratifies it.
 
@@ -392,6 +392,28 @@ The `territoryType` prop on `DomainCircle` may remain plumbed for future use (e.
 
 ---
 
+## §16.12 — First-question orientation panel (v11.4 lock)
+
+v11.1 §16.12 specified that the first time a player writes a question, a one-time orientation panel should appear to surface the §8.4.3 authorship-opens-territory mechanic. v11.1 marked the copy as "needs a final pass." The §8.4.8 withdrawal above retired the "on your map" visual claim; the orientation copy is adjusted accordingly.
+
+**v11.4 locked copy:**
+
+> Heads up: writing a question opens it as a new domain in your Knowledge base. When a friend answers it correctly, it counts toward your mastery there too. You can also send it directly to specific friends — toggle that on the destinations panel below.
+
+**Display rules:**
+- Shown at the top of `QuestionForm` in `mode === 'create'` only.
+- Eligibility is server-derived: the panel renders when the current user has zero non-deleted authored questions (`hasUserAuthoredAnyQuestion` returns `false`). The check fires via `GET /api/me/has-authored-question` on form mount.
+- Dismissible by tap on "Got it." Dismissal is session-local; if a user closes the page without saving, the panel re-appears next time they open the form. Once the user saves their first question the count flips to ≥1 and the panel never shows again.
+- No new schema. No `has_seen_first_question_orientation` flag is added — the derived signal (`hasAuthored`) is the persistence mechanism, and it self-cleans the moment the user engages with the mechanic.
+
+**What's intentionally not in the copy:**
+- The phrase "on your map" — retired alongside the §8.4.8 visual withdrawal.
+- The "declared territory → proven territory" framing from the v11.1 draft — replaced with "counts toward your mastery there too," which is the actual mechanic (mastery accrual via §8.32) without the now-invisible territory-type vocabulary.
+
+§16.12 is marked **RESOLVED** in v11.4. Code: `src/components/QuestionForm.tsx` (panel render), `src/app/api/me/has-authored-question/route.ts` (endpoint), `src/server/db/queries/questions.ts` (`hasUserAuthoredAnyQuestion` helper).
+
+---
+
 ## §10 — Data Model (clarifications, no migrations)
 
 ### §10.1 `feed_items.source_result` enum
@@ -520,7 +542,7 @@ The following items from `audits/2026-05-16-phase2-findings.md` either confirm c
 
 **v11.3 revisions folded in (2026-05-18):** §7.3 — Onboarding "Keep all" fast path rewritten to a binary contract (skip cultural anchor on "These look good"; full four-step flow on "Let me adjust them" or "Start fresh"). §16.19 — Cultural anchor at the route marked RESOLVED as optional, in line with the §7.3 revision.
 
-**v11.4 revisions folded in (2026-05-18):** Tier name confirmation (line 45) rewritten to ratify **Curious / Versed / Fluent / Master** as canonical; the Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired. §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline. §8.4.8 — visual treatment for declared territory withdrawn; declared and demonstrated circles render identically, the data-model distinction stays.
+**v11.4 revisions folded in (2026-05-18):** Tier name confirmation (line 45) rewritten to ratify **Curious / Versed / Fluent / Master** as canonical; the Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired. §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline. §8.4.8 — visual treatment for declared territory withdrawn; declared and demonstrated circles render identically, the data-model distinction stays. §16.12 — first-question orientation panel copy locked and shipped; "on your map" framing replaced with "in your Knowledge base" + "counts toward your mastery there too" to match the §8.4.8 withdrawal.
 
 **Next planned revision:** v11.5, when §16.18 (thumbs-up → surface-priority ordering formula) is resolved, or when Activities / Joshing Game / Personal Rounds / Archive are re-enabled.
 
