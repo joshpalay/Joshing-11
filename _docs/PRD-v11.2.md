@@ -42,7 +42,7 @@ Two items remain unresolved and are deliberately not locked here. They are carri
 | 17 | §10 | Schema clarifications: `source_result` enum, `territory_type` text-with-typecast, quip storage |
 | 18 | §16 | Four new open questions carried forward (16.16–16.19) |
 | v11.3 | §7.3, §16.19 | Onboarding "Keep all" rewritten to a binary contract; cultural anchor at the route resolved as optional |
-| v11.4 | line 45, §16.16, §16.17, §8.4.8, §16.12, §8.11, §6.1–§6.6 | Tier labels locked to Curious / Versed / Fluent / Master; author credit windowed model locked; catch-up + recovery MAX rule locked; declared-territory visual distinction withdrawn; first-question orientation panel copy locked and shipped; SMS locked to OTP only (all notification-class triggers retired); §6.1 / §6.2 / §6.3 / §6.4 / §6.6 user stories rewritten to reflect v11.1+ mechanics and the SMS-OTP-only rule |
+| v11.4 | line 45, §16.16, §16.17, §8.4.8, §16.12, §8.11, §7.1, §6.1–§6.6 | Tier labels locked to Curious / Versed / Fluent / Master; author credit windowed model locked; catch-up + recovery MAX rule locked; declared-territory visual distinction withdrawn; first-question orientation panel copy locked and shipped; SMS deferred entirely in Phase 1 (OTP hardcoded to `000000`); §7.1 auth locked to Phase-1 hardcoded code + invite-required gate, with Phase-2 SMS-OTP re-enable checklist; §6.1 / §6.2 / §6.3 / §6.4 / §6.6 user stories rewritten to reflect v11.1+ mechanics and the SMS-deferred rule |
 
 **Tier name confirmation (v11.4 revision).** v11.1 §8.4.8 named the tiers Establishing / Familiar / Solid / Mastery and v11.2 reaffirmed those names. The 2026-05-18 learning-and-shared-knowledge audit identified a three-way fork in shipped UI copy (`Establishing / Familiar / Solid / Mastery` in shared helpers, `Curious / Explorer / Scholar / Sage` on the profile and domain pages, `Familiar / Solid / Mastery` in the in-session `MasteryMoment`) and recommended unifying on **Curious / Versed / Fluent / Master** because that vocabulary frames the player's relationship to a domain as an interior learning journey rather than a credentialing ladder. PR #302 unified every user-facing surface on that vocabulary; v11.4 ratifies it.
 
@@ -58,7 +58,7 @@ v11.1 flagged that §6.1 (Maya's onboarding) and §6.3 (the Feed moment) no long
 
 ### §6.1 New player onboarding (v11.4)
 
-**Maya** receives a text from her friend Greg: *"I think you'd like this — try it tonight."* She taps the link. Joshing asks for her phone, sends a 6-digit code via SMS, she verifies. Greg has pre-seeded three interests for her: Sondheim Musicals, Modernist Poetry, Italian Cinema. The invite-suggestions screen offers a binary choice: **These look good** or **Let me adjust them**.
+**Maya** receives a text from her friend Greg: *"I think you'd like this — try it tonight."* She taps the link. Joshing asks for her phone, then for a 6-digit code. The Phase 1 product hardcodes the code to `000000` (see §7.1 / §8.11) — she enters it and she's in. Greg has pre-seeded three interests for her: Sondheim Musicals, Modernist Poetry, Italian Cinema. The invite-suggestions screen offers a binary choice: **These look good** or **Let me adjust them**.
 
 She taps **These look good** — the three seeded interests become her starting Knowledge base and she lands on home. No further questions. (If she had tapped **Let me adjust them**, Joshing would have walked her through the full four-step flow: a compact cultural-anchor step asking when she was born and where she grew up; two warm-up questions; and a final review step where she could edit the seeded set, accept LLM-proposed additions, and lock her five.)
 
@@ -115,6 +115,26 @@ The §8.39 group-and-seed-account "Create Test Game" flow does not match the shi
 ### §5.4 Activities Tab, Joshing Game, Archive — deferred
 
 Each has a dedicated section below (§8.7, §8.14, §8.15). Listed here so §5's Phase 1 feature list stays accurate: none of these surfaces ships as reachable in v11.2.
+
+---
+
+## §7.1 — Authentication (v11.4 — OTP-via-SMS deferred to Phase 2)
+
+PRD11 §7.1 specified: *"Authentication is via US mobile phone number + SMS one-time code. There are no passwords, no email, no third-party sign-on. Phone number is the unique account identifier."* v11.4 narrows this for Phase 1.
+
+**Phase 1 (current).** The phone number remains the account identifier and the only login surface. The 6-digit verification code is **hardcoded to `000000`** for every account, every environment. No SMS is sent — see §8.11 for the full SMS-deferred rationale. `verifyOtp` accepts `000000` unconditionally (`src/server/auth/otp-store.ts:37-39`, commit `c5629d0`).
+
+**Invite-required gate stays.** Phase 1's hardcoded code does *not* loosen the invite-required check. `POST /api/auth/request-otp` still rejects phone numbers without a valid pending invitation (`hasValidPendingInvitationForPhone`). The combination — invite-required pre-check + `000000` post-check — is the working Phase 1 login gate. A bad actor who guesses `000000` still needs an accepted invitation on file to provision an account.
+
+**Phase 2 (deferred).** Real per-user OTP-via-SMS delivery returns when (a) the product moves beyond closed-beta scale and (b) the §8.11 re-enable checklist is executed. The Phase 2 OTP flow is the only SMS trigger the product will ever ship; every other historical SMS trigger is permanently retired (§8.11).
+
+**Login flow as it stands today:**
+
+1. User enters US phone number on `/login`.
+2. `POST /api/auth/request-otp` validates the phone and checks for an invitation (or an existing account).
+3. The route returns `{ ok: true, phone }`. In non-production it also returns `debugCode: "000000"` for testing convenience; in production this field is omitted.
+4. User enters `000000` (told to them out-of-band — via the invite SMS that brought them to the app, an admin handoff, or community knowledge during closed beta).
+5. `POST /api/auth/verify-otp` accepts the code and mints a JWT session with the `inv: true` claim.
 
 ---
 
@@ -317,35 +337,36 @@ v11.1 §8.10b said reactions allow "Optional personal note up to 100 characters.
 
 ---
 
-## §8.11 — SMS Notifications (v11.4 rewrite — OTP only)
+## §8.11 — SMS Notifications (v11.4 rewrite — SMS fully deferred)
 
-**v11.4 lock: SMS is for authentication only.** All notification-class SMS triggers are removed from the product. The phone number remains the account identifier and the OTP code is the single piece of SMS communication Joshing sends.
+**v11.4 lock: SMS is deferred entirely in Phase 1.** Joshing sends no SMS messages at all — not for OTP, not for notifications, not for any reason. The phone number remains the account identifier but never receives a message from the product.
 
-**v11.4 SMS trigger table:**
+**Phase 1 login (see §7.1 v11.4 below):** the OTP verification code is hardcoded to `000000` for every account, every environment. A real per-user OTP-via-SMS delivery is **Phase 2** work.
 
-| Trigger | Copy | Default |
-|---|---|---|
-| OTP for auth | Your Joshing code: NNNNNN | Always (cannot be opted out) |
+**v11.4 SMS trigger table (Phase 1):**
 
-**Rationale.** Every non-OTP SMS is a tap that pulls a player back to the app on a schedule the app picked, not on a schedule the player chose. The product's animating idea — quiet, presence-not-curation, no urgency — does not survive a notification stream. Daily-Five SMS, direct-send SMS, ceremony SMS, reaction SMS, and friend-request SMS are all retired. Re-engagement happens because the player opens the app, not because the app pings their phone.
+| Trigger | Status |
+|---|---|
+| Everything | Deferred to Phase 2 |
 
-**What this removes from earlier specs:**
+**Phase 2 SMS triggers — for future reference, not Phase 1 spec.** When SMS is re-enabled in Phase 2, the only trigger that will be added back is the OTP. The product has explicitly decided that *no other SMS triggers will ever ship.* Daily-reminder, direct-send, reaction, creator-note, Joshing Game, and ceremony SMS are all permanently retired. Re-engagement happens because the player opens the app, not because the app pings them.
 
-- `'daily_questions'` and `'daily_questions_batched'` — noon "Your five for today" reminder. Retired.
-- `'question_reaction'` — used for both "friend sent you a question" and reaction notifications. Retired.
-- `'creator_note_prompt'` and `'creator_note_received'` — creator-note follow-ups. Retired.
-- `'joshing_game_received'`, `'joshing_game_progress'`, `'joshing_game_complete'` — Joshing Game flow. (Joshing Games are already deferred per §8.14; these triggers stay retired when Joshing Games are re-enabled unless §8.11 is reopened.)
-- `'ceremony_ready'` — biweekly ceremony notification. Retired. Ceremony fires on the cron; the user discovers it the next time they open the app.
+**Rationale.** Every non-OTP SMS is a tap that pulls a player back to the app on a schedule the app picked, not on a schedule the player chose. The product's animating idea — quiet, presence-not-curation, no urgency — does not survive a notification stream. The Phase 1 deferral of OTP itself is a pragmatic call: a hardcoded `000000` keeps the invite-required login gate intact (see §7.1) without requiring Twilio production wiring, deliverability tuning, or carrier compliance work for a closed-beta-scale user base.
 
-**What stays:**
+**What this means in code today:**
 
-- `'otp'` — the only active SMS message type. Generated by `requestOtp`, delivered by `sendSms`, logged in `SmsLog`.
+- `verifyOtp` accepts `000000` unconditionally in all environments (`src/server/auth/otp-store.ts:37-39`, commit `c5629d0`).
+- `requestOtp` generates and stores a per-request 6-digit code (`src/server/auth/otp-store.ts:22-32`). Under Phase 1 this is dead state — no one ever sees the code, no SMS is sent. The OtpCode rows accumulate harmlessly; a cleanup pass can drop the write entirely, but it's not urgent.
+- The non-OTP `sendSms` call sites in code (cron daily reminder, creator notes, reactions, Joshing Game, ceremony) are still wired up. Under the v11.4 lock they are **dead spec**; ripping them out is a code-cleanup task tracked separately from this PRD revision.
+- The `smsMessageTypeEnum` Postgres enum retains all historical values for migration safety. No rows are written by application code under the Phase 1 deferral.
 
-**Behavior in-app replaces the retired SMS surfaces.** Daily-Five readiness is surfaced on the Home screen on entry. New direct-sends and reactions appear in the Feed and on Knowledge (per the §8.15 Activities-deferred substitute-surfacing rule from §8.12). The biweekly ceremony surfaces as a banner on Home the first time the user opens the app after the cron has fired.
+**Phase 2 re-enable checklist (when product is ready):**
 
-**Schema:** the `smsMessageTypeEnum` Postgres enum retains the retired values for migration safety. No rows referencing the retired values are written by application code under v11.4. A future enum migration may drop the unused values; not blocking.
-
-**Code-side note (separately tracked, not a PRD change).** As of 2026-05-18, the production OTP delivery path itself is incomplete — `requestOtp` (`src/server/auth/otp-store.ts:22-32`) generates and stores the 6-digit code but does not call `sendSms`. The route at `src/app/api/auth/request-otp/route.ts:48` returns the code as `debugCode` only in non-production. Adding the SMS-delivery call to `requestOtp` (or to the route) is required to make OTP work in production; that is a code-side fix, not a PRD revision. The §8.11 v11.4 lock above defines the *intended* SMS surface; the missing send is tracked separately.
+1. Wire `sendSms(phone, 'Your Joshing code: NNNNNN', 'otp', userId)` into `requestOtp` (or its caller).
+2. Remove or gate the `000000` shortcut in `verifyOtp` — at minimum require it to be a non-production environment.
+3. Confirm rate-limiting on `request-otp` (the route should already have basic rate-limit infra; verify before re-enable).
+4. Confirm Twilio production credentials and messaging-service SID are in place.
+5. Update §7.1 below and this §8.11 entry to remove the deferral.
 
 ---
 
@@ -588,7 +609,7 @@ The following items from `audits/2026-05-16-phase2-findings.md` either confirm c
 
 **v11.3 revisions folded in (2026-05-18):** §7.3 — Onboarding "Keep all" fast path rewritten to a binary contract (skip cultural anchor on "These look good"; full four-step flow on "Let me adjust them" or "Start fresh"). §16.19 — Cultural anchor at the route marked RESOLVED as optional, in line with the §7.3 revision.
 
-**v11.4 revisions folded in (2026-05-18):** Tier name confirmation (line 45) rewritten to ratify **Curious / Versed / Fluent / Master** as canonical; the Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired. §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline. §8.4.8 — visual treatment for declared territory withdrawn; declared and demonstrated circles render identically, the data-model distinction stays. §16.12 — first-question orientation panel copy locked and shipped; "on your map" framing replaced with "in your Knowledge base" + "counts toward your mastery there too" to match the §8.4.8 withdrawal. §8.11 — SMS locked to OTP only; daily-reminder, direct-send, reaction, creator-note, Joshing Game, and biweekly-ceremony triggers all retired. §6.1 / §6.2 / §6.3 / §6.4 / §6.6 user stories rewritten to reflect v11.1+ mechanics (binary onboarding fast path, inline Feed on Home, thumbs as quality signal, no-SMS opens for daily / send / ceremony).
+**v11.4 revisions folded in (2026-05-18):** Tier name confirmation (line 45) rewritten to ratify **Curious / Versed / Fluent / Master** as canonical; the Establishing / Familiar / Solid / Mastery and Curious / Explorer / Scholar / Sage label sets are retired. §16.16 — Author credit model RESOLVED with the empirical-rate windowed model locked, including the Accessible skip and uniform cross-surface coverage; §8.32 author-credit text superseded inline. §16.17 — Catch-up + recovery combination RESOLVED with MAX of the two reductions locked (25%, not 6.25%); §8.32 receives a clarifying paragraph inline. §8.4.8 — visual treatment for declared territory withdrawn; declared and demonstrated circles render identically, the data-model distinction stays. §16.12 — first-question orientation panel copy locked and shipped; "on your map" framing replaced with "in your Knowledge base" + "counts toward your mastery there too" to match the §8.4.8 withdrawal. §8.11 — SMS deferred entirely in Phase 1. No SMS sends at all — not for OTP, not for notifications. Daily-reminder, direct-send, reaction, creator-note, Joshing Game, and biweekly-ceremony triggers all permanently retired; OTP-via-SMS deferred to Phase 2 with a re-enable checklist documented. §7.1 — authentication locked to a hardcoded `000000` code for Phase 1, behind the invite-required gate; real per-user OTP delivery is Phase 2. §6.1 / §6.2 / §6.3 / §6.4 / §6.6 user stories rewritten to reflect v11.1+ mechanics (binary onboarding fast path, inline Feed on Home, thumbs as quality signal, no-SMS opens for daily / send / ceremony, hardcoded login code in §6.1).
 
 **Next planned revision:** v11.5, when §16.18 (thumbs-up → surface-priority ordering formula) is resolved, or when Activities / Joshing Game / Personal Rounds / Archive are re-enabled.
 
