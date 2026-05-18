@@ -5,7 +5,9 @@
 
 import { and, count, eq } from 'drizzle-orm';
 
-import { db, masteryEvents } from '@/server/db';
+import { db, masteryEvents, questions } from '@/server/db';
+import { creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
+import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 
 /**
  * Count existing author_credit mastery events for a given question+author pair.
@@ -23,4 +25,87 @@ export async function countAuthorCreditEvents(questionId: string, authorId: stri
     ));
 
   return row?.value ?? 0;
+}
+
+type QuestionStats = {
+  correctCount: number;
+  askedCount: number;
+  calibratedDifficulty: typeof questions.$inferSelect['calibratedDifficulty'];
+  llmDifficulty: typeof questions.$inferSelect['llmDifficulty'];
+};
+
+export type AwardAuthorCreditParams = {
+  creatorUserId: string;
+  answererUserId: string;
+  questionId: string;
+  domain: string;
+  sourceId: string;
+  broadCategory?: string | null;
+  /**
+   * Pre-fetched stats from the canonical Question row. Pass when the caller
+   * already has the row loaded (feed/[id]/answer, questions/[id]/answer);
+   * omit to have the helper fetch them itself (daily/answer, catchup/answer,
+   * which only have a generated_question id pre-persist).
+   */
+  questionStats?: QuestionStats;
+  /** Short label for log lines, e.g. 'daily/answer'. */
+  scope: string;
+};
+
+/**
+ * Compute and persist the author-credit mastery event for a correct answer.
+ *
+ * Designed to be called via `void awardAuthorCredit(...)` from every answer
+ * route — the caller's HTTP response should never wait on this. All errors
+ * are swallowed and logged; the answerer's own mastery write is unaffected.
+ *
+ * Pattern A callers (daily/answer, daily/catchup/answer) only have the
+ * canonical question id at this point, so the helper fetches the stats row
+ * itself. Pattern B callers (feed/[id]/answer, questions/[id]/answer)
+ * already have the row in memory and pass it via `questionStats` so we
+ * don't re-fetch.
+ */
+export async function awardAuthorCredit(params: AwardAuthorCreditParams): Promise<void> {
+  try {
+    let stats = params.questionStats;
+    if (!stats) {
+      const [row] = await db
+        .select({
+          correctCount: questions.correctCount,
+          askedCount: questions.askedCount,
+          calibratedDifficulty: questions.calibratedDifficulty,
+          llmDifficulty: questions.llmDifficulty,
+        })
+        .from(questions)
+        .where(eq(questions.id, params.questionId))
+        .limit(1);
+      if (!row) return;
+      stats = row;
+    }
+
+    const existingCredits = await countAuthorCreditEvents(params.questionId, params.creatorUserId);
+    const authorAward = creatorMasteryAwardForNthCorrect(
+      stats.correctCount,
+      stats.askedCount,
+      existingCredits + 1,
+      stats.calibratedDifficulty ?? stats.llmDifficulty,
+    );
+    if (authorAward.awardedPoints <= 0) return;
+
+    await writeMasteryEvent({
+      userId: params.creatorUserId,
+      questionId: params.questionId,
+      domain: params.domain,
+      pointsAwarded: authorAward.awardedPoints,
+      sourceType: 'author_credit',
+      sourceId: params.sourceId,
+      broadCategory: params.broadCategory ?? undefined,
+      eventQuestionId: params.questionId,
+      basePoints: authorAward.basePoints,
+      weight: authorAward.weight,
+      answeredByUserId: params.answererUserId,
+    });
+  } catch (err) {
+    console.warn(`[${params.scope}] author_credit failed`, err);
+  }
 }

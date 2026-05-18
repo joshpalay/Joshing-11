@@ -9,8 +9,7 @@ import { getCatchupQuestions } from '@/server/db/queries/daily';
 import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
-import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
+import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
@@ -185,38 +184,15 @@ export async function POST(request: NextRequest) {
           questionId: canonicalQuestionId,
         });
 
-        // Author credit: windowed scheme, Moderate/Specialist only (PRD §8.32).
-        const [canonicalQ] = await db
-          .select({ calibratedDifficulty: questions.calibratedDifficulty, llmDifficulty: questions.llmDifficulty, correctCount: questions.correctCount, askedCount: questions.askedCount })
-          .from(questions)
-          .where(eq(questions.id, canonicalQuestionId))
-          .limit(1);
-        if (canonicalQ) {
-          const existingCredits = await countAuthorCreditEvents(canonicalQuestionId, persistedCreatorId);
-          const authorAward = creatorMasteryAwardForNthCorrect(
-            canonicalQ.correctCount,
-            canonicalQ.askedCount,
-            existingCredits + 1,
-            canonicalQ.calibratedDifficulty ?? canonicalQ.llmDifficulty,
-          );
-          if (authorAward.awardedPoints > 0) {
-            await writeMasteryEvent({
-              userId: persistedCreatorId,
-              questionId: canonicalQuestionId,
-              domain: persistedDomainForCreator,
-              pointsAwarded: authorAward.awardedPoints,
-              sourceType: 'author_credit',
-              sourceId: `catchup:${catchupItem.dailyQueueItemId}:${session.userId}`,
-              broadCategory: undefined,
-              eventQuestionId: canonicalQuestionId,
-              basePoints: authorAward.basePoints,
-              weight: authorAward.weight,
-              answeredByUserId: session.userId,
-            }).catch((err) => {
-              console.warn('[daily/catchup/answer] author_credit write failed', err);
-            });
-          }
-        }
+        // Author credit (PRD §8.32): off the user's hot path.
+        void awardAuthorCredit({
+          creatorUserId: persistedCreatorId,
+          answererUserId: session.userId,
+          questionId: canonicalQuestionId,
+          domain: persistedDomainForCreator,
+          sourceId: `catchup:${catchupItem.dailyQueueItemId}:${session.userId}`,
+          scope: 'daily/catchup/answer',
+        });
       }
 
       void createFeedItemsForFriendsFromAnswer(

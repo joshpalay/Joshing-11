@@ -5,8 +5,8 @@ import { gradeAnswer, selectQuip } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, playerMastery, questions } from '@/server/db';
-import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
-import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
+import { getBasePoints } from '@/server/mastery/scoring';
+import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
@@ -139,30 +139,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
       questionId: question.id,
     });
 
-    const existingCredits = await countAuthorCreditEvents(question.id, question.creatorId);
-    const authorAward = creatorMasteryAwardForNthCorrect(
-      question.correctCount,
-      question.askedCount,
-      existingCredits + 1,
-      question.calibratedDifficulty ?? question.llmDifficulty,
-    );
-    if (authorAward.awardedPoints > 0) {
-      await writeMasteryEvent({
-        userId: question.creatorId,
-        questionId: question.id,
-        domain,
-        pointsAwarded: authorAward.awardedPoints,
-        sourceType: 'author_credit',
-        sourceId,
-        broadCategory: question.broadCategory,
-        eventQuestionId: question.id,
-        basePoints: authorAward.basePoints,
-        weight: authorAward.weight,
-        answeredByUserId: session.userId,
-      }).catch((err) => {
-        console.warn('[questions/answer] author_credit write failed', err);
-      });
-    }
+    // Author credit (PRD §8.32): off the user's hot path. Pass the loaded
+    // question row so the helper doesn't re-fetch.
+    void awardAuthorCredit({
+      creatorUserId: question.creatorId,
+      answererUserId: session.userId,
+      questionId: question.id,
+      domain,
+      sourceId,
+      broadCategory: question.broadCategory,
+      questionStats: {
+        correctCount: question.correctCount,
+        askedCount: question.askedCount,
+        calibratedDifficulty: question.calibratedDifficulty,
+        llmDifficulty: question.llmDifficulty,
+      },
+      scope: 'questions/answer',
+    });
   }
 
   if (isCorrect) {
