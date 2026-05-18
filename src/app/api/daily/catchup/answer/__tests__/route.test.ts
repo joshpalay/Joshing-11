@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createFeedItemsForFriendsFromAnswerMock,
-  generateBreadcrumbMock,
   getCatchupQuestionsMock,
   getSessionMock,
   gradeAnswerMock,
@@ -14,7 +13,6 @@ const {
   writeMasteryEventMock,
 } = vi.hoisted(() => ({
   createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
-  generateBreadcrumbMock: vi.fn(async () => null),
   getCatchupQuestionsMock: vi.fn(),
   getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
   gradeAnswerMock: vi.fn(),
@@ -127,10 +125,6 @@ vi.mock('@/server/daily/catchup', () => ({
     slots.find((s) => s.slot_index === idx),
   replaceQueueSlot: (slots: { slot_index: number }[], idx: number, fn: (s: unknown) => unknown) =>
     slots.map((s) => (s.slot_index === idx ? fn(s) : s)),
-}))
-
-vi.mock('@/server/daily/generate-breadcrumb', () => ({
-  generateBreadcrumb: generateBreadcrumbMock,
 }))
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({

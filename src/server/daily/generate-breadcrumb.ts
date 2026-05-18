@@ -12,11 +12,22 @@ type GenerateBreadcrumbParams = {
   domain: string;
 };
 
+const BREADCRUMB_CACHE_MAX = 500;
 const breadcrumbCache = new Map<string, string | null>();
 
 function cacheKey(params: GenerateBreadcrumbParams): string {
   const questionKey = params.questionId?.trim() || params.questionText.trim().toLowerCase();
   return `${questionKey}:${params.isCorrect ? 'correct' : 'wrong'}`;
+}
+
+function setCacheEntry(key: string, value: string | null): void {
+  if (breadcrumbCache.has(key)) breadcrumbCache.delete(key);
+  breadcrumbCache.set(key, value);
+  while (breadcrumbCache.size > BREADCRUMB_CACHE_MAX) {
+    const oldest = breadcrumbCache.keys().next().value;
+    if (oldest === undefined) break;
+    breadcrumbCache.delete(oldest);
+  }
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
@@ -45,7 +56,7 @@ export async function generateBreadcrumb(params: GenerateBreadcrumbParams): Prom
 
   const client = getAnthropicClient();
   if (!client) {
-    breadcrumbCache.set(key, null);
+    setCacheEntry(key, null);
     return null;
   }
 
@@ -73,6 +84,6 @@ Correct answer: ${params.correctAnswer}`,
 
   const response = await withTimeout(request, BREADCRUMB_TIMEOUT_MS);
   const text = response ? cleanBreadcrumb(extractTextContent(response.content)) : null;
-  breadcrumbCache.set(key, text);
+  setCacheEntry(key, text);
   return text;
 }

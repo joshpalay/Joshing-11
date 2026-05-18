@@ -7,7 +7,6 @@ import { getSession } from '@/server/auth/session';
 import { dailyQueues, db, questions } from '@/server/db';
 import { getCatchupQuestions } from '@/server/db/queries/daily';
 import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/server/daily/catchup';
-import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
@@ -80,14 +79,6 @@ export async function POST(request: NextRequest) {
   const isCorrect = grade.result === 'correct';
   const answerState = isCorrect ? 'correct' : 'incorrect';
   const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
-  const breadcrumb = await generateBreadcrumb({
-    questionId: catchupItem.questionId,
-    questionText: catchupItem.questionText,
-    correctAnswer: catchupItem.correctAnswer,
-    submittedAnswer: parsed.submittedAnswer,
-    isCorrect,
-    domain: catchupItem.domain,
-  }).catch(() => null);
 
   // Promote the bot question to a canonical row BEFORE writing the mastery
   // event so cross-surface dedup can key on the canonical Question.id
@@ -152,7 +143,6 @@ export async function POST(request: NextRequest) {
       awarded_points: pointsAwarded,
       reveal_canonical_answer: catchupItem.correctAnswer,
       reveal_explainer: catchupItem.explanation ?? '',
-      reveal_breadcrumb: breadcrumb,
       reveal_quip: grade.consolation,
       quip,
     } satisfies QueueSlot;
@@ -254,7 +244,7 @@ export async function POST(request: NextRequest) {
     correct: isCorrect,
     pointsAwarded,
     answerState,
-    breadcrumb,
+    breadcrumb: null,
     awarded_points: pointsAwarded,
     masteryDelta,
     mastery_delta: masteryDelta,

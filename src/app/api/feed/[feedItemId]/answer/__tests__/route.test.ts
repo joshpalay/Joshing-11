@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createFeedItemsForFriendsFromAnswerMock,
-  generateBreadcrumbMock,
   getBasePointsMock,
   getSessionMock,
   gradeAnswerMock,
@@ -13,7 +12,6 @@ const {
   writeMasteryEventMock,
 } = vi.hoisted(() => ({
   createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
-  generateBreadcrumbMock: vi.fn(async () => null),
   getBasePointsMock: vi.fn((_difficulty: unknown, state: string) => {
     if (state === 'first_correct') return 100
     if (state === 'first_correct_after_wrong') return 25
@@ -121,10 +119,6 @@ vi.mock('@/server/db', () => ({
     correctCount: 'q.correctCount',
   },
   users: { id: 'u.id', displayName: 'u.display' },
-}))
-
-vi.mock('@/server/daily/generate-breadcrumb', () => ({
-  generateBreadcrumb: generateBreadcrumbMock,
 }))
 
 vi.mock('@/server/mastery/scoring', () => ({

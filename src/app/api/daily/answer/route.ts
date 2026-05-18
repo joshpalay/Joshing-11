@@ -10,7 +10,6 @@ import {
   generatedQuestions,
   questions,
 } from '@/server/db';
-import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
 import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
@@ -152,16 +151,6 @@ export async function POST(request: NextRequest) {
     const isCorrect = grade.result === 'correct';
     const answerState = isCorrect ? 'correct' : 'incorrect';
     const quip = parsed.gaveUp ? null : selectQuip({ isCorrect, surface: 'daily', friendResult: null });
-    const breadcrumb = parsed.gaveUp
-      ? null
-      : await generateBreadcrumb({
-          questionId: question.id,
-          questionText: question.questionText,
-          correctAnswer: canonicalAnswer,
-          submittedAnswer: parsed.submittedAnswer,
-          isCorrect,
-          domain: question.canonicalSubcategory,
-        }).catch(() => null);
 
     // Promote the bot question to a canonical row BEFORE writing the mastery
     // event so cross-surface dedup can key on the canonical Question.id
@@ -230,7 +219,6 @@ export async function POST(request: NextRequest) {
         awarded_points: pointsAwarded,
         reveal_canonical_answer: canonicalAnswer,
         reveal_explainer: question.explainer,
-        reveal_breadcrumb: breadcrumb,
         reveal_quip: grade.consolation,
         quip,
       } satisfies QueueSlot;
@@ -337,7 +325,7 @@ export async function POST(request: NextRequest) {
       explanation: question.explainer,
       pointsAwarded,
       answerState,
-      breadcrumb,
+      breadcrumb: null,
       masteryDelta,
       correctAnswer: canonicalAnswer,
       consolation: grade.consolation,

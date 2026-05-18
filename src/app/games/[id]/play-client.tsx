@@ -1,9 +1,36 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { GameplayChatThread, type ChatMessage } from '@/components/play/GameplayChat';
+
+async function fetchJoshingGameBreadcrumb(
+  gameId: string,
+  questionId: string,
+  messageId: string,
+  setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
+): Promise<void> {
+  try {
+    const response = await fetch('/api/breadcrumb', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ source: 'joshing_game', gameId, questionId }),
+    });
+    if (!response.ok) return;
+    const body = await response.json().catch(() => null) as { breadcrumb?: string | null } | null;
+    const breadcrumb = body?.breadcrumb ?? null;
+    if (!breadcrumb) return;
+    setMessages((existing) => existing.map((message) =>
+      message.id === messageId && message.kind === 'result'
+        ? { ...message, breadcrumb }
+        : message,
+    ));
+  } catch {
+    // Breadcrumb is purely additive context; failure is silently ignored.
+  }
+}
 import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy';
 import type { JoshingGameView, QuestionRow } from '@/server/db/queries/joshing-game';
 
@@ -122,10 +149,11 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
       setAnsweredIds(nextAnswered);
       const nextQuestion = orderedQuestions.find((question) => !nextAnswered.has(question.questionId));
       setPausingAfterAnswer(true);
+      const resultMessageId = `result-${currentQuestion.questionId}`;
       setMessages((current) => [
         ...current,
         {
-          id: `result-${currentQuestion.questionId}`,
+          id: resultMessageId,
           kind: 'result',
           assignmentId: currentQuestion.questionId,
           questionText: currentQuestion.question.questionText,
@@ -133,7 +161,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
           submitted,
           correctAnswer: body.isCorrect ? null : body.correctAnswer ?? currentQuestion.question.answerText,
           consolation: null,
-          breadcrumb: body.breadcrumb ?? null,
+          breadcrumb: null,
           copyVariant: currentQuestion.position,
           creatorName: game.creator.displayName,
           canonicalSubcategory: currentQuestion.question.canonicalSubcategory,
@@ -147,6 +175,8 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
             : null,
         },
       ]);
+
+      void fetchJoshingGameBreadcrumb(game.game.id, currentQuestion.questionId, resultMessageId, setMessages);
 
       nextQuestionTimerRef.current = window.setTimeout(() => {
         setPausingAfterAnswer(false);
