@@ -2,9 +2,9 @@
 
 import Link from 'next/link'
 import { CheckCircle2, Clock, MessageCircleQuestion, Settings } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-type DailyStatus = {
+export type DailyStatus = {
   questionsRemaining: number
   questionsAnswered: number
   isComplete: boolean
@@ -12,10 +12,17 @@ type DailyStatus = {
   queueId: string | null
 }
 
-type DailyPreferences = {
+export type DailyPreferences = {
   difficulty: 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive'
   domainMode: 'random' | 'custom'
   selectedDomains: string[]
+}
+
+type TodaysFiveCardProps = {
+  /** When supplied, the initial /api/daily/status fetch is skipped. */
+  initialStatus?: DailyStatus | null
+  /** When supplied, the initial /api/daily/preferences fetch is skipped. */
+  initialPreferences?: DailyPreferences | null
 }
 
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -60,14 +67,23 @@ function formatCountdown(targetIso: string, nowMs: number): string {
   return `${totalMinutes}m`
 }
 
-export default function TodaysFiveCard() {
-  const [status, setStatus] = useState<DailyStatus | null>(null)
-  const [preferences, setPreferences] = useState<DailyPreferences | null>(null)
+export default function TodaysFiveCard({
+  initialStatus = null,
+  initialPreferences = null,
+}: TodaysFiveCardProps = {}) {
+  const [status, setStatus] = useState<DailyStatus | null>(initialStatus)
+  const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences)
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [resetting, setResetting] = useState(false)
   const [resetError, setResetError] = useState<string | null>(null)
+  // Skip the initial /api/daily/* fetch when the server already provided both.
+  const skipInitialFetchRef = useRef(initialStatus !== null && initialPreferences !== null)
 
   useEffect(() => {
+    if (skipInitialFetchRef.current) {
+      skipInitialFetchRef.current = false
+      return
+    }
     let cancelled = false
 
     async function loadStatus() {

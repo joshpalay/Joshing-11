@@ -405,6 +405,15 @@ function toAnsweredByYouItem(
 type FeedListProps = {
   pageSize?: number
   infinite?: boolean
+  /**
+   * Server-rendered first page. When supplied, the initial client fetch is
+   * skipped — items, cursor, and meta are seeded from this prop so the user
+   * sees the feed on first paint with no client round-trip. Subsequent filter
+   * changes and infinite-scroll pages still fetch via /api/feed.
+   */
+  initialPage?: FeedResponse | null
+  /** Server-rendered ceremony banner; same rationale as initialPage. */
+  initialBanner?: CeremonyBanner | null
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
@@ -428,6 +437,8 @@ function FeedListLoading() {
 function FeedListContent({
   pageSize = 20,
   infinite = false,
+  initialPage = null,
+  initialBanner = null,
 }: FeedListProps) {
   const searchParams = useSearchParams()
   const initialFilterParam =
@@ -436,21 +447,39 @@ function FeedListContent({
     initialFilterParam === 'sent-to-me' || initialFilterParam === 'from-friends'
       ? initialFilterParam
       : 'all'
+  // initialPage is only valid for the 'all' filter (that's what the server
+  // pre-fetches). If the URL pins a different filter, fall back to client fetch.
+  const initialPageMatchesFilter = initialPage !== null && initialFilter === 'all'
   const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
-  const [items, setItems] = useState<FeedApiItem[]>([])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingInitial, setLoadingInitial] = useState(true)
+  const [items, setItems] = useState<FeedApiItem[]>(
+    initialPageMatchesFilter ? initialPage!.items : []
+  )
+  const [nextCursor, setNextCursor] = useState<string | null>(
+    initialPageMatchesFilter
+      ? initialPage!.next_cursor ?? initialPage!.meta?.next_cursor ?? null
+      : null
+  )
+  const [hasMore, setHasMore] = useState(
+    initialPageMatchesFilter
+      ? Boolean(initialPage!.has_more ?? initialPage!.meta?.has_more)
+      : false
+  )
+  const [loadingInitial, setLoadingInitial] = useState(!initialPageMatchesFilter)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(null)
+  const [feedMeta, setFeedMeta] = useState<FeedMeta | null>(
+    initialPageMatchesFilter ? initialPage!.meta ?? null : null
+  )
   const [results, setResults] = useState<Record<string, ResultState>>({})
   const [cardStates, setCardStates] = useState<Record<string, QuestionCardState>>({})
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
   const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(null)
+  const [ceremonyBanner, setCeremonyBanner] = useState<CeremonyBanner | null>(initialBanner)
+  // True for the very first render path when we already have server-rendered
+  // data; the initial-fetch useEffect skips its work once.
+  const skipInitialFetchRef = useRef(initialPageMatchesFilter)
 
   const loadFeed = useCallback(
     async (cursor?: string | null) => {
@@ -514,6 +543,10 @@ function FeedListContent({
   )
 
   useEffect(() => {
+    if (skipInitialFetchRef.current) {
+      skipInitialFetchRef.current = false
+      return
+    }
     const timer = window.setTimeout(() => {
       void loadFeed()
     }, 0)
