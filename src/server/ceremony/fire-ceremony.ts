@@ -51,7 +51,7 @@ async function hasMasteryEventInCycle(
 export async function fireCeremony(userId: string): Promise<string | null> {
   const cycleEnd = new Date();
   const cycleStart = new Date(cycleEnd);
-  cycleStart.setDate(cycleStart.getDate() - 14);
+  cycleStart.setDate(cycleStart.getDate() - 7);
   const cycleStartIso = isoDate(cycleStart);
   const cycleEndIso = isoDate(cycleEnd);
 
@@ -125,7 +125,7 @@ export async function fireCeremony(userId: string): Promise<string | null> {
   if (user?.phoneNumber && user.smsOptIn !== 'opted_out') {
     await sendSms(
       user.phoneNumber,
-      `Two weeks of Joshing. Here's what you've been up to. ${appUrl()}/ceremony/${ceremonyId}`,
+      `A week of Joshing. Here's what you've been up to. ${appUrl()}/ceremony/${ceremonyId}`,
       'ceremony_ready',
       userId,
     );

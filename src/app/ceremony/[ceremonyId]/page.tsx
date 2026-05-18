@@ -18,6 +18,8 @@ type Beat2 = {
 type Beat3 = { userId: string; displayName: string; contributionCount: number }[];
 type Beat4 = { userId: string; displayName: string; sharedDomains: string[] };
 type Beat5 = { totalCreatorPoints: number; topQuestion: { text: string; answeredCount: number } | null };
+type Beat1FriendFallback = { friendName: string; count: number; domains: string[] };
+type Beat5FriendFallback = { friendName: string; totalCreatorPoints: number };
 
 type CeremonyMode = 'solo' | 'duo' | 'group';
 
@@ -26,10 +28,12 @@ type BeatsPayload = {
   cycleEnd: string;
   mode?: CeremonyMode;
   beat1: Beat1 | null;
+  beat1FriendFallback?: Beat1FriendFallback | null;
   beat2: Beat2 | null;
   beat3: Beat3 | null;
   beat4: Beat4 | null;
   beat5: Beat5 | null;
+  beat5FriendFallback?: Beat5FriendFallback | null;
 };
 
 type CeremonyRow = {
@@ -39,10 +43,12 @@ type CeremonyRow = {
 
 type BeatView =
   | { id: 1; content: Beat1 }
+  | { id: '1-friend'; content: Beat1FriendFallback }
   | { id: 2; content: Beat2 }
   | { id: 3; content: Beat3 }
   | { id: 4; content: Beat4 }
-  | { id: 5; content: Beat5 };
+  | { id: 5; content: Beat5 }
+  | { id: '5-friend'; content: Beat5FriendFallback };
 
 const TIER_LABEL: Record<MasteryTier, string> = {
   establishing: 'Curious',
@@ -100,14 +106,43 @@ function CeremonyCircle({
 function beatViews(payload: BeatsPayload): BeatView[] {
   const views: BeatView[] = [];
   if (payload.beat1) views.push({ id: 1, content: payload.beat1 });
+  else if (payload.beat1FriendFallback) views.push({ id: '1-friend', content: payload.beat1FriendFallback });
   if (payload.beat2) views.push({ id: 2, content: payload.beat2 });
   if (payload.beat3) views.push({ id: 3, content: payload.beat3 });
   if (payload.beat4) views.push({ id: 4, content: payload.beat4 });
   if (payload.beat5) views.push({ id: 5, content: payload.beat5 });
+  else if (payload.beat5FriendFallback) views.push({ id: '5-friend', content: payload.beat5FriendFallback });
   return views;
 }
 
 function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
+  if (beat.id === '1-friend') {
+    const { friendName, count, domains } = beat.content;
+    return (
+      <div className="mx-auto max-w-2xl text-center">
+        <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
+          {friendName} leveled up this week.
+        </h1>
+        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+          You didn&rsquo;t cross a tier this week. {friendName} crossed {count} in {joinList(domains)}.
+        </p>
+      </div>
+    );
+  }
+
+  if (beat.id === '5-friend') {
+    return (
+      <div className="mx-auto max-w-2xl text-center">
+        <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
+          {beat.content.friendName} taught the room.
+        </h1>
+        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+          You didn&rsquo;t earn author credit this week. {beat.content.friendName}&rsquo;s questions earned {beat.content.totalCreatorPoints} points for others.
+        </p>
+      </div>
+    );
+  }
+
   if (beat.id === 1) {
     return (
       <div className="mx-auto max-w-2xl text-center">
@@ -228,7 +263,7 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
     <div className="mx-auto max-w-2xl text-center">
       <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">You taught people things.</h1>
       <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-        Your questions earned {beat.content.totalCreatorPoints} points for others this fortnight.
+        Your questions earned {beat.content.totalCreatorPoints} points for others this week.
       </p>
       {beat.content.topQuestion ? (
         <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-stone-300">
@@ -321,7 +356,7 @@ export default function CeremonyPage() {
   if (!ceremony) {
     return (
       <main className="grid min-h-dvh place-items-center bg-stone-950 px-6 text-center text-stone-100">
-        <p className="text-sm text-stone-300">Loading your two weeks...</p>
+        <p className="text-sm text-stone-300">Loading your week...</p>
       </main>
     );
   }
@@ -335,8 +370,8 @@ export default function CeremonyPage() {
       <div className="relative z-10 w-full">
         {isEnd ? (
           <div className="mx-auto max-w-2xl text-center">
-            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">That's your two weeks.</h1>
-            <p className="mt-8 text-lg text-stone-200 sm:text-xl">See you in another fourteen days.</p>
+            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">That's your week.</h1>
+            <p className="mt-8 text-lg text-stone-200 sm:text-xl">See you next Sunday.</p>
             <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
               <button
                 type="button"
@@ -369,7 +404,7 @@ export default function CeremonyPage() {
           className="fixed inset-0 z-30 flex items-center justify-center overflow-y-auto bg-stone-950/80 px-5 py-8"
           role="dialog"
           aria-modal="true"
-          aria-label="Share your two weeks"
+          aria-label="Share your week"
           onClick={(event) => {
             event.stopPropagation();
             if (event.target === event.currentTarget) setShareUrl(null);

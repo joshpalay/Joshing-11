@@ -9,7 +9,7 @@ import { getSession } from '@/server/auth/session'
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
-import { getCeremonyBanner } from '@/server/db/queries/ceremony'
+import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
 import { getFeedPagePayload } from '@/server/feed/get-feed-page'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 
@@ -87,9 +87,9 @@ async function MissedQuestionsSection({ userId }: { userId: string }) {
 }
 
 async function FeedSection({ userId }: { userId: string }) {
-  const [feedPage, banner] = await Promise.all([
+  const [feedPage, latestUnviewed] = await Promise.all([
     getFeedPagePayload(userId, { limit: FEED_PAGE_SIZE, cursor: null, filter: 'all' }),
-    getCeremonyBanner(userId),
+    getLatestUnviewedCeremony(userId),
   ])
 
   return (
@@ -97,7 +97,12 @@ async function FeedSection({ userId }: { userId: string }) {
       pageSize={FEED_PAGE_SIZE}
       infinite
       initialPage={feedPage}
-      initialBanner={banner ? { id: banner.id, firedAt: banner.firedAt.toISOString() } : null}
+      initialCeremonyStatus={{
+        nextFireAt: getNextCeremonyAt().toISOString(),
+        latestUnviewed: latestUnviewed
+          ? { id: latestUnviewed.id, firedAt: latestUnviewed.firedAt.toISOString() }
+          : null,
+      }}
     />
   )
 }
