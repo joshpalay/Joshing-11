@@ -538,3 +538,32 @@ Production launch blockers right now: the hardcoded OTP bypass, failing producti
 
 Smallest launchable fix set: remove `000000` OTP bypass, make `npm run build` pass in the deployment environment, wire `/feed` to `FeedList`, enforce friend-only recipients server-side for Joshing Games, require the PRD onboarding warmup threshold and load pre-seeded interests, complete or explicitly defer friend profiles/invites, remove spider/streak surfacing if PRD remains authoritative, and update `.env.example` to match `env-check.ts`.
 
+---
+
+## SECTION 13 - Surfaces & Copy Disposition (2026-05-18)
+
+Resolutions for brief-referenced surfaces flagged as "missing in code." Group-game-adjacent items are withdrawn now that group games are out of Phase 1 (parallel to the declared-territory visual withdrawal in commit `629cedb`). See `PRD-11.1-MASTER-ALIGNMENT-AUDIT.md` §14 for the same disposition with additional context.
+
+### Withdrawn (Phase 1)
+
+- **Standout moments / "only you got this"** — no peer set without group games.
+- **Game Summary "Group Story" section** — group-game artifact.
+- **Friend Play** — group-game artifact.
+- **Challenge Worlds** — group-game-adjacent feature; not on Phase 1 roadmap.
+- **Share-card emoji grid (Wordle-style)** — numeric highlights in `ShareCard.tsx` stay on-brand.
+
+### Resolved (already implemented)
+
+- **"common ground +" sub-label rotation** — `src/components/play/GameplayChat.tsx:87-90`.
+- **Accepted-variant near-miss** — handled by the consolation line for in-ballpark wrong answers (`src/lib/llm.ts:446-450`); accepted alternatives are silently correct.
+- **Next-questions countdown** — time-to-next-round in `src/components/TodaysFiveCard.tsx:164`.
+
+### Removed
+
+- **"Now it's in yours too." wrong-reveal variant** — dropped from the `wrongHeadline` rotation in `src/components/play/GameplayChat.tsx` (4 → 3 variants).
+
+### Author identity (Top 10 items 3, 7, 11, 14)
+
+- **In-session question card** — ✅ author promoted; `0.86rem / weight 600` serif name with `0.55rem` mono "FROM" label (commit `70399ba`).
+- **End-of-session review card** — ✅ author promoted to same in-session pattern when `creatorNote` exists (this PR). System questions retain "JOSHING BOT · DOMAIN".
+
