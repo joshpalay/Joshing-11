@@ -92,7 +92,7 @@ Should this challenged answer count? Return JSON only.`;
       model: ANTHROPIC_MODEL,
       max_tokens: 400,
       temperature: 0,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 

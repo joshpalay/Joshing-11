@@ -508,7 +508,7 @@ Categorize this question. Return JSON only.`;
       model: ANTHROPIC_MODEL,
       max_tokens: 300,
       temperature: 0,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 
@@ -552,7 +552,7 @@ Return JSON only.`;
         model: ANTHROPIC_MODEL,
         max_tokens: 120,
         temperature: 0,
-        system: refinementPrompt,
+        system: [{ type: 'text', text: refinementPrompt, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: refinementMessage }],
       });
 
@@ -622,7 +622,7 @@ Write brief and full explainers. Return JSON only.`;
       model: ANTHROPIC_MODEL,
       max_tokens: 800,
       temperature: 0.7,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 
@@ -677,7 +677,7 @@ Write 2–3 sentences of factual explanation.`;
       model: ANTHROPIC_MODEL,
       max_tokens: 400,
       temperature: 0.45,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 
@@ -744,7 +744,7 @@ Suggest a canonical answer and classify the question type. Return JSON only.`;
       model: ANTHROPIC_MODEL,
       max_tokens: 600,
       temperature: 0,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 
@@ -831,7 +831,7 @@ Suggest specific topic tags. Return JSON only.`;
       model: ANTHROPIC_MODEL,
       max_tokens: 150,
       temperature: 0,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 
@@ -884,7 +884,7 @@ Return JSON only.`;
       model: ANTHROPIC_MODEL,
       max_tokens: 120,
       temperature: 0,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 
@@ -932,7 +932,7 @@ No explanation outside the JSON.`;
       model: ANTHROPIC_MODEL,
       max_tokens: 200,
       temperature: 0,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 

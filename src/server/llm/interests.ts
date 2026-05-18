@@ -229,7 +229,7 @@ Propose candidate interests. Return JSON array only.`;
     model: ANTHROPIC_MODEL,
     max_tokens: 1600,
     temperature: 0.65,
-    system: systemPrompt,
+    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: userMessage }],
   });
 
@@ -289,7 +289,7 @@ Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation
     model: CANONICALIZE_MODEL,
     max_tokens: 260,
     temperature: 0.2,
-    system: systemPrompt,
+    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: cleanInput }],
   });
 
