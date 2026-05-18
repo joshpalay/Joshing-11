@@ -47,6 +47,7 @@ A question is NOT OK if:
 - It asks for an opinion or preference
 - It contains factual errors or false premises
 - It is so broad that a correct answer could be any of dozens of things
+- It contains or telegraphs its own answer ("What is the capital of France, which is Paris?" — self-answering; "Who wrote the 1922 poem 'The Waste Land' by T. S. Eliot?" — names the author it is asking for)
 
 Question to review: ${JSON.stringify(questionText)}
 
@@ -58,6 +59,7 @@ Issue descriptions should be short (under 12 words each), specific, and helpful.
 - "Multiple Tchaikovsky symphonies could be the answer."
 - "Asks for opinion rather than fact."
 - "Date range is too broad to have a single answer."
+- "Question reveals its own answer."
 
 Reformulations should preserve the author's apparent intent while fixing the issue. Provide 2-4 reformulations, ordered most to least faithful to the original.`;
 

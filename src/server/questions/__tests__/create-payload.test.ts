@@ -103,6 +103,86 @@ describe('create question payload categorization', () => {
     expect(result.errors).toEqual([]);
     expect(result.value.sendToFriendIds).toEqual([]);
   });
+
+  describe('answer-in-question guard', () => {
+    it('rejects when the answer appears verbatim in the question', () => {
+      const result = readCreateQuestionPayload({
+        text: 'What is the capital of France, which is Paris?',
+        correctAnswer: 'Paris',
+        verified: true,
+        critiqueIterations: 0,
+      });
+
+      expect(result.errors).toContain('answerInQuestion');
+    });
+
+    it('rejects multi-word answers that appear in the question', () => {
+      const result = readCreateQuestionPayload({
+        text: "Who wrote The Waste Land, the 1922 poem?",
+        correctAnswer: 'The Waste Land',
+        verified: true,
+        critiqueIterations: 0,
+      });
+
+      expect(result.errors).toContain('answerInQuestion');
+    });
+
+    it('rejects when an alternate answer leaks into the question', () => {
+      const result = readCreateQuestionPayload({
+        text: 'Which US state is also nicknamed the Empire State?',
+        correctAnswer: 'New York',
+        alternateAnswers: ['Empire State'],
+        verified: true,
+        critiqueIterations: 0,
+      });
+
+      expect(result.errors).toContain('answerInQuestion');
+    });
+
+    it('is case- and punctuation-insensitive', () => {
+      const result = readCreateQuestionPayload({
+        text: 'In 1969, who took "one small step" on the moon?',
+        correctAnswer: 'one small step',
+        verified: true,
+        critiqueIterations: 0,
+      });
+
+      expect(result.errors).toContain('answerInQuestion');
+    });
+
+    it('does not trigger on partial word overlap', () => {
+      const result = readCreateQuestionPayload({
+        text: 'Which French city served as the setting for the Burning of Notre-Dame?',
+        correctAnswer: 'Paris',
+        verified: true,
+        critiqueIterations: 0,
+      });
+
+      expect(result.errors).not.toContain('answerInQuestion');
+    });
+
+    it('does not flag short answers like "no"', () => {
+      const result = readCreateQuestionPayload({
+        text: 'Is there snow on Mount Everest year-round?',
+        correctAnswer: 'No',
+        verified: true,
+        critiqueIterations: 0,
+      });
+
+      expect(result.errors).not.toContain('answerInQuestion');
+    });
+
+    it('does not trigger on answers that are only a substring of a question word', () => {
+      const result = readCreateQuestionPayload({
+        text: 'What country is famous for hosting the Cannes Film Festival?',
+        correctAnswer: 'an',
+        verified: true,
+        critiqueIterations: 0,
+      });
+
+      expect(result.errors).not.toContain('answerInQuestion');
+    });
+  });
 });
 
 describe('normalizeCanonicalSubcategory', () => {

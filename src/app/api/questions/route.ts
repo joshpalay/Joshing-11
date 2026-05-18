@@ -60,6 +60,16 @@ export async function POST(request: NextRequest) {
     },
   });
   if (errors.length > 0) {
+    if (errors.includes('answerInQuestion')) {
+      return NextResponse.json(
+        {
+          error: 'answer_in_question',
+          fields: errors,
+          message: 'Your question appears to contain its own answer. Rephrase the question so it does not reveal the answer.',
+        },
+        { status: 400 },
+      );
+    }
     return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
 
