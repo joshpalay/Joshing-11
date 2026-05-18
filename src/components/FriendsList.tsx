@@ -31,7 +31,7 @@ type RequestAction = 'accept' | 'ignore'
 
 function previewInterests(interests: string[]) {
   if (interests.length === 0) return null
-  return interests.slice(0, 5).join(', ')
+  return interests.join(', ')
 }
 
 export default function FriendsList() {
