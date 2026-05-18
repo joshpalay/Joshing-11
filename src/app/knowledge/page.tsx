@@ -30,6 +30,7 @@ type DomainMastery = {
   isDeclaredInterest: boolean;
   isDemonstrated: boolean;
   territoryType?: 'declared' | 'demonstrated';
+  isHidden?: boolean;
 };
 
 type KnowledgeResponse = {
@@ -105,6 +106,7 @@ function toPortraitEntry(domain: DomainMastery): PortraitEntry {
     totalMasteryPoints: Math.max(domain.points, domain.isDeclaredInterest ? 1 : 0),
     tier: asTier(domain.tier),
     authoredAnsweredCount: domain.questionsAnswered,
+    isHidden: Boolean(domain.isHidden),
   };
 }
 
@@ -170,6 +172,10 @@ function KnowledgePageContent() {
   const [reinstating, setReinstating] = useState<string | null>(null);
   const [questionToast, setQuestionToast] = useState<string | null>(null);
   const [askFriendDomain, setAskFriendDomain] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [hiddenOverrides, setHiddenOverrides] = useState<Record<string, boolean>>({});
+  const [hidePending, setHidePending] = useState<string | null>(null);
+  const [hideError, setHideError] = useState<string | null>(null);
 
   const loadKnowledge = async () => {
     const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
@@ -240,7 +246,29 @@ function KnowledgePageContent() {
     [data],
   );
 
-  const portraitEntries = useMemo(() => sortedDomains.map(toPortraitEntry), [sortedDomains]);
+  const isDomainHidden = useMemo(() => {
+    return (domain: DomainMastery) => {
+      const override = hiddenOverrides[domain.displayName];
+      if (typeof override === 'boolean') return override;
+      return Boolean(domain.isHidden);
+    };
+  }, [hiddenOverrides]);
+
+  const annotatedDomains = useMemo(
+    () => sortedDomains.map((domain) => ({ ...domain, isHidden: isDomainHidden(domain) })),
+    [sortedDomains, isDomainHidden],
+  );
+  const visibleDomains = useMemo(
+    () => annotatedDomains.filter((domain) => !domain.isHidden),
+    [annotatedDomains],
+  );
+  const hiddenCount = annotatedDomains.length - visibleDomains.length;
+
+  const portraitEntries = useMemo(
+    () => (editMode ? annotatedDomains : visibleDomains).map(toPortraitEntry),
+    [annotatedDomains, visibleDomains, editMode],
+  );
+  const sharePortraitEntries = useMemo(() => visibleDomains.map(toPortraitEntry), [visibleDomains]);
   const declaredSlots = useMemo(() => {
     if (!data) return [];
     const byKey = new Map(data.pageData.allDomains.map((domain) => [domainKey(domain.domain), domain]));
@@ -255,15 +283,43 @@ function KnowledgePageContent() {
       .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
   }, [data, declaredKeys]);
 
-  const topCardDomains = useMemo(() => sortedDomains.filter((domain) => domain.points > 0).slice(0, 5), [sortedDomains]);
+  const topCardDomains = useMemo(() => visibleDomains.filter((domain) => domain.points > 0).slice(0, 5), [visibleDomains]);
   const expandingDomains = data?.pageData.expandingDomains ?? [];
   const showShareNotice = (message: string) => {
     setQuestionToast(message);
     window.setTimeout(() => setQuestionToast(null), 2200);
   };
-  const yourMind = data ? displayMind(sortedDomains, data.pageData.declaredInterests) : '';
+  const yourMind = data ? displayMind(visibleDomains, data.pageData.declaredInterests) : '';
   const displayName = 'You';
-  const hasAnything = sortedDomains.length > 0;
+  const hasAnything = annotatedDomains.length > 0;
+
+  const toggleDomainHidden = async (canonicalSubcategory: string, nextHidden: boolean) => {
+    setHideError(null);
+    setHidePending(canonicalSubcategory);
+    setHiddenOverrides((current) => ({ ...current, [canonicalSubcategory]: nextHidden }));
+    try {
+      const response = await fetch(`/api/knowledge/${encodeURIComponent(canonicalSubcategory)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ visibility: nextHidden ? 'private' : 'public' }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(body?.message ?? 'Could not save that change.');
+      }
+    } catch (caught) {
+      setHiddenOverrides((current) => {
+        const next = { ...current };
+        delete next[canonicalSubcategory];
+        return next;
+      });
+      setHideError(caught instanceof Error ? caught.message : 'Could not save that change.');
+      window.setTimeout(() => setHideError(null), 3200);
+    } finally {
+      setHidePending((current) => (current === canonicalSubcategory ? null : current));
+    }
+  };
 
   // openInterestModal is always triggered from within manage-interests, so closing returns there.
   const openInterestModal = (slotIndex: number, currentDomain: string | null) => {
@@ -437,8 +493,8 @@ function KnowledgePageContent() {
             iconKey: domain.iconKey,
             broadCategory: domain.broadCategory,
           }))}
-          overflowCount={Math.max(0, sortedDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
-          tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${sortedDomains.length} territories`}
+          overflowCount={Math.max(0, visibleDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
+          tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${visibleDomains.length} territories`}
           rarestTerritory={null}
           rarestTerritorySolo={false}
           shareText={`My Joshing knowledge portrait: ${topCardDomains.map((domain) => domain.displayName).join(', ')}`}
@@ -454,18 +510,57 @@ function KnowledgePageContent() {
 
       {hasAnything && (
         <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
-          <div className="mb-2">
-            <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
-            <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;</p>
+          <div className="mb-2 flex items-start justify-between gap-3">
+            <div>
+              <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
+              <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
+                {editMode ? 'TAP A CIRCLE TO HIDE OR SHOW IT' : 'SEE HOW YOUR KNOWLEDGE IS BUILDING ->'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditMode((current) => !current)}
+              className="shrink-0 min-h-8 border border-[var(--border-warm)] bg-white text-[var(--ink)] px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer"
+              aria-pressed={editMode}
+            >
+              {editMode ? 'Done' : 'Edit'}
+            </button>
           </div>
 
-          <div id="portrait-circles-section">
-            <PortraitCircles entries={portraitEntries} />
-            <div className="mt-5 flex justify-center">
-              <button type="button" className="px-8 py-[11px] border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] text-[#faf8f2] font-['Courier_New',monospace] text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
-                Share portrait
+          {editMode ? (
+            <p className="m-0 mb-2 text-[0.78rem] text-[var(--text-muted-warm)] leading-[1.5]">
+              Tap a circle to hide it from friends. Hidden circles stay visible to you here while editing.
+            </p>
+          ) : hiddenCount > 0 ? (
+            <p className="m-0 mb-2 text-[0.78rem] text-[var(--text-muted-warm)]">
+              {hiddenCount} hidden from friends —{' '}
+              <button
+                type="button"
+                className="underline bg-transparent border-none p-0 text-[var(--text-muted-warm)] cursor-pointer"
+                onClick={() => setEditMode(true)}
+              >
+                Edit to show
               </button>
-            </div>
+            </p>
+          ) : null}
+
+          <div id="portrait-circles-section">
+            <PortraitCircles
+              entries={portraitEntries}
+              editMode={editMode}
+              onToggleHidden={(canonical, nextHidden) => void toggleDomainHidden(canonical, nextHidden)}
+              pendingDomain={hidePending}
+            />
+            {hideError ? (
+              <p className="mt-3 text-[0.78rem] text-[#8b1a0e] border border-[#c0392b]/40 p-2">{hideError}</p>
+            ) : null}
+            {!editMode ? (
+              <div className="mt-5 flex justify-center">
+                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] text-[#faf8f2] font-['Courier_New',monospace] text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
+                  Share portrait
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
       )}
@@ -538,7 +633,7 @@ function KnowledgePageContent() {
       </section>
 
       {shareModalOpen && (
-        <SharePortraitModal entries={portraitEntries} playerDisplayName={displayName} onClose={() => setShareModalOpen(false)} />
+        <SharePortraitModal entries={sharePortraitEntries} playerDisplayName={displayName} onClose={() => setShareModalOpen(false)} />
       )}
 
       {askFriendDomain ? (
