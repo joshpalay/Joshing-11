@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { writeActivity } from '@/server/activity/write-activity';
-import { db, questions, userQuestionBank, users } from '@/server/db';
+import { db, feedItems, joshingGameResponses, questions, userQuestionBank, users } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { bankQuestionSelectColumns, type QuestionView, toQuestionView } from '@/server/db/queries/questions';
 
@@ -21,6 +21,81 @@ function questionDomain(question: typeof questions.$inferSelect): string {
 
 function displayName(value: string | null): string {
   return value?.trim() || 'A friend';
+}
+
+function shortAnswererName(value: string | null): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return 'A friend';
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  const initial = parts[1].charAt(0).toUpperCase();
+  return initial ? `${parts[0]} ${initial}` : parts[0];
+}
+
+async function getAnswerersForQuestions(
+  questionIds: string[],
+  viewerUserId: string,
+): Promise<Map<string, { names: string[]; total: number }>> {
+  if (questionIds.length === 0) return new Map();
+
+  const [gameRows, feedRows] = await Promise.all([
+    db
+      .select({
+        questionId: joshingGameResponses.questionId,
+        userId: joshingGameResponses.userId,
+        displayName: users.displayName,
+        answeredAt: sql<Date>`max(${joshingGameResponses.answeredAt})`.as('answered_at'),
+      })
+      .from(joshingGameResponses)
+      .innerJoin(users, eq(joshingGameResponses.userId, users.id))
+      .where(and(
+        inArray(joshingGameResponses.questionId, questionIds),
+        ne(joshingGameResponses.userId, viewerUserId),
+        sql`${joshingGameResponses.answeredAt} is not null`,
+      ))
+      .groupBy(joshingGameResponses.questionId, joshingGameResponses.userId, users.displayName),
+    db
+      .select({
+        questionId: feedItems.questionId,
+        userId: feedItems.recipientUserId,
+        displayName: users.displayName,
+        answeredAt: sql<Date>`max(${feedItems.sourceEventAt})`.as('answered_at'),
+      })
+      .from(feedItems)
+      .innerJoin(users, eq(feedItems.recipientUserId, users.id))
+      .where(and(
+        inArray(feedItems.questionId, questionIds),
+        ne(feedItems.recipientUserId, viewerUserId),
+        sql`${feedItems.answerResult} is not null`,
+        isNull(feedItems.joshingGameId),
+      ))
+      .groupBy(feedItems.questionId, feedItems.recipientUserId, users.displayName),
+  ]);
+
+  const byQuestion = new Map<string, Map<string, { displayName: string | null; answeredAt: number }>>();
+  for (const row of [...gameRows, ...feedRows]) {
+    if (!row.questionId || !row.userId) continue;
+    const answeredAt = row.answeredAt ? new Date(row.answeredAt).getTime() : 0;
+    let perUser = byQuestion.get(row.questionId);
+    if (!perUser) {
+      perUser = new Map();
+      byQuestion.set(row.questionId, perUser);
+    }
+    const existing = perUser.get(row.userId);
+    if (!existing || answeredAt > existing.answeredAt) {
+      perUser.set(row.userId, { displayName: row.displayName, answeredAt });
+    }
+  }
+
+  const result = new Map<string, { names: string[]; total: number }>();
+  for (const [questionId, perUser] of byQuestion) {
+    const sorted = [...perUser.values()].sort((a, b) => b.answeredAt - a.answeredAt);
+    result.set(questionId, {
+      names: sorted.slice(0, 2).map((entry) => shortAnswererName(entry.displayName)),
+      total: sorted.length,
+    });
+  }
+  return result;
 }
 
 export async function addToBank(params: {
@@ -131,8 +206,14 @@ export async function getBankedQuestions(userId: string): Promise<BankedQuestion
     .where(and(eq(userQuestionBank.userId, userId), isNull(questions.deletedAt)))
     .orderBy(desc(userQuestionBank.addedAt));
 
+  const answerersByQuestion = await getAnswerersForQuestions(
+    rows.map((row) => row.question.id),
+    userId,
+  );
+
   return Promise.all(rows.map(async (row) => {
     const view = await toQuestionView(row.question);
+    const answerers = answerersByQuestion.get(row.question.id);
     return {
       ...view,
       bankEntryId: row.bank.id,
@@ -140,6 +221,7 @@ export async function getBankedQuestions(userId: string): Promise<BankedQuestion
       isInBank: true,
       isOwnAuthored: row.question.creatorId === userId,
       authorName: row.question.creatorId === userId ? 'You' : displayName(row.author.displayName),
+      answerers: answerers && answerers.total > 0 ? answerers : undefined,
     };
   }));
 }
