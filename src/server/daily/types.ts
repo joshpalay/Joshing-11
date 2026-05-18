@@ -30,6 +30,10 @@ export const queueSlotSchema = z.object({
   /** Optional creator note — only ever set for friend questions. */
   author_note: z.string().nullish(),
   domain: z.string(),
+  /** Free-text broader topic for this slot (e.g. "Saturday morning cartoons"). Optional — populated for newly built slots. */
+  broad_category: z.string().nullish(),
+  /** Top-level category enum value (e.g. "film_tv"). Optional — populated for newly built slots from canonical Question rows. */
+  category: z.string().nullish(),
   question_text: z.string(),
   /** LLM-rated objective difficulty for this question, surfaced as a badge in the UI. */
   difficulty_estimate: z.enum(['accessible', 'moderate', 'specialist']).optional(),

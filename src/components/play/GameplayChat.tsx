@@ -32,6 +32,8 @@ export type ChatMessage =
       isNew?: boolean;
       onDismiss?: () => void;
       dismissLabel?: string;
+      /** When false, the dismiss button calls onDismiss but does not flip into the "Skipped" inline state — used when the click opens a dialog instead of completing the action. Defaults to true to preserve legacy behavior. */
+      dismissImmediate?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
     }
@@ -133,6 +135,7 @@ function QuestionRow({
   isNew = false,
   onDismiss,
   dismissLabel = "Skip - don't show again",
+  dismissImmediate = true,
 }: {
   subhead?: string | null;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
@@ -141,6 +144,7 @@ function QuestionRow({
   isNew?: boolean;
   onDismiss?: () => void;
   dismissLabel?: string;
+  dismissImmediate?: boolean;
 }) {
   const [dismissed, setDismissed] = useState(false);
   const [visible, setVisible] = useState(!isNew);
@@ -153,9 +157,9 @@ function QuestionRow({
   }, []);
 
   const handleDismiss = useCallback(() => {
-    setDismissed(true);
+    if (dismissImmediate) setDismissed(true);
     onDismiss?.();
-  }, [onDismiss]);
+  }, [onDismiss, dismissImmediate]);
 
   return (
     <div
@@ -894,6 +898,7 @@ export function GameplayChatThread({
                 isNew={m.isNew}
                 onDismiss={m.onDismiss}
                 dismissLabel={m.dismissLabel}
+                dismissImmediate={m.dismissImmediate}
                 subhead={m.subhead}
                 badges={m.badges}
               />
