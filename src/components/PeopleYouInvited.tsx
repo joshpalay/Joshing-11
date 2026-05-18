@@ -76,6 +76,7 @@ export default function PeopleYouInvited() {
   const [error, setError] = useState<string | null>(null)
   const [copyingId, setCopyingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const loadInvites = useCallback(async () => {
     setError(null)
@@ -158,6 +159,35 @@ export default function PeopleYouInvited() {
       )
     } finally {
       setCancellingId(null)
+    }
+  }
+
+  async function deleteInvite(invite: OutgoingInvite) {
+    setDeletingId(invite.id)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/friend-invitations', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ invitationId: invite.id, permanent: true }),
+      })
+      const body = (await response.json().catch(() => null)) as {
+        message?: string
+      } | null
+
+      if (!response.ok) {
+        throw new Error(body?.message ?? 'Could not delete this.')
+      }
+
+      await loadInvites()
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : 'Could not delete this.'
+      )
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -266,6 +296,19 @@ export default function PeopleYouInvited() {
                       onClick={() => createNewInvite(invite)}
                     >
                       Write a fresh note
+                    </button>
+                  </div>
+                ) : null}
+
+                {invite.status === 'cancelled' ? (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      className="text-muted-foreground text-sm"
+                      onClick={() => deleteInvite(invite)}
+                      disabled={deletingId === invite.id}
+                    >
+                      {deletingId === invite.id ? 'Deleting…' : 'Delete'}
                     </button>
                   </div>
                 ) : null}
