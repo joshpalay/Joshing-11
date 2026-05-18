@@ -10,10 +10,10 @@ import type { AnsweredByYouFeedItem, AnsweredByYouPairedFriend } from './types'
 import { colorForCategory, colorForUser, initialsFor, isDarkColor } from './visual'
 
 const TIER_LABEL: Record<string, string> = {
-  establishing: 'Curious',
-  familiar: 'Versed',
-  solid: 'Fluent',
-  mastery: 'Master',
+  establishing: 'Establishing',
+  familiar: 'Familiar',
+  solid: 'Solid',
+  mastery: 'Mastery',
 }
 
 function tierLabel(tier: string): string {

@@ -1,10 +1,10 @@
 import type { MasteryTier } from '@/types/db';
 
 export const KNOWLEDGE_TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Curious',
-  familiar: 'Versed',
-  solid: 'Fluent',
-  mastery: 'Master',
+  establishing: 'Establishing',
+  familiar: 'Familiar',
+  solid: 'Solid',
+  mastery: 'Mastery',
 };
 
 export const KNOWLEDGE_TIER_INTERPRETATION: Record<MasteryTier, string> = {

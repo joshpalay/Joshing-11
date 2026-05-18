@@ -50,10 +50,10 @@ type DomainDetail = {
 };
 
 const TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Curious',
-  familiar: 'Versed',
-  solid: 'Fluent',
-  mastery: 'Master',
+  establishing: 'Establishing',
+  familiar: 'Familiar',
+  solid: 'Solid',
+  mastery: 'Mastery',
 };
 
 const VISIBILITY_HELP: Record<DomainVisibility, string> = {

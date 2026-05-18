@@ -27,9 +27,9 @@ type TodaysFiveCardProps = {
 
 const DIFFICULTY_LABELS: Record<string, string> = {
   normal: 'Establishing',
-  moderate: 'Solid',
-  challenging: 'Skilled',
-  ridiculous: 'Master',
+  moderate: 'Familiar',
+  challenging: 'Solid',
+  ridiculous: 'Mastery',
   adaptive: 'Adaptive',
 }
 
