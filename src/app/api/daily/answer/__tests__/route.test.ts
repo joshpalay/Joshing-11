@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createFeedItemsForFriendsFromAnswerMock,
-  generateBreadcrumbMock,
   getSessionMock,
   gradeAnswerMock,
   persistGeneratedQuestionMock,
@@ -53,7 +52,6 @@ const {
 
   return {
     createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
-    generateBreadcrumbMock: vi.fn(async () => null),
     getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
     gradeAnswerMock: vi.fn(),
     persistGeneratedQuestionMock: vi.fn(async () => ({
@@ -123,10 +121,6 @@ vi.mock('@/server/db', () => ({
     broadCategory: 'q.bc',
     category: 'q.c',
   },
-}))
-
-vi.mock('@/server/daily/generate-breadcrumb', () => ({
-  generateBreadcrumb: generateBreadcrumbMock,
 }))
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({

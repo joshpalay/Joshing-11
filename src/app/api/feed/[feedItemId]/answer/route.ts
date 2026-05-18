@@ -5,7 +5,6 @@ import { gradeAnswer, selectQuip } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, playerMastery, questions, users } from '@/server/db';
-import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { getBasePoints, creatorMasteryAwardForNthCorrect } from '@/server/mastery/scoring';
 import { countAuthorCreditEvents } from '@/server/mastery/author-credit';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
@@ -95,14 +94,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     : 0;
   const pointsAwarded = basePoints;
   const awardsMasteryCredit = pointsAwarded > 0;
-  const breadcrumb = await generateBreadcrumb({
-    questionId: question.id,
-    questionText: question.questionText,
-    correctAnswer: question.answerText,
-    submittedAnswer: parsed.submittedAnswer,
-    isCorrect,
-    domain,
-  }).catch(() => null);
   const masteryDelta = await writeMasteryEvent({
     userId: session.userId,
     questionId: question.id,
@@ -230,7 +221,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     explanation,
     pointsAwarded,
     answerState,
-    breadcrumb,
+    breadcrumb: null,
     masteryDelta,
     correctAnswer: question.answerText,
     quip,

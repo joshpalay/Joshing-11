@@ -449,6 +449,33 @@ export default function DailyPage() {
     return map;
   }, [queue?.slots]);
 
+  const fetchBreadcrumb = useCallback(async (queueId: string, slotIndex: number) => {
+    try {
+      const response = await fetch('/api/breadcrumb', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ source: 'daily', queueId, slotIndex }),
+      });
+      if (!response.ok) return;
+      const body = await response.json().catch(() => null) as { breadcrumb?: string | null } | null;
+      const breadcrumb = body?.breadcrumb ?? null;
+      if (!breadcrumb) return;
+      setQueue((existing) => existing && existing.queue_id === queueId
+        ? {
+            ...existing,
+            slots: existing.slots.map((slot) =>
+              slot.slot_index === slotIndex
+                ? { ...slot, reveal_breadcrumb: breadcrumb }
+                : slot,
+            ),
+          }
+        : existing);
+    } catch {
+      // Breadcrumb is purely additive context; failure is silently ignored.
+    }
+  }, []);
+
   const postAnswer = useCallback(async (opts: { submittedAnswer: string; gaveUp: boolean }) => {
     if (!queue || !currentSlot || submitting) return;
     setSubmitting(true);
@@ -489,7 +516,7 @@ export default function DailyPage() {
                     awarded_points: body.pointsAwarded ?? body.awarded_points ?? 0,
                     reveal_canonical_answer: body.correctAnswer ?? body.answer,
                     reveal_explainer: body.explanation ?? body.explainer,
-                    reveal_breadcrumb: body.breadcrumb ?? null,
+                    reveal_breadcrumb: null,
                     reveal_quip: opts.gaveUp ? null : body.consolation ?? body.quip ?? null,
                   }
                 : slot
@@ -499,12 +526,16 @@ export default function DailyPage() {
       setPausedAfterSlotIndex(currentSlot.slot_index);
       window.setTimeout(() => setPausedAfterSlotIndex(null), 850);
       setAnswer('');
+
+      if (!opts.gaveUp) {
+        void fetchBreadcrumb(queue.queue_id, currentSlot.slot_index);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not record that answer.');
     } finally {
       setSubmitting(false);
     }
-  }, [currentSlot, queue, submitting]);
+  }, [currentSlot, fetchBreadcrumb, queue, submitting]);
 
   const submitAnswer = useCallback(async () => {
     const trimmed = answer.trim();

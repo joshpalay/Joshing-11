@@ -6,7 +6,6 @@ import { selectQuip, type FriendResult } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, joshingGameResponses, users } from '@/server/db';
-import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import {
   checkJoshingGameCompletion,
   getJoshingGame,
@@ -101,16 +100,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const domain = answeredQuestion
       ? answeredQuestion.question.canonicalSubcategory || answeredQuestion.question.broadCategory || answeredQuestion.question.category
       : 'General Knowledge';
-    const breadcrumb = answeredQuestion
-      ? await generateBreadcrumb({
-          questionId: answeredQuestion.questionId,
-          questionText: answeredQuestion.question.questionText,
-          correctAnswer,
-          submittedAnswer: parsed.submittedAnswer,
-          isCorrect: grade.isCorrect,
-          domain,
-        }).catch(() => null)
-      : null;
 
     if (grade.isCorrect && answeredQuestion?.question.creatorId && answeredQuestion.question.creatorId !== session.userId) {
       void promoteDeclaredToDemonstrated({
@@ -212,7 +201,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       ...grade,
       correctAnswer,
       answerState: grade.answerState,
-      breadcrumb,
+      breadcrumb: null,
       viewerStatus: freshView.viewerStatus,
       quip,
     });

@@ -109,7 +109,6 @@ type AnswerResponse = {
   correctAnswer?: string
   explanation?: string | null
   quip?: string | null
-  breadcrumb?: string | null
   pointsAwarded?: number | null
   masteryDelta?: unknown | null
 }
@@ -120,7 +119,6 @@ type ResultState = {
   submittedAnswer: string
   explanation: string | null
   quip: string | null
-  breadcrumb: string | null
   awardedPoints: number | null
   masteryDelta: unknown | null
 }
@@ -702,7 +700,6 @@ function FeedListContent({
             submittedAnswer,
             explanation: body.explanation ?? null,
             quip: body.quip ?? null,
-            breadcrumb: body.breadcrumb ?? null,
             awardedPoints: body.pointsAwarded ?? null,
             masteryDelta: body.masteryDelta ?? null,
           },
