@@ -44,6 +44,8 @@ function rateLimitKey(userId: string, phone: string) {
 }
 
 function checkInviteRateLimit(userId: string, phone: string, now = new Date()) {
+  if (process.env.INVITE_THROTTLE_DISABLED === '1') return null
+
   const nowMs = now.getTime()
   const userAttempts = pruneWindow(
     inviteAttemptsByUser.get(userId) ?? [],
