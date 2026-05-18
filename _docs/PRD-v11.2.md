@@ -32,7 +32,7 @@ Two items remain unresolved and are deliberately not locked here. They are carri
 | 7 | §8.5.2 | Reinstate the "Share with all friends" broadcast destination; simplify save-to-bank confirmation copy |
 | 8 | §8.7 | Archive deferred; split Catch-up out as a separate, active feature |
 | 9 | §8.8a | Breadcrumb length is 1–2 sentences (LLM-generated); separated from §8.1.14 per-answer quips |
-| 10 | §8.10 | Star voting replaced by thumbs up / thumbs down — no daily budget, no SMS to author |
+| 10 | §8.10 | Star voting replaced by thumbs-down only; thumbs-up deferred to a later phase pending a product decision on whether to ship |
 | 11 | §8.10b | Reaction custom-message cap raised from 100 to 160 characters |
 | 12 | §8.11 | Remove "Friend answered your question" and thumbs-up SMS triggers |
 | 13 | §8.12 | Navigation is Home / Friends / Questions / Knowledge / Account (Feed and Activities are not primary nav) |
@@ -138,11 +138,13 @@ All v11.1 ceremony copy referencing Act 1, Act 2, per-game triggers, all-players
 
 ---
 
-## §8.1.11 — Thumbs-up as quality signal (clarified; PRD unchanged)
+## §8.1.11 — Thumbs-up as quality signal (deferred)
 
-v11.1 §8.1.11 specifies that thumbs-up "Contributes to its surface priority in friends' Feeds — heavily thumbed questions surface earlier in friends' Feeds, all else equal." Code records the signal but does not currently update `surface_priority_score` and the Feed query does not order by it. The signal is a no-op today.
+v11.1 §8.1.11 specified that thumbs-up on a question contributes to its "surface priority in friends' Feeds — heavily thumbed questions surface earlier in friends' Feeds, all else equal." The signal is recorded today (`question_feedback`, `question_ratings`), and `questions.surface_priority_score` is written by `src/server/db/queries/ratings.ts` (via `QuestionRatingButtons` on the deferred Joshing Game / Archive surfaces) and by an orphan `/api/feed/[feedItemId]/thumbsup` endpoint that no UI calls. The Feed query (`src/server/db/queries/feed.ts`) does not read the column.
 
-**v11.2 leaves the spec unchanged.** The PRD describes the intended behavior correctly. The implementation gap is a code-side TODO, tracked in the remediation prompt and as open question §16.18 (which surfaces the still-undecided weighting formula).
+**v11.2 defers the thumbs-up surface-priority behavior to a later phase.** Whether the feature ships at all is unresolved (see §16.18). Until that decision, §8.1.11 is **dormant**: no PRD claim is made about thumbs-up affecting Feed ordering, and the existing writes to `surface_priority_score` are spec-irrelevant. The column stays in the schema; the signal remains a no-op on the Feed read path by design, not by oversight.
+
+Thumbs-down is unaffected by this deferral — see the revised §8.10 below.
 
 ---
 
@@ -265,7 +267,7 @@ v11.1 §8.10 described a star-voting mechanic: 2 stars per player per day per gr
 
 **v11.2 replacement for §8.10:**
 
-> Players may give thumbs-up or thumbs-down on any question in the End of Session Review. Thumbs-up increments the question's surface priority score (subject to the formula resolution in §16.18); thumbs-down decrements it and removes the question from the player's own Feed and from propagation to their friends (§8.2.10). No daily budget applies. The star mechanic is removed entirely; the "star_notification" SMS trigger is removed (see §8.11).
+> Players may give thumbs-down on any question in the End of Session Review. Thumbs-down removes the question from the player's own Feed and suppresses propagation to their friends (§8.2.10). No daily budget applies. Thumbs-up is **deferred to a later phase** (see §8.1.11 and §16.18); the gesture may continue to appear in UI for surfaces that are themselves deferred (Joshing Game, Archive), but has no PRD-documented effect in v11.2. The star mechanic is removed entirely; the "star_notification" SMS trigger is removed (see §8.11).
 
 ---
 
@@ -386,7 +388,7 @@ See §8.1.14 above. Daily Five quips are stored in the JSONB queue slot; Feed an
 
 ### §10.4 Schema changes net of v11.2
 
-**No new tables. No new columns.** v11.2 is a spec-and-copy revision; the schema additions from v11.1 (cultural anchor fields on users, `territory_type` on KB domains, `quip` columns, `FeedDismissedDomain`, `surface_priority_score`) are all already shipped per the Phase 1 triage.
+**No new tables. No new columns.** v11.2 is a spec-and-copy revision; the schema additions from v11.1 (cultural anchor fields on users, `territory_type` on KB domains, `quip` columns, `FeedDismissedDomain`, `surface_priority_score` — the last of these is shipped but dormant per the §8.1.11 / §16.18 deferral) are all already shipped per the Phase 1 triage.
 
 The only schema-shaped TODOs are:
 
@@ -424,16 +426,17 @@ Neither blocks the v11.2 spec.
 
 **v11.2 does not lock a choice.** No spec text changes in §8.32. Decision deferred.
 
-### §16.18 Thumbs-up surface ordering — formula unresolved
+### §16.18 Thumbs-up surface ordering — feature deferred
 
-**Status:** code gap, not spec drift. v11.1 §8.1.11 specifies that thumbs-up contributes to surface priority. The signal is recorded in `question_feedback`, but `questions.surface_priority_score` is never updated and the feed query does not order by it. The signal is a no-op.
+**Status:** deferred to a later phase. v11.1 §8.1.11 described thumbs-up as a Feed-ordering signal. Triage in the 2026-05-16 audit found the read side never consumes the score, the write side is split across two tables (`question_feedback`, `question_ratings`) on three surfaces that don't align with the live product, and the product is unsure whether the feature is worth shipping at all.
 
-**Decision needed before the code fix can land:**
+**Decisions deferred (in order):**
 
-- Eager update to `surface_priority_score` when feedback is recorded, or dynamic computation in the feed query joining `question_feedback`?
-- Weighting formula: each thumbs-up adds X to the priority score? Subject to decay over time? Capped per question?
+1. Does Joshing want thumbs-up on questions as a product feature?
+2. If yes — which surface owns the gesture (Feed item, End of Session Review, both)?
+3. If yes — eager vs. dynamic computation; weighting / decay / cap.
 
-**v11.2 leaves the spec unchanged.** This is tracked as a code-side TODO blocked on a small product call about the formula.
+**v11.2 takes no position on (1)–(3).** §8.1.11 and §8.10 are revised above to reflect the deferral. The `surface_priority_score` column and the two ratings tables remain in place; code cleanup of dormant writes is tracked separately and is not blocked on the product decision.
 
 ### §16.19 Cultural anchor — required or skippable at the route?
 
