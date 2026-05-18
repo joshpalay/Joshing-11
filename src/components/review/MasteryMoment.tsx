@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import type { MasteryTier } from '@/types/db';
 
 type Props = {
@@ -19,7 +20,7 @@ function copyForTier(tier: MasteryTier, subcategory: string): string {
 }
 
 function formatTierLabel(tier: MasteryTier): string {
-  return tier.charAt(0).toUpperCase() + tier.slice(1);
+  return KNOWLEDGE_TIER_LABEL[tier];
 }
 
 export default function MasteryMoment({

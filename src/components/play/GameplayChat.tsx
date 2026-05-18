@@ -84,10 +84,10 @@ export type ChatMessage =
     };
 
 const CORRECT_COPY: Array<{ headline: string; subLabel: string }> = [
-  { headline: 'Nice pull.', subLabel: 'shared signal' },
-  { headline: 'Right on.', subLabel: 'you both know this one' },
-  { headline: 'Locked in.', subLabel: 'confirmed' },
-  { headline: 'Exactly.', subLabel: 'same territory' },
+  { headline: 'Nice pull.', subLabel: 'common ground' },
+  { headline: 'Right on.', subLabel: 'common ground +' },
+  { headline: 'Locked in.', subLabel: 'common ground ++' },
+  { headline: 'Exactly.', subLabel: 'common ground +++' },
 ];
 
 function wrongHeadline(variant: number): string {
@@ -95,7 +95,7 @@ function wrongHeadline(variant: number): string {
     case 0: return 'Not this time — here\u2019s the answer.';
     case 1: return 'You\u2019ll know this one next time.';
     case 2:
-      return 'Nice try.';
+      return 'Now it’s in yours too.';
     case 3: return 'Close, but not quite.';
     default: return 'Not this time — here\u2019s the answer.';
   }
@@ -180,13 +180,22 @@ function QuestionRow({
       {creatorName ? (
         <p
           style={{
-            ...monoStyle,
-            fontSize: '0.6rem',
-            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontSize: '0.86rem',
+            color: 'var(--text)',
             paddingLeft: '2px',
+            paddingBottom: '2px',
+            opacity: 0.82,
+            lineHeight: 1.3,
           }}
         >
-          {creatorName}
+          <span style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginRight: '6px' }}>
+            FROM
+          </span>
+          <span style={{ fontWeight: 600 }}>{creatorName}</span>
+          {creatorName.trim().toLowerCase() === 'joshing' ? null : (
+            <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>gave you this</span>
+          )}
         </p>
       ) : null}
       <div

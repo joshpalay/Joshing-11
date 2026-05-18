@@ -25,9 +25,9 @@ export type UserProfile = {
 
 const TIER_LABELS: Record<MasteryTier, string> = {
   establishing: 'Curious',
-  familiar: 'Explorer',
-  solid: 'Scholar',
-  mastery: 'Sage',
+  familiar: 'Versed',
+  solid: 'Fluent',
+  mastery: 'Master',
 };
 
 function maskPhoneNumber(value: string): string {

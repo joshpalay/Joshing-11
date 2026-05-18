@@ -1,7 +1,7 @@
 export const B5_PERSONAL_MASTERY_COPY = {
   /** Tier progress row (single mastery bar). */
   tierBar: {
-    masterPeak: 'Mastery',
+    masterPeak: 'Master',
     toNext: (points: number, nextLabel: string) => `${points} pts to ${nextLabel}`,
   },
   /** Secondary / expandable only — not for primary card surfaces. */
