@@ -131,6 +131,43 @@ function logFallback(scope: string, reason: string, extra?: Record<string, unkno
   console.warn(`[LLM] ${scope} fallback: ${reason}`, extra ?? {});
 }
 
+/**
+ * Wraps Anthropic.messages.create with structured logging of duration, token
+ * usage, and cache hits/writes. Use everywhere a request is made instead of
+ * calling client.messages.create directly, so the prompt-caching configuration
+ * can be observed in production. `scope` should be a short stable label like
+ * 'grade' or 'categorize'.
+ */
+export async function loggedMessagesCreate(
+  client: Anthropic,
+  scope: string,
+  params: Anthropic.MessageCreateParamsNonStreaming,
+): Promise<Anthropic.Message> {
+  const startedAt = Date.now();
+  try {
+    const response = await client.messages.create(params);
+    const usage = response.usage;
+    console.info('[llm]', {
+      scope,
+      model: params.model,
+      duration_ms: Date.now() - startedAt,
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      cache_read_tokens: usage.cache_read_input_tokens ?? 0,
+      cache_create_tokens: usage.cache_creation_input_tokens ?? 0,
+    });
+    return response;
+  } catch (error) {
+    console.warn('[llm] error', {
+      scope,
+      model: params.model,
+      duration_ms: Date.now() - startedAt,
+      ...summarizeError(error),
+    });
+    throw error;
+  }
+}
+
 function clampConfidence(value: unknown, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return fallback;
@@ -420,7 +457,7 @@ Return only valid JSON with keys: result, confidence, reason, consolation. No ex
       return fallbackGrading();
     }
 
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'grade', {
       model: GRADING_MODEL,
       max_tokens: 300,
       temperature: 0,
@@ -504,7 +541,7 @@ Categorize this question. Return JSON only.`;
       return fallbackCategorization(questionText, answerText);
     }
 
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'categorize', {
       model: ANTHROPIC_MODEL,
       max_tokens: 300,
       temperature: 0,
@@ -548,7 +585,7 @@ Broad category: ${broadCategory}
 Current subcategory (too broad): ${subcategory}
 Return JSON only.`;
 
-      const refinementResponse = await client.messages.create({
+      const refinementResponse = await loggedMessagesCreate(client, 'categorize-refine', {
         model: ANTHROPIC_MODEL,
         max_tokens: 120,
         temperature: 0,
@@ -618,7 +655,7 @@ Write brief and full explainers. Return JSON only.`;
       return fallbackExplainer(canonicalAnswer);
     }
 
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'explainer', {
       model: ANTHROPIC_MODEL,
       max_tokens: 800,
       temperature: 0.7,
@@ -673,7 +710,7 @@ Write 2–3 sentences of factual explanation.`;
       return fallbackFactualReflectionExplanation(canonicalAnswer);
     }
 
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'reflection-explainer', {
       model: ANTHROPIC_MODEL,
       max_tokens: 400,
       temperature: 0.45,
@@ -740,7 +777,7 @@ Suggest a canonical answer and classify the question type. Return JSON only.`;
       return fallbackSuggestion();
     }
 
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'suggest-answer', {
       model: ANTHROPIC_MODEL,
       max_tokens: 600,
       temperature: 0,
@@ -827,7 +864,7 @@ Suggest specific topic tags. Return JSON only.`;
     const client = getAnthropicClient();
     if (!client) return { tags: [] };
 
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'suggest-tags', {
       model: ANTHROPIC_MODEL,
       max_tokens: 150,
       temperature: 0,
@@ -880,7 +917,7 @@ Return JSON only.`;
     const client = getAnthropicClient();
     if (!client) return null;
 
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'resolve-subcategory', {
       model: ANTHROPIC_MODEL,
       max_tokens: 120,
       temperature: 0,
@@ -928,7 +965,7 @@ No explanation outside the JSON.`;
       return { cleaned_text: questionText, confidence: 'high' };
     }
 
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'clean-question', {
       model: ANTHROPIC_MODEL,
       max_tokens: 200,
       temperature: 0,

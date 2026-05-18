@@ -1,4 +1,4 @@
-import { extractTextContent, getAnthropicClient } from '@/lib/llm';
+import { extractTextContent, getAnthropicClient, loggedMessagesCreate } from '@/lib/llm';
 
 const BREADCRUMB_MODEL = 'claude-haiku-4-5';
 const BREADCRUMB_TIMEOUT_MS = 3000;
@@ -64,7 +64,7 @@ export async function generateBreadcrumb(params: GenerateBreadcrumbParams): Prom
     ? 'The user got it right.'
     : `The user answered "${params.submittedAnswer}" instead of the correct answer "${params.correctAnswer}".`;
 
-  const request = client.messages.create({
+  const request = loggedMessagesCreate(client, 'breadcrumb', {
     model: BREADCRUMB_MODEL,
     max_tokens: 120,
     temperature: 0.55,

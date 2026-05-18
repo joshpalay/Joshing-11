@@ -4,6 +4,7 @@ import {
   ANTHROPIC_MODEL,
   extractTextContent,
   getAnthropicClient,
+  loggedMessagesCreate,
   parseJsonObject,
 } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
@@ -42,7 +43,7 @@ Up to 3 alternate accepted answers (common variations, abbreviations, or alterna
 A brief educational explanation (2-3 sentences) that would help someone learn if they got it wrong.
 Respond in JSON only: { "correctAnswer": "...", "alternateAnswers": ["...", "..."], "explanation": "..." }`;
 
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'questions-suggest', {
       model: ANTHROPIC_MODEL,
       max_tokens: 500,
       temperature: 0,

@@ -1,4 +1,4 @@
-import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, parseJsonObject } from '@/lib/llm';
+import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
 import { DIFFICULTY_COPY, type QuestionDifficultyTier } from '@/lib/questions/difficulty-copy';
 
 export { DIFFICULTY_COPY };
@@ -68,7 +68,7 @@ Use this domain-relative scale:
 Respond in JSON only: { "tier": "establishing" | "solid" | "skilled" | "master" }`;
 
   try {
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'difficulty', {
       model: ANTHROPIC_MODEL,
       max_tokens: 120,
       temperature: 0,

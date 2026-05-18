@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { loggedMessagesCreate } from '@/lib/llm';
 import type { MasteryTier } from '@/types/db';
 import type { PortraitState } from '@/server/profile/portrait';
 
@@ -89,7 +90,7 @@ export async function generateMultitudesCopy(input: {
   });
 
   try {
-    const response = await client.messages.create({
+    const response = await loggedMessagesCreate(client, 'multitudes', {
       model: MODEL,
       system: SYSTEM_PROMPT,
       max_tokens: 120,
