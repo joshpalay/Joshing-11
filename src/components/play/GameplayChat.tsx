@@ -91,12 +91,10 @@ const CORRECT_COPY: Array<{ headline: string; subLabel: string }> = [
 ];
 
 function wrongHeadline(variant: number): string {
-  switch (variant % 4) {
+  switch (variant % 3) {
     case 0: return 'Not this time — here\u2019s the answer.';
     case 1: return 'You\u2019ll know this one next time.';
-    case 2:
-      return 'Now it’s in yours too.';
-    case 3: return 'Close, but not quite.';
+    case 2: return 'Close, but not quite.';
     default: return 'Not this time — here\u2019s the answer.';
   }
 }
