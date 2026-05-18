@@ -12,6 +12,22 @@ function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
+type SlotOutcome = 'correct' | 'incorrect' | 'skipped' | 'unanswered';
+
+function buildSlotOutcomes(slots: QueueSlot[]): SlotOutcome[] {
+  const outcomes: SlotOutcome[] = Array.from({ length: DAILY_QUEUE_SIZE }, () => 'unanswered');
+  for (const slot of slots) {
+    const idx = slot.slot_index;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= DAILY_QUEUE_SIZE) continue;
+    if (slot.answered) {
+      outcomes[idx] = slot.answer_state === 'incorrect' ? 'incorrect' : 'correct';
+    } else if (slot.skipped) {
+      outcomes[idx] = 'skipped';
+    }
+  }
+  return outcomes;
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -33,6 +49,7 @@ export async function GET() {
       complete: false,
       queue_id: null,
       queue_date: null,
+      slotOutcomes: buildSlotOutcomes([]),
       preferences: {
         selected_domains: preferences.selectedDomains,
         difficulty_preference: preferences.difficulty,
@@ -58,6 +75,7 @@ export async function GET() {
     complete: isComplete,
     queue_id: queue.id,
     queue_date: queue.queueDate,
+    slotOutcomes: buildSlotOutcomes(slots),
     preferences: {
       selected_domains: preferences.selectedDomains,
       difficulty_preference: preferences.difficulty,
