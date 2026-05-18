@@ -1,44 +1,31 @@
-import { count, countDistinct, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 
 import {
   db,
-  joshingGameResponses,
-  joshingGames,
+  declaredInterests,
   playerMastery,
-  questions,
   users,
 } from '@/server/db';
-import { getTierForPoints } from '@/server/mastery/tiers';
-import type { MasteryTier } from '@/types/db';
+import { formatBio } from '@/server/profile/bio';
 
 export type UserProfile = {
   id: string;
   displayName: string;
   phoneNumber: string;
   createdAt: string;
-  totalPoints: number;
-  currentTier: string;
-  questionsAuthored: number;
-  gamesCreated: number;
-  gamesPlayed: number;
+  bio: string;
 };
 
-const TIER_LABELS: Record<MasteryTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
-};
-
-function maskPhoneNumber(value: string): string {
+function formatPhoneNumber(value: string): string {
   const digits = value.replace(/\D/g, '');
-  const lastFour = digits.slice(-4).padStart(4, '*');
 
-  if (digits.length >= 11 && digits.startsWith('1')) {
-    return `+1 (***) ***-${lastFour}`;
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
   }
-
-  return `(***) ***-${lastFour}`;
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return value;
 }
 
 function fallbackDisplayName(phoneNumber: string): string {
@@ -61,38 +48,37 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 
   if (!user) return null;
 
-  const [pointsResult, authoredResult, createdResult, playedResult] = await Promise.all([
+  const [topDomains, declared] = await Promise.all([
     db
-      .select({ totalPoints: sql<number>`coalesce(sum(${playerMastery.totalPoints}), 0)` })
+      .select({
+        displayName: playerMastery.canonicalSubcategory,
+        points: playerMastery.totalPoints,
+      })
       .from(playerMastery)
-      .where(eq(playerMastery.userId, userId)),
+      .where(eq(playerMastery.userId, userId))
+      .orderBy(desc(playerMastery.totalPoints))
+      .limit(3),
     db
-      .select({ value: count() })
-      .from(questions)
-      .where(sql`${questions.creatorId} = ${userId} and ${questions.deletedAt} is null`),
-    db
-      .select({ value: count() })
-      .from(joshingGames)
-      .where(eq(joshingGames.creatorId, userId)),
-    db
-      .select({ value: countDistinct(joshingGameResponses.gameId) })
-      .from(joshingGameResponses)
-      .where(eq(joshingGameResponses.userId, userId)),
+      .select({ domain: declaredInterests.domain })
+      .from(declaredInterests)
+      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
+      .limit(3),
   ]);
 
-  const totalPoints = Math.round(Number(pointsResult[0]?.totalPoints ?? 0));
-  const tier = getTierForPoints(totalPoints);
+  const bio = formatBio({
+    topDomains: topDomains.map((row) => ({
+      displayName: row.displayName,
+      points: Number(row.points ?? 0),
+    })),
+    declaredInterests: declared.map((row) => row.domain),
+  });
 
   return {
     id: user.id,
     displayName: user.displayName?.trim() || fallbackDisplayName(user.phoneNumber),
-    phoneNumber: maskPhoneNumber(user.phoneNumber),
+    phoneNumber: formatPhoneNumber(user.phoneNumber),
     createdAt: user.createdAt.toISOString(),
-    totalPoints,
-    currentTier: TIER_LABELS[tier],
-    questionsAuthored: Number(authoredResult[0]?.value ?? 0),
-    gamesCreated: Number(createdResult[0]?.value ?? 0),
-    gamesPlayed: Number(playedResult[0]?.value ?? 0),
+    bio,
   };
 }
 
