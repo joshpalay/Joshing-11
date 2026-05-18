@@ -2,6 +2,7 @@ import { and, countDistinct, desc, eq, getTableColumns, inArray, isNull, sql } f
 
 import {
   db,
+  feedItems,
   joshingGameQuestions,
   joshingGameResponses,
   joshingGames,
@@ -151,7 +152,7 @@ function toIso(value: Date | string | null | undefined): string | null {
 }
 
 async function readQuestionStats(questionId: string) {
-  const [responseStats, gameStats] = await Promise.all([
+  const [responseStats, feedStats, gameStats] = await Promise.all([
     db
       .select({
         timesAnswered: sql<number>`count(*)`,
@@ -161,6 +162,19 @@ async function readQuestionStats(questionId: string) {
       .where(and(
         eq(joshingGameResponses.questionId, questionId),
         sql`${joshingGameResponses.answeredAt} is not null`,
+      )),
+    // Answers submitted via "Send to friend" land in feedItems, not joshingGameResponses.
+    // joshingGameId is null filters out feed items that mirror an already-counted game response.
+    db
+      .select({
+        timesAnswered: sql<number>`count(*)`,
+        timesCorrect: sql<number>`count(*) filter (where ${feedItems.answerResult} = 'correct')`,
+      })
+      .from(feedItems)
+      .where(and(
+        eq(feedItems.questionId, questionId),
+        sql`${feedItems.answerResult} is not null`,
+        isNull(feedItems.joshingGameId),
       )),
     db
       .select({
@@ -172,8 +186,10 @@ async function readQuestionStats(questionId: string) {
       .where(eq(joshingGameQuestions.questionId, questionId)),
   ]);
 
-  const timesAnswered = Number(responseStats[0]?.timesAnswered ?? 0);
-  const timesCorrect = Number(responseStats[0]?.timesCorrect ?? 0);
+  const timesAnswered =
+    Number(responseStats[0]?.timesAnswered ?? 0) + Number(feedStats[0]?.timesAnswered ?? 0);
+  const timesCorrect =
+    Number(responseStats[0]?.timesCorrect ?? 0) + Number(feedStats[0]?.timesCorrect ?? 0);
   const usedInGamesCount = Number(gameStats[0]?.usedInGamesCount ?? 0);
 
   return {
