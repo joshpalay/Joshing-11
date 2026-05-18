@@ -245,6 +245,56 @@ export async function register() {
       // will create both User and FeedDismissedDomain in normal migration order.
     }
 
+    // Migration 0036 adds a DomainExclusionScope enum, a NOT NULL scope column
+    // with default on USER_DOMAIN_EXCLUSIONS, and replaces the unique constraint
+    // to include scope. If a preview/production database has this migration
+    // recorded without these pieces present, the exclusion writes used by the
+    // daily familiarity slider fail before migrate() can repair them. Apply each
+    // piece idempotently outside the migrator transaction.
+    try {
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE t.typname = 'DomainExclusionScope' AND n.nspname = 'public'
+          ) THEN
+            CREATE TYPE "public"."DomainExclusionScope" AS ENUM('subcategory', 'broad_category', 'category');
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        ALTER TABLE "USER_DOMAIN_EXCLUSIONS"
+          ADD COLUMN IF NOT EXISTS "scope" "public"."DomainExclusionScope" NOT NULL DEFAULT 'subcategory'
+      `);
+      await db.execute(sql`
+        ALTER TABLE "USER_DOMAIN_EXCLUSIONS"
+          DROP CONSTRAINT IF EXISTS "USER_DOMAIN_EXCLUSIONS_user_id_canonical_subcategory_key"
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          exclusions_table regclass := to_regclass('public."USER_DOMAIN_EXCLUSIONS"');
+        BEGIN
+          IF exclusions_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'USER_DOMAIN_EXCLUSIONS_user_id_scope_canonical_subcategory_key'
+                AND conrelid = exclusions_table
+            )
+          THEN
+            ALTER TABLE "USER_DOMAIN_EXCLUSIONS"
+              ADD CONSTRAINT "USER_DOMAIN_EXCLUSIONS_user_id_scope_canonical_subcategory_key"
+              UNIQUE ("user_id", "scope", "canonical_subcategory");
+          END IF;
+        END $$
+      `);
+    } catch {
+      // USER_DOMAIN_EXCLUSIONS may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

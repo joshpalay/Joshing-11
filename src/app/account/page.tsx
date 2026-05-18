@@ -2,9 +2,22 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import {
+  Code2,
+  FlaskConical,
+  Loader2,
+  Lock,
+  LogOut,
+  MessageSquare,
+  Palette,
+  Pencil,
+  RefreshCw,
+  Sun,
+  User,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { SettingsGroup, SettingsRow } from '@/components/account/SettingsRow';
 import type { UserProfile } from '@/server/db/queries/account';
 
 type AccountResponse = {
@@ -13,6 +26,7 @@ type AccountResponse = {
 };
 
 const AVATAR_COLORS = ['#0f766e', '#7c3aed', '#be123c', '#2563eb', '#b45309', '#15803d'];
+const APP_VERSION = 'v1.0.0';
 
 function initialsFor(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -26,10 +40,6 @@ function colorForUser(userId: string): string {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length]!;
 }
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat().format(value);
-}
-
 function memberSince(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Member since recently';
@@ -39,28 +49,19 @@ function memberSince(value: string): string {
 function LoadingSkeleton() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-28">
-      <div className="mb-6 flex flex-col items-center">
-        <div className="size-28 animate-pulse rounded-full bg-muted" />
-        <div className="mt-4 h-8 w-44 animate-pulse rounded-md bg-muted" />
-        <div className="mt-3 h-6 w-36 animate-pulse rounded-full bg-muted" />
+      <div className="mb-8 flex items-start gap-4">
+        <div className="size-24 animate-pulse rounded-full bg-muted" />
+        <div className="flex flex-1 flex-col gap-2">
+          <div className="h-8 w-44 animate-pulse rounded-md bg-muted" />
+          <div className="h-4 w-full animate-pulse rounded-md bg-muted" />
+          <div className="h-4 w-3/4 animate-pulse rounded-md bg-muted" />
+        </div>
       </div>
-      <div className="mb-5 h-28 animate-pulse rounded-lg border bg-muted" />
-      <div className="mb-5 grid grid-cols-2 gap-3">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-24 animate-pulse rounded-lg border bg-muted" />
-        ))}
-      </div>
-      <div className="h-40 animate-pulse rounded-lg border bg-muted" />
+      <div className="mb-6 h-6 w-24 animate-pulse rounded bg-muted" />
+      <div className="mb-8 h-64 animate-pulse rounded-xl border bg-muted" />
+      <div className="mb-6 h-6 w-40 animate-pulse rounded bg-muted" />
+      <div className="h-72 animate-pulse rounded-xl border bg-muted" />
     </main>
-  );
-}
-
-function StatTile({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border bg-card p-4 text-center text-card-foreground">
-      <div className="text-3xl font-semibold">{formatNumber(value)}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{label}</div>
-    </div>
   );
 }
 
@@ -69,10 +70,6 @@ export default function AccountPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -99,7 +96,6 @@ export default function AccountPage() {
       }
 
       setProfile(body.profile);
-      setDisplayName(body.profile.displayName);
     } catch (caught) {
       setLoadError(caught instanceof Error ? caught.message : 'Could not load your account.');
     } finally {
@@ -112,50 +108,8 @@ export default function AccountPage() {
     return () => window.clearTimeout(timer);
   }, [loadProfile]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 2200);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-
-  const changed = profile ? displayName.trim() !== profile.displayName : false;
-  const initials = useMemo(() => initialsFor(profile?.displayName ?? displayName), [displayName, profile]);
+  const initials = useMemo(() => initialsFor(profile?.displayName ?? ''), [profile]);
   const canDeleteAccount = deleteConfirmation === 'DELETE';
-
-  async function saveDisplayName() {
-    if (!profile) return;
-    setSaving(true);
-    setSaveError(null);
-
-    try {
-      const response = await fetch('/api/account', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ displayName }),
-      });
-      const body = await response.json().catch(() => null) as { error?: string } | null;
-
-      if (response.status === 400) {
-        setSaveError(body?.error ?? 'Display name must be 2-30 characters.');
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error(body?.error ?? 'Could not update your name.');
-      }
-
-      const trimmed = displayName.trim();
-      setProfile({ ...profile, displayName: trimmed });
-      setDisplayName(trimmed);
-      setToast('Name updated.');
-    } catch (caught) {
-      setSaveError(caught instanceof Error ? caught.message : 'Could not update your name.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
 
   async function confirmDeleteAccount() {
     if (!canDeleteAccount) return;
@@ -218,137 +172,135 @@ export default function AccountPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-28">
-      <section className="mb-7 flex flex-col items-center text-center">
+      <section className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-start">
         <div
-          className="grid size-28 place-items-center rounded-full text-3xl font-semibold text-white shadow-sm"
+          className="grid size-24 flex-none place-items-center rounded-full text-2xl font-semibold text-white shadow-sm"
           style={{ backgroundColor: colorForUser(profile.id) }}
           aria-hidden="true"
         >
           {initials}
         </div>
-        <h1 className="mt-4 font-serif text-4xl font-semibold leading-tight">{profile.displayName}</h1>
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-sm">
-          <span className="rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground">{profile.currentTier}</span>
-          <span className="text-muted-foreground">{formatNumber(profile.totalPoints)} points</span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h1 className="font-serif text-4xl font-semibold leading-tight">{profile.displayName}</h1>
+          <p className="mt-2 text-base text-muted-foreground">{profile.bio}</p>
+          <p className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <PhoneIcon className="size-4" />
+            {profile.phoneNumber}
+          </p>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">{memberSince(profile.createdAt)}</p>
+        <Link
+          href="/account/profile"
+          className="inline-flex h-11 flex-none items-center gap-2 self-start rounded-lg border bg-card px-4 text-sm font-medium text-card-foreground shadow-sm hover:bg-muted"
+        >
+          <Pencil className="size-4" />
+          Edit profile
+        </Link>
       </section>
 
-      <section className="mb-7 rounded-lg border bg-card p-4 text-card-foreground">
-        <label className="text-sm font-medium" htmlFor="display-name">Display name</label>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-          <input
-            id="display-name"
-            value={displayName}
-            onChange={(event) => {
-              setDisplayName(event.target.value);
-              setSaveError(null);
-            }}
-            className="h-11 min-w-0 flex-1 rounded-md border bg-background px-3 text-base outline-none focus:border-primary"
-            maxLength={30}
+      <section className="mb-10">
+        <h2 className="mb-3 font-serif text-2xl font-semibold">Account</h2>
+        <SettingsGroup>
+          <SettingsRow
+            icon={User}
+            title="Profile"
+            subtitle="Name, photo, bio, and tagline"
+            href="/account/profile"
           />
-          {changed ? (
-            <div className="flex items-center gap-3">
-              <button className="btn-primary inline-flex min-w-20 items-center justify-center gap-2" type="button" onClick={() => void saveDisplayName()} disabled={saving}>
-                {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-                Save
-              </button>
-              <button
-                className="text-sm text-muted-foreground underline"
-                type="button"
-                onClick={() => {
-                  setDisplayName(profile.displayName);
-                  setSaveError(null);
-                }}
-              >
-                Cancel
-              </button>
+          <SettingsRow
+            icon={Lock}
+            title="Privacy & visibility"
+            subtitle="Control what others can see"
+            href="/account/privacy"
+          />
+          <SettingsRow
+            icon={MessageSquare}
+            title="SMS & notifications"
+            subtitle="Manage how you get updates"
+            href="/account/notifications"
+          />
+          <SettingsRow
+            icon={Palette}
+            title="App preferences"
+            subtitle="Theme, language, and more"
+            href="/account/preferences"
+          />
+        </SettingsGroup>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="mb-3 font-serif text-2xl font-semibold">Developer Tools</h2>
+        <SettingsGroup>
+          <SettingsRow
+            icon={FlaskConical}
+            title="Create test game"
+            subtitle="Spin up a test game instantly"
+            href="/dev/test-game"
+          />
+          <SettingsRow
+            icon={RefreshCw}
+            title="Reset session"
+            subtitle="Clear current session data"
+            href="/dev/reset-session"
+          />
+          <SettingsRow
+            icon={Sun}
+            title="Trigger noon reset"
+            subtitle="Simulate daily reset (noon ET)"
+            href="/dev/noon-reset"
+          />
+          <SettingsRow
+            icon={Code2}
+            title="View staging flags"
+            subtitle="See feature flag status"
+            href="/dev/flags"
+          />
+        </SettingsGroup>
+
+        <div className="mt-4">
+          <SettingsGroup>
+            <SettingsRow
+              icon={LogOut}
+              title="Log out"
+              subtitle="Sign out of your account"
+              onClick={() => {
+                setConfirmingLogout(true);
+                setConfirmingDelete(false);
+                setDeleteError(null);
+              }}
+              disabled={loggingOut}
+            />
+          </SettingsGroup>
+          {confirmingLogout ? (
+            <div className="mt-3 rounded-xl border border-destructive/30 bg-card p-4 text-card-foreground">
+              <p className="text-sm font-medium">Are you sure you want to log out?</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-destructive px-3 text-sm font-medium text-destructive hover:bg-destructive/10"
+                  type="button"
+                  onClick={() => void confirmLogout()}
+                  disabled={loggingOut}
+                >
+                  {loggingOut ? <Loader2 className="size-4 animate-spin" /> : null}
+                  Log out
+                </button>
+                <button
+                  className="rounded-md border px-3 text-sm"
+                  type="button"
+                  onClick={() => setConfirmingLogout(false)}
+                  disabled={loggingOut}
+                >
+                  Cancel
+                </button>
+              </div>
+              {logoutError ? <p className="mt-2 text-sm text-destructive">{logoutError}</p> : null}
             </div>
           ) : null}
         </div>
-        {saveError ? <p className="mt-2 text-sm text-destructive">{saveError}</p> : null}
       </section>
 
-      <section className="mb-7">
-        <h2 className="font-serif text-2xl font-semibold">Your Stats</h2>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <StatTile label="Questions written" value={profile.questionsAuthored} />
-          <StatTile label="Games created" value={profile.gamesCreated} />
-          <StatTile label="Games played" value={profile.gamesPlayed} />
-          <StatTile label="Total points" value={profile.totalPoints} />
-        </div>
-      </section>
-
-      <section className="mb-7 divide-y rounded-lg border bg-card text-card-foreground">
-        {[
-          { href: '/knowledge?interests=manage', label: 'Manage interests' },
-          { href: '/archive', label: 'Archive' },
-          { href: '/questions', label: 'Your Questions' },
-          { href: '/knowledge', label: 'Knowledge Map' },
-          { href: '/activities', label: 'Activities' },
-        ].map((item) => (
-          <Link key={item.href} href={item.href} className="flex min-h-14 items-center justify-between px-4 text-sm font-medium hover:bg-muted">
-            {item.label}
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </Link>
-        ))}
-      </section>
-
-      <section className="mt-auto rounded-lg border border-destructive/30 bg-card p-4 text-card-foreground">
-        <h2 className="text-sm font-semibold text-destructive">Danger Zone</h2>
-        <div className="mt-4">
-          <p className="text-sm font-medium">Phone: {profile.phoneNumber}</p>
-          <p className="mt-1 text-xs text-muted-foreground">To change your number, contact support.</p>
-        </div>
-
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <button
-            className="min-h-10 rounded-md border border-destructive px-4 text-sm font-medium text-destructive hover:bg-destructive/10"
-            type="button"
-            onClick={() => {
-              setConfirmingLogout(true);
-              setConfirmingDelete(false);
-              setDeleteError(null);
-            }}
-          >
-            Log out
-          </button>
-          <button
-            className="min-h-10 rounded-md bg-destructive px-4 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
-            type="button"
-            onClick={() => {
-              setConfirmingDelete(true);
-              setConfirmingLogout(false);
-              setLogoutError(null);
-            }}
-          >
-            Delete account
-          </button>
-        </div>
-
-        {confirmingLogout ? (
-          <div className="mt-5 rounded-lg border border-destructive/30 p-3">
-            <p className="text-sm font-medium">Are you sure you want to log out?</p>
-            <div className="mt-3 flex gap-2">
-              <button
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-destructive px-3 text-sm font-medium text-destructive hover:bg-destructive/10"
-                type="button"
-                onClick={() => void confirmLogout()}
-                disabled={loggingOut}
-              >
-                {loggingOut ? <Loader2 className="size-4 animate-spin" /> : null}
-                Log out
-              </button>
-              <button className="rounded-md border px-3 text-sm" type="button" onClick={() => setConfirmingLogout(false)} disabled={loggingOut}>
-                Cancel
-              </button>
-            </div>
-            {logoutError ? <p className="mt-2 text-sm text-destructive">{logoutError}</p> : null}
-          </div>
-        ) : null}
-
+      <section className="mb-10">
         {confirmingDelete ? (
-          <div className="mt-5 rounded-lg border border-destructive bg-destructive/5 p-3">
+          <div className="rounded-xl border border-destructive bg-destructive/5 p-4">
             <p className="text-sm font-semibold text-destructive">Delete your account permanently?</p>
             <p className="mt-1 text-xs text-muted-foreground">
               This removes your account, sessions, stats, authored questions, games, and friend connections. This cannot be undone.
@@ -392,14 +344,41 @@ export default function AccountPage() {
             </div>
             {deleteError ? <p className="mt-2 text-sm text-destructive">{deleteError}</p> : null}
           </div>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+            onClick={() => {
+              setConfirmingDelete(true);
+              setConfirmingLogout(false);
+              setLogoutError(null);
+            }}
+          >
+            Delete account
+          </button>
+        )}
       </section>
 
-      {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
-          {toast}
-        </div>
-      ) : null}
+      <footer className="mt-auto pt-6 text-center text-xs text-muted-foreground">
+        Joshing {APP_VERSION} · {memberSince(profile.createdAt)}
+      </footer>
     </main>
+  );
+}
+
+function PhoneIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.96.36 1.9.7 2.79a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.29-1.29a2 2 0 0 1 2.11-.45c.89.34 1.83.58 2.79.7A2 2 0 0 1 22 16.92Z" />
+    </svg>
   );
 }

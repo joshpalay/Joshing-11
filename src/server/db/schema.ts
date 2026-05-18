@@ -124,6 +124,11 @@ export const themePreferenceEnum = pgEnum('ThemePreference', [
 export const subscriptionPlanEnum = pgEnum('SubscriptionPlan', ['free', 'plus_monthly', 'plus_yearly']);
 export const portraitVisibilityEnum = pgEnum('PortraitVisibility', ['public', 'private']);
 export const masteryTierEnum = pgEnum('MasteryTier', ['establishing', 'familiar', 'solid', 'mastery']);
+export const domainExclusionScopeEnum = pgEnum('DomainExclusionScope', [
+  'subcategory',
+  'broad_category',
+  'category',
+]);
 export const masterySourceTypeEnum = pgEnum('MasterySourceType', [
   'live_correct',
   'authored',
@@ -598,11 +603,13 @@ export const userDomainExclusions = pgTable(
     id: id(),
     userId: text('user_id').notNull().references(() => users.id),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
+    scope: domainExclusionScopeEnum('scope').notNull().default('subcategory'),
     excludedAt: timestamp('excluded_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    unique('USER_DOMAIN_EXCLUSIONS_user_id_canonical_subcategory_key').on(
+    unique('USER_DOMAIN_EXCLUSIONS_user_id_scope_canonical_subcategory_key').on(
       table.userId,
+      table.scope,
       table.canonicalSubcategory,
     ),
   ],

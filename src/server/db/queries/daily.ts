@@ -8,12 +8,13 @@ import {
   generatedQuestions,
   masteryEvents,
   playerMastery,
+  questions as canonicalQuestions,
   userDomainExclusions,
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { pgErrorCode } from '@/server/db/pg-error';
-import { categoryLabel } from '@/lib/questions-types';
+import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 import { asQueueSlots, dailyQueueItemId } from '@/server/daily/catchup';
 import type { QueueSlot } from '@/server/daily/types';
 import {
@@ -76,18 +77,74 @@ function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-async function getExcludedKnowledgeDomains(userId: string): Promise<Set<string>> {
+type ScopedExclusions = {
+  subcategories: Set<string>;
+  broadCategories: Set<string>;
+};
+
+async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclusions> {
+  let rows: { domain: string; scope: 'subcategory' | 'broad_category' | 'category' }[];
   try {
-    const rows = await db
-      .select({ domain: userDomainExclusions.canonicalSubcategory })
+    rows = await db
+      .select({
+        domain: userDomainExclusions.canonicalSubcategory,
+        scope: userDomainExclusions.scope,
+      })
       .from(userDomainExclusions)
       .where(eq(userDomainExclusions.userId, userId));
-
-    return new Set(rows.map((row) => normalizeDomain(row.domain).toLowerCase()).filter(Boolean));
   } catch (error) {
-    if (pgErrorCode(error) === '42P01') return new Set();
-    throw error;
+    if (pgErrorCode(error) === '42P01') return { subcategories: new Set(), broadCategories: new Set() };
+    // 42703 = scope column missing on a database where the additive migration
+    // hasn't landed yet. Fall back to a scope='subcategory' read so the feature
+    // degrades to its pre-migration behavior instead of failing.
+    if (pgErrorCode(error) === '42703') {
+      const legacy = await db
+        .select({ domain: userDomainExclusions.canonicalSubcategory })
+        .from(userDomainExclusions)
+        .where(eq(userDomainExclusions.userId, userId));
+      rows = legacy.map((row) => ({ domain: row.domain, scope: 'subcategory' as const }));
+    } else {
+      throw error;
+    }
   }
+
+  const subcategories = new Set<string>();
+  const broadCategories = new Set<string>();
+  const categoryEnums: string[] = [];
+
+  for (const row of rows) {
+    const value = normalizeDomain(row.domain);
+    if (!value) continue;
+    if (row.scope === 'subcategory') subcategories.add(value.toLowerCase());
+    else if (row.scope === 'broad_category') broadCategories.add(value.toLowerCase());
+    else if (row.scope === 'category') categoryEnums.push(value);
+  }
+
+  // Category-scope exclusions name a top-level Category enum value (e.g.
+  // 'film_tv'). The knowledge base only carries subcategory + broadCategory,
+  // so we map each excluded category to the set of broadCategory strings it
+  // covers in the canonical Question table and merge those into the
+  // broadCategories filter.
+  if (categoryEnums.length > 0) {
+    try {
+      const knownCategories = categoryEnums.filter((value): value is typeof CATEGORIES[number] =>
+        (CATEGORIES as readonly string[]).includes(value),
+      );
+      if (knownCategories.length > 0) {
+        const expanded = await db
+          .select({ broadCategory: canonicalQuestions.broadCategory })
+          .from(canonicalQuestions)
+          .where(inArray(canonicalQuestions.category, knownCategories));
+        for (const row of expanded) {
+          if (row.broadCategory) broadCategories.add(row.broadCategory.toLowerCase());
+        }
+      }
+    } catch (error) {
+      if (pgErrorCode(error) !== '42P01' && pgErrorCode(error) !== '42703') throw error;
+    }
+  }
+
+  return { subcategories, broadCategories };
 }
 
 async function getPlayerMasteryKnowledgeRows(userId: string) {
@@ -128,13 +185,19 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
     getExcludedKnowledgeDomains(userId),
   ]);
 
+  const isExcluded = (domain: string, broadCategory: string | null): boolean => {
+    if (excludedDomains.subcategories.has(domain.toLowerCase())) return true;
+    if (broadCategory && excludedDomains.broadCategories.has(broadCategory.toLowerCase())) return true;
+    return false;
+  };
+
   const domainsByKey = new Map<string, KnowledgeBaseDomain>();
 
   for (const row of masteryRows) {
     const domain = normalizeDomain(row.domain);
     if (!domain) continue;
     const key = domain.toLowerCase();
-    if (excludedDomains.has(key)) continue;
+    if (isExcluded(domain, row.broadCategory)) continue;
     domainsByKey.set(key, {
       domain,
       broadCategory: row.broadCategory,
@@ -149,7 +212,7 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
     const domain = normalizeDomain(row.domain);
     if (!domain) continue;
     const key = domain.toLowerCase();
-    if (excludedDomains.has(key)) continue;
+    if (isExcluded(domain, row.broadCategory)) continue;
     const existing = domainsByKey.get(key);
     domainsByKey.set(key, {
       domain: existing?.domain ?? domain,
@@ -285,6 +348,8 @@ export async function createDailyQueueItem(
     source: 'bot',
     generated_question_id: question.id,
     domain: question.canonicalSubcategory,
+    broad_category: question.broadCategory,
+    category: null,
     question_text: question.questionText,
     difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate),
     answered: false,

@@ -6,8 +6,26 @@ import { useRouter } from 'next/navigation';
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
+import { categoryLabel } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
+
+type ExclusionScope = 'subcategory' | 'broad_category' | 'category';
+
+type ExclusionTick = { scope: ExclusionScope; label: string; value: string };
+
+function buildExclusionTicks(slot: QueueSlot): ExclusionTick[] {
+  const ticks: ExclusionTick[] = [
+    { scope: 'subcategory', label: slot.domain, value: slot.domain },
+  ];
+  if (slot.broad_category && slot.broad_category.trim()) {
+    ticks.push({ scope: 'broad_category', label: slot.broad_category, value: slot.broad_category });
+  }
+  if (slot.category && slot.category.trim()) {
+    ticks.push({ scope: 'category', label: categoryLabel(slot.category), value: slot.category });
+  }
+  return ticks;
+}
 
 function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
   const tier = difficultyEstimateToTierLabel(slot.difficulty_estimate);
@@ -86,18 +104,23 @@ function sessionCloseLines(slots: QueueSlot[]): { scoreLine: string; interpretiv
 }
 
 function UnfamiliarDialog({
-  domain,
+  ticks,
   busy,
   onExclude,
   onSkipOnly,
   onCancel,
 }: {
-  domain: string;
+  ticks: ExclusionTick[];
   busy: boolean;
-  onExclude: () => void;
+  onExclude: (tick: ExclusionTick) => void;
   onSkipOnly: () => void;
   onCancel: () => void;
 }) {
+  const [tickIndex, setTickIndex] = useState(0);
+  const maxIndex = Math.max(0, ticks.length - 1);
+  const safeIndex = Math.min(tickIndex, maxIndex);
+  const selected = ticks[safeIndex] ?? ticks[0];
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
     window.addEventListener('keydown', handleKey);
@@ -127,22 +150,58 @@ function UnfamiliarDialog({
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-lg)',
           padding: '1.5rem',
-          maxWidth: '22rem',
+          maxWidth: '24rem',
           width: '100%',
         }}
       >
         <p id="unfamiliar-dialog-title" className="text-sm font-semibold text-[var(--text)]">
-          Not familiar with &ldquo;{domain}&rdquo;?
+          How familiar are you with this?
         </p>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Remove it from your daily topics so you won&rsquo;t see these questions again.
+          Slide to the scope you&rsquo;d like to skip going forward.
         </p>
+
+        {ticks.length > 1 ? (
+          <div className="mt-5">
+            <input
+              type="range"
+              min={0}
+              max={maxIndex}
+              step={1}
+              value={safeIndex}
+              onChange={(event) => setTickIndex(Number(event.target.value))}
+              aria-label="Unfamiliarity scope"
+              style={{ width: '100%' }}
+            />
+            <div className="mt-2 flex justify-between gap-1 text-[0.65rem] uppercase tracking-[0.06em] text-[var(--text-muted)]">
+              {ticks.map((tick, i) => (
+                <span
+                  key={`${tick.scope}-${i}`}
+                  style={{
+                    flex: '1 1 0',
+                    textAlign: i === 0 ? 'left' : i === ticks.length - 1 ? 'right' : 'center',
+                    color: i === safeIndex ? 'var(--text)' : 'var(--text-muted)',
+                    fontWeight: i === safeIndex ? 600 : 400,
+                  }}
+                >
+                  {tick.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <p className="mt-4 text-sm text-[var(--text-muted)]">
+          We&rsquo;ll stop sending you questions about{' '}
+          <span className="font-semibold text-[var(--text)]">{selected?.label ?? ''}</span>.
+        </p>
+
         <div className="mt-4 flex flex-col gap-2">
           <button
             type="button"
             className="btn-primary w-full"
-            disabled={busy}
-            onClick={onExclude}
+            disabled={busy || !selected}
+            onClick={() => { if (selected) onExclude(selected); }}
           >
             {busy ? '...' : 'Remove from my topics'}
           </button>
@@ -287,34 +346,47 @@ export default function DailyPage() {
     }
   }, [currentSlot, queue, submitting]);
 
-  const excludeDomainAndSkip = useCallback(async () => {
+  const excludeDomainAndSkip = useCallback(async (tick: ExclusionTick) => {
     if (!currentSlot) return;
-    const domain = currentSlot.domain;
     setExcludingDomain(true);
     try {
-      const prefsResponse = await fetch('/api/daily/preferences', { credentials: 'include' });
-      if (prefsResponse.ok) {
-        const prefsBody = await prefsResponse.json().catch(() => null) as {
-          preferences: { domainMode: string; selectedDomains: string[] };
-          domains: Array<{ domain: string }>;
-        } | null;
-        if (prefsBody) {
-          const { preferences, domains } = prefsBody;
-          const allDomains = domains.map((d) => d.domain);
-          const base = preferences.domainMode === 'custom' ? preferences.selectedDomains : allDomains;
-          const nextDomains = base.filter((d) => d !== domain);
-          if (nextDomains.length > 0) {
-            await fetch('/api/daily/preferences', {
-              method: 'PATCH',
-              headers: { 'content-type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ domainMode: 'custom', selectedDomains: nextDomains }),
-            });
+      await fetch('/api/users/domain-exclusions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ canonical_subcategory: tick.value, scope: tick.scope }),
+      });
+      // Subcategory exclusions also need to drop the domain from the user's
+      // selectedDomains list in Custom mode so today's queue rebuild can't
+      // re-pull it; broader scopes are filtered out by getKnowledgeBase via
+      // userDomainExclusions and don't touch selectedDomains.
+      if (tick.scope === 'subcategory') {
+        try {
+          const prefsResponse = await fetch('/api/daily/preferences', { credentials: 'include' });
+          if (prefsResponse.ok) {
+            const prefsBody = await prefsResponse.json().catch(() => null) as {
+              preferences: { domainMode: string; selectedDomains: string[] };
+              domains: Array<{ domain: string }>;
+            } | null;
+            if (prefsBody && prefsBody.preferences.domainMode === 'custom') {
+              const nextDomains = prefsBody.preferences.selectedDomains.filter((d) => d !== tick.value);
+              if (nextDomains.length > 0 && nextDomains.length !== prefsBody.preferences.selectedDomains.length) {
+                await fetch('/api/daily/preferences', {
+                  method: 'PATCH',
+                  headers: { 'content-type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ domainMode: 'custom', selectedDomains: nextDomains }),
+                });
+              }
+            }
           }
+        } catch {
+          // preferences sync is best-effort; the exclusion write above already
+          // ensures future queue builds skip this domain.
         }
       }
     } catch {
-      // preference update is best-effort; skip regardless
+      // exclusion is best-effort; still skip the slot so the user can move on
     } finally {
       setExcludingDomain(false);
     }
@@ -425,6 +497,9 @@ export default function DailyPage() {
           creatorName: null,
           isNew: true,
           badges: questionBadges(slot),
+          onDismiss: () => setShowUnfamiliarDialog(true),
+          dismissLabel: 'Not familiar with this topic',
+          dismissImmediate: false,
         });
         if (submitting && answer.trim()) {
           rows.push({ id: 'u-pending', kind: 'user', text: answer.trim() });
@@ -631,15 +706,7 @@ export default function DailyPage() {
               {submitting ? '...' : 'Send'}
             </button>
           </div>
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
-              disabled={submitting}
-              onClick={() => setShowUnfamiliarDialog(true)}
-            >
-              Not familiar with this topic
-            </button>
+          <div className="mt-2 flex items-center justify-end gap-3">
             <button
               type="button"
               className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
@@ -654,9 +721,9 @@ export default function DailyPage() {
 
       {showUnfamiliarDialog && currentSlot ? (
         <UnfamiliarDialog
-          domain={currentSlot.domain}
+          ticks={buildExclusionTicks(currentSlot)}
           busy={excludingDomain || submitting}
-          onExclude={() => void excludeDomainAndSkip()}
+          onExclude={(tick) => void excludeDomainAndSkip(tick)}
           onSkipOnly={() => { setShowUnfamiliarDialog(false); void skipCurrent(); }}
           onCancel={() => setShowUnfamiliarDialog(false)}
         />
