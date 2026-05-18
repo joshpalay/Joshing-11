@@ -156,6 +156,13 @@ function getBaseUrl(request: Request): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL
   if (configured) return configured.replace(/\/$/, '')
 
+  // On Vercel, prefer the project's stable production hostname over the
+  // request host so invites created from a preview deployment still link
+  // to production. VERCEL_PROJECT_PRODUCTION_URL is auto-injected on every
+  // deployment and contains the hostname only (no scheme).
+  const vercelProd = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  if (vercelProd) return `https://${vercelProd.replace(/\/$/, '')}`
+
   const host =
     request.headers.get('x-forwarded-host') ?? request.headers.get('host')
   const protocol = request.headers.get('x-forwarded-proto') ?? 'https'
