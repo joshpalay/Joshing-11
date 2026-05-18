@@ -239,6 +239,15 @@ export async function getQuestionsForUser(userId: string): Promise<QuestionView[
   return getBankedQuestions(userId);
 }
 
+export async function hasUserAuthoredAnyQuestion(userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: questions.id })
+    .from(questions)
+    .where(and(eq(questions.creatorId, userId), isNull(questions.deletedAt)))
+    .limit(1);
+  return rows.length > 0;
+}
+
 export type AuthoredQuestionPreview = {
   id: string;
   questionText: string;
