@@ -4,6 +4,7 @@ export type TelemetryEventName =
   | 'add_friend_started'
   | 'add_friend_invite_created'
   | 'add_friend_invite_cancelled'
+  | 'add_friend_invite_deleted'
   | 'add_friend_invite_rate_limited'
   | 'add_friend_message_copied'
   | 'add_friend_sms_handoff_opened'

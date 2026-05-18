@@ -7,6 +7,7 @@ import { db, friendInvitations, users } from '@/server/db'
 import {
   cancelFriendInvitation,
   createFriendInvitation,
+  deleteFriendInvitation,
   listOutgoingFriendInvitations,
   type OutgoingFriendInvitation,
 } from '@/server/friends/invitations'
@@ -417,6 +418,7 @@ export async function DELETE(request: Request) {
   > | null
   const invitationId =
     typeof body?.invitationId === 'string' ? body.invitationId.trim() : ''
+  const permanent = body?.permanent === true
 
   if (!invitationId) {
     return NextResponse.json(
@@ -426,6 +428,34 @@ export async function DELETE(request: Request) {
   }
 
   try {
+    if (permanent) {
+      const deleted = await deleteFriendInvitation({
+        invitationId,
+        inviterUserId: session.userId,
+      })
+
+      if (!deleted) {
+        return NextResponse.json(
+          {
+            error: 'not_found',
+            message: 'Set-aside invitation was not found.',
+          },
+          { status: 404 }
+        )
+      }
+
+      logTelemetry('add_friend_invite_deleted', {
+        inviter_user_id: session.userId,
+        invitation_id: deleted.id,
+      })
+
+      return NextResponse.json({
+        ok: true,
+        invitationId: deleted.id,
+        status: 'deleted',
+      })
+    }
+
     const invitation = await cancelFriendInvitation({
       invitationId,
       inviterUserId: session.userId,
