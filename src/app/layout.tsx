@@ -11,6 +11,7 @@ import { getUserOnboardingProfile } from '@/server/db/queries/users';
 const montserrat = Montserrat({
   subsets: ['latin'],
   variable: '--font-sans-body',
+  display: 'swap',
 })
 
 // F5.1: handwriting register (Personal Record, annotations, signature-style microcopy).
