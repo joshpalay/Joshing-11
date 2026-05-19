@@ -364,6 +364,12 @@ function normalizeMasteryDelta(
   return { previousTier, newTier, tierChanged }
 }
 
+function pickOpenedNewTerritory(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false
+  const r = raw as Record<string, unknown>
+  return r.openedNewTerritory === true
+}
+
 function pickBroadCategory(
   raw: unknown,
   item: FeedApiItem
@@ -1132,6 +1138,7 @@ function FeedListContent({
             submittedAnswer={result.submittedAnswer}
             explanation={result.explanation}
             quip={result.quip}
+            openedNewTerritory={pickOpenedNewTerritory(result.masteryDelta)}
             questionId={sheetItem.question_id}
             feedItemId={sheetItem.id}
             onClose={() => setFeedbackSheetId(null)}
