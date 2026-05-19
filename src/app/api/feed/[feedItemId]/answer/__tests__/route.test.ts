@@ -29,6 +29,7 @@ const {
     previousTier: 'establishing',
     newTier: 'establishing',
     tierChanged: false,
+    openedNewTerritory: false,
   })),
 }))
 
@@ -177,6 +178,7 @@ describe('POST /api/feed/[feedItemId]/answer mastery scoring (F2.3)', () => {
       previousTier: 'establishing',
       newTier: 'establishing',
       tierChanged: false,
+      openedNewTerritory: false,
     })
   })
 

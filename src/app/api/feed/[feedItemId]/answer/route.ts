@@ -117,6 +117,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       previousTier,
       newTier: previousTier,
       tierChanged: false,
+      openedNewTerritory: false,
     };
   });
 

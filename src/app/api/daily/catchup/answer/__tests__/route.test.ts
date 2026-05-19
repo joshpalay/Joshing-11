@@ -30,6 +30,7 @@ const {
     previousTier: 'establishing',
     newTier: 'establishing',
     tierChanged: false,
+    openedNewTerritory: false,
   })),
 }))
 
@@ -195,6 +196,7 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
       previousTier: 'establishing',
       newTier: 'establishing',
       tierChanged: false,
+      openedNewTerritory: false,
     })
   })
 

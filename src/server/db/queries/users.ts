@@ -21,6 +21,7 @@ export type PreSeededInterest = {
 export type PreSeededInterestsForUser = {
   interests: PreSeededInterest[];
   inviterName: string | null;
+  inviteeDisplayName: string | null;
 };
 
 function normalizeDeclaredInterest(interest: DeclaredInterestInput): DeclaredInterestInput | null {
@@ -176,7 +177,7 @@ export const getUserOnboardingProfile = cache(async (userId: string) => {
   return user ?? null;
 });
 
-function normalizeInviterName(value: string | null | undefined) {
+function normalizePersonName(value: string | null | undefined) {
   const normalized = value?.trim().replace(/\s+/g, ' ');
   return normalized ? normalized.slice(0, 80) : null;
 }
@@ -186,6 +187,7 @@ export async function getPreSeededInterestsForUser(userId: string): Promise<PreS
     .select({
       preSeededInterests: friendInvitations.preSeededInterests,
       inviterName: users.displayName,
+      inviteeDisplayName: friendInvitations.inviteeDisplayName,
     })
     .from(friendInvitations)
     .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
@@ -195,6 +197,7 @@ export async function getPreSeededInterestsForUser(userId: string): Promise<PreS
 
   return {
     interests: parsePreSeededInterests(invitation?.preSeededInterests),
-    inviterName: normalizeInviterName(invitation?.inviterName),
+    inviterName: normalizePersonName(invitation?.inviterName),
+    inviteeDisplayName: normalizePersonName(invitation?.inviteeDisplayName),
   };
 }

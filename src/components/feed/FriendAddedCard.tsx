@@ -56,19 +56,27 @@ export function FriendAddedCard({
   return (
     <article
       className={cn(
-        'relative overflow-hidden rounded-2xl border border-[var(--border-warm)] bg-[var(--cream)] px-5 py-5 sm:px-7 sm:py-6',
+        'overflow-hidden rounded-[1.5rem] bg-[var(--ink)] p-[6px] shadow-[0_10px_24px_-8px_rgb(0_0_0/0.28)]',
         className,
       )}
     >
-      <Sparkle size={26} className="left-3 top-5 rotate-[8deg]" opacity={0.95} />
-      <Sparkle size={14} className="left-7 top-14" opacity={0.7} />
-      <Sparkle size={10} className="left-4 bottom-6" opacity={0.55} />
+      <p
+        className="px-3 pb-[10px] pt-[6px] text-[10px] font-bold uppercase leading-none tracking-[0.22em]"
+        style={{ color: 'var(--cream)' }}
+      >
+        Handwritten <span className="opacity-50">·</span> By {friendName}
+      </p>
 
-      <Sparkle size={22} className="right-4 top-12 -rotate-[6deg]" opacity={0.9} />
-      <Sparkle size={12} className="right-9 top-4" opacity={0.6} />
-      <Sparkle size={9} className="right-6 bottom-8" opacity={0.5} />
+      <div className="relative overflow-hidden rounded-[1.15rem] border border-[var(--border-warm)] bg-[var(--cream)] px-5 py-5 sm:px-7 sm:py-6">
+        <Sparkle size={26} className="left-3 top-5 rotate-[8deg]" opacity={0.95} />
+        <Sparkle size={14} className="left-7 top-14" opacity={0.7} />
+        <Sparkle size={10} className="left-4 bottom-6" opacity={0.55} />
 
-      <div className="relative pl-6 pr-4 sm:pl-10 sm:pr-8">
+        <Sparkle size={22} className="right-4 top-12 -rotate-[6deg]" opacity={0.9} />
+        <Sparkle size={12} className="right-9 top-4" opacity={0.6} />
+        <Sparkle size={9} className="right-6 bottom-8" opacity={0.5} />
+
+        <div className="relative pl-6 pr-4 sm:pl-10 sm:pr-8">
         <div className="flex items-start justify-between gap-3">
           <p
             className="text-[11px] font-bold uppercase leading-none tracking-[0.14em]"
@@ -145,6 +153,7 @@ export function FriendAddedCard({
               Answer this
             </button>
           ) : null}
+        </div>
         </div>
       </div>
     </article>

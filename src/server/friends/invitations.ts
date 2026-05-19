@@ -400,6 +400,27 @@ export async function cancelFriendInvitation({
   return invitation ?? null
 }
 
+export async function deleteFriendInvitation({
+  invitationId,
+  inviterUserId,
+}: {
+  invitationId: string
+  inviterUserId: string
+}): Promise<FriendInvitation | null> {
+  const [invitation] = await db
+    .delete(friendInvitations)
+    .where(
+      and(
+        eq(friendInvitations.id, invitationId),
+        eq(friendInvitations.inviterUserId, inviterUserId),
+        isNotNull(friendInvitations.cancelledAt)
+      )
+    )
+    .returning()
+
+  return invitation ?? null
+}
+
 export async function markInvitationAccepted({
   invitationId,
   inviteeUserId,

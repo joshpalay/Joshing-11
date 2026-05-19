@@ -129,18 +129,22 @@ function AnsweredResult({
 }) {
   const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle')
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
+  const [recheckAccepted, setRecheckAccepted] = useState(false)
 
   const requestRecheck = useCallback(async () => {
     if (!recheckAction || recheckState === 'submitting') return
     setRecheckState('submitting')
     setRecheckMessage(null)
+    setRecheckAccepted(false)
     try {
       const outcome = await recheckAction.onSubmit()
       setRecheckState('done')
       setRecheckMessage(outcome.message)
+      setRecheckAccepted(outcome.accepted)
     } catch {
       setRecheckState('error')
       setRecheckMessage('Could not recheck that answer.')
+      setRecheckAccepted(false)
     }
   }, [recheckAction, recheckState])
 
@@ -190,15 +194,33 @@ function AnsweredResult({
         </div>
       ) : null}
       {recheckMessage ? (
-        <p
-          className="text-[11px]"
-          style={{
-            color: recheckState === 'error' ? '#b91c1c' : 'var(--ink)',
-            opacity: recheckState === 'error' ? 1 : 0.6,
-          }}
-        >
-          {recheckMessage}
-        </p>
+        recheckAccepted ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium"
+            style={{
+              backgroundColor: 'color-mix(in srgb, #047857 10%, var(--cream))',
+              borderColor: 'color-mix(in srgb, #047857 35%, var(--border-warm))',
+              color: '#065f46',
+            }}
+          >
+            <span aria-hidden className="text-[15px] leading-none">✓</span>
+            <span>{recheckMessage}</span>
+          </div>
+        ) : (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-[11px]"
+            style={{
+              color: recheckState === 'error' ? '#b91c1c' : 'var(--ink)',
+              opacity: recheckState === 'error' ? 1 : 0.6,
+            }}
+          >
+            {recheckMessage}
+          </p>
+        )
       ) : null}
     </div>
   )
@@ -215,7 +237,12 @@ export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByY
         className="absolute inset-y-0 left-0 w-[2px]"
         style={{ backgroundColor: categoryColor }}
       />
-      <div className="p-[14px]">
+      <div
+        className="px-[14px] pt-[14px] pb-[12px]"
+        style={{
+          backgroundColor: 'color-mix(in srgb, var(--ink) 5%, var(--cream))',
+        }}
+      >
         <div className="flex items-center gap-3">
           <AnsweredAvatarStack
             pairedFriend={item.pairedFriend}
@@ -279,10 +306,10 @@ export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByY
             {item.personalMessage}
           </p>
         ) : null}
+      </div>
 
-        <div className="mt-3 border-t border-[var(--border-light)] pt-3">
-          <AnsweredResult item={item} recheckAction={recheckAction} />
-        </div>
+      <div className="px-[14px] py-[12px]">
+        <AnsweredResult item={item} recheckAction={recheckAction} />
       </div>
     </article>
   )

@@ -69,6 +69,7 @@ const {
       previousTier: 'establishing',
       newTier: 'establishing',
       tierChanged: false,
+      openedNewTerritory: false,
     })),
     dbState,
   }
@@ -189,6 +190,7 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
       previousTier: 'establishing',
       newTier: 'establishing',
       tierChanged: false,
+      openedNewTerritory: false,
     })
   })
 
