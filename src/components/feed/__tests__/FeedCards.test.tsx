@@ -247,6 +247,51 @@ describe('Feed answered states', () => {
   })
 })
 
+describe('FriendAnsweredCard viewer-already-answered footer', () => {
+  it('renders a "you both had it" status when viewer and friend were both correct', () => {
+    const rendered = html(
+      <FriendAnsweredCard
+        item={{
+          ...feedCardPreviewFixtures.friendAnsweredRight,
+          viewerResult: 'correct',
+          friendCorrect: true,
+        }}
+        onAnswer={() => undefined}
+      />
+    )
+    expect(rendered).toContain('You both had it')
+    expect(rendered).not.toContain('Answer →')
+  })
+
+  it('renders a "you missed it" status when viewer was wrong and friend was right', () => {
+    const rendered = html(
+      <FriendAnsweredCard
+        item={{
+          ...feedCardPreviewFixtures.friendAnsweredRight,
+          viewerResult: 'incorrect',
+          friendCorrect: true,
+        }}
+        onAnswer={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Noah knew this')
+    expect(rendered).toContain('you missed it')
+    expect(rendered).not.toContain('Answer →')
+  })
+
+  it('omits the status footer when the viewer has not answered yet', () => {
+    const rendered = html(
+      <FriendAnsweredCard
+        item={feedCardPreviewFixtures.friendAnsweredRight}
+        onAnswer={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Answer →')
+    expect(rendered).not.toContain('You both had it')
+    expect(rendered).not.toContain('you missed it')
+  })
+})
+
 describe('Authored-by-viewer card', () => {
   it('renders a "New question" eyebrow with the italic category', () => {
     const rendered = html(
