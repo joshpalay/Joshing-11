@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, X } from 'lucide-react'
+import { Check, Sparkles, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { visibleFeedCategory } from './category'
@@ -15,6 +15,7 @@ type AnswerFeedbackSheetProps = {
   submittedAnswer: string
   explanation: string | null
   quip: string | null
+  openedNewTerritory?: boolean
   questionId: string
   feedItemId: string
   onClose: () => void
@@ -31,11 +32,13 @@ export function AnswerFeedbackSheet({
   submittedAnswer,
   explanation,
   quip,
+  openedNewTerritory = false,
   questionId,
   feedItemId,
   onClose,
 }: AnswerFeedbackSheetProps) {
   const visibleCategory = visibleFeedCategory(category)
+  const showNewTerritory = openedNewTerritory && isCorrect
   const [bankState, setBankState] = useState<BankState>('idle')
   const hasAutoSavedRef = useRef(false)
 
@@ -98,9 +101,22 @@ export function AnswerFeedbackSheet({
         onClick={onClose}
         aria-label="Dismiss"
       />
-      <div className="relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-3xl bg-white shadow-2xl">
+      <div
+        className={
+          showNewTerritory
+            ? 'relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl ring-2 ring-amber-400/60'
+            : 'relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-3xl bg-white shadow-2xl'
+        }
+      >
         <div className="flex items-center justify-between px-5 pt-5 pb-2">
-          {visibleCategory ? (
+          {showNewTerritory ? (
+            <p className="inline-flex items-center gap-1.5 text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-amber-700">
+              <Sparkles className="size-3.5" aria-hidden />
+              <span>
+                New territory{visibleCategory ? <span className="text-amber-700/70"> · {visibleCategory.toUpperCase()}</span> : null}
+              </span>
+            </p>
+          ) : visibleCategory ? (
             <p className="text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-stone-500">
               {visibleCategory.toUpperCase()}
             </p>
@@ -144,6 +160,26 @@ export function AnswerFeedbackSheet({
               </span>
             ) : null}
           </div>
+
+          {showNewTerritory ? (
+            <div className="mb-3 flex items-start gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3">
+              <span
+                className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700"
+                aria-hidden
+              >
+                <Sparkles className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-serif text-[15px] leading-snug font-semibold text-amber-900">
+                  You opened new territory
+                  {visibleCategory ? <> in {visibleCategory}</> : null}.
+                </p>
+                <p className="mt-0.5 text-[12px] text-amber-800/80">
+                  First time you&rsquo;ve gotten a question right here. It&rsquo;s on your map now.
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           <p className="pb-3 font-serif text-lg leading-7 text-stone-950">
             {question}

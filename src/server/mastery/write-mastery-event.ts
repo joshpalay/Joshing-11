@@ -29,6 +29,7 @@ export type MasteryEventWriteResult = {
   previousTier: MasteryTier;
   newTier: MasteryTier;
   tierChanged: boolean;
+  openedNewTerritory: boolean;
 };
 
 async function readAuthorCredit(userId: string, domain: string) {
@@ -87,6 +88,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
     ? effectiveTier(nextTotalPoints, authorCredit.points, authorCredit.distinctQuestions)
     : previousTier;
   const tierChanged = previousTier !== nextTier;
+  const openedNewTerritory = !existing && params.pointsAwarded > 0;
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`
@@ -165,5 +167,6 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
     previousTier,
     newTier: nextTier,
     tierChanged,
+    openedNewTerritory,
   };
 }
