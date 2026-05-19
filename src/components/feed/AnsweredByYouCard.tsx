@@ -237,7 +237,12 @@ export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByY
         className="absolute inset-y-0 left-0 w-[2px]"
         style={{ backgroundColor: categoryColor }}
       />
-      <div className="p-[14px]">
+      <div
+        className="px-[14px] pt-[14px] pb-[12px]"
+        style={{
+          backgroundColor: 'color-mix(in srgb, var(--ink) 5%, var(--cream))',
+        }}
+      >
         <div className="flex items-center gap-3">
           <AnsweredAvatarStack
             pairedFriend={item.pairedFriend}
@@ -301,10 +306,10 @@ export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByY
             {item.personalMessage}
           </p>
         ) : null}
+      </div>
 
-        <div className="mt-3 border-t border-[var(--border-light)] pt-3">
-          <AnsweredResult item={item} recheckAction={recheckAction} />
-        </div>
+      <div className="px-[14px] py-[12px]">
+        <AnsweredResult item={item} recheckAction={recheckAction} />
       </div>
     </article>
   )
