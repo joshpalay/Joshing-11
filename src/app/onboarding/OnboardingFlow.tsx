@@ -8,6 +8,7 @@ import { COUNTRIES } from '@/lib/onboarding/countries'
 import { US_STATES } from '@/lib/onboarding/us-regions'
 
 type CurrentStep =
+  | 'display-name'
   | 'invite-suggestions'
   | 'background'
   | 'warmup'
@@ -35,7 +36,12 @@ export type PreSeededInterest = ProposedInterest
 type OnboardingFlowProps = {
   preSeededInterests: PreSeededInterest[]
   inviterName?: string | null
+  inviteeDisplayName?: string | null
+  initialDisplayName?: string | null
 }
+
+const DISPLAY_NAME_MIN = 2
+const DISPLAY_NAME_MAX = 30
 
 type CanonicalSuggestion = {
   original: string
@@ -170,11 +176,22 @@ function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
 export default function OnboardingFlow({
   preSeededInterests,
   inviterName,
+  inviteeDisplayName,
+  initialDisplayName,
 }: OnboardingFlowProps) {
   const router = useRouter()
-  const [currentStep, setCurrentStep] = useState<CurrentStep>(() =>
-    preSeededInterests.length > 0 ? 'invite-suggestions' : 'background'
+  const hasInitialDisplayName = Boolean(initialDisplayName?.trim())
+  const [currentStep, setCurrentStep] = useState<CurrentStep>(() => {
+    if (!hasInitialDisplayName) return 'display-name'
+    return preSeededInterests.length > 0 ? 'invite-suggestions' : 'background'
+  })
+  const [displayName, setDisplayName] = useState<string>(() =>
+    (initialDisplayName ?? inviteeDisplayName ?? '')
+      .trim()
+      .slice(0, DISPLAY_NAME_MAX)
   )
+  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false)
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null)
   const [birthYear, setBirthYear] = useState('')
   const [grewUpCountry, setGrewUpCountry] = useState('')
   const [grewUpRegion, setGrewUpRegion] = useState('')
@@ -431,6 +448,46 @@ export default function OnboardingFlow({
     }
   }
 
+  async function submitDisplayName() {
+    const trimmed = displayName.trim().replace(/\s+/g, ' ')
+    if (trimmed.length < DISPLAY_NAME_MIN || trimmed.length > DISPLAY_NAME_MAX) {
+      setDisplayNameError(
+        `Pick something between ${DISPLAY_NAME_MIN} and ${DISPLAY_NAME_MAX} characters.`
+      )
+      return
+    }
+
+    setDisplayNameError(null)
+    setIsSavingDisplayName(true)
+
+    try {
+      const response = await fetch('/api/account', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: trimmed }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        setDisplayNameError(
+          typeof data?.error === 'string'
+            ? data.error
+            : "We couldn't save that name. Try again."
+        )
+        return
+      }
+
+      setDisplayName(trimmed)
+      setCurrentStep(
+        inviteInterests.length > 0 ? 'invite-suggestions' : 'background'
+      )
+    } catch {
+      setDisplayNameError("We couldn't save that name. Try again.")
+    } finally {
+      setIsSavingDisplayName(false)
+    }
+  }
+
   function keepInviteInterests() {
     setError(null)
     const toSave = inviteInterests
@@ -563,6 +620,59 @@ export default function OnboardingFlow({
         <ProgressDots currentStep={currentStep} />
 
         <div className="mt-9 flex flex-1 flex-col">
+          {currentStep === 'display-name' ? (
+            <div className="flex flex-1 flex-col justify-center gap-8">
+              <StepHeader
+                title="What should we call you?"
+                subtitle={
+                  inviteeDisplayName?.trim()
+                    ? `${displayInviterName} added you as "${inviteeDisplayName.trim()}". Keep it or change it — ${DISPLAY_NAME_MIN} to ${DISPLAY_NAME_MAX} characters.`
+                    : `This is how you'll appear to friends. ${DISPLAY_NAME_MIN} to ${DISPLAY_NAME_MAX} characters.`
+                }
+              />
+
+              <form
+                className="space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (!isSavingDisplayName) void submitDisplayName()
+                }}
+              >
+                <label className="block">
+                  <span className="text-sm font-medium">Your name</span>
+                  <input
+                    type="text"
+                    className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
+                    placeholder="Your name"
+                    autoFocus
+                    autoComplete="name"
+                    maxLength={DISPLAY_NAME_MAX}
+                    value={displayName}
+                    onChange={(e) => {
+                      setDisplayName(e.target.value.slice(0, DISPLAY_NAME_MAX))
+                      if (displayNameError) setDisplayNameError(null)
+                    }}
+                  />
+                </label>
+
+                {displayNameError ? (
+                  <p className="text-destructive text-sm">{displayNameError}</p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className="btn-primary h-12 w-full"
+                  disabled={
+                    isSavingDisplayName ||
+                    displayName.trim().length < DISPLAY_NAME_MIN
+                  }
+                >
+                  {isSavingDisplayName ? 'Saving...' : 'Continue'}
+                </button>
+              </form>
+            </div>
+          ) : null}
+
           {currentStep === 'invite-suggestions' ? (
             <div className="flex flex-1 flex-col justify-center gap-8">
               <StepHeader

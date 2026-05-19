@@ -8,6 +8,7 @@ import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { logTelemetry } from '@/server/telemetry';
 import {
   type DeclaredInterestInput,
+  getUserOnboardingProfile,
   markOnboardingComplete,
   saveDeclaredInterests,
 } from '@/server/db/queries/users';
@@ -82,6 +83,17 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: 'invalid_request', message: 'Save 1 to 5 interests, or skip invite suggestions. Domains must be 2 to 100 characters.' },
       { status: 400 },
+    );
+  }
+
+  const profile = await getUserOnboardingProfile(session.userId);
+  if (!profile?.displayName?.trim()) {
+    return NextResponse.json(
+      {
+        error: 'display_name_required',
+        message: 'Choose a display name before finishing onboarding.',
+      },
+      { status: 409 },
     );
   }
 

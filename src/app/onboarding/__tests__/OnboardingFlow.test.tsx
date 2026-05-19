@@ -13,23 +13,22 @@ describe('OnboardingFlow invited-interest copy', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         inviterName="Alex Inviter"
+        initialDisplayName="Returning User"
         preSeededInterests={[
           { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
         ]}
       />
     )
 
-    expect(html).toContain('Alex Inviter left a few ideas for you:')
+    expect(html).toContain('Alex Inviter suggested these for you.')
     expect(html).toContain('Sondheim')
-    expect(html).toContain(
-      'They&#x27;re just a starting point — keep, edit, or ignore them before anything is saved.'
-    )
   })
 
   it("renders Josh as Jaime's inviter with all three suggested interests", () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         inviterName="Josh"
+        initialDisplayName="Returning User"
         preSeededInterests={[
           { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
           { domain: 'Jazz', broadCategory: 'Music', rationale: null },
@@ -38,7 +37,7 @@ describe('OnboardingFlow invited-interest copy', () => {
       />
     )
 
-    expect(html).toContain('Josh left a few ideas for you:')
+    expect(html).toContain('Josh suggested these for you.')
     expect(html).toContain('Sondheim')
     expect(html).toContain('Jazz')
     expect(html).toContain('Poetry')
@@ -48,41 +47,73 @@ describe('OnboardingFlow invited-interest copy', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         inviterName={null}
+        initialDisplayName="Returning User"
         preSeededInterests={[
           { domain: 'Jazz', broadCategory: 'Music', rationale: null },
         ]}
       />
     )
 
-    expect(html).toContain('A friend left a few ideas for you:')
+    expect(html).toContain('A friend suggested these for you.')
   })
 
   it('still renders regular onboarding with no invite', () => {
     const html = renderToStaticMarkup(
-      <OnboardingFlow preSeededInterests={[]} />
+      <OnboardingFlow preSeededInterests={[]} initialDisplayName="Returning User" />
     )
 
-    expect(html).toContain('The trivia you wish you were asked.')
-    expect(html).not.toContain('left a few ideas for you:')
+    expect(html).toContain('Welcome to Joshing')
+    expect(html).not.toContain('suggested these for you.')
   })
 })
 
-describe('OnboardingFlow Add Friend regression copy', () => {
-  it('renders the invite skip affordance without changing regular onboarding', () => {
-    const invitedHtml = renderToStaticMarkup(
+describe('OnboardingFlow display-name gate', () => {
+  it('renders the name step first when no displayName is set', () => {
+    const html = renderToStaticMarkup(
       <OnboardingFlow
-        inviterName="Alex Inviter"
         preSeededInterests={[
-          { domain: 'Jazz', broadCategory: 'Music', rationale: null },
+          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
         ]}
+        inviterName="Alex Inviter"
       />
     )
-    const regularHtml = renderToStaticMarkup(
-      <OnboardingFlow preSeededInterests={[]} />
+
+    expect(html).toContain('What should we call you?')
+    expect(html).not.toContain('suggested these for you.')
+  })
+
+  it('prefills the input with the invitee name from the invitation', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow
+        preSeededInterests={[]}
+        inviterName="Alex Inviter"
+        inviteeDisplayName="Morgan Lee"
+      />
     )
 
-    expect(invitedHtml).toContain('Skip these ideas')
-    expect(regularHtml).not.toContain('Skip these ideas')
-    expect(regularHtml).toContain('The trivia you wish you were asked.')
+    expect(html).toContain('What should we call you?')
+    expect(html).toContain('value="Morgan Lee"')
+    expect(html).toContain('Alex Inviter')
+  })
+
+  it('uses the generic subtitle when no inviteeDisplayName is provided', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow preSeededInterests={[]} inviterName={null} />
+    )
+
+    expect(html).toContain('What should we call you?')
+    expect(html).toContain("This is how you&#x27;ll appear to friends.")
+  })
+
+  it('skips the name step when the user already has a displayName', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow
+        preSeededInterests={[]}
+        initialDisplayName="Existing Name"
+      />
+    )
+
+    expect(html).not.toContain('What should we call you?')
+    expect(html).toContain('Welcome to Joshing')
   })
 })

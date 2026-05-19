@@ -47,5 +47,12 @@ export default async function OnboardingPage() {
     rationale: interest.description ?? null,
   }));
 
-  return <OnboardingFlow preSeededInterests={preSeededInterests} inviterName={seeded.inviterName} />;
+  return (
+    <OnboardingFlow
+      preSeededInterests={preSeededInterests}
+      inviterName={seeded.inviterName}
+      inviteeDisplayName={seeded.inviteeDisplayName}
+      initialDisplayName={user.displayName}
+    />
+  );
 }
