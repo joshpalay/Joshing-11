@@ -73,6 +73,10 @@ export default function AddFriendInvite() {
   const [error, setError] = useState<string | null>(null)
   const [copyLabel, setCopyLabel] = useState('Copy message')
   const [submitting, setSubmitting] = useState(false)
+  const [contactsSupported, setContactsSupported] = useState<boolean | null>(
+    null
+  )
+  const [isIos, setIsIos] = useState(false)
   const messageRef = useRef<HTMLTextAreaElement | null>(null)
 
   const trimmedName = name.trim()
@@ -110,6 +114,66 @@ export default function AddFriendInvite() {
     return () =>
       window.removeEventListener('friend-invitations:create-new', prefillInvite)
   }, [])
+
+  useEffect(() => {
+    void (async () => {
+      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      if (!('contacts' in navigator) || !('ContactsManager' in window)) {
+        setIsIos(ios)
+        setContactsSupported(false)
+        return
+      }
+      try {
+        const props = await navigator.contacts!.getProperties()
+        setIsIos(ios)
+        setContactsSupported(props.includes('name') && props.includes('tel'))
+      } catch {
+        setIsIos(ios)
+        setContactsSupported(false)
+      }
+    })()
+  }, [])
+
+  async function pickContact() {
+    sendTelemetry('contact_picker_opened', {})
+    try {
+      const results = await navigator.contacts!.select(['name', 'tel'], {
+        multiple: false,
+      })
+      if (!results.length) {
+        sendTelemetry('contact_picker_cancelled', {})
+        return
+      }
+      const contact = results[0]
+      const pickedName = (contact.name ?? [])
+        .filter(Boolean)
+        .join(' ')
+        .trim()
+      const pickedTel =
+        (contact.tel ?? []).find(looksLikeUsMobileNumber) ?? null
+      if (!pickedTel) {
+        setError(
+          'That contact has no US mobile number. Try another, or type one in.'
+        )
+        sendTelemetry('contact_picker_no_us_tel', {
+          had_name: Boolean(pickedName),
+        })
+        return
+      }
+      if (pickedName) setName(pickedName)
+      setPhone(pickedTel)
+      setError(null)
+      sendTelemetry('contact_picker_selected', {
+        had_name: Boolean(pickedName),
+        tel_count: contact.tel?.length ?? 0,
+      })
+    } catch (err) {
+      setError('Could not open contacts. You can type the number instead.')
+      sendTelemetry('contact_picker_error', {
+        message: err instanceof Error ? err.message : 'unknown',
+      })
+    }
+  }
 
   function resetFlow() {
     setExpanded(false)
@@ -245,6 +309,16 @@ export default function AddFriendInvite() {
             </h2>
           </div>
 
+          {contactsSupported ? (
+            <button
+              type="button"
+              onClick={pickContact}
+              className="btn-ghost min-h-11 w-full rounded-full text-sm"
+            >
+              Pick from contacts
+            </button>
+          ) : null}
+
           <div className="space-y-4">
             <label className="text-foreground block text-sm font-medium">
               Name
@@ -277,6 +351,12 @@ export default function AddFriendInvite() {
                 enterKeyHint="next"
               />
             </label>
+            {isIos ? (
+              <p className="text-muted-foreground text-xs leading-5">
+                Tip: tap the name or phone field and use the suggestion above
+                your keyboard to pull from Contacts.
+              </p>
+            ) : null}
           </div>
 
           {error ? (
