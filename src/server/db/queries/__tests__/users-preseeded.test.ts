@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { dbMock, state } = vi.hoisted(() => {
   const state = {
-    row: undefined as { preSeededInterests: unknown; inviterName: string | null } | undefined,
+    row: undefined as
+      | {
+          preSeededInterests: unknown
+          inviterName: string | null
+          inviteeDisplayName: string | null
+        }
+      | undefined,
   }
 
   const limited = {
@@ -34,6 +40,7 @@ vi.mock('@/server/db', () => ({
     preSeededInterests: 'friendInvitations.preSeededInterests',
     inviterUserId: 'friendInvitations.inviterUserId',
     inviteeUserId: 'friendInvitations.inviteeUserId',
+    inviteeDisplayName: 'friendInvitations.inviteeDisplayName',
     acceptedAt: 'friendInvitations.acceptedAt',
   },
   users: {
@@ -53,11 +60,13 @@ describe('getPreSeededInterestsForUser', () => {
   it('loads inviter display name with accepted invite interests', async () => {
     state.row = {
       inviterName: '  Alex   Inviter  ',
+      inviteeDisplayName: '  Morgan   Lee  ',
       preSeededInterests: [{ label: ' Sondheim ', broadCategory: 'Theater' }],
     }
 
     await expect(getPreSeededInterestsForUser('user-invitee')).resolves.toEqual({
       inviterName: 'Alex Inviter',
+      inviteeDisplayName: 'Morgan Lee',
       interests: [{ label: 'Sondheim', description: null, broadCategory: 'Theater' }],
     })
   })
@@ -65,11 +74,13 @@ describe('getPreSeededInterestsForUser', () => {
   it('returns a null inviter name when unavailable so UI can use friend fallback', async () => {
     state.row = {
       inviterName: '   ',
+      inviteeDisplayName: null,
       preSeededInterests: ['Jazz'],
     }
 
     await expect(getPreSeededInterestsForUser('user-invitee')).resolves.toEqual({
       inviterName: null,
+      inviteeDisplayName: null,
       interests: [{ label: 'Jazz' }],
     })
   })
@@ -77,6 +88,7 @@ describe('getPreSeededInterestsForUser', () => {
   it('keeps non-invite onboarding empty', async () => {
     await expect(getPreSeededInterestsForUser('user-no-invite')).resolves.toEqual({
       inviterName: null,
+      inviteeDisplayName: null,
       interests: [],
     })
   })

@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   getSessionMock,
+  getUserOnboardingProfileMock,
   markOnboardingCompleteMock,
   refreshSessionOnboardingClaimMock,
   saveDeclaredInterestsMock,
 } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
+  getUserOnboardingProfileMock: vi.fn(),
   markOnboardingCompleteMock: vi.fn(),
   refreshSessionOnboardingClaimMock: vi.fn(),
   saveDeclaredInterestsMock: vi.fn(),
@@ -18,6 +20,7 @@ vi.mock('@/server/auth/session', () => ({
 }))
 
 vi.mock('@/server/db/queries/users', () => ({
+  getUserOnboardingProfile: getUserOnboardingProfileMock,
   markOnboardingComplete: markOnboardingCompleteMock,
   saveDeclaredInterests: saveDeclaredInterestsMock,
 }))
@@ -36,6 +39,11 @@ describe('POST /api/onboarding/save-interests', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getSessionMock.mockResolvedValue({ userId: 'user-invitee' })
+    getUserOnboardingProfileMock.mockResolvedValue({
+      id: 'user-invitee',
+      displayName: 'Morgan Lee',
+      onboardingComplete: false,
+    })
     saveDeclaredInterestsMock.mockResolvedValue(undefined)
     markOnboardingCompleteMock.mockResolvedValue(undefined)
     refreshSessionOnboardingClaimMock.mockResolvedValue(true)
@@ -144,6 +152,11 @@ describe('POST /api/onboarding/save-interests', () => {
     for (const choice of choices) {
       vi.clearAllMocks()
       getSessionMock.mockResolvedValue({ userId: 'user-jaime' })
+      getUserOnboardingProfileMock.mockResolvedValue({
+        id: 'user-jaime',
+        displayName: 'Jaime',
+        onboardingComplete: false,
+      })
       saveDeclaredInterestsMock.mockResolvedValue(undefined)
       markOnboardingCompleteMock.mockResolvedValue(undefined)
       refreshSessionOnboardingClaimMock.mockResolvedValue(true)
@@ -202,6 +215,40 @@ describe('POST /api/onboarding/save-interests', () => {
 
     expect(response.status).toBe(400)
     expect(body.error).toBe('invalid_request')
+    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
+    expect(markOnboardingCompleteMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses to complete onboarding when displayName is still null', async () => {
+    getUserOnboardingProfileMock.mockResolvedValue({
+      id: 'user-invitee',
+      displayName: null,
+      onboardingComplete: false,
+    })
+
+    const response = await POST(
+      jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }])
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error).toBe('display_name_required')
+    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
+    expect(markOnboardingCompleteMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses to complete onboarding when displayName is whitespace only', async () => {
+    getUserOnboardingProfileMock.mockResolvedValue({
+      id: 'user-invitee',
+      displayName: '   ',
+      onboardingComplete: false,
+    })
+
+    const response = await POST(
+      jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }])
+    )
+
+    expect(response.status).toBe(409)
     expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
     expect(markOnboardingCompleteMock).not.toHaveBeenCalled()
   })
