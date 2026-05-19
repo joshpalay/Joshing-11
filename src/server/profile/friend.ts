@@ -1,15 +1,30 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import { db, declaredInterests } from '@/server/db'
-import { getFriendship } from '@/server/db/queries/friends'
+import { getFriends, getFriendship } from '@/server/db/queries/friends'
 import { getUserById } from '@/server/db/queries/users'
 
-type FriendProfileVisibility = 'self' | 'friend'
+type FriendProfileVisibility = 'self' | 'friend' | 'stranger'
+
+const MUTUAL_FRIENDS_LIMIT = 24
 
 export type FriendPortraitInterest = {
   domain: string
   broadCategory: string | null
   shared: boolean
+}
+
+export type FriendPortraitMutualFriend = {
+  id: string
+  displayName: string
+}
+
+export type FriendPortraitFriendship = {
+  id: string
+  status: string
+  formedAt: Date | null
+  requestedByUserId: string
+  viewerIsRequester: boolean
 }
 
 export type FriendPortraitData = {
@@ -19,14 +34,13 @@ export type FriendPortraitData = {
     memberSince: Date
   }
   visibility: FriendProfileVisibility
-  friendship: {
-    id: string
-    formedAt: Date | null
-  } | null
+  friendship: FriendPortraitFriendship | null
   interests: FriendPortraitInterest[]
   sharedInterests: string[]
   viewerSoloInterests: string[]
   friendSoloInterests: string[]
+  mutualFriends: FriendPortraitMutualFriend[]
+  mutualFriendsOverflow: number
 }
 
 function profileDisplayName(
@@ -52,11 +66,18 @@ export async function getFriendPortraitData(
     ? null
     : await getFriendship(normalizedViewerId, normalizedUserId)
 
-  if (!isSelf && friendship?.status !== 'active') return null
+  const isActiveFriend = !isSelf && friendship?.status === 'active'
+  const visibility: FriendProfileVisibility = isSelf
+    ? 'self'
+    : isActiveFriend
+      ? 'friend'
+      : 'stranger'
 
-  const visibleUserIds = isSelf
+  const interestOwnerIds = isSelf
     ? [normalizedUserId]
-    : [normalizedUserId, normalizedViewerId]
+    : isActiveFriend
+      ? [normalizedUserId, normalizedViewerId]
+      : [normalizedViewerId]
 
   const interestRows = await db
     .select({
@@ -68,7 +89,7 @@ export async function getFriendPortraitData(
     .where(
       and(
         eq(declaredInterests.isActive, true),
-        inArray(declaredInterests.userId, visibleUserIds)
+        inArray(declaredInterests.userId, interestOwnerIds)
       )
     )
     .orderBy(asc(declaredInterests.domain))
@@ -84,18 +105,47 @@ export async function getFriendPortraitData(
     .map((interest) => ({
       domain: interest.domain,
       broadCategory: interest.broadCategory,
-      shared: !isSelf && viewerInterests.has(interest.domain),
+      shared: isActiveFriend && viewerInterests.has(interest.domain),
     }))
 
   const friendInterestDomains = new Set(interests.map((i) => i.domain))
-  const viewerSoloInterests = isSelf
-    ? []
-    : Array.from(viewerInterests)
+  const viewerSoloInterests = isActiveFriend
+    ? Array.from(viewerInterests)
         .filter((domain) => !friendInterestDomains.has(domain))
         .sort((a, b) => a.localeCompare(b))
-  const friendSoloInterests = interests
-    .filter((interest) => !interest.shared)
-    .map((interest) => interest.domain)
+    : []
+  const friendSoloInterests = isActiveFriend
+    ? interests.filter((interest) => !interest.shared).map((i) => i.domain)
+    : []
+
+  let mutualFriends: FriendPortraitMutualFriend[] = []
+  let mutualFriendsOverflow = 0
+  if (!isSelf) {
+    const [viewerFriends, viewedUserFriends] = await Promise.all([
+      getFriends(normalizedViewerId),
+      getFriends(normalizedUserId),
+    ])
+    const viewerFriendIds = new Set(viewerFriends.map((u) => u.id))
+    const mutuals = viewedUserFriends
+      .filter((user) => viewerFriendIds.has(user.id))
+      .map((user) => ({
+        id: user.id,
+        displayName: profileDisplayName(user.displayName, user.phoneNumber),
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName))
+    mutualFriends = mutuals.slice(0, MUTUAL_FRIENDS_LIMIT)
+    mutualFriendsOverflow = Math.max(0, mutuals.length - mutualFriends.length)
+  }
+
+  const portraitFriendship: FriendPortraitFriendship | null = friendship
+    ? {
+        id: friendship.id,
+        status: friendship.status,
+        formedAt: friendship.formedAt,
+        requestedByUserId: friendship.requestedByUserId,
+        viewerIsRequester: friendship.requestedByUserId === normalizedViewerId,
+      }
+    : null
 
   return {
     user: {
@@ -106,18 +156,15 @@ export async function getFriendPortraitData(
       ),
       memberSince: viewedUser.createdAt,
     },
-    visibility: isSelf ? 'self' : 'friend',
-    friendship: friendship
-      ? {
-          id: friendship.id,
-          formedAt: friendship.formedAt,
-        }
-      : null,
+    visibility,
+    friendship: portraitFriendship,
     interests,
     sharedInterests: interests
       .filter((interest) => interest.shared)
       .map((interest) => interest.domain),
     viewerSoloInterests,
     friendSoloInterests,
+    mutualFriends,
+    mutualFriendsOverflow,
   }
 }

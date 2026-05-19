@@ -19,6 +19,9 @@ export type TelemetryEventName =
   | 'friend_request_reinvite_after_ignore_limited'
   | 'friend_request_accepted'
   | 'friend_request_ignored'
+  | 'friend_request_from_profile'
+  | 'friend_request_cancelled'
+  | 'friendship_removed'
 
 type TelemetryValue = string | number | boolean | null | undefined
 export type TelemetryMetadata = Record<string, TelemetryValue>
