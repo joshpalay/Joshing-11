@@ -34,6 +34,14 @@ vi.mock('next/link', () => ({
 
 vi.mock('next/navigation', () => ({
   notFound: notFoundMock,
+  useRouter: () => ({
+    refresh: vi.fn(),
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    prefetch: vi.fn(),
+  }),
 }))
 
 vi.mock('@/server/auth/session', () => ({
@@ -130,6 +138,8 @@ describe('/users/[id] friend profile page', () => {
       sharedInterests: ['Jazz piano'],
       viewerSoloInterests: ['Bauhaus design'],
       friendSoloInterests: ['Roman roads'],
+      mutualFriends: [],
+      mutualFriendsOverflow: 0,
     })
     getUserMasteryOverviewMock.mockResolvedValue({
       totalPoints: 0,

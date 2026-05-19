@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation'
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard'
 import { AuthoredQuestionsFeed } from '@/components/profile/AuthoredQuestionsFeed'
+import { MutualFriendsSection } from '@/components/profile/MutualFriendsSection'
+import { ProfileFriendButton } from '@/components/profile/ProfileFriendButton'
 import { SharedInterestsOverlap } from '@/components/profile/SharedInterestsOverlap'
 import { getSession } from '@/server/auth/session'
 import {
@@ -59,6 +61,67 @@ export default async function UserProfilePage({
   const portrait = await getFriendPortraitData(id, session.userId)
   if (!portrait) notFound()
 
+  const isSelf = portrait.visibility === 'self'
+  const isStranger = portrait.visibility === 'stranger'
+  const friendFirstName = firstName(portrait.user.displayName)
+
+  const profileLabel = isSelf
+    ? 'Your profile'
+    : isStranger
+      ? 'Joshing member'
+      : 'Friend profile'
+
+  if (isStranger) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5">
+        <div className="mb-5">
+          <Link
+            href="/friends"
+            className="text-muted-foreground text-sm font-medium underline-offset-4 hover:underline"
+          >
+            ← Friends
+          </Link>
+        </div>
+
+        <section className="bg-card text-card-foreground rounded-3xl border p-5 shadow-sm">
+          <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+            {profileLabel}
+          </p>
+          <div className="mt-4 flex items-start gap-4">
+            <div className="bg-primary/10 text-primary flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl font-serif text-3xl font-semibold">
+              {portrait.user.displayName.slice(0, 1).toUpperCase() || 'J'}
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-foreground font-serif text-3xl font-semibold">
+                {portrait.user.displayName}
+              </h1>
+              <p className="text-muted-foreground mt-2 text-sm leading-6">
+                On Joshing since {formatMemberSince(portrait.user.memberSince)}.
+              </p>
+              <ProfileFriendButton
+                targetUserId={portrait.user.id}
+                friendship={portrait.friendship}
+                targetDisplayName={portrait.user.displayName}
+              />
+            </div>
+          </div>
+        </section>
+
+        <MutualFriendsSection
+          friends={portrait.mutualFriends}
+          overflowCount={portrait.mutualFriendsOverflow}
+          visibility="stranger"
+          friendFirstName={friendFirstName}
+        />
+
+        <p className="text-muted-foreground mt-6 text-sm">
+          Become friends to see {friendFirstName}’s knowledge portrait,
+          interests, and authored questions.
+        </p>
+      </main>
+    )
+  }
+
   const [mastery, pageData, authoredQuestions] = await Promise.all([
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
@@ -81,8 +144,6 @@ export default async function UserProfilePage({
   const tierSignature = `${new Intl.NumberFormat().format(
     Math.round(mastery.totalPoints),
   )} knowledge points across ${sortedDomains.length} territories`
-  const friendFirstName = firstName(portrait.user.displayName)
-  const isSelf = portrait.visibility === 'self'
 
   const authoredItems = authoredQuestions.map((question) => ({
     id: question.id,
@@ -105,7 +166,7 @@ export default async function UserProfilePage({
 
       <section className="bg-card text-card-foreground rounded-3xl border p-5 shadow-sm">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-          {isSelf ? 'Your profile' : 'Friend profile'}
+          {profileLabel}
         </p>
         <div className="mt-4 flex items-start gap-4">
           <div className="bg-primary/10 text-primary flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl font-serif text-3xl font-semibold">
@@ -123,17 +184,32 @@ export default async function UserProfilePage({
                 Friends since {formatMemberSince(portrait.friendship.formedAt)}.
               </p>
             ) : null}
+            {!isSelf ? (
+              <ProfileFriendButton
+                targetUserId={portrait.user.id}
+                friendship={portrait.friendship}
+                targetDisplayName={portrait.user.displayName}
+              />
+            ) : null}
           </div>
         </div>
       </section>
 
       {!isSelf ? (
-        <SharedInterestsOverlap
-          viewerSoloInterests={portrait.viewerSoloInterests}
-          friendSoloInterests={portrait.friendSoloInterests}
-          sharedInterests={portrait.sharedInterests}
-          friendFirstName={friendFirstName}
-        />
+        <>
+          <SharedInterestsOverlap
+            viewerSoloInterests={portrait.viewerSoloInterests}
+            friendSoloInterests={portrait.friendSoloInterests}
+            sharedInterests={portrait.sharedInterests}
+            friendFirstName={friendFirstName}
+          />
+          <MutualFriendsSection
+            friends={portrait.mutualFriends}
+            overflowCount={portrait.mutualFriendsOverflow}
+            visibility="friend"
+            friendFirstName={friendFirstName}
+          />
+        </>
       ) : null}
 
       <section className="mt-5" aria-label="Knowledge portrait">

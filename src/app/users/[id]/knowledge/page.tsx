@@ -50,6 +50,7 @@ export default async function FriendKnowledgePage({
   const { id } = await params
   const portrait = await getFriendPortraitData(id, session.userId)
   if (!portrait) notFound()
+  if (portrait.visibility === 'stranger') notFound()
 
   const isOwner = portrait.visibility === 'self'
   const [mastery, pageData] = await Promise.all([

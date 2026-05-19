@@ -187,6 +187,63 @@ export async function ignorePendingFriendshipRequest({
   return friendship ?? null
 }
 
+export async function cancelPendingFriendshipRequest({
+  friendshipId,
+  userId,
+  now = new Date(),
+}: {
+  friendshipId: string
+  userId: string
+  now?: Date
+}): Promise<typeof friendships.$inferSelect | null> {
+  const [friendship] = await db
+    .update(friendships)
+    .set({
+      status: 'cancelled',
+      removedAt: now,
+      removedByUserId: userId,
+    })
+    .where(
+      and(
+        eq(friendships.id, friendshipId),
+        eq(friendships.status, 'pending'),
+        eq(friendships.requestedByUserId, userId),
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
+      )
+    )
+    .returning()
+
+  return friendship ?? null
+}
+
+export async function removeFriendship({
+  friendshipId,
+  userId,
+  now = new Date(),
+}: {
+  friendshipId: string
+  userId: string
+  now?: Date
+}): Promise<typeof friendships.$inferSelect | null> {
+  const [friendship] = await db
+    .update(friendships)
+    .set({
+      status: 'removed',
+      removedAt: now,
+      removedByUserId: userId,
+    })
+    .where(
+      and(
+        eq(friendships.id, friendshipId),
+        eq(friendships.status, 'active'),
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
+      )
+    )
+    .returning()
+
+  return friendship ?? null
+}
+
 export async function upsertInvitationFriendship(
   writer: FriendshipWriter,
   {

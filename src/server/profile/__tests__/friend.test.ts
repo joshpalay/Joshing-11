@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { dbMock, getFriendshipMock, getUserByIdMock, state } = vi.hoisted(() => {
+const { dbMock, getFriendshipMock, getFriendsMock, getUserByIdMock, state } = vi.hoisted(() => {
   const state = {
     interestRows: [] as Array<{
       userId: string
@@ -22,6 +22,7 @@ const { dbMock, getFriendshipMock, getUserByIdMock, state } = vi.hoisted(() => {
   return {
     dbMock,
     getFriendshipMock: vi.fn(),
+    getFriendsMock: vi.fn(),
     getUserByIdMock: vi.fn(),
     state,
   }
@@ -46,6 +47,7 @@ vi.mock('@/server/db', () => ({
 
 vi.mock('@/server/db/queries/friends', () => ({
   getFriendship: getFriendshipMock,
+  getFriends: getFriendsMock,
 }))
 
 vi.mock('@/server/db/queries/users', () => ({
@@ -68,7 +70,9 @@ describe('friend portrait data', () => {
       id: 'friendship-1',
       status: 'active',
       formedAt: new Date('2026-02-01T00:00:00.000Z'),
+      requestedByUserId: 'viewer-1',
     })
+    getFriendsMock.mockResolvedValue([])
   })
 
   it('returns a minimal friend portrait for active friends', async () => {
@@ -89,7 +93,10 @@ describe('friend portrait data', () => {
       visibility: 'friend',
       friendship: {
         id: 'friendship-1',
+        status: 'active',
         formedAt: new Date('2026-02-01T00:00:00.000Z'),
+        requestedByUserId: 'viewer-1',
+        viewerIsRequester: true,
       },
       interests: [
         { domain: 'Jazz piano', broadCategory: 'Music', shared: true },
@@ -98,6 +105,8 @@ describe('friend portrait data', () => {
       sharedInterests: ['Jazz piano'],
       viewerSoloInterests: [],
       friendSoloInterests: ['Roman roads'],
+      mutualFriends: [],
+      mutualFriendsOverflow: 0,
     })
   })
 
@@ -114,12 +123,14 @@ describe('friend portrait data', () => {
     expect(portrait?.user.displayName).toBe('+15550101010')
   })
 
-  it('returns null for missing users and non-active friendships', async () => {
+  it('returns null for missing users', async () => {
     getUserByIdMock.mockResolvedValueOnce(null)
     await expect(
       getFriendPortraitData('missing-user', 'viewer-1')
     ).resolves.toBeNull()
+  })
 
+  it('returns a stranger portrait when no active friendship exists', async () => {
     getUserByIdMock.mockResolvedValueOnce({
       id: 'stranger-1',
       displayName: 'Stranger',
@@ -129,10 +140,63 @@ describe('friend portrait data', () => {
     getFriendshipMock.mockResolvedValueOnce({
       id: 'friendship-2',
       status: 'pending',
+      formedAt: null,
+      requestedByUserId: 'viewer-1',
     })
 
-    await expect(
-      getFriendPortraitData('stranger-1', 'viewer-1')
-    ).resolves.toBeNull()
+    const portrait = await getFriendPortraitData('stranger-1', 'viewer-1')
+
+    expect(portrait?.visibility).toBe('stranger')
+    expect(portrait?.friendship).toEqual({
+      id: 'friendship-2',
+      status: 'pending',
+      formedAt: null,
+      requestedByUserId: 'viewer-1',
+      viewerIsRequester: true,
+    })
+    expect(portrait?.interests).toEqual([])
+    expect(portrait?.sharedInterests).toEqual([])
+    expect(portrait?.viewerSoloInterests).toEqual([])
+    expect(portrait?.friendSoloInterests).toEqual([])
+  })
+
+  it('returns a stranger portrait with no friendship row at all', async () => {
+    getUserByIdMock.mockResolvedValueOnce({
+      id: 'stranger-2',
+      displayName: 'Unconnected',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      phoneNumber: '+15550101012',
+    })
+    getFriendshipMock.mockResolvedValueOnce(null)
+
+    const portrait = await getFriendPortraitData('stranger-2', 'viewer-1')
+
+    expect(portrait?.visibility).toBe('stranger')
+    expect(portrait?.friendship).toBeNull()
+  })
+
+  it('returns mutual friends for non-self views', async () => {
+    getFriendsMock.mockImplementation(async (userId: string) => {
+      if (userId === 'viewer-1') {
+        return [
+          { id: 'mutual-1', displayName: 'Mona Mutual', phoneNumber: null },
+          { id: 'viewer-only', displayName: 'Vera', phoneNumber: null },
+        ]
+      }
+      if (userId === 'friend-1') {
+        return [
+          { id: 'mutual-1', displayName: 'Mona Mutual', phoneNumber: null },
+          { id: 'friend-only', displayName: 'Fiona', phoneNumber: null },
+        ]
+      }
+      return []
+    })
+
+    const portrait = await getFriendPortraitData('friend-1', 'viewer-1')
+
+    expect(portrait?.mutualFriends).toEqual([
+      { id: 'mutual-1', displayName: 'Mona Mutual' },
+    ])
+    expect(portrait?.mutualFriendsOverflow).toBe(0)
   })
 })
