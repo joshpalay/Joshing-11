@@ -129,18 +129,22 @@ function AnsweredResult({
 }) {
   const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle')
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
+  const [recheckAccepted, setRecheckAccepted] = useState(false)
 
   const requestRecheck = useCallback(async () => {
     if (!recheckAction || recheckState === 'submitting') return
     setRecheckState('submitting')
     setRecheckMessage(null)
+    setRecheckAccepted(false)
     try {
       const outcome = await recheckAction.onSubmit()
       setRecheckState('done')
       setRecheckMessage(outcome.message)
+      setRecheckAccepted(outcome.accepted)
     } catch {
       setRecheckState('error')
       setRecheckMessage('Could not recheck that answer.')
+      setRecheckAccepted(false)
     }
   }, [recheckAction, recheckState])
 
@@ -190,15 +194,33 @@ function AnsweredResult({
         </div>
       ) : null}
       {recheckMessage ? (
-        <p
-          className="text-[11px]"
-          style={{
-            color: recheckState === 'error' ? '#b91c1c' : 'var(--ink)',
-            opacity: recheckState === 'error' ? 1 : 0.6,
-          }}
-        >
-          {recheckMessage}
-        </p>
+        recheckAccepted ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium"
+            style={{
+              backgroundColor: 'color-mix(in srgb, #047857 10%, var(--cream))',
+              borderColor: 'color-mix(in srgb, #047857 35%, var(--border-warm))',
+              color: '#065f46',
+            }}
+          >
+            <span aria-hidden className="text-[15px] leading-none">✓</span>
+            <span>{recheckMessage}</span>
+          </div>
+        ) : (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-[11px]"
+            style={{
+              color: recheckState === 'error' ? '#b91c1c' : 'var(--ink)',
+              opacity: recheckState === 'error' ? 1 : 0.6,
+            }}
+          >
+            {recheckMessage}
+          </p>
+        )
       ) : null}
     </div>
   )

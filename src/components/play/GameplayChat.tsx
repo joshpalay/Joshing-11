@@ -567,6 +567,7 @@ function ResultRow({
 }) {
   const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
+  const [recheckAccepted, setRecheckAccepted] = useState(false);
   const expired = result === 'expired';
   const correct = result === 'correct';
   const gaveUp = result === 'gave_up';
@@ -575,13 +576,16 @@ function ResultRow({
     if (!recheckAction || recheckState === 'submitting') return;
     setRecheckState('submitting');
     setRecheckMessage(null);
+    setRecheckAccepted(false);
     try {
       const outcome = await recheckAction.onSubmit();
       setRecheckState('done');
       setRecheckMessage(outcome.message);
+      setRecheckAccepted(outcome.accepted);
     } catch {
       setRecheckState('error');
       setRecheckMessage('Could not recheck that answer.');
+      setRecheckAccepted(false);
     }
   }, [recheckAction, recheckState]);
 
@@ -694,9 +698,33 @@ function ResultRow({
                   {recheckState === 'submitting' ? 'Rechecking...' : 'Recheck my answer'}
                 </button>
                 {recheckMessage ? (
-                  <p style={{ marginTop: '6px', fontSize: '0.78rem', color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)', lineHeight: 1.35 }}>
-                    {recheckMessage}
-                  </p>
+                  recheckAccepted ? (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      style={{
+                        marginTop: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid color-mix(in srgb, var(--success) 35%, var(--border))',
+                        background: 'color-mix(in srgb, var(--success) 12%, var(--surface))',
+                        color: '#065f46',
+                        padding: '8px 12px',
+                        fontSize: '0.85rem',
+                        fontWeight: 500,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                      <span>{recheckMessage}</span>
+                    </div>
+                  ) : (
+                    <p role="status" aria-live="polite" style={{ marginTop: '6px', fontSize: '0.78rem', color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)', lineHeight: 1.35 }}>
+                      {recheckMessage}
+                    </p>
+                  )
                 ) : null}
               </div>
             ) : null}
