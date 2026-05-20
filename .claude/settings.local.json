@@ -24,7 +24,9 @@
       "Bash(Select-Object Name)",
       "Bash(mkdir -p C:/Users/rpala/Desktop/dev/joshing-11/audits)",
       "Bash(git push *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Read(//root/.claude/plans/**)",
+      "Bash(mkdir -p /root/.claude/plans)"
     ]
   }
 }

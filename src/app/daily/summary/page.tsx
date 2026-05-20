@@ -21,6 +21,7 @@ import type {
   DailySummaryView,
   QuestionRecap,
 } from '@/server/db/queries/daily-summary'
+import { RoundReminderCard } from './RoundReminderCard'
 
 type FeedbackSignal = 'thumbs_up' | 'thumbs_down'
 
@@ -267,16 +268,52 @@ export default function DailySummaryPage() {
         </div>
       </section>
 
+      {summary.reminderPromptState === 'show' ? <RoundReminderCard /> : null}
+
+      <section className="card mt-5 px-5 py-4">
+        <h2 style={titleStyle}>Tomorrow</h2>
+        <p className="text-foreground mt-2 text-sm leading-6">
+          Five new at noon.
+        </p>
+      </section>
+
+      {summary.recentFriendBridge ? (
+        <section className="card mt-5 px-5 py-4">
+          <h2 style={titleStyle}>Meanwhile</h2>
+          <p className="text-foreground mt-2 text-sm leading-6">
+            {bridgeSentence(summary.recentFriendBridge)}
+          </p>
+          <Link className="btn-ghost mt-3" href="/#feed">
+            See what they&apos;re up to →
+          </Link>
+        </section>
+      ) : null}
+
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <Link className="btn-primary sm:flex-1" href="/knowledge">
-          See your knowledge map
-        </Link>
-        <Link className="btn-ghost sm:flex-1" href="/">
+        <Link className="btn-primary sm:flex-1" href="/">
           Back home
+        </Link>
+        <Link className="btn-ghost sm:flex-1" href="/knowledge">
+          See your knowledge map
         </Link>
       </div>
     </main>
   )
+}
+
+function bridgeSentence(bridge: NonNullable<DailySummaryView['recentFriendBridge']>): string {
+  const { friendName, cardType, domainDisplayName } = bridge
+  const domain = domainDisplayName?.trim() || 'something new'
+  switch (cardType) {
+    case 'friend_answered':
+      return `${friendName} answered ${domain}.`
+    case 'friend_liked':
+      return `${friendName} liked a question about ${domain}.`
+    case 'friend_added':
+      return `${friendName} just joined.`
+    default:
+      return `${friendName} is around today.`
+  }
 }
 
 function InterpretiveLine({ text }: { text: string }) {

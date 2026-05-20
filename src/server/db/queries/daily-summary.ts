@@ -1,18 +1,23 @@
-import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
 
+import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import {
   dailyQueues,
   db,
   generatedQuestions,
   masteryEvents,
   playerMastery,
+  users,
 } from '@/server/db';
 import { resolveTier } from '@/server/mastery/tiers';
 import { getDeliveredCreatorNotesForQuestions, type DeliveredCreatorNote } from '@/server/creator-notes';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { getFeedPagePayload } from '@/server/feed/get-feed-page';
 import type { QueueSlot } from '@/server/daily/types';
 import type { MasteryTier } from '@/types/db';
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export type DailySummaryView = {
   date: string;
@@ -25,6 +30,15 @@ export type DailySummaryView = {
   domainGains: DomainGain[];
   newTerritory: string[];
   tierCrossings: TierCrossing[];
+  recentFriendBridge: RecentFriendBridge | null;
+  isFirstCompletedRound: boolean;
+  reminderPromptState: 'show' | 'hidden';
+};
+
+export type RecentFriendBridge = {
+  friendName: string;
+  cardType: string;
+  domainDisplayName: string | null;
 };
 
 export type QuestionRecap = {
@@ -219,6 +233,10 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const pointsEarned = [...pointsByDomain.values()].reduce((sum, points) => sum + points, 0);
   const gainedDomains = [...touchedDomains].filter((domain) => (pointsByDomain.get(domain) ?? 0) > 0);
 
+  const recentFriendBridge = await getRecentFriendBridge(userId);
+  const { isFirstCompletedRound, reminderPromptState } =
+    await computeReminderPromptState(userId, dateString, totalAnswered);
+
   return {
     date: dateString,
     totalAnswered,
@@ -240,5 +258,83 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       .sort((a, b) => b.pointsGained - a.pointsGained || a.displayName.localeCompare(b.displayName)),
     newTerritory,
     tierCrossings,
+    recentFriendBridge,
+    isFirstCompletedRound,
+    reminderPromptState,
   };
+}
+
+async function computeReminderPromptState(
+  userId: string,
+  todayString: string,
+  todayAnswered: number,
+): Promise<{ isFirstCompletedRound: boolean; reminderPromptState: 'show' | 'hidden' }> {
+  // Today must have at least one answered slot to count as "completed".
+  if (todayAnswered <= 0) {
+    return { isFirstCompletedRound: false, reminderPromptState: 'hidden' };
+  }
+
+  // Did the user complete any earlier daily queue? A queue counts as completed
+  // when any of its slots has answered=true. We only need to know whether such
+  // a row exists for any prior date, not how many.
+  const [prior] = await db
+    .select({ id: dailyQueues.id })
+    .from(dailyQueues)
+    .where(and(
+      eq(dailyQueues.userId, userId),
+      ne(dailyQueues.queueDate, todayString),
+      sql`EXISTS (
+        SELECT 1 FROM jsonb_array_elements(${dailyQueues.slots}) slot
+        WHERE (slot->>'answered')::boolean IS TRUE
+      )`,
+    ))
+    .limit(1);
+
+  const isFirstCompletedRound = !prior;
+  if (!isFirstCompletedRound) {
+    return { isFirstCompletedRound: false, reminderPromptState: 'hidden' };
+  }
+
+  const [user] = await db
+    .select({
+      smsOptIn: users.smsOptIn,
+      emailOptIn: users.emailOptIn,
+      reminderPromptDismissedAt: users.reminderPromptDismissedAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user) {
+    return { isFirstCompletedRound: true, reminderPromptState: 'hidden' };
+  }
+
+  const show =
+    user.smsOptIn === 'not_asked' &&
+    user.emailOptIn === 'not_asked' &&
+    user.reminderPromptDismissedAt === null;
+
+  return {
+    isFirstCompletedRound: true,
+    reminderPromptState: show ? 'show' : 'hidden',
+  };
+}
+
+async function getRecentFriendBridge(userId: string): Promise<RecentFriendBridge | null> {
+  const mostRecentReset = new Date(getNextDailyResetBoundary().getTime() - ONE_DAY_MS);
+  const page = await getFeedPagePayload(userId, { limit: 5, cursor: null, filter: 'all' });
+  for (const item of page.items) {
+    if (item.card_type === 'answered_by_you') continue;
+    const eventAtRaw = typeof item.source_event_at === 'string' ? item.source_event_at : null;
+    if (!eventAtRaw) continue;
+    const eventAt = new Date(eventAtRaw);
+    if (Number.isNaN(eventAt.getTime())) continue;
+    if (eventAt < mostRecentReset) continue;
+    return {
+      friendName: item.source_friend_display_name ?? 'A friend',
+      cardType: item.card_type,
+      domainDisplayName: item.domain_pill ?? null,
+    };
+  }
+  return null;
 }

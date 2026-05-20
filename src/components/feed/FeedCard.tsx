@@ -11,10 +11,11 @@ type FeedCardProps = {
   item: FeedCardBaseItem
   overflow?: ReactNode
   onAnswer?: () => void
+  footer?: ReactNode
   className?: string
 }
 
-export function FeedCard({ item, overflow, onAnswer, className }: FeedCardProps) {
+export function FeedCard({ item, overflow, onAnswer, footer, className }: FeedCardProps) {
   const categoryColor = colorForCategory(item.category)
   const visibleCategory = visibleFeedCategory(item.category)
   const onDark = isDarkColor(categoryColor)
@@ -198,6 +199,8 @@ export function FeedCard({ item, overflow, onAnswer, className }: FeedCardProps)
               Answer →
             </button>
           </div>
+        ) : footer ? (
+          <div className="mt-3">{footer}</div>
         ) : null}
       </div>
     </article>
