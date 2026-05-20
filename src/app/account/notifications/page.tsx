@@ -29,7 +29,7 @@ export default async function NotificationsSettingsPage() {
   if (!state) redirect('/login');
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-28">
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 pt-10 pb-28">
       <Link
         href="/account"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
