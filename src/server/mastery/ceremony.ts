@@ -470,10 +470,13 @@ Examples:
 
 If the parent does not yet exist, CREATE it from the merge.
 
-2. AGGRESSIVE on near-duplicate merges. Any two labels that refer to the same body of knowledge with different wording must be merged.
+2. AGGRESSIVE on near-duplicate merges. Any two labels that refer to the same body of knowledge with different wording must be merged. This includes acronyms and abbreviations vs. their spelled-out forms.
 Examples:
 "Late Tchaikovsky" + "Tchaikovsky's Late Period" → one domain
 "Joyce's Ulysses" + "James Joyce's Ulysses" + "Ulysses" → one domain (prefer the most concise canonical name)
+"UX Design" + "User Experience Design" → one domain (prefer the most common form, e.g. "UX Design")
+"AI" + "Artificial Intelligence" → one domain
+"NYC History" + "New York City History" → one domain
 
 3. CONSERVATIVE on splits and on cross-work merges.
 Do NOT merge:
