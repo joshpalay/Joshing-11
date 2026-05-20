@@ -1,0 +1,77 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+
+import { getSession } from '@/server/auth/session';
+import {
+  getReminderState,
+  updateReminderPreferences,
+} from '@/server/db/queries/account';
+
+export const dynamic = 'force-dynamic';
+
+const bodySchema = z
+  .object({
+    smsOptIn: z.enum(['opted_in', 'opted_out']).optional(),
+    emailOptIn: z.enum(['opted_in', 'opted_out']).optional(),
+    pendingEmail: z.string().trim().email().optional(),
+    dismissed: z.literal(true).optional(),
+  })
+  .refine(
+    (b) =>
+      b.smsOptIn !== undefined ||
+      b.emailOptIn !== undefined ||
+      b.pendingEmail !== undefined ||
+      b.dismissed === true,
+    'must specify at least one change',
+  );
+
+export async function GET() {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const state = await getReminderState(session.userId);
+  if (!state) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  return NextResponse.json({ state });
+}
+
+export async function PATCH(request: Request) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const json = await request.json().catch(() => null);
+  const parsed = bodySchema.safeParse(json);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'invalid_body', message: 'No reminder changes provided.' },
+      { status: 400 },
+    );
+  }
+
+  const result = await updateReminderPreferences(session.userId, parsed.data);
+  if (!result.ok) {
+    if (result.reason === 'not_found') {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+    if (result.reason === 'email_not_verified') {
+      return NextResponse.json(
+        {
+          error: 'email_not_verified',
+          message: 'Verify your email before enabling email reminders.',
+        },
+        { status: 409 },
+      );
+    }
+    if (result.reason === 'phone_not_verified') {
+      return NextResponse.json(
+        {
+          error: 'phone_not_verified',
+          message: 'Verify your phone number before enabling SMS reminders.',
+        },
+        { status: 409 },
+      );
+    }
+  }
+
+  return NextResponse.json({ state: result.ok ? result.state : null });
+}

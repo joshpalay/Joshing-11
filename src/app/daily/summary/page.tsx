@@ -21,6 +21,7 @@ import type {
   DailySummaryView,
   QuestionRecap,
 } from '@/server/db/queries/daily-summary'
+import { RoundReminderCard } from './RoundReminderCard'
 
 type FeedbackSignal = 'thumbs_up' | 'thumbs_down'
 
@@ -266,6 +267,8 @@ export default function DailySummaryPage() {
           ))}
         </div>
       </section>
+
+      {summary.reminderPromptState === 'show' ? <RoundReminderCard /> : null}
 
       <section className="card mt-5 px-5 py-4">
         <h2 style={titleStyle}>Tomorrow</h2>

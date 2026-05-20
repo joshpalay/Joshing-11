@@ -82,6 +82,92 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   };
 }
 
+export type ReminderOptInState = 'opted_in' | 'opted_out' | 'not_asked';
+
+export type ReminderState = {
+  smsOptIn: ReminderOptInState;
+  emailOptIn: ReminderOptInState;
+  emailVerified: boolean;
+  email: string | null;
+  pendingEmail: string | null;
+  phoneNumber: string;
+  reminderPromptDismissedAt: string | null;
+};
+
+export async function getReminderState(userId: string): Promise<ReminderState | null> {
+  const [row] = await db
+    .select({
+      smsOptIn: users.smsOptIn,
+      emailOptIn: users.emailOptIn,
+      emailVerified: users.emailVerified,
+      email: users.email,
+      pendingEmail: users.pendingEmail,
+      phoneNumber: users.phoneNumber,
+      reminderPromptDismissedAt: users.reminderPromptDismissedAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!row) return null;
+
+  return {
+    smsOptIn: row.smsOptIn,
+    emailOptIn: row.emailOptIn,
+    emailVerified: row.emailVerified,
+    email: row.email,
+    pendingEmail: row.pendingEmail,
+    phoneNumber: row.phoneNumber,
+    reminderPromptDismissedAt: row.reminderPromptDismissedAt?.toISOString() ?? null,
+  };
+}
+
+export type ReminderPreferenceUpdate = {
+  smsOptIn?: 'opted_in' | 'opted_out';
+  emailOptIn?: 'opted_in' | 'opted_out';
+  pendingEmail?: string;
+  dismissed?: true;
+};
+
+export type ReminderPreferenceResult =
+  | { ok: true; state: ReminderState }
+  | { ok: false; reason: 'not_found' | 'email_not_verified' | 'phone_not_verified' };
+
+export async function updateReminderPreferences(
+  userId: string,
+  patch: ReminderPreferenceUpdate,
+): Promise<ReminderPreferenceResult> {
+  const [current] = await db
+    .select({
+      phoneVerified: users.phoneVerified,
+      emailVerified: users.emailVerified,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!current) return { ok: false, reason: 'not_found' };
+
+  if (patch.smsOptIn === 'opted_in' && !current.phoneVerified) {
+    return { ok: false, reason: 'phone_not_verified' };
+  }
+  if (patch.emailOptIn === 'opted_in' && !current.emailVerified) {
+    return { ok: false, reason: 'email_not_verified' };
+  }
+
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (patch.smsOptIn !== undefined) set.smsOptIn = patch.smsOptIn;
+  if (patch.emailOptIn !== undefined) set.emailOptIn = patch.emailOptIn;
+  if (patch.pendingEmail !== undefined) set.pendingEmail = patch.pendingEmail;
+  if (patch.dismissed === true) set.reminderPromptDismissedAt = new Date();
+
+  await db.update(users).set(set).where(eq(users.id, userId));
+
+  const state = await getReminderState(userId);
+  if (!state) return { ok: false, reason: 'not_found' };
+  return { ok: true, state };
+}
+
 export async function updateDisplayName(params: {
   userId: string;
   displayName: string;
