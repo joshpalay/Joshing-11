@@ -116,6 +116,7 @@ export const answerStateEnum = pgEnum('AnswerState', [
   'incorrect',
 ]);
 export const smsOptInEnum = pgEnum('SmsOptIn', ['opted_in', 'opted_out', 'not_asked']);
+export const emailOptInEnum = pgEnum('EmailOptIn', ['opted_in', 'opted_out', 'not_asked']);
 export const themePreferenceEnum = pgEnum('ThemePreference', [
   'quiet_atelier',
   'sunday_margins',
@@ -155,6 +156,10 @@ export const users = pgTable(
     subscriptionPlan: subscriptionPlanEnum('subscription_plan').notNull().default('free'),
     smsOptIn: smsOptInEnum('sms_opt_in').notNull().default('not_asked'),
     smsReminderTime: integer('sms_reminder_time'),
+    emailOptIn: emailOptInEnum('email_opt_in').notNull().default('not_asked'),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    pendingEmail: text('pending_email'),
+    reminderPromptDismissedAt: timestamp('reminder_prompt_dismissed_at', { withTimezone: true }),
     portraitVisibility: portraitVisibilityEnum('portrait_visibility').notNull().default('public'),
     knowledgeCardShareToken: text('knowledge_card_share_token'),
     knowledgeCardShareExpiresAt: timestamp('knowledge_card_share_expires_at', { withTimezone: true }),

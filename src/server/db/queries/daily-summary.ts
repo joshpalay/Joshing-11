@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
 
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import {
@@ -7,6 +7,7 @@ import {
   generatedQuestions,
   masteryEvents,
   playerMastery,
+  users,
 } from '@/server/db';
 import { resolveTier } from '@/server/mastery/tiers';
 import { getDeliveredCreatorNotesForQuestions, type DeliveredCreatorNote } from '@/server/creator-notes';
@@ -30,6 +31,8 @@ export type DailySummaryView = {
   newTerritory: string[];
   tierCrossings: TierCrossing[];
   recentFriendBridge: RecentFriendBridge | null;
+  isFirstCompletedRound: boolean;
+  reminderPromptState: 'show' | 'hidden';
 };
 
 export type RecentFriendBridge = {
@@ -231,6 +234,8 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const gainedDomains = [...touchedDomains].filter((domain) => (pointsByDomain.get(domain) ?? 0) > 0);
 
   const recentFriendBridge = await getRecentFriendBridge(userId);
+  const { isFirstCompletedRound, reminderPromptState } =
+    await computeReminderPromptState(userId, dateString, totalAnswered);
 
   return {
     date: dateString,
@@ -254,6 +259,64 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     newTerritory,
     tierCrossings,
     recentFriendBridge,
+    isFirstCompletedRound,
+    reminderPromptState,
+  };
+}
+
+async function computeReminderPromptState(
+  userId: string,
+  todayString: string,
+  todayAnswered: number,
+): Promise<{ isFirstCompletedRound: boolean; reminderPromptState: 'show' | 'hidden' }> {
+  // Today must have at least one answered slot to count as "completed".
+  if (todayAnswered <= 0) {
+    return { isFirstCompletedRound: false, reminderPromptState: 'hidden' };
+  }
+
+  // Did the user complete any earlier daily queue? A queue counts as completed
+  // when any of its slots has answered=true. We only need to know whether such
+  // a row exists for any prior date, not how many.
+  const [prior] = await db
+    .select({ id: dailyQueues.id })
+    .from(dailyQueues)
+    .where(and(
+      eq(dailyQueues.userId, userId),
+      ne(dailyQueues.queueDate, todayString),
+      sql`EXISTS (
+        SELECT 1 FROM jsonb_array_elements(${dailyQueues.slots}) slot
+        WHERE (slot->>'answered')::boolean IS TRUE
+      )`,
+    ))
+    .limit(1);
+
+  const isFirstCompletedRound = !prior;
+  if (!isFirstCompletedRound) {
+    return { isFirstCompletedRound: false, reminderPromptState: 'hidden' };
+  }
+
+  const [user] = await db
+    .select({
+      smsOptIn: users.smsOptIn,
+      emailOptIn: users.emailOptIn,
+      reminderPromptDismissedAt: users.reminderPromptDismissedAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user) {
+    return { isFirstCompletedRound: true, reminderPromptState: 'hidden' };
+  }
+
+  const show =
+    user.smsOptIn === 'not_asked' &&
+    user.emailOptIn === 'not_asked' &&
+    user.reminderPromptDismissedAt === null;
+
+  return {
+    isFirstCompletedRound: true,
+    reminderPromptState: show ? 'show' : 'hidden',
   };
 }
 

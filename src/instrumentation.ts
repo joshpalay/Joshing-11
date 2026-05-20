@@ -295,6 +295,45 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0037 adds the EmailOptIn enum and four columns on User for the
+    // round-open reminder opt-in (email_opt_in, email_verified, pending_email,
+    // reminder_prompt_dismissed_at). If a preview/production database has this
+    // migration recorded without the pieces present, the daily summary query
+    // and PATCH /api/account/reminders fail before migrate() can repair them.
+    try {
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE t.typname = 'EmailOptIn' AND n.nspname = 'public'
+          ) THEN
+            CREATE TYPE "public"."EmailOptIn" AS ENUM('opted_in', 'opted_out', 'not_asked');
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "email_opt_in" "public"."EmailOptIn" NOT NULL DEFAULT 'not_asked'
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "email_verified" boolean NOT NULL DEFAULT false
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "pending_email" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "reminder_prompt_dismissed_at" timestamptz
+      `);
+    } catch {
+      // User table may not exist yet on a fresh database — migrate() creates
+      // it before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
