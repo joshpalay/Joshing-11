@@ -1,5 +1,6 @@
 import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 
+import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import {
   dailyQueues,
   db,
@@ -11,8 +12,11 @@ import { resolveTier } from '@/server/mastery/tiers';
 import { getDeliveredCreatorNotesForQuestions, type DeliveredCreatorNote } from '@/server/creator-notes';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { getFeedPagePayload } from '@/server/feed/get-feed-page';
 import type { QueueSlot } from '@/server/daily/types';
 import type { MasteryTier } from '@/types/db';
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export type DailySummaryView = {
   date: string;
@@ -25,6 +29,13 @@ export type DailySummaryView = {
   domainGains: DomainGain[];
   newTerritory: string[];
   tierCrossings: TierCrossing[];
+  recentFriendBridge: RecentFriendBridge | null;
+};
+
+export type RecentFriendBridge = {
+  friendName: string;
+  cardType: string;
+  domainDisplayName: string | null;
 };
 
 export type QuestionRecap = {
@@ -219,6 +230,8 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const pointsEarned = [...pointsByDomain.values()].reduce((sum, points) => sum + points, 0);
   const gainedDomains = [...touchedDomains].filter((domain) => (pointsByDomain.get(domain) ?? 0) > 0);
 
+  const recentFriendBridge = await getRecentFriendBridge(userId);
+
   return {
     date: dateString,
     totalAnswered,
@@ -240,5 +253,25 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       .sort((a, b) => b.pointsGained - a.pointsGained || a.displayName.localeCompare(b.displayName)),
     newTerritory,
     tierCrossings,
+    recentFriendBridge,
   };
+}
+
+async function getRecentFriendBridge(userId: string): Promise<RecentFriendBridge | null> {
+  const mostRecentReset = new Date(getNextDailyResetBoundary().getTime() - ONE_DAY_MS);
+  const page = await getFeedPagePayload(userId, { limit: 5, cursor: null, filter: 'all' });
+  for (const item of page.items) {
+    if (item.card_type === 'answered_by_you') continue;
+    const eventAtRaw = typeof item.source_event_at === 'string' ? item.source_event_at : null;
+    if (!eventAtRaw) continue;
+    const eventAt = new Date(eventAtRaw);
+    if (Number.isNaN(eventAt.getTime())) continue;
+    if (eventAt < mostRecentReset) continue;
+    return {
+      friendName: item.source_friend_display_name ?? 'A friend',
+      cardType: item.card_type,
+      domainDisplayName: item.domain_pill ?? null,
+    };
+  }
+  return null;
 }

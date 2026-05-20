@@ -40,7 +40,7 @@ export default async function Home() {
               <MissedQuestionsSection userId={session.userId} />
             </Suspense>
           ) : null}
-          <div>
+          <div id="feed">
             <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
               What&apos;s happening
             </p>
