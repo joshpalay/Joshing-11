@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { CheckCircle2, Clock, MessageCircleQuestion, Settings } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export type SlotOutcome = 'correct' | 'incorrect' | 'skipped' | 'unanswered'
 
@@ -72,30 +72,12 @@ function normalizeSlotOutcomes(value: unknown): SlotOutcome[] {
   })
 }
 
-function formatCountdown(targetIso: string, nowMs: number): string {
-  const targetMs = Date.parse(targetIso)
-  if (!Number.isFinite(targetMs)) return 'any second now'
-
-  const remainingMs = targetMs - nowMs
-  if (remainingMs < 60_000) return 'any second now'
-
-  const totalMinutes = Math.ceil(remainingMs / 60_000)
-  if (totalMinutes > 60) {
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
-    return `${hours}h ${minutes}m`
-  }
-
-  return `${totalMinutes}m`
-}
-
 export default function TodaysFiveCard({
   initialStatus = null,
   initialPreferences = null,
 }: TodaysFiveCardProps = {}) {
   const [status, setStatus] = useState<DailyStatus | null>(initialStatus)
   const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences)
-  const [nowMs, setNowMs] = useState(() => Date.now())
   const [resetting, setResetting] = useState(false)
   const [resetError, setResetError] = useState<string | null>(null)
   // Skip the initial /api/daily/* fetch when the server already provided both.
@@ -164,11 +146,6 @@ export default function TodaysFiveCard({
     }
   }, [])
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 60_000)
-    return () => window.clearInterval(timer)
-  }, [])
-
   const effectiveStatus = status ?? FALLBACK_STATUS
   const answered = Math.max(0, Math.min(effectiveStatus.questionsAnswered, 5))
   const isComplete =
@@ -178,16 +155,15 @@ export default function TodaysFiveCard({
     ? '/daily/summary'
     : '/daily'
   const actionLabel = isComplete
-    ? 'See your recap'
+    ? "See today's recap →"
     : hasStartedRound
       ? 'Resume round'
       : 'Play now'
-  const subtext = useMemo(() => {
-    if (isComplete) {
-      return `Done for today. Next round in ${formatCountdown(effectiveStatus.nextRoundAt, nowMs)}.`
-    }
-    return answered > 0 ? `${answered} of 5 answered` : 'Ready when you are'
-  }, [answered, effectiveStatus.nextRoundAt, isComplete, nowMs])
+  const subtext = isComplete
+    ? 'Today done · Five new at noon tomorrow'
+    : answered > 0
+      ? `${answered} of 5 answered`
+      : 'Ready when you are'
 
   const resetForToday = async () => {
     if (resetting) return
