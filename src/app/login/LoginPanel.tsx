@@ -136,7 +136,7 @@ export default function LoginPanel() {
             className="h-11 w-full rounded-md border bg-background px-3 text-base outline-none ring-offset-background focus:ring-2 focus:ring-ring"
             placeholder="555-123-4567"
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
+            onChange={(event) => setPhone(event.target.value.replace(/\D/g, ''))}
             disabled={loading}
           />
           <button
