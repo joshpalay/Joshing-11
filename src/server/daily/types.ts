@@ -60,6 +60,8 @@ export const queueSlotSchema = z.object({
   reveal_breadcrumb: z.string().nullish(),
   /** LLM consolation quip for near-miss wrong answers (PRD §8.1.14). */
   reveal_quip: z.string().nullish(),
+  /** LLM-generated friends-only aside; only populated when the viewer is the creator or an active friend. */
+  reveal_inside_joke: z.string().nullish(),
   /** Per-answer commentary quip from selectQuip() (PRD §8.1.14). */
   quip: z.string().nullish(),
   /** Optional appeal state after a player asks the app to recheck a wrong grade. */

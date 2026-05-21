@@ -15,6 +15,7 @@ import {
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
+import { areFriends } from '@/server/db/queries/friends';
 
 export const dynamic = 'force-dynamic';
 
@@ -197,6 +198,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
         eq(joshingGameResponses.userId, session.userId),
       ));
 
+    const insideJoke = await selectInsideJokeForViewer(
+      answeredQuestion?.question.insideJoke ?? null,
+      answeredQuestion?.question.creatorId ?? null,
+      session.userId,
+    );
+
     return NextResponse.json({
       ...grade,
       correctAnswer,
@@ -204,6 +211,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       breadcrumb: null,
       viewerStatus: freshView.viewerStatus,
       quip,
+      insideJoke,
     });
   } catch (error) {
     if (error instanceof JoshingGameValidationError) {
@@ -212,4 +220,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     throw error;
   }
+}
+
+async function selectInsideJokeForViewer(
+  insideJoke: string | null,
+  creatorId: string | null,
+  viewerId: string,
+): Promise<string | null> {
+  if (!insideJoke || !creatorId) return null;
+  if (creatorId === viewerId) return insideJoke;
+  const friends = await areFriends(viewerId, creatorId);
+  return friends ? insideJoke : null;
 }

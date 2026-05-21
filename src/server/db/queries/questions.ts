@@ -95,6 +95,7 @@ const questionViewColumns = {
   canonicalSubcategory: questionTableColumns.canonicalSubcategory,
   categoryOverridden: questionTableColumns.categoryOverridden,
   creatorNote: questionTableColumns.creatorNote,
+  insideJoke: questionTableColumns.insideJoke,
   difficultyEstimate: questionTableColumns.difficultyEstimate,
   llmDifficulty: questionTableColumns.llmDifficulty,
   calibratedDifficulty: questionTableColumns.calibratedDifficulty,
@@ -361,9 +362,13 @@ export async function createQuestion(params: {
   domain?: string;
   difficulty: number;
   creatorNote?: string | null;
+  insideJoke?: string | null;
   verified: boolean;
   llmSuggestedAnswer?: string | null;
   critiqueIterations: number;
+  publicStatus?: 'not_scored' | 'eligible_pending' | 'rejected' | 'opted_out' | 'migrated';
+  publicEligibilityScore?: number | null;
+  publicEligibilityReason?: string | null;
 }): Promise<{ id: string }> {
   await ensureQuestionSurfacePriorityColumn();
 
@@ -375,6 +380,7 @@ export async function createQuestion(params: {
     acceptedAlternatives: params.alternateAnswers,
     factualExplanation: params.explanation,
     creatorNote: params.creatorNote ?? null,
+    insideJoke: params.insideJoke ?? null,
     category: params.category as typeof questions.$inferInsert.category,
     broadCategory: params.broadCategory,
     subcategory: params.subcategory,
@@ -387,6 +393,9 @@ export async function createQuestion(params: {
     questionType: 'factual',
     visibility: 'public',
     status: params.verified ? 'verified' : 'unverified',
+    ...(params.publicStatus !== undefined ? { publicStatus: params.publicStatus } : {}),
+    ...(params.publicEligibilityScore !== undefined ? { publicEligibilityScore: params.publicEligibilityScore } : {}),
+    ...(params.publicEligibilityReason !== undefined ? { publicEligibilityReason: params.publicEligibilityReason } : {}),
   } satisfies Partial<typeof questions.$inferInsert>;
 
   const createWithValues = async (values: typeof questions.$inferInsert) => {

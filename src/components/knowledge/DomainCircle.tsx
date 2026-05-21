@@ -4,15 +4,9 @@ import {
 } from '@/components/icons/domain-icons'
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import type { MasteryTier } from '@/types/db'
 import type { CSSProperties } from 'react'
-
-const TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
-}
 
 type DomainCircleProps = {
   diameter: number
@@ -159,7 +153,7 @@ export function DomainCircle({
       </div>
       <p style={nameStyle}>{canonicalSubcategory}</p>
       {showTierLabel && currentTier && (
-        <p style={tierStyle}>{TIER_LABEL[currentTier]}</p>
+        <p style={tierStyle}>{KNOWLEDGE_TIER_LABEL[currentTier]}</p>
       )}
       {showYourQs > 0 && (
         <div

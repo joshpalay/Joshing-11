@@ -12,6 +12,7 @@ import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-i
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
+import { areFriends } from '@/server/db/queries/friends';
 
 export const dynamic = 'force-dynamic';
 
@@ -221,6 +222,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     ? (question.explainerFullCorrect ?? question.explainerFull ?? question.explainerBrief ?? question.factualExplanation)
     : (question.explainerFullWrong ?? question.explainerFull ?? question.explainerBrief ?? question.factualExplanation);
 
+  const insideJoke = await selectInsideJokeForViewer(question.insideJoke, question.creatorId, session.userId);
+
   return NextResponse.json({
     isCorrect,
     explanation,
@@ -230,5 +233,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
     masteryDelta,
     correctAnswer: question.answerText,
     quip,
+    insideJoke,
   });
+}
+
+async function selectInsideJokeForViewer(
+  insideJoke: string | null,
+  creatorId: string | null,
+  viewerId: string,
+): Promise<string | null> {
+  if (!insideJoke || !creatorId) return null;
+  if (creatorId === viewerId) return insideJoke;
+  const friends = await areFriends(viewerId, creatorId);
+  return friends ? insideJoke : null;
 }

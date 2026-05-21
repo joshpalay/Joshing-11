@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray, ne, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, or } from 'drizzle-orm';
 
-import { db, declaredInterests, friendships, users } from '@/server/db';
+import { db, declaredInterests, feedItems, friendships, users } from '@/server/db';
+import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 export type User = typeof users.$inferSelect;
 export type Friendship = typeof friendships.$inferSelect;
@@ -59,6 +60,40 @@ export async function getFriends(userId: string): Promise<User[]> {
     .from(users)
     .where(inArray(users.id, friendIds))
     .orderBy(asc(users.displayName), asc(users.phoneNumber));
+}
+
+export async function getRecentDirectSendRecipients(userId: string, limit = 3): Promise<User[]> {
+  if (limit <= 0) return [];
+
+  const recentRows = await db
+    .select({ recipientUserId: feedItems.recipientUserId })
+    .from(feedItems)
+    .where(and(
+      eq(feedItems.sourceUserId, userId),
+      eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
+    ))
+    .orderBy(desc(feedItems.sourceEventAt))
+    .limit(50);
+
+  const orderedDistinctIds: string[] = [];
+  const seen = new Set<string>();
+  for (const row of recentRows) {
+    if (seen.has(row.recipientUserId)) continue;
+    seen.add(row.recipientUserId);
+    orderedDistinctIds.push(row.recipientUserId);
+    if (orderedDistinctIds.length >= limit) break;
+  }
+  if (orderedDistinctIds.length === 0) return [];
+
+  const friends = await getFriends(userId);
+  const friendsById = new Map(friends.map((friend) => [friend.id, friend] as const));
+
+  const result: User[] = [];
+  for (const id of orderedDistinctIds) {
+    const friend = friendsById.get(id);
+    if (friend) result.push(friend);
+  }
+  return result;
 }
 
 export async function getFriendsHub(userId: string): Promise<FriendsHub> {
@@ -161,4 +196,63 @@ export async function areFriends(userAId: string, userBId: string): Promise<bool
   if (userAId === userBId) return false;
   const friendship = await getFriendship(userAId, userBId);
   return friendship?.status === 'active';
+}
+
+/**
+ * Returns the viewer's 1st-degree friend ids and 2nd-degree (friends of
+ * friends) ids, with FoF de-duplicated against direct friends and the
+ * viewer themselves. Used by the Daily 5 picker to rank eligible
+ * user-authored questions: direct friends first, then FoF, then everyone
+ * else.
+ *
+ * The friend graph is small and uncached, so we run two normal queries
+ * rather than a recursive CTE — the second pass is bounded by
+ * `directIds.length` which is itself indexed via the existing
+ * Friendship_userAId_status_idx / Friendship_userBId_status_idx pair.
+ */
+export async function getFriendAndFoFUserIds(userId: string): Promise<{
+  direct: Set<string>;
+  extended: Set<string>;
+}> {
+  const directRows = await db
+    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
+    .from(friendships)
+    .where(and(
+      eq(friendships.status, 'active'),
+      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+    ));
+
+  const direct = new Set<string>();
+  for (const row of directRows) {
+    const friendId = row.userAId === userId ? row.userBId : row.userAId;
+    direct.add(friendId);
+  }
+
+  if (direct.size === 0) {
+    return { direct, extended: new Set<string>() };
+  }
+
+  const directList = [...direct];
+  const fofRows = await db
+    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
+    .from(friendships)
+    .where(and(
+      eq(friendships.status, 'active'),
+      or(
+        inArray(friendships.userAId, directList),
+        inArray(friendships.userBId, directList),
+      ),
+    ));
+
+  const extended = new Set<string>();
+  for (const row of fofRows) {
+    if (directList.includes(row.userAId) && row.userBId !== userId && !direct.has(row.userBId)) {
+      extended.add(row.userBId);
+    }
+    if (directList.includes(row.userBId) && row.userAId !== userId && !direct.has(row.userAId)) {
+      extended.add(row.userAId);
+    }
+  }
+
+  return { direct, extended };
 }

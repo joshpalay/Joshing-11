@@ -1,5 +1,6 @@
 import { forwardRef, type CSSProperties } from 'react';
 
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import type { MasteryTier } from '@/types/db';
 
 type ShareCardSize = 'square' | 'portrait';
@@ -24,13 +25,6 @@ export type ShareCardProps = {
   cycleStart: string;
   cycleEnd: string;
   size?: ShareCardSize;
-};
-
-const TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
 };
 
 const TIER_POINTS: Record<MasteryTier, number> = {
@@ -58,7 +52,7 @@ function buildHighlights(payload: ShareCardBeatsPayload): string[] {
   const highlights: string[] = [];
   const mastered = payload.beat1?.[0];
   if (mastered) {
-    highlights.push(`Crossed into ${TIER_LABEL[mastered.toTier]} in ${mastered.domain}`);
+    highlights.push(`Crossed into ${KNOWLEDGE_TIER_LABEL[mastered.toTier]} in ${mastered.domain}`);
   }
 
   const discovered = payload.beat2?.friendMediated[0] ?? payload.beat2?.authored[0] ?? payload.beat2?.promoted[0];

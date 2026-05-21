@@ -48,6 +48,7 @@ type GradeResponse = {
   pointsAwarded: number;
   correctAnswer?: string;
   breadcrumb?: string | null;
+  insideJoke?: string | null;
   viewerStatus: 'not_started' | 'in_progress' | 'complete';
 };
 
@@ -162,6 +163,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
           submitted,
           correctAnswer: body.isCorrect ? null : body.correctAnswer ?? currentQuestion.question.answerText,
           consolation: null,
+          insideJoke: body.insideJoke ?? null,
           breadcrumb: null,
           copyVariant: currentQuestion.position,
           creatorName: game.creator.displayName,

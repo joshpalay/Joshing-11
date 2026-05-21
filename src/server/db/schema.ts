@@ -233,6 +233,7 @@ export const questions = pgTable(
     canonicalSubcategory: text('canonical_subcategory'),
     categoryOverridden: boolean('category_overridden').notNull().default(false),
     creatorNote: text('creator_note'),
+    insideJoke: text('inside_joke'),
     difficultyEstimate: difficultyEstimateEnum('difficulty_estimate'),
     llmDifficulty: difficultyEstimateEnum('llm_difficulty'),
     calibratedDifficulty: difficultyEstimateEnum('calibrated_difficulty'),

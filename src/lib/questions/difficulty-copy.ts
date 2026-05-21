@@ -18,7 +18,7 @@ const TIER_COPY: Record<QuestionDifficultyTier, string> = {
 
 const ESTIMATE_COPY: Record<DifficultyEstimateValue, string> = {
   accessible: 'Establishing',
-  moderate: 'Solid',
+  moderate: 'Familiar',
   specialist: 'Mastery',
 };
 

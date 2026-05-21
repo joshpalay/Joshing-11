@@ -1,5 +1,6 @@
 'use client';
 
+import { Search, X } from 'lucide-react';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 export type QuestionFormValues = {
@@ -32,7 +33,7 @@ type SuggestionResponse = {
 
 type FriendOption = { id: string; displayName: string };
 
-type Stage = 'WRITING' | 'CRITIQUING' | 'CRITIQUED' | 'ANSWERING' | 'REVIEWING' | 'SUBMITTING' | 'DONE';
+type Stage = 'WRITING' | 'CRITIQUING' | 'CRITIQUED' | 'ANSWERING' | 'SUBMITTING' | 'DONE';
 
 type Props = {
   mode?: 'create' | 'edit';
@@ -65,6 +66,8 @@ type State = {
   friends: FriendOption[];
   friendsLoading: boolean;
   sendToFriendIds: string[];
+  recentFriendIds: string[];
+  friendSearch: string;
 };
 
 type Action =
@@ -80,14 +83,14 @@ type Action =
   | { type: 'START_SUGGESTION' }
   | { type: 'SUGGESTION_RESULT'; questionText: string; suggestion: SuggestionResponse }
   | { type: 'SUGGESTION_ERROR'; questionText?: string; value: string | null }
-  | { type: 'REVIEW' }
-  | { type: 'BACK_TO_EDIT' }
   | { type: 'SUBMITTING' }
   | { type: 'DONE' }
   | { type: 'SPECIFIC_MODE'; value: boolean }
   | { type: 'SHARE_TO_FEED'; value: boolean }
   | { type: 'FRIENDS_LOADING'; value: boolean }
   | { type: 'FRIENDS_LOADED'; friends: FriendOption[] }
+  | { type: 'RECENTS_LOADED'; ids: string[] }
+  | { type: 'FRIEND_SEARCH'; value: string }
   | { type: 'TOGGLE_FRIEND'; id: string };
 
 function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecificMode = false): State {
@@ -112,6 +115,8 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     friends: [],
     friendsLoading: false,
     sendToFriendIds: initialValues?.sendToFriendIds ?? [],
+    recentFriendIds: [],
+    friendSearch: '',
   };
 }
 
@@ -156,14 +161,14 @@ function reducer(state: State, action: Action): State {
       }
       return { ...state, suggesting: false, suggestionError: action.value };
     }
-    case 'REVIEW': return { ...state, stage: 'REVIEWING', error: null };
-    case 'BACK_TO_EDIT': return { ...state, stage: 'ANSWERING' };
     case 'SUBMITTING': return { ...state, stage: 'SUBMITTING', error: null };
     case 'DONE': return { ...state, stage: 'DONE' };
-    case 'SPECIFIC_MODE': return { ...state, specificMode: action.value, shareToFeed: action.value ? false : state.shareToFeed, sendToFriendIds: [] };
+    case 'SPECIFIC_MODE': return { ...state, specificMode: action.value, shareToFeed: action.value ? false : state.shareToFeed, sendToFriendIds: [], friendSearch: '' };
     case 'SHARE_TO_FEED': return { ...state, shareToFeed: action.value, specificMode: action.value ? false : state.specificMode, sendToFriendIds: action.value ? [] : state.sendToFriendIds };
     case 'FRIENDS_LOADING': return { ...state, friendsLoading: action.value };
     case 'FRIENDS_LOADED': return { ...state, friends: action.friends, friendsLoading: false };
+    case 'RECENTS_LOADED': return { ...state, recentFriendIds: action.ids };
+    case 'FRIEND_SEARCH': return { ...state, friendSearch: action.value };
     case 'TOGGLE_FRIEND': {
       const selected = state.sendToFriendIds.includes(action.id);
       return { ...state, sendToFriendIds: selected ? state.sendToFriendIds.filter((id) => id !== action.id) : [...state.sendToFriendIds, action.id] };
@@ -253,6 +258,25 @@ export function QuestionForm({
   }, [state.stage]);
 
   const alternateAnswers = useMemo(() => alternateAnswersFrom(state.alternateText), [state.alternateText]);
+  const friendsById = useMemo(() => {
+    const map = new Map<string, FriendOption>();
+    for (const friend of state.friends) map.set(friend.id, friend);
+    return map;
+  }, [state.friends]);
+  const recents = useMemo(() => {
+    const result: FriendOption[] = [];
+    for (const id of state.recentFriendIds) {
+      const friend = friendsById.get(id);
+      if (friend) result.push(friend);
+      if (result.length >= 3) break;
+    }
+    return result;
+  }, [state.recentFriendIds, friendsById]);
+  const filteredFriends = useMemo(() => {
+    const query = state.friendSearch.trim().toLowerCase();
+    if (!query) return state.friends;
+    return state.friends.filter((friend) => friend.displayName.toLowerCase().includes(query));
+  }, [state.friends, state.friendSearch]);
   const showDestinations = mode === 'create';
   const verified = computedVerified(state);
   const submitDisabled = state.stage === 'SUBMITTING';
@@ -262,11 +286,18 @@ export function QuestionForm({
     if (state.friends.length > 0 || state.friendsLoading) return;
     dispatch({ type: 'FRIENDS_LOADING', value: true });
     try {
-      const response = await fetch('/api/users', { cache: 'no-store', credentials: 'include' });
-      const body = await response.json().catch(() => null) as FriendOption[] | null;
-      dispatch({ type: 'FRIENDS_LOADED', friends: response.ok && Array.isArray(body) ? body : [] });
+      const [friendsResponse, recentsResponse] = await Promise.all([
+        fetch('/api/users', { cache: 'no-store', credentials: 'include' }),
+        fetch('/api/users/recent', { cache: 'no-store', credentials: 'include' }),
+      ]);
+      const friendsBody = await friendsResponse.json().catch(() => null) as FriendOption[] | null;
+      dispatch({ type: 'FRIENDS_LOADED', friends: friendsResponse.ok && Array.isArray(friendsBody) ? friendsBody : [] });
+      const recentsBody = await recentsResponse.json().catch(() => null) as FriendOption[] | null;
+      const recentIds = recentsResponse.ok && Array.isArray(recentsBody) ? recentsBody.map((friend) => friend.id) : [];
+      dispatch({ type: 'RECENTS_LOADED', ids: recentIds });
     } catch {
       dispatch({ type: 'FRIENDS_LOADED', friends: [] });
+      dispatch({ type: 'RECENTS_LOADED', ids: [] });
     }
   }
 
@@ -354,15 +385,6 @@ export function QuestionForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, state.stage, state.questionText, state.suggesting, state.llmSuggestedAnswer]);
 
-  function review() {
-    const validationError = validate(state);
-    if (validationError) {
-      dispatch({ type: 'ERROR', value: validationError });
-      return;
-    }
-    dispatch({ type: 'REVIEW' });
-  }
-
   async function finalSave() {
     const validationError = validate(state);
     if (validationError) {
@@ -392,7 +414,7 @@ export function QuestionForm({
 
   const critique = state.critiqueResult;
   const counter = remainingCopy(state);
-  const canShowAnswering = state.stage === 'ANSWERING' || state.stage === 'REVIEWING' || state.stage === 'SUBMITTING' || mode === 'edit';
+  const canShowAnswering = state.stage === 'ANSWERING' || state.stage === 'SUBMITTING' || mode === 'edit';
 
   return (
     <div className="space-y-5">
@@ -428,7 +450,7 @@ export function QuestionForm({
           required
           className="w-full rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-primary"
           placeholder="What is the name of Alexander the Great's horse?"
-          readOnly={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'}
+          readOnly={state.stage === 'SUBMITTING'}
         />
         <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
           <span>{state.stage === 'CRITIQUING' ? 'Reviewing your question...' : null}</span>
@@ -469,7 +491,7 @@ export function QuestionForm({
 
       {canShowAnswering ? (
         <>
-          {state.stage !== 'REVIEWING' && state.stage !== 'SUBMITTING' && (counter || state.suggesting || state.suggestionError) ? (
+          {state.stage !== 'SUBMITTING' && (counter || state.suggesting || state.suggestionError) ? (
             <div className="flex flex-wrap items-center gap-3">
               {state.suggesting ? <span className="text-sm text-muted-foreground">Suggesting answer...</span> : null}
               {counter ? <span className="text-xs text-muted-foreground">{counter}</span> : null}
@@ -485,7 +507,7 @@ export function QuestionForm({
               onChange={(event) => dispatch({ type: 'FIELD', field: 'userAnswer', value: event.target.value.slice(0, 200) })}
               maxLength={200}
               required
-              readOnly={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'}
+              readOnly={state.stage === 'SUBMITTING'}
               className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary"
               placeholder="Bucephalus"
             />
@@ -493,14 +515,20 @@ export function QuestionForm({
 
           <div>
             <label htmlFor="alternate-answers" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Alternate answers</label>
-            <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="Accepted variations, separated by commas" />
+            <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="Accepted variations, separated by commas" />
             <p className="mt-1 text-xs text-muted-foreground">{alternateAnswers.length}/5 alternates</p>
           </div>
 
           <div>
             <label htmlFor="explanation" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Explanation</label>
-            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={4} maxLength={500} readOnly={state.stage === 'REVIEWING' || state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="A short note that helps someone learn if they miss it." />
+            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={4} maxLength={500} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="A short note that helps someone learn if they miss it." />
             <p className="mt-1 text-right text-xs text-muted-foreground">{state.explanation.length}/500</p>
+          </div>
+
+          <div>
+            <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Creator note</label>
+            <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="Optional context for recipients" />
+            <p className="mt-1 text-right text-xs text-muted-foreground">{state.creatorNote.length}/200</p>
           </div>
 
           <div className="rounded-md border bg-muted/30 p-3">
@@ -508,24 +536,17 @@ export function QuestionForm({
             <p className="mt-1 text-sm text-muted-foreground">Joshing will read the question and answer when you save, then use the LLM to choose the broad category, precise domain, and difficulty.</p>
           </div>
 
-          {state.stage === 'REVIEWING' && state.llmSuggestedAnswer && !answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (
+          {state.llmSuggestedAnswer && !answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (
             <div className="rounded-md border bg-muted/40 p-3 text-sm">
               <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">LLM suggestion</p>
               <p className="mt-1 line-through decoration-amber-500">{state.llmSuggestedAnswer}</p>
             </div>
           ) : null}
 
-          {state.stage === 'REVIEWING' || state.stage === 'SUBMITTING' ? (
-            <>
-              <div>
-                <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Creator note</label>
-                <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="Optional context for recipients" />
-                <p className="mt-1 text-right text-xs text-muted-foreground">{state.creatorNote.length}/200</p>
-              </div>
-              <p className={verified ? 'text-sm text-emerald-700' : 'text-sm text-amber-700'}>
-                {verified ? '✓ Verified — matches LLM suggestion' : "⚠ Unverified — your answer differs from the LLM's suggestion. Recipients will see this."}
-              </p>
-            </>
+          {state.llmSuggestedAnswer ? (
+            <p className={verified ? 'text-sm text-emerald-700' : 'text-sm text-amber-700'}>
+              {verified ? '✓ Verified — matches LLM suggestion' : "⚠ Unverified — your answer differs from the LLM's suggestion. Recipients will see this."}
+            </p>
           ) : null}
 
           {showDestinations ? (
@@ -535,14 +556,94 @@ export function QuestionForm({
               <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Share with all friends</span></label>
               <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.specificMode} onChange={(event) => toggleSpecificMode(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Send to specific friends only</span></label>
               {state.specificMode ? (
-                <div className="mt-1">
-                  {state.friendsLoading ? <p className="text-xs text-muted-foreground">Loading friends...</p> : state.friends.length === 0 ? <p className="text-xs text-muted-foreground">No friends found.</p> : (
+                <div className="mt-1 space-y-3">
+                  {state.sendToFriendIds.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
-                      {state.friends.map((friend) => {
-                        const selected = state.sendToFriendIds.includes(friend.id);
-                        return <button key={friend.id} type="button" onClick={() => dispatch({ type: 'TOGGLE_FRIEND', id: friend.id })} className={['rounded-full border px-3 py-1 text-sm transition', selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background hover:bg-muted'].join(' ')}>{friend.displayName}</button>;
+                      {state.sendToFriendIds.map((id) => {
+                        const friend = friendsById.get(id);
+                        if (!friend) return null;
+                        return (
+                          <span key={id} className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary py-1 pl-3 pr-1 text-sm text-primary-foreground">
+                            {friend.displayName}
+                            <button
+                              type="button"
+                              onClick={() => dispatch({ type: 'TOGGLE_FRIEND', id })}
+                              aria-label={`Remove ${friend.displayName}`}
+                              className="inline-flex size-5 items-center justify-center rounded-full hover:bg-primary-foreground/20"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </span>
+                        );
                       })}
                     </div>
+                  ) : null}
+
+                  {state.friendsLoading ? (
+                    <p className="text-xs text-muted-foreground">Loading friends...</p>
+                  ) : state.friends.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No friends found.</p>
+                  ) : (
+                    <>
+                      {state.friendSearch.trim() === '' && recents.length > 0 ? (
+                        <div>
+                          <p className="mb-2 text-xs uppercase tracking-[0.1em] text-muted-foreground">Recents</p>
+                          <div className="flex flex-wrap gap-2">
+                            {recents.map((friend) => {
+                              const selected = state.sendToFriendIds.includes(friend.id);
+                              return (
+                                <button
+                                  key={friend.id}
+                                  type="button"
+                                  onClick={() => dispatch({ type: 'TOGGLE_FRIEND', id: friend.id })}
+                                  aria-pressed={selected}
+                                  className={['rounded-full border px-3 py-1 text-sm transition', selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background hover:bg-muted'].join(' ')}
+                                >
+                                  {friend.displayName}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <label className="relative block">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <input
+                          type="text"
+                          aria-label="Search friends"
+                          value={state.friendSearch}
+                          onChange={(event) => dispatch({ type: 'FRIEND_SEARCH', value: event.target.value })}
+                          placeholder="Search friends..."
+                          className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm outline-none focus:border-primary"
+                          disabled={state.stage === 'SUBMITTING'}
+                        />
+                      </label>
+
+                      <div className="max-h-64 overflow-y-auto rounded-md border">
+                        {filteredFriends.length === 0 ? (
+                          <p className="p-3 text-xs text-muted-foreground">No friends match &ldquo;{state.friendSearch.trim()}&rdquo;.</p>
+                        ) : (
+                          filteredFriends.map((friend) => {
+                            const selected = state.sendToFriendIds.includes(friend.id);
+                            return (
+                              <button
+                                key={friend.id}
+                                type="button"
+                                onClick={() => dispatch({ type: 'TOGGLE_FRIEND', id: friend.id })}
+                                aria-pressed={selected}
+                                className="flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/60"
+                              >
+                                <span className={['inline-flex size-4 items-center justify-center rounded-sm border', selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'].join(' ')}>
+                                  {selected ? <span aria-hidden className="text-[10px] leading-none">✓</span> : null}
+                                </span>
+                                <span>{friend.displayName}</span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               ) : null}
@@ -551,14 +652,7 @@ export function QuestionForm({
           ) : null}
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {state.stage === 'REVIEWING' || state.stage === 'SUBMITTING' ? (
-              <>
-                <button type="button" onClick={() => dispatch({ type: 'BACK_TO_EDIT' })} className="btn-ghost" disabled={submitDisabled}>Back to edit</button>
-                <button type="button" disabled={submitDisabled} onClick={() => void finalSave()} className="btn-primary">{submitDisabled ? loadingLabel : resolvedSubmitLabel}</button>
-              </>
-            ) : (
-              <button type="button" onClick={review} className="btn-primary">Review</button>
-            )}
+            <button type="button" disabled={submitDisabled} onClick={() => void finalSave()} className="btn-primary">{submitDisabled ? loadingLabel : resolvedSubmitLabel}</button>
             {onCancel ? <button type="button" onClick={onCancel} className="btn-ghost" disabled={submitDisabled}>Cancel</button> : null}
           </div>
         </>
