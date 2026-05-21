@@ -110,6 +110,26 @@ const monoStyle: CSSProperties = {
   letterSpacing: '0.06em',
 };
 
+const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
+  (name) => `${name}’s world includes this`,
+  (name) => `${name} carries this one`,
+  (name) => `${name} thought you might`,
+];
+
+function firstNameFrom(creatorName: string): string {
+  const trimmed = creatorName.trim();
+  const space = trimmed.indexOf(' ');
+  return space === -1 ? trimmed : trimmed.slice(0, space);
+}
+
+function wrongNamedSubLabel(creatorName: string | null, variant: number): string | null {
+  if (!creatorName) return null;
+  if (creatorName.trim().toLowerCase() === 'joshing') return null;
+  const firstName = firstNameFrom(creatorName);
+  if (!firstName) return null;
+  return WRONG_NAMED_SUBLABEL[variant % WRONG_NAMED_SUBLABEL.length]!(firstName);
+}
+
 function SystemRow({ text }: { text: string }) {
   return (
     <div className="flex justify-center py-0.5">
@@ -304,6 +324,8 @@ function UserRow({ text }: { text: string }) {
 
 function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: string | null }) {
   const author = creatorName?.trim() ?? null;
+  const isBot = author?.toLowerCase() === 'joshing';
+  const showAuthor = author && !isBot;
   return (
     <div
       style={{
@@ -312,15 +334,25 @@ function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: stri
         paddingLeft: '8px',
       }}
     >
-      {author ? (
-        <p style={{ ...monoStyle, fontSize: '0.5rem', color: 'var(--text-muted)' }}>FROM [{author}]</p>
+      {showAuthor ? (
+        <p
+          style={{
+            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontSize: '0.7rem',
+            fontStyle: 'italic',
+            color: 'var(--text-muted)',
+          }}
+        >
+          From {firstNameFrom(author!)}.
+        </p>
       ) : null}
       <p
         style={{
-          marginTop: author ? '2px' : '0',
-          fontSize: '0.78rem',
+          marginTop: showAuthor ? '2px' : '0',
+          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontSize: '0.92rem',
           fontStyle: 'italic',
-          color: 'color-mix(in srgb, var(--text-muted) 78%, var(--text))',
+          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
           lineHeight: 1.35,
         }}
       >
@@ -675,6 +707,17 @@ function ResultRow({
                 <span style={{ fontWeight: 600 }}>Answer:</span> {correctAnswer}
               </p>
             ) : null}
+            <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Now it&rsquo;s in yours too
+            </p>
+            {(() => {
+              const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant);
+              return namedSubLabel ? (
+                <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {namedSubLabel}
+                </p>
+              ) : null;
+            })()}
             {consolation ? (
               <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                 {consolation}
