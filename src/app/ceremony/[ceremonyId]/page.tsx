@@ -6,6 +6,7 @@ import { Check, Share2, X } from 'lucide-react';
 
 import { ShareCard } from '@/components/ShareCard';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import type { MasteryTier } from '@/types/db';
 
 type Beat1 = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
@@ -49,13 +50,6 @@ type BeatView =
   | { id: 4; content: Beat4 }
   | { id: 5; content: Beat5 }
   | { id: '5-friend'; content: Beat5FriendFallback };
-
-const TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
-};
 
 function joinList(values: string[]) {
   if (values.length <= 2) return values.join(' and ');
@@ -154,7 +148,7 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
               <div>
                 <p className="font-serif text-xl font-semibold text-stone-50">{crossing.domain}</p>
                 <p className="mt-1 text-xs uppercase tracking-[0.16em] text-stone-400">
-                  {TIER_LABEL[crossing.fromTier]} {'->'} {TIER_LABEL[crossing.toTier]}
+                  {KNOWLEDGE_TIER_LABEL[crossing.fromTier]} {'->'} {KNOWLEDGE_TIER_LABEL[crossing.toTier]}
                 </p>
               </div>
             </div>

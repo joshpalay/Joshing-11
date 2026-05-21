@@ -8,6 +8,7 @@ import { DomainVisibilityToggle, type DomainVisibility } from '@/components/know
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import type { MasteryTier } from '@/types/db';
 
 type MasteryEvent = {
@@ -47,13 +48,6 @@ type DomainDetail = {
   visibility: DomainVisibility;
   recentEvents: MasteryEvent[];
   questionHistory: QuestionAnswer[];
-};
-
-const TIER_LABEL: Record<MasteryTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
 };
 
 const VISIBILITY_HELP: Record<DomainVisibility, string> = {
@@ -191,7 +185,7 @@ export default function DomainDetailPage() {
 
       <section className="mb-5 rounded-lg border bg-card p-5 text-card-foreground">
         <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Current tier</p>
-        <h2 className="mt-2 font-serif text-4xl font-semibold">{TIER_LABEL[tier]}</h2>
+        <h2 className="mt-2 font-serif text-4xl font-semibold">{KNOWLEDGE_TIER_LABEL[tier]}</h2>
         <div className="mt-5">
           <TierProgressBar
             tier={tier}
@@ -202,7 +196,7 @@ export default function DomainDetailPage() {
         <p className="mt-3 text-sm text-muted-foreground">
           {formatNumber(detail.points)} points
           {detail.nextTier && detail.pointsToNextTier !== null
-            ? ` · ${formatNumber(detail.pointsToNextTier)} to ${TIER_LABEL[asTier(detail.nextTier)]}`
+            ? ` · ${formatNumber(detail.pointsToNextTier)} to ${KNOWLEDGE_TIER_LABEL[asTier(detail.nextTier)]}`
             : ' · Top tier reached'}
         </p>
       </section>

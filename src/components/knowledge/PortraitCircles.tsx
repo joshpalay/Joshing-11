@@ -6,8 +6,10 @@ import {
   type CircleSizingTier,
 } from '@/lib/knowledge/circle-sizing'
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
+import type { MasteryTier } from '@/types/db'
 
-type PortraitTier = 'establishing' | 'familiar' | 'solid' | 'mastery'
+type PortraitTier = MasteryTier
 type SortMode = 'domain' | 'mastery'
 
 export type PortraitEntry = {
@@ -32,13 +34,6 @@ const TIER_ORDER: PortraitTier[] = [
   'familiar',
   'establishing',
 ]
-
-const TIER_DISPLAY: Record<PortraitTier, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
-}
 
 type DomainColor = {
   primary: string
@@ -177,7 +172,7 @@ function buildSections(
       })
   }
   return TIER_ORDER.map((tier) => ({
-    label: TIER_DISPLAY[tier],
+    label: KNOWLEDGE_TIER_LABEL[tier],
     color: '#6b5535',
     entries: entries
       .filter((e) => e.tier === tier)
@@ -475,7 +470,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
                 }}
               />
               <span style={{ fontSize: 9.5, color: '#8b7355' }}>
-                {TIER_DISPLAY[tier]}
+                {KNOWLEDGE_TIER_LABEL[tier]}
               </span>
             </div>
           ))}
