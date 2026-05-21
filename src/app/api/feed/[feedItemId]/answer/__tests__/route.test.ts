@@ -10,28 +10,60 @@ const {
   readPriorAnswersForQuestionMock,
   selectQuipMock,
   writeMasteryEventMock,
-} = vi.hoisted(() => ({
-  createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
-  getBasePointsMock: vi.fn((_difficulty: unknown, state: string) => {
-    if (state === 'first_correct') return 100
-    if (state === 'first_correct_after_wrong') return 25
-    return 0
-  }),
-  getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
-  gradeAnswerMock: vi.fn(),
-  promoteDeclaredToDemonstratedMock: vi.fn(),
-  promptCreatorNoteAfterWrongAnswerMock: vi.fn(),
-  readPriorAnswersForQuestionMock: vi.fn(async () => []),
-  selectQuipMock: vi.fn(() => 'quip'),
-  writeMasteryEventMock: vi.fn(async () => ({
-    domain: 'history',
-    points: 0,
-    previousTier: 'establishing',
-    newTier: 'establishing',
-    tierChanged: false,
-    openedNewTerritory: false,
-  })),
-}))
+  dbMock,
+  selectCallChain,
+} = vi.hoisted(() => {
+  // Drizzle chain mock — sequence: feed lookup, playerMastery lookup.
+  const selectCallChain: Array<() => Promise<unknown[]>> = []
+  function makeChainable() {
+    const chain: Record<string, unknown> = {}
+    chain.from = () => chain
+    chain.innerJoin = () => chain
+    chain.leftJoin = () => chain
+    chain.where = () => chain
+    chain.limit = () => {
+      const handler = selectCallChain.shift() ?? (async () => [])
+      return handler()
+    }
+    return chain
+  }
+  return {
+    createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
+    getBasePointsMock: vi.fn((_difficulty: unknown, state: string) => {
+      if (state === 'first_correct') return 100
+      if (state === 'first_correct_after_wrong') return 25
+      return 0
+    }),
+    getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
+    gradeAnswerMock: vi.fn(),
+    promoteDeclaredToDemonstratedMock: vi.fn(),
+    promptCreatorNoteAfterWrongAnswerMock: vi.fn(),
+    readPriorAnswersForQuestionMock: vi.fn(async () => []),
+    selectQuipMock: vi.fn(() => 'quip'),
+    writeMasteryEventMock: vi.fn(async () => ({
+      domain: 'history',
+      points: 0,
+      previousTier: 'establishing',
+      newTier: 'establishing',
+      tierChanged: false,
+      openedNewTerritory: false,
+    })),
+    dbMock: {
+      select: vi.fn(() => makeChainable()),
+      transaction: vi.fn(async (fn: (tx: unknown) => Promise<void>) => {
+        const tx = {
+          update: vi.fn(() => ({
+            set: vi.fn(() => ({
+              where: vi.fn(async () => undefined),
+            })),
+          })),
+        }
+        await fn(tx)
+      }),
+    },
+    selectCallChain,
+  }
+})
 
 const FEED_ROW = {
   feedItem: {
@@ -59,36 +91,6 @@ const FEED_ROW = {
     factualExplanation: null,
   },
   sourceDisplayName: 'Friend',
-}
-
-// Drizzle chain mock — sequence: feed lookup, playerMastery lookup.
-const selectCallChain: Array<() => Promise<unknown[]>> = []
-
-function makeChainable() {
-  const chain: Record<string, unknown> = {}
-  chain.from = () => chain
-  chain.innerJoin = () => chain
-  chain.leftJoin = () => chain
-  chain.where = () => chain
-  chain.limit = () => {
-    const handler = selectCallChain.shift() ?? (async () => [])
-    return handler()
-  }
-  return chain
-}
-
-const dbMock = {
-  select: vi.fn(() => makeChainable()),
-  transaction: vi.fn(async (fn: (tx: unknown) => Promise<void>) => {
-    const tx = {
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(async () => undefined),
-        })),
-      })),
-    }
-    await fn(tx)
-  }),
 }
 
 vi.mock('@/server/grading', () => ({
@@ -283,5 +285,97 @@ describe('POST /api/feed/[feedItemId]/answer mastery scoring (F2.3)', () => {
     await POST(jsonRequest({ submitted_answer: 'A' }) as never, makeContext())
 
     expect(promoteDeclaredToDemonstratedMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/feed/[feedItemId]/answer retry policy (direct_sent persistence)', () => {
+  function rowWith(overrides: Partial<typeof FEED_ROW.feedItem>) {
+    return {
+      ...FEED_ROW,
+      feedItem: { ...FEED_ROW.feedItem, ...overrides },
+    }
+  }
+
+  function primeDbChain(row: unknown) {
+    selectCallChain.length = 0
+    selectCallChain.push(async () => [row])
+    selectCallChain.push(async () => [])
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    readPriorAnswersForQuestionMock.mockResolvedValue([])
+    writeMasteryEventMock.mockResolvedValue({
+      domain: 'history',
+      points: 0,
+      previousTier: 'establishing',
+      newTier: 'establishing',
+      tierChanged: false,
+      openedNewTerritory: false,
+    })
+  })
+
+  it('accepts a retry on a direct_sent item that was answered wrong', async () => {
+    primeDbChain(rowWith({
+      state: 'answered',
+      sourceType: 'direct_sent',
+      answerResult: 'incorrect',
+    }))
+    readPriorAnswersForQuestionMock.mockResolvedValueOnce([{ result: 'wrong' }])
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+
+    const response = await POST(jsonRequest({ submitted_answer: 'A' }) as never, makeContext())
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({ isCorrect: true })
+    expect(writeMasteryEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ answerState: 'first_correct_after_wrong' }),
+    )
+  })
+
+  it('rejects a retry on a direct_sent item that was answered correctly', async () => {
+    primeDbChain(rowWith({
+      state: 'answered',
+      sourceType: 'direct_sent',
+      answerResult: 'correct',
+    }))
+
+    const response = await POST(jsonRequest({ submitted_answer: 'A' }) as never, makeContext())
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body).toMatchObject({ error: 'invalid_state' })
+    expect(gradeAnswerMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a retry on a non-direct_sent answered item even if wrong', async () => {
+    primeDbChain(rowWith({
+      state: 'answered',
+      sourceType: 'authored_shared',
+      answerResult: 'incorrect',
+    }))
+
+    const response = await POST(jsonRequest({ submitted_answer: 'A' }) as never, makeContext())
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body).toMatchObject({ error: 'invalid_state' })
+    expect(gradeAnswerMock).not.toHaveBeenCalled()
+  })
+
+  it('still rejects dismissed / rolled_off items regardless of source', async () => {
+    primeDbChain(rowWith({
+      state: 'dismissed',
+      sourceType: 'direct_sent',
+      answerResult: 'incorrect',
+    }))
+
+    const response = await POST(jsonRequest({ submitted_answer: 'A' }) as never, makeContext())
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body).toMatchObject({ error: 'invalid_state' })
+    expect(gradeAnswerMock).not.toHaveBeenCalled()
   })
 })
