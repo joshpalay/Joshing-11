@@ -348,7 +348,7 @@ function QuestionsPageContent() {
       <header className="mb-5 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-serif text-3xl font-semibold">Your Questions</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{questions.length} banked questions</p>
+          <p className="mt-1 text-sm text-muted-foreground">{questions.length} questions</p>
         </div>
         <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={() => setDrawer({ mode: 'create' })}>
           <Plus className="size-4" />
@@ -394,7 +394,7 @@ function QuestionsPageContent() {
         <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
           <h2 className="font-serif text-2xl font-semibold">No questions yet.</h2>
           <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-            Your question bank is empty. Write a question or save one from a friend to build your bank.
+            You haven&apos;t written any questions yet. Write one to get started.
           </p>
           <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create' })}>
             Write a question

@@ -253,7 +253,7 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
 
 export async function getQuestionsForUser(userId: string): Promise<QuestionView[]> {
   const { getBankedQuestions } = await import('@/server/db/queries/bank');
-  return getBankedQuestions(userId);
+  return getBankedQuestions(userId, { onlyAuthored: true });
 }
 
 export async function hasUserAuthoredAnyQuestion(userId: string): Promise<boolean> {
