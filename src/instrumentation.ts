@@ -335,6 +335,19 @@ export async function register() {
       // it before this migration runs.
     }
 
+    // Migration 0039 adds the nullable Question.inside_joke column for the
+    // friends-only LLM-generated aside. Apply it idempotently in case the
+    // migration is recorded without the column actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "inside_joke" text
+      `);
+    } catch {
+      // Question may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

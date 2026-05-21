@@ -102,6 +102,7 @@ type AnswerResponse = {
   correctAnswer?: string
   explanation?: string | null
   quip?: string | null
+  insideJoke?: string | null
   pointsAwarded?: number | null
   masteryDelta?: unknown | null
 }
@@ -112,6 +113,7 @@ type ResultState = {
   submittedAnswer: string
   explanation: string | null
   quip: string | null
+  insideJoke: string | null
   awardedPoints: number | null
   masteryDelta: unknown | null
 }
@@ -852,6 +854,7 @@ function FeedListContent({
             submittedAnswer,
             explanation: body.explanation ?? null,
             quip: body.quip ?? null,
+            insideJoke: body.insideJoke ?? null,
             awardedPoints: body.pointsAwarded ?? null,
             masteryDelta: body.masteryDelta ?? null,
           },
@@ -1138,6 +1141,7 @@ function FeedListContent({
             submittedAnswer={result.submittedAnswer}
             explanation={result.explanation}
             quip={result.quip}
+            insideJoke={result.insideJoke}
             openedNewTerritory={pickOpenedNewTerritory(result.masteryDelta)}
             questionId={sheetItem.question_id}
             feedItemId={sheetItem.id}

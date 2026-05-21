@@ -50,6 +50,8 @@ export type ChatMessage =
       correctAnswer: string | null;
       /** Near-miss quip from LLM grader */
       consolation: string | null;
+      /** LLM-generated friends-only aside; only present when the viewer is the creator or an active friend. */
+      insideJoke?: string | null;
       breadcrumb: string | null;
       /** 0–3 index for rotating copy phrases */
       copyVariant: number;
@@ -539,6 +541,7 @@ function ResultRow({
   result,
   correctAnswer,
   consolation,
+  insideJoke,
   breadcrumb,
   quip,
   copyVariant,
@@ -554,6 +557,7 @@ function ResultRow({
   questionText: string;
   correctAnswer: string | null;
   consolation: string | null;
+  insideJoke?: string | null;
   breadcrumb: string | null;
   quip?: string | null;
   copyVariant: number;
@@ -739,6 +743,41 @@ function ResultRow({
           </p>
         ) : null}
       </div>
+      {insideJoke ? (
+        <div
+          style={{
+            marginTop: '8px',
+            width: '100%',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid color-mix(in srgb, #b58a2b 24%, var(--border))',
+            background: 'color-mix(in srgb, #f6c97a 14%, var(--surface-2))',
+            padding: '10px 14px',
+            color: 'var(--text)',
+          }}
+        >
+          <p
+            style={{
+              ...monoStyle,
+              fontSize: '0.55rem',
+              color: 'color-mix(in srgb, #6b4a10 80%, var(--text-muted))',
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Between us friends
+          </p>
+          <p
+            style={{
+              marginTop: '4px',
+              fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+              fontSize: '0.92rem',
+              lineHeight: 1.45,
+            }}
+          >
+            {insideJoke}
+          </p>
+        </div>
+      ) : null}
       {reactionPrompt ? <QuestionReactionPrompt prompt={reactionPrompt} /> : null}
     </div>
   );
@@ -944,6 +983,7 @@ export function GameplayChatThread({
                 questionText={m.questionText}
                 correctAnswer={m.correctAnswer}
                 consolation={m.consolation}
+                insideJoke={m.insideJoke}
                 breadcrumb={m.breadcrumb}
                 quip={m.quip}
                 copyVariant={m.copyVariant}

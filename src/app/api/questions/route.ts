@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
-import { categorizeQuestion } from '@/lib/llm';
+import { categorizeQuestion, generateInsideJoke } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
 import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
 import {
@@ -128,7 +128,17 @@ export async function POST(request: NextRequest) {
     canonicalSubcategory: questionFields.canonicalSubcategory,
     explanation: questionFields.explanation,
   });
-  const categorizedQuestionFields = { ...questionFields, difficulty: difficultyAssessment.difficulty };
+  const insideJoke = await generateInsideJoke({
+    questionText: questionFields.text,
+    correctAnswer: questionFields.correctAnswer,
+    broadCategory: questionFields.broadCategory,
+    canonicalSubcategory: questionFields.canonicalSubcategory,
+  });
+  const categorizedQuestionFields = {
+    ...questionFields,
+    difficulty: difficultyAssessment.difficulty,
+    insideJoke,
+  };
 
   if (sendToFriendIds.length > 0) {
     const friends = await getFriends(session.userId);

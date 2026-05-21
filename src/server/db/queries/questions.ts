@@ -95,6 +95,7 @@ const questionViewColumns = {
   canonicalSubcategory: questionTableColumns.canonicalSubcategory,
   categoryOverridden: questionTableColumns.categoryOverridden,
   creatorNote: questionTableColumns.creatorNote,
+  insideJoke: questionTableColumns.insideJoke,
   difficultyEstimate: questionTableColumns.difficultyEstimate,
   llmDifficulty: questionTableColumns.llmDifficulty,
   calibratedDifficulty: questionTableColumns.calibratedDifficulty,
@@ -361,6 +362,7 @@ export async function createQuestion(params: {
   domain?: string;
   difficulty: number;
   creatorNote?: string | null;
+  insideJoke?: string | null;
   verified: boolean;
   llmSuggestedAnswer?: string | null;
   critiqueIterations: number;
@@ -375,6 +377,7 @@ export async function createQuestion(params: {
     acceptedAlternatives: params.alternateAnswers,
     factualExplanation: params.explanation,
     creatorNote: params.creatorNote ?? null,
+    insideJoke: params.insideJoke ?? null,
     category: params.category as typeof questions.$inferInsert.category,
     broadCategory: params.broadCategory,
     subcategory: params.subcategory,
