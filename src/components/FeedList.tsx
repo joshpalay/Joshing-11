@@ -527,6 +527,7 @@ function FeedListContent({
   const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hideToast, setHideToast] = useState<{ category: string } | null>(null)
   const [ceremonyStatus, setCeremonyStatus] = useState<CeremonyStatus | null>(initialCeremonyStatus)
   // True for the very first render path when we already have server-rendered
   // data; the initial-fetch useEffect skips its work once.
@@ -667,6 +668,7 @@ function FeedListContent({
 
   const hideCategory = useCallback(async (item: FeedApiItem) => {
     if (!item.domain_pill) return
+    const category = item.domain_pill
     setBusyId(item.id)
     setError(null)
     try {
@@ -674,17 +676,21 @@ function FeedListContent({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ domain: item.domain_pill }),
+        body: JSON.stringify({ domain: category }),
       })
       if (!response.ok) {
         const body = await response.json().catch(() => null)
         throw new Error(body?.message ?? 'Could not hide that category.')
       }
       setItems((current) =>
-        current.filter(
-          (currentItem) => currentItem.domain_pill !== item.domain_pill
-        )
+        current.filter((currentItem) => currentItem.domain_pill !== category)
       )
+      setHideToast({ category })
+      window.setTimeout(() => {
+        setHideToast((current) =>
+          current?.category === category ? null : current
+        )
+      }, 4500)
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -961,6 +967,22 @@ function FeedListContent({
         ))}
       </nav>
       <CeremonyTopOfFeed status={ceremonyStatus} />
+
+      {hideToast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="text-muted-foreground mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2 text-sm italic"
+        >
+          <span>Hidden questions about {hideToast.category}.</span>
+          <Link
+            href="/knowledge#focused-feed"
+            className="text-foreground text-xs font-medium not-italic underline-offset-4 hover:underline"
+          >
+            Manage on your knowledge page →
+          </Link>
+        </div>
+      ) : null}
 
       {items.length === 0 ? (
         <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">

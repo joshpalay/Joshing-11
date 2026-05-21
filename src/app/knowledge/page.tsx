@@ -593,7 +593,7 @@ function KnowledgePageContent() {
       </section>
 
       {dismissedDomains.length > 0 && (
-        <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Dismissed domains">
+        <section id="focused-feed" className="bg-white border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Dismissed domains">
           <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">FOCUSED FEED</p>
           <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — RE-OPEN ANY TIME</p>
           <div className="mt-3 flex flex-col gap-2">

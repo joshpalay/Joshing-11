@@ -349,7 +349,7 @@ describe('Feed card category and overflow affordances', () => {
         isInBank: true,
       })
     ).toEqual([
-      'Hide this category',
+      'Hide questions about Literature',
       'Hide questions from Maya',
       'Send to friend',
       'Report',
