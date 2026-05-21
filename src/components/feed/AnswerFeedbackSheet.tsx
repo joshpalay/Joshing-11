@@ -15,6 +15,7 @@ type AnswerFeedbackSheetProps = {
   submittedAnswer: string
   explanation: string | null
   quip: string | null
+  insideJoke?: string | null
   openedNewTerritory?: boolean
   questionId: string
   feedItemId: string
@@ -32,6 +33,7 @@ export function AnswerFeedbackSheet({
   submittedAnswer,
   explanation,
   quip,
+  insideJoke = null,
   openedNewTerritory = false,
   questionId,
   feedItemId,
@@ -222,6 +224,17 @@ export function AnswerFeedbackSheet({
             <div className="rounded-2xl bg-stone-50 p-4">
               <p className="font-serif text-[15px] leading-7 text-stone-800">
                 {explanation}
+              </p>
+            </div>
+          ) : null}
+
+          {insideJoke ? (
+            <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+              <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-amber-800/80">
+                Between us friends
+              </p>
+              <p className="mt-1.5 font-serif text-[15px] leading-7 text-amber-950">
+                {insideJoke}
               </p>
             </div>
           ) : null}

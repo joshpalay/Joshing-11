@@ -23,6 +23,7 @@ import { suggestAnswer } from '@/lib/llm';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
 import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
+import { areFriends } from '@/server/db/queries/friends';
 
 export const dynamic = 'force-dynamic';
 
@@ -160,6 +161,7 @@ export async function POST(request: NextRequest) {
     let canonicalQuestionId: string | null = null;
     let persistedCreatorId: string | null = null;
     let persistedDomainForCreator: string | null = null;
+    let persistedInsideJoke: string | null = null;
     let persistAttempt = 0;
     while (persistAttempt < 2 && canonicalQuestionId === null) {
       persistAttempt += 1;
@@ -167,13 +169,14 @@ export async function POST(request: NextRequest) {
         const persisted = await persistGeneratedQuestion(question.id, slot.domain);
         canonicalQuestionId = persisted.questionId;
         const [persistedQuestion] = await db
-          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category, insideJoke: questions.insideJoke })
           .from(questions)
           .where(eq(questions.id, persisted.questionId))
           .limit(1);
         persistedCreatorId = persistedQuestion?.creatorId ?? null;
         persistedDomainForCreator =
           persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+        persistedInsideJoke = persistedQuestion?.insideJoke ?? null;
       } catch (error) {
         const finalAttempt = persistAttempt >= 2;
         console.warn(
@@ -235,6 +238,12 @@ export async function POST(request: NextRequest) {
     }
     const pointsAwarded = skipMasteryForUnknownDomain ? 0 : uncheckedPointsAwarded;
 
+    const insideJokeForViewer = await selectInsideJokeForViewer(
+      persistedInsideJoke,
+      persistedCreatorId,
+      session.userId,
+    );
+
     const nextSlots = slots.map((item) => {
       if (item.slot_index !== parsed.slotIndex) return item;
       return {
@@ -245,6 +254,7 @@ export async function POST(request: NextRequest) {
         awarded_points: pointsAwarded,
         reveal_canonical_answer: canonicalAnswer,
         reveal_explainer: question.explainer,
+        reveal_inside_joke: insideJokeForViewer,
         reveal_quip: grade.consolation,
         quip,
       } satisfies QueueSlot;
@@ -340,9 +350,21 @@ export async function POST(request: NextRequest) {
       awarded_points: pointsAwarded,
       mastery_delta: masteryDelta,
       quip,
+      insideJoke: insideJokeForViewer,
     });
   } catch (error) {
     console.error('[daily/answer] unexpected failure', error);
     return dailyAnswerErrorResponse(500, 'unexpected', 'Could not record that answer.');
   }
+}
+
+async function selectInsideJokeForViewer(
+  insideJoke: string | null,
+  creatorId: string | null,
+  viewerId: string,
+): Promise<string | null> {
+  if (!insideJoke || !creatorId) return null;
+  if (creatorId === viewerId) return insideJoke;
+  const friends = await areFriends(viewerId, creatorId);
+  return friends ? insideJoke : null;
 }

@@ -681,6 +681,70 @@ Return JSON only.`;
   }
 }
 
+// ─── Inside joke (friends-only aside on the answer reveal) ────────────────────
+
+export async function generateInsideJoke(params: {
+  questionText: string;
+  correctAnswer: string;
+  broadCategory: string | null;
+  canonicalSubcategory: string | null;
+}): Promise<string | null> {
+  const systemPrompt = `You write a one- or two-sentence "between us friends" aside that displays under a trivia answer when the viewer is friends with the question's creator.
+
+Tone:
+- Conspiratorial, fond, slightly teasing — like an inside joke between people who actually know each other.
+- Specific to the answer's content. Riff on a detail of the subject, not the act of asking.
+- NOT a hint and NOT a restatement of the formal explainer. The reader already knows the answer when they see this line.
+
+Hard rules:
+- 1–2 sentences. No greetings, no sign-offs, no emoji.
+- Do not address the creator by name (you don't know it).
+- Do not invent fake personal history ("remember when we...").
+- Plain prose. No quotes around the line. No "FYI" / "btw" preambles.
+
+Return JSON only, exactly:
+{ "inside_joke": "<one or two sentences>" }`;
+
+  const userMessage = `Question: ${params.questionText}
+Answer: ${params.correctAnswer}
+Broad category: ${params.broadCategory ?? 'unknown'}
+Topic: ${params.canonicalSubcategory ?? 'unknown'}
+Write the aside. Return JSON only.`;
+
+  try {
+    const client = getAnthropicClient();
+    if (!client) {
+      logFallback('generateInsideJoke', 'no_client');
+      return null;
+    }
+
+    const response = await loggedMessagesCreate(client, 'inside-joke', {
+      model: ANTHROPIC_MODEL,
+      max_tokens: 160,
+      temperature: 0.7,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: userMessage }],
+    });
+
+    const text = extractTextContent(response.content);
+    const parsed = parseJsonObject(text);
+    if (!parsed) {
+      logFallback('generateInsideJoke', 'invalid_json', { responseLength: text.length });
+      return null;
+    }
+
+    const insideJoke = asTrimmedString(parsed.inside_joke);
+    if (!insideJoke) {
+      logFallback('generateInsideJoke', 'missing_field');
+      return null;
+    }
+    return insideJoke;
+  } catch (error) {
+    logFallback('generateInsideJoke', 'request_failed', summarizeError(error));
+    return null;
+  }
+}
+
 // ─── Prompt 3: Educational Explainer ──────────────────────────────────────────
 
 export async function generateExplainer(
