@@ -90,8 +90,15 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
   const tierChanged = previousTier !== nextTier;
   const openedNewTerritory = !existing && params.pointsAwarded > 0;
 
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`
+  const eventInserted = await db.transaction(async (tx) => {
+    // ON CONFLICT DO NOTHING covers the two unique constraints on
+    // MASTERY_EVENTS: the answer_id key (per-submission idempotency for
+    // double-clicks/retries) and the (source_type, question_id,
+    // answered_by_user_id) key (cross-surface dedupe when the same canonical
+    // question resurfaces via different generated/queue slots). When a
+    // conflict skips the insert we must NOT credit player_mastery a second
+    // time — the original event already did.
+    const insertResult = await tx.execute<{ id: string }>(sql`
       insert into "MASTERY_EVENTS" (
         "user_id",
         "canonical_subcategory",
@@ -123,9 +130,13 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
         ${params.sourceType === 'author_credit' || params.sourceType === 'curator_credit' ? null : (params.answerState ?? null)},
         ${params.sourceType}
       )
+      on conflict do nothing
+      returning "id"
     `);
 
-    if (params.pointsAwarded > 0) {
+    const inserted = insertResult.rows.length > 0;
+
+    if (inserted && params.pointsAwarded > 0) {
       await tx
         .insert(playerMastery)
         .values({
@@ -149,7 +160,21 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
           },
         });
     }
+
+    return inserted;
   });
+
+  if (!eventInserted) {
+    return {
+      domain: params.domain,
+      broadCategory: broadCategory ?? null,
+      points: 0,
+      previousTier,
+      newTier: previousTier,
+      tierChanged: false,
+      openedNewTerritory: false,
+    };
+  }
 
   if (tierChanged) {
     await writeTierCrossingActivityForFriends({
