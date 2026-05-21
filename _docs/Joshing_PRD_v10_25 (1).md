@@ -9,6 +9,12 @@
 
 ---
 
+## Changelog — v10.25
+
+- **§8.22 Wrong-Answer Text Visibility (new subsection).** Codifies a privacy posture the product has been operating on implicitly: the literal text a player submits on a wrong answer is the player's property and is not exposed to the author by default. Authors see the event and aggregate analytics; submitted text reaches the author only through grade disputes or an explicit opt-in checkbox attached to a wrong-answer reaction. Companion edits to §8.10b, §8.3 / §8.18 (creator analytics surfaces), and §11 (Data Model — ANSWERS and QUESTION_REACTIONS).
+
+---
+
 ## Source of Truth & Conflict Resolution
 
 ### Source of Truth Order (normative)
@@ -477,7 +483,7 @@ Private labels for personal curation — identifying which questions are right f
 
 **Question Analytics**
 
-Each question in the bank shows: correct percentage, total times answered, stars received, most common wrong answers (top 3, anonymized). Common wrong answers allow creators to identify canonical answer gaps and add accepted alternatives.
+Each question in the bank shows: correct percentage, total times answered, stars received, most common wrong answers (top 3, anonymized). Common wrong answers allow creators to identify canonical answer gaps and add accepted alternatives. Surfacing follows the aggregation rule in §8.22 ("Wrong-Answer Text Visibility — Author Side"): a wrong answer appears only when count ≥ 3, or count ≥ 2 in a group where the author is not a member; never with per-player attribution.
 
 For questions opted into the shared library, analytics also show: total pools played in beyond the creator's own groups, aggregate star rate across all pools.
 
@@ -1249,6 +1255,10 @@ For wrong answers, discovery-oriented options are presented first:
 
 Below any canned response option, a secondary prompt: "say more →" — a small optional text field, 100 characters maximum. The character limit is deliberate — it keeps it a moment, not an essay. If they have more to say, they should say it in person. That's the point.
 
+**Wrong-Answer Text Opt-In**
+
+On wrong-answer reactions only, a checkbox below the note field reads "Show my answer too." When checked, the player's submitted answer is included in the reaction payload to the question's author. Default unchecked. This is the only path by which an author sees a friend's specific wrong-answer text outside of grade disputes and de-identified aggregate analytics (see §8.22, "Wrong-Answer Text Visibility — Author Side").
+
 **Creator Responses**
 
 When a creator receives a reaction, they can respond with their own canned reply or a short note:
@@ -1583,7 +1593,7 @@ Accessible from each game card. Defaults to most recently used group and game co
 
 - Correct rate per question
 - Star count per question
-- Top 3 most common wrong answers (anonymized)
+- Top 3 most common wrong answers (anonymized; aggregation gated by the rule in §8.22 — count ≥ 3, or count ≥ 2 cross-group; never per-player attribution)
 - Number of players who have answered it
 
 **The Personal Performance View**
@@ -1795,6 +1805,68 @@ The reaction mechanic is available on all questions. For wrong answers, the cann
 - *"You knew I wouldn't get this, didn't you."*
 
 These invite the creator to continue the conversation in a specific direction rather than simply rating the question.
+
+**Wrong-Answer Text Visibility — Author Side**
+
+The literal text a player submitted on a question they got wrong is **not visible to the question's author by default**. The author sees that the friend got it wrong; the author does not see what the friend typed.
+
+This is a deliberate asymmetry. The answerer is in the more vulnerable position — they committed to an answer and were graded against it. Surfacing that text unilaterally to the author would convert a discovery moment into a quiet evaluation moment and breaks the discovery-not-judgment frame established at the top of §8.22.
+
+*What the author **does** see by default*
+
+| Surface | What the author sees about a friend's wrong answer |
+|---|---|
+| Activity feed | "[Friend] got your [Category] question wrong" — event + result + category. No submitted text. |
+| Wrong-answer creator prompt notification | Same. No submitted text. Prompts the author to add a creator note if none exists. |
+| Question analytics view (see §8.3 / §8.18 creator stats) | Aggregate **common wrong answers** — surfaced only when two or more *distinct* players submit the same (or canonicalized-equivalent) wrong answer for the same question. Names are not attached. See "Aggregation rule" below. |
+| Game / season summary | Per-question correct-rate among recipients. No per-recipient submitted text. |
+| Dispute review | When and only when a player explicitly disputes a grade, the author sees that player's submitted answer alongside the canonical answer for that question. This is consent by the act of disputing. |
+
+*What the author can see — via opt-in by the answerer*
+
+The **only** path that surfaces a specific player's specific wrong-answer text to the author is the **Question Reaction mechanic (§8.10b)**, and only when the answerer chooses to send a reaction.
+
+Two reveal patterns:
+
+1. **Canned reaction alone.** When the answerer taps a canned reaction (e.g., "You knew I wouldn't get this, didn't you"), the author sees the reaction in the End-of-Session Review thread and the question's archive card. The author sees the question, the player's *result* (wrong), and the *reaction* — but still not the literal submitted text.
+2. **Personal note opt-in.** A new optional toggle appears below the 100-character note field on wrong-answer reactions only:
+
+   > [ ] **Show my answer too**
+   > *"Sometimes the wrong answer is the most interesting part."*
+
+   When checked, the answerer's submitted answer text is included in the reaction payload visible to the author and only the author. The default state is unchecked. The toggle is sticky per-player-per-question (does not persist across questions or sessions).
+
+The toggle exists because for close friends, the wrong answer often *is* the conversation starter ("I had Vermeer" / "no it was Hammershøi but you were in the right century") — but that conversation has to be initiated by the person whose answer it is.
+
+*Aggregation rule for "common wrong answers" in creator analytics*
+
+A wrong answer becomes eligible for de-identified surfacing in the author's analytics view if and only if:
+
+- Two or more *distinct* user_ids have submitted the same canonical wrong answer for the same question_id, AND
+- No reverse-lookup risk exists — if exactly two distinct players have submitted the same wrong answer and the author can plausibly identify both from group context, the row is suppressed. Threshold: surface only when count ≥ 3 *or* count ≥ 2 in a group where the author is not a member.
+
+The author sees: the wrong text, count, and percentage of all wrong submissions on that question. The author does not see: which players submitted it.
+
+This rule exists in service of **question authoring quality** (the author needs to know that everyone is guessing "Vermeer" so they can decide whether to add an accepted alternative, refine the prompt, or add a creator note pointing to the distinction). It does not serve curiosity about specific people.
+
+*Schema implications*
+
+- **ANSWERS.submitted_answer** is *not* exposed in any author-facing read path other than: (a) the answering player's own views, (b) dispute resolution, (c) aggregate canonical roll-ups gated by the rule above.
+- **QUESTION_REACTIONS** gains an optional field `include_submitted_answer` (boolean, default false). When true *and* the reaction's `from_user_id` matches the ANSWERS.user_id for the same question, the read layer joins the submitted_answer text into the reaction payload visible to `to_user_id`. When false, the join is not performed.
+- **SMS_LOG**: no change. Privacy-by-design rule continues — SMS never carries submitted answer text. The wrong-answer creator prompt SMS notifies on the event only.
+
+*Privacy primitives this codifies*
+
+This subsection makes explicit a privacy posture the product has been operating on implicitly:
+
+1. **Wrong answers belong to the answerer.** The author wrote the question; the answer the player typed is the player's. The player decides whether to share it back.
+2. **Aggregation requires plurality.** No individual is visible in analytics unless the answer is shared by multiple distinct players, with reverse-lookup safety on small groups.
+3. **Dispute is consent.** Disputing a grade is an explicit act that hands the answer text to the author for review. No other path does this without an additional opt-in.
+
+*Out of scope for this subsection*
+
+- Correct-answer text visibility: not relevant — the canonical text *is* the submitted text, by definition of "correct." No privacy gradient.
+- Public game / Phase 2 surfaces: this subsection covers the invitation-only friend-and-group context. Public-game answer visibility is governed separately and is addressed in §8.25.
 
 **Replay on wrong answers**
 
@@ -4142,6 +4214,8 @@ Note: Assignment algorithm excludes questions where `question.creator_id = user.
 | question_presented_at | timestamptz | Nullable — records when the question was first displayed to the player in the session |
 | response_time_ms | integer | Nullable — calculated at answer submission: `answered_at - question_presented_at`, stored as integer milliseconds |
 
+`submitted_answer` is the answering player's property. Visible to: the answering player; the question's author only via (a) grade dispute, (b) wrong-answer reaction with `include_submitted_answer = true`, or (c) de-identified aggregation per §8.22. Never logged in SMS_LOG.
+
 These fields power the Temporal Highlights reveals (Reveal 4 and Reveal 5) in the Personal Record beat of the ceremony. If absent, those reveals omit silently — the ceremony does not fail.
 
 ### DAILY_SESSIONS TABLE
@@ -4183,6 +4257,7 @@ These fields power the Temporal Highlights reveals (Reveal 4 and Reveal 5) in th
 | canned_type | enum | Nullable — answerer: `always_knew` / `got_me` / `of_course_you` / `never_heard` / `need_to_talk` / `didnt_know_tell_me` / `need_story` / `adding_to_list` / `knew_i_wouldnt` — creator: `knew_youd_get_it` / `surprised_you_knew` / `just_for_you` / `story_here` |
 | note_text | text | Nullable — max 100 chars, private to the pair |
 | parent_reaction_id | UUID | Nullable — for creator responses |
+| include_submitted_answer | boolean | Default false. Only meaningful when `canned_type` is a wrong-answer reaction and `from_user_id == ANSWERS.user_id` for the same `question_id`. Read layer enforces; write layer accepts. See §8.22 "Wrong-Answer Text Visibility — Author Side". |
 | created_at | timestamp | |
 
 Indexed on (question_id, game_id) and (to_user_id). Reaction note text never exposed to any user other than from_user_id and to_user_id.
