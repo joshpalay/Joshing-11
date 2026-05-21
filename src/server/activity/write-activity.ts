@@ -14,7 +14,12 @@ export type ActivityItemType =
   | 'creator_note_received'
   | 'friend_answered_your_question'
   | 'authored_question_shared'
-  | 'declared_promoted';
+  | 'declared_promoted'
+  // §8.22 grade-dispute path: the question's author is notified when an
+  // answerer disputes their wrong-answer grade. The dispute is the
+  // answerer's explicit ask for a second look, which is the consent gate
+  // that exposes their submitted text to the author.
+  | 'grade_dispute_filed';
 
 export async function writeActivity(params: {
   userId: string;

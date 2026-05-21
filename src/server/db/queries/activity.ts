@@ -6,6 +6,7 @@ import {
   db,
   feedItems,
   friendships,
+  gradeDisputes,
   joshingGameQuestions,
   joshingGameRecipients,
   joshingGameResponses,
@@ -89,6 +90,18 @@ export type ActivityItemView = Pick<
       noteText: string;
       deliveredAt: Date | null;
     };
+    gradeDispute?: {
+      id: string;
+      questionText: string;
+      canonicalAnswer: string;
+      // §8.22 dispute path: the answerer initiated the dispute, which is
+      // the consent gate that exposes their literal text to the author.
+      submittedAnswer: string;
+      status: string;
+      reviewDecision: string | null;
+      reviewReason: string | null;
+      acceptedAlternative: string | null;
+    };
   };
 };
 
@@ -118,6 +131,7 @@ function isActivityType(value: string): value is ActivityItemType {
     'friend_answered_your_question',
     'authored_question_shared',
     'declared_promoted',
+    'grade_dispute_filed',
   ].includes(value);
 }
 
@@ -537,6 +551,48 @@ async function hydrateCreatorNotes(items: ActivityItemRow[]) {
   ] as const));
 }
 
+async function hydrateGradeDisputes(items: ActivityItemRow[]) {
+  const disputeIds = [
+    ...new Set(
+      items
+        .filter((item) => item.type === 'grade_dispute_filed' && item.referenceType === 'grade_dispute')
+        .map((item) => item.referenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (disputeIds.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['gradeDispute']>>();
+  }
+
+  const rows = await db
+    .select({
+      id: gradeDisputes.id,
+      questionText: gradeDisputes.questionText,
+      canonicalAnswer: gradeDisputes.canonicalAnswer,
+      submittedAnswer: gradeDisputes.submittedAnswer,
+      status: gradeDisputes.status,
+      reviewDecision: gradeDisputes.reviewDecision,
+      reviewReason: gradeDisputes.reviewReason,
+      acceptedAlternative: gradeDisputes.acceptedAlternative,
+    })
+    .from(gradeDisputes)
+    .where(inArray(gradeDisputes.id, disputeIds));
+
+  return new Map(rows.map((row) => [
+    row.id,
+    {
+      id: row.id,
+      questionText: row.questionText ?? '',
+      canonicalAnswer: row.canonicalAnswer,
+      submittedAnswer: row.submittedAnswer,
+      status: row.status,
+      reviewDecision: row.reviewDecision,
+      reviewReason: row.reviewReason,
+      acceptedAlternative: row.acceptedAlternative,
+    } satisfies NonNullable<ActivityItemView['reference']['gradeDispute']>,
+  ]));
+}
+
 async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
   const relevant = items.filter(
     (item) => item.type === 'friend_answered_your_question'
@@ -659,7 +715,7 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     .orderBy(desc(activityItems.createdAt))
     .limit(100);
 
-  const [actorsById, friendshipRequestsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, authoredSharedQuestionsById, declaredPromotedById] = await Promise.all([
+  const [actorsById, friendshipRequestsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, authoredSharedQuestionsById, declaredPromotedById, gradeDisputesById] = await Promise.all([
     hydrateActors(rows),
     hydrateFriendshipRequests(rows),
     hydrateGames(rows, userId),
@@ -671,6 +727,7 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
     hydrateFriendAnsweredQuestions(rows),
     hydrateAuthoredSharedQuestions(rows),
     hydrateDeclaredPromoted(rows),
+    hydrateGradeDisputes(rows),
   ]);
 
   return rows
@@ -715,6 +772,9 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
           : undefined,
         creatorNote: row.referenceType === 'creator_note' && row.referenceId
           ? creatorNotesById.get(row.referenceId)
+          : undefined,
+        gradeDispute: row.referenceType === 'grade_dispute' && row.referenceId
+          ? gradeDisputesById.get(row.referenceId)
           : undefined,
       },
     }));

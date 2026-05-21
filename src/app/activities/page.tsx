@@ -150,6 +150,14 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     )
   }
 
+  if (item.type === 'grade_dispute_filed') {
+    return (
+      <>
+        {actorName(item)} asked for a re-look at your question
+      </>
+    )
+  }
+
   return <>Something happened on Joshing</>
 }
 
@@ -224,6 +232,32 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
     )
   }
 
+  if (item.type === 'grade_dispute_filed') {
+    const dispute = item.reference.gradeDispute
+    if (!dispute) return null
+    return (
+      <div className="bg-background mt-1 space-y-1 rounded-md border p-3 text-sm leading-6">
+        <p>
+          <span className="text-foreground font-medium">Question:</span>{' '}
+          {dispute.questionText}
+        </p>
+        <p className="text-muted-foreground">
+          <span className="text-foreground font-medium">Canonical answer:</span>{' '}
+          {dispute.canonicalAnswer}
+        </p>
+        {/* §8.22 dispute path: the answerer initiated the dispute, which is
+            the consent gate that lets the author see their literal text. */}
+        <p className="text-muted-foreground">
+          <span className="text-foreground font-medium">They wrote:</span>{' '}
+          {dispute.submittedAnswer || '(no text)'}
+        </p>
+        <p className="text-muted-foreground text-xs">
+          {disputeStatusLabel(dispute.status, dispute.acceptedAlternative)}
+        </p>
+      </div>
+    )
+  }
+
   if (item.type !== 'reaction_received') return null
   const reaction = item.reference.reaction
   if (!reaction) return null
@@ -246,6 +280,20 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
       ) : null}
     </div>
   )
+}
+
+function disputeStatusLabel(
+  status: string,
+  acceptedAlternative: string | null,
+): string {
+  if (status === 'alternative_added') {
+    return acceptedAlternative
+      ? `Accepted — added "${acceptedAlternative}" as an alternative.`
+      : 'Accepted — alternative added.'
+  }
+  if (status === 'dismissed') return 'Dismissed — grade stands.'
+  if (status === 'reviewed') return 'Reviewed.'
+  return 'Pending review.'
 }
 
 function ActivityCta({ item }: { item: ActivityItemView }) {
