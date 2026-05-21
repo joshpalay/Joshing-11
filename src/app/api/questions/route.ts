@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion, generateInsideJoke } from '@/lib/llm';
+import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
 import { getSession } from '@/server/auth/session';
 import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
 import {
@@ -134,6 +135,26 @@ export async function POST(request: NextRequest) {
     broadCategory: questionFields.broadCategory,
     canonicalSubcategory: questionFields.canonicalSubcategory,
   });
+  // Haiku-vet for the shared Daily 5 pool — approved questions become eligible
+  // to surface in other users' games (prioritised by friends + friends-of-
+  // friends). Failure is non-fatal: we leave publicStatus at 'not_scored'
+  // and the /api/cron/vet-questions sweep will retry.
+  const verdict = await vetQuestion({
+    questionText: questionFields.text,
+    answer: questionFields.correctAnswer,
+    alternateAnswers: questionFields.alternateAnswers,
+    explanation: questionFields.explanation ?? null,
+    broadCategory: questionFields.broadCategory,
+    canonicalSubcategory: questionFields.canonicalSubcategory,
+  });
+  const publicScoring = verdictToPublicStatus(verdict);
+  console.info('[questions/vet]', {
+    userId: session.userId,
+    verdictStatus: verdict.status,
+    overallScore: publicScoring.publicEligibilityScore,
+    publicStatus: publicScoring.publicStatus,
+  });
+
   const categorizedQuestionFields = {
     ...questionFields,
     difficulty: difficultyAssessment.difficulty,
@@ -153,7 +174,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const created = await createQuestion({ authorId: session.userId, ...categorizedQuestionFields });
+  const created = await createQuestion({
+    authorId: session.userId,
+    ...categorizedQuestionFields,
+    publicStatus: publicScoring.publicStatus,
+    publicEligibilityScore: publicScoring.publicEligibilityScore,
+    publicEligibilityReason: publicScoring.publicEligibilityReason,
+  });
   console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: categorizedQuestionFields.verified, category: categorizedQuestionFields.category, canonicalSubcategory: categorizedQuestionFields.canonicalSubcategory, difficultyTier: difficultyAssessment.tier });
   const feedShare = {
     requested: shareToFeed,

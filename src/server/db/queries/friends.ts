@@ -162,3 +162,62 @@ export async function areFriends(userAId: string, userBId: string): Promise<bool
   const friendship = await getFriendship(userAId, userBId);
   return friendship?.status === 'active';
 }
+
+/**
+ * Returns the viewer's 1st-degree friend ids and 2nd-degree (friends of
+ * friends) ids, with FoF de-duplicated against direct friends and the
+ * viewer themselves. Used by the Daily 5 picker to rank eligible
+ * user-authored questions: direct friends first, then FoF, then everyone
+ * else.
+ *
+ * The friend graph is small and uncached, so we run two normal queries
+ * rather than a recursive CTE — the second pass is bounded by
+ * `directIds.length` which is itself indexed via the existing
+ * Friendship_userAId_status_idx / Friendship_userBId_status_idx pair.
+ */
+export async function getFriendAndFoFUserIds(userId: string): Promise<{
+  direct: Set<string>;
+  extended: Set<string>;
+}> {
+  const directRows = await db
+    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
+    .from(friendships)
+    .where(and(
+      eq(friendships.status, 'active'),
+      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+    ));
+
+  const direct = new Set<string>();
+  for (const row of directRows) {
+    const friendId = row.userAId === userId ? row.userBId : row.userAId;
+    direct.add(friendId);
+  }
+
+  if (direct.size === 0) {
+    return { direct, extended: new Set<string>() };
+  }
+
+  const directList = [...direct];
+  const fofRows = await db
+    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
+    .from(friendships)
+    .where(and(
+      eq(friendships.status, 'active'),
+      or(
+        inArray(friendships.userAId, directList),
+        inArray(friendships.userBId, directList),
+      ),
+    ));
+
+  const extended = new Set<string>();
+  for (const row of fofRows) {
+    if (directList.includes(row.userAId) && row.userBId !== userId && !direct.has(row.userBId)) {
+      extended.add(row.userBId);
+    }
+    if (directList.includes(row.userBId) && row.userAId !== userId && !direct.has(row.userAId)) {
+      extended.add(row.userAId);
+    }
+  }
+
+  return { direct, extended };
+}
