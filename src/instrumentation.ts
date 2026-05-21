@@ -136,7 +136,8 @@ export async function register() {
           ADD COLUMN IF NOT EXISTS "personalMessage" text,
           ADD COLUMN IF NOT EXISTS "sourceResult" text,
           ADD COLUMN IF NOT EXISTS "submittedAnswer" text,
-          ADD COLUMN IF NOT EXISTS "quip" text
+          ADD COLUMN IF NOT EXISTS "quip" text,
+          ADD COLUMN IF NOT EXISTS "catchupResolvedAt" timestamptz
       `);
     } catch {
       // FeedItem table may not exist yet — migrate() handles initial creation.

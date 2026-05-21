@@ -36,8 +36,10 @@ const {
 
 const CATCHUP_ITEM = {
   dailyQueueItemId: 'queue-1:0',
+  surface: 'daily' as const,
   queueId: 'queue-1',
   slotIndex: 0,
+  feedItemId: null,
   questionId: 'gen-q-1',
   questionText: 'q?',
   correctAnswer: 'A',
@@ -107,6 +109,16 @@ vi.mock('@/server/auth/session', () => ({
 vi.mock('@/server/db', () => ({
   db: dbMock,
   dailyQueues: { id: 'q.id' },
+  feedItems: {
+    id: 'f.id',
+    recipientUserId: 'f.recipient',
+    questionId: 'f.questionId',
+    catchupResolvedAt: 'f.catchupResolvedAt',
+    answerResult: 'f.answerResult',
+    submittedAnswer: 'f.submittedAnswer',
+    state: 'f.state',
+    sourceEventAt: 'f.sourceEventAt',
+  },
   questions: {
     id: 'q.id',
     creatorId: 'q.creatorId',
@@ -126,6 +138,11 @@ vi.mock('@/server/daily/catchup', () => ({
     slots.find((s) => s.slot_index === idx),
   replaceQueueSlot: (slots: { slot_index: number }[], idx: number, fn: (s: unknown) => unknown) =>
     slots.map((s) => (s.slot_index === idx ? fn(s) : s)),
+  parseCatchupItemId: (id: string) => {
+    if (id.startsWith('feed:')) return { surface: 'feed', feedItemId: id.slice(5) }
+    const [queueId, slotIndexValue] = id.split(':')
+    return { surface: 'daily', queueId, slotIndex: Number(slotIndexValue) }
+  },
 }))
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({
