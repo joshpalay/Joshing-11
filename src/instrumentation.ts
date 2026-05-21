@@ -335,7 +335,21 @@ export async function register() {
       // it before this migration runs.
     }
 
-    // Migration 0039 adds the nullable Question.inside_joke column for the
+    // Migration 0040 adds includeSubmittedAnswer to QuestionReaction (§8.22
+    // opt-in for surfacing answerer text to the question author). Guard for
+    // preview/production databases that may have this migration recorded
+    // without the column actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "QuestionReaction"
+          ADD COLUMN IF NOT EXISTS "includeSubmittedAnswer" boolean NOT NULL DEFAULT false
+      `);
+    } catch {
+      // QuestionReaction table may not exist yet on a fresh database —
+      // migrate() creates it before this migration runs.
+    }
+
+    // Migration 0041 adds the nullable Question.inside_joke column for the
     // friends-only LLM-generated aside. Apply it idempotently in case the
     // migration is recorded without the column actually present.
     try {

@@ -56,8 +56,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
     .limit(1);
 
   if (!row) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  if (row.feedItem.state === 'dismissed' || row.feedItem.state === 'rolled_off' || row.feedItem.state === 'answered') {
+  if (row.feedItem.state === 'dismissed' || row.feedItem.state === 'rolled_off') {
     return NextResponse.json({ error: 'invalid_state', message: 'This Feed item is already closed.' }, { status: 400 });
+  }
+  // direct_sent questions are personal asks from a specific friend. A wrong
+  // answer keeps the card actionable so the recipient can take another swing
+  // without leaving the feed. Other source types — including direct_sent
+  // that were already answered correctly — stay closed once answered.
+  if (row.feedItem.state === 'answered') {
+    const allowRetry =
+      row.feedItem.sourceType === 'direct_sent'
+      && row.feedItem.answerResult === 'incorrect';
+    if (!allowRetry) {
+      return NextResponse.json({ error: 'invalid_state', message: 'This Feed item is already closed.' }, { status: 400 });
+    }
   }
 
   const question = row.question;

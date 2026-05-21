@@ -113,15 +113,20 @@ export type FeedRecheckAction = {
 type AnsweredByYouCardProps = {
   item: AnsweredByYouFeedItem
   recheckAction?: FeedRecheckAction | null
+  // Optional retry handler for direct_sent wrong answers — opens the answer
+  // sheet so the recipient can take another swing without leaving the feed.
+  onRetry?: () => void
   overflow?: ReactNode
 }
 
 function AnsweredResult({
   item,
   recheckAction,
+  onRetry,
 }: {
   item: AnsweredByYouFeedItem
   recheckAction?: FeedRecheckAction | null
+  onRetry?: () => void
 }) {
   const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle')
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
@@ -176,17 +181,29 @@ function AnsweredResult({
           {item.quip}
         </p>
       ) : null}
-      {recheckAction && recheckState !== 'done' ? (
-        <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={() => void requestRecheck()}
-            disabled={recheckState === 'submitting'}
-            className="inline-flex items-center border-[1.5px] border-[var(--ink)] bg-[var(--cream)] px-[8px] py-[4px] text-[12px] text-[var(--ink)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-default disabled:opacity-60"
-            style={{ boxShadow: '3px 3px 0 var(--ink)' }}
-          >
-            {recheckState === 'submitting' ? 'Rechecking...' : 'Recheck →'}
-          </button>
+      {(onRetry || (recheckAction && recheckState !== 'done')) ? (
+        <div className="flex justify-end gap-2 pt-2">
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex items-center border-[1.5px] border-[var(--ink)] bg-[var(--cream)] px-[8px] py-[4px] text-[12px] text-[var(--ink)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
+              style={{ boxShadow: '3px 3px 0 var(--ink)' }}
+            >
+              Try again →
+            </button>
+          ) : null}
+          {recheckAction && recheckState !== 'done' ? (
+            <button
+              type="button"
+              onClick={() => void requestRecheck()}
+              disabled={recheckState === 'submitting'}
+              className="inline-flex items-center border-[1.5px] border-[var(--ink)] bg-[var(--cream)] px-[8px] py-[4px] text-[12px] text-[var(--ink)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-default disabled:opacity-60"
+              style={{ boxShadow: '3px 3px 0 var(--ink)' }}
+            >
+              {recheckState === 'submitting' ? 'Rechecking...' : 'Recheck →'}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {recheckMessage ? (
@@ -222,7 +239,7 @@ function AnsweredResult({
   )
 }
 
-export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByYouCardProps) {
+export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: AnsweredByYouCardProps) {
   const category = visibleFeedCategory(item.category)
   const categoryColor = colorForCategory(item.category)
 
@@ -305,7 +322,7 @@ export function AnsweredByYouCard({ item, recheckAction, overflow }: AnsweredByY
       </div>
 
       <div className="px-[14px] py-[12px]">
-        <AnsweredResult item={item} recheckAction={recheckAction} />
+        <AnsweredResult item={item} recheckAction={recheckAction} onRetry={onRetry} />
       </div>
     </article>
   )

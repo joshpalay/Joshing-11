@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 
 import { CreatorNoteForm } from '@/app/creator-notes/new/CreatorNoteForm';
-import { creatorNoteSubmittedAnswerText } from '@/lib/creator-note-submitted-answer';
 import { getSession } from '@/server/auth/session';
 import { findWrongAnswerContext } from '@/server/creator-notes';
 import { db, questions, users } from '@/server/db';
@@ -68,14 +67,13 @@ export default async function NewCreatorNotePage({ searchParams }: PageProps) {
         </h1>
       </header>
 
+      {/* §8.22 wrong-answer text visibility: the answerer's submitted text is
+          intentionally NOT shown to the question author here. The author writes
+          the note from the question + canonical answer alone. */}
       <section className="mt-5 rounded-md border bg-card p-4 text-sm leading-6">
         <p><span className="font-medium text-foreground">Question:</span> {row.question.questionText}</p>
         <p className="mt-2 text-muted-foreground">
           <span className="font-medium text-foreground">Answer:</span> {row.question.answerText}
-        </p>
-        <p className="mt-2 text-muted-foreground">
-          <span className="font-medium text-foreground">{recipientName} said:</span>{' '}
-          {creatorNoteSubmittedAnswerText(wrongAnswer.submittedAnswer, 'Their')}
         </p>
       </section>
 

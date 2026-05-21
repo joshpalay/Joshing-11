@@ -1064,11 +1064,19 @@ function FeedListContent({
                   const recheckAction: FeedRecheckAction | null = isIncorrect
                     ? { onSubmit: () => submitRecheck(item) }
                     : null
+                  // direct_sent wrong answers stay re-attemptable (server
+                  // allows the re-grade; clicking reopens the same answer
+                  // sheet). Other source types still close on answer.
+                  const onRetry =
+                    isIncorrect && item.source_type === 'direct_sent'
+                      ? () => setAnswerSheetId(item.id)
+                      : undefined
                   return (
                     <AnsweredByYouCard
                       key={item.id}
                       item={answeredItem}
                       recheckAction={recheckAction}
+                      onRetry={onRetry}
                       overflow={overflow}
                     />
                   )
