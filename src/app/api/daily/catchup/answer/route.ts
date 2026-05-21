@@ -4,9 +4,14 @@ import { NextRequest } from 'next/server';
 import { gradeAnswer, selectQuip } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
-import { dailyQueues, db, questions } from '@/server/db';
-import { getCatchupQuestions } from '@/server/db/queries/daily';
-import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/server/daily/catchup';
+import { dailyQueues, db, feedItems, questions } from '@/server/db';
+import { getCatchupQuestions, type CatchupQuestion } from '@/server/db/queries/daily';
+import {
+  asQueueSlots,
+  findQueueSlotBySlotIndex,
+  parseCatchupItemId,
+  replaceQueueSlot,
+} from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { awardAuthorCredit } from '@/server/mastery/author-credit';
@@ -32,6 +37,26 @@ function parseBody(value: unknown): { dailyQueueItemId: string; submittedAnswer:
   return { dailyQueueItemId, submittedAnswer };
 }
 
+function nextItemPayload(item: CatchupQuestion | null) {
+  if (!item) return null;
+  return {
+    dailyQueueItemId: item.dailyQueueItemId,
+    questionId: item.questionId,
+    questionText: item.questionText,
+    correctAnswer: item.correctAnswer,
+    alternateAnswers: item.alternateAnswers,
+    explanation: item.explanation,
+    domain: item.domain,
+    domainDisplayName: item.domainDisplayName,
+    queueDate: item.queueDate,
+    queueAge: item.queueAge,
+    wasSkipped: item.wasSkipped,
+    expiresAt: item.expiresAt,
+    expiresSoon: item.expiresSoon,
+    difficultyEstimate: item.difficultyEstimate,
+  };
+}
+
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return catchUpErrorResponse(401, 'unauthorized');
@@ -49,12 +74,40 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  if (catchupItem.surface === 'feed') {
+    return handleFeedCatchupAnswer({
+      userId: session.userId,
+      submittedAnswer: parsed.submittedAnswer,
+      catchupItem,
+    });
+  }
+
+  return handleDailyCatchupAnswer({
+    userId: session.userId,
+    submittedAnswer: parsed.submittedAnswer,
+    catchupItem,
+  });
+}
+
+async function handleDailyCatchupAnswer({
+  userId,
+  submittedAnswer,
+  catchupItem,
+}: {
+  userId: string;
+  submittedAnswer: string;
+  catchupItem: CatchupQuestion;
+}) {
+  if (catchupItem.queueId === null || catchupItem.slotIndex === null) {
+    return catchUpErrorResponse(500, 'invalid_state', 'Daily catch-up item missing queue reference');
+  }
+
   const [queue] = await db
     .select()
     .from(dailyQueues)
     .where(eq(dailyQueues.id, catchupItem.queueId))
     .limit(1);
-  if (!queue || queue.userId !== session.userId) {
+  if (!queue || queue.userId !== userId) {
     return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found', {
       refresh_required: true,
     });
@@ -62,14 +115,21 @@ export async function POST(request: NextRequest) {
 
   const slots = asQueueSlots(queue.slots);
   const slot = findQueueSlotBySlotIndex(slots, catchupItem.slotIndex);
-  if (!slot || slot.answered || slot.dismissed_at) {
+  if (!slot || slot.dismissed_at) {
+    return catchUpErrorResponse(400, 'catch_up_not_eligible', 'catch-up item is already closed', {
+      refresh_required: true,
+    });
+  }
+  // A slot previously answered correctly is not eligible — only wrong/skipped/
+  // untouched slots show up in catch-up after the expanded eligibility rules.
+  if (slot.answered && slot.answer_state !== 'incorrect') {
     return catchUpErrorResponse(400, 'catch_up_not_eligible', 'catch-up item is already closed', {
       refresh_required: true,
     });
   }
 
   const grade = await gradeAnswer(
-    parsed.submittedAnswer,
+    submittedAnswer,
     catchupItem.correctAnswer,
     catchupItem.alternateAnswers,
     catchupItem.questionText,
@@ -115,7 +175,7 @@ export async function POST(request: NextRequest) {
   }
 
   const priorAnswers = canonicalQuestionId
-    ? await readPriorAnswersForQuestion(session.userId, canonicalQuestionId)
+    ? await readPriorAnswersForQuestion(userId, canonicalQuestionId)
     : [];
   const masteryAnswerState = computeAnswerState(
     isCorrect ? 'correct' : 'wrong',
@@ -138,7 +198,7 @@ export async function POST(request: NextRequest) {
       ...item,
       answered: true,
       answer_state: answerState,
-      submitted_answer: parsed.submittedAnswer,
+      submitted_answer: submittedAnswer,
       awarded_points: pointsAwarded,
       reveal_canonical_answer: catchupItem.correctAnswer,
       reveal_explainer: catchupItem.explanation ?? '',
@@ -148,13 +208,13 @@ export async function POST(request: NextRequest) {
   });
 
   const masteryDelta = await writeMasteryEvent({
-    userId: session.userId,
+    userId,
     questionId: catchupItem.questionId,
     domain: catchupItem.domain,
     answerState: masteryAnswerState,
     pointsAwarded,
     sourceType: 'catchup',
-    sourceId: parsed.dailyQueueItemId,
+    sourceId: catchupItem.dailyQueueItemId,
     broadCategory: catchupItem.broadCategory,
     eventQuestionId: canonicalQuestionId,
     basePoints: catchupItem.basePoints,
@@ -164,10 +224,10 @@ export async function POST(request: NextRequest) {
   await db
     .update(dailyQueues)
     .set({ slots: nextSlots })
-    .where(eq(dailyQueues.id, catchupItem.queueId));
+    .where(eq(dailyQueues.id, queue.id));
 
   await updateDomainDifficultyOnAnswer(
-    session.userId,
+    userId,
     catchupItem.domain,
     isCorrect,
   ).catch((err) => {
@@ -176,30 +236,30 @@ export async function POST(request: NextRequest) {
 
   if (canonicalQuestionId) {
     try {
-      if (isCorrect && persistedCreatorId && persistedCreatorId !== session.userId && persistedDomainForCreator) {
+      if (isCorrect && persistedCreatorId && persistedCreatorId !== userId && persistedDomainForCreator) {
         void promoteDeclaredToDemonstrated({
           userId: persistedCreatorId,
           domain: persistedDomainForCreator,
-          triggeringFriendId: session.userId,
+          triggeringFriendId: userId,
           questionId: canonicalQuestionId,
         });
 
         // Author credit (PRD §8.32): off the user's hot path.
         void awardAuthorCredit({
           creatorUserId: persistedCreatorId,
-          answererUserId: session.userId,
+          answererUserId: userId,
           questionId: canonicalQuestionId,
           domain: persistedDomainForCreator,
-          sourceId: `catchup:${catchupItem.dailyQueueItemId}:${session.userId}`,
+          sourceId: `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
           scope: 'daily/catchup/answer',
         });
       }
 
       void createFeedItemsForFriendsFromAnswer(
-        session.userId,
+        userId,
         canonicalQuestionId,
         isCorrect ? 'correct' : 'incorrect',
-        `catchup:${catchupItem.dailyQueueItemId}:${session.userId}`,
+        `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
       );
     } catch (error) {
       console.warn('[daily/catchup/answer] feed propagation failed', {
@@ -210,7 +270,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const nextItem = (await getCatchupQuestions(session.userId))[0] ?? null;
+  const nextItem = (await getCatchupQuestions(userId))[0] ?? null;
 
   return Response.json({
     dailyQueueItemId: catchupItem.dailyQueueItemId,
@@ -230,23 +290,150 @@ export async function POST(request: NextRequest) {
     explainer: catchupItem.explanation,
     consolation: grade.consolation,
     quip,
-    nextItem: nextItem
-      ? {
-          dailyQueueItemId: nextItem.dailyQueueItemId,
-          questionId: nextItem.questionId,
-          questionText: nextItem.questionText,
-          correctAnswer: nextItem.correctAnswer,
-          alternateAnswers: nextItem.alternateAnswers,
-          explanation: nextItem.explanation,
-          domain: nextItem.domain,
-          domainDisplayName: nextItem.domainDisplayName,
-          queueDate: nextItem.queueDate,
-          queueAge: nextItem.queueAge,
-          wasSkipped: nextItem.wasSkipped,
-          expiresAt: nextItem.expiresAt,
-          expiresSoon: nextItem.expiresSoon,
-          difficultyEstimate: nextItem.difficultyEstimate,
-        }
-      : null,
+    nextItem: nextItemPayload(nextItem),
+  });
+}
+
+async function handleFeedCatchupAnswer({
+  userId,
+  submittedAnswer,
+  catchupItem,
+}: {
+  userId: string;
+  submittedAnswer: string;
+  catchupItem: CatchupQuestion;
+}) {
+  if (!catchupItem.feedItemId) {
+    return catchUpErrorResponse(500, 'invalid_state', 'Feed catch-up item missing feed reference');
+  }
+  const parsedId = parseCatchupItemId(catchupItem.dailyQueueItemId);
+  if (parsedId?.surface !== 'feed') {
+    return catchUpErrorResponse(500, 'invalid_state', 'Feed catch-up item id malformed');
+  }
+
+  // Re-verify the feed item still exists and is still eligible. We pulled it
+  // via getCatchupQuestions, but a concurrent feed answer/dismiss could have
+  // resolved it between the read and now.
+  const [feedRow] = await db
+    .select({ feedItem: feedItems, question: questions })
+    .from(feedItems)
+    .innerJoin(questions, eq(feedItems.questionId, questions.id))
+    .where(eq(feedItems.id, catchupItem.feedItemId))
+    .limit(1);
+  if (!feedRow || feedRow.feedItem.recipientUserId !== userId) {
+    return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found', {
+      refresh_required: true,
+    });
+  }
+  if (feedRow.feedItem.catchupResolvedAt) {
+    return catchUpErrorResponse(400, 'catch_up_not_eligible', 'catch-up item is already closed', {
+      refresh_required: true,
+    });
+  }
+
+  const grade = await gradeAnswer(
+    submittedAnswer,
+    catchupItem.correctAnswer,
+    catchupItem.alternateAnswers,
+    catchupItem.questionText,
+    feedRow.question.questionType,
+  );
+  const isCorrect = grade.result === 'correct';
+  const answerState = isCorrect ? 'correct' : 'incorrect';
+  const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
+
+  const priorAnswers = await readPriorAnswersForQuestion(userId, feedRow.question.id);
+  const masteryAnswerState = computeAnswerState(
+    isCorrect ? 'correct' : 'wrong',
+    priorAnswers,
+  );
+
+  const baseCatchupPoints = Math.round(catchupItem.basePoints * CATCHUP_SURFACE_WEIGHT);
+  const pointsAwarded =
+    masteryAnswerState === 'first_correct'
+      ? baseCatchupPoints
+      : masteryAnswerState === 'first_correct_after_wrong'
+        ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
+        : 0;
+
+  const masteryDelta = await writeMasteryEvent({
+    userId,
+    questionId: feedRow.question.id,
+    domain: catchupItem.domain,
+    answerState: masteryAnswerState,
+    pointsAwarded,
+    sourceType: 'catchup',
+    sourceId: catchupItem.dailyQueueItemId,
+    broadCategory: catchupItem.broadCategory,
+    eventQuestionId: feedRow.question.id,
+    basePoints: catchupItem.basePoints,
+    weight: catchupItem.basePoints > 0 ? pointsAwarded / catchupItem.basePoints : 0,
+  });
+
+  // Resolve the feed item so it stops surfacing in catch-up. We only flip
+  // answerResult to 'correct' on recovery; the original feed-card history
+  // (state='answered', submittedAnswer) stays put so the user can still see
+  // what they originally typed.
+  await db
+    .update(feedItems)
+    .set({
+      catchupResolvedAt: new Date(),
+      ...(isCorrect ? { answerResult: 'correct' as const, pointsAwarded } : {}),
+    })
+    .where(eq(feedItems.id, feedRow.feedItem.id));
+
+  await updateDomainDifficultyOnAnswer(userId, catchupItem.domain, isCorrect).catch((err) => {
+    console.warn('[daily/catchup/answer] updateDomainDifficultyOnAnswer (feed) failed', err);
+  });
+
+  // Promote author's declared territory + author credit on first recovery,
+  // mirroring the daily path. Skipped for self-authored questions.
+  if (isCorrect && feedRow.question.creatorId && feedRow.question.creatorId !== userId) {
+    void promoteDeclaredToDemonstrated({
+      userId: feedRow.question.creatorId,
+      domain: catchupItem.domain,
+      triggeringFriendId: userId,
+      questionId: feedRow.question.id,
+    });
+    void awardAuthorCredit({
+      creatorUserId: feedRow.question.creatorId,
+      answererUserId: userId,
+      questionId: feedRow.question.id,
+      domain: catchupItem.domain,
+      sourceId: `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
+      scope: 'daily/catchup/answer',
+    });
+  }
+
+  if (isCorrect) {
+    void createFeedItemsForFriendsFromAnswer(
+      userId,
+      feedRow.question.id,
+      'correct',
+      `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
+    );
+  }
+
+  const nextItem = (await getCatchupQuestions(userId))[0] ?? null;
+
+  return Response.json({
+    dailyQueueItemId: catchupItem.dailyQueueItemId,
+    questionId: feedRow.question.id,
+    result: grade.result,
+    isCorrect,
+    correct: isCorrect,
+    pointsAwarded,
+    answerState,
+    breadcrumb: null,
+    awarded_points: pointsAwarded,
+    masteryDelta,
+    mastery_delta: masteryDelta,
+    correctAnswer: catchupItem.correctAnswer,
+    answer: catchupItem.correctAnswer,
+    explanation: catchupItem.explanation,
+    explainer: catchupItem.explanation,
+    consolation: grade.consolation,
+    quip,
+    nextItem: nextItemPayload(nextItem),
   });
 }

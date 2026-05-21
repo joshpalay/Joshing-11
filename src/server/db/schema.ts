@@ -715,6 +715,7 @@ export const feedItems = pgTable(
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
     quip: text('quip'),
+    catchupResolvedAt: timestamp('catchupResolvedAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
