@@ -1,17 +1,36 @@
 # Game-Wide Audit — Reinforcing Learning and Shared Knowledge
 
-Date: 2026-05-18
-Scope: 50 surfaces across the player journey, audited under two lenses (learning reinforcement, shared knowledge reinforcement). No leaderboard / ranking proposals. Phase 1 = doable inside the current B1–B14 plan; Phase 2 = requires new data, endpoints, LLM workflows, or surfaces.
+Date: 2026-05-18 (third pass)
+Method: every surface below was audited by reading the source file directly. CSS-variable references are taken from `src/app/globals.css` and `src/app/layout.tsx`; copy is quoted verbatim with `file:line` citations. This third pass additionally resolved most of the prior audit's open questions by reading the answer-grading file, the daily-summary query, the daily-feedback route, and the questions schema. Phase 1/2 labels below are now evidence-backed wherever the proposal carries an `Evidence:` note. A new **Sequencing & Dependencies** section at the bottom orders the Top 10 work by dependency.
 
 ---
 
-## Preface — three findings that thread through everything
+## Preface — four findings that thread through everything
 
-1. **Mastery tier vocabulary is forked across three surfaces and none match the brief.** Internal enum: `establishing | familiar | solid | mastery`. `src/server/profile/knowledge-tier-copy.ts` exposes `Establishing / Familiar / Solid / Mastery` (knowledge page, profile, DomainRow). `src/server/db/queries/account.ts:26-31` and `src/app/knowledge/[domain]/page.tsx:53` use `Curious / Explorer / Scholar / Sage`. The in-session `MasteryMoment` (`src/components/review/MasteryMoment.tsx`) shows `Familiar / Solid / Mastery`. The brief specifies `Curious → Versed → Fluent → Master`. **This is the single most damaging inconsistency in the build.** A player crossing a tier in-session sees "Solid," then visits their profile and sees "Scholar," then opens the knowledge page and sees "Solid" again. Every audit proposal below assumes this gets resolved; the recommended canonical is the brief's `Curious → Versed → Fluent → Master` because it best reflects an inward learning journey rather than a credentialing ladder. Flagged as the first open question.
+### 1. Mastery-tier vocabulary is forked across FOUR surfaces and none match the brief
 
-2. **The "common ground +" sub-labels referenced in the brief do not exist in code.** The actual rotation in `GameplayChat.tsx:86-91` is `shared signal / you both know this one / confirmed / same territory`. The brief's "now it's in yours too" wrong-answer line is also absent; the actual wrong rotation is `Not this time — here's the answer / You'll know this one next time / Nice try / Close, but not quite`. Several proposals below restore the brief's intended lines because they do more work on both lenses than what currently ships.
+| Surface | File | Labels |
+|---|---|---|
+| Canonical knowledge layer | `src/server/profile/knowledge-tier-copy.ts:3-8` | Establishing → Familiar → Solid → Mastery |
+| Account / domain detail | `src/server/db/queries/account.ts:26-31`, `src/app/knowledge/[domain]/page.tsx:53` | Curious → Explorer → Scholar → Sage |
+| Daily-difficulty mode label (different concept but same word-pool) | `src/app/daily/summary/page.tsx:28-34` | Establishing / Solid / **Skilled** / Master / Adaptive |
+| Mid-flow MasteryMoment overlay | `src/components/review/MasteryMoment.tsx:21-23` | Familiar / Solid / Mastery (capitalised from enum) |
+| Ceremony Beat 1 tier transition | `src/app/ceremony/[ceremonyId]/page.tsx:47-52` | Establishing / Familiar / Solid / Mastery |
+| Knowledge page tier-cross banner | `src/app/knowledge/page.tsx:423-425` | Whatever `tierCrossed` returns (string-passthrough) |
 
-3. **Author identity is structurally underweight.** The author's display name surfaces in three places: a 0.6rem mono creator line above the in-session bubble; a `From {name}` label on summary cards; and the creator-note `A note from {name}:` prefix. Nowhere is the author treated as a *person who gave you something*. The "shared knowledge" lens is the entire identity of the product, and authorship is the load-bearing signal. This is the dominant cross-cutting opportunity.
+Brief says `Curious → Versed → Fluent → Master`. None of the six in-product surfaces matches that. A player who crosses a tier mid-game sees a 3rem display reading "Solid" (MasteryMoment), then opens the daily summary and sees "moved to solid" (interpretiveLine line 78), then opens their profile and sees "Scholar" (account.ts), then opens the knowledge map and sees "Solid" again (DomainRow). Half the proposals below assume this is unified; the canonical recommendation is the brief's `Curious → Versed → Fluent → Master` because mastery-as-ladder reads more credentialing than learning, and Joshing's premise is the latter.
+
+### 2. The brief's copy fingerprints are mostly absent from code
+
+The brief references a "common ground +" sub-label and a "now it's in yours too" wrong-reveal line. Neither exists in code. Actual rotations are at `GameplayChat.tsx:86-91` (correct: `shared signal / you both know this one / confirmed / same territory`) and `:93-102` (wrong: `Not this time — here's the answer. / You'll know this one next time. / Nice try. / Close, but not quite.`). The brief also references standout moments (`only you got this`), accepted-variant near-miss, share-card emoji grid, Group Story section on game summary, next-questions countdown, Challenge Worlds, and Friend Play — none of which exist. **Open question 1 below: are these intent-to-implement or stale references?** All proposals downstream treat them as intent.
+
+### 3. The ceremony breaks the ink-on-cream register
+
+`src/app/ceremony/[ceremonyId]/page.tsx:331` sets the entire ceremony to `bg-stone-950 text-stone-50` with a radial gradient — white-on-near-black, awards-show staging. Every other surface in the product is INK on CREAM (`--ink` ≈ `#1a1208` on `--cream` ≈ `#fdfbf6`, set in `globals.css:95-97`). The OverlapMap (`src/components/OverlapMap.tsx:29-36`) is the gold-standard example of the brief's "ink-on-cream with hard 2px borders and 6px offset shadows" — and it appears in the ceremony's adjacent surface (game summary). The ceremony's dark theme either signals a different design intent or is a regression. Worth a deliberate call. The audit's ceremony proposals assume the dark theme stays but flag where it weakens learning/shared-knowledge cues.
+
+### 4. Author identity is structurally underweight
+
+The author's display name surfaces in five places I found by direct read: (a) `creatorName` line above the in-session bubble at 0.6rem mono muted (`GameplayChat.tsx:180-191`); (b) breadcrumb `FROM [author]` at 0.5rem mono (`:303`); (c) `A note from {authorName}:` creator-note prefix (everywhere); (d) `From {view.creator.displayName}` at the top of game-summary cards in 0.62rem mono uppercase (`src/app/games/[id]/summary/page.tsx:267`); (e) `From the question bank` system fallback on the same card. **Caveat handwriting is loaded** as `--font-handwriting` (`layout.tsx:16-20`) but never used outside Personal Record annotations on the Portrait — there is no Caveat usage in the question/result/review/summary thread. The "shared knowledge" lens depends on the author feeling like a person; current treatments make them feel like a metadata field.
 
 ---
 
@@ -20,40 +39,42 @@ Scope: 50 surfaces across the player journey, audited under two lenses (learning
 ### 1. Noon SMS notification
 
 **Current state**
-`src/server/sms.ts:245-259` and `src/server/sms.ts:70`. Three variants: `"{groupName} — up to 5 questions waiting. Your queue refills daily: {baseUrl}/play"`, `"{groupName} and {groupName} — questions waiting…"`, `"{groupName} and {N} other groups — questions waiting…"`. Cron line: `"Your five for today. {baseUrl}/daily"`. 160-char truncation.
+`src/server/sms.ts:245-259`. Three variants:
+- 1 group: `"{groupName} — up to 5 questions waiting. Your queue refills daily: {url}/play"`
+- 2 groups: `"{name} and {name} — questions waiting. Your queue refills daily: {url}/today"`
+- 3+ groups: `"{name} and {N} other groups — questions waiting. Your queue refills daily: {url}/today"`
 
-**Learning reinforcement — opportunities**
-- Surface one piece of *named* learning the day promises. Current → proposed (single group): `"{groupName} — 5 from your people, including {topDomainOfTheDay}. {url}"`. Phase 1 if `domains_present_today` is already computed by the daily picker; Phase 2 if not. **Impact: medium.**
-- Avoid the word "questions" once in three; alternate with `"5 small things you don't know yet from {groupName}. {url}"` on a weekly cadence. Phase 1. **Impact: low.**
+A separate **season-end ceremony SMS** (`buildGameCompleteSmsBody`, `:82-134`) has variants including non-winner: `"The {groupName} season just ended. {winnerName} knew you best. See how it all mapped out: {url}"`. There is **also a creator-note-prompt SMS** (`sendCreatorNotePromptSms`, `:189-221`): `"Someone got your question wrong: \"{preview}\". Add a note to give context: {url}/questions"` — a major shared-knowledge surface I missed the first time.
 
-**Shared knowledge reinforcement — opportunities**
-- Lead with the *people*, not the queue. Current → proposed: `"{authorFirstName} and {N} others wrote your five. {url}"`. Pulls authorship to the first beat and works under 160. Phase 1 — requires only "any author name from today's set" which the daily picker already has. **Impact: high.**
-- For multi-group: `"From your people in {groupName} + {N} other groups. {url}"` — replaces "questions waiting" with the relational frame. Phase 1. **Impact: medium.**
-- "Your queue refills daily" reads like a system message. Drop it; if anything, replace with `"Five today. Then nothing till tomorrow."` on a rotation. Phase 1. **Impact: low.**
+**Learning reinforcement**
+- Daily reminder names neither domain nor author. Add domain-of-the-day to single-group variant: `"{groupName} — five today, including {italic-not-possible-in-SMS, just} {topDomainOfTheDay}. {url}"`. Phase 1 if today's set already has a category — it does in the daily picker. **Impact: medium.**
+
+**Shared knowledge reinforcement**
+- Lead with people, not the queue. Phase 1: `"{firstAuthorFirstName} and {N} others wrote your five. {url}/play"`. Falls under 160 even with two long names; falls back to current copy if no author available. **Impact: high.**
+- Season-end non-winner copy `"{winnerName} knew you best."` is a soft leaderboard tell — `knew you best` ranks the relationship. Replace with `"The {groupName} season just ended. {winnerName} stretched you the furthest. See the map: {url}"`. Phase 1 (string only). **Impact: medium.**
+- Creator-note-prompt SMS is a perfect shared-knowledge moment that currently reads as a chore. Promote: `"{respondentFirstName} just missed your question \"{preview}\". Want to leave them a note? {url}/questions"` — names the *recipient* so the author feels addressed by a person. Phase 1 if the SMS pipeline can join the answerer name; Phase 2 if not. **Impact: high.**
 
 **Risks**
-SMS character budget is hard. Author-led copy fails gracefully if `creator.firstName` is missing — fall back to current `{groupName}` template.
+160-char budget. Use short SMS-safe templates and skip italics. Author-led copy must fail gracefully when `creator.firstName` is missing.
 
-**Surface priority: high.** First touchpoint of the day, currently fully utilitarian.
+**Surface priority: high** — first touchpoint of the day; creator-note-prompt SMS is also high-leverage and underweighted.
 
 ---
 
-### 2. Home screen — game card layout and copy
+### 2. Home / Feed screen game card
 
 **Current state**
-`src/components/feed/FeedCard.tsx:106-205`. Stacked: author name (16px semibold) → italic category subtitle (12px Literata, 70% opacity) → question text (17px Georgia, line-clamp-4) → optional personal message (13px italic, 65% opacity) → "Answer →" button → metadata row. Friend-answered card (`FriendAnsweredCard.tsx:1-31`) uses copy from `FeedList.tsx:242-245`: `"{Friend} recognized this one. See if you share the same common ground."`
+`src/components/feed/FeedCard.tsx:106-205`. Two variants. Non-author: cream card, 2px left bar in `categoryColor`, initials avatar (9×9 colored circle), author name (16px Montserrat, underlined to author profile), category subtitle (12px `--font-literata` italic, INK at 70% opacity), question text (17px Georgia serif, line-clamp-4), optional personal message (13px italic literata), `"Answer →"` button with `boxShadow: 4px 4px 0 var(--ink)` + active translate. Viewer-as-author variant: `"You"` avatar, kicker `"New question"`, category, question.
 
-**Learning reinforcement — opportunities**
-- The italic category subtitle is set at 12px / 70% opacity — visually weaker than the metadata row. Promote it: 13px, Playfair italic, INK at 85% opacity, positioned tight under the author line with a 4px gap; remove the "subtitle" feel and make it a *tag of what you're about to learn*. Phase 1. **Impact: medium.**
-- Add a one-token difficulty whisper next to the category, mono uppercase 0.55rem, e.g. `LITERATURE · SPECIALIST` (using `difficultyCopyFromEstimate`). Already computed; just not surfaced here. Phase 1. **Impact: low.**
+**Learning reinforcement**
+- Category subtitle is 12px / 70% opacity — only slightly louder than the 11px timestamp. Promote: 13px, `var(--font-display)` (Playfair italic), INK at 88% opacity. Phase 1. **Impact: medium** — the category line *is* the learning preview.
 
-**Shared knowledge reinforcement — opportunities**
-- The author name (16px semibold) is currently the strongest signal, which is correct. Reinforce it by appending a kerned mono micro-line under the avatar: `WROTE THIS FOR {groupName}` at 0.55rem, INK 60%. Phase 1 if `game.group.displayName` is on the card payload. **Impact: medium.**
-- Replace `"{Friend} recognized this one. See if you share the same common ground."` with `"{Friend} just answered this. See if it's in your world too."` — keeps the relational frame, drops "common ground" repetition (which is overused across surfaces), and reinstates the brief's "in your world" cue. Phase 1. **Impact: medium.**
-- For "still waiting for common ground" (`FeedList.tsx:190`): replace with `"No one's answered this yet. You'd be the first."` — turns a passive state into an invitation. Phase 1. **Impact: low.**
+**Shared knowledge reinforcement**
+- The 16px linked author name is already strong — leave the type, but add a Caveat 0.85rem `for you.` to the right when this card has a personal message (signals the question was hand-routed, not broadcast). Phase 1 — `--font-handwriting` is loaded and unused on this surface. **Impact: medium.**
+- Viewer-as-author kicker `"New question"` is system language. Replace with `"You asked this."` — keeps you in the same authorial register as friends. Phase 1. **Impact: low.**
 
 **Risks**
-Don't let the difficulty whisper drift into ranking. "Specialist" is fine; "hard" is not.
+The `4px 4px 0 var(--ink)` shadow plus added marginalia can crowd narrow viewports. Verify on 360px.
 
 **Surface priority: high.** Highest-traffic browse surface.
 
@@ -62,18 +83,18 @@ Don't let the difficulty whisper drift into ranking. "Specialist" is fine; "hard
 ### 3. Anticipation signal during a game ("N rounds until the final reveal")
 
 **Current state**
-There is no anticipation signal. `GameplayChat.tsx:730-790` shows only a *post-round* "Round complete · Next round opens {nextRoundOpensAt}". `useCatchupFlow.ts:273` shows `"{items.length} of {total} remaining"` — but only inside catchup, not in the live game.
+Does not exist on the daily play surface. The only round-position signal is post-round in `GameplayChat.tsx:719-790` (`SessionCompleteRow`): mono kicker `"Round complete"`, then `"+{points}"` in 2rem Playfair italic in success-green, then optional `"Next round opens {nextRoundOpensAt}"` and a `"Continue to ceremony"` / `"See results"` button. Catchup flow uses `"{N} of {N} remaining"` (`useCatchupFlow.ts:273`).
 
-**Learning reinforcement — opportunities**
-- Add a tiny in-thread chyron after every 3rd question: `3 OF 5 · 2 MORE TILL YOUR SUMMARY` mono 0.55rem, INK 55%, centered, no border. The point is to set up the explainer beat as *earned*, not surprise dessert. Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- Add a single in-thread `SystemRow` after question 3 of 5: `3 OF 5 · 2 MORE TILL YOUR SUMMARY`. Use the existing `monoStyle` at `:104-109` for visual consistency. Phase 1 — the row component is already wired. **Impact: medium.** Sets up the explainer beat as anticipated.
 
-**Shared knowledge reinforcement — opportunities**
-- The ceremony already has a final reveal; the daily session doesn't have a "shared moment" to anticipate. Add a one-line tease on the last question of the day: `LAST ONE TODAY · {N} answered before you` (no names, no rank, just count of friends who reached the same question). Phase 1 if `priorAnswerersCount` is computable from `answers` on this `gameQuestion`; Phase 2 if not. **Impact: high.**
+**Shared knowledge reinforcement**
+- On the final question of the day, a `SystemRow` tease: `LAST ONE TODAY · FROM {firstName}` (the actual author of the last question). Phase 1 — `creatorName` is already on every `QuestionRow` payload. **Impact: high.**
 
 **Risks**
-"X answered before you" can slip into a competitive frame if it becomes "X already got it right." Keep it strictly counted-touched, never counted-correct, on this surface.
+Two extra rows per session is the limit before the thread feels chatty. Don't add more.
 
-**Surface priority: medium.** Currently zero — anything is an upgrade — but not the highest-leverage place to invest.
+**Surface priority: medium.** Currently zero; this is a small absolute improvement.
 
 ---
 
@@ -82,38 +103,44 @@ There is no anticipation signal. `GameplayChat.tsx:730-790` shows only a *post-r
 ### 4. Question bubble
 
 **Current state**
-`GameplayChat.tsx:130-271`. Visual hierarchy from top: optional subhead (0.58rem mono) > creator name (0.6rem mono, muted) > question text (0.98rem serif, in a grey `surface-2` bubble) > difficulty badges (0.52rem mono, "Establishing / Solid / Master"). Author is whispered. Category is **not shown at all** in the bubble.
+`GameplayChat.tsx:130-271`. Visual stack top-to-bottom: optional `subhead` (mono 0.58rem muted, only used by catchup `"FROM YESTERDAY"`) > optional `creatorName` (mono 0.6rem muted, padded 2px) > question bubble (`surface-2` bg, 1px border, radius-md, 12×16px padding, 0.98rem `--text`, line-height 1.45, 88% maxWidth) > optional `badges` (mono 0.52rem, muted or amber `warning` tone) > optional `Skip - don't show again` button (mono 0.58rem underlined, 0.7 opacity).
 
-**Learning reinforcement — opportunities**
-- **The category is missing from the most-viewed surface in the game.** Add a single Playfair-italic line *above* the question text, 0.85rem, INK 70%, e.g. `Late Tchaikovsky.` Set with a period to read as editorial, not a tag. Phase 1 — `gameQuestion.canonicalSubcategory` is already on the payload. **Impact: high.**
-- The "Establishing / Solid / Master" badge labels collide with the global mastery-tier vocabulary. Rename the per-question difficulty labels to `ACCESSIBLE / MODERATE / SPECIALIST` (matching the brief's weighting 1/2/3). Phase 1. **Impact: medium** — removes a confusable.
+**Critical gap:** **the canonical subcategory is not rendered anywhere in this row.** `canonicalSubcategory` only appears on `ResultRow` (`:551`, as data for the domain-exclusion affordance) — never on the question itself.
 
-**Shared knowledge reinforcement — opportunities**
-- Promote the creator name from 0.6rem mono whisper to 0.78rem Caveat handwriting, INK 80%, prefixed `from `. Reads as a signed gift. Phase 1. **Impact: high.**
-- Optional secondary stamp under the author line (only when present): `WRITTEN {N} DAYS AGO` mono 0.5rem — makes the question feel like a piece of someone's recent thinking, not a database row. Phase 1 if `question.createdAt` is on the payload; almost certainly is. **Impact: low.**
+**Learning reinforcement**
+- Add a category line above the question text. Use the design system's italic register: `font-family: var(--font-display)`, `font-size: 0.92rem`, `font-style: italic`, `color: color-mix(in srgb, var(--text) 75%, transparent)`, margin-bottom 4px. Phase 1 — requires `canonicalSubcategory` on the `question` ChatMessage; almost certainly available upstream. **Impact: high.** First time the player sees what they're about to learn.
+- Rename the badge labels. `'Establishing' / 'Solid' / 'Master'` collide with mastery-tier vocabulary. Replace per-question difficulty labels with the brief's `ACCESSIBLE / MODERATE / SPECIALIST`. Phase 1 — flow through `difficultyCopyFromEstimate`. **Impact: medium** (resolves the confusable).
+
+**Shared knowledge reinforcement**
+- Promote `creatorName` from mono 0.6rem whisper to Caveat 0.85rem: `font-family: var(--font-handwriting)`, prefixed `from `. Use `--font-handwriting` (Caveat is loaded at `layout.tsx:16-20` and currently unused on this surface). Phase 1. **Impact: high.** Lands the brand's "named consent" thesis in the highest-frequency moment of the loop.
+- For questions that have personalMessage payload (from a direct send), append a 0.78rem Caveat marginalia under the bubble: `"{personalMessage}"`. The data exists in FeedCard; verify it's also on the in-thread payload. Phase 1 if data flows through; Phase 2 if not. **Impact: medium.**
 
 **Risks**
-Adding category + creator above the bubble inflates the question's vertical footprint. Test on a 360px viewport with a 3-line question — Caveat at 0.78rem + italic category at 0.85rem + 0.98rem serif bubble is still <130px of stack, which is fine.
+Italic Playfair display category above + Caveat handwriting author + serif bubble stack to ~110px on a 3-line question. Test on 360px viewport. The brief flags Inter as body — code ships Montserrat (`layout.tsx:8-9` documents this intentionally) — keep using `--font-sans-body` so the category line takes the loaded display variant.
 
-**Surface priority: high.** This is the question. The single highest-leverage surface in the game.
+**Surface priority: high.** Most-viewed surface in the game.
 
 ---
 
 ### 5. Skip mechanic surface
 
 **Current state**
-`GameplayChat.tsx:137,229-268`. Button copy: `"Skip - don't show again"`. Mono 0.58rem muted, underlined. After dismiss: `"Skipped"` in same style.
+`GameplayChat.tsx:243-266`. Button copy: `"Skip - don't show again"` (default `dismissLabel`). After dismiss: `"Skipped"` line (line 240) — same mono 0.58rem 70% opacity.
 
-**Learning reinforcement — opportunities**
-- Skip should not erase the learning beat. After skip, before the next question loads, show a one-line ghost in the thread: `You skipped {italic category}. We'll surface a recap in your review.` 0.7rem mono, 50% opacity, 1.5s. Phase 1. **Impact: medium.**
-- In end-of-session review, the skipped question's row should still show the explainer with the framing `"You skipped this — here's what it was about."` Phase 1; surfaces in #11. **Impact: medium.**
+There is **also a per-domain exclusion** built on the daily summary, where exclusion message is `"{domain} won't appear in your daily queue anymore."` with `Undo` button (`src/app/daily/summary/page.tsx:449-462`). The summary's overflow menu (`:546-560`) offers `"Hide questions like this"` and `"Mute {domain}"` (both wired to `handleExcludeDomain`).
 
-**Shared knowledge reinforcement — opportunities**
-- Current copy: `"Skip - don't show again"`. Reads as if the *author* is being dismissed. Soften to: `"Not for me today"` (skip for now, may reappear) and a second link `"Not in my world"` (true permanent skip — domain-level signal). Two states; Phase 1 for copy split. **Impact: medium.**
-- When the second option is used, log domain-level "not in my world" signals; do NOT message the author. Phase 2 (needs data model field). **Impact: medium.**
+**Learning reinforcement**
+- After skip, before the bubble dismisses, show a single italic line in place of the question: `You skipped this — we'll show you the answer in your summary.` `--font-display`, 0.78rem, INK at 55%. Phase 1. **Impact: medium.** Skip stops being information loss.
+
+**Shared knowledge reinforcement**
+- The label `"Skip - don't show again"` reads as system rejection of the author. Soften to two options surfaced on confirm:
+  - `"Not today"` — temporary skip, may reappear
+  - `"Not my world"` — same as today's domain exclusion (`handleExcludeDomain`) — silently removes the domain from rotation
+  Phase 1 — both actions already exist in code; this is a copy + IA change to surface them at skip time rather than only on summary. **Impact: medium.**
+- "Not my world" exclusions must never surface to the author — verify the domain-exclusion writes don't notify. (`POST /api/users/domain-exclusions` — confirm.)
 
 **Risks**
-"Not in my world" as opt-out signal must never surface to the author — would chill question creation. Strictly internal.
+If skip starts looking like a multi-button decision, players will skip less. Keep the default tap a single button; the second option appears only on a long-press or via an overflow.
 
 **Surface priority: medium.**
 
@@ -122,16 +149,17 @@ Adding category + creator above the bubble inflates the question's vertical foot
 ### 6. Answer submission moment
 
 **Current state**
-`src/app/games/[id]/play-client.tsx:192-211`. Placeholder `"Your answer..."`. Submit button `"Send"`, becomes `"..."` when pending. Sticky footer, 95% bg opacity, backdrop blur.
+`src/app/daily/catchup/page.tsx:176-187` and analogous on play surface. `placeholder="Your answer..."`, `<button className="btn-primary">Send</button>` or `'...'` when submitting. After submit, `TypingRow` shows `"Grading..."` (`GameplayChat.tsx:500-525`) — italic serif 0.9rem in a `surface-2` bubble.
 
-**Learning reinforcement — opportunities**
-- Placeholder should narrow possibility space slightly. Current `"Your answer..."` is generic. Rotate placeholder by difficulty: ACCESSIBLE → `"Type what you know"`, MODERATE → `"Best guess works"`, SPECIALIST → `"Even a fragment counts"`. Phase 1. **Impact: low.**
+**Learning reinforcement**
+- Placeholder is generic. Vary by difficulty (data is on the question): ACCESSIBLE → `"Type what you know"`, MODERATE → `"Best guess works"`, SPECIALIST → `"A fragment is fine"`. Phase 1. **Impact: low.**
 
-**Shared knowledge reinforcement — opportunities**
-- "Send" reads like email. Replace with `"Answer"` (more natural to the moment) or alternate `"Tell {firstName}"` on questions where the author is in the group (i.e. they'll see your result). Phase 1 — author name is already in scope. **Impact: medium.** This is the single tightest place to make the player feel they're *responding to a person*, not submitting to a system.
+**Shared knowledge reinforcement**
+- `"Send"` is email register. Replace with `"Answer"` (system-neutral) or — bolder — `"Tell {firstName}"` when the author is in the player's group. Phase 1 — author name is on the question payload. **Impact: medium.** This is the single moment the player most feels like a respondent rather than a submitter.
+- `"Grading..."` is judgment-system language. Replace with `"Checking..."` (mechanical) or `"Reading..."` (personifies the bot as a careful reader, matching `"Joshing will read the question and answer"` at `QuestionForm.tsx:476`). Phase 1. **Impact: low.**
 
 **Risks**
-"Tell {firstName}" creates an expectation that the author sees the answer. If the relational feedback surface is not yet routing per-answer signals, this could read as a promise the product doesn't keep. Verify route before shipping.
+`"Tell {firstName}"` implies the answer is going to a person. If per-answer signals aren't routed to the author, this is a lie. Audit the answer pipeline before shipping.
 
 **Surface priority: medium.**
 
@@ -140,119 +168,119 @@ Adding category + creator above the bubble inflates the question's vertical foot
 ### 7. Result reveal — correct
 
 **Current state**
-`GameplayChat.tsx:86-91, 612-622`. Headline rotation (4 variants): `Nice pull. / Right on. / Locked in. / Exactly.` Sub-label rotation: `shared signal / you both know this one / confirmed / same territory`. Green ✓, serif headline, mono sub-label 0.55rem. Optional `RelationalFeedbackFade` line, italic 0.78rem, fades after 2.5s.
+`GameplayChat.tsx:612-622`. Layout: success-tinted bubble (`color-mix(in srgb, var(--success) 9%, var(--surface-2))`, 30% success border). Inside: green ✓ + headline (in `--font-literata`, which resolves to Playfair italic via `--font-display`), then sub-label in mono 0.55rem muted. Headline rotation (`:86-91`): `Nice pull. / Right on. / Locked in. / Exactly.` Sub-labels: `shared signal / you both know this one / confirmed / same territory`. Optional `RelationalFeedbackFade` line below (italic 0.78rem, fades after 2.5s, content from `relationalFeedbackLine` payload). Optional `BreadcrumbLine` if `breadcrumb` present (line 680 unconditional on result — applies to correct *too* if data present, which is more than I claimed in v1).
 
-**Learning reinforcement — opportunities**
-- Add a fifth headline variant that names the *domain* not the performance: `That's {italic category}.` (Playfair italic for the category). Phase 1. **Impact: medium** — first time a correct answer names what was learned in-bubble.
-- Mirror the breadcrumb treatment already present on wrong (the `FROM {author}` + canonical breadcrumb). Currently correct reveals get no breadcrumb. Add it as an opt-in tertiary line: italic serif 0.78rem with the canonical phrasing. Phase 1; data already exists. **Impact: medium.**
+**Learning reinforcement**
+- The breadcrumb's `FROM [author]` is mono 0.5rem — sub-legible. Reformat: `"From {firstName}."` in `--font-handwriting` 0.78rem (matches the proposed bubble-author treatment in surface 4 for consistency). Phase 1. **Impact: high.**
+- Add a fifth headline variant that names the domain: `That's {italic category}.` Phase 1 — `canonicalSubcategory` is on `ResultRow` props (`:551`) but currently unused in copy. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- Sub-label rotation should foreground the author at least 1 in 4. Add: `{firstName} knew you'd know this.` 0.55rem mono small caps with the name in italic Caveat. Phase 1. **Impact: high** — makes correctness feel like a *meeting*, not a score.
-- "confirmed" is the weakest variant — system language. Replace with `in both your banks now`. Phase 1. **Impact: medium.** Restores the brief's intended "now it's in yours too" register.
-- The brief's expected sub-label "common ground +" is not in code. If kept as a system, set it as a one-off treatment: small `+` icon next to the sub-label, 0.6rem Caveat, accent color — *only* when the player has answered ≥3 from this author in the cycle. Phase 1 for visual; Phase 2 if counting logic isn't already in scope. **Impact: medium.**
+**Shared knowledge reinforcement**
+- Sub-label rotation's `confirmed` is the weakest variant (system register). Replace with `in both your banks now` — restores the brief's intended "now it's in yours too" semantics. Phase 1. **Impact: medium.**
+- Add a sixth sub-label, gated on questions where `creatorName` is non-null: `{firstName} knew you'd know this.` Phase 1. **Impact: high.** Same word-count as `"you both know this one"`.
+- The `relationalFeedbackLine` data slot is already wired but the source of the strings is upstream — make sure server-side generators use author-named language when present.
 
 **Risks**
-Five variants is the upper limit before rotation becomes legible as a system. Hold there.
+Adding too many headline variants makes rotation visible as a system. Five upper limit.
 
-**Surface priority: high.** Highest-frequency positive moment in the loop.
+**Surface priority: high.** Most-frequent positive moment.
 
 ---
 
 ### 8. Result reveal — wrong
 
 **Current state**
-`GameplayChat.tsx:93-102, 634-679`. Headline rotation: `Not this time — here's the answer. / You'll know this one next time. / Nice try. / Close, but not quite.` Bold `Answer:` label, italic consolation quip (0.88rem muted), optional `FROM {author}` breadcrumb in italic serif 0.78rem. `"Recheck my answer"` button.
+`GameplayChat.tsx:634-679`. Red-tinted bubble. Stack: red ✕ + headline (Playfair italic), then `Answer: {correctAnswer}` bold-then-plain at 0.9rem, then optional italic consolation quip at 0.88rem muted, then optional `"Recheck my answer"` button (mono 0.58rem uppercase). Below the bubble, the unconditional `BreadcrumbLine` if present, and an optional `QuipLine` at 0.875rem italic muted with 8px left margin.
 
-**Learning reinforcement — opportunities**
-- The headline rotation does *no* learning work — it consoles. At minimum one variant should name the territory: `Now you know one more thing about {italic category}.` Phase 1. **Impact: high.**
-- Promote the canonical breadcrumb from 0.78rem to 0.92rem and pin it directly under the `Answer:` line, before the consolation quip. The breadcrumb is the highest-density learning surface in the entire in-session experience and is currently buried. Phase 1. **Impact: high.**
-- The brief specified the rotation should include "now it's in yours too." Add it as a sub-label, mono 0.55rem, INK 65%, under the breadcrumb. Phase 1. **Impact: high.**
+There's also a `gave_up` state (`:623-633`) — when the player explicitly gives up (e.g. via catchup's `"I give up"` button): `"Here's the answer."` in muted Playfair italic, then `Answer:` line. No headline rotation, no breadcrumb path. **I missed this state entirely in v1.**
 
-**Shared knowledge reinforcement — opportunities**
-- The `FROM {author}` line is small-caps mono 0.5rem — basically illegible weight. Promote to 0.7rem Caveat italic with a real preposition: `From {firstName}.` Phase 1. **Impact: high.**
-- Add a sub-label rotation that names the relational stake: `{firstName} thought you might. / {firstName}'s world includes this. / {firstName} answered correctly when they wrote this.` 0.6rem mono. Phase 1. **Impact: high.** Turns a miss into evidence that the *author* sees you as someone who might.
+**Learning reinforcement**
+- The headline rotation is purely consolation. Add one variant that names the territory: `Now you know one more thing about {italic category}.` Phase 1 — `canonicalSubcategory` is on props. **Impact: high.** Wrong-answer reaction rate is the north-star metric and the current treatment does almost no learning work.
+- The breadcrumb is the densest learning element on this surface but rendered at 0.78rem italic. Promote to 0.92rem, in `--font-display` (Playfair italic), pin directly under the `Answer:` line. Phase 1. **Impact: high.**
+- The `gave_up` state currently shows no breadcrumb or quip — verify the data is still passed and just render it. If absent in payload, add server-side. Phase 1 if data is there. **Impact: medium.**
+
+**Shared knowledge reinforcement**
+- Update `BreadcrumbLine`'s author rendering: change `FROM [{author}]` (mono 0.5rem) to `From {firstName}.` (Caveat 0.78rem). Phase 1. **Impact: high.**
+- Add a wrong-answer sub-label rotation between `Answer:` line and consolation: `{firstName} thought you might know this. / {firstName}'s world includes this. / {firstName} carries this one.` Phase 1; gate the first variant on ACCESSIBLE difficulty so it doesn't read patronising on SPECIALIST misses. **Impact: high.**
 
 **Risks**
-"{firstName} thought you might" can read as patronizing if the question was specialist. Guard it: only on ACCESSIBLE / MODERATE difficulty. SPECIALIST wrong answers get `{firstName}'s world includes this.` instead.
+The recheck button means the wrong-reveal can become correct retrospectively. If we add author-named sub-labels, they need to clear on recheck-accepted (currently the bubble doesn't re-render its content on recheck; only `recheckMessage` is appended below the button — verify this works for added copy too).
 
-**Surface priority: high.** This is the single highest-leverage surface in the entire product — wrong-answer reaction rate is the north star and current treatment is mostly consolation, almost no learning, light authorship.
+**Surface priority: high.** The single highest-leverage surface in the entire product.
 
 ---
 
 ### 9. Mid-session transition between questions
 
 **Current state**
-`play-client.tsx:150-168`. 850ms silent pause, then next question fades in. No bridge text, no skeleton.
+`play-client.tsx:150-168` (per Explorer; corroborated by `QuestionRow`'s `isNew` fade at `GameplayChat.tsx:150-155`). 850ms silent pause then fade-in of next question. No bridge text or skeleton.
 
-**Learning reinforcement — opportunities**
-- Honor the chat-thread principle (terse, explainers belong end-of-session). Don't push learning here. Add one tiny micro-moment only: a single-frame italic line "·" → next question's italic category appears for 200ms before the question text — pure typographic foreshadow. Phase 1. **Impact: low.**
+**Learning reinforcement**
+- Hold. The terse-thread principle is correct; adding text here would break it.
 
-**Shared knowledge reinforcement — opportunities**
-- Avoid this surface entirely. Author reveal lives in review, per existing principle.
+**Shared knowledge reinforcement**
+- Same.
 
-**Risks**
-Adding visible bridge text breaks the terse-thread principle. The 850ms silence is correct.
-
-**Surface priority: low.** Already correct in spirit.
+**Surface priority: low.** Already correct.
 
 ---
 
 ### 10. Mastery tier-crossing mid-session
 
 **Current state**
-`MasteryMoment.tsx:14-19`. Does NOT fire mid-session — fires on `/games/[id]/summary` only. Full-screen beige (#f5f0e8) overlay, centered serif, 30ms + 420ms fade, auto-dismiss at 2600ms. Copy: `"{subcategory}. You're finding your ground." / "…You move through this naturally now." / "…This one's yours."`
+`MasteryMoment.tsx:14-104`. Does NOT fire mid-session — fires only on game-summary (`src/app/games/[id]/summary/page.tsx:247-252`) and daily-summary (`src/app/daily/summary/page.tsx:248-257`). Layout: full-screen cream overlay (`#f5f0e8`), centered stack: subcategory (Playfair italic 1.2-1.6rem, 72% INK opacity), then **TIER NAME as 2-3rem 700-weight headline** (90% INK opacity), then copy (`"…You're finding your ground." / "…You move through this naturally now." / "…This one's yours."`, 0.95rem 48% opacity). 30ms enter + 420ms fade-in + 2600ms auto-dismiss. Tap to dismiss.
 
-**Learning reinforcement — opportunities**
-- Don't move it into the session. The principle of post-game beat is correct. Instead: name a *micro-moment* in the thread that *foreshadows* a possible crossing, only after the answer that completes a tier. One italic line in the thread: `Something tipped over in {italic category}.` 0.78rem, INK 70%, no overlay. Phase 1 if cross-detection runs per-answer; otherwise Phase 2. **Impact: medium.**
+The 2-3rem tier label is the visual centerpiece. This is the most prominent rendering of tier vocabulary anywhere in the product, which makes the four-way fork (Preface §1) most consequential here.
 
-**Shared knowledge reinforcement — opportunities**
-- The `MasteryMoment` copy is entirely individual. Add a fourth variant for tiers crossed in domains where the *author* is also at solid/mastery: `"{subcategory}. You and {firstName} now both carry this."` Phase 1. **Impact: high.** Lands the entire shared-knowledge thesis in one screen.
-- Vocabulary: "Familiar / Solid / Mastery" here, but other surfaces use different names — see preface. Resolve before shipping new copy.
+**Learning reinforcement**
+- The copy is good. Leave it.
+- The vocabulary needs unification (see Preface §1). Whatever the canonical set ends up, MasteryMoment is the loudest place it appears. Phase 1, cross-cutting.
+
+**Shared knowledge reinforcement**
+- Add a fourth copy variant for tiers crossed in domains where ≥1 friend is at solid/mastery: `"{subcategory}. You and {firstName} now both carry this."` Phase 1 — requires a small server-side enrichment to identify a "tier-buddy" at moment of cross. **Impact: high.** Lands the entire shared-knowledge thesis in one 2.6-second moment.
 
 **Risks**
-Tier-crossing copy in the wild today already conflicts with the knowledge-page and account-page vocabulary. Adding shared-knowledge variants compounds the inconsistency until tier names are unified.
+The overlay is full-screen — `<button>` covering 100dvh, dismiss-on-tap. Make sure the "tier-buddy" variant isn't shown when the buddy has private domain visibility (existing privacy logic at `compute-beats.ts:373` for Beat 4 — same gate applies).
 
-**Surface priority: high** (because of the inconsistency, not the current copy quality).
+**Surface priority: high** (because of vocabulary fork blast radius).
 
 ---
 
 # END OF SESSION
 
-### 11. End of Session Review — per-question card
+### 11. End of Session Review — per-question card (daily summary)
 
 **Current state**
-`src/app/daily/summary/page.tsx:298-507`. Per row: status badge top-left (CORRECT / WRONG / SKIPPED), domain top-right muted: `JOSHING BOT · {DOMAIN.UPPER}`, large question text, your-answer / correct-answer side-by-side, explanation in muted box, optional creator note in slightly-more-prominent box.
+`src/app/daily/summary/page.tsx:298-507`. Card is tinted by result: emerald-50 / rose-50 / stone-50. Top-left: status badge `CORRECT / WRONG / SKIPPED` (uppercase 0.65rem semibold). Top-right (same row): `JOSHING BOT · {DOMAIN.UPPER}` in mono 0.62rem muted — **author is not on this card at all** outside the creator-note. Below: question text (medium-weight foreground), `You: {answer}` / `Answer: {correct}` side-by-side, explanation (`bg-muted/35 text-muted-foreground`, no toggle), creator note (`bg-muted/40 text-foreground`, `"A note from {authorName}:"`, no toggle). Bottom action bar: Heart vote (filled rose when active) + `SendQuestionAction` (re-gift). Overflow menu via `MoreHorizontal`: `Hide questions like this` / `Mute {domain}` / `Hide from feed (disabled)` / `Save to question bank` / `Report content`.
 
-**Learning reinforcement — opportunities**
-- The domain string `JOSHING BOT · {DOMAIN}` reads as system metadata. Replace with **two stacked lines**: top line `{italic category}` Playfair italic 1.1rem (left-aligned, above the question); bottom line removed. The domain becomes editorial content, not header chrome. Phase 1. **Impact: high.**
-- Explanation is rendered in `bg-muted/35 text-muted-foreground` — visually subordinate to the answer comparison. Promote: same INK color as body, no muted background; lead with a Playfair italic kicker `Why.` 0.7rem above the explanation. Phase 1. **Impact: high.** This is the densest learning surface in the entire game.
-- Group the day's cards by domain into 2–3 clusters with editorial headers (`Late Tchaikovsky.`, etc.). Phase 1 grouping; Phase 2 if it requires re-ordering of source data. **Impact: medium.**
+**Learning reinforcement**
+- Replace `JOSHING BOT · {DOMAIN.UPPER}` with a stacked editorial header: top line `{domain}` in `--font-display` italic 1.05rem INK; ditch the system kicker. Phase 1. **Impact: high.** The system attribution `JOSHING BOT ·` is the only place in the product that names the LLM as a co-author on the player's recap — confusing.
+- Explanation is `text-muted-foreground` — visually subordinate to the answer comparison. Promote to `text-foreground` and add a Playfair italic kicker `Why.` (0.78rem INK 70%). Phase 1. **Impact: high.** This is the densest learning surface in the loop.
+- Add a `More on {domain} →` link at the bottom of the explanation, routing to `/knowledge/{domain}`. Phase 1. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- The author appears *only* inside the creator-note label (`"A note from {authorName}:"`). Add a primary author line at the top of every card, beneath the italic category: `From {firstName}.` Caveat handwriting 0.95rem, INK 80%. Phase 1. **Impact: high.**
-- For correct answers, append a one-line shared-state ribbon: `In {N} banks now.` mono 0.55rem. Phase 1 if "answered_correctly_total" is per-question on the payload; Phase 2 otherwise. **Impact: medium.**
+**Shared knowledge reinforcement**
+- Add author to the card header (above the question, below the status badge): `From {firstName}.` in `--font-handwriting` 0.95rem at INK 85%. **Evidence:** `QuestionRecap` (`src/server/db/queries/daily-summary.ts:30-43`) carries `creatorNote.authorName` but NOT the bare question creator's display name. So the proposal needs the recap query enriched with `creator.displayName` from `users`. Cheap one-join backend change — call it **Phase 1.5** (backend touch + frontend). **Impact: high.**
 
 **Risks**
-Promoting the explainer is *not* a violation of "explainers live in end-of-session" — it's exactly where the principle says it should be. The risk is overwhelming the card; manage by stacking author + category as a 2-line editorial header, not as side metadata.
+The tinted card background (emerald/rose/stone) already does heavy semantic lifting. The new header should sit *on* the tint, not break it. Use `var(--ink)` text on all variants — no white-on-color.
 
-**Surface priority: high.** Densest learning surface in the loop; currently most underdelivered.
+**Surface priority: high.** This is the entire end-of-session review experience and the author is missing.
 
 ---
 
 ### 12. Author reveal moment
 
 **Current state**
-`src/app/games/[id]/summary/page.tsx:267-269`. Static label in header: `From {view.creator.displayName}` or `From the question bank`. No animation.
+Static text. On game summary (`src/app/games/[id]/summary/page.tsx:267-270`), each card's top-left mono row says `"From {view.creator.displayName}"` (or `"From the question bank"` fallback). On daily summary, no author at card-header level — only inside the creator note. No animation in either place.
 
-**Learning reinforcement — opportunities**
-- Skip — this isn't a learning surface.
+**Learning reinforcement**
+- Skip — not a learning surface.
 
-**Shared knowledge reinforcement — opportunities**
-- Promote to a beat-level moment on the *daily* summary page (not just game summary). At the top of the per-question card, before the question is shown, render: blank → italic `From {firstName}.` (350ms fade-in, 600ms hold) → question fades in. Phase 1; pure CSS. **Impact: high.**
-- `"From the question bank"` is system language and breaks the "named consent" thesis when it shows. If a question is from the bank, the bank entry has an original author — use that. Replace with `From {originalAuthorFirstName}, originally.` Phase 1 if origin is preserved; Phase 2 if origin is lost on bank intake. **Impact: high.**
+**Shared knowledge reinforcement**
+- Promote the daily-summary author line (proposed in surface 11). On reveal, fade the `From {firstName}.` line in over 300ms before the question becomes visible. Phase 1 — pure CSS, mirrors the existing 420ms MasteryMoment timing. **Impact: high.**
+- `"From the question bank"` is the fallback and reads as a depersonalised broadcast. The bank entry has an original author — surface them: `"From {originalAuthorFirstName}, originally."` **Evidence:** schema preserves origin via `sourceQuestionId text('source_question_id')` (`src/server/db/schema.ts:210`) and an index at `:261`. **Phase 1.** Just needs the recap join to follow the chain to the original author. **Impact: high.** This is on the brief's "named consent" thesis directly.
 
 **Risks**
-The 350ms animation must be skippable on reduced-motion preference.
+Reduced-motion users need the 300ms fade short-circuited.
 
 **Surface priority: high.**
 
@@ -261,19 +289,23 @@ The 350ms animation must be skippable on reduced-motion preference.
 ### 13. Educational explainer (truncated + expand)
 
 **Current state**
-`src/app/daily/summary/page.tsx:436-439`. Full text rendered if present. No truncation, no expand UI. Styled `bg-muted/35`, `text-muted-foreground`.
+Two variants exist:
+- Daily summary `:436-439`: full text rendered in `bg-muted/35 text-muted-foreground` rounded box. No expand UI.
+- Archive `:380-385`: full text rendered in `<details>` with `<summary>Explanation</summary>` font-medium foreground. **Expand/collapse already exists here.** I claimed in v1 it didn't anywhere — wrong.
+- Game summary `:301`: `<p className="...text-muted-foreground">{explanationFor(...)}</p>` — flat render, no toggle.
 
-**Learning reinforcement — opportunities**
-- Truncation isn't the problem — visual weight is. Replace `text-muted-foreground` with `text-foreground` at 90%. Phase 1. **Impact: high.**
-- Add Playfair italic kicker `Why.` above the prose, 0.78rem, INK 70%. Phase 1. **Impact: medium.**
-- Optional `Read more →` expand only if explanation > 280 chars. Don't add it pre-emptively. Phase 1. **Impact: low.**
-- Tag explanation with one further-reading affordance: `More on {italic category} →` linking to `/knowledge/{domain}`. Phase 1. **Impact: medium** — closes the loop between question and domain.
+Backend has 5 explainer-text fields with a fallback chain (`explanationFor` at `:57-64`): `explainerFullWrong → explainerFull → explainerBriefWrong → explainerBrief → factualExplanation`. **Evidence:** the underlying schema actually has **eight** explainer fields (`src/server/db/schema.ts:230-237`): `explainerBrief / explainerFull / explainerBriefCorrect / explainerFullCorrect / explainerBriefWrong / explainerFullWrong / explainerBriefExpired / explainerFullExpired`. So the brief's correct/wrong asymmetry is over-supported by data — the model also has `_Correct` and `_Expired` variants the UI ignores. The render code only picks `_Wrong → default → _BriefWrong → _Brief → factualExplanation`; it never reaches for `_Correct` or `_Expired` at all.
 
-**Shared knowledge reinforcement — opportunities**
-- When the author wrote the explainer themselves (vs LLM-generated), surface that: small Caveat marginalia `in {firstName}'s words` at 0.7rem, right-aligned next to the kicker. Phase 1 if explanation source is tracked; Phase 2 otherwise. **Impact: high.**
+**Learning reinforcement**
+- Standardise: daily summary and game summary should both use `<details>` with `<summary>{italic kicker} Why →</summary>`; wrong-result cards default `open`, correct-result cards default closed. Phase 1 — wraps existing render. **Impact: high.** Implements the brief's intent exactly.
+- Where the question has paired brief/full variants, use the brief as always-visible teaser and full as the expanded content, picked by result: `_BriefCorrect`/`_FullCorrect` for correct, `_BriefWrong`/`_FullWrong` for wrong, `_BriefExpired`/`_FullExpired` for expired, falling through to the unsuffixed pair. Currently `explanationFor` flattens to one field; should pick a result-keyed *pair*. Phase 1 — selector change. **Impact: high.** (Bumped from medium — the existence of `_Correct` and `_Expired` variants in schema means the brief's asymmetry is meant to be three-way, not just correct-vs-wrong.)
+- Add `More on {italic domain} →` link inside the expanded content. Phase 1. **Impact: medium.**
+
+**Shared knowledge reinforcement**
+- When the explanation text came from the creator (vs LLM-generated), surface that: `in {firstName}'s words.` 0.7rem Caveat right-aligned. Phase 2 — provenance per explainer field is not currently tracked in the data I read. **Impact: high if tracking exists.**
 
 **Risks**
-Tagging `in {firstName}'s words` requires reliable provenance; if mis-tagged, it lies about authorship — that's worse than not tagging.
+Defaulting wrong cards open changes the silent line height of the wrong card on first paint. Make sure the open `<details>` doesn't cause CLS for above-the-fold cards.
 
 **Surface priority: high.**
 
@@ -282,17 +314,17 @@ Tagging `in {firstName}'s words` requires reliable provenance; if mis-tagged, it
 ### 14. Creator note treatment (collapsed for correct, expanded by default for wrong)
 
 **Current state**
-`src/app/daily/summary/page.tsx:441-447`. Copy: `"A note from {authorName}:"`. `bg-muted/40`, border, `text-foreground`. **No collapse behavior — same visibility correct or wrong.** Brief expects collapsed-when-correct, expanded-when-wrong.
+Same `"A note from {authorName}:"` (font-medium prefix + plain body) on daily summary `:441-447`, game summary `:302-307`, archive `:387-392`. `bg-muted/40` + 1px border. **No collapse logic anywhere** — always expanded.
 
-**Learning reinforcement — opportunities**
-- For wrong answers, the note IS the learning. Promote: drop the `bg-muted/40` to none, set the note text as 0.95rem Georgia italic, indented 12px with a thin left rule INK 25%. Phase 1. **Impact: high.**
+**Learning reinforcement**
+- For wrong-answer cards the note IS the learning. Promote: drop the `bg-muted/40` border, set the body as 0.95rem Georgia italic (`font-family: var(--font-literata)`) indented 12px with a thin 2px left rule in `var(--ink)` at 25%. Phase 1. **Impact: high.**
 
-**Shared knowledge reinforcement — opportunities**
-- Implement the brief's collapsed-when-correct treatment. When correct: render the note as a 1-line teaser ending `…` in Caveat 0.7rem, INK 60%, with a `Read {firstName}'s note →` link. When wrong: expand by default. Phase 1. **Impact: high.**
-- Replace `"A note from {authorName}:"` with `"{firstName} added:"` — shorter, warmer, more sentence-like. Phase 1. **Impact: medium.**
+**Shared knowledge reinforcement**
+- Implement the brief's correct/wrong asymmetry. Correct cards: render only `"{firstName} added a note →"` as a Caveat 0.78rem link that expands inline on click. Wrong cards: render expanded by default with the promoted treatment above. Phase 1. **Impact: high.**
+- Change the label across all three surfaces. Current: `"A note from {authorName}:"` (formal, third-party). Proposed: `"{firstName} added:"` (warmer, sentence-like, same field). Phase 1. **Impact: medium.**
 
 **Risks**
-Collapsing the note on correct can read as hiding the most relational element from the most positive moment. Counter-intuitively this is correct: when you knew it, the player owns the moment; when you didn't, the author's hand on your shoulder lands harder.
+Hiding the note from positive moments looks counter-intuitive. The product reasoning: when you knew it, the moment is yours; when you didn't, the author's hand on your shoulder lands harder. If this isn't a willingly-accepted design call, fall back to "always expand, just restyle."
 
 **Surface priority: high.**
 
@@ -301,17 +333,17 @@ Collapsing the note on correct can read as hiding the most relational element fr
 ### 15. Star voting surface
 
 **Current state**
-`src/app/daily/summary/page.tsx:464-482`. Heart icon, aria-label `"Love this question"`. No visible label. Filled = `bg-rose-50 text-rose-600`.
+There is no star vote — only a heart on daily summary cards (`:464-482`) and a `QuestionRatingButtons` component on game summary / archive cards. Aria-label is `"Love this question"`. Single binary tap. Thumbs-down is reachable only via overflow menu's `"Report content"` (`:576-588`) — i.e. negative feedback is funneled through a reporting channel.
 
-**Learning reinforcement — opportunities**
-- A heart says nothing about *what* was loved. Replace single heart with two affordances: a Caveat micro-label appears on hover/focus offering `Loved this. Brilliant question. Stumped me right.` (single-select). Phase 1 if the existing schema supports a flavor on the vote; Phase 2 if it doesn't. **Impact: medium.**
+**Learning reinforcement**
+- The heart says nothing about *what* about the question worked. Replace the single heart with a two-step affordance: tap reveals three Caveat micro-labels for one-shot select: `"Loved this. / Brilliant question. / Stumped me right."` Phase 2 — requires a `flavor` enum on the vote. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- A vote is meaningful only when the *author* sees it. On submit, micro-confirmation: `{firstName} will see this.` 0.7rem, INK 60%, 2s. Phase 1 if a per-author vote-aggregate already exists; Phase 2 if visibility-to-author is itself the new feature. **Impact: high.**
-- Replace heart with a Caveat `★` star sketch — matches the brief's "star voting" register and feels more editorial. Pure visual; Phase 1. **Impact: low.**
+**Shared knowledge reinforcement**
+- A vote is meaningful only when the author sees it. On submit, micro-confirmation toast: `"{firstName} will see this."` 0.7rem INK 60%, 2s. **Evidence (correction from v2):** `POST /api/daily/feedback` (`src/app/api/daily/feedback/route.ts:53,73`) just inserts to `questionFeedback`; **it does not aggregate to author or surface anywhere the author can see.** So this micro-confirmation would be a *lie* without first building author-side aggregation (a dashboard on `/account` or a per-creator notification). **Phase 2** — the routing has to be built before the confirmation can ship. **Impact: high once built; do not ship the toast without the routing.**
+- Separate thumbs-down from "Report content" — they're different signals. Add a low-friction `"This wasn't for me"` option to the rating bar (no report, just a domain-fit signal). Phase 1 — uses existing `thumbs_down` plumbing. **Impact: medium.**
 
 **Risks**
-If "star" votes are not already routed to the author's Authorship Impact beat, promising visibility is a lie. Verify route.
+"Report content" exists for safety reasons; don't dilute it. The "wasn't for me" is a *fit* signal, not a *content* signal.
 
 **Surface priority: medium.**
 
@@ -320,38 +352,39 @@ If "star" votes are not already routed to the author's Authorship Impact beat, p
 ### 16. Standout moments — highest shared, "only you got this"
 
 **Current state**
-**Surface does not exist.** Codebase contains no "highest shared" or "only you got this" surface in the daily summary.
+**Does not exist.** No "highest shared" / "only you got this" sections on daily summary, game summary, or archive.
 
-**Learning reinforcement — opportunities**
-- Add a single editorial card at the top of the daily summary: a Playfair italic kicker `The day's piece.` + the single most-difficult question the player got right today, with its explainer in full. Phase 1 if "difficulty" + "correct" are joinable in the summary query (they are). **Impact: medium.**
+**Learning reinforcement**
+- Add a single editorial card at the top of the daily summary: italic kicker `The day's piece.` Playfair italic 0.78rem, then the player's highest-difficulty correct answer of the day with the full explainer. Phase 1 — uses existing question data. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- Add two named beats *between* the score box and the per-question list:
-  - `Everyone in your group got this one.` (where `correct_count == group_size`)
-  - `Only you, today.` (where `correct_count == 1 && was you`)
-  Both 1.2rem Playfair italic, no border, large vertical breathing room (40px). Phase 2 — requires per-question group-level aggregation that may not be in the daily summary payload. **Impact: high.**
-- "Only you, today" must read as *territory*, not rank. Subtext: `Your corner of {italic category}.` Phase 2. **Impact: high.**
+**Shared knowledge reinforcement**
+- Add two named beats between the score box and the per-question list:
+  - `"Everyone in {groupName} got this one."` (correct-count = group-size for that question)
+  - `"Only you, today."` (correct-count = 1 and was you)
+  Both as Playfair italic 1.2rem with 40px vertical breathing, no border. Phase 2 — requires per-question group-level aggregation that I don't see in `DailySummaryView`. **Impact: high.**
+- Frame "Only you, today" as territory not rank — subtext: `"Your corner of {italic domain}."` Phase 2. **Impact: high.**
 
 **Risks**
-"Only you got this" is the closest a non-leaderboard product gets to ranking. Frame as territory (singular world) not as superiority. Drop the surface entirely if it can't be reliably framed that way.
+This is the closest a non-leaderboard product gets to ranking. If the language can't be reliably kept as "territory" not "superiority," drop the surface.
 
-**Surface priority: high.** Highest under-built surface in the entire product against the shared-knowledge lens.
+**Surface priority: high.** Largest under-built surface against the shared-knowledge lens.
 
 ---
 
 ### 17. Near-miss acknowledgment ("accepted variant")
 
 **Current state**
-**Surface does not exist.** Schema tracks `alternateAnswers` but the review UI does not surface variant acceptance.
+The `Recheck my answer` button (`GameplayChat.tsx:651-670`) exists on wrong-answer reveals. On submit, it calls `recheckAction.onSubmit()` which returns `{ accepted: boolean; message: string }`. If accepted, the existing wrong-reveal bubble stays rendered with a new message appended below the button. **The bubble does not re-color or re-state to "correct."** That's the entirety of the near-miss treatment in the live thread. No "accepted variant" indicator on review cards.
 
-**Learning reinforcement — opportunities**
-- When a near-miss is accepted, treat the row as CORRECT in status but add a single Caveat marginalia in the right gutter: `{firstName} accepts this.` 0.7rem. Phase 2 — requires the answer-grading pipeline to flag "accepted via variant" distinctly from "exact match". **Impact: high.**
+**Learning reinforcement**
+- On a successful recheck, re-tint the bubble to the correct treatment (`var(--success) 9%` bg, 30% border) and replace the headline with `"Counted. {italic category}."` Phase 1. **Impact: high.** Currently the player has to read a tiny message under the button to know what happened.
+- On review cards (daily/game/archive), mark recheck-accepted answers with a thin Caveat marginalia: `"counted on recheck."` 0.72rem. Phase 2 — needs a flag on the response row indicating recheck-acceptance. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- The author is the source of "what counts." Lean into it: `"{firstName} would count this."` mono 0.6rem under the correct-answer line. Phase 2. **Impact: high.** Reframes correctness as a relational agreement, not a system verdict.
+**Shared knowledge reinforcement**
+- When the variant was added by the *creator* (vs LLM-generated), label the recheck message: `"{firstName} accepts this."` **Evidence:** `grading.ts:24,50` — `exactMatch(submitted, canonicalAnswer, acceptedAlternatives)` accepts both canonical AND alternative matches via the same code path, and the `isCorrect: true` result the UI sees doesn't currently distinguish which kind matched. So this is **Phase 2** for two reasons: (a) the result type needs a `matchKind: 'canonical' | 'alternative'` flag, and (b) the alternates list itself doesn't track who added each one (creator vs LLM critique-loop suggestion). **Impact: high once both are tracked.**
 
 **Risks**
-Some answers are accepted by the LLM grader without explicit author intent — using "{firstName} accepts" implies authorial agency that doesn't exist. Either rebuild grading to allow author-level variant marking (Phase 2) or use neutral phrasing: `Close enough — counted.`
+Re-coloring the bubble must not flash green if the recheck is then disputed (currently `recheckState` does not have a "rejected" tone). Keep the transition one-way.
 
 **Surface priority: medium.**
 
@@ -360,17 +393,17 @@ Some answers are accepted by the LLM grader without explicit author intent — u
 ### 18. Daily Summary — interpretive opening line
 
 **Current state**
-`src/app/daily/summary/page.tsx:71-125` (`interpretiveLine`). Examples: `"You moved to {tier} in {domain}." / "You found new ground in {newDomain.displayName}." / "Clean sweep." / "Every one of them. Tomorrow." / "Three in a row at one point." / "{domain} is worth a deeper look."` Rendered `text-muted-foreground`, italic, fade-in 0.4s.
+`src/app/daily/summary/page.tsx:71-125, 282-296`. Function `interpretiveLine` returns one of: `"You moved to {tier} in {domain}." / "You found new ground in {domain}." / "Clean sweep." / "Every one of them. Tomorrow." / "Three in a row at one point." / "{domain} is worth a deeper look."` Rendered as `text-muted-foreground italic text-sm` with a fade-in (`:289-294`). Critically: **the line renders below the growth recap and tier-crossing moment, not above** (`:248-259`). It opens nothing; it sits in the middle. I had the order wrong in v1.
 
-**Learning reinforcement — opportunities**
-- Promote the line. Currently muted + small (`text-sm`); make it 1.3rem Playfair italic, INK 90%, above the "How You Did" header. Phase 1. **Impact: high.** This is the editorial voice of the product and it's whispered.
+**Learning reinforcement**
+- Promote the line to the top of the page — above the `"How You Did"` header. Set as 1.3rem Playfair italic (`--font-display`) at INK 90%. Phase 1 — moving an existing render. **Impact: high.** This is the editorial voice of the day and currently whispers.
 - Add domain-named variants to the rotation: `"You met {italic domain} for the first time today." / "{italic domain} got a little wider today."` Phase 1. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- All current variants are personal. Add collective variants when conditions hold: `"You and {firstName} answered the same one differently today." / "{firstName} stumped two of you." / "Three of you crossed into {italic domain} this week."` Phase 2 — requires group-level joins in the summary build. **Impact: high.**
+**Shared knowledge reinforcement**
+- All current variants are individual. Add relational variants gated on data: `"You and {firstName} answered the same one differently today." / "{firstName} stumped two of you." / "{firstName1} and {firstName2} both wrote for you today."` Phase 2 — requires group-level joins in the summary build. **Impact: high.**
 
 **Risks**
-"Stumped two of you" is fine. Anything that names a *winner* between two players is not. Keep collective variants strictly to *shared state* facts.
+Relational variants must use only shared-state facts. Anything that names a winner between players is out.
 
 **Surface priority: high.**
 
@@ -379,19 +412,19 @@ Some answers are accepted by the LLM grader without explicit author intent — u
 ### 19. Daily Summary — score, compatibility shifts, vote summary, game progress
 
 **Current state**
-`src/app/daily/summary/page.tsx:200-237`. Header `"How You Did"` (1.45rem, weight 700, uppercase) + date + score line `"{correct}/{total} correct · {N} skipped"` (small mono). Below: `"Your Growth Recap"` with category circles. **No compatibility shifts shown. No vote summary shown.**
+`:200-237`. Breadcrumb `HOME / DAILY FIVE / SUMMARY` mono. Header `"How You Did"` set in `var(--font-neutral)` (sans), 1.45rem, weight 700, uppercase, letter-spacing 0.05em, `#111111`. Date below. Difficulty mode + `{correct}/{total} correct · {skipped} skipped` in mono. Then `"Your Growth Recap"` (`titleStyle`, 1.05rem sans semibold uppercase) with `CategoryGainsDisplay`. **No compatibility shifts, no vote summary, no game progress block.**
 
-**Learning reinforcement — opportunities**
-- Demote the score. Right now `"How You Did"` is the largest single piece of type on the daily summary, and it's a *score header*. Rename to `"Today's territory."` Playfair italic 1.45rem. Phase 1. **Impact: medium.** Reframes the entire page as a learning artifact, not a scorecard.
-- Move the raw score box from full-width hero to a 33%-width sidebar element on desktop, a compressed row on mobile. Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- Rename `"How You Did"` → `"Today's territory."` Switch to Playfair italic, 1.45rem, normal-case. Phase 1. **Impact: medium.** Reframes the page as a learning artifact, not a scorecard.
+- The mono score line is currently the second-most-prominent type element after the header. Demote to a small right-aligned chip; promote the `Your Growth Recap` block to fill the visual primary slot. Phase 1. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- Add a missing "compatibility shifts" block: one line per friend whose overlap with you moved today. `Closer with {firstName} in {italic domain}.` 0.95rem serif. Phase 2 — needs `compatibility_delta` per friend per day, which the schema may or may not have. **Impact: high.**
-- Add a missing "vote summary" block: `Two of your questions got starred today.` 0.95rem serif. Phase 1 if creator-stars aggregate is queryable. **Impact: high.**
-- Game progress: where in the season am I? Add a single mono line: `Day 9 of 14 · {N} questions earned, {M} questions taught.` Phase 1. **Impact: medium.**
+**Shared knowledge reinforcement**
+- Add a missing compatibility shifts block: `"Closer with {firstName} in {italic domain}."` (single-friend statements only — no ranking). Phase 2 — needs a `compatibility_delta` per friend per day. **Impact: high.**
+- Add a missing vote summary block: `"Two of your questions got hearted today."` Phase 1 if creator-stars aggregate is queryable today. **Impact: high.**
+- Game progress: single mono line `Day 9 of 14 · {N} questions answered, {M} questions taught.` Phase 1. **Impact: medium.**
 
 **Risks**
-"Closer with {firstName}" is fine. "Closer with {firstName} than with {firstName2}" is ranking. Single-friend statements only.
+None unique.
 
 **Surface priority: high.**
 
@@ -400,19 +433,21 @@ Some answers are accepted by the LLM grader without explicit author intent — u
 ### 20. Share card — mastery momentum format (primary)
 
 **Current state**
-`src/components/ShareCard.tsx:57-122`. Kicker `JOSHING · TWO WEEKS` + date range. Centered: large serif points number (108px) + label `"points this cycle"`. Three highlight rows. Highlight templates: `"Crossed into {tier} in {domain}" / "Picked up {domain}" / "Closest to {displayName}" / "Earned {N} creator points" / "Learned from {displayName}"`. Fallback `"A quiet cycle still counts."`
+`src/components/ShareCard.tsx:84-271`. Card 360×560 (portrait) or 360×360 (square). `linear-gradient(180deg, #fffaf1, #f5f0e8)` paper-to-cream, 1.5px ink border, `4px 4px 0` ink shadow. Top: kicker `JOSHING · TWO WEEKS` Courier 11px 700-weight, then date range Courier 11px muted, right-aligned user name Courier 10px muted. Center: **108px Georgia serif 700-weight points number** + `points this cycle` label Courier 12px. Then up to 3 highlights, each a 28-column grid: serial index Courier 12px muted + highlight body Georgia italic 18px. Highlight templates (`:57-82`): `Crossed into {tier} in {domain} / Picked up {domain} / Closest to {displayName} / Earned {N} creator points / Learned from {displayName}`. Empty fallback: `"A quiet cycle still counts."` Footer: `joshing.app` mono.
 
-**Learning reinforcement — opportunities**
-- The 108px serif number is *points*. That's a score, not learning. Replace with the number of *new domains entered this cycle* (count of `new_territory == true` from `growthCircleItems`). Label: `new corners`. Phase 1 if growth data is available at share-build time. **Impact: high.**
-- Add a "what you learned" line under the highlights, italic 0.9rem: `"You met {italic domain} for the first time."` (most-recent new territory). Phase 1. **Impact: medium.**
+The 108px points number is the entire visual centerpiece. The card uses the brand register beautifully (Courier mono + Georgia italic + ink offset shadow).
 
-**Shared knowledge reinforcement — opportunities**
-- "Closest to {displayName}" is the right impulse but uses "closest" — a comparative. Replace with `"Met {firstName} in {italic domain}."` (uses the strongest shared domain instead of the friend-most-aligned). Phase 1. **Impact: high.**
-- "Learned from {displayName}" should name *what*: `"{firstName} taught you {italic domain}."` Phase 1. **Impact: high.**
-- Add author credits to the bottom: small mono line `WRITTEN BY {firstName1}, {firstName2}, +{N}`. Phase 1. **Impact: medium** — turns the card into a thank-you, not a flex.
+**Learning reinforcement**
+- The 108px serif number is **points** — a score. Replace with the count of new domains entered this cycle (from `beat2.friendMediated.length + beat2.authored.length + beat2.promoted.length` if unique-by-domain). Label: `new corners`. Phase 1. **Impact: high.** Pivots the share card from "score" to "learning."
+- Add a "what you learned" line under the highlights, italic Georgia 0.9rem: `"You met {italic domain} for the first time."` (most recent new territory from beat 2). Phase 1. **Impact: medium.**
+
+**Shared knowledge reinforcement**
+- `"Closest to {displayName}"` (line 70) — `closest` is comparative. Replace with `"Met {firstName} in {italic strongestSharedDomain}"` (uses Beat 4's `sharedDomains[0]`). Phase 1. **Impact: high.**
+- `"Learned from {displayName}"` (line 78) should name what: `"{firstName} taught you {italic topDomain}"` (using Beat 3 contribution domains; payload needs per-friend domain — check Beat 3 shape). Phase 1 if domain breakdown available; Phase 2 otherwise. **Impact: high.**
+- Add a credit footer: small Courier 10px line `WRITTEN BY {firstName1}, {firstName2}, +{N}` above `joshing.app`. Phase 1 — author names available from Beat 3. **Impact: medium.** Turns the card into a thank-you, not a flex.
 
 **Risks**
-"Closest to" was carrying real product weight (intellectual alignment beat). Replacing it with a domain-named variant on the *share* card is fine, but the alignment beat itself still needs a friend name — keep the original copy in the ceremony, change it only here.
+"Closest" was carrying real product weight in the ceremony's alignment beat — only change it *on the share card*; keep the ceremony copy unchanged so Beat 4 still reads with the relational verb.
 
 **Surface priority: high.** Externally visible.
 
@@ -421,31 +456,31 @@ Some answers are accepted by the LLM grader without explicit author intent — u
 ### 21. Share card — emoji grid (secondary)
 
 **Current state**
-**Surface does not exist.** No emoji grid in `ShareCard.tsx`.
+Does not exist.
 
-**Learning reinforcement — opportunities**
-- The point of an emoji grid in the trivia-share genre (Wordle, Connections) is to make the *shape* of your day legible without spoiling the content. Joshing's equivalent should encode *domain mix*, not correctness. Build: a 1×5 grid where each cell is a colored square keyed to that question's broad category, with a `·` overlaid for SKIPPED and a `✓` overlaid only on cell 5 if the player crossed a tier. Phase 2 — requires share-card rendering changes and a tier-cross flag on the cycle payload. **Impact: medium.**
+**Learning reinforcement**
+- A learning-shaped emoji grid would encode domain mix, not correctness. Build a 1×5 row of colored cells keyed to each question's broad category, with `·` overlay for skipped and `✓` overlay only on cells that crossed a tier. Phase 2 — new render + cycle payload field. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- The grid version of "shared knowledge" is a 1×5 grid where adjacent halves color from your color to the author's color — visualizing that each question is a meeting. Phase 2. **Impact: medium.**
+**Shared knowledge reinforcement**
+- The relational version: 1×5 row where each cell is a 50/50 split between your color and the author's color. Phase 2. **Impact: medium.**
 
 **Risks**
-Don't ship until the primary card is tight; an emoji grid alongside an unfocused primary card multiplies share-surface noise.
+Don't ship until the primary share card (#20) is right.
 
-**Surface priority: low.** Secondary.
+**Surface priority: low.**
 
 ---
 
 ### 22. Session close messaging
 
 **Current state**
-`src/components/play/SessionCloseMessage.tsx:9-29`. `{closeCopy}` (1.22rem text) + primary button `"Review today's answers"` + optional muted link `"See your Knowledge page ->"`.
+`src/components/play/SessionCloseMessage.tsx:9-29`. `{closeCopy}` (1.22rem text, `--text`, leading-relaxed). Optional primary button `"Review today's answers"`. Optional muted link `"See your Knowledge page ->"`. `closeCopy` is provided by caller (per `useCatchupFlow`).
 
-**Learning reinforcement — opportunities**
-- `closeCopy` is a single field — no current visibility into rotations. Define a rotation that always names *something learned*: `"You met {italic domain} today." / "Two new things stuck. Review them?" / "{italic domain} got a little wider."` Phase 1. **Impact: high.**
+**Learning reinforcement**
+- Define a `closeCopy` rotation that always names *something learned* today: `"You met {italic domain} today." / "{italic domain} got a little wider." / "Two new things stuck. Want to see them?"` Phase 1 — copy rotation in `useCatchupFlow` or its parent. **Impact: high.**
 
-**Shared knowledge reinforcement — opportunities**
-- Add a rotation that names *who you met*: `"You answered three from {firstName} today." / "{firstName1} and {firstName2} both wrote for you today."` Phase 1. **Impact: high.**
+**Shared knowledge reinforcement**
+- Add a rotation that names *who*: `"You answered three from {firstName} today." / "{firstName1} and {firstName2} both wrote for you today."` Phase 1. **Impact: high.**
 
 **Risks**
 None unique.
@@ -457,16 +492,16 @@ None unique.
 ### 23. Next-questions countdown
 
 **Current state**
-`GameplayChat.tsx:730-790` shows `"Next round opens {nextRoundOpensAt}"` after a round; there is no countdown on the home/feed surface between sessions.
+`GameplayChat.tsx:766-770` shows `"Next round opens {nextRoundOpensAt}"` after a session-complete event. No countdown on the home/feed surface between sessions.
 
-**Learning reinforcement — opportunities**
-- Replace plain timestamp with a one-line tease: `Five new ones from your people at {time}.` 0.95rem serif. Phase 1. **Impact: low.**
+**Learning reinforcement**
+- Replace plain timestamp with: `"Five new ones from your people at {time}."` 0.95rem `--font-literata`. Phase 1. **Impact: low.**
 
-**Shared knowledge reinforcement — opportunities**
-- The wait should feel like waiting for a *gift*. Add an ambient single-line `Tomorrow: {firstName} and {N} others.` Caveat 0.85rem. Phase 1 if next-day authors are predictable from the queue; Phase 2 if next-day picks are not yet computed. **Impact: high.**
+**Shared knowledge reinforcement**
+- Add an ambient line: `"Tomorrow: {firstName} and {N} others."` Caveat 0.85rem. Phase 1 if next-day author preview is computable from the queue; Phase 2 if picks aren't yet finalised that early. **Impact: high.**
 
 **Risks**
-Pre-announcing tomorrow's authors removes some of the noon SMS surprise. Keep the SMS author-led too (#1) — they reinforce, not cannibalize.
+Pre-announcing tomorrow's authors removes some SMS surprise. Coordinate with SMS rewrite (#1).
 
 **Surface priority: low.**
 
@@ -477,20 +512,19 @@ Pre-announcing tomorrow's authors removes some of the noon SMS surprise. Keep th
 ### 24. Question archive
 
 **Current state**
-`src/app/archive/page.tsx:206-346`. Header `"Your Archive"`, metadata `"{total} questions · {N} correct"`. Source filters: `All / Daily Five / Feed / Joshing Games / Sent to me / Mine`. Result filters: `All / Correct / Incorrect / Skipped`. Per-card: source label, result badge (`AUTHORED / CORRECT / WRONG / SKIPPED`), domain pill linking to `/knowledge/{domain}`, optional creator note `"A note from {name}:"`.
+`src/app/archive/page.tsx:206-441`. Header `"Your Archive"` in `font-serif text-4xl font-semibold` (solid editorial weight). Metadata `"{N} questions · {N} correct"`. Filter row sticky: Source select, Domain select, Result select, `Show only verified` checkbox, search input. Active filters render as removable chips. Per-card (`ArchiveCard`): source label top-left mono, result badge top-right (AUTHORED sky / CORRECT emerald / WRONG rose / SKIPPED stone — `resultLabel` and `resultClass`). Question text. `You: / Answer:` block. **Explanation is in `<details>` with `<summary>Explanation</summary>`** — collapsible already. Optional creator note. Bottom row: domain pill (`bg-secondary` link to `/knowledge/{domain}`) + optional `⚠ unverified` chip + `+N pts` mono + answered date. Per-card actions: rating + send + bank.
 
-**Learning reinforcement — opportunities**
-- Default sort is unspecified — switch to a curated "by domain" grouping, with each group headed by an italic Playfair `{domain}` and the count of questions you've touched in it. Phase 1. **Impact: medium.** Turns the archive into a learning atlas.
-- The result badges `WRONG / SKIPPED` foreground the failure. Replace `WRONG` with `LEARNED` (only for wrong answers where the explainer was viewed; otherwise `WRONG`). Phase 2 — needs a `viewed_explainer` flag. **Impact: medium.**
-- Add a "stumped us all" view (referenced in brief but not implemented): filter where `correct_count == 0 across the group`. Phase 2 — requires aggregation. **Impact: medium.**
-- Add a "best questions" view: top-starred. Phase 2. **Impact: medium.**
+**Learning reinforcement**
+- Default sort is by date — switch to optional "by domain" grouping with editorial Playfair italic headers (count of touched questions per domain). Phase 1 — sort+group, no new data. **Impact: medium.** Turns the archive into a learning atlas.
+- Add "Stumped us all" and "Best questions" views as additional Source filter options. Phase 2 — both require group-level aggregation. **Impact: medium.**
+- The `<details>` summary text `"Explanation"` is generic. Replace with the same kicker proposed in #13: `"Why →"` `var(--font-display)` italic. Phase 1. **Impact: low** (cross-cutting consistency).
 
-**Shared knowledge reinforcement — opportunities**
-- Add an `Authors` filter — view by who wrote it. `"Questions from {firstName}"` becomes a real cross-cutting lens. Phase 1 if `creatorId` is already on the row payload (it is). **Impact: high.**
-- "Sent to me" / "Mine" are utilitarian. Rename to `From friends` / `Yours`. Phase 1. **Impact: low.**
+**Shared knowledge reinforcement**
+- Add an `Authors` filter dimension — view by who wrote it. Phase 1 if `creatorId` is on the row payload (it is, since `AUTHORED` is one of the result classes). **Impact: high.**
+- Source labels `Sent to me / Mine` are utilitarian. Replace with `From friends / Yours`. Phase 1. **Impact: low.**
 
 **Risks**
-Renaming `WRONG → LEARNED` is a value statement. Verify with the team before shipping; a player who didn't open the explainer hasn't actually learned anything.
+None unique.
 
 **Surface priority: medium.**
 
@@ -499,18 +533,18 @@ Renaming `WRONG → LEARNED` is a value statement. Verify with the team before s
 ### 25. Knowledge page — spider graph for top 8 domains
 
 **Current state**
-`src/components/knowledge/PortraitCircles.tsx`. Circles organized by tier and broad category, sized by `totalMasteryPoints`. Tier display set: `Establishing / Familiar / Solid / Mastery`. Hard-coded color palette per broad category.
+`src/app/knowledge/page.tsx:455-471`. `"Your Knowledge"` kicker (small-caps Montserrat) + `"See how your knowledge is building →"` sub-kicker. Renders `<PortraitCircles entries={portraitEntries}>` with `getPortraitDomainColor`. Below: `"Share portrait"` button in Courier white-on-black with 2px 2px 0 #3a3a3a offset shadow — uses the brutalist editorial register.
 
-**Learning reinforcement — opportunities**
-- The portrait visualizes *territory size* but not *direction*. Overlay a small Caveat handwriting arrow on the most-recently-grown circle: `growing` or `just entered`. Phase 1 if `last_grown_at` is computable; Phase 2 otherwise. **Impact: high.**
-- Tier vocabulary: resolve to one set (see Preface). If using the brief's `Curious → Versed → Fluent → Master`, that lands harder here than the current "Mastery" terminus, which reads slightly grandiose for ~50 questions in a domain. Phase 1. **Impact: high** (cross-surface).
+**Learning reinforcement**
+- Overlay a Caveat handwriting arrow on the most-recently-grown circle: `growing` or `just entered`. Phase 1 if `last_grown_at` is on the entry; check `RecentlyExpanding` component (which exists at `:453`) for the data path. **Impact: high.**
+- Resolve tier vocabulary (Preface §1) — PortraitCircles uses the canonical `KNOWLEDGE_TIER_LABEL` set, so fixing that file fixes this surface.
 
-**Shared knowledge reinforcement — opportunities**
-- Circles currently show your own mastery only. Overlay a thin Caveat outline of the *group's average* in that domain — a second circle, dashed, 1px. Phase 2 — requires group aggregation in the portrait payload. **Impact: high.** Lets a player see at a glance "we know X together; I'm farther in Y."
-- For each circle, a 0.6rem mono caption: `WITH {firstName} + {N}` listing who else has answered in this domain. Phase 2. **Impact: high.**
+**Shared knowledge reinforcement**
+- Currently visualizes your own mastery only. Phase 2: overlay a dashed Caveat circle showing the *group's* average mastery in each domain — a backdrop, never a benchmark. Requires group aggregation in portrait payload. **Impact: high.**
+- For each circle, a 0.6rem mono caption `WITH {firstName} +{N}` listing other carriers. Phase 2. **Impact: high.**
 
 **Risks**
-Group-average overlay must never be sortable, rankable, or comparable across players. It's a backdrop to the player's own circle, not a benchmark.
+Group-average overlay must never be sortable or rankable. It's a context, not a metric.
 
 **Surface priority: medium.**
 
@@ -519,14 +553,14 @@ Group-average overlay must never be sortable, rankable, or comparable across pla
 ### 26. Knowledge page — list of remaining domains
 
 **Current state**
-`src/components/knowledge/DomainRow.tsx:25-89`. Row: domain name 1rem, progress bar, `"Your q's"` dot grid (5 dots), tier label (`KNOWLEDGE_TIER_LABEL[tier]` or `"New territory"`), points count, chevron, optional `Declared` badge.
+`src/components/knowledge/DomainRow.tsx:25-89`. Row layout: title (1rem `--text`) + tier label (0.88rem warm gray) + `<DomainProgressBar>` + `"Your q's"` label and 5-dot contribution indicator (filled `#111111` / unfilled `#ddd6c7`). Right side: optional `Declared` badge (uppercase Inter 0.62rem 700-weight, ink border + ink text), optional points label, chevron `›`. Special states: `"New territory"` (when `masteryPoints === 0`); `"Add questions here to reach mastery."` (when `yourQuestionsCount === 0` and tier ≥ solid).
 
-**Learning reinforcement — opportunities**
-- The tier label is currently below the progress bar — buried. Promote to the right-hand side, top-aligned, mono uppercase 0.65rem, INK 70%. Phase 1. **Impact: medium.**
-- `"Your q's"` is too cute to read at a glance. Replace with `Authored` and a count, e.g., `3 authored`. Phase 1. **Impact: low.**
+**Learning reinforcement**
+- The tier label sits under the title in 0.88rem warm gray — already legible but uses the canonical `KNOWLEDGE_TIER_LABEL` (Establishing/Familiar/Solid/Mastery). Resolve to brief's set (Preface §1). Phase 1. **Impact: medium.**
+- `"Your q's"` is too cute and abbreviated. Replace with `Authored` and the actual count, e.g. `Authored: 3`. Phase 1. **Impact: low.**
 
-**Shared knowledge reinforcement — opportunities**
-- Add a 4th column: `Shared with {N}` (count of friends who have ≥1 correct answer in this domain). Phase 2 — requires per-domain group overlap, may already exist for the overlap map. **Impact: high.** Turns the list from a personal ledger into a meeting map.
+**Shared knowledge reinforcement**
+- Add a fourth meta-row item: `Shared with {N}` (count of friends with ≥1 correct in this domain). Phase 2 — needs per-domain friend-overlap aggregation. **Impact: high.** Turns the list from a personal ledger into a meeting map.
 
 **Risks**
 None unique.
@@ -538,76 +572,77 @@ None unique.
 ### 27. Mastery tier display on profile
 
 **Current state**
-`src/app/users/[id]/page.tsx:139-180`. Heading `"Knowledge portrait"`. Renders `<KnowledgeCard>` for non-self viewers with `Establishing / Familiar / Solid / Mastery` labels under each domain circle. Self viewer with no domains: `"Your Knowledge Portrait"` + mind statement + tier signature. **Tier labels conflict with `src/server/db/queries/account.ts` and `src/app/knowledge/[domain]/page.tsx` which use `Curious / Explorer / Scholar / Sage`.**
+`src/app/users/[id]/page.tsx`. Heading `"Knowledge portrait"`. Renders `KnowledgeCard` with `KNOWLEDGE_TIER_LABEL` set. On account/domain detail pages (`src/server/db/queries/account.ts:26-31`, `src/app/knowledge/[domain]/page.tsx:53`), uses **Curious / Explorer / Scholar / Sage** instead. So a player who taps from their profile into a domain detail sees a tier-name change.
 
-**Learning reinforcement — opportunities**
-- Unify tier vocabulary across all six surfaces that show it (see Preface). Phase 1, cross-cutting. **Impact: high.**
-- Add a "carries" line under the portrait: `"{firstName} carries {N} territories at solid or above."` 0.95rem Georgia italic. Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- Unify (Preface §1). Phase 1.
 
-**Shared knowledge reinforcement — opportunities**
-- On a *friend's* profile, add a "we share" header above the portrait: `"You and {firstName} share {N} territories."` 1.05rem Playfair italic, listing the top 3 in mono. Phase 1 if shared-domains is queryable per-pair (it is in OverlapMap). **Impact: high.**
+**Shared knowledge reinforcement**
+- On a friend's profile, add a `"What you share"` block above the portrait: `"You and {firstName} share {N} territories."` with the top 3 in mono. Phase 1 — shared-domains is the same query used in `OverlapMap`. **Impact: high.**
 
 **Risks**
-Tier vocabulary unification breaks every existing screenshot in marketing/docs. Worth it.
+None unique.
 
-**Surface priority: high.**
+**Surface priority: high** (because of the tier-name fork).
 
 ---
 
 ### 28. Personal Round summary screen
 
 **Current state**
-`src/app/games/[id]/summary/page.tsx`. Header `"How You Did"`, score box (TOTAL + `+points`), `"Your Growth Recap"` with category circles, optional MasteryMoment, `OverlapMap` for single-recipient games, `"Round Recap"` with per-question cards.
+`src/app/games/[id]/summary/page.tsx:197-355`. Breadcrumb `HOME / {title} / SUMMARY`. Header `"How You Did"` (sans uppercase 1.45rem, same style as daily). Success-tinted score box: `Total` kicker → `+{totalPoints}` in font-mono 5xl 700-weight → `{correct}/{count} correct · {N} skipped` mono. `"Your Growth Recap"` block. Optional `MasteryMoment` for first tier crossing. Then `"Round Recap"` with per-question cards — **each card top-left says `"From {creator.displayName}"`** in mono 0.62rem uppercase muted (different from daily which says `"JOSHING BOT · {DOMAIN}"`). Top-right: difficulty pill (`difficultyCopyFromEstimate` → rose/amber/sky) + result badge. Then `Your Impact Recap`: `"{N} of your questions were answered correctly this round."` Then OverlapMap (single-recipient only). Bottom: `"Back to Feed"` btn-ghost only.
 
-**Learning reinforcement — opportunities**
-- Same as #19: demote "How You Did" → `"Today's territory."` Phase 1. **Impact: medium.**
-- "Your Growth Recap" → `"What got wider."` Phase 1. **Impact: low.**
+**Learning reinforcement**
+- Same renames as #19: `"How You Did"` → `"Your game."`, `"Your Growth Recap"` → `"What got wider."` Phase 1.
+- The `font-mono text-5xl font-bold` `+{points}` is a scoreboard. Soften: same number in Playfair italic 5xl (`--font-display`). Phase 1. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- `"Your Impact Recap"` (line 336) is a great surface — currently reads `"{N} of your questions were answered correctly this round."` Promote: `"{firstName1} and {firstName2} got your questions right."` (name names, not just count). Phase 1 if responses include who-answered-which. **Impact: high.**
+**Shared knowledge reinforcement**
+- `"Your Impact Recap"` is a great surface that currently uses a count, never names. Replace with named version: `"{firstName1} and {firstName2} got your questions right."` (with `+{N} others` overflow). Phase 1 if responses include answerer identity per question; the data IS already loaded (`authoredQuestionsAnsweredCorrectly` at `:172-180`). **Impact: high.**
 
 **Risks**
-Naming answerers requires their consent posture — verify privacy defaults.
+Naming answerers requires their privacy posture — but answer participation in a single game is already implicitly public to other participants.
 
 **Surface priority: medium.**
 
 ---
 
-### 29. Catch-up / missed questions surface (half-credit treatment)
+### 29. Catch-up / missed questions (half-credit treatment)
 
 **Current state**
-`src/app/daily/catchup/page.tsx` + `useCatchupFlow.ts`. Header `"Catch up"` + `"{N} missed {question(s)} from the past week"`. Intro copy: `"Take your time - untimed; for your record, not standings."` + `"These count for 0.25x points - the moment has passed, but the territory is still worth claiming."` Completion: `"Catch-up complete."` Empty: `"Nothing to catch up on. You're all clear."`
+`src/app/daily/catchup/page.tsx`. Header: nav crumb `Home / Catch up`, then label `"Catch up"` (mono caps), then `"{N} missed {question(s)} from the past week"` in font-serif xl semibold. Right-side `{N} of {N} remaining`. Dismissable intro card: `introCopy` (from `useCatchupFlow`) + `CATCH_UP_POINTS_CAPTION = "These count for 0.25x points - the moment has passed, but the territory is still worth claiming."` (`src/server/play/catch-up-copy.ts:13-14`). On completion: success-tinted card `All handled` kicker + `CATCH_UP_COMPLETION_COPY = "Catch-up complete."` + `"{N} caught up - {N} correct - {N} dismissed"`. Empty: `"Nothing to catch up on. You're all clear."` Per-question subhead set as `"FROM YESTERDAY"` / `"FROM {N} DAYS AGO"` / `"FROM {weekday}"` in `QuestionRow.subhead`. Below the form: `"I give up"` button (instead of skip) + `"Not interested"` link → drop-from-catchup confirm dialog `"Drop this from catch-up?"`.
 
-**Learning reinforcement — opportunities**
-- The intro copy is already strong on learning ("the territory is still worth claiming"). Keep it. **No change needed.**
-- Surface count of *new territories you could still enter* in the catchup queue: `"3 of these are in {italic domain} — somewhere you're already building."` Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- Intro copy is already very good. **Keep verbatim** (`"the territory is still worth claiming"` is the brief's exact register).
+- Surface the catchable territory: when ≥2 catchup items are in the same domain, prepend a Playfair line: `"3 of these are in {italic domain} — somewhere you're already building."` Phase 1 if the catchup queue exposes domains. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- The "FROM YESTERDAY / FROM N DAYS AGO" subhead is set in small mono. Replace with author-led: `"From {firstName}, {N} days ago."` 0.78rem Caveat. Phase 1. **Impact: high.**
+**Shared knowledge reinforcement**
+- Subhead `"FROM YESTERDAY"` is time-only; promote to author-led: `"From {firstName}, {when}."` (`when` = "yesterday" / "3 days ago" / "Tuesday"). Replace `QuestionRow.subhead` content. Phase 1 — both `creatorName` and the day-offset are already available. **Impact: high.**
 - Completion copy `"Catch-up complete."` is utilitarian. Replace with `"You met them all."` Phase 1. **Impact: medium.**
 
 **Risks**
 None unique.
 
-**Surface priority: medium.** Surface is already strong; small leverage.
+**Surface priority: medium.** Already strong; small leverage.
 
 ---
 
-### 30. Group Knowledge Map (`/leaderboard` route)
+### 30. Group Knowledge Map (`OverlapMap`)
 
 **Current state**
-`src/components/OverlapMap.tsx`. Headline `"Where you've met"` / `"so far."` (italic serif, 1.65rem). Two colored circles per domain, sized by mastery points, overlapping by shared correctness. `"{sharedPct}% shared"` mono small caps under each. Strongest-overlap call-out. Empty: `"You haven't answered the same question correctly yet. Keep playing."` Footer: `"Categories where neither of you has answered correctly together are hidden. They'll appear when you do."`
+`src/components/OverlapMap.tsx`. **This is the gold-standard editorial surface in the product.** Renders as a section card with `background: #faf8f2`, `border: 2px solid #1a1a1a`, `boxShadow: 6px 6px 0 #1a1a1a` (the exact brief register). Headline `"Where you've met / so far."` in Playfair italic 1.65rem (first line sans for contrast, second line italic). Legend with player colors. Grouped by broad category (Courier header 0.72rem uppercase). Per category cell: SVG with two overlapping circles (sized by mastery points, overlap by `sharedCorrect/max(aCorrect,bCorrect)`), italic Playfair domain name 0.95rem, mono `{N}% shared`. `"Your strongest overlap"` pull-quote box at the bottom (mono kicker + 1.35rem italic Playfair domain). Footer: `"Categories where neither of you has answered correctly together are hidden. They'll appear when you do."` (italic Playfair 0.78rem muted ink).
 
-**Learning reinforcement — opportunities**
-- Domain name is currently 0.95rem italic serif under the venn. Promote to *above* the venn at 1.1rem Playfair italic so the visualization reads as evidence of a domain, not the other way around. Phase 1. **Impact: medium.**
+Rendered only on the game summary, for single-recipient games (`src/app/games/[id]/summary/page.tsx:185-194`). The CLAUDE.md mentions a `/leaderboard` route that "renders the Group Knowledge Map" — I did not confirm this route exists in code during this redo; the surface I verified is the in-summary embed.
 
-**Shared knowledge reinforcement — opportunities**
-- The headline `"Where you've met"` is among the best copy in the product. **Keep verbatim.**
-- Add a per-domain ambient line under each venn: `"{firstName} taught you 2; you taught {firstName} 1."` mono 0.6rem. Phase 1 if both-directions tracked (likely is). **Impact: high.** Turns overlap into reciprocity.
-- For multi-person games (3+ players), the surface currently only renders for single-recipient. Extend to N×N matrix view — same venn pattern, one venn per pair, organized by domain. Phase 2 — needs new layout + payload. **Impact: high.**
+**Learning reinforcement**
+- Domain name sits *below* the venn. Move it *above* — so the diagram reads as evidence for a named thing. Phase 1. **Impact: medium.**
+
+**Shared knowledge reinforcement**
+- The headline `"Where you've met so far."` is among the best copy in the product. Keep verbatim.
+- Per-venn add a reciprocity caption: `"{firstName} taught you 2; you taught {firstName} 1."` mono 0.6rem under the percentage. Phase 1 if both-direction counts are derivable from `aCorrect`/`bCorrect` deltas. **Impact: high.** Turns overlap into reciprocity.
+- Multi-recipient extension (N>2 players): currently the component is hard-typed for `[player, player]`. Phase 2 — needs N×N matrix view, one venn per pair, organized by domain. **Impact: high.**
 
 **Risks**
-This is the surface most at risk of drifting toward ranking. The `% shared` metric is fine because it's symmetric (no winner). Never add `% correct` or `points` here. Verify no proposal slips into per-player ranking.
+Don't introduce `%correct` or `points` here — both would slide toward ranking. `%shared` is symmetric and safe.
 
 **Surface priority: high.**
 
@@ -616,14 +651,13 @@ This is the surface most at risk of drifting toward ranking. The `% shared` metr
 ### 31. Intellectual Alignment surface
 
 **Current state**
-`src/components/profile/SharedInterestsOverlap.tsx`. Kicker `"Common ground"` + dynamic headline (`"No interest overlap with {firstName} yet."` or `"You and {firstName} share {N} interest(s)."`). Venn diagram with `"You"` and `"{firstName}"` columns + shared center.
+`src/components/profile/SharedInterestsOverlap.tsx` (per Explorer; not directly read this round but corroborated by archive routes and friends hub). Kicker `"Common ground"` + `"You and {firstName} share {N} interest(s)."` Venn with `"You"` / `"{firstName}"` columns + shared center pills.
 
-**Learning reinforcement — opportunities**
-- The overlap is *declared interests*, not *proven knowledge*. Add a parallel block below: `"Where you've both shown your hand:"` with a list of domains where both have ≥1 correct answer. Phase 1 — data is already used in OverlapMap. **Impact: high.** Connects declared territory to proven territory in one view.
+**Learning reinforcement**
+- The overlap is *declared interests*. Add a parallel block: `"Where you've both shown your hand:"` listing domains where both have ≥1 correct answer (same data the OverlapMap uses). Phase 1. **Impact: high.** Connects declared territory to proven territory in one view.
 
-**Shared knowledge reinforcement — opportunities**
-- "Common ground" is overused (also appears in FeedList copy). Replace this surface's kicker with `"Where you overlap."` Phase 1. **Impact: low.**
-- For shared interests, add a Caveat marginalia per row when one of you wrote a question in that domain: `you asked about this` / `{firstName} asked about this`. Phase 1 if origin per declared interest is tracked. **Impact: medium.**
+**Shared knowledge reinforcement**
+- `"Common ground"` is overused (also in `FeedList.tsx:190,242,560,561`). Replace the kicker here with `"Where you overlap."` Phase 1. **Impact: low.**
 
 **Risks**
 None unique.
@@ -635,14 +669,14 @@ None unique.
 ### 32. Author profile
 
 **Current state**
-`src/app/users/[id]/page.tsx:52-189`. Avatar (initial in colored circle), display name (3xl serif bold), `"On Joshing since {month year}"` + optional `"Friends since {month year}"`. Knowledge Portrait with KnowledgeCard. Authored Questions Feed.
+`src/app/users/[id]/page.tsx`. Avatar (initial in colored circle), display name (3xl serif bold). `"On Joshing since {month year}"` + optional `"Friends since {month year}"`. Knowledge Portrait with KnowledgeCard. Authored Questions Feed at the bottom.
 
-**Learning reinforcement — opportunities**
-- The "On Joshing since" line is meta. Replace with a domain-anchored line: `"Building {italic domain} since {month}."` (uses their oldest/strongest domain). Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- `"On Joshing since"` is meta. Replace with a domain-anchored line: `"Building {italic domain} since {month}."` (uses their oldest or strongest domain). Phase 1. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- Add a `"What we share"` block above Authored Questions, with the top 3 shared domains + mini-overlap venn. Phase 1. **Impact: high.**
-- Authored Questions section currently lists their recent questions. Add a per-question marginalia: `"You answered this {timeAgo}."` or `"You haven't seen this yet."` Phase 1. **Impact: medium.** Makes the feed feel like *your relationship with their thinking*, not just their library.
+**Shared knowledge reinforcement**
+- Add a `"What we share"` block above Authored Questions: top 3 shared domains + mini-overlap venn. Phase 1 — shared-domain queries exist. **Impact: high.**
+- On the Authored Questions list, add per-question marginalia: `"You answered this {when}."` or `"You haven't seen this yet."` Phase 1. **Impact: medium.**
 
 **Risks**
 None unique.
@@ -656,37 +690,41 @@ None unique.
 ### 33. Question creation interface
 
 **Current state**
-`src/components/QuestionForm.tsx`. Page title `"Write a question"`. Field label `"Question"`. Placeholder `"What is the name of Alexander the Great's horse?"`. Utilitarian, technical. No tagline matching the brief's `"What piece of your world belongs in this game?"`
+`src/components/QuestionForm.tsx`. Page title `"Write a question"` (`src/app/questions/page.tsx:416`). Field labels in mono 0.75rem uppercase: `Question`, `Correct answer`, `Alternate answers`, `Explanation`, `Creator note`. Placeholders: `"What is the name of Alexander the Great's horse?"`, `"Bucephalus"`, `"Accepted variations, separated by commas"`, `"A short note that helps someone learn if they miss it."`, `"Optional context for recipients"`. Character counters under each field.
 
-**Learning reinforcement — opportunities**
-- Add a single italic Playfair line under the title: `"Something specific. Something a friend should know but might not."` Phase 1. **Impact: medium.**
+**The form has a critique loop I missed in v1** (`:407-426`): when the player saves a question, an LLM critique step may flag it: `"⚠ This question might be unclear:"` + bullet issues + `"Try one of these instead:"` + clickable reformulations. Counter: `"5/5 question reviews used today. You can still save your question; AI review returns tomorrow."`
 
-**Shared knowledge reinforcement — opportunities**
-- Restore the brief's intended frame. Replace page title `"Write a question"` with `"A piece of your world."` Playfair italic 1.6rem. Subhead Caveat 0.95rem: `"Pick something specific."` Phase 1. **Impact: high.**
-- Currently the only audience signal is a checkbox at the very end (`"Share with all friends"`). Add an ambient `"For whomever you choose."` Caveat marginalia next to the question field. Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- Add a single italic Playfair subhead under the page title: `"Something specific. Something a friend should know but might not."` Phase 1. **Impact: medium.**
+- The critique loop's `"⚠ This question might be unclear:"` is good. Soften the verb so the LLM reads as a collaborator: `"Could be sharper:"` (no warning icon). Phase 1. **Impact: low.**
+
+**Shared knowledge reinforcement**
+- Replace page title `"Write a question"` with `"A piece of your world."` in Playfair italic 1.6rem. Caveat subhead: `"Pick something specific."` Phase 1. **Impact: high.**
+- Currently the only audience signal is the Destinations card at the very end. Add Caveat marginalia next to the question field on first focus: `"For whomever you choose."` 0.85rem. Phase 1. **Impact: medium.**
 
 **Risks**
-Don't soften the form so much it discourages utility. The example placeholder is good; keep it.
+Don't soften so much it discourages utility. Keep the example placeholders.
 
-**Surface priority: high.** Question-creation is the supply side of the entire game.
+**Surface priority: high.** Supply-side of the entire game.
 
 ---
 
 ### 34. LLM answer suggestion moment
 
 **Current state**
-`QuestionForm.tsx`. While suggesting: `"Suggesting answer..."` (small muted). On review, if mismatched: `"LLM suggestion"` label + the LLM answer struck through with amber decoration. In QuickAddQuestionModal: `"Joshing will read the question and answer when you save, then choose the category, specific area, and difficulty automatically."`
+`QuestionForm.tsx`. Suggestion auto-runs on entry to ANSWERING stage (`:322-337`). While loading: `"Suggesting answer..."` 0.875rem muted. On review with mismatch (`:479-484`): `"LLM suggestion"` kicker + strikethrough on the LLM answer (amber decoration). Verification states (`:493-495`): `"✓ Verified — matches LLM suggestion"` (emerald) or `"⚠ Unverified — your answer differs from the LLM's suggestion. Recipients will see this."` (amber). AI classification call-out (`:474-477`): `"Joshing will read the question and answer when you save, then use the LLM to choose the broad category, precise domain, and difficulty."`
 
-**Learning reinforcement — opportunities**
-- The LLM acts like a fact-checker. Reframe as a *second pair of eyes*. Replace `"Suggesting answer..."` with `"Reading…"`. Phase 1. **Impact: low.**
-- On the review screen, the strikethrough on the LLM suggestion is correct visually but the label is wrong. Replace `"LLM suggestion"` with `"Joshing read it as:"` (the bot has been personified throughout — extend that here). Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- Replace `"Suggesting answer..."` with `"Reading..."` Phase 1. **Impact: low.**
+- Replace `"LLM suggestion"` kicker with `"Joshing read it as:"` — consistent with the classification call-out's "Joshing" personification. Phase 1. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- After confidence is established, the LLM is now a third party. Soften the verification copy: `"✓ Verified — matches LLM suggestion"` → `"Joshing agrees."` Phase 1. **Impact: medium.**
-- `"⚠ Unverified — your answer differs from the LLM's suggestion. Recipients will see this."` → `"You and Joshing disagree. Your friends will see your answer."` Phase 1. **Impact: medium.** Aligns the verification step with the author's authority over their question.
+**Shared knowledge reinforcement**
+- Replace `"✓ Verified — matches LLM suggestion"` with `"Joshing agrees."` Phase 1. **Impact: medium.**
+- Replace `"⚠ Unverified — your answer differs from the LLM's suggestion. Recipients will see this."` with `"You and Joshing disagree. Your friends will see your answer."` Phase 1. **Impact: medium.** Aligns the verification with authorial authority over your question.
+- The AI classification call-out is fine. Keep verbatim.
 
 **Risks**
-Personifying the bot too heavily slides toward whimsy that the editorial register can't carry. Caveat: keep "Joshing" branded but don't add personality beyond what already exists.
+Don't over-personify the bot. "Joshing agrees" is the upper limit — anything more is whimsy the register can't carry.
 
 **Surface priority: medium.**
 
@@ -695,19 +733,20 @@ Personifying the bot too heavily slides toward whimsy that the editorial registe
 ### 35. Public pool opt-in toggle
 
 **Current state**
-`QuestionForm.tsx:499-519`. Card titled `"Destinations"`. Always-on disabled checkbox `"Save to bank"`. Off-by-default checkbox `"Share with all friends"` with supporting text `"Your friends will see this in their feed (except friends who've marked this domain as Not my focus)."` Off-by-default `"Send to specific friends only"`. Default: bank-only.
+`QuestionForm.tsx:499-519`. Card titled `Destinations`. Always-on disabled checkbox `"Save to bank"`. Off-by-default `"Share with all friends"`. Off-by-default `"Send to specific friends only"`. **Default state of `shareToFeed` is `!initialSpecificMode`** (line 111) — so by default for ordinary creation, `shareToFeed` is TRUE. I had this wrong in v1.
 
-**Learning reinforcement — opportunities**
+Three-state footer copy: `"Sent directly to the friends you pick." / "Your friends will see this in their feed (except friends who've marked this domain as Not my focus)." / "Saved to your bank only."`
+
+**Learning reinforcement**
 - None unique.
 
-**Shared knowledge reinforcement — opportunities**
-- `"Destinations"` is a UPS word. Replace with `"Who sees it."` Phase 1. **Impact: low.**
-- `"Save to bank"` is good. Add Caveat marginalia: `"yours, always"` next to it. Phase 1. **Impact: low.**
-- `"Share with all friends"` supporting text is half a sentence about exclusions. Lead with the positive: `"Your friends see this in their feed."` then on a second muted line: `"(unless they've muted {italic domain}.)"`. Phase 1. **Impact: medium.**
-- Default for friend-relevant questions: when the question category matches ≥1 friend's declared interest, recommend (don't force) opt-in by pre-checking and showing `"Recommended — three friends have {italic domain} in their world."` Phase 2 — needs interest-cross-reference at creation time. **Impact: high.**
+**Shared knowledge reinforcement**
+- Replace `Destinations` (UPS register) with `Who sees it.` Phase 1. **Impact: low.**
+- The "share with all friends" supporting text leads with exclusions ("except friends who've muted..."). Lead with the positive: `"Your friends see this in their feed."` then on a second muted line: `"(unless they've muted {italic domain}.)"` Phase 1. **Impact: medium.**
+- Add Caveat marginalia next to "Save to bank": `"yours, always"` 0.78rem INK 60%. Phase 1. **Impact: low.**
 
 **Risks**
-Auto-checking "Share with all friends" by default is a consent shift. Strong recommendation copy + clear unchecked-checkbox state is safer.
+Default-on `shareToFeed` is already a generous default — don't change it without a separate consent review.
 
 **Surface priority: medium.**
 
@@ -716,36 +755,36 @@ Auto-checking "Share with all friends" by default is a consent shift. Strong rec
 ### 36. "Why I added this" optional creator note
 
 **Current state**
-`QuestionForm.tsx:488-492`. Label `"Creator note"`. Placeholder `"Optional context for recipients"`. 200-char limit. Review stage only.
+`QuestionForm.tsx:488-492`. Label `Creator note` mono uppercase. Placeholder `"Optional context for recipients"`. 200-char limit. Renders in review stage only. The same note then appears on review cards with prefix `"A note from {authorName}:"`.
 
-**Learning reinforcement — opportunities**
-- Provide an example as a placeholder rotation: `"e.g. I think about this every time I hear the second movement."` / `"e.g. My dad taught me this on a long drive."` Phase 1. **Impact: medium.** Pulls the field from "metadata" toward "memory."
+**Learning reinforcement**
+- Add an example placeholder rotation: `"e.g. I think about this every time I hear the second movement." / "e.g. My dad taught me this on a long drive." / "e.g. I had to look it up — twice."` Phase 1. **Impact: medium.** Pulls the field from metadata toward memory.
 
-**Shared knowledge reinforcement — opportunities**
-- Replace label `"Creator note"` with `"Why this one."` Playfair italic 0.95rem. Phase 1. **Impact: high.** Matches the brief's framing.
+**Shared knowledge reinforcement**
+- Replace label `"Creator note"` with `"Why this one."` in Playfair italic 0.95rem (the only field that breaks the mono-uppercase label register, on purpose). Phase 1. **Impact: high.**
 - Replace placeholder `"Optional context for recipients"` with `"What made you think to ask it?"` Phase 1. **Impact: high.**
 
 **Risks**
 None unique.
 
-**Surface priority: high.** This is where the question becomes a gift; current treatment is metadata.
+**Surface priority: high.** Where the question becomes a gift.
 
 ---
 
 ### 37. Question bank in contribution flows
 
 **Current state**
-`QuestionBankPicker.tsx`. `"Pick up to {N} questions from your bank to contribute."` Per-question metadata: `{category} · Written by you / From {authorName}`.
+`src/components/QuestionBankPicker.tsx` (per Explorer, not re-read). Picker entry: `"Pick up to {N} questions from your bank to contribute."` Per-question: `{category} · Written by you / From {authorName}`. Empty bank: `"Your question bank is empty."`
 
-**Learning reinforcement — opportunities**
-- Add a default sort by domain freshness — questions in domains the *recipient* has been entering recently. Phase 2 — requires recipient context at picker time. **Impact: medium.**
+**Learning reinforcement**
+- Add a domain-freshness default sort: questions in domains the *recipient* has been entering recently. Phase 2 — needs recipient context at picker time. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- `"contribute"` is utilitarian. Replace with `"send"`. Phase 1. **Impact: low.**
-- `"From {authorName}"` is good provenance. Add marginalia: `"originally for {firstName}"` when the question's prior recipients are visible. Phase 2. **Impact: medium.**
+**Shared knowledge reinforcement**
+- Replace `"contribute"` (utilitarian) with `"send"`. Phase 1. **Impact: low.**
+- `"Written by you / From {authorName}"` is good provenance. Phase 1 sufficient as is.
 
 **Risks**
-Exposing prior-recipient history could feel surveillant. Keep it strictly first-degree (your own use of a bank question), never others'.
+None unique.
 
 **Surface priority: medium.**
 
@@ -753,84 +792,85 @@ Exposing prior-recipient history could feel surveillant. Keep it strictly first-
 
 # GAME-END (CEREMONY)
 
-### 38. Ceremony Act 1 — Portrait beat
+### 38. Ceremony Act 1 — Portrait beat (Beat 1)
 
 **Current state**
-`src/app/ceremony/[ceremonyId]/page.tsx:111-129`. Heading `"You leveled up."` Serif 5xl/7xl. CeremonyCircle visuals by tier scale. Tier transition in small muted caps below.
+`src/app/ceremony/[ceremonyId]/page.tsx:111-129`. On dark stone-950 bg, white text. Heading `"You leveled up."` in `font-serif text-5xl/7xl font-semibold`. Below: max-width-xl left-aligned grid. Per-crossing row: `CeremonyCircle` scaled by `TIER_SCALE[toTier]` (0.28/0.48/0.72/1) on the left, then a column with `{domain}` in font-serif xl semibold (stone-50) + tier transition `{TIER_LABEL[fromTier]} -> {TIER_LABEL[toTier]}` in mono xs uppercase (stone-400, letter-spacing 0.16em). Tap-to-advance interaction on the surrounding `<main>` (`:332`).
 
-**Learning reinforcement — opportunities**
-- `"You leveled up."` is gaming language. Replace with `"You grew."` Playfair italic 5xl. Phase 1. **Impact: medium.**
-- Under the heading, add one domain-named line: `"In {italic domain1}, {italic domain2}, and {italic domain3}."` 1.6rem Georgia italic, INK 80%. Phase 1. **Impact: high.** Names the actual learning at the beat where the player is most receptive.
+**Learning reinforcement**
+- `"You leveled up."` is gaming register. Replace with `"You grew."` Phase 1. **Impact: medium.**
+- Add a single Playfair-italic line under the heading: `"In {italic domain1}, {italic domain2}, and {italic domain3}."` 1.6rem stone-200. Phase 1. **Impact: high.** Names the actual learning at the most-receptive moment.
 
-**Shared knowledge reinforcement — opportunities**
-- None for this beat — it's intentionally personal (Act 1).
+**Shared knowledge reinforcement**
+- None for this beat — it's intentionally personal.
 
 **Risks**
-Don't crowd Act 1 with collective signal; that's Act 2's job.
+Don't crowd Act 1 with collective signal; that's Act 2's role.
 
 **Surface priority: medium.**
 
 ---
 
-### 39. Ceremony Act 1 — Personal Record beat (all seven reveals)
+### 39. Ceremony Act 1 — Personal Record beat (Beat 2's three sub-blocks)
 
 **Current state**
-`page.tsx:132-193`. Three sub-beats:
-- `"You went somewhere new."` (friend-mediated correctness) → `"Through your friends, you picked up {N} {question(s)} in {domains}."`
-- `"You staked new territory."` (authored, new domain) → `"You wrote questions that opened a new domain: {domains}."`
-- `"Your territory came to life."` (authored, friend answered) → `"A friend answered your questions and proved your knowledge in {domains}."`
+`:132-193`. Beat 2 renders up to three sub-blocks stacked, each with its own 5xl/7xl heading:
+- `"You went somewhere new."` + `"Through your friends, you picked up {N} {question(s)} in {domains}."` + per-domain circles (scaled by `0.45 + correctCount/questionCount * 0.45`) with `{correctCount}/{questionCount}` mono caption.
+- `"You staked new territory."` + `"You wrote questions that opened {a new domain | {N} new domains}: {domains}."` + circles at scale 0.35 with `Declared` caption.
+- `"Your territory came to life."` + `"A friend answered your questions and proved your knowledge in {domains}."` + circles at scale 0.7 with `Demonstrated` caption.
 
-Brief expects seven reveals; code has three (with conditional rendering, so up to three appear).
+The brief mentioned "seven reveals" — I see three sub-blocks; the other four are not implemented as discrete sub-beats.
 
-**Learning reinforcement — opportunities**
-- Add four missing reveals to reach seven (brief alignment). Candidates the data likely supports:
-  - `"You got close."` — near-miss accepted-variant moments. Phase 2.
-  - `"You doubled back."` — questions you missed early in the cycle and got right in catchup. Phase 1 if catchup-correctness deltas are computable. **Impact: medium.**
-  - `"You went deep."` — most questions answered in a single domain. Phase 1. **Impact: medium.**
-  - `"You held the line."` — questions you got right in a domain where the group's average was below 50%. Phase 2 — requires group aggregation. **Impact: high.**
-- Promote the listed domain names in each beat from inline mono to dedicated italic Playfair lines, one per beat. Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- Promote the listed domains in each sub-block from inline run-on to dedicated italic Playfair lines, one per domain. Phase 1 — just a layout change. **Impact: medium.**
+- Add four missing reveals (brief alignment):
+  - `"You doubled back."` — questions missed early in cycle, got right in catchup. Phase 1 if catchup-correctness deltas are queryable.
+  - `"You went deep."` — domain with most questions answered in cycle. Phase 1.
+  - `"You held the line."` — questions right in a domain where group average <50%. Phase 2 (needs group agg).
+  - `"You got close."` — near-miss accepted variants. Phase 2 (needs flag).
+  Combined **Impact: medium-high.**
 
-**Shared knowledge reinforcement — opportunities**
-- The friend-mediated beat is already strong. Add the *names* of the friends whose questions you answered: `"Through {firstName1}, {firstName2}, and {firstName3}, you picked up…"` Phase 1. **Impact: high.**
-- For the "promoted" beat (`"Your territory came to life."`), name the friend: `"{firstName} answered your question about {italic domain}."` Phase 1. **Impact: high.**
+**Shared knowledge reinforcement**
+- Sub-block 1 lists domains but not the friends. Add: `"Through {firstName1}, {firstName2}, and {firstName3}, you picked up..."` Phase 1 — Beat 2's `friendMediated` items currently only carry `domain / questionCount / correctCount`, so a small server-side enrichment is needed (add `topContributor: { displayName }` per friendMediated item). **Impact: high.**
+- Sub-block 3 (Demonstrated): name the friend who proved your question: `"{firstName} answered your question about {italic domain}."` Phase 1 with same enrichment. **Impact: high.**
 
 **Risks**
-Seven beats is a lot of ceremony real estate. Define minimum-data thresholds so beats only fire if there's signal; otherwise the ceremony pads.
+Don't pad with low-signal beats — define minimum thresholds so empty sub-beats don't fire.
 
-**Surface priority: high.** Ceremony is the brand's most-rendered narrative surface.
+**Surface priority: high.** Most-rendered narrative.
 
 ---
 
-### 40. Ceremony Act 2 — Group Knowledge Map beat
+### 40. Ceremony Act 2 — Group Knowledge Map beat (Beat 3)
 
 **Current state**
-`page.tsx:196-211` (Beat 3). `"These people taught you something."` Top 3 friends by `contributionCount`. Per friend: `"{displayName} contributed {N} {question(s)}."` Suppressed in solo mode.
+`:196-211`. Solo override: `"Questions that shaped your cycle."` Duo/group: `"These people taught you something."` Body per contributor: `"{displayName} contributed {N} {question(s)}."` Top 3 contributors only (suppressed in solo via `compute-beats.ts:454`). No domain breakdown per contributor.
 
-**Learning reinforcement — opportunities**
-- "contributed" is utilitarian — strip it. `"{firstName} — {italic domain}, {italic domain}, and {N} more."` (replaces count with domain-named evidence). Phase 1 if per-friend per-domain breakdown exists in beat3 payload; Phase 2 otherwise. **Impact: high.**
+**Learning reinforcement**
+- `"contributed"` is utilitarian. Replace with domain evidence: `"{firstName} — {italic domain1}, {italic domain2}, and {N} more."` Phase 1 with per-contributor domain enrichment in Beat 3 payload; Phase 2 otherwise. **Impact: high.**
 
-**Shared knowledge reinforcement — opportunities**
-- The heading `"These people taught you something."` is already excellent — keep.
-- Add a closing single-line summary: `"In total, your friends carried {N} questions into your world this fortnight."` Playfair italic 1.4rem. Phase 1. **Impact: medium.**
+**Shared knowledge reinforcement**
+- Heading is already excellent. Keep.
+- Add a closing summary after the contributor list: `"In total, your friends carried {N} questions into your world this fortnight."` 1.4rem Playfair italic. Phase 1. **Impact: medium.**
 
 **Risks**
-Naming domains-per-friend creates a privacy surface — make sure domain privacy flags propagate.
+Naming domains-per-friend creates a privacy surface — propagate `profileDomainVisibility` like Beat 4 already does (`compute-beats.ts:373`).
 
 **Surface priority: high.**
 
 ---
 
-### 41. Ceremony Act 2 — Authorship Impact beat
+### 41. Ceremony Act 2 — Authorship Impact beat (Beat 5)
 
 **Current state**
-`page.tsx:227-239` (Beat 5). `"You taught people things."` + `"Your questions earned {N} points for others this fortnight."` Optional `"Your most-played: \"{question.text}\""`.
+`:227-239`. `"You taught people things."` + `"Your questions earned {N} points for others this fortnight."` + optional `"Your most-played: \"{question.text}\""` (Beat 5 data: `totalCreatorPoints` and `topQuestion`).
 
-**Learning reinforcement — opportunities**
-- `"points for others"` is system language. Replace with `"answered correctly by your friends"`. Phase 1. **Impact: medium.**
-- For the most-played question, add the *domain*: `"Your most-played, in {italic domain}: \"{question.text}\""` Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- `"points for others"` is system register. Replace with `"answered correctly by your friends"`. Phase 1. **Impact: medium.**
+- For the most-played question, name its domain: `"Your most-played, in {italic domain}: \"{question.text}\""` Phase 1 if `topQuestion` carries domain (likely needs server-side add — Phase 2 if not). **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- Add the *names* of who answered the most-played question: `"{firstName1}, {firstName2}, and {N} others answered."` 0.95rem. Phase 1. **Impact: high.** Makes "you taught people" land as actual people, not a number.
+**Shared knowledge reinforcement**
+- Name *who* answered the most-played: `"{firstName1}, {firstName2}, and {N} others answered."` Phase 1 if Beat 5 includes answerer list (currently it has only `answeredCount`, so Phase 2). **Impact: high.**
 
 **Risks**
 None unique.
@@ -839,40 +879,42 @@ None unique.
 
 ---
 
-### 42. Ceremony Act 2 — Relational Feedback beat
+### 42. Ceremony Act 2 — Relational Feedback beat (Beat 4)
 
 **Current state**
-`page.tsx:214-224` (Beat 4). `"You and {displayName} see the world similarly."` + `"You both know {joinList(sharedDomains)}."`
+`:214-224`. `"You and {displayName} see the world similarly."` + `"You both know {joinList(sharedDomains)}."` Picks the friend with most shared domains (`compute-beats.ts:379-380`), respects `profileDomainVisibility` private flag (`:373`).
 
-**Learning reinforcement — opportunities**
-- Currently a flat list of domains. Promote: one Playfair italic line per shared domain, stacked, 1.1rem. Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- The flat join of shared domains compresses into one run-on sentence. Stack: one Playfair italic 1.1rem line per shared domain. Phase 1. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- The heading `"You and {firstName} see the world similarly."` is among the best copy in the product. **Keep.**
-- Add a single intimate marginalia at the bottom: `"That's not nothing."` Caveat 1rem. Phase 1. **Impact: medium.**
+**Shared knowledge reinforcement**
+- Heading is among the best in the product. Keep verbatim.
+- Add a closing marginalia: `"That's not nothing."` Caveat 1rem. Phase 1. **Impact: medium.**
 
 **Risks**
 None.
 
-**Surface priority: medium.** Already strong; small leverage.
+**Surface priority: medium.** Already strong.
 
 ---
 
 ### 43. Ceremony Act 2 — Climax beat (group / duo / solo modes)
 
 **Current state**
-`page.tsx:336-361`. End card: `"That's your two weeks."` + `"See you in another fourteen days."` Buttons `"Share"` / `"Done"`. No explicit climax beat — end card is functional. Beats 3 & 4 are suppressed in solo mode but no specific climax replaces them.
+`:336-361`. End-card after last beat: `"That's your two weeks."` + `"See you in another fourteen days."` + Share / Done buttons. **No explicit climax beat per mode** — solo just sees Beats 1, 2, 5 (Beats 3 and 4 suppressed); duo/group see all five. No mode-specific copy beyond the suppression.
 
-**Learning reinforcement — opportunities**
-- Promote the final tier-cross (the single most-significant of the cycle) to the closing line: `"And {italic domain} is yours now."` Playfair italic 1.8rem, set above `"That's your two weeks."` Phase 1 — most-significant tier-cross is already in the beat data. **Impact: high.**
+**Learning reinforcement**
+- Promote the cycle's single most-significant tier-cross to the closing line: `"And {italic domain} is yours now."` Playfair italic 1.8rem above `"That's your two weeks."` Phase 1 — first beat1 entry is the candidate. **Impact: high.**
 
-**Shared knowledge reinforcement — opportunities**
-- For **group** mode: closing line `"You and {N} others wrote and answered {M} questions together."` 1.4rem. Phase 1. **Impact: high.**
-- For **duo** mode: closing line `"You and {firstName} — fourteen days of asking each other."` 1.4rem Playfair italic. Phase 1. **Impact: high.**
-- For **solo** mode (no active friends this cycle): `"Your two weeks, alone but not nothing."` Playfair italic 1.4rem. Phase 1. **Impact: medium.** Solo mode is currently the bleakest surface; this softens.
+**Shared knowledge reinforcement**
+- Mode-specific closing lines:
+  - **group:** `"You and {N} others answered each other for fourteen days."` 1.4rem. Phase 1.
+  - **duo:** `"You and {firstName} — fourteen days of asking each other."` 1.4rem Playfair italic. Phase 1.
+  - **solo:** `"Your two weeks. The map kept building."` Playfair italic 1.4rem — softens the bleakness of solo without referencing absent friends. Phase 1.
+  Each **Impact: high.**
 
 **Risks**
-"Alone but not nothing" must not read patronizing. Test with a real solo-cycle player.
+Solo copy must not patronise. Test with a real solo cycle.
 
 **Surface priority: high.**
 
@@ -881,16 +923,16 @@ None.
 ### 44. Ceremony Act 2 — Invitation beat
 
 **Current state**
-`page.tsx:367-422` + `ShareCard.tsx`. Share modal. See #20 for share-card content. No explicit "invitation" copy beyond the share modal title (which is essentially the share card itself).
+`:367-422`. Share modal — see #20 for ShareCard content. There is **no explicit invitation beat** — the modal IS the invitation, and the only invitation language is the ShareCard text itself.
 
-**Learning reinforcement — opportunities**
-- Add an explicit invitation line before the share modal opens, as a tertiary card after the climax: `"Bring someone else into your world."` Playfair italic 1.4rem + secondary button `"Invite a friend"` linking to `/friends` invite flow. Phase 1 — uses existing invite route. **Impact: medium.**
+**Learning reinforcement**
+- Before the share modal opens, add a tertiary card after the end-card: `"Bring someone into your world."` Playfair italic 1.4rem + secondary button `"Invite a friend"` routing to `/friends`. Phase 1 — uses existing invite route. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- The brief's invitation beat is structurally missing — currently it's just a share modal. Add a one-domain prompt: `"You and {firstName} share {italic domain} now. Who else might?"` with a one-tap `Send {firstName}'s questions to →` flow targeting a likely-match contact. Phase 2 — requires contact suggestions + targeted-share endpoint. **Impact: high.**
+**Shared knowledge reinforcement**
+- The invitation beat the brief described doesn't yet exist as a discrete moment. Add a one-domain prompt: `"You and {firstName} share {italic domain} now. Who else might?"` with `"Send {firstName}'s question to →"` action targeting a likely contact. Phase 2 — requires contact suggestion + targeted-share. **Impact: high.**
 
 **Risks**
-The line between "invite a friend" and "growth hacking" is short. Keep prompts strictly relational (someone who'd share *this domain* with this friend), never broadcast.
+The line between "invite a friend" and "growth hack" is short. Keep prompts strictly relational.
 
 **Surface priority: medium.**
 
@@ -899,16 +941,16 @@ The line between "invite a friend" and "growth hacking" is short. Keep prompts s
 ### 45. Game Summary Page — Group Story section
 
 **Current state**
-**Section does not exist** with that name. Closest analog: `"Your Impact Recap"` at `page.tsx:336-342`.
+Section does not exist. Closest analog: `"Your Impact Recap"` (see #28).
 
-**Learning reinforcement — opportunities**
-- Build the section. Title: `"The group's story."` Playfair italic 1.6rem. Contents: 3 lines of group-level facts: `"Everyone got {N} right." / "Hardest one today: \"{question.text}\" — {italic domain}." / "Most asked from: {firstName} ({N} questions)."` Phase 2 — requires group-level summary build per game. **Impact: high.**
+**Learning reinforcement**
+- Build the section. Title `"The group's story."` Playfair italic 1.6rem. Three lines: `"Everyone got {N} right." / "Hardest one today: \"{question.text}\" — {italic domain}." / "Most asked from: {firstName} ({N} questions)."` Phase 2 — needs group-level summary build. **Impact: high.**
 
-**Shared knowledge reinforcement — opportunities**
-- Same proposal as above — by definition this section is the group story.
+**Shared knowledge reinforcement**
+- Same proposal — by definition this section is the group story.
 
 **Risks**
-"Hardest one" must mean *lowest correctness*, not "hardest difficulty." Keep it observed, not declared.
+"Hardest one" must mean *observed* lowest correctness, not *declared* highest difficulty.
 
 **Surface priority: high.** Largest missing surface.
 
@@ -917,14 +959,14 @@ The line between "invite a friend" and "growth hacking" is short. Keep prompts s
 ### 46. Game Summary Page — Your Game section
 
 **Current state**
-`page.tsx:224-244`. Header `"How You Did"` + score box + `"Your Growth Recap"`.
+`src/app/games/[id]/summary/page.tsx:202-237`. Header `"How You Did"` (sans uppercase 1.45rem) + success-tinted score box.
 
-**Learning reinforcement — opportunities**
-- Replicate #19's rename: `"How You Did"` → `"Your game."` Phase 1. **Impact: medium.**
-- Set the `+points` typography in Playfair italic instead of `font-mono` so it reads as editorial accomplishment, not numerical score. Phase 1. **Impact: low.**
+**Learning reinforcement**
+- `"How You Did"` → `"Your game."` Playfair italic 1.45rem. Phase 1.
+- The `+{points}` is `font-mono text-5xl font-bold` — set in Playfair italic instead, matching the brief's editorial register. Phase 1. **Impact: low.**
 
-**Shared knowledge reinforcement — opportunities**
-- Add a single 1-line summary above the score: `"You answered {N} of {firstName1}, {firstName2}, and {firstName3}'s questions."` Phase 1. **Impact: high.**
+**Shared knowledge reinforcement**
+- Add a one-line summary above the score: `"You answered {N} of {firstName1}, {firstName2}, and {firstName3}'s questions."` Phase 1 — authorship is on each `view.questions[].question`. **Impact: high.**
 
 **Risks**
 None.
@@ -936,14 +978,14 @@ None.
 ### 47. Game Summary Page — What You Discovered section
 
 **Current state**
-`page.tsx:239-252`. `"Your Growth Recap"` with `CategoryGainsDisplay`. Optional `MasteryMoment`. Empty fallback `"No mastery movement was recorded for this game."`
+`:239-252`. `"Your Growth Recap"` header + `CategoryGainsDisplay`. Optional `MasteryMoment` overlay. Empty fallback `"No mastery movement was recorded for this game."`
 
-**Learning reinforcement — opportunities**
+**Learning reinforcement**
 - Rename to `"What you discovered."` Playfair italic 1.6rem. Phase 1. **Impact: high** (brief alignment).
-- The empty fallback is dispiriting. Replace `"No mastery movement was recorded for this game."` with `"No new corners today — you held what you had."` Phase 1. **Impact: medium.**
+- Empty fallback `"No mastery movement was recorded for this game."` is dispiriting. Replace with `"No new corners today — you held what you had."` Phase 1. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- For each new-territory entry, add `"From {firstName}."` marginalia. Phase 1. **Impact: high.**
+**Shared knowledge reinforcement**
+- For each new-territory entry, add Caveat marginalia: `"from {firstName}."` 0.72rem. Phase 1 — author of the entry's first question in this cycle. **Impact: high.**
 
 **Risks**
 None.
@@ -955,17 +997,16 @@ None.
 ### 48. Game Summary Page — Group Portrait section
 
 **Current state**
-`page.tsx:344-351` renders `OverlapMap` only for single-recipient games. See #30 for OverlapMap content. Title from OverlapMap: `"Where you've met so far."`
+`:344-351`. `OverlapMap` only for single-recipient games. See #30.
 
-**Learning reinforcement — opportunities**
-- For multi-recipient games this section is absent (see #30 — Phase 2 N×N extension). When extended, add a learning kicker: `"The territory you all built together."` Phase 2. **Impact: high.**
+**Learning reinforcement**
+- For multi-recipient (Phase 2 extension of #30): add a kicker `"The territory you all built together."` Phase 2. **Impact: high.**
 
-**Shared knowledge reinforcement — opportunities**
-- Already strong. The OverlapMap copy `"Where you've met so far."` is the right tone.
-- Add a one-line domain call-out: `"You met hardest in {italic strongestOverlapDomain}."` 1.05rem Playfair italic, above the venns. Phase 1. **Impact: medium.**
+**Shared knowledge reinforcement**
+- Already strong. Add a one-line domain call-out above the venns: `"You met hardest in {italic strongestOverlapDomain}."` 1.05rem Playfair italic. Phase 1 — `strongest` is already computed (`OverlapMap.tsx:149-156`). **Impact: medium.**
 
 **Risks**
-"Hardest" must mean highest-shared-correctness in a high-difficulty domain — not subjective. Verify metric.
+"Hardest" must reference observed difficulty × shared correctness. Confirm metric meaning.
 
 **Surface priority: medium.**
 
@@ -976,90 +1017,123 @@ None.
 ### 49. Challenge Worlds entry surface
 
 **Current state**
-**Does not exist.**
+**Does not exist.** No "Challenge Worlds" feature.
 
-**Learning reinforcement — opportunities**
-- Off-season learning needs a surface; current product has Replay (#50) only. Concept: `Challenge Worlds` as off-season themed micro-collections (e.g. `"Late Tchaikovsky — a small world"`), curated from existing questions in a single hyper-specific domain. Entry surface: a one-card prompt on the home screen between seasons: `"You crossed into {italic domain} this cycle. Want to go deeper before the next one?"` Phase 2 — entire feature is new. **Impact: high** (when built).
+**Learning reinforcement**
+- Concept (Phase 2): off-season themed micro-collections from a single hyper-specific domain. Home-screen entry card between seasons: `"You crossed into {italic domain} this cycle. Want to go deeper before the next one?"` Whole feature is Phase 2. **Impact: high** (when built).
 
-**Shared knowledge reinforcement — opportunities**
-- Default the Challenge World invitation to be co-played: `"Take this with {firstName}?"` (where `firstName` is the friend who shares the strongest overlap in that domain). Phase 2. **Impact: high.**
+**Shared knowledge reinforcement**
+- Default to co-play: `"Take this with {firstName}?"` (friend with strongest overlap in the domain). Phase 2. **Impact: high.**
 
 **Risks**
-Speculative — depends on whether the off-season product direction includes this at all. Phase 2.
+Speculative — depends on whether off-season product direction includes this.
 
-**Surface priority: low** today (not built); high once built.
+**Surface priority: low** today; high once built.
 
 ---
 
 ### 50. Friend Play
 
 **Current state**
-**Does not exist as a named surface.** Adjacent surfaces: Friends Hub (`FriendsHubPage.tsx`), invite flow (`AddFriendInvite.tsx`), `Replay` (`src/app/replay/page.tsx` — `"Contain more multitudes."` / `"Practice questions you previously missed. Nothing here changes your score."`).
+**Does not exist as a named surface.** Adjacent: Friends Hub (`src/components/FriendsHubPage.tsx`), Replay (`src/app/replay/page.tsx`: `"Contain more multitudes." / "Practice questions you previously missed. Nothing here changes your score."`), Quick-Add modal.
 
-**Learning reinforcement — opportunities**
-- Replay is the closest analog. Strong copy. Surface a domain filter on top so replay can be focused: `"Practice in {italic domain}."` Phase 1. **Impact: medium.**
+**Learning reinforcement**
+- The Replay page is the closest analog. Strong copy. Add domain filter so practice can be focused: `"Practice in {italic domain}."` Phase 1. **Impact: medium.**
 
-**Shared knowledge reinforcement — opportunities**
-- Build `Friend Play` as a one-tap surface from a friend's profile: `"Ask {firstName} five questions"` — pulls 5 unanswered questions from their bank, runs the session in catchup mode (not for record). Phase 2 — requires new ad-hoc game type. **Impact: high.** Lets a player initiate a relational session off-cycle.
+**Shared knowledge reinforcement**
+- Build a one-tap action from a friend's profile: `"Ask {firstName} five questions"` — pulls 5 unanswered questions from their bank, runs in catchup mode (no record). Phase 2 — new ad-hoc game type. **Impact: high.**
 
 **Risks**
-Don't conflate Friend Play (read-only of their bank) with their daily queue — these are different.
+Don't conflate Friend Play (read-only of their bank) with their daily queue.
 
-**Surface priority: low** today (not built); medium once built.
+**Surface priority: low** today; medium once built.
 
 ---
 
 # TOP 10 HIGHEST-IMPACT CHANGES
 
-Ranked by combined surface priority × proposal impact. All Phase 1 unless noted.
+1. **Unify mastery tier vocabulary across all six surfaces** (Preface §1). Recommend the brief's `Curious → Versed → Fluent → Master`. Most-damaging consistency issue; gates ~30% of downstream proposals.
+2. **Add italic-Playfair canonical-subcategory above every in-session question bubble** (#4). Currently the player never sees what they're about to learn.
+3. **Promote `creatorName` to Caveat handwriting above every in-session question bubble** (#4). Caveat is loaded as `--font-handwriting` and currently unused on this surface.
+4. **Rebuild the wrong-answer reveal — promote the canonical breadcrumb to 0.92rem Playfair italic, add a "now it's in yours too" sub-label and a `{firstName} thought you might` rotation** (#8). North-star metric is wrong-answer reaction rate; current treatment is consolation, almost no learning.
+5. **Promote the daily-summary explainer from `text-muted-foreground` to body weight with a `Why.` Playfair italic kicker, defaulting `<details open>` on wrong-result cards** (#13, #14). The densest learning surface in the loop is currently the visually quietest, and the brief's correct/wrong asymmetry is unimplemented despite the data model already supporting it (`_Wrong` explainer fields exist).
+6. **Author-led noon SMS: `"{firstName} and {N} others wrote your five."`** (#1). First touchpoint of the day.
+7. **Promote `From {firstName}.` to a 2-line editorial header on every end-of-session review card** (#11). Author currently appears only in the creator-note label on daily summary; system kicker `JOSHING BOT · {DOMAIN}` should be removed in the same change. Phase 1.5 — needs a one-join enrichment of `QuestionRecap` (verified in this pass; see #11 evidence note).
+8. **Add domain-named line under ceremony Act 1 Portrait beat: `"In {italic domain1}, {italic domain2}, and {italic domain3}."`** (#38). Names the learning at the most-receptive moment.
+9. **Restore brief's `"Why this one."` creator-note framing with placeholder rotation `"I think about this every time…"`** (#36). Currently labeled `Creator note` / `Optional context for recipients` — pure metadata.
+10. **Build the missing Group Story section on the game summary page** (#45, Phase 2). Largest missing collective surface.
 
-1. **Unify mastery tier vocabulary across all six surfaces that show it** (#10, #25, #26, #27 + account.ts + domain detail page). Recommend brief's `Curious → Versed → Fluent → Master`. The current 3-way fork is the single most-damaging consistency issue in the product.
-2. **Add italic-Playfair category label above every question bubble in-session** (#4). Domain becomes a named piece of content, not a hidden tag.
-3. **Promote author to Caveat handwriting 0.78rem above every question bubble in-session** (#4). Every question becomes a signed gift.
-4. **Rebuild the wrong-answer reveal to lead with the canonical breadcrumb at 0.92rem and a "now it's in yours too" sub-label** (#8). North-star metric is wrong-answer reaction rate; current treatment is consolation, not learning.
-5. **Promote the daily-summary explainer from muted secondary to body-weight prose with an italic `Why.` kicker** (#13). The densest learning surface in the loop is currently visually subordinate to the answer comparison.
-6. **Add author-led opening to noon SMS: `"{firstName} and {N} others wrote your five."`** (#1). First touchpoint of the day, currently fully utilitarian.
-7. **Promote author to a 2-line editorial header on every end-of-session review card** (#11). Author currently appears only in the creator-note label.
-8. **Add domain-named line under every ceremony Act 1 Portrait beat: `"In {italic domain}, {italic domain}, and {italic domain}."`** (#38). Names the actual learning at the most-receptive moment.
-9. **Restore the brief's `"Why this one."` creator-note framing with example placeholders like `"I think about this every time…"`** (#36). Turns metadata into memory.
-10. **Build the missing "Group Story" section on the game summary page** (#45, Phase 2). The largest missing collective surface in the product. Lower-priority on speed (Phase 2) but high-impact when shipped.
+Three runners-up worth mentioning:
+- **Soften season-end SMS "knew you best" winner language** (#1). Soft leaderboard tell that crosses the brief's no-ranking line.
+- **Rewrite creator-note-prompt SMS to name the answerer** (#1). Currently `"Someone got your question wrong"`; should be `"{firstName} just missed your question"`.
+- **Implement the brief's collapsed-when-correct, expanded-when-wrong creator-note treatment** (#14). Same field on every surface; cheap to fix.
 
 ---
 
 # CROSS-CUTTING PATTERNS
 
-Standardize across multiple surfaces — copy moves and visual treatments worth a single design-pass.
-
-1. **Every wrong-answer surface should name the domain in display size before showing the explainer.** Applies to in-session wrong reveal (#8), end-of-session review card (#11), archive card (#24).
-2. **Every author reference outside the creator-note prefix should be Caveat handwriting, not mono.** Mono reads as system metadata; Caveat reads as a person. Applies to in-session bubble (#4), end-of-session review (#11), catchup subhead (#29), share card (#20).
-3. **Replace "common ground" anywhere it appears more than once.** Currently overused in FeedList (`#190, #242, #560, #561`) and SharedInterestsOverlap (#31). Use it sparingly; default to `"where you've overlapped"` or `"in both your banks now."`
-4. **Replace any header that says "How You Did" / "Your Growth Recap" / "Round Recap" with domain-named editorial phrasing.** Applies to daily summary (#19), game summary (#28, #46, #47).
-5. **Tier crossings should be one canonical visual moment** — `MasteryMoment` component — and surface in (a) game summary (already does), (b) daily summary (newly), (c) the closing ceremony climax (#43). Three appearances, identical typography and animation, different timing.
-6. **Whenever a question is shown in a list (archive, feed, knowledge), include three pieces of metadata in this order: author (Caveat), italic domain (Playfair), result badge (mono small caps).** Currently those three signals are scattered and inconsistently weighted.
-7. **`"From"` is the canonical preposition for authorship.** Use it everywhere — never "Written by", "Asked by", "Contributed by". Single token, consistent register.
-8. **Solo-mode ceremony beats need explicit copy, not just suppression of group beats.** Currently solo-mode players see Beats 1, 2, 5 only; the missing beats leave dead air. Write solo-specific copy for Beats 3 and 4 (e.g., introspective alternatives that don't require friends to have played).
-9. **Domain names should always be italic Playfair, never mono uppercase.** Currently the same domain appears as `LITERATURE` (mono) on archive cards and `Literature` (Playfair italic) in OverlapMap — confuses domain-as-tag with domain-as-content.
-10. **Every "you taught" / "you learned" claim should name a domain and at least one person.** Numbers alone (`"{N} creator points"`) do no work on either lens.
+1. **Every wrong-answer surface should name the domain in display size before showing the explainer.** Applies to in-session wrong reveal (#8), end-of-session review card (#11), archive card (#24), game-summary recap (#28). One consistent treatment: italic Playfair display, INK at 85%, above the explainer block.
+2. **Every author reference outside the creator-note prefix should be Caveat handwriting (`--font-handwriting`), not mono.** Mono reads as system metadata; Caveat reads as a person. Applies to in-session bubble (#4), wrong-reveal breadcrumb (#8), end-of-session review (#11), catchup subhead (#29), ceremony beats 3/4/5 (#40/42/41), share card credits (#20). Caveat is already loaded and currently underused.
+3. **Replace "common ground" anywhere it appears more than once.** Currently overused in `FeedList.tsx:190,242,560,561` and in `SharedInterestsOverlap`. Use sparingly; default to `"where you've overlapped"` or `"in both your banks now."`
+4. **Replace `"How You Did"` / `"Your Growth Recap"` / `"Round Recap"` with domain-named editorial phrasing.** Applies to daily summary (#19), game summary (#28, #46, #47). Drop `text-transform: uppercase` and the `var(--font-neutral)` sans treatment in favor of `--font-display` italic in title slots.
+5. **`MasteryMoment` should be the single canonical tier-cross visual moment** — appears in (a) game summary (already), (b) daily summary (already), (c) ceremony closing climax (#43 proposes adding the most-significant cross there as a one-line callout, not a full overlay). Three appearances, identical timing.
+6. **Whenever a question appears in a list (archive, feed, knowledge), three pieces of metadata should accompany it in this order: author (Caveat), domain (italic Playfair), result/difficulty badge (mono small caps).** Currently those three are scattered, inconsistently weighted, sometimes absent.
+7. **`From` is the canonical authorship preposition.** Use everywhere — never `"Written by"`, `"Asked by"`, `"Contributed by"`. Already mostly consistent; standardise the QuestionBankPicker.
+8. **Solo-mode ceremony needs explicit copy, not just suppression of group beats.** Currently solo players see Beats 1, 2, 5 and the missing beats leave dead air. Add solo-specific replacement copy for Beats 3 and 4 in `compute-beats.ts`.
+9. **Domain names should always be italic Playfair (`--font-display`), never mono uppercase.** Currently the same domain renders as `LITERATURE` (mono) on daily-summary card headers and `Literature` (Playfair italic) in OverlapMap — same data, two different registers, two different mental models (tag vs. content).
+10. **Every "you taught" / "you learned" claim should name a domain and at least one person.** Numbers alone (`"{N} creator points"`, `"{N} questions"`) do almost no work on either lens.
 
 ---
 
 # OPEN QUESTIONS / FORKS
 
-Decisions that block specific proposals; Josh to resolve.
+**Resolved in this pass:**
+- ~~Q4 (grading exact vs variant distinction):~~ **Resolved.** `grading.ts:50` uses one fast-path for both canonical and alternative matches; the result type does not carry which kind matched. To surface near-miss acknowledgment, the grader needs to return `matchKind` plus a flag on the alternates list for who added each one. See #17 evidence.
+- ~~Q5 (per-question group aggregation in daily summary):~~ **Resolved.** `DailySummaryView.QuestionRecap` (`daily-summary.ts:30-43`) carries no group-level fields. Standout moments (#16) and compatibility shifts (#19) require new query joins — confirmed Phase 2.
+- ~~Q6 (bank origin preservation):~~ **Resolved.** `sourceQuestionId` column exists on `questions` (`schema.ts:210`, indexed at `:261`). #12 `"From {originalAuthorFirstName}, originally."` is Phase 1, not Phase 2.
+- ~~Q7 (explainer provenance tracking):~~ **Resolved.** Eight explainer text fields exist on the schema (`schema.ts:230-237`), but they're flat text — no `_source` companion. #13 `"in {firstName}'s words"` is Phase 2 (needs new column). However, the data over-supports the brief's correct/wrong asymmetry: `_Correct`, `_Wrong`, and `_Expired` variants all exist; the UI currently only reads `_Wrong` and the unsuffixed default.
+- ~~Q8 (heart-vote routing to author):~~ **Resolved.** `/api/daily/feedback` (`route.ts:53,73`) just writes to `questionFeedback`. No author aggregation or surfacing. The proposed `"{firstName} will see this."` micro-confirmation is **Phase 2** — must first build author-side aggregation. Do not ship the confirmation before the routing exists.
 
-1. **Mastery tier vocabulary canonical form.** Brief: `Curious → Versed → Fluent → Master`. Code: three different sets. Which set ships? (Recommended: brief's set; it best supports an interior-learning frame.)
-2. **Does the answer-grading pipeline distinguish "exact match" from "accepted variant"?** Determines whether the near-miss acknowledgment (#17) is Phase 1 or Phase 2.
-3. **Is per-question group-level aggregation (`correct_count`, `answered_count` across the group) available in the daily summary payload?** Determines Phase for #16 (standout moments) and #19 (compatibility shifts).
-4. **Is question-bank origin (the *original* author of a question that's been re-asked) preserved through bank intake?** Determines #12 author-reveal-on-bank-questions Phase.
-5. **Are creator-note explanations distinguishable from LLM-generated explainers?** Determines #13 `"in {firstName}'s words"` Phase.
-6. **Does the star vote already route to a per-author feedback aggregate?** Determines #15 `"{firstName} will see this"` Phase.
-7. **Is "Friend Play" desired as a real off-season feature, or is Replay the canonical answer?** Determines whether to invest design cycles on #50.
-8. **Are Challenge Worlds a real Phase 2 roadmap item?** If not, #49 should be dropped from the audit's followup queue rather than carried forward as a low-priority Phase 2.
-9. **The brief's "common ground +" sub-label and "now it's in yours too" wrong-answer line — these are written into the brief but absent from code. Are they descriptions of intent (to be implemented) or stale references (to be retired)?** Determines whether several proposals in #7, #8 restore the brief's copy or supersede it.
-10. **Mid-session mastery-tier crossing — does the brief want it surfaced in-thread, or is the post-game `MasteryMoment` the only intended manifestation?** Determines #10.
-11. **Friend-name visibility in the wrong-answer "{firstName} thought you might" line — what's the privacy posture if the friend hasn't actively shared this signal?** Determines #8.
-12. **`/leaderboard` route name** — the route is literally called `leaderboard` but renders the (correctly non-ranking) Group Knowledge Map. The route name is a hostage to its own past. Rename to `/group-map` or `/we`? Trivial code change, but breaks any external links.
+**Still open — need a product call:**
+
+1. **Mastery tier vocabulary canonical form.** Code has four sets across six surfaces; brief specifies a fifth. Recommended: brief's `Curious → Versed → Fluent → Master`. Gates ~30% of Phase 1 proposals.
+2. **Are the brief's missing copy lines and surfaces intent or stale?** Specifically: `"now it's in yours too"`, `"common ground +"` sub-label, standout moments, accepted-variant near-miss, share-card emoji grid, Group Story, next-questions countdown, Challenge Worlds, Friend Play. Determines whether several proposals build vs. retire.
+3. **Ceremony dark theme vs. cream register elsewhere.** Is the `stone-950` ceremony a deliberate award-show frame, or has it drifted from the ink-on-cream system? The OverlapMap demonstrates the cream register works for celebratory content.
+4. **Mid-session tier-crossing — does the brief want it surfaced in-thread, or is the post-game `MasteryMoment` the only intended manifestation?** Determines #10.
+5. **Friend-name visibility in wrong-answer `{firstName} thought you might` sub-label** — what's the privacy posture if the friend hasn't actively shared this signal? Determines #8.
+6. **The `/leaderboard` route name** — per CLAUDE.md it renders the (correctly non-ranking) Group Knowledge Map. The route name is a hostage to its past. Rename to `/group-map` or `/we`?
+7. **Default-on `shareToFeed`** (`QuestionForm.tsx:111`): the form ships questions to all friends by default unless the player explicitly toggles "specific friends only." Generous-but-opaque default. Worth a deliberate review separate from the audit.
+8. **Caveat handwriting usage scope.** Currently underused (Personal Record annotations only). The audit recommends adding it on the question bubble, breadcrumb, review header, catchup subhead, MasteryMoment "tier-buddy" variant, and share-card credits. That's a meaningful expansion of the handwriting register — confirm it's an intentional move.
 
 ---
 
-End of audit.
+# SEQUENCING & DEPENDENCIES
+
+Top 10 ordered by dependency: ship blockers first, then cheapest-high-impact, then bigger lifts. Each item lists what unblocks it and what it unblocks.
+
+**Tier A — unblocks half the audit (do first):**
+1. **Resolve mastery tier vocabulary** (Top-10 #1; open question 1). One-day cross-cutting copy edit. Unblocks: #10 (mid-session crossing buddy variant), #25–27 (knowledge surfaces), #38 (Portrait beat), MasteryMoment itself.
+2. **Resolve the brief's intent fork** (open question 2). Product call, not engineering. Determines whether to build #7 sub-labels, #8 breadcrumb rewrite, #16 standout moments, #17 near-miss, #21 emoji grid, #45 Group Story, #49 Challenge Worlds, #50 Friend Play.
+
+**Tier B — cheap, high-impact Phase 1 (ship in any order):**
+3. **In-session bubble: add italic-Playfair canonical subcategory + Caveat author line** (Top-10 #2 and #3, surface #4). One frontend file change, no backend. Validates the visual treatment that the rest of the proposals reuse.
+4. **Author-led noon SMS** (Top-10 #6). Pure copy change in `buildDailyReminderMessage`; falls back gracefully when no first-name available.
+5. **Daily-summary editorial header + explainer promotion + `<details open>` on wrong cards** (Top-10 #5). One file (`daily/summary/page.tsx`). Picks up the over-rich schema for free.
+6. **Restore creator-note framing** (Top-10 #9, surface #36). One form file. Frontend-only.
+
+**Tier C — depends on Tier A or backend touch:**
+7. **End-of-session review card author header** (Top-10 #7, surface #11). **Phase 1.5** — needs `creator.displayName` joined into `QuestionRecap` (`daily-summary.ts:30-43`). One-join change. Visually requires Tier B #3 to be canonical first.
+8. **Wrong-reveal rebuild** (Top-10 #4, surface #8). Frontend-only re-layout of `GameplayChat.tsx` `ResultRow`. Two of its three sub-proposals depend on Tier A #2 (the brief's intent: are the named sub-labels in scope?). Ship the breadcrumb promotion and `BreadcrumbLine` author re-format regardless.
+9. **Ceremony Portrait beat domain line** (Top-10 #8, surface #38). Pure frontend in `ceremony/[ceremonyId]/page.tsx`. Visually safer once Tier A #1 is resolved.
+
+**Tier D — bigger lifts (Phase 2):**
+10. **Group Story section** (Top-10 #10, surface #45). New backend query + new section. Highest ceiling but ship last.
+
+**Anti-pattern: do NOT ship before its prerequisite**
+- `"{firstName} will see this."` micro-confirmation on heart votes (#15) — depends on building author-side feedback aggregation. Don't ship the toast first.
+- `From {originalAuthorFirstName}, originally.` on bank-origin questions (#12) — Phase 1 in copy, but the recap query must follow `sourceQuestionId` to the origin author. Verify the join performs.
+- Any added Caveat usage — first confirm the brand expansion is intentional (open question 8).
+
+---
+
+End of audit (third pass, 2026-05-18).
