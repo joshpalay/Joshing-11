@@ -127,6 +127,28 @@ function summarizeError(error: unknown): Record<string, unknown> {
   };
 }
 
+// Operator-actionable errors deserve a louder log line than the generic
+// "[llm] error" warn so they don't get lost in the noise of timeouts /
+// model overload. These are the cases where the model is fine but the
+// account/key is broken: refilling credits, rotating the key, or waiting
+// out a rate limit is the only fix, and the user-visible symptom (zero
+// generated questions, "Today's Daily Five is taking longer than usual")
+// looks identical to a model hiccup.
+function classifyOperatorError(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const status = (error as { status?: number }).status;
+  const apiMessage = (error as { error?: { message?: string } }).error?.message ?? '';
+  const combined = `${error.message} ${apiMessage}`;
+
+  if (status === 429) return 'RATE_LIMITED';
+  if (status === 401 || status === 403) return 'AUTH_FAILED';
+  if (status === 402) return 'PAYMENT_REQUIRED';
+  if (status === 400 && /credit balance|billing|insufficient.*credit/i.test(combined)) {
+    return 'CREDITS_EXHAUSTED';
+  }
+  return null;
+}
+
 function logFallback(scope: string, reason: string, extra?: Record<string, unknown>) {
   console.warn(`[LLM] ${scope} fallback: ${reason}`, extra ?? {});
 }
@@ -158,12 +180,22 @@ export async function loggedMessagesCreate(
     });
     return response;
   } catch (error) {
-    console.warn('[llm] error', {
-      scope,
-      model: params.model,
-      duration_ms: Date.now() - startedAt,
-      ...summarizeError(error),
-    });
+    const operatorErrorKind = classifyOperatorError(error);
+    if (operatorErrorKind) {
+      console.error(`[llm] ${operatorErrorKind}`, {
+        scope,
+        model: params.model,
+        duration_ms: Date.now() - startedAt,
+        ...summarizeError(error),
+      });
+    } else {
+      console.warn('[llm] error', {
+        scope,
+        model: params.model,
+        duration_ms: Date.now() - startedAt,
+        ...summarizeError(error),
+      });
+    }
     throw error;
   }
 }
