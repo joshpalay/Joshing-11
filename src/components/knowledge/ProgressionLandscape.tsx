@@ -3,17 +3,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DomainCircle } from '@/components/knowledge/DomainCircle';
 import { getDomainCircleSize } from '@/lib/knowledge/circle-sizing';
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import type { MasteryTier } from '@/types/db';
 
 const TIERS = ['establishing', 'familiar', 'solid', 'mastery'] as const;
 type Tier = (typeof TIERS)[number];
-
-const TIER_LABEL: Record<Tier, string> = {
-  establishing: 'ESTABLISHING',
-  familiar: 'FAMILIAR',
-  solid: 'SOLID',
-  mastery: 'MASTERY',
-};
 
 const GHOST_CIRCLE_DIAMETER = 18;
 const GHOST_CIRCLE_DIAMETER_MOBILE = 15;
@@ -219,7 +213,7 @@ export function ProgressionLandscape({
               }}
               style={{ ...colHeaderStyle, borderRight: i < 3 ? '1px solid #e8e2d6' : undefined }}
             >
-              {TIER_LABEL[tier]}
+              {KNOWLEDGE_TIER_LABEL[tier].toUpperCase()}
             </div>
           ))}
 

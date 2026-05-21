@@ -4,20 +4,16 @@ import { useCallback, useState, type ReactNode } from 'react'
 
 import { KnowledgeCircle } from '@/components/knowledge/CategoryCircles'
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
+import type { MasteryTier } from '@/types/db'
 
 import { visibleFeedCategory } from './category'
 import type { AnsweredByYouFeedItem, AnsweredByYouPairedFriend } from './types'
 import { colorForCategory, colorForUser, initialsFor, isDarkColor } from './visual'
 
-const TIER_LABEL: Record<string, string> = {
-  establishing: 'Establishing',
-  familiar: 'Familiar',
-  solid: 'Solid',
-  mastery: 'Mastery',
-}
-
 function tierLabel(tier: string): string {
-  return TIER_LABEL[tier.toLowerCase()] ?? tier
+  const normalized = tier.toLowerCase() as MasteryTier
+  return KNOWLEDGE_TIER_LABEL[normalized] ?? tier
 }
 
 function KnowledgeGainIndicator({ item }: { item: AnsweredByYouFeedItem }) {
