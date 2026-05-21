@@ -97,6 +97,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
                 questionId: item.questionId,
                 contextType: 'joshing_game',
                 contextId: game.game.id,
+                result: response.isCorrect ? 'correct' : 'wrong',
               }
             : null,
         });
@@ -171,6 +172,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
                 questionId: currentQuestion.questionId,
                 contextType: 'joshing_game',
                 contextId: game.game.id,
+                result: body.isCorrect ? 'correct' : 'wrong',
               }
             : null,
         },

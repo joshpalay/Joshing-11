@@ -397,6 +397,10 @@ export const questionReactions = pgTable(
     contextId: text('contextId'),
     reactionType: text('reactionType').notNull(),
     customMessage: text('customMessage'),
+    // §8.22 opt-in. When true on a wrong-answer reaction, the answerer
+    // consents to the question's author seeing their literal submitted text
+    // alongside the reaction.
+    includeSubmittedAnswer: boolean('includeSubmittedAnswer').notNull().default(false),
     repliedAt: timestamp('repliedAt', { withTimezone: true }),
     createdAt: createdAt(),
   },

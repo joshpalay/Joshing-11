@@ -236,6 +236,14 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
         {reaction.customMessage ? ` - ${reaction.customMessage}` : ''}
       </p>
       <p className="line-clamp-2 italic">{reaction.questionText}</p>
+      {/* §8.22 opt-in: rendered only when the answerer explicitly chose to
+          include their submitted text. */}
+      {reaction.submittedAnswer ? (
+        <p>
+          <span className="text-foreground font-medium">They wrote:</span>{' '}
+          {reaction.submittedAnswer}
+        </p>
+      ) : null}
     </div>
   )
 }

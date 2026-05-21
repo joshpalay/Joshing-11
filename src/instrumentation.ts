@@ -335,6 +335,20 @@ export async function register() {
       // it before this migration runs.
     }
 
+    // Migration 0040 adds includeSubmittedAnswer to QuestionReaction (§8.22
+    // opt-in for surfacing answerer text to the question author). Guard for
+    // preview/production databases that may have this migration recorded
+    // without the column actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "QuestionReaction"
+          ADD COLUMN IF NOT EXISTS "includeSubmittedAnswer" boolean NOT NULL DEFAULT false
+      `);
+    } catch {
+      // QuestionReaction table may not exist yet on a fresh database —
+      // migrate() creates it before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

@@ -50,6 +50,10 @@ export type ActivityItemView = Pick<
       customMessage: string | null;
       repliedAt: Date | null;
       questionText: string;
+      // §8.22 wrong-answer text visibility: populated only when the answerer
+      // explicitly opted in (includeSubmittedAnswer=true on a wrong-answer
+      // reaction). Null in every other case.
+      submittedAnswer: string | null;
     };
     directQuestion?: {
       feedItemId: string;
@@ -323,13 +327,70 @@ async function hydrateReactions(items: ActivityItemRow[]) {
       customMessage: questionReactions.customMessage,
       repliedAt: questionReactions.repliedAt,
       questionText: questions.questionText,
+      senderUserId: questionReactions.senderUserId,
+      questionId: questionReactions.questionId,
+      contextType: questionReactions.contextType,
+      contextId: questionReactions.contextId,
+      includeSubmittedAnswer: questionReactions.includeSubmittedAnswer,
     })
     .from(questionReactions)
     .innerJoin(questions, eq(questionReactions.questionId, questions.id))
     .where(inArray(questionReactions.id, reactionIds));
 
+  // §8.22 opt-in resolution: for any reaction the answerer flagged with
+  // includeSubmittedAnswer=true, join the original submitted text from the
+  // matching feed item or joshing-game response. The viewer of this activity
+  // is the question's author by construction (reaction activities target
+  // recipientUserId === author); the opt-in is the consent gate.
+  const optedInRows = rows.filter((row) => row.includeSubmittedAnswer);
+  const feedRowIds = optedInRows
+    .filter((row) => row.contextType === 'feed' && row.contextId)
+    .map((row) => row.contextId!);
+  const gameKeys = optedInRows
+    .filter((row) => row.contextType === 'joshing_game' && row.contextId)
+    .map((row) => ({ gameId: row.contextId!, questionId: row.questionId, userId: row.senderUserId }));
+  const gameIds = [...new Set(gameKeys.map((key) => key.gameId))];
+
+  const [feedAnswerRows, gameAnswerRows] = await Promise.all([
+    feedRowIds.length > 0
+      ? db
+          .select({ id: feedItems.id, submittedAnswer: feedItems.submittedAnswer })
+          .from(feedItems)
+          .where(inArray(feedItems.id, feedRowIds))
+      : Promise.resolve([] as { id: string; submittedAnswer: string | null }[]),
+    gameIds.length > 0
+      ? db
+          .select({
+            gameId: joshingGameResponses.gameId,
+            questionId: joshingGameResponses.questionId,
+            userId: joshingGameResponses.userId,
+            submittedAnswer: joshingGameResponses.submittedAnswer,
+          })
+          .from(joshingGameResponses)
+          .where(inArray(joshingGameResponses.gameId, gameIds))
+      : Promise.resolve([] as {
+          gameId: string;
+          questionId: string;
+          userId: string;
+          submittedAnswer: string | null;
+        }[]),
+  ]);
+
+  const feedAnswerById = new Map(feedAnswerRows.map((row) => [row.id, row.submittedAnswer ?? null]));
+  const gameAnswerByKey = new Map(
+    gameAnswerRows.map((row) => [`${row.gameId}:${row.questionId}:${row.userId}`, row.submittedAnswer ?? null]),
+  );
+
   return new Map(rows.map((row) => {
     const reaction = getCannedReaction(row.reactionType);
+    let submittedAnswer: string | null = null;
+    if (row.includeSubmittedAnswer) {
+      if (row.contextType === 'feed' && row.contextId) {
+        submittedAnswer = feedAnswerById.get(row.contextId) ?? null;
+      } else if (row.contextType === 'joshing_game' && row.contextId) {
+        submittedAnswer = gameAnswerByKey.get(`${row.contextId}:${row.questionId}:${row.senderUserId}`) ?? null;
+      }
+    }
     return [
       row.id,
       {
@@ -339,6 +400,7 @@ async function hydrateReactions(items: ActivityItemRow[]) {
         customMessage: row.customMessage,
         repliedAt: row.repliedAt,
         questionText: row.questionText,
+        submittedAnswer,
       },
     ] as const;
   }));

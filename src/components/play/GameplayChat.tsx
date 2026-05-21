@@ -6,13 +6,21 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
-import { CANNED_REACTIONS, type ReactionKey } from '@/lib/reactions';
+import {
+  CORRECT_ANSWER_REACTIONS,
+  WRONG_ANSWER_REACTIONS,
+  isWrongAnswerReactionKey,
+  type ReactionKey,
+} from '@/lib/reactions';
 
 export type ReactionPromptData = {
   senderName: string;
   questionId: string;
   contextType: 'feed' | 'joshing_game';
   contextId: string | null;
+  // §8.10b: which canned set to render. Wrong-answer reactions also enable
+  // the §8.22 "include what I wrote" opt-in.
+  result: 'correct' | 'wrong';
 };
 
 export type RecheckActionResult = { accepted: boolean; message: string };
@@ -358,6 +366,10 @@ function reactionEmoji(value: string): string {
     case ':face_palm:': return '🤦';
     case ':sunny:': return '☀️';
     case ':thought_balloon:': return '💭';
+    case ':thinking_face:': return '🤔';
+    case ':open_book:': return '📖';
+    case ':memo:': return '📝';
+    case ':sweat_smile:': return '😅';
     default: return value;
   }
 }
@@ -366,6 +378,12 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'hidden' | 'error'>('idle');
   const [customOpen, setCustomOpen] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
+  // §8.22 opt-in. Only meaningful on wrong-answer reactions; the API coerces
+  // it to false for any other reactionType.
+  const [includeSubmittedAnswer, setIncludeSubmittedAnswer] = useState(false);
+
+  const isWrongAnswer = prompt.result === 'wrong';
+  const cannedSet = isWrongAnswer ? WRONG_ANSWER_REACTIONS : CORRECT_ANSWER_REACTIONS;
 
   useEffect(() => {
     if (status !== 'idle') return;
@@ -392,6 +410,8 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
           contextId: prompt.contextId,
           reactionType,
           customMessage: customMessage.trim() || null,
+          includeSubmittedAnswer:
+            includeSubmittedAnswer && isWrongAnswerReactionKey(reactionType),
         }),
       });
       if (!response.ok) throw new Error('Could not send reaction');
@@ -399,7 +419,7 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
     } catch {
       setStatus('error');
     }
-  }, [customMessage, prompt.contextId, prompt.contextType, prompt.questionId]);
+  }, [customMessage, includeSubmittedAnswer, prompt.contextId, prompt.contextType, prompt.questionId]);
 
   if (status === 'hidden') return null;
 
@@ -434,8 +454,29 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
           }}
         />
       ) : null}
+      {isWrongAnswer ? (
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginBottom: '8px',
+            fontSize: '0.72rem',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={includeSubmittedAnswer}
+            onChange={(event) => setIncludeSubmittedAnswer(event.target.checked)}
+            disabled={status === 'sending'}
+          />
+          Include what I wrote
+        </label>
+      ) : null}
       <div style={{ display: 'flex', gap: '6px', maxWidth: '100%', overflowX: 'auto', paddingBottom: '3px' }}>
-        {CANNED_REACTIONS.map((reaction) => (
+        {cannedSet.map((reaction) => (
           <button
             key={reaction.key}
             type="button"
