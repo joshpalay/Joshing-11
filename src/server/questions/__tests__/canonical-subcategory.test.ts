@@ -33,6 +33,15 @@ describe('canonical-subcategory boundary guard (F4.5)', () => {
       expect(isGenericSubcategory('T. S. Eliot')).toBe(false)
     })
 
+    it('returns true for ultra-short fragment labels (e.g. categorizer truncation)', () => {
+      // Real-world bug: the deterministic fallback in src/lib/llm.ts produced
+      // "Mr" (from "Mr. Hooper") and "A" (from "A loaf of bread...") as canonical
+      // subcategories. Both are too short to be meaningful.
+      expect(isGenericSubcategory('A')).toBe(true)
+      expect(isGenericSubcategory('Mr')).toBe(true)
+      expect(isGenericSubcategory('T')).toBe(true)
+    })
+
     it('returns false for broad-but-acceptable category names', () => {
       // Note: the audit lists these in the LLM helper's superset (used for
       // re-prompting), but they are NOT in the strict write-boundary set.
