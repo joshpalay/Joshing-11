@@ -45,7 +45,7 @@ export function getFeedOverflowMenuLabels({
 }) {
   const visibleCategory = visibleFeedCategory(category)
   return [
-    ...(visibleCategory ? ['Hide this category'] : []),
+    ...(visibleCategory ? [`Hide questions about ${visibleCategory}`] : []),
     `Hide questions from ${sourceName || 'this person'}`,
     ...(hasQuestion && !isInBank ? ['Add to bank'] : []),
     ...(hasQuestion ? ['Send to friend'] : []),
@@ -167,7 +167,7 @@ export function FeedOverflowMenu({
                 disabled={disabled}
                 onClick={wrapAction(onHideCategory)}
               >
-                Hide this category
+                Hide questions about {visibleCategory}
               </MenuButton>
             ) : null}
             <MenuButton disabled={disabled} onClick={wrapAction(onHidePerson)}>
