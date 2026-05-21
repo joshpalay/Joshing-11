@@ -1,9 +1,12 @@
 import {
   createDailyQueueItem,
+  createDailyQueueItemFromAuthored,
   getKnowledgeBase,
   getTodaysDailyQueue,
+  pickEligibleAuthoredQuestions,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { getFriendAndFoFUserIds } from '@/server/db/queries/friends';
 import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 
@@ -41,15 +44,33 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     );
   }
 
-  const generated = await generateDailyQuestionsFromKnowledgeBase(userId, DAILY_QUEUE_SIZE);
-  if (generated.length === 0) {
+  // Prefer vetted user-authored questions, prioritised by friends-of-friends,
+  // then top up the remaining slots with LLM-generated questions. The
+  // QueueSlot schema already supports both bot and friend sources
+  // (src/server/daily/types.ts), so this is a picker change — no slot-shape
+  // migration required.
+  const socialGraph = await getFriendAndFoFUserIds(userId);
+  const authored = await pickEligibleAuthoredQuestions(userId, socialGraph, DAILY_QUEUE_SIZE);
+
+  const remaining = DAILY_QUEUE_SIZE - authored.length;
+  const generated = remaining > 0
+    ? await generateDailyQuestionsFromKnowledgeBase(userId, remaining)
+    : [];
+
+  if (authored.length === 0 && generated.length === 0) {
     throw new DailyQueueFillError(
       'generation_failed',
       "Today's Daily Five is taking longer than usual.",
     );
   }
 
-  for (const [index, question] of generated.slice(0, DAILY_QUEUE_SIZE).entries()) {
-    await createDailyQueueItem(userId, question.id, index);
+  let position = 0;
+  for (const pick of authored) {
+    await createDailyQueueItemFromAuthored(userId, pick, position);
+    position += 1;
+  }
+  for (const question of generated.slice(0, DAILY_QUEUE_SIZE - position)) {
+    await createDailyQueueItem(userId, question.id, position);
+    position += 1;
   }
 }

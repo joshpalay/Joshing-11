@@ -18,6 +18,7 @@ import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { type QueueSlot } from '@/server/daily/types';
 import { asQueueSlots } from '@/server/daily/catchup';
+import { resolveDailyBasePoints } from '@/server/daily/types';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { computeAnswerState } from '@/server/answer-state';
@@ -121,24 +122,76 @@ export async function POST(request: NextRequest) {
     if (slot.answered || slot.skipped) {
       return dailyAnswerErrorResponse(400, 'invalid_state', 'That question is already closed.');
     }
-    if (!slot.generated_question_id) {
+    if (!slot.generated_question_id && !slot.question_id) {
       return dailyAnswerErrorResponse(400, 'invalid_state', 'That Daily Five slot is not ready yet.');
     }
 
-    const [question] = await db
-      .select()
-      .from(generatedQuestions)
-      .where(and(
-        eq(generatedQuestions.id, slot.generated_question_id),
-        eq(generatedQuestions.userId, session.userId),
-      ))
-      .limit(1);
+    // The Daily 5 mixes two slot shapes — bot-generated questions live in
+    // `generatedQuestions`, while vetted user-authored questions live in the
+    // canonical `questions` table and are picked into a `source: 'friend'`
+    // slot. Normalise both into a single shape so the rest of the route
+    // (grading, mastery, propagation) doesn't care which pool we're in.
+    type DailyAnswerQuestion = {
+      generatedId: string | null;
+      canonicalId: string | null;
+      questionText: string;
+      answer: string;
+      explainer: string | null;
+      canonicalSubcategory: string;
+      broadCategory: string | null;
+      basePoints: number;
+    };
 
-    if (!question) {
-      return dailyAnswerErrorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+    let question: DailyAnswerQuestion;
+    if (slot.generated_question_id) {
+      const [row] = await db
+        .select()
+        .from(generatedQuestions)
+        .where(and(
+          eq(generatedQuestions.id, slot.generated_question_id),
+          eq(generatedQuestions.userId, session.userId),
+        ))
+        .limit(1);
+      if (!row) {
+        return dailyAnswerErrorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+      }
+      question = {
+        generatedId: row.id,
+        canonicalId: null,
+        questionText: row.questionText,
+        answer: await resolveCanonicalAnswer(row),
+        explainer: row.explainer,
+        canonicalSubcategory: row.canonicalSubcategory,
+        broadCategory: row.broadCategory,
+        basePoints: Math.round(row.basePoints),
+      };
+    } else {
+      const [row] = await db
+        .select()
+        .from(questions)
+        .where(eq(questions.id, slot.question_id!))
+        .limit(1);
+      if (!row || row.deletedAt) {
+        return dailyAnswerErrorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+      }
+      const explainer = row.explainerFull
+        ?? row.explainerBrief
+        ?? row.factualExplanation
+        ?? null;
+      const difficulty = row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate ?? null;
+      question = {
+        generatedId: null,
+        canonicalId: row.id,
+        questionText: row.questionText,
+        answer: row.answerText,
+        explainer,
+        canonicalSubcategory: row.canonicalSubcategory ?? slot.domain,
+        broadCategory: row.broadCategory,
+        basePoints: resolveDailyBasePoints(difficulty),
+      };
     }
 
-    const canonicalAnswer = await resolveCanonicalAnswer(question);
+    const canonicalAnswer = question.answer;
 
     const grade = parsed.gaveUp
       ? { result: 'wrong' as const, consolation: null }
@@ -153,43 +206,64 @@ export async function POST(request: NextRequest) {
     const answerState = isCorrect ? 'correct' : 'incorrect';
     const quip = parsed.gaveUp ? null : selectQuip({ isCorrect, surface: 'daily', friendResult: null });
 
-    // Promote the bot question to a canonical row BEFORE writing the mastery
-    // event so cross-surface dedup can key on the canonical Question.id
-    // (F2.1). If persistence fails the route still records the answer in the
+    // For bot slots: promote the generated question to a canonical row
+    // BEFORE writing the mastery event so cross-surface dedup can key on
+    // Question.id (F2.1). For friend slots: the canonical row already
+    // exists, so skip the promotion and read author metadata directly.
+    // If persistence fails the route still records the answer in the
     // queue and the user-visible result is unaffected; only mastery /
     // friend-feed propagation are skipped for this attempt.
-    let canonicalQuestionId: string | null = null;
+    let canonicalQuestionId: string | null = question.canonicalId;
     let persistedCreatorId: string | null = null;
     let persistedDomainForCreator: string | null = null;
     let persistedInsideJoke: string | null = null;
-    let persistAttempt = 0;
-    while (persistAttempt < 2 && canonicalQuestionId === null) {
-      persistAttempt += 1;
-      try {
-        const persisted = await persistGeneratedQuestion(question.id, slot.domain);
-        canonicalQuestionId = persisted.questionId;
-        const [persistedQuestion] = await db
-          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category, insideJoke: questions.insideJoke })
-          .from(questions)
-          .where(eq(questions.id, persisted.questionId))
-          .limit(1);
-        persistedCreatorId = persistedQuestion?.creatorId ?? null;
-        persistedDomainForCreator =
-          persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
-        persistedInsideJoke = persistedQuestion?.insideJoke ?? null;
-      } catch (error) {
-        const finalAttempt = persistAttempt >= 2;
-        console.warn(
-          finalAttempt
-            ? '[daily/answer] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
-            : '[daily/answer] persistGeneratedQuestion failed; retrying once',
-          {
-            generatedQuestionId: question.id,
-            attempt: persistAttempt,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        );
+
+    if (question.generatedId) {
+      let persistAttempt = 0;
+      while (persistAttempt < 2 && canonicalQuestionId === null) {
+        persistAttempt += 1;
+        try {
+          const persisted = await persistGeneratedQuestion(question.generatedId, slot.domain);
+          canonicalQuestionId = persisted.questionId;
+          const [persistedQuestion] = await db
+            .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category, insideJoke: questions.insideJoke })
+            .from(questions)
+            .where(eq(questions.id, persisted.questionId))
+            .limit(1);
+          persistedCreatorId = persistedQuestion?.creatorId ?? null;
+          persistedDomainForCreator =
+            persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+          persistedInsideJoke = persistedQuestion?.insideJoke ?? null;
+        } catch (error) {
+          const finalAttempt = persistAttempt >= 2;
+          console.warn(
+            finalAttempt
+              ? '[daily/answer] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
+              : '[daily/answer] persistGeneratedQuestion failed; retrying once',
+            {
+              generatedQuestionId: question.generatedId,
+              attempt: persistAttempt,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          );
+        }
       }
+    } else if (question.canonicalId) {
+      const [canonicalRow] = await db
+        .select({
+          creatorId: questions.creatorId,
+          domain: questions.canonicalSubcategory,
+          broadCategory: questions.broadCategory,
+          category: questions.category,
+          insideJoke: questions.insideJoke,
+        })
+        .from(questions)
+        .where(eq(questions.id, question.canonicalId))
+        .limit(1);
+      persistedCreatorId = canonicalRow?.creatorId ?? null;
+      persistedDomainForCreator =
+        canonicalRow?.domain || canonicalRow?.broadCategory || canonicalRow?.category || null;
+      persistedInsideJoke = canonicalRow?.insideJoke ?? null;
     }
 
     // Compute answer_state against masteryEvents history so first_correct
@@ -204,7 +278,7 @@ export async function POST(request: NextRequest) {
       isCorrect ? 'correct' : 'wrong',
       priorAnswers,
     );
-    const basePoints = Math.round(question.basePoints);
+    const basePoints = question.basePoints;
     const uncheckedPointsAwarded =
       masteryAnswerState === 'first_correct'
         ? basePoints
@@ -232,7 +306,7 @@ export async function POST(request: NextRequest) {
         console.warn('[daily/answer] bot question domain not in player KB; skipping mastery write', {
           userId: session.userId,
           domain: question.canonicalSubcategory,
-          generatedQuestionId: question.id,
+          generatedQuestionId: question.generatedId,
         });
       }
     }
@@ -253,7 +327,7 @@ export async function POST(request: NextRequest) {
         submitted_answer: parsed.gaveUp ? '' : parsed.submittedAnswer,
         awarded_points: pointsAwarded,
         reveal_canonical_answer: canonicalAnswer,
-        reveal_explainer: question.explainer,
+        reveal_explainer: question.explainer ?? undefined,
         reveal_inside_joke: insideJokeForViewer,
         reveal_quip: grade.consolation,
         quip,
@@ -270,7 +344,7 @@ export async function POST(request: NextRequest) {
       try {
         masteryDelta = await writeMasteryEvent({
           userId: session.userId,
-          questionId: question.id,
+          questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,
           domain: question.canonicalSubcategory,
           answerState: masteryAnswerState,
           pointsAwarded,
@@ -295,6 +369,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (canonicalQuestionId && !parsed.gaveUp) {
+      const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
       try {
         if (isCorrect && persistedCreatorId && persistedCreatorId !== session.userId && persistedDomainForCreator) {
           void promoteDeclaredToDemonstrated({
@@ -311,7 +386,7 @@ export async function POST(request: NextRequest) {
             answererUserId: session.userId,
             questionId: canonicalQuestionId,
             domain: persistedDomainForCreator,
-            sourceId: `daily:${question.id}:${session.userId}`,
+            sourceId: `daily:${propagationKey}:${session.userId}`,
             scope: 'daily/answer',
           });
         }
@@ -323,11 +398,11 @@ export async function POST(request: NextRequest) {
           session.userId,
           canonicalQuestionId,
           isCorrect ? 'correct' : 'incorrect',
-          `daily:${question.id}:${session.userId}`,
+          `daily:${propagationKey}:${session.userId}`,
         );
       } catch (error) {
         console.warn('[daily/answer] feed propagation failed', {
-          generatedQuestionId: question.id,
+          generatedQuestionId: question.generatedId,
           canonicalQuestionId,
           error: error instanceof Error ? error.message : String(error),
         });

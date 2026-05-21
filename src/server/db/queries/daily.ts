@@ -11,6 +11,7 @@ import {
   playerMastery,
   questions as canonicalQuestions,
   userDomainExclusions,
+  users,
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
@@ -494,6 +495,197 @@ export async function createDailyQueueItem(
       .set({ usedInQueue: true })
       .where(eq(generatedQuestions.id, generatedQuestionId));
 
+    return updated;
+  });
+}
+
+export type AuthoredPick = {
+  id: string;
+  creatorId: string | null;
+  questionText: string;
+  answerText: string;
+  alternateAnswers: string[];
+  factualExplanation: string | null;
+  canonicalSubcategory: string;
+  broadCategory: string | null;
+  category: string;
+  difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
+  authorName: string | null;
+  authorNote: string | null;
+};
+
+/**
+ * Returns up to `limit` vetted user-authored questions for the viewer's
+ * Daily 5, ranked by social tier: direct friends first, then friends-of-
+ * friends, then everyone else. The orchestrator tops up the remaining
+ * slots with LLM-generated questions.
+ *
+ * "Vetted" means publicStatus = 'eligible_pending' (set by the Haiku
+ * vetter in src/server/llm/vet-question.ts). The viewer is never offered
+ * their own question, deleted questions, or questions that have already
+ * appeared in any of their past daily queues.
+ */
+export async function pickEligibleAuthoredQuestions(
+  viewerUserId: string,
+  socialGraph: { direct: Set<string>; extended: Set<string> },
+  limit: number,
+): Promise<AuthoredPick[]> {
+  if (limit <= 0) return [];
+
+  // Collect every question id the viewer has already seen on any past daily
+  // queue. The graph is small per user (5 slots/day) so a Node-side scan is
+  // simpler than a JSONB containment subquery and dodges driver portability
+  // questions. Indexed via DailyQueue_user_id_idx.
+  const pastQueues = await db
+    .select({ slots: dailyQueues.slots })
+    .from(dailyQueues)
+    .where(eq(dailyQueues.userId, viewerUserId));
+  const seenQuestionIds = new Set<string>();
+  for (const row of pastQueues) {
+    for (const slot of asQueueSlots(row.slots)) {
+      if (slot.question_id) seenQuestionIds.add(slot.question_id);
+    }
+  }
+
+  // Pull a generous over-fetch so the in-memory tier sort has something to
+  // work with even when most of the recent pool came from the viewer's own
+  // FoF cluster. The DB-side ORDER BY is only the score+recency tiebreak.
+  const overFetch = Math.max(limit * 6, 30);
+  const candidates = await db
+    .select({
+      id: canonicalQuestions.id,
+      creatorId: canonicalQuestions.creatorId,
+      questionText: canonicalQuestions.questionText,
+      answerText: canonicalQuestions.answerText,
+      alternateAnswers: canonicalQuestions.acceptedAlternatives,
+      factualExplanation: canonicalQuestions.factualExplanation,
+      canonicalSubcategory: canonicalQuestions.canonicalSubcategory,
+      broadCategory: canonicalQuestions.broadCategory,
+      category: canonicalQuestions.category,
+      difficultyEstimate: canonicalQuestions.difficultyEstimate,
+      creatorNote: canonicalQuestions.creatorNote,
+      publicEligibilityScore: canonicalQuestions.publicEligibilityScore,
+      createdAt: canonicalQuestions.createdAt,
+    })
+    .from(canonicalQuestions)
+    .where(and(
+      eq(canonicalQuestions.publicStatus, 'eligible_pending'),
+      eq(canonicalQuestions.visibility, 'public'),
+      isNotNull(canonicalQuestions.creatorId),
+      isNotNull(canonicalQuestions.canonicalSubcategory),
+      isNull(canonicalQuestions.deletedAt),
+    ))
+    .orderBy(
+      desc(canonicalQuestions.publicEligibilityScore),
+      desc(canonicalQuestions.createdAt),
+    )
+    .limit(overFetch);
+
+  const tierOf = (creatorId: string | null): number => {
+    if (!creatorId) return 3;
+    if (socialGraph.direct.has(creatorId)) return 0;
+    if (socialGraph.extended.has(creatorId)) return 1;
+    return 2;
+  };
+
+  const filtered = candidates
+    .filter((row) => row.creatorId && row.creatorId !== viewerUserId)
+    .filter((row) => !seenQuestionIds.has(row.id))
+    .filter((row) => row.canonicalSubcategory && !isGenericSubcategory(row.canonicalSubcategory))
+    .map((row) => ({
+      row,
+      tier: tierOf(row.creatorId),
+      score: row.publicEligibilityScore ?? 0,
+      createdAt: row.createdAt?.getTime() ?? 0,
+    }))
+    .sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      if (a.score !== b.score) return b.score - a.score;
+      return b.createdAt - a.createdAt;
+    })
+    .slice(0, limit);
+
+  if (filtered.length === 0) return [];
+
+  // Hydrate author display names in one shot.
+  const authorIds = [...new Set(filtered.map((c) => c.row.creatorId).filter((id): id is string => Boolean(id)))];
+  const authorRows = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(inArray(users.id, authorIds));
+  const nameById = new Map(authorRows.map((u) => [u.id, u.displayName] as const));
+
+  return filtered.map(({ row }) => ({
+    id: row.id,
+    creatorId: row.creatorId,
+    questionText: row.questionText,
+    answerText: row.answerText,
+    alternateAnswers: row.alternateAnswers ?? [],
+    factualExplanation: row.factualExplanation,
+    canonicalSubcategory: row.canonicalSubcategory ?? '',
+    broadCategory: row.broadCategory,
+    category: String(row.category ?? ''),
+    difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
+    authorName: row.creatorId ? nameById.get(row.creatorId) ?? null : null,
+    authorNote: row.creatorNote ?? null,
+  } satisfies AuthoredPick));
+}
+
+/**
+ * Inserts a vetted user-authored question into the viewer's daily queue
+ * as a `source: 'friend'` slot. Counterpart to `createDailyQueueItem`,
+ * which only handles bot-generated questions. The QueueSlot schema
+ * already supports both shapes (src/server/daily/types.ts).
+ */
+export async function createDailyQueueItemFromAuthored(
+  userId: string,
+  authored: AuthoredPick,
+  position: number,
+): Promise<DailyQueueRow> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+
+  const slot: QueueSlot = {
+    slot_index: position,
+    source: 'friend',
+    question_id: authored.id,
+    author_id: authored.creatorId ?? undefined,
+    author_name: authored.authorName,
+    author_note: authored.authorNote,
+    domain: authored.canonicalSubcategory,
+    broad_category: authored.broadCategory,
+    category: authored.category || null,
+    question_text: authored.questionText,
+    difficulty_estimate: authored.difficultyEstimate ?? undefined,
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(dailyQueues)
+      .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
+      .limit(1);
+
+    if (!existing) {
+      const [created] = await tx
+        .insert(dailyQueues)
+        .values({
+          userId,
+          queueDate: assignmentDateStr,
+          slots: [slot],
+        })
+        .returning();
+      return created;
+    }
+
+    const slots = asQueueSlots(existing.slots).filter((item) => item.slot_index !== position);
+    const nextSlots = [...slots, slot].sort((a, b) => a.slot_index - b.slot_index);
+    const [updated] = await tx
+      .update(dailyQueues)
+      .set({ slots: nextSlots })
+      .where(eq(dailyQueues.id, existing.id))
+      .returning();
     return updated;
   });
 }

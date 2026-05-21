@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/weekly-ceremony",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/vet-questions",
+      "schedule": "0 * * * *"
     }
   ]
 }

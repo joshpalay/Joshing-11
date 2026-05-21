@@ -366,6 +366,9 @@ export async function createQuestion(params: {
   verified: boolean;
   llmSuggestedAnswer?: string | null;
   critiqueIterations: number;
+  publicStatus?: 'not_scored' | 'eligible_pending' | 'rejected' | 'opted_out' | 'migrated';
+  publicEligibilityScore?: number | null;
+  publicEligibilityReason?: string | null;
 }): Promise<{ id: string }> {
   await ensureQuestionSurfacePriorityColumn();
 
@@ -390,6 +393,9 @@ export async function createQuestion(params: {
     questionType: 'factual',
     visibility: 'public',
     status: params.verified ? 'verified' : 'unverified',
+    ...(params.publicStatus !== undefined ? { publicStatus: params.publicStatus } : {}),
+    ...(params.publicEligibilityScore !== undefined ? { publicEligibilityScore: params.publicEligibilityScore } : {}),
+    ...(params.publicEligibilityReason !== undefined ? { publicEligibilityReason: params.publicEligibilityReason } : {}),
   } satisfies Partial<typeof questions.$inferInsert>;
 
   const createWithValues = async (values: typeof questions.$inferInsert) => {
