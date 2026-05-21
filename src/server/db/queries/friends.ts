@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray, ne, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, or } from 'drizzle-orm';
 
-import { db, declaredInterests, friendships, users } from '@/server/db';
+import { db, declaredInterests, feedItems, friendships, users } from '@/server/db';
+import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 export type User = typeof users.$inferSelect;
 export type Friendship = typeof friendships.$inferSelect;
@@ -59,6 +60,40 @@ export async function getFriends(userId: string): Promise<User[]> {
     .from(users)
     .where(inArray(users.id, friendIds))
     .orderBy(asc(users.displayName), asc(users.phoneNumber));
+}
+
+export async function getRecentDirectSendRecipients(userId: string, limit = 3): Promise<User[]> {
+  if (limit <= 0) return [];
+
+  const recentRows = await db
+    .select({ recipientUserId: feedItems.recipientUserId })
+    .from(feedItems)
+    .where(and(
+      eq(feedItems.sourceUserId, userId),
+      eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
+    ))
+    .orderBy(desc(feedItems.sourceEventAt))
+    .limit(50);
+
+  const orderedDistinctIds: string[] = [];
+  const seen = new Set<string>();
+  for (const row of recentRows) {
+    if (seen.has(row.recipientUserId)) continue;
+    seen.add(row.recipientUserId);
+    orderedDistinctIds.push(row.recipientUserId);
+    if (orderedDistinctIds.length >= limit) break;
+  }
+  if (orderedDistinctIds.length === 0) return [];
+
+  const friends = await getFriends(userId);
+  const friendsById = new Map(friends.map((friend) => [friend.id, friend] as const));
+
+  const result: User[] = [];
+  for (const id of orderedDistinctIds) {
+    const friend = friendsById.get(id);
+    if (friend) result.push(friend);
+  }
+  return result;
 }
 
 export async function getFriendsHub(userId: string): Promise<FriendsHub> {
