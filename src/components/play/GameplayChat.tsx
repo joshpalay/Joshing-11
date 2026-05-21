@@ -324,6 +324,8 @@ function UserRow({ text }: { text: string }) {
 
 function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: string | null }) {
   const author = creatorName?.trim() ?? null;
+  const isBot = author?.toLowerCase() === 'joshing';
+  const showAuthor = author && !isBot;
   return (
     <div
       style={{
@@ -332,15 +334,25 @@ function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: stri
         paddingLeft: '8px',
       }}
     >
-      {author ? (
-        <p style={{ ...monoStyle, fontSize: '0.5rem', color: 'var(--text-muted)' }}>FROM [{author}]</p>
+      {showAuthor ? (
+        <p
+          style={{
+            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontSize: '0.7rem',
+            fontStyle: 'italic',
+            color: 'var(--text-muted)',
+          }}
+        >
+          From {firstNameFrom(author!)}.
+        </p>
       ) : null}
       <p
         style={{
-          marginTop: author ? '2px' : '0',
-          fontSize: '0.78rem',
+          marginTop: showAuthor ? '2px' : '0',
+          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontSize: '0.92rem',
           fontStyle: 'italic',
-          color: 'color-mix(in srgb, var(--text-muted) 78%, var(--text))',
+          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
           lineHeight: 1.35,
         }}
       >
