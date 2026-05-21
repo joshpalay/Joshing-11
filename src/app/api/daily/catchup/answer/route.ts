@@ -207,19 +207,28 @@ async function handleDailyCatchupAnswer({
     } satisfies QueueSlot;
   });
 
-  const masteryDelta = await writeMasteryEvent({
-    userId,
-    questionId: catchupItem.questionId,
-    domain: catchupItem.domain,
-    answerState: masteryAnswerState,
-    pointsAwarded,
-    sourceType: 'catchup',
-    sourceId: catchupItem.dailyQueueItemId,
-    broadCategory: catchupItem.broadCategory,
-    eventQuestionId: canonicalQuestionId,
-    basePoints: catchupItem.basePoints,
-    weight: catchupItem.basePoints > 0 ? pointsAwarded / catchupItem.basePoints : 0,
-  });
+  let masteryDelta = null;
+  try {
+    masteryDelta = await writeMasteryEvent({
+      userId,
+      questionId: catchupItem.questionId,
+      domain: catchupItem.domain,
+      answerState: masteryAnswerState,
+      pointsAwarded,
+      sourceType: 'catchup',
+      sourceId: catchupItem.dailyQueueItemId,
+      broadCategory: catchupItem.broadCategory,
+      eventQuestionId: canonicalQuestionId,
+      basePoints: catchupItem.basePoints,
+      weight: catchupItem.basePoints > 0 ? pointsAwarded / catchupItem.basePoints : 0,
+    });
+  } catch (error) {
+    // Cross-surface dedupe: the unique key on (source_type, question_id,
+    // answered_by_user_id) can fire when the same canonical question
+    // resurfaces via a different generated/queue slot. Mirror the live
+    // daily/answer route and let the rest of the submission complete.
+    console.warn('[daily/catchup/answer] writeMasteryEvent failed', error);
+  }
 
   await db
     .update(dailyQueues)
@@ -356,19 +365,26 @@ async function handleFeedCatchupAnswer({
         ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
         : 0;
 
-  const masteryDelta = await writeMasteryEvent({
-    userId,
-    questionId: feedRow.question.id,
-    domain: catchupItem.domain,
-    answerState: masteryAnswerState,
-    pointsAwarded,
-    sourceType: 'catchup',
-    sourceId: catchupItem.dailyQueueItemId,
-    broadCategory: catchupItem.broadCategory,
-    eventQuestionId: feedRow.question.id,
-    basePoints: catchupItem.basePoints,
-    weight: catchupItem.basePoints > 0 ? pointsAwarded / catchupItem.basePoints : 0,
-  });
+  let masteryDelta = null;
+  try {
+    masteryDelta = await writeMasteryEvent({
+      userId,
+      questionId: feedRow.question.id,
+      domain: catchupItem.domain,
+      answerState: masteryAnswerState,
+      pointsAwarded,
+      sourceType: 'catchup',
+      sourceId: catchupItem.dailyQueueItemId,
+      broadCategory: catchupItem.broadCategory,
+      eventQuestionId: feedRow.question.id,
+      basePoints: catchupItem.basePoints,
+      weight: catchupItem.basePoints > 0 ? pointsAwarded / catchupItem.basePoints : 0,
+    });
+  } catch (error) {
+    // See note in handleDailyCatchupAnswer: tolerate cross-surface dedupe
+    // conflicts on the (source_type, question_id, answered_by_user_id) key.
+    console.warn('[daily/catchup/answer] writeMasteryEvent (feed) failed', error);
+  }
 
   // Resolve the feed item so it stops surfacing in catch-up. We only flip
   // answerResult to 'correct' on recovery; the original feed-card history
