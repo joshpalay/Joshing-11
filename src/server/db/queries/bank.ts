@@ -190,7 +190,15 @@ export async function checkBankedQuestions(userId: string, questionIds: string[]
   return Object.fromEntries(uniqueIds.map((id) => [id, banked.has(id)]));
 }
 
-export async function getBankedQuestions(userId: string): Promise<BankedQuestion[]> {
+export async function getBankedQuestions(
+  userId: string,
+  options?: { onlyAuthored?: boolean },
+): Promise<BankedQuestion[]> {
+  const filters = [eq(userQuestionBank.userId, userId), isNull(questions.deletedAt)];
+  if (options?.onlyAuthored) {
+    filters.push(eq(questions.creatorId, userId));
+  }
+
   const rows = await db
     .select({
       bank: userQuestionBank,
@@ -203,7 +211,7 @@ export async function getBankedQuestions(userId: string): Promise<BankedQuestion
     .from(userQuestionBank)
     .innerJoin(questions, eq(userQuestionBank.questionId, questions.id))
     .innerJoin(users, eq(questions.creatorId, users.id))
-    .where(and(eq(userQuestionBank.userId, userId), isNull(questions.deletedAt)))
+    .where(and(...filters))
     .orderBy(desc(userQuestionBank.addedAt));
 
   const answerersByQuestion = await getAnswerersForQuestions(
