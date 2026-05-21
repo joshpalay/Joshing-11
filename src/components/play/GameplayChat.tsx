@@ -675,6 +675,9 @@ function ResultRow({
                 <span style={{ fontWeight: 600 }}>Answer:</span> {correctAnswer}
               </p>
             ) : null}
+            <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Now it&rsquo;s in yours too
+            </p>
             {consolation ? (
               <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                 {consolation}
