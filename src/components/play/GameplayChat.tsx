@@ -110,6 +110,26 @@ const monoStyle: CSSProperties = {
   letterSpacing: '0.06em',
 };
 
+const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
+  (name) => `${name}’s world includes this`,
+  (name) => `${name} carries this one`,
+  (name) => `${name} thought you might`,
+];
+
+function firstNameFrom(creatorName: string): string {
+  const trimmed = creatorName.trim();
+  const space = trimmed.indexOf(' ');
+  return space === -1 ? trimmed : trimmed.slice(0, space);
+}
+
+function wrongNamedSubLabel(creatorName: string | null, variant: number): string | null {
+  if (!creatorName) return null;
+  if (creatorName.trim().toLowerCase() === 'joshing') return null;
+  const firstName = firstNameFrom(creatorName);
+  if (!firstName) return null;
+  return WRONG_NAMED_SUBLABEL[variant % WRONG_NAMED_SUBLABEL.length]!(firstName);
+}
+
 function SystemRow({ text }: { text: string }) {
   return (
     <div className="flex justify-center py-0.5">
@@ -678,6 +698,14 @@ function ResultRow({
             <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
               Now it&rsquo;s in yours too
             </p>
+            {(() => {
+              const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant);
+              return namedSubLabel ? (
+                <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {namedSubLabel}
+                </p>
+              ) : null;
+            })()}
             {consolation ? (
               <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                 {consolation}
