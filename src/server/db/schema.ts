@@ -397,6 +397,10 @@ export const questionReactions = pgTable(
     contextId: text('contextId'),
     reactionType: text('reactionType').notNull(),
     customMessage: text('customMessage'),
+    // §8.22 opt-in. When true on a wrong-answer reaction, the answerer
+    // consents to the question's author seeing their literal submitted text
+    // alongside the reaction.
+    includeSubmittedAnswer: boolean('includeSubmittedAnswer').notNull().default(false),
     repliedAt: timestamp('repliedAt', { withTimezone: true }),
     createdAt: createdAt(),
   },
@@ -715,6 +719,7 @@ export const feedItems = pgTable(
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
     quip: text('quip'),
+    catchupResolvedAt: timestamp('catchupResolvedAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

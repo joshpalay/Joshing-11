@@ -136,7 +136,8 @@ export async function register() {
           ADD COLUMN IF NOT EXISTS "personalMessage" text,
           ADD COLUMN IF NOT EXISTS "sourceResult" text,
           ADD COLUMN IF NOT EXISTS "submittedAnswer" text,
-          ADD COLUMN IF NOT EXISTS "quip" text
+          ADD COLUMN IF NOT EXISTS "quip" text,
+          ADD COLUMN IF NOT EXISTS "catchupResolvedAt" timestamptz
       `);
     } catch {
       // FeedItem table may not exist yet — migrate() handles initial creation.
@@ -332,6 +333,20 @@ export async function register() {
     } catch {
       // User table may not exist yet on a fresh database — migrate() creates
       // it before this migration runs.
+    }
+
+    // Migration 0040 adds includeSubmittedAnswer to QuestionReaction (§8.22
+    // opt-in for surfacing answerer text to the question author). Guard for
+    // preview/production databases that may have this migration recorded
+    // without the column actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "QuestionReaction"
+          ADD COLUMN IF NOT EXISTS "includeSubmittedAnswer" boolean NOT NULL DEFAULT false
+      `);
+    } catch {
+      // QuestionReaction table may not exist yet on a fresh database —
+      // migrate() creates it before this migration runs.
     }
 
     try {

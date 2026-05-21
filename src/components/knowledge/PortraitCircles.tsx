@@ -46,6 +46,19 @@ type DomainColor = {
   text: string
 }
 
+// Section header relabel — "General Knowledge" is the catch-all bucket the
+// categorizer falls back to, but it shouldn't be shown to users as a category
+// name. ("Other" already normalizes to "General Knowledge" via
+// normalizeBroadCategory.) Render those entries under a softer label.
+const SECTION_LABEL_OVERRIDES: Record<string, string> = {
+  'General Knowledge': 'Other interests',
+  Other: 'Other interests',
+}
+
+function displaySectionLabel(broadCategory: string): string {
+  return SECTION_LABEL_OVERRIDES[broadCategory] ?? broadCategory
+}
+
 const DOMAIN_COLORS: Record<string, DomainColor> = {
   Literature: {
     primary: '#c0392b',
@@ -151,7 +164,7 @@ function buildSections(
     }
     return Array.from(domainMap.entries())
       .map(([domain, cats]) => ({
-        label: domain,
+        label: displaySectionLabel(domain),
         color: getPortraitDomainColor(domain).primary,
         entries: [...cats].sort(
           (a, b) => b.totalMasteryPoints - a.totalMasteryPoints
@@ -381,12 +394,10 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
 
   const validEntries = useMemo(
     () =>
-      entries
-        .map((entry) => ({
-          ...entry,
-          broadCategory: normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge',
-        }))
-        .filter((e) => e.broadCategory && e.broadCategory !== 'General Knowledge'),
+      entries.map((entry) => ({
+        ...entry,
+        broadCategory: normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge',
+      })),
     [entries]
   )
   const isSparse = validEntries.length < SPARSE_THRESHOLD
@@ -443,7 +454,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
                   }}
                 />
                 <span style={{ fontSize: 9.5, color: dc.text, opacity: 0.85 }}>
-                  {domain}
+                  {displaySectionLabel(domain)}
                 </span>
               </div>
             )

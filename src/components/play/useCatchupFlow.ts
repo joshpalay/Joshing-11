@@ -285,10 +285,14 @@ export function useCatchupFlow() {
         },
       ]);
 
-      const [queueId, slotIndexValue] = item.dailyQueueItemId.split(':');
-      const slotIndex = Number(slotIndexValue);
-      if (queueId && Number.isInteger(slotIndex)) {
-        void fetchBreadcrumbForCatchupMessage(queueId, slotIndex, resultMessageId, setMessages);
+      // Breadcrumbs are computed from daily-queue slots only; feed-sourced
+      // catch-up items use a `feed:<feedItemId>` ID and have no slot to look up.
+      if (!item.dailyQueueItemId.startsWith('feed:')) {
+        const [queueId, slotIndexValue] = item.dailyQueueItemId.split(':');
+        const slotIndex = Number(slotIndexValue);
+        if (queueId && Number.isInteger(slotIndex)) {
+          void fetchBreadcrumbForCatchupMessage(queueId, slotIndex, resultMessageId, setMessages);
+        }
       }
 
       window.setTimeout(() => {

@@ -228,7 +228,16 @@ function DailySetupContent() {
       });
       const queueBody = await queueResponse.json().catch(() => null);
       if (!queueResponse.ok) {
-        if (domainMode === 'custom' && selectedDomains.size > 0) {
+        // Only the "no knowledge base for this domain" failure should send the
+        // user to the empty-state knowledge page. Transient generation
+        // failures (503 `generation_failed`, e.g. LLM outage or exhausted
+        // credits) should surface the server's banner so we don't lie that
+        // the topic itself is missing.
+        if (
+          queueBody?.error === 'no_knowledge_base' &&
+          domainMode === 'custom' &&
+          selectedDomains.size > 0
+        ) {
           const [domain] = Array.from(selectedDomains);
           router.push(`/knowledge?emptyDomain=${encodeURIComponent(domain)}`);
           return;

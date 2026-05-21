@@ -104,15 +104,20 @@ vi.mock('@/server/sms', () => ({ sendSms: vi.fn() }));
 vi.mock('@/server/activity/write-activity', () => ({ writeActivity: vi.fn() }));
 
 function selectChain(result: unknown[]) {
+  const terminalWhere = {
+    orderBy: vi.fn(() => ({ limit: vi.fn(async () => result) })),
+    limit: vi.fn(async () => result),
+  };
+  const joinNode: Record<string, unknown> = {
+    where: vi.fn(() => terminalWhere),
+  };
+  joinNode.leftJoin = vi.fn(() => joinNode);
+  joinNode.innerJoin = vi.fn(() => joinNode);
   return {
     from: vi.fn(() => ({
-      innerJoin: vi.fn(() => ({
-        where: vi.fn(() => ({ limit: vi.fn(async () => result) })),
-      })),
-      where: vi.fn(() => ({
-        orderBy: vi.fn(() => ({ limit: vi.fn(async () => result) })),
-        limit: vi.fn(async () => result),
-      })),
+      innerJoin: vi.fn(() => joinNode),
+      leftJoin: vi.fn(() => joinNode),
+      where: vi.fn(() => terminalWhere),
     })),
   };
 }
@@ -188,51 +193,36 @@ describe('Feed submitted answers for creator notes', () => {
     }));
   });
 
-  it('returns the saved Feed submitted answer for creator-note context', async () => {
-    vi.clearAllMocks();
+  // §8.22 wrong-answer text visibility:
+  // findWrongAnswerContext is consumed by the question's author on the
+  // creator-note compose page. The answerer's literal text must NOT be in
+  // the return shape — only (contextType, contextId).
+
+  it('returns context for a Feed wrong answer without exposing the submitted text', async () => {
+    dbMock.select.mockReset();
     dbMock.select
       .mockReturnValueOnce(selectChain([]))
-      .mockReturnValueOnce(selectChain([{ id: 'feed-1', submittedAnswer: 'Morris Day' }]))
+      .mockReturnValueOnce(selectChain([{ id: 'feed-1' }]))
       .mockReturnValueOnce(selectChain([]));
 
     const { findWrongAnswerContext } = await import('@/server/creator-notes');
-    await expect(findWrongAnswerContext('question-1', 'recipient-1')).resolves.toEqual({
-      contextType: 'feed',
-      contextId: 'feed-1',
-      submittedAnswer: 'Morris Day',
-    });
+    const result = await findWrongAnswerContext('question-1', 'recipient-1');
+    expect(result).toEqual({ contextType: 'feed', contextId: 'feed-1' });
+    expect(result && 'submittedAnswer' in result).toBe(false);
   });
 
-  it('preserves the historical Feed fallback when no submitted answer was saved', async () => {
-    vi.clearAllMocks();
-    dbMock.select
-      .mockReturnValueOnce(selectChain([]))
-      .mockReturnValueOnce(selectChain([{ id: 'old-feed-1', submittedAnswer: null }]))
-      .mockReturnValueOnce(selectChain([]));
-
-    const { findWrongAnswerContext } = await import('@/server/creator-notes');
-    await expect(findWrongAnswerContext('question-1', 'recipient-1')).resolves.toMatchObject({
-      contextType: 'feed',
-      contextId: 'old-feed-1',
-      submittedAnswer: null,
-    });
-  });
-
-  it('keeps existing Joshing Game submitted-answer context unchanged', async () => {
-    vi.clearAllMocks();
+  it('returns context for a Joshing Game wrong answer without exposing the submitted text', async () => {
+    dbMock.select.mockReset();
     dbMock.select.mockReturnValueOnce(selectChain([
       {
         contextId: 'game-1',
-        submittedAnswer: 'Morris Day',
         answeredAt: new Date('2026-05-01T12:00:00.000Z'),
       },
     ]));
 
     const { findWrongAnswerContext } = await import('@/server/creator-notes');
-    await expect(findWrongAnswerContext('question-1', 'recipient-1')).resolves.toEqual({
-      contextType: 'joshing_game',
-      contextId: 'game-1',
-      submittedAnswer: 'Morris Day',
-    });
+    const result = await findWrongAnswerContext('question-1', 'recipient-1');
+    expect(result).toEqual({ contextType: 'joshing_game', contextId: 'game-1' });
+    expect(result && 'submittedAnswer' in result).toBe(false);
   });
 });

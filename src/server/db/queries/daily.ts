@@ -1,10 +1,11 @@
-import { and, asc, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 
 import {
   dailyPreferences,
   dailyQueues,
   db,
   declaredInterests,
+  feedItems,
   generatedQuestions,
   masteryEvents,
   playerMastery,
@@ -15,7 +16,7 @@ import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
-import { asQueueSlots, dailyQueueItemId } from '@/server/daily/catchup';
+import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId } from '@/server/daily/catchup';
 import type { QueueSlot } from '@/server/daily/types';
 import {
   catchUpExpiresAt,
@@ -28,6 +29,7 @@ import {
   dedupeCatchUpItems,
   orderCatchUpItems,
 } from '@/server/play/catch-up-turn-sequencing';
+import { getBasePoints } from '@/server/mastery/scoring';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 function asQueueSlotDifficulty(
@@ -49,14 +51,27 @@ export type KnowledgeBaseDomain = {
 export type DailyPreferenceRow = typeof dailyPreferences.$inferSelect;
 export type DailyQueueRow = typeof dailyQueues.$inferSelect;
 
+export type CatchupSurface = 'daily' | 'feed';
+
 export type CatchupQueueItem = {
+  /**
+   * Opaque dispatch ID. Daily slots use `${queueId}:${slotIndex}` (legacy
+   * format the client already parses); feed items use `feed:${feedItemId}`.
+   * Routes that receive this back from the client should resolve it via
+   * `parseCatchupItemId` rather than splitting manually.
+   */
   dailyQueueItemId: string;
-  queueId: string;
+  surface: CatchupSurface;
+  /** Daily-only — null for feed items. */
+  queueId: string | null;
+  /** Daily-only — null for feed items. */
+  slotIndex: number | null;
+  /** Feed-only — null for daily items. */
+  feedItemId: string | null;
   queueDate: string;
   queueAge: number;
   expiresAt: string;
   expiresSoon: boolean;
-  slotIndex: number;
   questionId: string;
   questionText: string;
   correctAnswer: string;
@@ -254,12 +269,24 @@ export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
 export async function getCatchupQuestions(userId: string): Promise<CatchupQuestion[]> {
   const { assignmentDateStr } = getDailyAssignmentBounds();
 
+  const [dailyItems, feedItemsForCatchup] = await Promise.all([
+    getDailyCatchupItems(userId, assignmentDateStr),
+    getFeedCatchupItems(userId, assignmentDateStr),
+  ]);
+
+  return dedupeCatchUpItems(orderCatchUpItems([...dailyItems, ...feedItemsForCatchup]));
+}
+
+async function getDailyCatchupItems(
+  userId: string,
+  assignmentDateStr: string,
+): Promise<CatchupQuestion[]> {
   const queues = await db
     .select()
     .from(dailyQueues)
     .where(and(
       eq(dailyQueues.userId, userId),
-      lt(dailyQueues.queueDate, assignmentDateStr),
+      lte(dailyQueues.queueDate, assignmentDateStr),
     ))
     .orderBy(asc(dailyQueues.queueDate));
 
@@ -284,7 +311,7 @@ export async function getCatchupQuestions(userId: string): Promise<CatchupQuesti
     ));
   const questionById = new Map(questions.map((question) => [question.id, question]));
 
-  const mapped = candidateSlots
+  return candidateSlots
     .map(({ queue, slot }): CatchupQuestion | null => {
       const question = slot.generated_question_id ? questionById.get(slot.generated_question_id) : null;
       if (!question) return null;
@@ -298,12 +325,14 @@ export async function getCatchupQuestions(userId: string): Promise<CatchupQuesti
       if (isGenericSubcategory(domain)) return null;
       return {
         dailyQueueItemId: dailyQueueItemId(queue.id, slot.slot_index),
+        surface: 'daily',
         queueId: queue.id,
+        slotIndex: slot.slot_index,
+        feedItemId: null,
         queueDate,
         queueAge: queueAgeInDays(queueDate, assignmentDateStr),
         expiresAt,
         expiresSoon: expiresWithin24Hours(expiresAt),
-        slotIndex: slot.slot_index,
         questionId: question.id,
         questionText: slot.question_text || question.questionText,
         correctAnswer: question.answer,
@@ -319,8 +348,79 @@ export async function getCatchupQuestions(userId: string): Promise<CatchupQuesti
       } satisfies CatchupQuestion;
     })
     .filter((question): question is CatchupQuestion => Boolean(question));
+}
 
-  return dedupeCatchUpItems(orderCatchUpItems(mapped));
+async function getFeedCatchupItems(
+  userId: string,
+  assignmentDateStr: string,
+): Promise<CatchupQuestion[]> {
+  // Mirror the daily lookback: only surface feed-missed items whose source
+  // event landed within the catch-up window. sourceEventAt is the canonical
+  // "when this hit your feed" timestamp and is already indexed.
+  const oldestDate = new Date(`${assignmentDateStr}T00:00:00.000Z`);
+  oldestDate.setUTCDate(oldestDate.getUTCDate() - CATCHUP_LOOKBACK_DAYS);
+
+  let rows: Array<{ feedItem: typeof feedItems.$inferSelect; question: typeof canonicalQuestions.$inferSelect }>;
+  try {
+    rows = await db
+      .select({ feedItem: feedItems, question: canonicalQuestions })
+      .from(feedItems)
+      .innerJoin(canonicalQuestions, eq(feedItems.questionId, canonicalQuestions.id))
+      .where(and(
+        eq(feedItems.recipientUserId, userId),
+        eq(feedItems.state, 'answered'),
+        eq(feedItems.answerResult, 'incorrect'),
+        isNull(feedItems.catchupResolvedAt),
+        gte(feedItems.sourceEventAt, oldestDate),
+      ))
+      .orderBy(desc(feedItems.sourceEventAt));
+  } catch (error) {
+    // catchupResolvedAt is added by migration 0038; tolerate a brief window
+    // where the column is missing so the homepage doesn't 500 on first boot.
+    if (pgErrorCode(error) === '42703') return [];
+    throw error;
+  }
+
+  return rows
+    .map(({ feedItem, question }): CatchupQuestion | null => {
+      const domain = question.canonicalSubcategory || question.broadCategory || question.category;
+      if (!domain || isGenericSubcategory(domain)) return null;
+      const queueDate = feedItem.sourceEventAt.toISOString().slice(0, 10);
+      const expiresAt = catchUpExpiresAt(queueDate);
+      const difficulty = asQueueSlotDifficulty(
+        question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null,
+      ) ?? null;
+      const basePoints = getBasePoints(difficulty, 'first_correct');
+      const explanation = question.explainerFullWrong
+        ?? question.explainerFull
+        ?? question.explainerBrief
+        ?? question.factualExplanation
+        ?? null;
+      return {
+        dailyQueueItemId: feedCatchupItemId(feedItem.id),
+        surface: 'feed',
+        queueId: null,
+        slotIndex: null,
+        feedItemId: feedItem.id,
+        queueDate,
+        queueAge: queueAgeInDays(queueDate, assignmentDateStr),
+        expiresAt,
+        expiresSoon: expiresWithin24Hours(expiresAt),
+        questionId: question.id,
+        questionText: question.questionText,
+        correctAnswer: question.answerText,
+        alternateAnswers: question.acceptedAlternatives ?? [],
+        explanation,
+        domain,
+        domainDisplayName: categoryLabel(domain),
+        broadCategory: question.broadCategory ?? domain,
+        basePoints,
+        difficultyEstimate: difficulty,
+        submittedAnswer: feedItem.submittedAnswer ?? null,
+        wasSkipped: false,
+      } satisfies CatchupQuestion;
+    })
+    .filter((item): item is CatchupQuestion => Boolean(item));
 }
 
 export async function createDailyQueueItem(

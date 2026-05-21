@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { dailyQueues, db } from '@/server/db';
+import { dailyQueues, db, feedItems } from '@/server/db';
 import { getCatchupQuestions } from '@/server/db/queries/daily';
 import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
@@ -42,6 +42,34 @@ export async function POST(request: NextRequest) {
     .find((item) => item.dailyQueueItemId === parsed.dailyQueueItemId);
   if (!catchupItem) return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found');
 
+  if (catchupItem.surface === 'feed') {
+    if (!catchupItem.feedItemId) {
+      return catchUpErrorResponse(500, 'invalid_state', 'Feed catch-up item missing feed reference');
+    }
+    const [feedItem] = await db
+      .select()
+      .from(feedItems)
+      .where(eq(feedItems.id, catchupItem.feedItemId))
+      .limit(1);
+    if (!feedItem || feedItem.recipientUserId !== session.userId) {
+      return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found');
+    }
+    if (feedItem.catchupResolvedAt) {
+      return catchUpErrorResponse(400, 'invalid_state', 'catch-up item is already closed');
+    }
+
+    await db
+      .update(feedItems)
+      .set({ catchupResolvedAt: new Date() })
+      .where(eq(feedItems.id, feedItem.id));
+
+    return Response.json({ dismissed: true });
+  }
+
+  if (catchupItem.queueId === null || catchupItem.slotIndex === null) {
+    return catchUpErrorResponse(500, 'invalid_state', 'Daily catch-up item missing queue reference');
+  }
+
   const [queue] = await db
     .select()
     .from(dailyQueues)
@@ -53,7 +81,10 @@ export async function POST(request: NextRequest) {
 
   const slots = asQueueSlots(queue.slots);
   const slot = findQueueSlotBySlotIndex(slots, catchupItem.slotIndex);
-  if (!slot || slot.answered || slot.dismissed_at) {
+  if (!slot || slot.dismissed_at) {
+    return catchUpErrorResponse(400, 'invalid_state', 'catch-up item is already closed');
+  }
+  if (slot.answered && slot.answer_state !== 'incorrect') {
     return catchUpErrorResponse(400, 'invalid_state', 'catch-up item is already closed');
   }
 

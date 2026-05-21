@@ -20,11 +20,17 @@ export function isCatchUpQueueDateEligible(
   lookbackDays = CATCHUP_LOOKBACK_DAYS,
 ): boolean {
   const oldestDate = minusUtcDays(assignmentDate, lookbackDays);
-  return queueDate < assignmentDate && queueDate >= oldestDate;
+  // Today's queue is eligible so wrong answers from today's Daily 5 surface
+  // immediately rather than waiting until tomorrow.
+  return queueDate <= assignmentDate && queueDate >= oldestDate;
 }
 
 export function isCatchUpSlotEligible(slot: QueueSlot): boolean {
-  return !slot.answered && !slot.dismissed_at && Boolean(slot.generated_question_id);
+  if (slot.dismissed_at) return false;
+  if (!slot.generated_question_id) return false;
+  // Wrong daily-5 answers are eligible for re-attempt; correct ones are not.
+  if (slot.answered) return slot.answer_state === 'incorrect';
+  return true;
 }
 
 export function expiresWithin24Hours(expiresAt: string, now = new Date()): boolean {

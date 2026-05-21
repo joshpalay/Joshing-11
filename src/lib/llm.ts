@@ -127,6 +127,28 @@ function summarizeError(error: unknown): Record<string, unknown> {
   };
 }
 
+// Operator-actionable errors deserve a louder log line than the generic
+// "[llm] error" warn so they don't get lost in the noise of timeouts /
+// model overload. These are the cases where the model is fine but the
+// account/key is broken: refilling credits, rotating the key, or waiting
+// out a rate limit is the only fix, and the user-visible symptom (zero
+// generated questions, "Today's Daily Five is taking longer than usual")
+// looks identical to a model hiccup.
+function classifyOperatorError(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const status = (error as { status?: number }).status;
+  const apiMessage = (error as { error?: { message?: string } }).error?.message ?? '';
+  const combined = `${error.message} ${apiMessage}`;
+
+  if (status === 429) return 'RATE_LIMITED';
+  if (status === 401 || status === 403) return 'AUTH_FAILED';
+  if (status === 402) return 'PAYMENT_REQUIRED';
+  if (status === 400 && /credit balance|billing|insufficient.*credit/i.test(combined)) {
+    return 'CREDITS_EXHAUSTED';
+  }
+  return null;
+}
+
 function logFallback(scope: string, reason: string, extra?: Record<string, unknown>) {
   console.warn(`[LLM] ${scope} fallback: ${reason}`, extra ?? {});
 }
@@ -158,12 +180,22 @@ export async function loggedMessagesCreate(
     });
     return response;
   } catch (error) {
-    console.warn('[llm] error', {
-      scope,
-      model: params.model,
-      duration_ms: Date.now() - startedAt,
-      ...summarizeError(error),
-    });
+    const operatorErrorKind = classifyOperatorError(error);
+    if (operatorErrorKind) {
+      console.error(`[llm] ${operatorErrorKind}`, {
+        scope,
+        model: params.model,
+        duration_ms: Date.now() - startedAt,
+        ...summarizeError(error),
+      });
+    } else {
+      console.warn('[llm] error', {
+        scope,
+        model: params.model,
+        duration_ms: Date.now() - startedAt,
+        ...summarizeError(error),
+      });
+    }
     throw error;
   }
 }
@@ -230,12 +262,15 @@ function tidySubcategoryCandidate(value: string): string | null {
     .replace(/[\s"'“”‘’`]+$/g, '')
     .replace(/^[\s"'“”‘’`]+/g, '')
     .trim();
-  const firstClause = withoutPrefix.split(/(?:\s+[-–—]\s+|[.!?;]|\n)/)[0]?.trim() ?? '';
+  // Split on em-dashes, semicolons, newlines, and `! ?`. Periods are intentionally
+  // omitted: splitting on `.` shreds abbreviations like "Mr. Hooper" or "T. S. Eliot"
+  // into the leading fragment, which then becomes a junk canonical_subcategory.
+  const firstClause = withoutPrefix.split(/(?:\s+[-–—]\s+|[!?;]|\n)/)[0]?.trim() ?? '';
   const normalized = firstClause.replace(/\s+/g, ' ').trim();
   if (!normalized) return null;
 
   const words = normalized.split(/\s+/);
-  if (words.length > 8 || normalized.length > 80) return null;
+  if (normalized.length < 3 || words.length > 8 || normalized.length > 80) return null;
   if (QUESTION_WORDS_NORMALIZED.has(normalizeCategoryLabel(normalized))) return null;
   return normalized;
 }
@@ -254,7 +289,10 @@ function quotedCandidates(value: string): string[] {
 
 function capitalizedPhraseCandidates(value: string): string[] {
   const candidates: string[] = [];
-  const phrasePattern = /\b(?:[A-Z][A-Za-z0-9]*(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,})(?:[-\s]+(?:[A-Z][A-Za-z0-9]*(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,}|of|the|and|for|in|to|a|an))*\b/g;
+  // Leading atom requires 2+ chars so single-letter words like "A" in
+  // "A loaf of bread..." don't get picked as a category. Acronyms ([A-Z]{2,})
+  // and any continuation atoms still match.
+  const phrasePattern = /\b(?:[A-Z][A-Za-z0-9]+(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,})(?:[-\s]+(?:[A-Z][A-Za-z0-9]*(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,}|of|the|and|for|in|to|a|an))*\b/g;
   for (const match of value.matchAll(phrasePattern)) {
     const phrase = match[0]?.trim();
     if (phrase) candidates.push(phrase);
@@ -382,9 +420,29 @@ function fallbackGrading(): GradingResponse {
   return { result: 'wrong', confidence: 0, reason: 'llm_error', consolation: null };
 }
 
+// "General Knowledge" and "Other" must never reach the UI as a broad_category.
+// The prompt forbids them, but this is a last-line guard if the LLM still
+// returns one. Remaps to the closest thematic bucket; "Pop Culture" is the
+// most flexible host for "doesn't quite fit anywhere else" topics.
+const FORBIDDEN_BROAD_CATEGORIES_NORMALIZED = new Set([
+  'general knowledge',
+  'general',
+  'other',
+  'potpourri',
+  'trivia',
+]);
+
+function avoidForbiddenBroadCategory(broadCategory: string): string {
+  const normalized = broadCategory.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  if (FORBIDDEN_BROAD_CATEGORIES_NORMALIZED.has(normalized)) {
+    return 'Pop Culture';
+  }
+  return broadCategory;
+}
+
 function fallbackCategorization(questionText = '', answerText = ''): CategoryResult {
   return finalizeCategorization(
-    { subcategory: 'General Knowledge', broad_category: 'General Knowledge', confidence: 0 },
+    { subcategory: 'General Knowledge', broad_category: 'Pop Culture', confidence: 0 },
     questionText,
     answerText
   );
@@ -507,8 +565,8 @@ Rules:
 - The subcategory must be as specific as the question demands.
 - Never normalize upward to a broad field if a narrower label is justified.
 - Use title case for both labels.
-- broad_category must be a stable top-level bucket, not an author/work/movement-specific territory (e.g., use "Literature" for James Joyce, Irish Modernism, novels, poetry, or fiction; use "Music", "History", "Film & Television", "Science", "Philosophy", "Language", "Sports", "Pop Culture", or "General Knowledge").
-- Never return "Other" as a broad_category or subcategory. Use "General Knowledge" as the broad_category only when no more precise top-level bucket applies.
+- broad_category must be a stable top-level bucket, not an author/work/movement-specific territory (e.g., use "Literature" for James Joyce, Irish Modernism, novels, poetry, or fiction; use "Music", "History", "Film & Television", "Science", "Philosophy", "Language", "Sports", or "Pop Culture"). For lifestyle/wellness/craft/community topics that don't fit those buckets, invent a thematic top-level label like "Health & Wellness", "Crafts & Making", or "Communities & Identities" — but keep it broad enough to host many subcategories.
+- NEVER return "General Knowledge" or "Other" as the broad_category — these are explicitly forbidden catch-alls. If no bucket fits, pick the closest thematic top-level label (or invent one as above). Same prohibition applies to the subcategory.
 - subcategory should be narrow and portrait-friendly.
 - The subcategory must always be narrower than the broad_category. Never return the broad_category value itself as the subcategory (e.g. if broad_category is "Pop Culture", the subcategory must be something more specific than "Pop Culture"; if broad_category is "Music", the subcategory must be more specific than "Music").
 - For music, film, TV, or pop culture questions: name the specific artist, franchise, era, or cultural moment — not the genre or medium (e.g. "Late-Career David Bowie", "MCU Phase 3", "Drag Race Seasons 1–5", "Early 2010s Internet Memes", "Survivor Original Era").
@@ -557,10 +615,20 @@ Categorize this question. Return JSON only.`;
     }
 
     let subcategory = asTrimmedString(parsed.subcategory);
-    const broadCategory = asTrimmedString(parsed.broad_category);
+    let broadCategory = asTrimmedString(parsed.broad_category);
     if (!subcategory || !broadCategory) {
       logFallback('categorizeQuestion', 'missing_required_fields');
       return fallbackCategorization(questionText, answerText);
+    }
+
+    const safeBroadCategory = avoidForbiddenBroadCategory(broadCategory);
+    if (safeBroadCategory !== broadCategory) {
+      console.warn('[categorizeQuestion] remapped forbidden broad_category', {
+        attempted: broadCategory,
+        remappedTo: safeBroadCategory,
+        subcategory,
+      });
+      broadCategory = safeBroadCategory;
     }
 
     if (isTooGenericSubcategory(subcategory, broadCategory)) {

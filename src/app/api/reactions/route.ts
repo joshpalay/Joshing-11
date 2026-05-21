@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { isReactionKey, type ReactionKey } from '@/lib/reactions';
+import { isReactionKey, isWrongAnswerReactionKey, type ReactionKey } from '@/lib/reactions';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, joshingGameQuestions, joshingGameRecipients, joshingGames } from '@/server/db';
 import {
@@ -19,6 +19,7 @@ type ReactionBody = {
   contextId: string | null;
   reactionType: ReactionKey;
   customMessage?: string | null;
+  includeSubmittedAnswer: boolean;
 };
 
 function parseBody(value: unknown): ReactionBody | null {
@@ -33,10 +34,14 @@ function parseBody(value: unknown): ReactionBody | null {
     : null;
   const reactionType = typeof record.reactionType === 'string' ? record.reactionType.trim() : '';
   const customMessage = typeof record.customMessage === 'string' ? record.customMessage.trim().slice(0, 160) : null;
+  // §8.22: only wrong-answer reactions are eligible to attach submitted text.
+  // For any other reactionType we coerce to false even if the client asks.
+  const includeSubmittedAnswerRequested = record.includeSubmittedAnswer === true;
+  const includeSubmittedAnswer = includeSubmittedAnswerRequested && isWrongAnswerReactionKey(reactionType);
 
   if (!questionId || !contextType || !isReactionKey(reactionType)) return null;
 
-  return { questionId, contextType, contextId, reactionType, customMessage };
+  return { questionId, contextType, contextId, reactionType, customMessage, includeSubmittedAnswer };
 }
 
 async function resolveRecipient(body: ReactionBody, senderUserId: string): Promise<string | null> {
@@ -105,6 +110,7 @@ export async function POST(request: NextRequest) {
     contextId: body.contextId,
     reactionType: body.reactionType,
     customMessage: body.customMessage,
+    includeSubmittedAnswer: body.includeSubmittedAnswer,
   });
 
   return NextResponse.json(created, { status: 201 });

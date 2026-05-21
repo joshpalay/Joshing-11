@@ -32,6 +32,7 @@ type CreateReactionParams = {
   contextId: string | null;
   reactionType: ReactionKey;
   customMessage?: string | null;
+  includeSubmittedAnswer?: boolean;
 };
 
 function displayName(value: string | null, fallback = 'Someone'): string {
@@ -67,6 +68,7 @@ export async function createReaction(params: CreateReactionParams): Promise<{ id
         contextId: params.contextId,
         reactionType: params.reactionType,
         customMessage: params.customMessage?.trim() ? params.customMessage.trim().slice(0, 160) : null,
+        includeSubmittedAnswer: params.includeSubmittedAnswer ?? false,
       })
       .returning({ id: questionReactions.id });
 

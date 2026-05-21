@@ -77,11 +77,16 @@ export async function promptCreatorNoteAfterWrongAnswer(params: {
   }
 }
 
+// §8.22: the answerer's submitted text is intentionally NOT returned here.
+// This helper exists to locate the (contextType, contextId) for a wrong answer
+// — the question's author calls it from the creator-note compose page and
+// must not see the literal text. The activity-feed hydrator queries
+// `joshingGameResponses.submittedAnswer` / `feedItems.submittedAnswer`
+// directly when the viewer is the answerer (their own text).
 export async function findWrongAnswerContext(questionId: string, recipientUserId: string) {
   const [gameResponse] = await db
     .select({
       contextId: joshingGameResponses.gameId,
-      submittedAnswer: joshingGameResponses.submittedAnswer,
       answeredAt: joshingGameResponses.answeredAt,
     })
     .from(joshingGameResponses)
@@ -97,15 +102,11 @@ export async function findWrongAnswerContext(questionId: string, recipientUserId
     return {
       contextType: 'joshing_game' as const,
       contextId: gameResponse.contextId,
-      submittedAnswer: gameResponse.submittedAnswer,
     };
   }
 
   const [feedItem] = await db
-    .select({
-      id: feedItems.id,
-      submittedAnswer: feedItems.submittedAnswer,
-    })
+    .select({ id: feedItems.id })
     .from(feedItems)
     .where(and(
       eq(feedItems.questionId, questionId),
@@ -129,7 +130,7 @@ export async function findWrongAnswerContext(questionId: string, recipientUserId
     .limit(1);
 
   if (correctEvent) return null;
-  return { contextType: 'feed' as const, contextId: feedItem.id, submittedAnswer: feedItem.submittedAnswer };
+  return { contextType: 'feed' as const, contextId: feedItem.id };
 }
 
 export async function createCreatorNote(params: {

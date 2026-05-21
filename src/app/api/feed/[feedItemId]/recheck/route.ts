@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
+import { writeActivity } from '@/server/activity/write-activity';
 import { db, feedItems, gradeDisputes, questions } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { getBasePoints } from '@/server/mastery/scoring';
@@ -72,7 +73,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       pointsAwarded = getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, 'first_correct');
     }
 
-    await db.transaction(async (tx) => {
+    const disputeId = await db.transaction(async (tx) => {
       if (accepted) {
         await tx
           .update(feedItems)
@@ -80,7 +81,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
           .where(eq(feedItems.id, feedItemId));
       }
 
-      await tx
+      const [inserted] = await tx
         .insert(gradeDisputes)
         .values({
           answerId,
@@ -95,8 +96,24 @@ export async function POST(_request: NextRequest, context: RouteContext) {
           acceptedAlternative: review.acceptedAlternative,
           status: disputeStatus,
           reviewedAt: review.decision === 'needs_human' ? null : new Date(),
-        });
+        })
+        .returning({ id: gradeDisputes.id });
+      return inserted?.id ?? null;
     });
+
+    // §8.22 dispute path: notify the question's author so they can review.
+    // The dispute is the answerer's explicit ask for a second look, which
+    // is the consent gate that lets the author see the literal submitted
+    // text alongside the canonical answer.
+    if (disputeId && question.creatorId && question.creatorId !== session.userId) {
+      await writeActivity({
+        userId: question.creatorId,
+        type: 'grade_dispute_filed',
+        actorUserId: session.userId,
+        referenceId: disputeId,
+        referenceType: 'grade_dispute',
+      });
+    }
 
     if (accepted) {
       await writeMasteryEvent({

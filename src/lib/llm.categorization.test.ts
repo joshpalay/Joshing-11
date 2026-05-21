@@ -5,16 +5,20 @@ import { normalizeCanonicalSubcategory } from '@/lib/question-categorization'
 const createMessageMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn(() => ({
-    messages: {
-      create: createMessageMock,
-    },
-  })),
+  // Anthropic is invoked with `new Anthropic({ apiKey })`, so the default export
+  // must be constructable. A class returning the mocked messages.create works;
+  // a vi.fn() factory does not (Node's new-call coercion rejects arrow fns).
+  default: class MockAnthropic {
+    messages = { create: createMessageMock };
+  },
 }))
 
 function anthropicTextResponse(json: Record<string, unknown>) {
   return {
     content: [{ type: 'text', text: JSON.stringify(json) }],
+    // loggedMessagesCreate reads response.usage.input_tokens etc.; without
+    // this stub the mocked call throws and categorizeQuestion falls back.
+    usage: { input_tokens: 0, output_tokens: 0 },
   }
 }
 

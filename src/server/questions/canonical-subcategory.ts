@@ -22,6 +22,12 @@ const FORBIDDEN_CANONICAL_SUBCATEGORIES = new Set<string>([
   'potpourri',
 ])
 
+// Anything shorter than this after normalization is treated as generic. This
+// catches single-letter and abbreviation-fragment labels like "A" and "Mr"
+// that previously slipped past the bucket-name blocklist (see the categorizer
+// fallback in src/lib/llm.ts).
+const MIN_SUBCATEGORY_LENGTH = 3
+
 function normalizeForCheck(value: string): string {
   return value
     .trim()
@@ -32,7 +38,9 @@ function normalizeForCheck(value: string): string {
 
 export function isGenericSubcategory(value: string | null | undefined): boolean {
   if (!value) return true
-  return FORBIDDEN_CANONICAL_SUBCATEGORIES.has(normalizeForCheck(value))
+  const normalized = normalizeForCheck(value)
+  if (normalized.length < MIN_SUBCATEGORY_LENGTH) return true
+  return FORBIDDEN_CANONICAL_SUBCATEGORIES.has(normalized)
 }
 
 export class GenericCanonicalSubcategoryError extends Error {

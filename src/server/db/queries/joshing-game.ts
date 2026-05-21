@@ -360,6 +360,18 @@ export async function getJoshingGame(params: {
 
   const canSeeAllResponses = viewerComplete || params.requestingUserId === gameRow.game.creatorId;
 
+  // §8.22 wrong-answer text visibility: even when the viewer is allowed to
+  // see aggregate results across participants, only their own row carries
+  // submittedAnswer. Other rows are projected with submittedAnswer = null so
+  // that no UI (or serialized payload shipped to a client component) can
+  // surface another player's literal answer text.
+  const visibleResponses = (canSeeAllResponses
+    ? responseRows
+    : responseRows.filter((response) => response.userId === params.requestingUserId))
+    .map((response) => response.userId === params.requestingUserId
+      ? response
+      : { ...response, submittedAnswer: null });
+
   return {
     game: {
       id: gameRow.game.id,
@@ -393,9 +405,7 @@ export async function getJoshingGame(params: {
         score: completed ? userResponses.filter((response) => response.isCorrect).length : null,
       };
     }),
-    responses: canSeeAllResponses
-      ? responseRows
-      : responseRows.filter((response) => response.userId === params.requestingUserId),
+    responses: visibleResponses,
     viewerStatus,
   };
 }
