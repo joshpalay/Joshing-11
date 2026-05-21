@@ -32,8 +32,6 @@ async function patchReminders(body: Record<string, unknown>): Promise<{
 
 export function NotificationsForm({ initialState, maskedPhone }: Props) {
   const [state, setState] = useState<ReminderState>(initialState);
-  const [savingSms, setSavingSms] = useState(false);
-  const [smsError, setSmsError] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState(state.pendingEmail ?? '');
   const [savingEmail, setSavingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -43,19 +41,6 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
   const emailOn = state.emailOptIn === 'opted_in';
   const hasPendingEmail = Boolean(state.pendingEmail);
   const hasVerifiedEmail = state.emailVerified && Boolean(state.email);
-
-  async function toggleSms() {
-    const next = smsOn ? 'opted_out' : 'opted_in';
-    setSavingSms(true);
-    setSmsError(null);
-    const result = await patchReminders({ smsOptIn: next });
-    setSavingSms(false);
-    if (!result.ok || !result.state) {
-      setSmsError(result.errorMessage ?? 'Could not save.');
-      return;
-    }
-    setState(result.state);
-  }
 
   async function saveEmail() {
     const trimmed = emailDraft.trim();
@@ -92,20 +77,26 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
       <section className="rounded-xl border bg-card p-5 text-card-foreground">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col">
-            <h2 className="font-serif text-lg font-semibold">SMS reminders</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-serif text-lg font-semibold">SMS reminders</h2>
+              <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                Coming soon
+              </span>
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Text {maskedPhone} when a new round opens.
+              SMS notifications are coming soon — this functionality isn&apos;t
+              available yet. Once it&apos;s ready, we&apos;ll text {maskedPhone}{' '}
+              when a new round opens.
             </p>
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={smsOn}
-            disabled={savingSms}
-            onClick={() => void toggleSms()}
-            className={`relative inline-flex h-7 w-12 flex-none items-center rounded-full border transition ${
-              smsOn ? 'bg-emerald-500 border-emerald-500' : 'bg-muted border-border'
-            } ${savingSms ? 'opacity-60' : ''}`}
+            aria-disabled
+            disabled
+            title="SMS notifications are coming soon"
+            className="relative inline-flex h-7 w-12 flex-none cursor-not-allowed items-center rounded-full border bg-muted border-border opacity-60"
           >
             <span
               className={`inline-block size-5 rounded-full bg-white shadow transition ${
@@ -114,14 +105,6 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
             />
           </button>
         </div>
-        {smsOn ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Saved. Texts will start when reminders launch.
-          </p>
-        ) : null}
-        {smsError ? (
-          <p className="mt-2 text-xs text-rose-700">{smsError}</p>
-        ) : null}
       </section>
 
       <section className="rounded-xl border bg-card p-5 text-card-foreground">
