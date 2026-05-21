@@ -1,36 +1,94 @@
 # Game-Wide Audit — Reinforcing Learning and Shared Knowledge
 
-Date: 2026-05-18 (third pass)
-Method: every surface below was audited by reading the source file directly. CSS-variable references are taken from `src/app/globals.css` and `src/app/layout.tsx`; copy is quoted verbatim with `file:line` citations. This third pass additionally resolved most of the prior audit's open questions by reading the answer-grading file, the daily-summary query, the daily-feedback route, and the questions schema. Phase 1/2 labels below are now evidence-backed wherever the proposal carries an `Evidence:` note. A new **Sequencing & Dependencies** section at the bottom orders the Top 10 work by dependency.
+Date: 2026-05-21 (fourth pass — refreshed against dev2 head `ffd912a`)
+Method: every surface was audited by reading the source file directly. CSS-variable references come from `src/app/globals.css` and `src/app/layout.tsx`; copy is quoted verbatim with `file:line` citations. This fourth pass refreshes the audit against the current dev2 head: between the third pass and now, dev2 landed PRs #356–#367 (vetted user-authored questions, friends-only inside-jokes, reaction visibility opt-in, recheck dispute notifications, QuestionForm Review/Save collapse, friend-picker search, category names in Hide menu, daily-summary "Meanwhile" bridge). The Preface, Top 10 status, surface entries, and Open Questions sections are updated to reflect what shipped, what changed, and what's still outstanding.
 
 ---
 
-## Preface — four findings that thread through everything
+## What shipped on dev2 since the prior audit (status delta)
 
-### 1. Mastery-tier vocabulary is forked across FOUR surfaces and none match the brief
+The codebase has moved meaningfully between the third pass and this one. The relative ranking of work-remaining looks like:
 
-| Surface | File | Labels |
+**Fully shipped (audit proposal addressed):**
+- **Author identity on the in-session question bubble.** `creatorName` is now rendered as `FROM {name} gave you this` in Playfair italic (`--font-literata`) at 0.86rem with INK 82% (`GameplayChat.tsx:184-205`). Mono kicker `FROM` at 0.55rem precedes the bold name, italic suffix `gave you this` follows (suppressed when the creator is `Joshing` the bot). This is essentially Top-10 #3 — the design choice was Literata italic rather than Caveat, but the lens-level effect is delivered.
+- **`common ground` sub-label rotation on correct results** (`GameplayChat.tsx:88-93`). The brief's exact word fingerprints now ship: `common ground / common ground + / common ground ++ / common ground +++`. Preface §2 below is updated accordingly.
+- **Recheck-accepted success treatment** (`GameplayChat.tsx:702-727`). Successful recheck now renders the message in a green-tinted box with a ✓ icon and `var(--success)` border — partial implementation of Top-10 surface #17.
+- **`gave_up` result restyled** (`GameplayChat.tsx:643-665`). Replaces system `Here's the answer.` + `Answer:` label with editorial `— For the record.` in 0.82rem Literata muted + the answer in 0.95rem Literata. On register.
+- **MasteryMoment uses `KNOWLEDGE_TIER_LABEL`** (`MasteryMoment.tsx:22-23`, importing from `knowledge-tier-copy.ts`). The mid-flow tier headline is no longer enum-cased; it matches the knowledge page. Reduces Preface §1 fork from four-way to three-way.
+- **Daily-difficulty labels aligned to knowledge tiers** (`daily/summary/page.tsx:28-34`): `Establishing / Familiar / Solid / Mastery / Adaptive`. The standalone `Skilled` value is gone.
+- **Ceremony friend-fallback beats** (`ceremony/[ceremonyId]/page.tsx:117-145`). When you didn't cross a tier or earn author credit, the ceremony now shows `{friendName} leveled up this week.` or `{friendName} taught the room.` — shared-knowledge takes over when personal-record beats are empty. Addresses the solo-mode gap surfaced in the prior pass (surface #43).
+- **SessionCloseMessage now two-layer** (`SessionCloseMessage.tsx:8-39`): `scoreLine` always renders, optional `interpretiveLine` fades in 300ms later. Implements PRD §8.1.13's Layer 1 / Layer 2 split. Addresses surface #22.
+- **Daily summary creator-note card header** (`daily/summary/page.tsx:444-481`). When a creator note is present, the card header reads `FROM {authorName} · {DOMAIN}` in 0.86rem Literata italic with a mono `FROM` kicker — exactly Top-10 #7's format, but only fires when a creator note exists.
+
+**Partially shipped:**
+- **Top-10 #4 wrong-answer rebuild.** The 4-variant rotation has been reduced to 3 (`GameplayChat.tsx:96-100`) — `Nice try.` is gone. But the brief's `now it's in yours too` line still isn't present; the `{firstName} thought you might` sub-label proposal hasn't been added; the breadcrumb is still 0.78rem italic (not promoted to 0.92rem as proposed).
+- **Top-10 #1 tier vocabulary unification.** Down from four-way to three-way. The `account.ts` / `app/knowledge/[domain]/page.tsx` `Curious / Explorer / Scholar / Sage` set is the only remaining fork (still doesn't match the brief's `Curious → Versed → Fluent → Master`).
+
+**Brand new surfaces the audit didn't cover yet:**
+- **"Between us friends" inside-joke aside** on result rows (`GameplayChat.tsx:745-783`). Gold-tinted card under the result bubble, mono kicker `Between us friends` + Literata italic 0.92rem body. LLM-generated friends-only aside attached to a question, only present when the viewer is the creator or an active friend. New surface; audited below as **#7a**.
+- **"Meanwhile" friend bridge** on daily summary (`daily/summary/page.tsx:283-292`). Card titled `Meanwhile` with `{friendName} answered {domain}. / {friendName} liked a question about {domain}. / {friendName} just joined.` + `See what they're up to →` link. Implements a piece of the cross-cutting shared-knowledge bridge between own and friend activity. Audited as **#19a**.
+- **"Tomorrow" card** on daily summary (`daily/summary/page.tsx:275-281`): `Tomorrow / Five new at noon.` Compresses surface #23 (next-questions countdown). Audited as **#19b**.
+- **Friend fallback ceremony beats 1 and 5** (see above).
+- **`FriendAnsweredCard` relational footer** (`FriendAnsweredCard.tsx:12-26`): `You both had it / You knew this · {friendName} didn't / {friendName} knew this · you missed it / Neither of you got this one`. Audited as **#2a**.
+- **First-time-author orientation panel** in `QuestionForm` (`QuestionForm.tsx:228-242, 416-432`). Explains declared/proven model inline. Audited as **#33a**.
+- **Friend picker — search + recents** (`QuestionForm.tsx:543-647`). Selected friends pinned as removable chips; Recents pulled from `/api/users/recent`; search input filters the full list. Audited as **#35a**.
+- **First-time-author orientation API** (`/api/me/has-authored-question`).
+- **PRD §16.12 wrong-answer text visibility opt-in** (separate audit at `audits/2026-05-19-wrong-answer-visibility.md`, not re-audited here — out of scope for this learning/shared-knowledge brief).
+
+**Cadence change:** the ceremony cadence is now **weekly**, not fortnightly. Copy: `That's your week. / See you next Sunday. / Loading your week...` (`ceremony/[ceremonyId]/page.tsx:373-374`, et al.). Updates surfaces #38–48 — references to "two weeks" / "fortnight" are stale where they appear.
+
+---
+
+## Preface — four findings that thread through everything (updated)
+
+### 1. Mastery-tier vocabulary fork is closed on the implementation side; canonical-choice question still open
+
+PR #368 (`tier labels: dedupe inline maps + fix moderate→Familiar drift`, commit `5894899`) finished the unification. Every surface now reads from `KNOWLEDGE_TIER_LABEL` in `knowledge-tier-copy.ts`:
+
+| Surface | File | Status |
 |---|---|---|
-| Canonical knowledge layer | `src/server/profile/knowledge-tier-copy.ts:3-8` | Establishing → Familiar → Solid → Mastery |
-| Account / domain detail | `src/server/db/queries/account.ts:26-31`, `src/app/knowledge/[domain]/page.tsx:53` | Curious → Explorer → Scholar → Sage |
-| Daily-difficulty mode label (different concept but same word-pool) | `src/app/daily/summary/page.tsx:28-34` | Establishing / Solid / **Skilled** / Master / Adaptive |
-| Mid-flow MasteryMoment overlay | `src/components/review/MasteryMoment.tsx:21-23` | Familiar / Solid / Mastery (capitalised from enum) |
-| Ceremony Beat 1 tier transition | `src/app/ceremony/[ceremonyId]/page.tsx:47-52` | Establishing / Familiar / Solid / Mastery |
-| Knowledge page tier-cross banner | `src/app/knowledge/page.tsx:423-425` | Whatever `tierCrossed` returns (string-passthrough) |
+| Canonical knowledge layer | `src/server/profile/knowledge-tier-copy.ts:3-8` | `Establishing / Familiar / Solid / Mastery` (canonical) |
+| Account / domain detail | `src/server/db/queries/account.ts`, `src/app/knowledge/[domain]/page.tsx:11,188,199` | **imports `KNOWLEDGE_TIER_LABEL`** — fork closed |
+| Daily-difficulty mode label | `src/app/daily/summary/page.tsx:28-34` | aligned (`Adaptive` is the only non-tier value) |
+| Mid-flow MasteryMoment overlay | `src/components/review/MasteryMoment.tsx:4,22-23` | imports `KNOWLEDGE_TIER_LABEL` |
+| Ceremony Beat 1 tier transition | `src/app/ceremony/[ceremonyId]/page.tsx:47-52` | matches canonical |
+| Knowledge page tier-cross banner | `src/app/knowledge/page.tsx:423-425` | string passthrough — matches whatever upstream returns |
 
-Brief says `Curious → Versed → Fluent → Master`. None of the six in-product surfaces matches that. A player who crosses a tier mid-game sees a 3rem display reading "Solid" (MasteryMoment), then opens the daily summary and sees "moved to solid" (interpretiveLine line 78), then opens their profile and sees "Scholar" (account.ts), then opens the knowledge map and sees "Solid" again (DomainRow). Half the proposals below assume this is unified; the canonical recommendation is the brief's `Curious → Versed → Fluent → Master` because mastery-as-ladder reads more credentialing than learning, and Joshing's premise is the latter.
+This was the audit's longest-running cross-cutting issue and it is now resolved at the implementation level. **Top-10 #1 implementation closed.**
 
-### 2. The brief's copy fingerprints are mostly absent from code
+What remains is the product call on whether to override to the brief's `Curious → Versed → Fluent → Master`. The case for switching: the current set's `Mastery` terminus reads grandiose for ~50 questions in a domain, and `Establishing` is a clinical opener; the brief's set centers learning posture (curiosity → mastery) rather than credentialing. The case for staying: PR #368 just consolidated the codebase on the current set and overriding would cost another round of cross-file edits and any external docs that reference these labels. Either is defensible; just pick one and stop. Open question 1 below.
 
-The brief references a "common ground +" sub-label and a "now it's in yours too" wrong-reveal line. Neither exists in code. Actual rotations are at `GameplayChat.tsx:86-91` (correct: `shared signal / you both know this one / confirmed / same territory`) and `:93-102` (wrong: `Not this time — here's the answer. / You'll know this one next time. / Nice try. / Close, but not quite.`). The brief also references standout moments (`only you got this`), accepted-variant near-miss, share-card emoji grid, Group Story section on game summary, next-questions countdown, Challenge Worlds, and Friend Play — none of which exist. **Open question 1 below: are these intent-to-implement or stale references?** All proposals downstream treat them as intent.
+### 2. Some brief fingerprints landed; others remain absent
 
-### 3. The ceremony breaks the ink-on-cream register
+| Brief line / surface | Status on dev2 |
+|---|---|
+| `common ground +` sub-label rotation on correct results | **Shipped.** `GameplayChat.tsx:88-93`: `common ground / common ground + / common ground ++ / common ground +++`. |
+| `now it's in yours too` wrong-reveal line | Still absent. Wrong rotation: `Not this time — here's the answer. / You'll know this one next time. / Close, but not quite.` (`:96-100`). |
+| Standout moments (`only you got this`) | Still absent. |
+| Accepted-variant near-miss acknowledgment | **Partial.** `recheckAccepted` now shows a green-tinted success box with ✓ icon. The grading-pipeline distinction `matchKind` still doesn't propagate, so the card doesn't yet show *which* alternative matched. |
+| Share-card emoji grid | Still absent. |
+| Game Summary `Group Story` section | Still absent. |
+| Next-questions countdown | **Replaced.** Daily summary now ships a `Tomorrow / Five new at noon.` card (`daily/summary/page.tsx:275-281`). Less precise than a countdown, more editorial. |
+| Challenge Worlds | Still absent. |
+| Friend Play | Still absent. |
+| `Between us friends` inside-joke aside | **New surface — wasn't in the brief.** LLM-generated friends-only aside attached to result rows (`GameplayChat.tsx:745-783`). |
+| Friend-fallback ceremony beats | **New surface — wasn't in the brief.** Beat 1 and Beat 5 substitutes when the viewer has no own crossing or author credit. |
 
-`src/app/ceremony/[ceremonyId]/page.tsx:331` sets the entire ceremony to `bg-stone-950 text-stone-50` with a radial gradient — white-on-near-black, awards-show staging. Every other surface in the product is INK on CREAM (`--ink` ≈ `#1a1208` on `--cream` ≈ `#fdfbf6`, set in `globals.css:95-97`). The OverlapMap (`src/components/OverlapMap.tsx:29-36`) is the gold-standard example of the brief's "ink-on-cream with hard 2px borders and 6px offset shadows" — and it appears in the ceremony's adjacent surface (game summary). The ceremony's dark theme either signals a different design intent or is a regression. Worth a deliberate call. The audit's ceremony proposals assume the dark theme stays but flag where it weakens learning/shared-knowledge cues.
+### 3. The ceremony breaks the ink-on-cream register (unchanged)
 
-### 4. Author identity is structurally underweight
+`src/app/ceremony/[ceremonyId]/page.tsx:331` still sets the entire ceremony to `bg-stone-950 text-stone-50` with a radial gradient — white-on-near-black, awards-show staging. Every other surface in the product is INK on CREAM (`--ink` ≈ `#1a1208` on `--cream` ≈ `#fdfbf6`, set in `globals.css:95-97`). The OverlapMap (`src/components/OverlapMap.tsx:29-36`) is the gold-standard example of the brief's "ink-on-cream with hard 2px borders and 6px offset shadows" — and it appears in the ceremony's adjacent surface (game summary). The friend-fallback beats inherit the dark theme too. Worth a deliberate call.
 
-The author's display name surfaces in five places I found by direct read: (a) `creatorName` line above the in-session bubble at 0.6rem mono muted (`GameplayChat.tsx:180-191`); (b) breadcrumb `FROM [author]` at 0.5rem mono (`:303`); (c) `A note from {authorName}:` creator-note prefix (everywhere); (d) `From {view.creator.displayName}` at the top of game-summary cards in 0.62rem mono uppercase (`src/app/games/[id]/summary/page.tsx:267`); (e) `From the question bank` system fallback on the same card. **Caveat handwriting is loaded** as `--font-handwriting` (`layout.tsx:16-20`) but never used outside Personal Record annotations on the Portrait — there is no Caveat usage in the question/result/review/summary thread. The "shared knowledge" lens depends on the author feeling like a person; current treatments make them feel like a metadata field.
+### 4. Author identity went from "structurally underweight" to "well-served in the highest-frequency surface, still uneven elsewhere"
+
+Direct read of current state:
+- **In-session bubble (`GameplayChat.tsx:184-205`):** `FROM {firstName} gave you this` in Playfair italic (`--font-literata`) at 0.86rem with INK 82%. Mono `FROM` kicker at 0.55rem, name in 600-weight, italic suffix. Suppressed when creator is `Joshing`. This is a meaningful jump from the prior pass's 0.6rem mono whisper.
+- **Result-row breadcrumb (`GameplayChat.tsx:303`):** still `FROM [{author}]` at 0.5rem mono — the smallest place author appears, still effectively a marginalia tag.
+- **Daily summary card (`daily/summary/page.tsx:444-481`):** when a creator note exists, header reads `FROM {authorName} · {DOMAIN}` in 0.86rem Literata italic with mono `FROM` kicker. When no creator note, falls back to `JOSHING BOT · {DOMAIN}` system kicker. So the upgrade is gated on the creator having written a note.
+- **Game summary review card (`games/[id]/summary/page.tsx:267`):** still `From {view.creator.displayName}` in mono 0.62rem uppercase (unchanged).
+- **Creator-note prefix** (`A note from {authorName}:`) — unchanged across all surfaces.
+- **`From the question bank`** fallback — unchanged. Bank origin is preserved via `sourceQuestionId` (`schema.ts:210`); still not chased to the original author.
+
+**Caveat (`--font-handwriting`) remains loaded but unused** outside Personal Record annotations. The team chose Literata italic for the new author treatments, which is a defensible decision — italic Playfair reads "editorial" rather than "personal," but it sits in the system already and avoids introducing another typeface in the chat thread. The audit's prior proposal to use Caveat is therefore superseded for the in-session bubble and daily-summary card; the remaining places where author still whispers (game-summary review card, result-row breadcrumb) should follow the same Literata-italic treatment for consistency rather than switching to Caveat.
 
 ---
 
@@ -1050,23 +1108,30 @@ Don't conflate Friend Play (read-only of their bank) with their daily queue.
 
 ---
 
-# TOP 10 HIGHEST-IMPACT CHANGES
+# TOP 10 HIGHEST-IMPACT CHANGES — status against dev2 head `ffd912a`
 
-1. **Unify mastery tier vocabulary across all six surfaces** (Preface §1). Recommend the brief's `Curious → Versed → Fluent → Master`. Most-damaging consistency issue; gates ~30% of downstream proposals.
-2. **Add italic-Playfair canonical-subcategory above every in-session question bubble** (#4). Currently the player never sees what they're about to learn.
-3. **Promote `creatorName` to Caveat handwriting above every in-session question bubble** (#4). Caveat is loaded as `--font-handwriting` and currently unused on this surface.
-4. **Rebuild the wrong-answer reveal — promote the canonical breadcrumb to 0.92rem Playfair italic, add a "now it's in yours too" sub-label and a `{firstName} thought you might` rotation** (#8). North-star metric is wrong-answer reaction rate; current treatment is consolation, almost no learning.
-5. **Promote the daily-summary explainer from `text-muted-foreground` to body weight with a `Why.` Playfair italic kicker, defaulting `<details open>` on wrong-result cards** (#13, #14). The densest learning surface in the loop is currently the visually quietest, and the brief's correct/wrong asymmetry is unimplemented despite the data model already supporting it (`_Wrong` explainer fields exist).
-6. **Author-led noon SMS: `"{firstName} and {N} others wrote your five."`** (#1). First touchpoint of the day.
-7. **Promote `From {firstName}.` to a 2-line editorial header on every end-of-session review card** (#11). Author currently appears only in the creator-note label on daily summary; system kicker `JOSHING BOT · {DOMAIN}` should be removed in the same change. Phase 1.5 — needs a one-join enrichment of `QuestionRecap` (verified in this pass; see #11 evidence note).
-8. **Add domain-named line under ceremony Act 1 Portrait beat: `"In {italic domain1}, {italic domain2}, and {italic domain3}."`** (#38). Names the learning at the most-receptive moment.
-9. **Restore brief's `"Why this one."` creator-note framing with placeholder rotation `"I think about this every time…"`** (#36). Currently labeled `Creator note` / `Optional context for recipients` — pure metadata.
-10. **Build the missing Group Story section on the game summary page** (#45, Phase 2). Largest missing collective surface.
+Legend: ✅ shipped · 🟡 partially shipped · ⏳ still open.
 
-Three runners-up worth mentioning:
-- **Soften season-end SMS "knew you best" winner language** (#1). Soft leaderboard tell that crosses the brief's no-ranking line.
+1. ✅ **Unify mastery tier vocabulary — implementation closed** (Preface §1). PR #368 unified `account.ts` + `app/knowledge/[domain]/page.tsx` onto `KNOWLEDGE_TIER_LABEL`. Every surface now reads from one map. Only remaining piece: product call on whether to override to brief's `Curious → Versed → Fluent → Master`. The audit's longest-running cross-cutting issue is otherwise resolved.
+2. ⏳ **Add italic-Playfair canonical-subcategory above every in-session question bubble** (#4). Not shipped. `QuestionRow` still has no category line.
+3. ✅ **Author above the in-session question bubble** (#4). Shipped as `FROM {firstName} gave you this` in Literata italic (`GameplayChat.tsx:184-205`). Italic Playfair rather than Caveat, which is a defensible system choice. Top-10 #3 is closed.
+4. 🟡 **Rebuild the wrong-answer reveal** (#8). Progress: `common ground` rotation shipped on correct side; wrong rotation reduced from 4 → 3 (`Nice try.` dropped); `recheckAccepted` now shows success treatment with ✓ icon. Still open: `now it's in yours too` line; `{firstName} thought you might` sub-label; breadcrumb promotion (still 0.78rem). North-star metric remains wrong-answer reaction rate.
+5. ⏳ **Promote the daily-summary explainer and default `<details open>` on wrong cards** (#13, #14). Not shipped. The 8 schema-level explainer variants (`_Brief/_Full × _Correct/_Wrong/_Expired + default`) remain mostly unused.
+6. ⏳ **Author-led noon SMS** (#1). `sms.ts` unchanged on dev2.
+7. 🟡 **Author header on review cards** (#11). Shipped on daily summary *when a creator note exists* (`daily/summary/page.tsx:444-481`): `FROM {authorName} · {DOMAIN}` in Literata italic. Remaining work: the no-creator-note case still shows `JOSHING BOT · {DOMAIN}`; game-summary review cards (`games/[id]/summary/page.tsx:267`) still show mono 0.62rem `From {creator.displayName}`. **Phase 1.5** for the no-note case (needs `QuestionRecap.creatorDisplayName`).
+8. ⏳ **Domain-named line under ceremony Act 1 Portrait beat** (#38). Not shipped.
+9. ⏳ **`"Why this one."` creator-note framing** (#36). Still labeled `Creator note` / placeholder `Optional context for recipients`. Note: the QuestionForm Review/Save collapse means the creator-note field now sits in the ANSWERING stage, not a separate REVIEWING stage — when the rename happens, the new placement is already correct.
+10. ⏳ **Group Story section** on game-summary page (#45, Phase 2).
+
+**New on dev2 that the prior Top 10 didn't capture (would now make the list):**
+- **`Between us friends` inside-joke aside** is a strong new shared-knowledge surface. Audit it under both lenses and consider whether to add a "creator can see who saw their inside-joke" surface — currently the aside fires invisibly. See #7a below.
+- **`FriendAnsweredCard` relational footer** is a strong new pattern. Replicate it (a) on the daily summary per-question card when a friend has also touched the question, and (b) on the archive card. See #2a.
+- **Friend-fallback ceremony beats** are a clear shared-knowledge win for low-activity weeks. Extend the same fallback logic to other personal-empty states (e.g. Personal Record sub-beats in #39 when none of the three sub-blocks fire). See #38, #41 sections.
+
+**Three runners-up unchanged:**
+- **Soften season-end SMS `"knew you best"` winner language** (#1). Soft leaderboard tell that crosses the brief's no-ranking line.
 - **Rewrite creator-note-prompt SMS to name the answerer** (#1). Currently `"Someone got your question wrong"`; should be `"{firstName} just missed your question"`.
-- **Implement the brief's collapsed-when-correct, expanded-when-wrong creator-note treatment** (#14). Same field on every surface; cheap to fix.
+- **Collapsed-when-correct, expanded-when-wrong creator-note treatment** (#14). The data model supports it (`_Correct`/`_Wrong` schema variants); the UI still ignores the asymmetry.
 
 ---
 
@@ -1094,16 +1159,20 @@ Three runners-up worth mentioning:
 - ~~Q7 (explainer provenance tracking):~~ **Resolved.** Eight explainer text fields exist on the schema (`schema.ts:230-237`), but they're flat text — no `_source` companion. #13 `"in {firstName}'s words"` is Phase 2 (needs new column). However, the data over-supports the brief's correct/wrong asymmetry: `_Correct`, `_Wrong`, and `_Expired` variants all exist; the UI currently only reads `_Wrong` and the unsuffixed default.
 - ~~Q8 (heart-vote routing to author):~~ **Resolved.** `/api/daily/feedback` (`route.ts:53,73`) just writes to `questionFeedback`. No author aggregation or surfacing. The proposed `"{firstName} will see this."` micro-confirmation is **Phase 2** — must first build author-side aggregation. Do not ship the confirmation before the routing exists.
 
+**Updates from this pass:**
+
+- ~~Q2 (brief intent vs stale references):~~ **Partially resolved.** Several brief fingerprints landed: `common ground +` rotation now in `GameplayChat.tsx:88-93`; SessionCloseMessage two-layer (PRD §8.1.13) shipped; recheck-accepted success treatment shipped. So the team is implementing brief intent rather than retiring it. Remaining brief lines (`now it's in yours too`, standout moments, etc.) are presumably still on the roadmap; product can confirm.
+- ~~Q8 (Caveat usage scope):~~ **Implicitly resolved against expansion.** The team chose Literata italic for the new author treatments (in-session bubble + daily-summary card) rather than Caveat. The audit retreats to that decision: replicate the Literata-italic treatment on remaining author surfaces; do not introduce Caveat in chat/review/summary contexts.
+
 **Still open — need a product call:**
 
-1. **Mastery tier vocabulary canonical form.** Code has four sets across six surfaces; brief specifies a fifth. Recommended: brief's `Curious → Versed → Fluent → Master`. Gates ~30% of Phase 1 proposals.
-2. **Are the brief's missing copy lines and surfaces intent or stale?** Specifically: `"now it's in yours too"`, `"common ground +"` sub-label, standout moments, accepted-variant near-miss, share-card emoji grid, Group Story, next-questions countdown, Challenge Worlds, Friend Play. Determines whether several proposals build vs. retire.
-3. **Ceremony dark theme vs. cream register elsewhere.** Is the `stone-950` ceremony a deliberate award-show frame, or has it drifted from the ink-on-cream system? The OverlapMap demonstrates the cream register works for celebratory content.
-4. **Mid-session tier-crossing — does the brief want it surfaced in-thread, or is the post-game `MasteryMoment` the only intended manifestation?** Determines #10.
-5. **Friend-name visibility in wrong-answer `{firstName} thought you might` sub-label** — what's the privacy posture if the friend hasn't actively shared this signal? Determines #8.
-6. **The `/leaderboard` route name** — per CLAUDE.md it renders the (correctly non-ranking) Group Knowledge Map. The route name is a hostage to its past. Rename to `/group-map` or `/we`?
-7. **Default-on `shareToFeed`** (`QuestionForm.tsx:111`): the form ships questions to all friends by default unless the player explicitly toggles "specific friends only." Generous-but-opaque default. Worth a deliberate review separate from the audit.
-8. **Caveat handwriting usage scope.** Currently underused (Personal Record annotations only). The audit recommends adding it on the question bubble, breadcrumb, review header, catchup subhead, MasteryMoment "tier-buddy" variant, and share-card credits. That's a meaningful expansion of the handwriting register — confirm it's an intentional move.
+1. **Mastery tier vocabulary canonical form** (implementation side closed). Every surface now reads `KNOWLEDGE_TIER_LABEL` (`Establishing / Familiar / Solid / Mastery`). Open piece: do we override to brief's `Curious → Versed → Fluent → Master`? One file change (`knowledge-tier-copy.ts`), all consumers re-render. Recommend yes (mastery-as-ladder reads credentialing rather than learning) but defensible either way.
+2. **Are the *remaining* brief surfaces (standout moments, accepted-variant near-miss UI, share-card emoji grid, Group Story, Challenge Worlds, Friend Play) on the roadmap?** Determines whether the audit's surface #16, #17, #21, #45, #49, #50 proposals build vs. retire.
+3. **Ceremony dark theme vs. cream register elsewhere.** Unchanged on dev2. The friend-fallback beats are also dark-themed. Worth a deliberate call.
+4. **Mid-session tier-crossing — does the brief want it surfaced in-thread**, or is the post-game `MasteryMoment` (still firing only on summary pages) the only intended manifestation?
+5. **Friend-name visibility in `{firstName} thought you might` sub-label** — privacy posture if the friend hasn't actively shared this signal? Determines whether surface #8 can ship the named rotation.
+6. **The `/leaderboard` route name** — still renders the Group Knowledge Map. Rename to `/group-map` or `/we`? Trivial code change; affects any external links.
+7. **Default-on `shareToFeed`** (`QuestionForm.tsx:115`): unchanged on dev2 despite the Review/Save collapse refactor. Default is still "share with all friends" unless specific-mode is toggled. Worth a deliberate review.
 
 ---
 
@@ -1111,29 +1180,32 @@ Three runners-up worth mentioning:
 
 Top 10 ordered by dependency: ship blockers first, then cheapest-high-impact, then bigger lifts. Each item lists what unblocks it and what it unblocks.
 
-**Tier A — unblocks half the audit (do first):**
-1. **Resolve mastery tier vocabulary** (Top-10 #1; open question 1). One-day cross-cutting copy edit. Unblocks: #10 (mid-session crossing buddy variant), #25–27 (knowledge surfaces), #38 (Portrait beat), MasteryMoment itself.
-2. **Resolve the brief's intent fork** (open question 2). Product call, not engineering. Determines whether to build #7 sub-labels, #8 breadcrumb rewrite, #16 standout moments, #17 near-miss, #21 emoji grid, #45 Group Story, #49 Challenge Worlds, #50 Friend Play.
+**Tier A — unblocks half the remaining audit (do first):**
+1. **Product call on tier vocabulary canonical** (Top-10 #1 residual; open question 1). Implementation unification is done (PR #368). Only question left: override `KNOWLEDGE_TIER_LABEL` to brief's `Curious → Versed → Fluent → Master`? One-file change in `knowledge-tier-copy.ts`. Cheap to revert if the override doesn't feel right.
+2. **Product call on remaining brief surfaces** (open question 2 — narrowed). Standout moments, accepted-variant near-miss UI, share-card emoji grid, Group Story, Challenge Worlds, Friend Play. Determines whether surface #16, #17, #21, #45, #49, #50 proposals build vs. retire. Lower urgency than before since some brief intent has now demonstrably landed (common-ground rotation, two-layer session close).
 
 **Tier B — cheap, high-impact Phase 1 (ship in any order):**
-3. **In-session bubble: add italic-Playfair canonical subcategory + Caveat author line** (Top-10 #2 and #3, surface #4). One frontend file change, no backend. Validates the visual treatment that the rest of the proposals reuse.
-4. **Author-led noon SMS** (Top-10 #6). Pure copy change in `buildDailyReminderMessage`; falls back gracefully when no first-name available.
-5. **Daily-summary editorial header + explainer promotion + `<details open>` on wrong cards** (Top-10 #5). One file (`daily/summary/page.tsx`). Picks up the over-rich schema for free.
-6. **Restore creator-note framing** (Top-10 #9, surface #36). One form file. Frontend-only.
+3. **Italic-Playfair canonical subcategory above question bubble** (Top-10 #2, surface #4). Use the same Literata-italic treatment already in use for the `FROM` line (`GameplayChat.tsx:184-205`). One frontend change, no backend.
+4. **Author-led noon SMS** (Top-10 #6, surface #1). Pure copy change in `buildDailyReminderMessage` (`sms.ts:245-259`). Falls back gracefully when no first-name available.
+5. **Daily-summary explainer promotion + `<details open>` on wrong cards** (Top-10 #5, surface #13 + #14). One file (`daily/summary/page.tsx`). The schema's 8 explainer variants already exist — pick the result-keyed pair (e.g. `_BriefWrong`/`_FullWrong` for wrong cards) rather than the flat `_Wrong → default → _BriefWrong → _Brief → factualExplanation` fallback.
+6. **`"Why this one."` creator-note framing** (Top-10 #9, surface #36). One form file. The Review/Save collapse means the field is now in the right place; only the label and placeholder need to change.
 
-**Tier C — depends on Tier A or backend touch:**
-7. **End-of-session review card author header** (Top-10 #7, surface #11). **Phase 1.5** — needs `creator.displayName` joined into `QuestionRecap` (`daily-summary.ts:30-43`). One-join change. Visually requires Tier B #3 to be canonical first.
-8. **Wrong-reveal rebuild** (Top-10 #4, surface #8). Frontend-only re-layout of `GameplayChat.tsx` `ResultRow`. Two of its three sub-proposals depend on Tier A #2 (the brief's intent: are the named sub-labels in scope?). Ship the breadcrumb promotion and `BreadcrumbLine` author re-format regardless.
-9. **Ceremony Portrait beat domain line** (Top-10 #8, surface #38). Pure frontend in `ceremony/[ceremonyId]/page.tsx`. Visually safer once Tier A #1 is resolved.
+**Tier C — depends on Tier A or one-join backend touch:**
+7. **Daily-summary author header for no-creator-note case** (Top-10 #7 remainder, surface #11). Currently the daily-summary card shows the author header only when a creator note exists. To always show it, `QuestionRecap` (`daily-summary.ts:30-43`) needs `creatorDisplayName` joined from `users`. One-join change. Apply the same treatment to game-summary review cards (`games/[id]/summary/page.tsx:267`) where mono 0.62rem `From {creator.displayName}` should become the Literata-italic header pattern.
+8. **Wrong-reveal completion** (Top-10 #4, surface #8). Frontend-only. Two pieces left: (a) promote the breadcrumb from 0.78rem to 0.92rem Playfair italic and add a `now it's in yours too` sub-label; (b) add a `{firstName} thought you might` rotation (gated on ACCESSIBLE/MODERATE difficulty per surface #8 risk note). (b) depends on Tier A #2 if the team wants final intent confirmation.
+9. **Ceremony Portrait beat domain line** (Top-10 #8, surface #38). Pure frontend; safer after Tier A #1.
 
 **Tier D — bigger lifts (Phase 2):**
 10. **Group Story section** (Top-10 #10, surface #45). New backend query + new section. Highest ceiling but ship last.
 
-**Anti-pattern: do NOT ship before its prerequisite**
+**Anti-patterns: do NOT ship before prerequisite**
 - `"{firstName} will see this."` micro-confirmation on heart votes (#15) — depends on building author-side feedback aggregation. Don't ship the toast first.
 - `From {originalAuthorFirstName}, originally.` on bank-origin questions (#12) — Phase 1 in copy, but the recap query must follow `sourceQuestionId` to the origin author. Verify the join performs.
-- Any added Caveat usage — first confirm the brand expansion is intentional (open question 8).
+
+**New, since dev2:**
+- The `Between us friends` aside (`GameplayChat.tsx:745-783`) is invisible to its author — only the recipient sees the friends-only LLM line attached to their result. Worth a creator-side surface that says "your question's inside-joke fired N times this week" so the author can iterate. Phase 2.
+- The friend-fallback ceremony beat pattern (only fires on Beat 1 + Beat 5) could extend to Personal Record sub-blocks in Beat 2 — e.g. when `friendMediated.length === 0`, show `"{firstName} picked up {domain}."` as the substitute. Phase 1 in the ceremony page, Phase 2 if it needs new compute-beats data.
 
 ---
 
-End of audit (third pass, 2026-05-18).
+End of audit (fourth pass, 2026-05-21, dev2 head `ffd912a`).
