@@ -54,14 +54,40 @@ function difficultyPillClasses(level: string): string {
   return 'border-sky-200 bg-sky-50 text-sky-700';
 }
 
-function explanationFor(question: JoshingGameView['questions'][number]['question']) {
-  return question.explainerFullWrong
-    ?? question.explainerFull
-    ?? question.explainerBriefWrong
-    ?? question.explainerBrief
-    ?? question.factualExplanation
-    ?? 'No explanation available.';
+type ExplainerOutcome = 'correct' | 'wrong' | 'expired';
+
+function explainerVariantsFor(
+  question: JoshingGameView['questions'][number]['question'],
+  outcome: ExplainerOutcome,
+): { brief: string | null; full: string | null } {
+  const fallbackBrief = question.explainerBrief ?? null;
+  const fallbackFull = question.explainerFull ?? question.factualExplanation ?? null;
+
+  if (outcome === 'correct') {
+    return {
+      brief: question.explainerBriefCorrect ?? fallbackBrief,
+      full: question.explainerFullCorrect ?? fallbackFull,
+    };
+  }
+  if (outcome === 'expired') {
+    return {
+      brief: question.explainerBriefExpired ?? fallbackBrief,
+      full: question.explainerFullExpired ?? fallbackFull,
+    };
+  }
+  return {
+    brief: question.explainerBriefWrong ?? fallbackBrief,
+    full: question.explainerFullWrong ?? fallbackFull,
+  };
 }
+
+const kickerStyle: CSSProperties = {
+  fontFamily: 'var(--font-display, "Playfair Display"), Georgia, serif',
+  fontStyle: 'italic',
+  fontSize: '0.78rem',
+  letterSpacing: '0.01em',
+  color: 'var(--text-muted)',
+};
 
 function responseKey(userId: string, questionId: string) {
   return `${userId}:${questionId}`;
@@ -258,6 +284,10 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
             {view.questions.map((gameQuestion) => {
               const response = responseByUserQuestion.get(responseKey(session.userId, gameQuestion.questionId));
               const correct = Boolean(response?.isCorrect);
+              const outcome: ExplainerOutcome = !response ? 'expired' : correct ? 'correct' : 'wrong';
+              const { brief, full } = explainerVariantsFor(gameQuestion.question, outcome);
+              const hasDistinctFull = Boolean(full && full !== brief);
+              const briefForDisplay = brief ?? full ?? null;
               const creatorNote = creatorNotesByQuestionId.get(gameQuestion.questionId);
 
               return (
@@ -298,7 +328,21 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       <span className="font-medium text-foreground">Answer:</span> {gameQuestion.question.answerText}
                     </p>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{explanationFor(gameQuestion.question)}</p>
+                  {briefForDisplay ? (
+                    <div className="mt-4 text-sm leading-6 text-foreground">
+                      <p style={kickerStyle}>Why.</p>
+                      {hasDistinctFull ? (
+                        <details className="mt-1" open={outcome !== 'correct'}>
+                          <summary className="cursor-pointer list-none font-medium leading-6 text-foreground [&::-webkit-details-marker]:hidden">
+                            {briefForDisplay}
+                          </summary>
+                          <p className="mt-2 leading-6 text-foreground">{full}</p>
+                        </details>
+                      ) : (
+                        <p className="mt-1 font-medium leading-6 text-foreground">{briefForDisplay}</p>
+                      )}
+                    </div>
+                  ) : null}
                   {creatorNote ? (
                     <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
                       <span className="font-medium">A note from {creatorNote.authorName}:</span>{' '}
