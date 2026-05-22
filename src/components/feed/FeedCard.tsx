@@ -13,9 +13,19 @@ type FeedCardProps = {
   onAnswer?: () => void
   footer?: ReactNode
   className?: string
+  headerContent?: ReactNode
+  dimQuestion?: boolean
 }
 
-export function FeedCard({ item, overflow, onAnswer, footer, className }: FeedCardProps) {
+export function FeedCard({
+  item,
+  overflow,
+  onAnswer,
+  footer,
+  className,
+  headerContent,
+  dimQuestion,
+}: FeedCardProps) {
   const categoryColor = colorForCategory(item.category)
   const visibleCategory = visibleFeedCategory(item.category)
   const onDark = isDarkColor(categoryColor)
@@ -128,31 +138,37 @@ export function FeedCard({ item, overflow, onAnswer, footer, className }: FeedCa
           </div>
 
           <div className="min-w-0 flex-1">
-            {item.authorHref ? (
-              <Link
-                href={item.authorHref}
-                className="block truncate text-[16px] leading-tight text-[var(--ink)] underline underline-offset-2"
-                style={{ textDecorationColor: 'rgb(0 0 0 / 0.35)' }}
-              >
-                {authorName}
-              </Link>
+            {headerContent ? (
+              headerContent
             ) : (
-              <span className="block truncate text-[16px] leading-tight text-[var(--ink)]">
-                {authorName}
-              </span>
+              <>
+                {item.authorHref ? (
+                  <Link
+                    href={item.authorHref}
+                    className="block truncate text-[16px] leading-tight text-[var(--ink)] underline underline-offset-2"
+                    style={{ textDecorationColor: 'rgb(0 0 0 / 0.35)' }}
+                  >
+                    {authorName}
+                  </Link>
+                ) : (
+                  <span className="block truncate text-[16px] leading-tight text-[var(--ink)]">
+                    {authorName}
+                  </span>
+                )}
+                {visibleCategory ? (
+                  <p
+                    className="mt-0.5 truncate text-[12px] italic leading-tight"
+                    style={{
+                      fontFamily: 'var(--font-literata)',
+                      color: 'var(--ink)',
+                      opacity: 0.7,
+                    }}
+                  >
+                    {visibleCategory}
+                  </p>
+                ) : null}
+              </>
             )}
-            {visibleCategory ? (
-              <p
-                className="mt-0.5 truncate text-[12px] italic leading-tight"
-                style={{
-                  fontFamily: 'var(--font-literata)',
-                  color: 'var(--ink)',
-                  opacity: 0.7,
-                }}
-              >
-                {visibleCategory}
-              </p>
-            ) : null}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -169,8 +185,14 @@ export function FeedCard({ item, overflow, onAnswer, footer, className }: FeedCa
         </div>
 
         <p
-          className="mt-3 line-clamp-4 text-[17px] leading-snug text-[var(--ink)]"
-          style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+          className={cn(
+            'mt-3 line-clamp-4 leading-snug text-[var(--ink)]',
+            dimQuestion ? 'text-[14px]' : 'text-[17px]',
+          )}
+          style={{
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            ...(dimQuestion ? { opacity: 0.65 } : null),
+          }}
         >
           {item.question}
         </p>
