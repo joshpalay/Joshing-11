@@ -57,24 +57,30 @@ export function FeedCard({
             </div>
 
             <div className="min-w-0 flex-1">
-              <p
-                className="text-[11px] uppercase leading-none tracking-[0.08em]"
-                style={{ color: 'var(--ink)', opacity: 0.7 }}
-              >
-                New question
-              </p>
-              {visibleCategory ? (
-                <p
-                  className="mt-1 truncate text-[12px] italic leading-tight"
-                  style={{
-                    fontFamily: 'var(--font-literata)',
-                    color: 'var(--ink)',
-                    opacity: 0.7,
-                  }}
-                >
-                  {visibleCategory}
-                </p>
-              ) : null}
+              {headerContent ? (
+                headerContent
+              ) : (
+                <>
+                  <p
+                    className="text-[11px] uppercase leading-none tracking-[0.08em]"
+                    style={{ color: 'var(--ink)', opacity: 0.7 }}
+                  >
+                    New question
+                  </p>
+                  {visibleCategory ? (
+                    <p
+                      className="mt-1 truncate text-[12px] italic leading-tight"
+                      style={{
+                        fontFamily: 'var(--font-literata)',
+                        color: 'var(--ink)',
+                        opacity: 0.7,
+                      }}
+                    >
+                      {visibleCategory}
+                    </p>
+                  ) : null}
+                </>
+              )}
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
@@ -109,6 +115,8 @@ export function FeedCard({
               {item.personalMessage}
             </p>
           ) : null}
+
+          {footer ? <div className="mt-3">{footer}</div> : null}
         </div>
       </article>
     )
