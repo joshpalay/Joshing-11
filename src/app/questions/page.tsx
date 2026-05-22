@@ -1,12 +1,11 @@
 'use client';
 
-import { Lock, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
-import { difficultyCopyFromValue } from '@/lib/questions/difficulty-copy';
-import { SendQuestionAction } from '@/components/SendQuestionAction';
+import { MyQuestionCard } from '@/components/questions/MyQuestionCard';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
@@ -46,113 +45,6 @@ function isNoQuestionsResponse(response: Response, body: QuestionsApiResponse | 
   return response.status === 204
     || response.status === 404
     || NO_QUESTIONS_PATTERNS.some((pattern) => pattern.test(apiMessage));
-}
-
-const DOMAIN_COLORS: Record<string, string> = {
-  music: '#7c3aed',
-  literature: '#0f766e',
-  history: '#b45309',
-  film_tv: '#be123c',
-  sport: '#15803d',
-  science: '#2563eb',
-  philosophy: '#6d28d9',
-  pop_culture: '#db2777',
-  language: '#0369a1',
-  general_knowledge: '#64748b',
-};
-
-function CardOverflowMenu({
-  inUse,
-  onEdit,
-  onDelete,
-}: {
-  inUse: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const handleKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [open]);
-
-  const lockedTitle = 'Used in a game — cannot be edited';
-
-  return (
-    <div className="relative ml-auto" ref={containerRef}>
-      <button
-        type="button"
-        aria-label="More actions"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen((current) => !current)}
-        className="-mr-1 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
-      >
-        <MoreHorizontal className="size-4" />
-      </button>
-      {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-44 rounded-md border bg-background p-1 shadow-md"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            disabled={inUse}
-            title={inUse ? lockedTitle : undefined}
-            onClick={() => {
-              setOpen(false);
-              onEdit();
-            }}
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {inUse ? <Lock className="size-4" /> : <Pencil className="size-4" />}
-            Edit
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            disabled={inUse}
-            title={inUse ? lockedTitle : undefined}
-            onClick={() => {
-              setOpen(false);
-              onDelete();
-            }}
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {inUse ? <Lock className="size-4" /> : <Trash2 className="size-4" />}
-            Delete
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function formatAnswerersLine(answerers: { names: string[]; total: number }): string | null {
-  const { names, total } = answerers;
-  if (total <= 0 || names.length === 0) return null;
-  const [first, second] = names;
-  if (total === 1) return `${first} answered your question`;
-  if (total === 2 && second) return `${first} and ${second} answered your question`;
-  const others = total - 1;
-  return `${first} and ${others} ${others === 1 ? 'other' : 'others'} answered your question`;
 }
 
 function initialValues(question: QuestionView): QuestionFormValues {
@@ -409,64 +301,19 @@ function QuestionsPageContent() {
         </section>
       ) : (
         <section className="space-y-3">
-          {filteredQuestions.map((question) => {
-            const inUse = question.usedInGamesCount > 0;
-            const color = DOMAIN_COLORS[question.category] ?? '#64748b';
-            const deleting = removingId === question.id;
-            const difficultyLabel = difficultyCopyFromValue(question.difficulty) ?? 'Unrated';
-
-            return (
-              <article
-                key={question.id}
-                className={`rounded-lg border bg-card p-4 text-card-foreground transition duration-200 ${deleting ? 'scale-[0.98] opacity-0' : 'opacity-100'}`}
-              >
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span
-                    className="rounded-full px-2.5 py-1 text-xs font-medium text-white"
-                    style={{ backgroundColor: color }}
-                  >
-                    {question.domainDisplayName}
-                  </span>
-                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground" aria-label={`LLM-rated difficulty: ${difficultyLabel}`}>
-                    {difficultyLabel}
-                  </span>
-                  <CardOverflowMenu
-                    inUse={inUse}
-                    onEdit={() => setDrawer({ mode: 'edit', question })}
-                    onDelete={() => setConfirmingId(question.id)}
-                  />
-                </div>
-                <p className="line-clamp-2 text-base font-medium leading-7">{question.text}</p>
-                <p className="mt-4 text-sm text-muted-foreground">
-                  {question.timesAnswered} answers · {question.correctRate}% correct · {question.usedInGamesCount} games
-                </p>
-                {question.isOwnAuthored && question.answerers ? (() => {
-                  const line = formatAnswerersLine(question.answerers);
-                  return line ? <p className="mt-1 text-sm text-muted-foreground">{line}</p> : null;
-                })() : null}
-                {cardError[question.id] ? <p className="mt-3 text-sm text-destructive">{cardError[question.id]}</p> : null}
-                <div className="mt-4 flex items-center gap-2">
-                  {confirmingId === question.id ? (
-                    <>
-                      <span className="mr-auto text-sm font-medium">Delete this question?</span>
-                      <button className="rounded-md border border-destructive px-3 py-2 text-sm text-destructive" type="button" onClick={() => void confirmDelete(question)}>
-                        Confirm
-                      </button>
-                      <button className="rounded-md border px-3 py-2 text-sm" type="button" onClick={() => setConfirmingId(null)}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <div className="ml-auto">
-                      <SendQuestionAction
-                        question={{ id: question.id, text: question.text, domain: question.domainDisplayName }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </article>
-            );
-          })}
+          {filteredQuestions.map((question) => (
+            <MyQuestionCard
+              key={question.id}
+              question={question}
+              confirming={confirmingId === question.id}
+              cardError={cardError[question.id]}
+              deleting={removingId === question.id}
+              onEdit={() => setDrawer({ mode: 'edit', question })}
+              onDeleteRequest={() => setConfirmingId(question.id)}
+              onConfirmDelete={() => void confirmDelete(question)}
+              onCancelConfirm={() => setConfirmingId(null)}
+            />
+          ))}
         </section>
       )}
 
