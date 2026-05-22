@@ -544,9 +544,21 @@ export function QuestionForm({
           ) : null}
 
           {state.llmSuggestedAnswer ? (
-            <p className={verified ? 'text-sm text-emerald-700' : 'text-sm text-amber-700'}>
-              {verified ? '✓ Verified — matches LLM suggestion' : "⚠ Unverified — your answer differs from the LLM's suggestion. Recipients will see this."}
-            </p>
+            verified ? (
+              <p className="text-sm text-emerald-700">✓ Verified — matches LLM suggestion</p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm text-amber-700">⚠ Unverified — your answer differs from the LLM&apos;s suggestion. Recipients will see this.</p>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'FIELD', field: 'userAnswer', value: state.llmSuggestedAnswer ?? '' })}
+                  disabled={state.stage === 'SUBMITTING'}
+                  className="rounded-md border border-amber-700 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Use LLM answer
+                </button>
+              </div>
+            )
           ) : null}
 
           {showDestinations ? (
