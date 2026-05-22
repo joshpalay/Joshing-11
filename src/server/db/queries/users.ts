@@ -2,7 +2,7 @@ import type { InferSelectModel } from 'drizzle-orm';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { cache } from 'react';
 
-import { db, declaredInterests, friendInvitations, users } from '@/server/db';
+import { db, declaredInterests, friendInvitations, playerMastery, users } from '@/server/db';
 
 type User = InferSelectModel<typeof users>;
 
@@ -143,6 +143,26 @@ export async function saveDeclaredInterests(userId: string, interests: DeclaredI
             declaredAt: new Date(),
             isActive: true,
           },
+        });
+
+      // Seed a zero-point PlayerMastery row for the declared domain. Without
+      // this, the daily-answer route's "bot questions can only deepen existing
+      // territories" guard (src/app/api/daily/answer/route.ts) fires for the
+      // user's very first daily, so correct answers in a freshly-declared
+      // domain award 0 points and silently never open the territory.
+      await tx
+        .insert(playerMastery)
+        .values({
+          userId,
+          canonicalSubcategory: interest.label,
+          broadCategory: interest.broadCategory ?? null,
+          totalPoints: 0,
+          tier: 'establishing',
+          seasonPointsStart: 0,
+          territoryType: 'declared',
+        })
+        .onConflictDoNothing({
+          target: [playerMastery.userId, playerMastery.canonicalSubcategory],
         });
     }
   });

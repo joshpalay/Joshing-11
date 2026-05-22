@@ -1,10 +1,20 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db, generatedQuestions, questions } from '@/server/db';
 import {
   GenericCanonicalSubcategoryError,
   isGenericSubcategory,
 } from '@/server/questions/canonical-subcategory';
+
+function normalizeQuestionTextForDedup(value: string): string {
+  return value
+    .normalize('NFKC')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
 
 type PersistGeneratedQuestionResult = {
   questionId: string;
@@ -36,6 +46,36 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
 
     if (!generated) {
       throw new Error(`Generated question not found: ${generatedQuestionId}`);
+    }
+
+    // Text-level dedup: the LLM occasionally returns identical question text
+    // across separate per-user GeneratedQuestion rows. Without this check each
+    // generation would land as its own Question, then a "friend answered"
+    // feed item for question B would slip past the question_id-based
+    // dedup in createFeedItemsForFriendsFromAnswer because the recipient's
+    // prior answer is keyed to question A.
+    const dedupText = normalizeQuestionTextForDedup(generated.questionText);
+    const dedupDomain = (generated.canonicalSubcategory ?? generated.broadCategory ?? slotDomain ?? '').trim();
+    if (dedupText && dedupDomain) {
+      const [textMatch] = await db
+        .select({ id: questions.id })
+        .from(questions)
+        .where(and(
+          isNull(questions.deletedAt),
+          eq(questions.source, 'daily_generated'),
+          sql`lower(regexp_replace(${questions.questionText}, '\s+', ' ', 'g')) = ${dedupText}`,
+          sql`lower(${questions.canonicalSubcategory}) = ${dedupDomain.toLowerCase()}`,
+        ))
+        .limit(1);
+
+      if (textMatch) {
+        // Intentionally do NOT rewrite the matched Question's
+        // generated_question_id — that would orphan the original
+        // GeneratedQuestion. The new GeneratedQuestion just shares the
+        // canonical Question; subsequent persist calls for this same
+        // GeneratedQuestion will re-hit this same text-dedup branch.
+        return { questionId: textMatch.id, alreadyExisted: true };
+      }
     }
 
     // F4.5: prefer a specific canonical subcategory; fall back through broad
