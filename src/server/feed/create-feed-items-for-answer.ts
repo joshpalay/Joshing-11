@@ -87,7 +87,7 @@ async function _createFeedItemsForFriendsFromAnswer(
 
   // Batched eligibility checks — one set-based query per filter instead of N
   // sequential round-trips per friend.
-  const [dismissedRows, existingRows, answerEventRows] = await Promise.all([
+  const [dismissedRows, existingRows, answerEventRows, alreadyAnsweredRows] = await Promise.all([
     db
       .select({ userId: feedDismissedDomains.userId })
       .from(feedDismissedDomains)
@@ -113,14 +113,32 @@ async function _createFeedItemsForFriendsFromAnswer(
             eq(feedItems.sourceAnswerId, sourceAnswerId),
           ))
       : Promise.resolve([] as Array<{ recipientUserId: string }>),
+    // Skip recipients who already answered this question on any surface
+    // (their own daily, catchup, or an earlier feed item). Without this,
+    // Robyn answers her declared-interest question in the daily, Josh later
+    // answers the same canonical question, and Robyn gets a fresh "Josh
+    // answered — your turn" feed card for content she already knows.
+    db
+      .select({ userId: masteryEvents.userId })
+      .from(masteryEvents)
+      .where(and(
+        inArray(masteryEvents.userId, friendIds),
+        eq(masteryEvents.questionId, questionId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+      )),
   ]);
 
   const dismissedSet = new Set(dismissedRows.map((r) => r.userId));
   const existingSet = new Set(existingRows.map((r) => r.recipientUserId));
   const answerEventSet = new Set(answerEventRows.map((r) => r.recipientUserId));
+  const alreadyAnsweredSet = new Set(alreadyAnsweredRows.map((r) => r.userId));
 
   const eligibleRecipientIds = friendIds.filter(
-    (id) => !dismissedSet.has(id) && !existingSet.has(id) && !answerEventSet.has(id),
+    (id) =>
+      !dismissedSet.has(id)
+      && !existingSet.has(id)
+      && !answerEventSet.has(id)
+      && !alreadyAnsweredSet.has(id),
   );
 
   if (eligibleRecipientIds.length > 0) {
