@@ -125,6 +125,108 @@ export async function register() {
       // initial creation and the 0018 migration will add these schema pieces.
     }
 
+    // Migration 0017 adds the 'creator_note_received' SmsMessageType enum value
+    // and creates the CreatorNote table with its FKs and indexes. If a preview/
+    // production database has this migration recorded without the table actually
+    // present, the daily summary query (and every creator-notes route) fails with
+    // Postgres 42P01 before migrate() can repair it. Pre-apply each piece
+    // idempotently outside the migrator transaction.
+    try {
+      await db.execute(sql`
+        ALTER TYPE "public"."SmsMessageType" ADD VALUE IF NOT EXISTS 'creator_note_received'
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "CreatorNote" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "authorUserId" text NOT NULL,
+          "recipientUserId" text NOT NULL,
+          "questionId" text NOT NULL,
+          "contextType" text NOT NULL,
+          "contextId" text,
+          "noteText" text NOT NULL,
+          "promptedAt" timestamp with time zone DEFAULT now() NOT NULL,
+          "writtenAt" timestamp with time zone,
+          "deliveredAt" timestamp with time zone,
+          "created_at" timestamp with time zone DEFAULT now() NOT NULL
+        )
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          note_table regclass := to_regclass('public."CreatorNote"');
+          user_table regclass := to_regclass('public."User"');
+        BEGIN
+          IF note_table IS NOT NULL
+            AND user_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'CreatorNote_authorUserId_User_id_fk'
+                AND conrelid = note_table
+            )
+          THEN
+            ALTER TABLE "CreatorNote"
+              ADD CONSTRAINT "CreatorNote_authorUserId_User_id_fk"
+              FOREIGN KEY ("authorUserId") REFERENCES "User"("id") ON DELETE cascade;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          note_table regclass := to_regclass('public."CreatorNote"');
+          user_table regclass := to_regclass('public."User"');
+        BEGIN
+          IF note_table IS NOT NULL
+            AND user_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'CreatorNote_recipientUserId_User_id_fk'
+                AND conrelid = note_table
+            )
+          THEN
+            ALTER TABLE "CreatorNote"
+              ADD CONSTRAINT "CreatorNote_recipientUserId_User_id_fk"
+              FOREIGN KEY ("recipientUserId") REFERENCES "User"("id") ON DELETE cascade;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          note_table regclass := to_regclass('public."CreatorNote"');
+          question_table regclass := to_regclass('public."Question"');
+        BEGIN
+          IF note_table IS NOT NULL
+            AND question_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'CreatorNote_questionId_Question_id_fk'
+                AND conrelid = note_table
+            )
+          THEN
+            ALTER TABLE "CreatorNote"
+              ADD CONSTRAINT "CreatorNote_questionId_Question_id_fk"
+              FOREIGN KEY ("questionId") REFERENCES "Question"("id") ON DELETE cascade;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "CreatorNote_authorUserId_promptedAt_idx"
+        ON "CreatorNote" USING btree ("authorUserId","promptedAt")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "CreatorNote_recipientUserId_questionId_idx"
+        ON "CreatorNote" USING btree ("recipientUserId","questionId")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "CreatorNote_questionId_idx"
+        ON "CreatorNote" USING btree ("questionId")
+      `);
+    } catch {
+      // SmsMessageType, User, or Question may not exist yet on a fresh database
+      // — migrate() creates them before 0017 runs.
+    }
+
     // Several FeedItem columns were introduced after the original table. In preview
     // databases with partially-recorded migrations, Drizzle can believe these
     // migrations already ran while the nullable columns are still absent, causing
