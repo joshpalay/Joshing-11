@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  BarChart3,
   Code2,
   FlaskConical,
   Loader2,
@@ -253,6 +254,12 @@ export default function AccountPage() {
             title="View staging flags"
             subtitle="See feature flag status"
             href="/dev/flags"
+          />
+          <SettingsRow
+            icon={BarChart3}
+            title="Points diagnostic"
+            subtitle="Inspect a user's mastery events and where points came from"
+            href="/dev/points-diagnostic"
           />
         </SettingsGroup>
 
