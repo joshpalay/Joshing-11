@@ -248,7 +248,7 @@ describe('Feed answered states', () => {
 })
 
 describe('FriendAnsweredCard viewer-already-answered footer', () => {
-  it('renders a "you both had it" status when viewer and friend were both correct', () => {
+  it('reframes the header around the viewer when both were correct and uses warm footer copy', () => {
     const rendered = html(
       <FriendAnsweredCard
         item={{
@@ -259,11 +259,13 @@ describe('FriendAnsweredCard viewer-already-answered footer', () => {
         onAnswer={() => undefined}
       />
     )
-    expect(rendered).toContain('You both had it')
+    expect(rendered).toContain('got your Science question')
+    expect(rendered).toContain('You both know some Science.')
+    expect(rendered).not.toContain('You both had it')
     expect(rendered).not.toContain('Answer →')
   })
 
-  it('renders a "you missed it" status when viewer was wrong and friend was right', () => {
+  it('renders a "missed your … question" header and "you missed it" footer when viewer was wrong and friend was right', () => {
     const rendered = html(
       <FriendAnsweredCard
         item={{
@@ -274,12 +276,14 @@ describe('FriendAnsweredCard viewer-already-answered footer', () => {
         onAnswer={() => undefined}
       />
     )
+    // Friend was right, so from the viewer's perspective the friend "got" their question.
+    expect(rendered).toContain('got your Science question')
     expect(rendered).toContain('Noah knew this')
     expect(rendered).toContain('you missed it')
     expect(rendered).not.toContain('Answer →')
   })
 
-  it('omits the status footer when the viewer has not answered yet', () => {
+  it('omits the status footer and the reframed header when the viewer has not answered yet', () => {
     const rendered = html(
       <FriendAnsweredCard
         item={feedCardPreviewFixtures.friendAnsweredRight}
@@ -288,7 +292,9 @@ describe('FriendAnsweredCard viewer-already-answered footer', () => {
     )
     expect(rendered).toContain('Answer →')
     expect(rendered).not.toContain('You both had it')
+    expect(rendered).not.toContain('You both know some')
     expect(rendered).not.toContain('you missed it')
+    expect(rendered).not.toContain('got your Science question')
   })
 })
 
