@@ -1,4 +1,4 @@
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
 import { getSession } from '@/server/auth/session';
 import {
@@ -32,12 +32,6 @@ type SearchParams = {
 type PageProps = {
   searchParams: Promise<SearchParams>;
 };
-
-function isDevDiagnosticEnabled(): boolean {
-  if (process.env.FEED_DEBUG_ENABLED === 'true') return true;
-  if (process.env.NODE_ENV !== 'production') return true;
-  return process.env.VERCEL_ENV !== undefined && process.env.VERCEL_ENV !== 'production';
-}
 
 function asCategory(value: string | undefined): Category | undefined {
   return value && (CATEGORY_VALUES as readonly string[]).includes(value) ? (value as Category) : undefined;
@@ -96,8 +90,6 @@ const LABEL_STYLE: React.CSSProperties = {
 };
 
 export default async function PointsDiagnosticPage({ searchParams }: PageProps) {
-  if (!isDevDiagnosticEnabled()) notFound();
-
   const session = await getSession();
   if (!session) redirect('/login');
 

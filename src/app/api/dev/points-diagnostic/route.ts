@@ -15,13 +15,6 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-export function isDevDiagnosticEnabled(): boolean {
-  if (process.env.FEED_DEBUG_ENABLED === 'true') return true;
-  if (process.env.NODE_ENV !== 'production') return true;
-  // Vercel preview deploys run with NODE_ENV='production' but VERCEL_ENV='preview'.
-  return process.env.VERCEL_ENV !== undefined && process.env.VERCEL_ENV !== 'production';
-}
-
 const querySchema = z.object({
   user: z.string().trim().min(1).optional(),
   category: z.enum(CATEGORY_VALUES).optional(),
@@ -74,7 +67,6 @@ function rowsToCsv(rows: PointsDiagnosticRow[]): string {
 export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  if (!isDevDiagnosticEnabled()) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
   const params = Object.fromEntries(request.nextUrl.searchParams.entries());
   const parsed = querySchema.safeParse(params);
