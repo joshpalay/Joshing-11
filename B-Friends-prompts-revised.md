@@ -88,6 +88,10 @@ File: `src/server/db/queries/questions.ts` — find `getAuthoredQuestionsForUser
 
 This makes both schema fields actually meaningful. Without this fix, the toggle in §2 above has no effect.
 
+**Preserve the "YOU ANSWERED" annotation** — the existing `<AuthoredQuestionsFeed>` at `src/components/profile/AuthoredQuestionsFeed.tsx` already shows whether the viewer has answered each authored question (visible as a "YOU ANSWERED" pill on the card). The gating change above filters which rows surface; it should not affect the per-row annotation logic. Verify by snapshot or visual after the change.
+
+**Empty state:** when the gate returns zero rows (vs. zero rows from no authored questions existing), the feed should still degrade gracefully. Check `<AuthoredQuestionsFeed>`'s empty rendering — it should not say "Robyn hasn't written any questions yet" when the truth is "Robyn has, but they're private." Better copy in that case is silence (omit the section header) or generic ("No public questions to show.").
+
 ### Acceptance
 
 - `/account/profile` renders the inline-editable form with all listed fields.
