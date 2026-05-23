@@ -146,7 +146,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
           totalPoints: params.pointsAwarded,
           tier: nextTier,
           tierReachedAt: tierChanged ? new Date() : null,
-          seasonPointsStart: 0,
+          lifetimePointsBaseline: 0,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({

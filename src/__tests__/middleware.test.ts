@@ -40,10 +40,10 @@ describe('proxy (invitation gate)', () => {
   describe('unauthenticated', () => {
     it('redirects page requests with no cookie to /login with next param', async () => {
       readSessionClaimsMock.mockResolvedValueOnce(null)
-      const res = await proxy(makeRequest('/feed'))
+      const res = await proxy(makeRequest('/knowledge'))
       expect(res.status).toBe(307) // NextResponse.redirect default
       expect(res.headers.get('location')).toContain('/login')
-      expect(res.headers.get('location')).toContain('next=%2Ffeed')
+      expect(res.headers.get('location')).toContain('next=%2Fknowledge')
     })
 
     it('returns 401 JSON for API requests with no cookie', async () => {
@@ -57,7 +57,7 @@ describe('proxy (invitation gate)', () => {
     it('rejects requests with a present-but-invalid JWT (readSessionClaims returns null)', async () => {
       readSessionClaimsMock.mockResolvedValueOnce(null)
       const res = await proxy(
-        makeRequest('/feed', { cookie: 'tampered.jwt.value' }),
+        makeRequest('/knowledge', { cookie: 'tampered.jwt.value' }),
       )
       expect(res.status).toBe(307)
       expect(res.headers.get('location')).toContain('/login')

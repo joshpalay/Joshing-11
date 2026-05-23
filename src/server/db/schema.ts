@@ -318,7 +318,7 @@ export const playerMastery = pgTable(
     totalPoints: doublePrecision('total_points').notNull().default(0),
     tier: masteryTierEnum('tier').notNull().default('establishing'),
     tierReachedAt: timestamp('tier_reached_at', { withTimezone: true }),
-    seasonPointsStart: doublePrecision('season_points_start').notNull().default(0),
+    lifetimePointsBaseline: doublePrecision('lifetime_points_baseline').notNull().default(0),
     territoryType: territoryTypeEnum('territory_type').notNull().default('demonstrated'),
     updatedAt: updatedAt(),
   },

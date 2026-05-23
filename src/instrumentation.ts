@@ -61,6 +61,30 @@ export async function register() {
       // PLAYER_MASTERY may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0043 renames PlayerMastery.season_points_start to
+    // lifetime_points_baseline. If a preview/production database has 0043
+    // recorded without the rename actually applied, Drizzle selects against
+    // the new column name fail with Postgres 42703. Apply the rename
+    // idempotently before migrate() so app code referencing the new column
+    // name keeps working.
+    try {
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'PLAYER_MASTERY'
+              AND column_name = 'season_points_start'
+          ) THEN
+            ALTER TABLE "PLAYER_MASTERY"
+              RENAME COLUMN "season_points_start" TO "lifetime_points_baseline";
+          END IF;
+        END $$
+      `);
+    } catch {
+      // PLAYER_MASTERY may not exist yet — migrate() handles initial creation.
+    }
+
     // UserQuestionBank provenance columns were added after the original table. If
     // a preview/production database has the migration marked as applied without
     // these additive columns present, Drizzle selects fail with Postgres 42703.
@@ -464,7 +488,7 @@ export async function register() {
       // before this migration runs.
     }
 
-    // Migration 0043 adds the nullable User.last_activity_bell_opened_at
+    // Migration 0044 adds the nullable User.last_activity_bell_opened_at
     // timestamp used by getBellBadgeCount to compute "rolled-off + unseen"
     // counts. Apply it idempotently in case the migration is recorded
     // without the column actually present.

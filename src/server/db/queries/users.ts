@@ -158,7 +158,7 @@ export async function saveDeclaredInterests(userId: string, interests: DeclaredI
           broadCategory: interest.broadCategory ?? null,
           totalPoints: 0,
           tier: 'establishing',
-          seasonPointsStart: 0,
+          lifetimePointsBaseline: 0,
           territoryType: 'declared',
         })
         .onConflictDoNothing({
