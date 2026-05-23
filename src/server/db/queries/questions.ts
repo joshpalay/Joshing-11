@@ -9,6 +9,7 @@ import {
   masteryEvents,
   questions,
   userQuestionBank,
+  users,
 } from '@/server/db';
 import { broadCategoryDisplayName } from '@/lib/question-categorization';
 import { pgErrorCode } from '@/server/db/pg-error';
@@ -281,6 +282,32 @@ export async function getAuthoredQuestionsForUser(params: {
   viewerUserId?: string;
 }): Promise<AuthoredQuestionPreview[]> {
   const limit = Math.max(1, Math.min(params.limit ?? 25, 100));
+  const isSelfView = params.viewerUserId === params.userId;
+
+  // User-level gate: when the author has hidden their authored questions
+  // from public view, return nothing to non-self viewers. Self-view always
+  // sees their own authored questions (regardless of either gate).
+  if (!isSelfView) {
+    const [author] = await db
+      .select({ authorProfilePublic: users.authorProfilePublic })
+      .from(users)
+      .where(eq(users.id, params.userId))
+      .limit(1);
+
+    if (!author || !author.authorProfilePublic) return [];
+  }
+
+  // Per-question filter: non-self viewers only see questions with
+  // visibility='public'. Self-view sees private questions as well.
+  const whereClauses = [
+    eq(questions.creatorId, params.userId),
+    isNull(questions.deletedAt),
+    eq(questions.source, 'authored'),
+  ];
+  if (!isSelfView) {
+    whereClauses.push(eq(questions.visibility, 'public'));
+  }
+
   const rows = await db
     .select({
       id: questions.id,
@@ -290,13 +317,7 @@ export async function getAuthoredQuestionsForUser(params: {
       createdAt: questions.createdAt,
     })
     .from(questions)
-    .where(
-      and(
-        eq(questions.creatorId, params.userId),
-        isNull(questions.deletedAt),
-        eq(questions.source, 'authored'),
-      ),
-    )
+    .where(and(...whereClauses))
     .orderBy(desc(questions.createdAt))
     .limit(limit);
 

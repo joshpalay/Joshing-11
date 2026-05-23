@@ -65,6 +65,11 @@ describe('friend portrait data', () => {
       displayName: 'Frances Friend',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101010',
+      handle: null,
+      tagline: null,
+      location: null,
+      bio: null,
+      authorProfilePublic: true,
     })
     getFriendshipMock.mockResolvedValue({
       id: 'friendship-1',
@@ -88,6 +93,11 @@ describe('friend portrait data', () => {
       user: {
         id: 'friend-1',
         displayName: 'Frances Friend',
+        handle: null,
+        tagline: null,
+        location: null,
+        bio: null,
+        authorProfilePublic: true,
         memberSince: new Date('2026-01-01T00:00:00.000Z'),
       },
       visibility: 'friend',
