@@ -337,6 +337,13 @@
       "when": 1780617600000,
       "tag": "0047_user_profile_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1780704000000,
+      "tag": "0048_friends_privacy_foundation",
+      "breakpoints": true
     }
   ]
 }
