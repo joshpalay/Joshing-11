@@ -2,9 +2,32 @@
 
 **Source of intent:** `joshing-prd-v12-friends-discovery.md` v12 §9.6.3 + §9.6.4.
 
-**Why revised:** The original build prompts (drafted against an idealized schema) assumed `users.handle`, `users.avatar_color`, a multi-tab Friends Hub, a normalized `users.phone`, and migrations under `src/server/db/migrations/`. None of those hold. This document replaces the original B-Friends-1 and adds three prerequisite prompts (P0-A, P0-B, P0-C) that must merge first.
+**Why revised:** The original build prompts (drafted against an idealized schema) assumed `users.handle`, `users.avatar_color`, a multi-tab Friends Hub, a normalized `users.phone`, and migrations under `src/server/db/migrations/`. None of those hold. This document replaces the original B-Friends-1 and adds prerequisite prompts (P0-A through P0-D) that must merge first.
 
-**Order:** P0-A → P0-B → P0-C → B-Friends-1 (revised). B-Friends-2 / -3 / -4 still need their own revision pass once these have shipped.
+**Order:** P0-D → P0-A → P0-B → P0-C → B-Friends-1 (revised). B-Friends-2 / -3 / -4 still need their own revision pass once these have shipped.
+
+> **Audit pass (2026-05-23):** Feasibility audit complete. See **"Per-prompt readiness (audit pass)"** at the bottom of this document for verdicts and decisions. **P0-C body has been rewritten** based on the audit finding that `FriendsList.tsx` already implements internal tabs.
+
+---
+
+## P0-D — Profile page design *(new prerequisite)*
+
+**Goal:** Design and ship `/account/profile`, which is currently a stub at `src/app/account/profile/page.tsx`. P0-A (handles) is blocked on this because the handle has no rendering home until the profile page exists.
+
+### Scope
+
+- Design pass — fields to surface: `displayName`, `@handle` (once P0-A lands), phone, avatar (using `AvatarChip` from P0-B once it lands).
+- Edit affordances for `displayName` (existing `updateDisplayName` in `src/server/db/queries/account.ts:171` already supports it) and — once P0-A lands — `@handle` (rate-limited).
+- Replace the current `<StubPage ... />` body in `src/app/account/profile/page.tsx`.
+- Match the visual language of the existing `/account/notifications` page (`src/app/account/notifications/NotificationsForm.tsx`).
+
+### Out of scope
+
+- The handle picker itself (P0-A).
+- Avatar customization UI (just render `AvatarChip` once P0-B lands).
+- Bio / tagline fields mentioned in the current stub copy — fast-follow.
+
+**Detailed design work TBD.** This entry is a placeholder to record the dependency. Flesh out before starting P0-A.
 
 ---
 
@@ -139,49 +162,43 @@ Replacing existing initials-chip implementations across the app is a follow-up, 
 
 ---
 
-## P0-C — Friends Hub sub-tabs
+## P0-C — Rename "Requests" tab to "Invitations" *(rewritten after audit)*
 
-**Goal:** Restructure the flat `FriendsHubPage` into a tabbed surface so B-Friends-2 / -3 / -4 have a place to live.
+**Goal:** B-Friends-2 / -3 / -4 need a place in the Friends UI for friend-request lifecycle to live. The feasibility audit (2026-05-23) found that `src/components/FriendsList.tsx:120-159` **already implements** a three-tab UI (Friends / Requests / Sent). The original P0-C plan (wrapping it in an *outer* tabs layer) would have produced nested tabs — bad UX.
+
+This rewrite keeps the existing internal tab structure and just renames "Requests" → "Invitations". B-Friends-2 lands the friend-request lifecycle into the renamed tab. No new components, no URL `?tab=` param yet (defer until B-Friends-4's tab-dot deep-link genuinely needs it).
 
 ### Scope
 
-#### Layout
+#### Rename
+File: `src/components/FriendsList.tsx`.
 
-File: `src/components/FriendsHubPage.tsx` (modify existing).
+- Tab label "Requests" → "Invitations" (both visible label and any `data-` / `aria-` selectors if they use the literal string).
+- The internal `activeTab` state value can stay `'requests'` for now — purely a UI label change. If clarity wins, also rename the enum value to `'invitations'`. Either is fine; pick one and apply consistently in this PR.
+- Update any test fixtures or snapshots that reference the old label.
 
-Add a sub-tab strip below the header. Two tabs in Phase 1:
+#### Drop from the original P0-C
+The following pieces from the pre-audit P0-C are explicitly **dropped**:
 
-- **Friends** — the current flat content (`AddFriendInvite` + `FriendsList`), unchanged.
-- **Invitations** — empty placeholder in this prompt. Renders `<InvitationsTabPlaceholder />` which says *"Friend requests will appear here."*
+- The outer Friends / Invitations tab strip on `FriendsHubPage`.
+- The `FriendsTabContent.tsx` and `InvitationsTabContent.tsx` wrapper components.
+- The `?tab=friends|invitations` URL parameter.
+- The header-restructure that moved the Add Friend button into the tab strip.
 
-Tab state via URL query param `?tab=friends|invitations`, default `friends`. Use Next.js search params, not local state — so the Friends tab dot (B-Friends-4 §10) can deep-link to Invitations.
-
-Don't introduce a tabs library. Match whatever tabbed UI already exists in the project (look in `src/components/` and `src/app/account/` for prior art before building from scratch). If nothing exists, build a small inline tabs component using existing CSS conventions.
-
-#### Header restructure
-
-Move the existing "Add friend" button into the tab strip's right side so it persists across both tabs. The "Find Friends" button required by B-Friends-3 §1 will join it later.
-
-#### Tab content components
-
-- `src/components/friends/FriendsTabContent.tsx` — wraps the current `AddFriendInvite` + `FriendsList` rendering.
-- `src/components/friends/InvitationsTabContent.tsx` — placeholder with the "Friend requests will appear here" copy.
-
-These two are what later prompts (B-Friends-2 §7, B-Friends-3 §1) will extend.
+`FriendsHubPage.tsx` stays as-is.
 
 ### Acceptance
 
-- `/friends` defaults to the Friends sub-tab; `/friends?tab=invitations` lands on Invitations.
-- Switching tabs updates the URL.
-- The Friends tab content is functionally unchanged from today.
-- The Invitations tab renders the placeholder copy.
-- The bottom Nav Friends tab still links to `/friends` without a tab param.
+- The Friends tab in the bottom nav still goes to `/friends`.
+- `FriendsList` now reads "Invitations" where it previously read "Requests" — both in the tab pill and in any empty-state copy.
+- Nothing else about the page changes.
 
 ### Out of scope
 
-- Real Invitations content (B-Friends-2 §4 onward).
-- Find Friends button / route (B-Friends-3).
-- Overview, Active Now, Shared Interests sub-tabs (later passes).
+- Adding deep-link URL state (B-Friends-4 may add a `?tab=` param if the new-discovery dot needs to route the user to a specific tab).
+- Adding the Find Friends button / route (B-Friends-3).
+- Wiring real friend-request lifecycle content into the Invitations tab (B-Friends-2).
+- Overview, Active Now, Shared Interests sub-tabs from the original PRD §9.6.4 — those were always speculative and aren't needed in Phase 1.
 
 ---
 
@@ -330,3 +347,61 @@ B-Friends-2, B-Friends-3, B-Friends-4 from the original document still need a re
 - **Cron location** — `src/app/api/cron/` + `vercel.json`, not `src/server/jobs/`.
 - **`users.phone_hash` + E.164 backfill** — needs `libphonenumber-js` as a new dependency; the existing `users.phoneNumber` column is not pre-normalized.
 - **No env validation file** — direct `process.env` is the current pattern.
+
+---
+
+## Per-prompt readiness (audit pass — 2026-05-23)
+
+Four `Explore` agents verified each prompt's codebase-touching assumptions. Decisions recorded inline.
+
+### B-Friends-1 revised — GREEN
+
+All assumptions verified. Implement using these existing patterns:
+
+- ✅ ID helper: `gen_random_uuid()::text` via `id()` at `src/server/db/schema.ts:19`. Use for `friend_requests.id`.
+- ✅ Instrumentation guards: `ADD COLUMN IF NOT EXISTS` at `src/instrumentation.ts:463`, `CREATE TABLE IF NOT EXISTS` at `src/instrumentation.ts:163-176`, `DO $$` blocks for FK constraints at `src/instrumentation.ts:178-196`.
+- ✅ Zod pattern to copy: `src/app/api/account/reminders/route.ts:12-26` (object + optional fields + `.refine` + `safeParse`, 400 on fail).
+- ✅ Toggle pattern (no library): inline `role="switch"` button at `src/app/account/notifications/NotificationsForm.tsx:121-136`.
+- ✅ `src/server/db/queries/account.ts` exists with coherent neighbors (`getUserProfile`, `updateReminderPreferences`, `updateDisplayName`, `deleteUserAccount`). Add `updateDiscoverability` + `deleteContactHashesForUser` here.
+- ✅ `getSession` canonical import: `@/server/auth/session` (93 usages, no alternatives).
+- ✅ Latest migration: `drizzle/0044_user_last_activity_bell_opened_at.sql` — next is `0045`.
+
+**Verdict: GREEN.** Implementable as written.
+
+### P0-A handles — BLOCKED on P0-D
+
+- ✅ User insert site: `src/app/api/auth/verify-otp/route.ts:49-53` via `provisionUserForPhone()`.
+- ✅ Onboarding flow exists at `src/app/onboarding/page.tsx` + `src/app/onboarding/OnboardingFlow.tsx` — natural insertion point for the handle picker.
+- ✅ ID/secret primitive: `gen_random_uuid()::text` for IDs; `randomBytes(N).toString('hex'|'base64url')` for tokens (`src/server/auth/session.ts:102`, `src/server/friends/invitations.ts:166`). No `nanoid` dep. Use `randomBytes(2).toString('hex')` for the 4-char handle suffix.
+- ✅ Top-level reserved routes (20): `account, activities, api, archive, ceremony, creator-notes, daily, dev, feed, friends, games, invite, knowledge, login, new-game, onboarding, questions, replay, share, users`.
+- ✅ Rate-limit prior art: `users.reminderPromptDismissedAt` at `src/server/db/schema.ts:162` + write at `src/server/db/queries/account.ts:162`. Model `handle_last_changed_at` on this.
+
+**Verdict: BLOCKED on P0-D.** The handle has no rendering home until `/account/profile` (currently a stub) exists. P0-D added as a new prerequisite.
+
+### P0-B avatar_color — GREEN (kept as written)
+
+- ❌ `clay1..clay8` tokens **don't exist** (`tailwind.config.ts:3` is empty). Palette is hex-array based.
+- ✅ Existing palette: `AVATAR_COLORS` (6 hex colors) at `src/components/feed/visual.ts:12-19`. Duplicated at `src/app/account/page.tsx:29` — dedupe as part of the work.
+- ✅ Existing deterministic helper: `colorForUser(userId)` at `src/components/feed/visual.ts`. Used by `AvatarDisc` at `src/components/feed/AnsweredByYouCard.tsx:53-79` and `initialsFor()` at `src/components/Nav.tsx:17-22`. **Use this exact function in the backfill script** so values match what's currently being rendered at runtime — users won't see their avatar color change.
+- ✅ User insert site: `src/app/api/auth/verify-otp/route.ts:49`.
+
+**Decision logged:** Keep the column despite existing runtime computation, so future user-customization UI has a place to write.
+
+**Verdict: GREEN** — but with two amendments to the original P0-B body:
+1. Palette is the existing 6-color `AVATAR_COLORS` hex array, not the speculated `clay1..clay8` tokens. The `avatar-palette.ts` helper file is unnecessary — re-export from `visual.ts` instead.
+2. Backfill must use the existing `colorForUser()` to preserve current rendering.
+
+### P0-C Friends Hub sub-tabs — REWRITTEN (see updated P0-C body above)
+
+- ❌ No reusable Tabs primitive in `src/components/ui/` (only `button.tsx`).
+- ❌ **`FriendsList.tsx` already implements its own three-tab UI** (Friends / Requests / Sent) at `src/components/FriendsList.tsx:120-159`. The original P0-C would have produced nested tabs.
+- ✅ `FriendsHubPage.tsx` is a clean wrapper with no `useSearchParams` or props (`src/components/FriendsHubPage.tsx:14-31`).
+- ✅ `Nav.tsx` Friends link is plain `/friends` (`src/components/Nav.tsx:11`).
+
+**Decision logged:** Drop the outer Friends/Invitations layer. Rename FriendsList's existing "Requests" tab to "Invitations". B-Friends-2 lands the lifecycle into that tab.
+
+**Verdict: REWRITTEN.** See updated P0-C body above. Original outer-tab design dropped.
+
+### NEW: P0-D Profile page design
+
+Placeholder added above P0-A. The current `/account/profile` is a stub (`src/app/account/profile/page.tsx`); P0-A's handle needs a rendering surface, so the profile page must come first. Detailed scope TBD — flesh out before starting P0-A.
