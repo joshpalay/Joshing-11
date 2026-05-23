@@ -666,7 +666,7 @@ On no match: "No one by that name. They may not be on Joshing yet — you can in
 
 Button tooltip: "Coming soon." B-Friends-4 replaces this entire block.
 
-**Block 3 — Existing-invite reflection.** Query: `friend_invitations` rows where `inviter_user_id = currentUserId` AND `invitee_user_id IS NOT NULL` (they joined) AND no active Friendship exists yet between the pair AND no pending `friend_requests` row exists in either direction.
+**Block 3 — Existing-invite reflection.** Query: `friend_invitations` rows where `inviter_user_id = currentUserId` AND `invitee_user_id IS NOT NULL` (they joined) AND no active Friendship exists yet between the pair AND no pending Friendship row exists between them (since after B-Friends-1/2, pending friend requests live as `friendships.status='pending'` — there is no separate `friend_requests` table).
 
 Render rows per spec §9.6.3.4 Block 3:
 
@@ -1006,7 +1006,7 @@ Four `Explore` agents verified each prompt's codebase-touching assumptions. Deci
 
 All assumptions verified. Implement using these existing patterns:
 
-- ✅ ID helper: `gen_random_uuid()::text` via `id()` at `src/server/db/schema.ts:19`. Use for `friend_requests.id`.
+- ✅ ID helper: `gen_random_uuid()::text` via `id()` at `src/server/db/schema.ts:19`. (No new tables now — Migration C extends the existing `Friendship` table instead.)
 - ✅ Instrumentation guards: `ADD COLUMN IF NOT EXISTS` at `src/instrumentation.ts:463`, `CREATE TABLE IF NOT EXISTS` at `src/instrumentation.ts:163-176`, `DO $$` blocks for FK constraints at `src/instrumentation.ts:178-196`.
 - ✅ Zod pattern to copy: `src/app/api/account/reminders/route.ts:12-26` (object + optional fields + `.refine` + `safeParse`, 400 on fail).
 - ✅ Toggle pattern (no library): inline `role="switch"` button at `src/app/account/notifications/NotificationsForm.tsx:121-136`.
@@ -1051,9 +1051,11 @@ All assumptions verified. Implement using these existing patterns:
 
 **Verdict: REWRITTEN.** See updated P0-C body above. Original outer-tab design dropped.
 
-### NEW: P0-D Profile page design
+### P0-D Profile edit page — GREEN
 
-Placeholder added above P0-A. The current `/account/profile` is a stub (`src/app/account/profile/page.tsx`); P0-A's handle needs a rendering surface, so the profile page must come first. Detailed scope TBD — flesh out before starting P0-A.
+Originally added as a "BLOCKED on TBD design" placeholder. Reframed on 2026-05-23 after the deeper audit (and user-supplied screenshots) revealed `/account` and `/users/[id]` already render the read-only profile cards — only the *edit* page is stubbed, and `users.authorProfilePublic` + `questions.visibility` exist in schema but are not enforced. P0-D now: builds the `/account/profile` inline-edit form, adds `tagline` + `location` columns, threads `@handle`/tagline/location into the existing render surfaces, and wires the two dead privacy fields through to `getAuthoredQuestionsForUser()`.
+
+**Verdict: GREEN.** Independent — does not block P0-A.
 
 ### B-Friends-2 — GREEN (re-revised after audit; decision (a) taken)
 
