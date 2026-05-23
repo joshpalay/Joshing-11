@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { X } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
@@ -661,16 +663,25 @@ export default function DailyPage() {
             <h1 className="font-serif text-xl font-semibold text-[var(--text)]">Today&apos;s five</h1>
           </div>
         </div>
-        <GeometricProgress
-          total={DAILY_QUEUE_SIZE}
-          current={Math.min(completedCount + 1, DAILY_QUEUE_SIZE)}
-          results={results}
-        />
+        <div className="flex items-center gap-2">
+          <GeometricProgress
+            total={DAILY_QUEUE_SIZE}
+            current={Math.min(completedCount + 1, DAILY_QUEUE_SIZE)}
+            results={results}
+          />
+          <Link
+            href="/"
+            aria-label="Close"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
+          >
+            <X className="size-5" strokeWidth={1.9} />
+          </Link>
+        </div>
       </header>
 
       <section
         className="flex-1 overflow-y-auto px-4 py-4"
-        style={{ paddingBottom: "calc(140px + env(safe-area-inset-bottom))" }}
+        style={{ paddingBottom: "calc(24px + env(safe-area-inset-bottom))" }}
       >
         {loading ? (
           <p className="text-sm text-[var(--text-muted)]">Loading today...</p>
@@ -690,6 +701,7 @@ export default function DailyPage() {
             borderColor: 'var(--border)',
             background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
             backdropFilter: 'blur(6px)',
+            paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
           }}
           onSubmit={(event) => {
             event.preventDefault();
