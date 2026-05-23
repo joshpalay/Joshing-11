@@ -5,12 +5,27 @@ import { CreatorNoteReadButton } from '@/app/activities/CreatorNoteReadButton'
 import { FriendRequestActions } from '@/app/activities/FriendRequestActions'
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead'
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton'
+import { DayDivider } from '@/components/lately/DayDivider'
+import { LatelyFeed } from '@/components/lately/LatelyFeed'
+import {
+  CREAM,
+  FH,
+  FM,
+  FS,
+  HILITE,
+  INK,
+  INK2,
+  INK3,
+  RULE,
+} from '@/components/lately/tokens'
 import { creatorNoteSubmittedAnswerText } from '@/lib/creator-note-submitted-answer'
 import { getSession } from '@/server/auth/session'
 import {
   getActivitiesForUser,
   type ActivityItemView,
 } from '@/server/db/queries/activity'
+import { getLatelyMoments } from '@/server/db/queries/lately'
+import { getUserById } from '@/server/db/queries/users'
 
 function formatActivityTime(value: Date) {
   return new Intl.DateTimeFormat(undefined, {
@@ -350,7 +365,7 @@ function ActivityCta({ item }: { item: ActivityItemView }) {
 
   if (item.type === 'received_direct_question') {
     return (
-      <Link href="/feed" className="btn-primary">
+      <Link href="/" className="btn-primary">
         Answer
       </Link>
     )
@@ -392,59 +407,150 @@ export default async function ActivitiesPage() {
   const session = await getSession()
   if (!session) redirect('/login')
 
-  const items = await getActivitiesForUser(session.userId)
+  const [items, moments, viewer] = await Promise.all([
+    getActivitiesForUser(session.userId),
+    getLatelyMoments(session.userId),
+    getUserById(session.userId),
+  ])
+  const tz = viewer?.timezone ?? 'America/New_York'
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5">
-      <MarkActivitiesRead />
-      <header className="mb-5 border-b pb-4">
-        <p className="text-muted-foreground text-xs tracking-[0.1em] uppercase">
-          Notes
-        </p>
-        <h1 className="text-foreground font-serif text-2xl font-semibold">
-          Recent notes
-        </h1>
-      </header>
+    <main
+      style={{
+        background: CREAM,
+        color: INK,
+        minHeight: '100dvh',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 420,
+          margin: '0 auto',
+          padding: '18px 20px 100px',
+          boxSizing: 'border-box',
+        }}
+      >
+        <MarkActivitiesRead />
 
-      {items.length === 0 ? (
-        <section className="flex flex-1 items-center justify-center py-16 text-center">
-          <p className="text-muted-foreground max-w-sm text-sm">
-            Nothing here yet. Play some questions and send a Joshing Game.
-          </p>
-        </section>
-      ) : (
-        <section className="space-y-3 pb-8">
-          {items.map((item) => (
-            <article
-              key={item.id}
-              id={
-                item.type === 'friend_request'
-                  ? `friendship-${item.referenceId}`
-                  : undefined
-              }
-              className={[
-                'bg-card text-card-foreground rounded-lg border p-4 transition',
-                isUnread(item)
-                  ? 'border-l-primary border-l-[3px]'
-                  : 'border-l-transparent opacity-75',
-              ].join(' ')}
+        <div style={{ marginBottom: 6 }}>
+          <h1
+            style={{
+              fontSize: 52,
+              fontFamily: FS,
+              fontWeight: 400,
+              fontStyle: 'italic',
+              lineHeight: 1,
+              margin: 0,
+              letterSpacing: -1.5,
+              position: 'relative',
+              display: 'inline-block',
+            }}
+          >
+            Lately.
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: '30%',
+                bottom: 4,
+                height: 8,
+                background: HILITE,
+                zIndex: -1,
+                opacity: 0.85,
+              }}
+            />
+          </h1>
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            color: INK2,
+            fontStyle: 'italic',
+            lineHeight: 1.5,
+            marginBottom: 4,
+          }}
+        >
+          Moments of connection from across your games.
+        </div>
+        <div
+          style={{
+            fontFamily: FH,
+            fontSize: 18,
+            color: INK2,
+            marginTop: 6,
+            marginLeft: 2,
+            transform: 'rotate(-1deg)',
+            display: 'inline-block',
+          }}
+        >
+          — the people who get you, getting you.
+        </div>
+
+        <LatelyFeed moments={moments} tz={tz} />
+
+        {items.length > 0 ? (
+          <>
+            <DayDivider label="EARLIER ACTIVITY" />
+            <section className="space-y-3 pb-8">
+              {items.map((item) => (
+                <article
+                  key={item.id}
+                  id={
+                    item.type === 'friend_request'
+                      ? `friendship-${item.referenceId}`
+                      : undefined
+                  }
+                  className={[
+                    'bg-card text-card-foreground rounded-lg border p-4 transition',
+                    isUnread(item)
+                      ? 'border-l-primary border-l-[3px]'
+                      : 'border-l-transparent opacity-75',
+                  ].join(' ')}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-base leading-7">
+                        <ActivityCopy item={item} />
+                      </p>
+                      <ActivitySubcopy item={item} />
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {formatActivityTime(item.createdAt)}
+                      </p>
+                    </div>
+                    <ActivityCta item={item} />
+                  </div>
+                </article>
+              ))}
+            </section>
+          </>
+        ) : null}
+
+        {moments.length > 0 || items.length > 0 ? (
+          <div
+            style={{
+              marginTop: 36,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 12,
+            }}
+          >
+            <div style={{ width: 40, height: 1, background: RULE }} />
+            <div
+              style={{
+                fontSize: 9,
+                fontFamily: FM,
+                color: INK3,
+                letterSpacing: 3,
+              }}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-base leading-7">
-                    <ActivityCopy item={item} />
-                  </p>
-                  <ActivitySubcopy item={item} />
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {formatActivityTime(item.createdAt)}
-                  </p>
-                </div>
-                <ActivityCta item={item} />
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
+              END OF FEED
+            </div>
+            <div style={{ width: 40, height: 1, background: RULE }} />
+          </div>
+        ) : null}
+      </div>
     </main>
   )
 }

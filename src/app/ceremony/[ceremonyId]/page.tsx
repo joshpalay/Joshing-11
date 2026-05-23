@@ -381,7 +381,7 @@ export default function CeremonyPage() {
                 className="inline-flex h-12 items-center justify-center rounded-md bg-stone-100 px-5 text-sm font-medium text-stone-950"
                 onClick={(event) => {
                   event.stopPropagation();
-                  router.push('/feed');
+                  router.push('/');
                 }}
               >
                 Done

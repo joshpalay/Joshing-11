@@ -21,6 +21,22 @@ export type ActivityItemType =
   // that exposes their submitted text to the author.
   | 'grade_dispute_filed';
 
+// Events surfaced in Home's top-3 RecentActivity and counted by the bell
+// badge. Light type filtering only — chronological within this set. Single
+// source of truth for "is this event home-worthy?" — see RecentActivitySection
+// and getBellBadgeCount.
+export const HOME_TOP3_ELIGIBLE_TYPES = [
+  'friend_answered_your_question',
+  'friend_mastery',
+  'declared_promoted',
+  'reaction_received',
+  'creator_note_received',
+  'question_curated',
+  'authored_question_shared',
+] as const satisfies readonly ActivityItemType[];
+
+export type HomeTop3EligibleType = (typeof HOME_TOP3_ELIGIBLE_TYPES)[number];
+
 export async function writeActivity(params: {
   userId: string;
   type: ActivityItemType;

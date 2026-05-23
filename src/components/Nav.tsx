@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Brain, Home, Menu, Pencil, Plus, Rss, User, X } from 'lucide-react';
+import { Bell, Brain, Home, Pencil, Plus, User, Users } from 'lucide-react';
 import { CreateChooser } from '@/components/CreateChooser';
 
 const navItems = [
   { href: '/', label: 'Home', Icon: Home },
-  { href: '/friends', label: 'Friends', Icon: Rss },
+  { href: '/friends', label: 'Friends', Icon: Users },
   { href: '/questions', label: 'Questions', Icon: Pencil },
   { href: '/knowledge', label: 'Knowledge', Icon: Brain },
   { href: '/account', label: 'Account', Icon: User },
@@ -21,17 +21,23 @@ function initialsFor(name: string): string {
   return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase();
 }
 
+function formatBadgeCount(count: number): string {
+  if (count > 99) return '99+';
+  return String(count);
+}
+
 export function Nav({
   initialUserId = null,
   initialDisplayName = null,
+  bellBadgeCount = 0,
 }: {
   initialUserId?: string | null;
   initialDisplayName?: string | null;
+  bellBadgeCount?: number;
 }) {
   const pathname = usePathname();
   const accountInitials = initialDisplayName ? initialsFor(initialDisplayName) || null : null;
   const currentUserId = initialUserId;
-  const [menuOpen, setMenuOpen] = useState(false);
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
   const isOtherUserProfilePath = (() => {
     if (!pathname.startsWith('/users/')) return false;
@@ -54,13 +60,13 @@ export function Nav({
 
   function AccountIcon({ active }: { active: boolean }) {
     if (!accountInitials) {
-      return <User className="size-5" strokeWidth={1.9} />;
+      return <User className="size-5" strokeWidth={active ? 2.4 : 1.8} />;
     }
 
     return (
       <span
         className={[
-          'grid size-6 place-items-center rounded-full text-[11px] font-semibold',
+          'grid size-5 place-items-center rounded-full text-[10px] font-semibold',
           active ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground',
         ].join(' ')}
         aria-hidden="true"
@@ -70,85 +76,101 @@ export function Nav({
     );
   }
 
+  const showBadge = bellBadgeCount > 0;
+  const badgeText = formatBadgeCount(bellBadgeCount);
+
   return (
     <>
-      <nav
-        className={[
-          'sticky top-0 z-40 border-b bg-background/95 backdrop-blur',
-          menuOpen ? 'px-6 pb-16 pt-7 md:pb-16' : 'px-4 py-3',
-        ].join(' ')}
-        aria-label="Primary navigation"
+      <header
+        className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur"
+        aria-label="Primary header"
       >
-        <div
-          className={[
-            'mx-auto flex max-w-4xl items-center justify-between',
-            menuOpen ? 'mb-9' : '',
-          ].join(' ')}
-        >
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <Link
             href="/"
-            className={[
-              'font-serif font-semibold leading-none text-foreground',
-              menuOpen ? 'text-[2rem]' : 'text-lg',
-            ].join(' ')}
-            onClick={() => setMenuOpen(false)}
+            className="font-serif text-lg font-semibold leading-none text-foreground"
           >
             Joshing
           </Link>
-          <button
-            type="button"
-            className={[
-              'inline-flex items-center justify-center border text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-              menuOpen
-                ? 'size-16 rounded-2xl bg-background text-4xl shadow-sm'
-                : 'min-h-10 min-w-10 rounded-md',
-            ].join(' ')}
-            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-            aria-expanded={menuOpen}
-            aria-controls="nav-menu"
-            onClick={() => setMenuOpen((current) => !current)}
+          <Link
+            href="/activities"
+            aria-label={
+              showBadge ? `Activity, ${bellBadgeCount} unread` : 'Activity'
+            }
+            className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            {menuOpen ? <X className="size-8" strokeWidth={1.6} /> : <Menu className="size-5" />}
-          </button>
+            <Bell className="size-5" strokeWidth={1.9} />
+            {showBadge ? (
+              <span
+                className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-white"
+                style={{ backgroundColor: 'var(--accent)' }}
+                aria-hidden="true"
+              >
+                {badgeText}
+              </span>
+            ) : null}
+          </Link>
         </div>
-        {menuOpen ? (
-          <div id="nav-menu" className="mx-auto grid max-w-4xl gap-8 md:gap-5" role="list">
-            {navItems.map(({ href, label, Icon }) => {
-              const active = pathname === href;
-              const isAccount = label === 'Account';
-
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMenuOpen(false)}
-                  aria-current={active ? 'page' : undefined}
-                  className={[
-                    'group flex min-h-14 items-center gap-7 rounded-xl px-8 text-[1.65rem] leading-none transition md:min-h-12 md:text-2xl',
-                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-                  ].join(' ')}
-                  role="listitem"
-                >
-                  <span className="relative grid size-7 shrink-0 place-items-center text-muted-foreground transition group-hover:text-foreground">
-                    {isAccount ? <AccountIcon active={active} /> : <Icon className="size-6" strokeWidth={1.9} />}
-                  </span>
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-        ) : null}
-      </nav>
+      </header>
       {showNewGameShortcut ? (
         <button
           type="button"
-          className="fixed bottom-20 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg md:hidden"
+          className="fixed bottom-24 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg md:hidden"
           aria-label="Create"
           onClick={() => setCreateChooserOpen(true)}
         >
           <Plus className="size-6" />
         </button>
       ) : null}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur"
+        aria-label="Primary navigation"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div
+          className="mx-auto grid max-w-4xl"
+          style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
+          role="list"
+        >
+          {navItems.map(({ href, label, Icon }) => {
+            const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+            const isAccount = label === 'Account';
+
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? 'page' : undefined}
+                role="listitem"
+                className={[
+                  'flex min-h-14 flex-col items-center justify-center gap-1 py-2 transition',
+                  active ? 'text-foreground opacity-100' : 'text-foreground/55 hover:text-foreground',
+                ].join(' ')}
+              >
+                <span aria-hidden="true" className="grid place-items-center">
+                  {isAccount ? (
+                    <AccountIcon active={active} />
+                  ) : (
+                    <Icon
+                      className="size-5"
+                      strokeWidth={active ? 2.4 : 1.8}
+                      fill={active && label === 'Home' ? 'currentColor' : 'none'}
+                    />
+                  )}
+                </span>
+                <span
+                  className={[
+                    'font-mono text-[9px] uppercase tracking-[0.08em]',
+                    active ? 'font-semibold' : 'font-medium',
+                  ].join(' ')}
+                >
+                  {label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
       <CreateChooser open={createChooserOpen} onClose={() => setCreateChooserOpen(false)} />
     </>
   );

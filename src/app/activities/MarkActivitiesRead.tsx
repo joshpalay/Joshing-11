@@ -4,10 +4,16 @@ import { useEffect } from 'react';
 
 export function MarkActivitiesRead() {
   useEffect(() => {
-    void fetch('/api/activities/read', {
-      method: 'POST',
-      credentials: 'include',
-    }).catch(() => undefined);
+    void Promise.allSettled([
+      fetch('/api/activities/read', {
+        method: 'POST',
+        credentials: 'include',
+      }),
+      fetch('/api/activities/opened', {
+        method: 'POST',
+        credentials: 'include',
+      }),
+    ]);
   }, []);
 
   return null;

@@ -227,7 +227,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
 
       <header>
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          <Link href="/feed" className="underline underline-offset-2">HOME</Link>
+          <Link href="/" className="underline underline-offset-2">HOME</Link>
           {' / '}
           {view.game.title}
           {' / SUMMARY'}
@@ -394,7 +394,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         </div>
       ) : null}
 
-      <Link className="btn-ghost mt-4" href="/feed">Back to Feed</Link>
+      <Link className="btn-ghost mt-4" href="/">Back to Home</Link>
     </main>
   );
 }

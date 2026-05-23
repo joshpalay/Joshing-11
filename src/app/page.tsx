@@ -1,13 +1,17 @@
 import { Suspense } from 'react'
-import Link from 'next/link'
 import FeedList from '@/components/FeedList'
 import TodaysFiveCard, {
   type DailyPreferences,
   type DailyStatus,
   type SlotOutcome,
 } from '@/components/TodaysFiveCard'
+import { CeremonyPin } from '@/components/home/CeremonyPin'
+import { Hero } from '@/components/home/Hero'
+import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
+import { RecentActivitySection } from '@/components/home/RecentActivitySection'
 import { getSession } from '@/server/auth/session'
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types'
+import { getRecentActivityForHome } from '@/server/db/queries/activity'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
@@ -20,42 +24,61 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-24 md:py-10">
-      <section className="space-y-6 border-b pb-6">
-        <div className="w-full">
-          <h1 className="text-foreground font-serif text-4xl leading-tight font-semibold md:text-5xl">
-            You contain multitudes.
-          </h1>
-        </div>
-        <div className="w-full space-y-3">
-          {session ? (
-            <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
-              <TodaysFiveSection userId={session.userId} />
-            </Suspense>
-          ) : (
-            <TodaysFiveCard />
-          )}
-          {session ? (
-            <Suspense fallback={null}>
-              <MissedQuestionsSection userId={session.userId} />
-            </Suspense>
-          ) : null}
-          <div id="feed">
-            <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
-              What&apos;s happening
-            </p>
-            {session ? (
-              <Suspense fallback={<FeedSkeleton />}>
-                <FeedSection userId={session.userId} />
-              </Suspense>
-            ) : (
-              <FeedList pageSize={FEED_PAGE_SIZE} infinite />
-            )}
-          </div>
-        </div>
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-4 py-6 pb-32 md:py-10">
+      {session ? (
+        <Suspense fallback={<HeroSkeleton />}>
+          <HeroSection userId={session.userId} />
+        </Suspense>
+      ) : (
+        <Hero isComplete={false} />
+      )}
+
+      {session ? (
+        <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
+          <TodaysFiveSection userId={session.userId} />
+        </Suspense>
+      ) : (
+        <TodaysFiveCard />
+      )}
+
+      {session ? (
+        <Suspense fallback={null}>
+          <MissedQuestionsSection userId={session.userId} />
+        </Suspense>
+      ) : null}
+
+      {session ? (
+        <Suspense fallback={null}>
+          <CeremonyPinSection userId={session.userId} />
+        </Suspense>
+      ) : null}
+
+      {session ? (
+        <Suspense fallback={null}>
+          <RecentActivityServerSection userId={session.userId} />
+        </Suspense>
+      ) : null}
+
+      <section id="feed">
+        <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
+          From your friends
+        </p>
+        {session ? (
+          <Suspense fallback={<FeedSkeleton />}>
+            <FromYourFriendsSection userId={session.userId} />
+          </Suspense>
+        ) : (
+          <FeedList pageSize={FEED_PAGE_SIZE} infinite />
+        )}
       </section>
     </main>
   )
+}
+
+async function HeroSection({ userId }: { userId: string }) {
+  const queue = await getTodaysDailyQueue(userId)
+  const status = buildDailyStatusSnapshot(queue)
+  return <Hero isComplete={status.isComplete} />
 }
 
 async function TodaysFiveSection({ userId }: { userId: string }) {
@@ -87,23 +110,36 @@ async function MissedQuestionsSection({ userId }: { userId: string }) {
   return <MissedQuestionsCard count={count} expiringCount={expiringCount} />
 }
 
-async function FeedSection({ userId }: { userId: string }) {
-  const [feedPage, latestUnviewed] = await Promise.all([
-    getFeedPagePayload(userId, { limit: FEED_PAGE_SIZE, cursor: null, filter: 'all' }),
-    getLatestUnviewedCeremony(userId),
-  ])
-
+async function CeremonyPinSection({ userId }: { userId: string }) {
+  const latestUnviewed = await getLatestUnviewedCeremony(userId)
   return (
-    <FeedList
-      pageSize={FEED_PAGE_SIZE}
-      infinite
-      initialPage={feedPage}
-      initialCeremonyStatus={{
+    <CeremonyPin
+      status={{
         nextFireAt: getNextCeremonyAt().toISOString(),
         latestUnviewed: latestUnviewed
           ? { id: latestUnviewed.id, firedAt: latestUnviewed.firedAt.toISOString() }
           : null,
       }}
+    />
+  )
+}
+
+async function RecentActivityServerSection({ userId }: { userId: string }) {
+  const items = await getRecentActivityForHome(userId, 3)
+  return <RecentActivitySection items={items} />
+}
+
+async function FromYourFriendsSection({ userId }: { userId: string }) {
+  const feedPage = await getFeedPagePayload(userId, {
+    limit: FEED_PAGE_SIZE,
+    cursor: null,
+    filter: 'all',
+  })
+  return (
+    <FeedList
+      pageSize={FEED_PAGE_SIZE}
+      infinite
+      initialPage={feedPage}
     />
   )
 }
@@ -160,55 +196,14 @@ function CardSkeleton({ minHeight }: { minHeight: string }) {
   )
 }
 
+function HeroSkeleton() {
+  return <div className="h-32" aria-hidden="true" />
+}
+
 function FeedSkeleton() {
   return (
     <div className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
       Loading feed…
-    </div>
-  )
-}
-
-function MissedQuestionsCard({
-  count,
-  expiringCount,
-}: {
-  count: number
-  expiringCount: number
-}) {
-  if (count === 0) return null
-  return (
-    <div
-      className="bg-card text-card-foreground rounded-lg border p-4"
-      style={
-        expiringCount > 0
-          ? {
-              borderColor: 'color-mix(in srgb, #b45309 32%, var(--border))',
-              boxShadow:
-                '0 0 0 1px color-mix(in srgb, #b45309 10%, transparent)',
-            }
-          : undefined
-      }
-    >
-      <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-        Reinforce what you learned
-      </p>
-      <p className="text-foreground mt-2 text-sm font-semibold">
-        {count === 1 ? '1 question to revisit' : `${count} questions to revisit`}
-      </p>
-      {expiringCount > 0 ? (
-        <p
-          className="mt-1 text-xs font-medium tracking-[0.08em] uppercase"
-          style={{ color: '#b45309' }}
-        >
-          {expiringCount} expires tomorrow
-        </p>
-      ) : null}
-      <Link
-        href="/daily/catchup"
-        className="btn-ghost mt-4 min-h-11 w-full justify-center"
-      >
-        Catch up →
-      </Link>
     </div>
   )
 }

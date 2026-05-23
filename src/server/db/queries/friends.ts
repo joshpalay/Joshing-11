@@ -1,6 +1,14 @@
-import { and, asc, desc, eq, inArray, ne, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
 
-import { db, declaredInterests, feedItems, friendships, users } from '@/server/db';
+import {
+  db,
+  declaredInterests,
+  feedItems,
+  friendships,
+  joshingGameResponses,
+  masteryEvents,
+  users,
+} from '@/server/db';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 export type User = typeof users.$inferSelect;
@@ -11,6 +19,7 @@ export type FriendHubFriend = {
   displayName: string
   declaredInterests: string[]
   sharedInterests: string[]
+  lastActiveAt: Date | null
 }
 
 export type IncomingFriendRequest = {
@@ -96,6 +105,47 @@ export async function getRecentDirectSendRecipients(userId: string, limit = 3): 
   return result;
 }
 
+// Derives a "last active" timestamp per user by taking the most recent of two
+// signals — answering a question (JoshingGameResponse.answeredAt) and being
+// awarded mastery (MASTERY_EVENTS.created_at). Both are direct evidence the
+// user did something, and together they survive when only one is present
+// (e.g. an authored question earns mastery without an answeredAt row).
+async function getLastActiveByUserId(userIds: string[]): Promise<Map<string, Date>> {
+  if (userIds.length === 0) return new Map()
+
+  const [responseRows, masteryRows] = await Promise.all([
+    db
+      .select({
+        userId: joshingGameResponses.userId,
+        lastAt: sql<Date>`max(${joshingGameResponses.answeredAt})`.as('last_at'),
+      })
+      .from(joshingGameResponses)
+      .where(and(
+        inArray(joshingGameResponses.userId, userIds),
+        sql`${joshingGameResponses.answeredAt} is not null`,
+      ))
+      .groupBy(joshingGameResponses.userId),
+    db
+      .select({
+        userId: masteryEvents.userId,
+        lastAt: sql<Date>`max(${masteryEvents.createdAt})`.as('last_at'),
+      })
+      .from(masteryEvents)
+      .where(inArray(masteryEvents.userId, userIds))
+      .groupBy(masteryEvents.userId),
+  ])
+
+  const lastActive = new Map<string, Date>()
+  for (const row of [...responseRows, ...masteryRows]) {
+    if (!row.lastAt) continue
+    const next = row.lastAt instanceof Date ? row.lastAt : new Date(row.lastAt)
+    if (Number.isNaN(next.getTime())) continue
+    const existing = lastActive.get(row.userId)
+    if (!existing || next > existing) lastActive.set(row.userId, next)
+  }
+  return lastActive
+}
+
 export async function getFriendsHub(userId: string): Promise<FriendsHub> {
   const activeFriendships = await db
     .select({ userAId: friendships.userAId, userBId: friendships.userBId })
@@ -141,6 +191,10 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
 
   const viewerInterests = new Set(interestsByUser.get(userId) ?? [])
 
+  const lastActiveByUser = friendIds.length === 0
+    ? new Map<string, Date>()
+    : await getLastActiveByUserId(friendIds)
+
   const incomingRows = await db
     .select({
       id: friendships.id,
@@ -167,6 +221,7 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
         displayName: displayName(friend.displayName, friend.phoneNumber),
         declaredInterests: friendInterests,
         sharedInterests: friendInterests.filter((interest) => viewerInterests.has(interest)),
+        lastActiveAt: lastActiveByUser.get(friend.id) ?? null,
       }
     }),
     incomingRequests: incomingRows.map((request) => ({

@@ -7,7 +7,7 @@
  * to hydrate <FeedList /> with the first page (no client round-trip).
  */
 
-import { and, count, eq, inArray, or } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, ne, or } from 'drizzle-orm';
 
 import { db, feedItems, friendships, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
@@ -167,20 +167,24 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
     db
       .select({ value: count() })
       .from(feedItems)
+      .innerJoin(questions, eq(feedItems.questionId, questions.id))
       .where(and(
         eq(feedItems.recipientUserId, viewerUserId),
         visibleSourcePredicate,
         feedFilterSourcePredicate(filter),
+        or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
       ))
       .then((rows) => rows[0]?.value ?? 0),
     db
       .select({ value: count() })
       .from(feedItems)
+      .innerJoin(questions, eq(feedItems.questionId, questions.id))
       .where(and(
         eq(feedItems.recipientUserId, viewerUserId),
         visibleSourcePredicate,
         feedFilterSourcePredicate(filter),
         inArray(feedItems.state, ['active', 'skipped']),
+        or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
       ))
       .then((rows) => rows[0]?.value ?? 0),
   ]);
