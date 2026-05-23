@@ -1,12 +1,10 @@
 import type { Metadata } from 'next'
-import { Montserrat, Playfair_Display } from 'next/font/google'
+import { Caveat, Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 import { getUserOnboardingProfile } from '@/server/db/queries/users';
 import { getBellBadgeCount } from '@/server/db/queries/activity';
-
-// Caveat removed — was preloaded but unused. Re-add when a handwriting register lands in UI.
 
 // Intentional product choice (2026-05-16): Montserrat is the body font.
 // PRD §typography spec'd Inter, but Montserrat ships. Update PRD to reflect this.
@@ -23,6 +21,13 @@ const playfair = Playfair_Display({
   subsets: ['latin'],
   style: ['italic'],
   variable: '--font-display',
+  display: 'swap',
+})
+
+// Handwritten register for the Lately flourish on /activities. Used sparingly.
+const caveat = Caveat({
+  subsets: ['latin'],
+  variable: '--font-caveat',
   display: 'swap',
 })
 
@@ -47,7 +52,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${playfair.variable}`}
+      className={`font-sans ${playfair.variable} ${caveat.variable}`}
     >
       <body className={montserrat.className}>
         <Nav

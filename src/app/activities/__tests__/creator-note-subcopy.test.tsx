@@ -12,6 +12,8 @@ vi.mock('@/app/activities/MarkActivitiesRead', () => ({ MarkActivitiesRead: () =
 vi.mock('@/app/activities/ReactionGotItButton', () => ({ ReactionGotItButton: () => null }));
 vi.mock('@/server/auth/session', () => ({ getSession: vi.fn() }));
 vi.mock('@/server/db/queries/activity', () => ({ getActivitiesForUser: vi.fn() }));
+vi.mock('@/server/db/queries/lately', () => ({ getLatelyMoments: vi.fn() }));
+vi.mock('@/server/db/queries/users', () => ({ getUserById: vi.fn() }));
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
