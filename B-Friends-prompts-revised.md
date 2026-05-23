@@ -235,33 +235,37 @@ CREATE INDEX idx_contact_hashes_phone ON contact_hashes (phone_hash);
 
 Note: `user_id` is `TEXT` not `UUID`, matching the existing `users.id` column type in this schema.
 
-**Migration C — `friend_requests` table:**
+**Migration C — extend `friendships` with request-lifecycle columns:**
+
+The 2026-05-23 independent audit found that `friendships.status = 'pending'` already models inbound friend requests (see `src/server/db/queries/friends.ts:198-214` + `src/server/friends/friendships.ts:83-156`). Rather than introduce a parallel `friend_requests` table, this migration extends the existing one.
 
 ```sql
-CREATE TABLE friend_requests (
-  id            TEXT PRIMARY KEY,
-  requester_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  recipient_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status        TEXT NOT NULL CHECK (status IN ('pending','accepted','declined','expired')),
-  personal_note TEXT,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  resolved_at   TIMESTAMPTZ,
-  expires_at    TIMESTAMPTZ NOT NULL,
-  CHECK (char_length(personal_note) <= 160),
-  CHECK (requester_id != recipient_id),
-  UNIQUE (requester_id, recipient_id)
-);
-CREATE INDEX idx_friend_requests_recipient_pending
-  ON friend_requests (recipient_id) WHERE status = 'pending';
-CREATE INDEX idx_friend_requests_expires_pending
-  ON friend_requests (expires_at) WHERE status = 'pending';
+ALTER TABLE "Friendship" ADD COLUMN personal_note  TEXT;
+ALTER TABLE "Friendship" ADD COLUMN expires_at     TIMESTAMPTZ;
+ALTER TABLE "Friendship" ADD COLUMN resolved_at    TIMESTAMPTZ;
+ALTER TABLE "Friendship" ADD CONSTRAINT friendship_personal_note_length
+  CHECK (char_length(personal_note) <= 160);
+ALTER TABLE "Friendship" ADD CONSTRAINT friendship_users_distinct
+  CHECK ("userAId" <> "userBId");
+CREATE INDEX idx_friendship_expires_pending
+  ON "Friendship" (expires_at) WHERE status = 'pending';
+CREATE INDEX idx_friendship_resolved_decay
+  ON "Friendship" (resolved_at) WHERE status IN ('declined','expired');
 ```
 
-ID generation: match the existing convention (read `src/server/db/schema.ts` and use the same helper that `friendships.id` uses). Don't introduce `gen_random_uuid()` if the project uses application-generated IDs.
+Notes:
 
-Update `src/server/db/schema.ts` for all three.
+- Use the actual table name (`"Friendship"`, capitalized — verify against `src/server/db/schema.ts:670` for the exact `pgTable('Friendship', ...)` name).
+- `status` is `text`, not an enum, so adding `'declined'` and `'expired'` as accepted values requires no schema change — just app-level discipline. B-Friends-2 introduces those values.
+- The `friendship_users_distinct` CHECK guards against `userAId = userBId`; if `friendshipPair()` at `src/server/friends/friendships.ts:28-29` has always normalized, this should never have happened in practice, but the CHECK is cheap insurance.
+- Personal note is nullable for backward compat: existing pending rows (created via `createOrReusePendingFriendshipRequest()`) have no note. The 160-char limit is enforced at the DB layer for new writes.
+- `expires_at` is nullable. New pending rows created via B-Friends-2's POST endpoint will set it to `NOW() + 30 days`. Existing pending rows have NULL, which the expiration cron should treat as "never expires" until they're updated or manually set.
 
-Add idempotent guards in `src/instrumentation.ts` matching the existing pattern (column-exists check before adding, table-exists before creating).
+Update `src/server/db/schema.ts` to add `personalNote`, `expiresAt`, `resolvedAt` to the friendships pgTable definition.
+
+Add idempotent guards in `src/instrumentation.ts` matching the existing pattern (column-exists check before adding, constraint-exists check before adding).
+
+**No `friend_requests` table is added.** The original spec proposed one; the audit found it duplicated existing functionality. See "B-Friends-2" readiness section at the bottom of this document for the full rationale.
 
 #### 2. Phone hashing
 
@@ -322,8 +326,9 @@ Place DB writes in `src/server/db/queries/account.ts` (extend the existing file)
 - Toggling rows 1 or 2 persists and survives reload.
 - Toggling `discoverable_by_contacts` ON → upload some test rows to `contact_hashes` directly → toggle OFF → verify `contact_hashes` is empty for that user (single transaction).
 - Unauthenticated PATCH returns 401.
-- Direct INSERT into `friend_requests` with a 161-char `personal_note` fails the CHECK constraint.
-- Direct INSERT with `requester_id = recipient_id` fails.
+- Direct INSERT/UPDATE on `friendships` with a 161-char `personal_note` fails the `friendship_personal_note_length` CHECK constraint.
+- Direct INSERT on `friendships` with `userAId = userBId` fails the `friendship_users_distinct` CHECK.
+- Existing pending Friendship rows continue to work (they have NULL `personal_note`, NULL `expires_at`).
 - Production boot fails fast if `PHONE_HASH_SALT` is unset.
 
 ### Out of scope
@@ -336,19 +341,28 @@ Place DB writes in `src/server/db/queries/account.ts` (extend the existing file)
 
 ---
 
-## B-Friends-2 (revised) — Friend request flow
+## B-Friends-2 (re-revised) — Friend request flow on the existing `friendships` table
 
-**Goal:** In-app friend request lifecycle. Send → notify → accept or decline → Friendship row.
+**Goal:** Add the missing pieces of the friend-request lifecycle on top of the existing `friendships` pending-request mechanism. Specifically: a freeform `personal_note`, a 30-day expiration with cron, a 30-day re-send cooldown, an outbound pending section, an "are these two blocked?" helper, and a new modal/button for inviting Joshing users you found via search or contact matching.
 
-**Depends on:** B-Friends-1 (`friend_requests` table). P0-A (handles, for the AddFriendButton's target identification) is *helpful* but not strictly required — request flow can use `userId` if handles aren't merged yet.
+**Depends on:** B-Friends-1 (the `friendships` column extensions: `personal_note`, `expires_at`, `resolved_at`). P0-A (handles) is helpful for the AddFriendButton target identification but not strictly required.
+
+**What already exists** (verified by audit on 2026-05-23 — don't rebuild):
+
+- `friendships.status='pending'` rows are the request representation.
+- `friendshipPair(a, b)` helper at `src/server/friends/friendships.ts:28-29` does userA<userB normalization.
+- `createOrReusePendingFriendshipRequest()` at `src/server/friends/friendships.ts` is called by `/api/friend-invitations` for existing-user invitees — extend it to accept `personalNote`.
+- ActivityItem writes for `'friend_request'` and `'friend_request_accepted'` already happen at `src/server/friends/friendships.ts:83-156`.
+- `POST /api/friend-requests/:id/:action` endpoint exists and is consumed by `FriendsList.tsx:90-95` for accept/decline (the "decline" action is currently called `'ignore'` — keep that naming for backward compat, but treat it as the decline path).
+- `getFriendsHub()` at `src/server/db/queries/friends.ts:198-214` reads inbound pending requests for the Friends Hub.
 
 ### Scope
 
-#### 1. AddFriendButton component
+#### 1. AddFriendButton component (NEW)
 
 File: `src/components/friends/AddFriendButton.tsx` (new).
 
-Generic, reusable. Used here, in B-Friends-3 search results, and in B-Friends-4 contact match cards.
+Generic. Used here, in B-Friends-3 search results, and in B-Friends-4 contact match cards.
 
 Props:
 
@@ -364,144 +378,156 @@ Render rules per spec §9.6.4.1:
 
 - `none` → "Add friend" (primary CTA) → opens `AddFriendRequestModal`.
 - `pending_outbound` → "Pending" pill (disabled, muted).
-- `pending_inbound` → inline "Accept" + "Decline" buttons hitting the accept/decline endpoints.
-- `friends` → "Friends" pill (disabled, with checkmark glyph).
+- `pending_inbound` → inline "Accept" + "Decline" buttons hitting the existing accept/ignore endpoints.
+- `friends` → "Friends" pill (disabled, with checkmark).
 - `recently_sent` → "Recently sent" pill (disabled, tooltip "You sent a request to this person in the last 30 days.").
 
-Use the existing button primitive at `src/components/ui/button.tsx` for the primary CTA.
+Use the existing button primitive at `src/components/ui/button.tsx`.
 
-#### 2. AddFriendRequestModal
+#### 2. AddFriendRequestModal (NEW)
 
 File: `src/components/friends/AddFriendRequestModal.tsx` (new).
 
-Modal per spec §9.6.4.1. Personal note textarea, 160-char limit (Zod + client counter, counter visible once ≥120 chars). On submit → `POST /api/friend-requests`. Optimistic close + flip parent button to `pending_outbound`. Toast "Sent." on success.
+Modal per spec §9.6.4.1. Personal note textarea, 160-char limit (Zod + client counter visible once ≥120 chars). On submit → new `POST /api/friend-requests` endpoint (§3 below). Optimistic close + flip parent button to `pending_outbound`. Toast "Sent." on success.
 
-Match the visual treatment of `src/components/AddFriendInvite.tsx` (the existing invite-by-phone modal) for consistency.
+Modal pattern: no reusable `<Modal>` exists. Copy the fixed-backdrop + centered-dialog pattern from `src/components/QuickAddQuestionModal.tsx` (the project's de facto modal reference). Don't reuse `AddFriendInvite.tsx`'s expanding-panel pattern — that one is intentionally inline.
 
 #### 3. API endpoints
 
-Files: `src/app/api/friend-requests/route.ts`, `src/app/api/friend-requests/[id]/accept/route.ts`, `src/app/api/friend-requests/[id]/decline/route.ts`, `src/app/api/friend-requests/[id]/route.ts` (DELETE).
+**NEW: `POST /api/friend-requests`** — body `{ recipientUserId: string, personalNote?: string }` (Zod-validate per `src/app/api/account/reminders/route.ts:12-26` pattern).
 
-Auth on all: `getSession()` from `@/server/auth/session`. Zod-validate bodies per the pattern at `src/app/api/account/reminders/route.ts:12-26`.
-
-Place query helpers at `src/server/db/queries/friend-requests.ts` (new) — sibling of the existing `src/server/db/queries/friendships.ts`.
-
-**`POST /api/friend-requests`** — body `{ recipientId: string, personalNote?: string }`.
+Distinct from the existing `POST /api/friend-invitations` (which is for inviting people by phone with topics). This endpoint is for sending a freeform-note request to an existing Joshing user. Internally it calls (an extended) `createOrReusePendingFriendshipRequest()` at `src/server/friends/friendships.ts` — see §4 for the extension.
 
 Server logic:
 
-1. Verify `recipientId` exists and isn't the caller.
-2. Active friendship check: existing accepted Friendship between the pair (with `removed_at IS NULL`). If yes → 409 "Already friends."
-3. Pending duplicate check: existing `friend_requests` row in `pending` with this `(requester, recipient)` pair. If yes → 409 "Request already pending." (The unique index also guards this at the DB layer.)
-4. Cooldown check: any `friend_requests` row with this pair in either direction, status in `('declined','expired')`, with `resolved_at > NOW() - INTERVAL '30 days'`. If yes → 429 "Recently sent — try again later."
-5. Anti-harassment (see §6 below). Blocked → 404 (silently, don't reveal the block).
-6. Insert with `id` defaulted by the DB (`gen_random_uuid()::text` per the column default added in B-Friends-1's `friend_requests` migration), `status='pending'`, `expires_at = NOW() + INTERVAL '30 days'`.
-7. Write an `ActivityItem` of type `'friend_request'` for the recipient via the existing helper at `src/server/activity/write-activity.ts`. Payload includes the requester's user ID and the personal note.
-8. Return 201.
+1. Verify `recipientUserId` exists and isn't the caller.
+2. **Friendship check:** `getRelationship(callerId, recipientUserId)` (see §6). Branch on the result:
+   - `'friends'` → 409 "Already friends."
+   - `'pending_outbound'` → 409 "Request already pending." (The existing pending row's note is **not** updated — to overwrite, the user must Cancel first and re-send.)
+   - `'pending_inbound'` → 409 "They've already sent you a request — go accept it."
+   - `'recently_sent'` → 429 "Recently sent — try again later."
+   - blocked (resolved silently inside `getRelationship`) → 404 (don't reveal).
+   - `'none'` → proceed.
+3. Call `createOrReusePendingFriendshipRequest({ inviterUserId: callerId, inviteeUserId: recipientUserId, personalNote, expiresAt: NOW() + 30 days, suggestedInterests: [] })`. Existing helper writes the Friendship row (status='pending', `requested_by_user_id = caller`, `formed_via = 'direct_request'`) and the `'friend_request'` ActivityItem.
+4. Return 201 with the Friendship row.
 
-**`POST /api/friend-requests/[id]/accept`** — recipient only.
+**Existing: `POST /api/friend-requests/:id/accept`** (already wired). Extend the handler to:
+- Set `resolved_at = NOW()` on the Friendship row alongside the existing `status='accepted'`, `formed_at=NOW()`.
+- Other behavior (Friendship transition, `'friend_request_accepted'` ActivityItem for requester) is unchanged — already correct.
 
-1. Load the row; verify `recipient_id = currentUserId` and `status = 'pending'`. Else 404.
-2. Insert into `friendships` (use the existing `friendships` query layer at `src/server/db/queries/friendships.ts`). Normalize so `user_a_id < user_b_id`. Set `formed_via = 'direct_request'` (this is the value the existing codebase uses — **not** the original prompt's `'in_app_request'`). Set `requested_by_user_id = <requester>`, `status = 'accepted'`, `formed_at = NOW()`.
-3. Update the friend_requests row: `status='accepted'`, `resolved_at = NOW()`.
-4. Write an `ActivityItem` of type `'friend_request_accepted'` for the **requester** (so they see "Robyn accepted your friend request").
-5. Return 200.
+**Existing: `POST /api/friend-requests/:id/ignore`** (already wired; FriendsList.tsx:90-95 uses `action='ignore'`). Extend the handler to:
+- Set `status='declined'`, `resolved_at=NOW()` (today it likely just removes / soft-removes the row; check the current implementation and update accordingly).
+- Continue to write no ActivityItem (decline is silent per spec §9.6.4.2).
 
-**`POST /api/friend-requests/[id]/decline`** — recipient only.
+**NEW: `DELETE /api/friend-requests/:id`** — requester only. Hard-deletes the row. The unique `(userA, userB)` plus normalization means re-sending immediately is allowed (no cooldown for self-cancellation). No ActivityItem.
 
-1. Verify ownership + status. Else 404.
-2. Update: `status='declined'`, `resolved_at = NOW()`.
-3. **No ActivityItem.** Decline is silent to the requester per spec §9.6.4.2.
-4. Return 200.
+#### 4. `createOrReusePendingFriendshipRequest` extension
 
-**`DELETE /api/friend-requests/[id]`** — requester only. Hard-deletes the row (the unique-pair constraint releases, allowing re-send). No ActivityItem. The recipient sees the inbound request disappear from their Invitations list on next refresh.
+Open `src/server/friends/friendships.ts` and extend the existing function:
 
-Rationale for hard-delete vs. a `'cancelled'` status: cancellation is the requester's own choice and shouldn't cool down future re-sends. The 30-day cooldown intentionally only fires on `declined`/`expired` resolutions.
+- Accept a new optional `personalNote?: string` argument. Persist to `friendships.personal_note`.
+- Accept a new optional `expiresAt?: Date` argument. Persist to `friendships.expires_at`. If omitted (e.g. when called from the existing `/api/friend-invitations` path for topic-seeded invites), leave NULL — those don't expire under v12 (existing behavior preserved).
+- "Reuse" behavior stays the same: if a pending row already exists in the pair, return it (don't create a duplicate). This is what currently powers idempotency of the existing `/api/friend-invitations` flow.
 
-#### 4. Inbound + outbound requests in the Invitations tab
+#### 5. Inbound + outbound rendering in the Invitations tab
 
-After P0-C, `FriendsList.tsx`'s tab labeled "Invitations" needs its content replaced.
+After P0-C, `FriendsList.tsx`'s tab is labeled "Invitations." The audit at `src/components/FriendsList.tsx:236-291` shows the inbound rendering already exists — it shows requester name + suggested-interest pills + Accept/Not-now buttons. Extend it to:
 
-Query (in `src/server/db/queries/friend-requests.ts`):
+- Render `personal_note` (if present) in italic-quoted block beneath the existing suggested-interest pills. If both are present, both render. If neither, neither block renders.
+- Add an "Outbound (Sent)" section beneath inbound, populated from a new query helper.
 
-- `listInboundPending(userId)` — rows where `recipient_id = userId AND status = 'pending'`, ordered `created_at DESC`. JOIN users for requester display data + avatar color.
-- `listOutboundPending(userId)` — rows where `requester_id = userId AND status = 'pending'`, ordered `created_at DESC`. JOIN users for recipient display data.
+**Query helpers** — extend `src/server/db/queries/friends.ts` (the file that already houses `getFriendsHub`):
 
-Wire into `FriendsList.tsx` so the Invitations tab renders, in order:
+- Add `listOutboundPending(userId)` → returns Friendship rows where `requestedByUserId = userId AND status = 'pending'`, joined to the *other* user for display. Order by `createdAt DESC`.
+- Update `getFriendsHub` (or its consumers in `/api/friends/route.ts`) to surface this alongside the existing `incomingRequests` field, e.g. as `outgoingRequests`.
 
-**Inbound section** — per spec §9.6.4.3:
+**Outbound row UI**:
 
 ```
-[Avatar]  Robyn
-          wants to be friends
-          2 days ago
-
-          "I think you'd love these
-           Stoppard questions I've been
-           writing."
-
-          [ Accept ]   [ Decline ]
+[Avatar]  Sarah
+          sent 2 days ago                    [ Cancel ]
 ```
 
-Personal note rendered in italic with quote marks. Omit the quote block if absent. Avatar via `AvatarChip` from P0-B. Accept / Decline hit the respective endpoints; optimistic remove on click. Toast "You're now friends with Robyn." on accept. No toast on decline.
-
-**Outbound section** — header "SENT (N)". Each row shows the recipient, "sent N days ago", and a "Cancel" button hitting `DELETE /api/friend-requests/:id`. Optimistic remove. No toast.
+Cancel hits `DELETE /api/friend-requests/:id`. Optimistic remove. No toast.
 
 **Empty states:**
 
 | Condition | Copy |
 |---|---|
-| Zero inbound, zero outbound | "All caught up on invitations." + link to `/friends/find` (Find Friends, lands in B-Friends-3) |
+| Zero inbound, zero outbound | "All caught up on invitations." + link to `/friends/find` (B-Friends-3) |
 | Zero pending overall AND zero friends | "No friends yet. Let's find your people." + same CTA |
 | `discoverable_by_contacts = false` AND zero pending | "Turn on discoverability to find people you already know on Joshing." + link to `/account/privacy` |
 
-#### 5. Expiration cron
+#### 6. `getRelationship` helper (NEW)
 
-File: `src/app/api/cron/expire-friend-requests/route.ts` (new). Wire into `vercel.json`'s `crons` array at e.g. `30 6 * * *` (between `daily-assignments` at 6:00 and `weekly-ceremony` at 8:00).
+File: `src/server/db/queries/friend-requests.ts` (new — small file, just this one helper and its query).
 
-Logic: `UPDATE friend_requests SET status='expired', resolved_at=NOW() WHERE status='pending' AND expires_at < NOW()`. Return the updated row count for logging.
+Signature: `getRelationship(viewerId: string, targetId: string): Promise<'none' | 'pending_outbound' | 'pending_inbound' | 'friends' | 'recently_sent'>`.
 
-Cron auth: copy the secret-header check pattern from the existing cron routes (inspect `src/app/api/cron/daily-assignments/route.ts` for the exact check — likely a `CRON_SECRET` env var compared against the `Authorization` header).
-
-#### 6. Anti-harassment
-
-Block model for v12: piggybacks on the existing `friendships.removed_at` + `removed_by_user_id` columns. A "block" = soft-deleted Friendship where `removed_by_user_id = <blocker>`. Symmetric exclusion:
-
-- If A soft-removed a friendship with B (`removed_by_user_id = A`), B cannot send a new request to A.
-- If B soft-removed a friendship with A (`removed_by_user_id = B`), A cannot send a new request to B.
-
-Implement as a shared helper `getRelationship(viewerId, targetId)` at `src/server/db/queries/friend-requests.ts`, returning the same enum the `AddFriendButton` consumes. Single source of truth for "what's the state between A and B." Used by:
-
-- `POST /api/friend-requests` (block both directions → 404).
-- Any UI that renders `AddFriendButton`.
+Single source of truth used by:
+- `POST /api/friend-requests` (block both directions → returns `'none'` outwardly but the POST itself responds 404).
 - B-Friends-3 search results.
 - B-Friends-4 contact match results.
+- AddFriendButton initial render.
 
-Logic:
+Resolution order (all queries against `friendships`):
 
 ```
-1. Active Friendship row → 'friends'
-2. Soft-removed Friendship where removed_by is *either* party → block (caller sees 'none' but POST fails)
-3. friend_requests row (pending) where caller is requester → 'pending_outbound'
-4. friend_requests row (pending) where caller is recipient → 'pending_inbound'
-5. friend_requests row resolved within 30 days as declined/expired (either direction) → 'recently_sent'
-6. Otherwise → 'none'
+1. Active row (status='accepted', removed_at IS NULL)                                 → 'friends'
+2. Soft-removed row (removed_at IS NOT NULL) where removed_by_user_id ∈ {viewer,target} → block: helper returns 'none' but exposes a separate `isBlocked` flag to callers that need it
+3. Pending row where requested_by_user_id = viewer                                     → 'pending_outbound'
+4. Pending row where requested_by_user_id = target                                     → 'pending_inbound'
+5. Resolved (declined/expired) row with resolved_at > NOW() - INTERVAL '30 days'       → 'recently_sent'
+6. Otherwise                                                                           → 'none'
 ```
+
+Implementation note: a "block" is not a separate enum value — it's a side-channel that the POST endpoint reads to decide between 404 vs. allow. UI surfaces never need to distinguish "blocked" from "none" — both look the same to the viewer (no Add Friend affordance, or rather: the affordance renders but the POST silently fails. To prevent the UI affordance from showing for blocked users, the helper should return `'none'` AND callers that render search/match results should filter out users where `isBlocked === true` before rendering).
+
+#### 7. Expiration + cleanup cron
+
+File: `src/app/api/cron/expire-friend-requests/route.ts` (new). Add to `vercel.json` `crons` array at `30 6 * * *` (between existing 6:00 daily-assignments and 8:00 weekly-ceremony).
+
+Auth: copy the pattern from `src/app/api/cron/daily-assignments/route.ts:24-29`:
+
+```ts
+function isAuthorized(request: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET;
+  if (!secret) return true;
+  return request.headers.get('authorization') === `Bearer ${secret}`;
+}
+```
+
+Two operations in one job:
+
+```sql
+-- Expire stale pending requests
+UPDATE "Friendship"
+SET status = 'expired', resolved_at = NOW()
+WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at < NOW();
+
+-- Garbage-collect old declined/expired rows (after the 30-day cooldown window doubles)
+DELETE FROM "Friendship"
+WHERE status IN ('declined', 'expired')
+  AND resolved_at IS NOT NULL
+  AND resolved_at < NOW() - INTERVAL '60 days';
+```
+
+Return `{ expired: N, deleted: M }` for cron-log visibility.
 
 ### Acceptance
 
-- POST creates a row with `status='pending'`, `expires_at` 30 days out, `id` defaulted by DB.
-- Recipient sees a new `friend_request` ActivityItem (surfaces in the bell from prior work).
-- Recipient's Invitations tab shows the request with personal note rendered in italic + quotes.
-- Accept creates a Friendship with `user_a_id < user_b_id` (normalized), `formed_via = 'direct_request'`, `requested_by_user_id` set correctly, and writes a `friend_request_accepted` ActivityItem for the **requester**, not the accepter.
-- Decline marks `status='declined'` and writes no ActivityItem.
+- New POST creates a `friendships` row with `status='pending'`, `personal_note` populated when provided, `expires_at` set to 30 days from now, `requested_by_user_id = caller`, `formed_via = 'direct_request'`.
+- The recipient sees a new `friend_request` ActivityItem (the existing write path at `src/server/friends/friendships.ts:83-116` already does this).
+- The Invitations tab in `FriendsList` renders the new `personal_note` in italic quoted block under any existing suggested-interest pills.
+- Accept transitions the Friendship to `status='accepted'`, sets `formed_at` and `resolved_at`, writes the `'friend_request_accepted'` ActivityItem for the requester.
+- Decline (action='ignore') transitions to `status='declined'`, sets `resolved_at`. No ActivityItem.
 - Re-request within 30 days of decline/expiration → 429.
-- The unique `(requester_id, recipient_id)` constraint prevents duplicate pending requests at the DB layer.
-- Expired pending rows transition to `'expired'` on next cron tick.
-- Soft-deleted Friendship with `removed_by_user_id = otherParty` → 404 on POST (not 403; doesn't reveal the block).
-- Personal note > 160 chars fails Zod **and** the CHECK constraint.
-- DELETE by the requester removes the row; recipient gets no notification.
-- Outbound pending section shows the user's sent requests; Cancel removes them silently.
+- Re-request from the *requester* after they self-cancelled (DELETE) is allowed immediately — no cooldown.
+- Outbound section shows the user's sent requests; Cancel hard-deletes the row.
+- Cron expires stale pending rows and garbage-collects declined/expired rows older than 60 days.
+- A soft-removed Friendship with `removed_by_user_id = otherParty` → POST returns 404 (not 403; doesn't reveal the block).
+- `personal_note > 160` chars fails both client-side (Zod + counter) and at the DB layer (`friendship_personal_note_length` CHECK from B-Friends-1).
+- The existing `/api/friend-invitations` topic-seeded flow continues to work end-to-end (unchanged — only the underlying helper got an optional new arg).
 
 ### Out of scope
 
@@ -941,40 +967,29 @@ All assumptions verified. Implement using these existing patterns:
 
 Placeholder added above P0-A. The current `/account/profile` is a stub (`src/app/account/profile/page.tsx`); P0-A's handle needs a rendering surface, so the profile page must come first. Detailed scope TBD — flesh out before starting P0-A.
 
-### B-Friends-2 — RED (architectural overlap with existing code; decision needed)
+### B-Friends-2 — GREEN (re-revised after audit; decision (a) taken)
 
-Independent audit on 2026-05-23 surfaced a **critical finding**:
+**Decision (2026-05-23):** Path (a) selected. Drop the new `friend_requests` table; extend the existing `friendships` table with `personal_note`, `expires_at`, `resolved_at` columns plus new `'declined'`/`'expired'` status values. B-Friends-1 Migration C and B-Friends-2 have been rewritten in place to reflect this.
 
-- ❌ **The existing codebase already implements inbound friend requests via `friendships.status = 'pending'`.** Not a new concept. Evidence:
-  - Existing query: `src/server/db/queries/friends.ts:198-214` (`getFriendsHub`) reads pending Friendship rows where `requestedByUserId != userId` as inbound requests.
-  - Existing endpoint: `POST /api/friend-requests/:requestId/:action` is already wired (consumed at `src/components/FriendsList.tsx:90-95`).
-  - Existing ActivityItem writes at `src/server/friends/friendships.ts:83-116,150-156` already emit `'friend_request'` and `'friend_request_accepted'` types.
-  - Existing pending-request flow uses `friendships.requestContext.suggestedInterests` for the personal-touch payload — not freeform text, but the slot exists.
-- The new `friend_requests` table proposed by B-Friends-1 **duplicates** this concept. Two parallel inbound-request systems would coexist, with the FriendsList "Requests/Invitations" tab querying one but not the other.
-- ✅ Other infrastructure verified:
-  - Friendship INSERT helper: `friendshipPair()` at `src/server/friends/friendships.ts:28-29` does the userA<userB normalization.
-  - `formedVia` write sites at `src/server/friends/friendships.ts:100` (`'direct_request'`) and `:267` (`'invitation'`).
-  - Cron auth: `process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET` checked via Bearer token (`src/app/api/cron/daily-assignments/route.ts:24-29`).
-  - `vercel.json` `crons` array shape verified.
-  - Modal pattern: no reusable `<Modal>` exists; copy the fixed-backdrop pattern from `src/components/QuickAddQuestionModal.tsx`.
-  - ActivityItem signature verified at `src/server/activity/write-activity.ts:40-59`; `'friend_request'` + `'friend_request_accepted'` types confirmed.
+What B-Friends-2 now does (re-revised, see body above):
 
-**Decision needed.** Three viable paths:
+- Adds two new components: `AddFriendButton`, `AddFriendRequestModal`.
+- Adds one new endpoint: `POST /api/friend-requests` (for sending a freeform-note request to an existing user).
+- Extends the existing `createOrReusePendingFriendshipRequest()` helper at `src/server/friends/friendships.ts` to accept `personalNote` and `expiresAt` args.
+- Extends the existing accept/ignore endpoints to set `resolved_at`.
+- Adds `DELETE /api/friend-requests/:id` for self-cancellation.
+- Adds a new outbound-pending section to the FriendsList Invitations tab.
+- Adds the `getRelationship` helper at `src/server/db/queries/friend-requests.ts`.
+- Adds the expire-friend-requests cron (also garbage-collects declined/expired older than 60 days).
 
-1. **(a) Drop `friend_requests` table from B-Friends-1.** Use existing `friendships.status='pending'` as the request representation. Extend the `friendships` schema with the missing pieces:
-   - `personal_note TEXT` (160-char CHECK)
-   - `expires_at TIMESTAMPTZ` (nullable; populated only for `pending` rows)
-   - `'declined'` and `'expired'` status values (extend the implicit enum — `status` is `text` so no migration friction)
-   - `resolved_at TIMESTAMPTZ` (nullable)
-   - Cooldown: query against `friendships` resolved within 30 days.
+What was preserved unchanged:
 
-   Smallest delta. Reuses existing endpoint, existing FriendsList tab, existing ActivityItem writes. B-Friends-2 shrinks to: add `AddFriendRequestModal` (new), extend the existing endpoint to accept `personal_note`, add the expiration cron, add the 30-day cooldown check, add `getRelationship` helper.
+- The existing FriendsList inbound rendering (just extended to show `personal_note` if present).
+- The existing `/api/friend-requests/:id/:action` endpoint shape.
+- The existing `/api/friend-invitations` topic-seeded flow (`AddFriendInvite.tsx` path).
+- All existing ActivityItem writes for friend events.
 
-2. **(b) Keep `friend_requests` table, migrate the existing flow.** Delete the pending-Friendship request mechanism, port everything to the new table. Larger refactor, but a cleaner end state (Friendship represents only accepted relationships).
-
-3. **(c) Run both in parallel temporarily.** Don't recommend — guarantees a "which is canonical?" question in every future PR.
-
-Until this is decided, B-Friends-2 should not be implemented. The schema in B-Friends-1's Migration C (`friend_requests` table) is on hold pending this decision.
+**Verdict: GREEN.** Implementation-ready.
 
 ### B-Friends-3 — YELLOW (two small corrections)
 
