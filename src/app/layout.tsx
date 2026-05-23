@@ -4,7 +4,9 @@ import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 import { getUserOnboardingProfile } from '@/server/db/queries/users';
+import { getBellBadgeCount } from '@/server/db/queries/activity';
 
+// Caveat removed — was preloaded but unused. Re-add when a handwriting register lands in UI.
 
 // Intentional product choice (2026-05-16): Montserrat is the body font.
 // PRD §typography spec'd Inter, but Montserrat ships. Update PRD to reflect this.
@@ -36,7 +38,12 @@ export default async function RootLayout({
 }) {
   const sessionToken = await getSessionToken()
   const claims = await readSessionClaims(sessionToken)
-  const profile = claims ? await getUserOnboardingProfile(claims.userId) : null
+  const [profile, bellBadgeCount] = claims
+    ? await Promise.all([
+        getUserOnboardingProfile(claims.userId),
+        getBellBadgeCount(claims.userId).catch(() => 0),
+      ])
+    : [null, 0]
   return (
     <html
       lang="en"
@@ -46,6 +53,7 @@ export default async function RootLayout({
         <Nav
           initialUserId={claims?.userId ?? null}
           initialDisplayName={profile?.displayName ?? null}
+          bellBadgeCount={bellBadgeCount}
         />
         {children}
       </body>

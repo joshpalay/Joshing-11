@@ -160,6 +160,7 @@ export const users = pgTable(
     emailVerified: boolean('email_verified').notNull().default(false),
     pendingEmail: text('pending_email'),
     reminderPromptDismissedAt: timestamp('reminder_prompt_dismissed_at', { withTimezone: true }),
+    lastActivityBellOpenedAt: timestamp('last_activity_bell_opened_at', { withTimezone: true }),
     portraitVisibility: portraitVisibilityEnum('portrait_visibility').notNull().default('public'),
     knowledgeCardShareToken: text('knowledge_card_share_token'),
     knowledgeCardShareExpiresAt: timestamp('knowledge_card_share_expires_at', { withTimezone: true }),
