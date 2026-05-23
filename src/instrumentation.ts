@@ -269,6 +269,20 @@ export async function register() {
       // FeedItem table may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0016 also adds the nullable "quip" column to JoshingGameResponse
+    // alongside the FeedItem.quip add above. If a preview/production database has
+    // 0016 recorded with only one of the two ALTERs applied, Drizzle selects
+    // joining JoshingGameResponse fail with Postgres 42703 (e.g. the knowledge
+    // domain detail query) before migrate() gets a chance to repair it.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "JoshingGameResponse"
+          ADD COLUMN IF NOT EXISTS "quip" text
+      `);
+    } catch {
+      // JoshingGameResponse may not exist yet — migrate() handles initial creation.
+    }
+
     // Migration 0028 adds the Category.general_knowledge enum value and migration
     // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
     // migrations in one transaction, but Postgres requires a newly-added enum value
