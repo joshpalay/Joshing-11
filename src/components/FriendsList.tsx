@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import PeopleYouInvited from '@/components/PeopleYouInvited'
+import { formatRelativeTime } from '@/components/feed/visual'
 import { useCallback, useEffect, useState } from 'react'
 
 type Tab = 'friends' | 'requests' | 'sent'
@@ -11,6 +12,7 @@ type Friend = {
   displayName: string
   declaredInterests: string[]
   sharedInterests: string[]
+  lastActiveAt: string | null
 }
 
 type IncomingRequest = {
@@ -170,6 +172,9 @@ export default function FriendsList() {
               {friends.map((friend) => {
                 const interests = previewInterests(friend.declaredInterests)
                 const sharedInterest = friend.sharedInterests[0]
+                const lastActiveLabel = friend.lastActiveAt
+                  ? formatRelativeTime(friend.lastActiveAt)
+                  : null
 
                 return (
                   <Link
@@ -191,6 +196,11 @@ export default function FriendsList() {
                             Interests will appear here as they declare them.
                           </p>
                         )}
+                        {lastActiveLabel ? (
+                          <p className="text-muted-foreground/70 mt-1 text-xs">
+                            Active {lastActiveLabel}
+                          </p>
+                        ) : null}
                       </div>
                       {sharedInterest ? (
                         <span className="bg-muted text-foreground shrink-0 rounded-full px-3 py-1 text-xs font-medium">
