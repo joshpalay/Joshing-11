@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { X } from 'lucide-react';
 
 import { GameplayChatThread } from '@/components/play/GameplayChat';
 import { useCatchupFlow } from '@/components/play/useCatchupFlow';
@@ -55,13 +57,22 @@ export default function DailyCatchupPage() {
           backdropFilter: 'blur(8px)',
         }}
       >
-        <nav className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
-          <button type="button" onClick={() => router.push('/')} className="underline-offset-4 hover:underline">
-            Home
-          </button>
-          <span className="px-1.5">/</span>
-          <span>Catch up</span>
-        </nav>
+        <div className="flex items-center justify-between gap-3">
+          <nav className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
+            <button type="button" onClick={() => router.push('/')} className="underline-offset-4 hover:underline">
+              Home
+            </button>
+            <span className="px-1.5">/</span>
+            <span>Catch up</span>
+          </nav>
+          <Link
+            href="/"
+            aria-label="Close"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
+          >
+            <X className="size-5" strokeWidth={1.9} />
+          </Link>
+        </div>
         <div className="mt-2 flex items-end justify-between gap-3">
           <div>
             <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">Catch up</p>
@@ -79,7 +90,14 @@ export default function DailyCatchupPage() {
         </div>
       </header>
 
-      <section className="flex-1 overflow-y-auto px-4 py-4" style={{ paddingBottom: currentItem ? '190px' : '48px' }}>
+      <section
+        className="flex-1 overflow-y-auto px-4 py-4"
+        style={{
+          paddingBottom: currentItem
+            ? 'calc(130px + env(safe-area-inset-bottom))'
+            : 'calc(24px + env(safe-area-inset-bottom))',
+        }}
+      >
         {loading ? (
           <p className="text-sm text-[var(--text-muted)]">Loading catch-up...</p>
         ) : error ? (
@@ -164,11 +182,12 @@ export default function DailyCatchupPage() {
 
       {currentItem && !loading && !completed ? (
         <form
-          className="fixed inset-x-0 bottom-16 z-30 mx-auto max-w-lg border-t px-4 py-3 md:bottom-0"
+          className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-lg border-t px-4 py-3"
           style={{
             borderColor: 'var(--border)',
             background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
             backdropFilter: 'blur(8px)',
+            paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
           }}
           onSubmit={(event) => void handleSubmit(event)}
         >
