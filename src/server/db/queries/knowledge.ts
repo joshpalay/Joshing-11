@@ -167,7 +167,7 @@ async function getPlayerMasteryRows(userId: string, orderByPoints = false): Prom
       totalPoints: playerMastery.totalPoints,
       tier: playerMastery.tier,
       tierReachedAt: playerMastery.tierReachedAt,
-      seasonPointsStart: playerMastery.seasonPointsStart,
+      lifetimePointsBaseline: playerMastery.lifetimePointsBaseline,
       updatedAt: playerMastery.updatedAt,
     };
 

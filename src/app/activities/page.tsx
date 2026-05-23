@@ -350,7 +350,7 @@ function ActivityCta({ item }: { item: ActivityItemView }) {
 
   if (item.type === 'received_direct_question') {
     return (
-      <Link href="/feed" className="btn-primary">
+      <Link href="/" className="btn-primary">
         Answer
       </Link>
     )
