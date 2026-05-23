@@ -4,28 +4,113 @@
 
 **Why revised:** The original build prompts (drafted against an idealized schema) assumed `users.handle`, `users.avatar_color`, a multi-tab Friends Hub, a normalized `users.phone`, and migrations under `src/server/db/migrations/`. None of those hold. This document replaces the original B-Friends-1 and adds prerequisite prompts (P0-A through P0-D) that must merge first.
 
-**Order:** P0-D → P0-A → P0-B → P0-C → B-Friends-1 (revised). B-Friends-2 / -3 / -4 still need their own revision pass once these have shipped.
+**Order:** P0-A → P0-B → P0-C → P0-D → B-Friends-1 → B-Friends-2 → B-Friends-3 → B-Friends-4. P0-A through P0-D can ship independently in any order (none strictly blocks another). The B-Friends sequence depends on B-Friends-1's `friendships`-column extension.
 
 > **Audit pass (2026-05-23):** Feasibility audit complete. See **"Per-prompt readiness (audit pass)"** at the bottom of this document for verdicts and decisions. **P0-C body has been rewritten** based on the audit finding that `FriendsList.tsx` already implements internal tabs.
 
 ---
 
-## P0-D — Profile page design *(new prerequisite)*
+## P0-D — Profile edit page + thread handle/tagline/location into existing surfaces
 
-**Goal:** Design and ship `/account/profile`, which is currently a stub at `src/app/account/profile/page.tsx`. P0-A (handles) is blocked on this because the handle has no rendering home until the profile page exists.
+**Goal:** Replace the stub at `/account/profile` with a real inline-edit form. Add `tagline` and `location` fields (other fields already exist). Thread `@handle` (from P0-A) into the existing `/account` and `/users/[id]` view surfaces. Wire `users.authorProfilePublic` and `questions.visibility` (both already exist in schema, neither is actually enforced today) through to the authored-questions query.
+
+**Depends on:** Nothing strictly. P0-A's handle picker can land before, after, or alongside.
+
+**What's already in place** (per 2026-05-23 audit + user-provided screenshots — much richer than initial sweep suggested):
+
+- `src/app/account/page.tsx` already renders the self-profile card: large round colored avatar (single initials, e.g. "JP" on solid blue), `displayName` in serif display font (Playfair), `bio` as body paragraph, `phoneNumber` with phone glyph rendered as `tel:` link, and an "Edit profile" pencil-button that links to `/account/profile`. The Account settings list beneath shows cards for Profile (subtitle: "Name, photo, bio, and tagline"), Privacy & visibility, SMS & notifications, App preferences.
+- `src/app/users/[id]/page.tsx` renders the public profile card titled "FRIEND PROFILE" (smaller-cap label), with avatar, displayName, "On Joshing since {month year}", "Friends since {month year}", a "Friends ✓" pill + inline "Unfriend" link. Below the card: a "COMMON GROUND" section with a venn-diagram visualization showing the viewer's solo interests / shared / target's solo interests, then mutual friends, knowledge preview, authored questions.
+- `users.bio` exists. `users.authorProfilePublic` (boolean, default `true`) exists but has no UI and is **not enforced** in `getAuthoredQuestionsForUser()`. `questions.visibility` enum (`'private' | 'public'`) exists but is also **not filtered** by the authored-feed query.
+- `ProfileFriendButton` unfriend flow at `src/components/profile/ProfileFriendButton.tsx:84-93` POSTs to `/api/friend-requests/:id/remove`. Unchanged.
+- **Visual language to preserve when building `/account/profile`:** serif display font for the user's name; solid-color circular avatar with white initials; muted body text; minimal chrome; underline-style links for phone. The new edit page should feel like a continuation of the existing `/account` card — not a separate look.
 
 ### Scope
 
-- Design pass — fields to surface: `displayName`, `@handle` (once P0-A lands), phone, avatar (using `AvatarChip` from P0-B once it lands).
-- Edit affordances for `displayName` (existing `updateDisplayName` in `src/server/db/queries/account.ts:171` already supports it) and — once P0-A lands — `@handle` (rate-limited).
-- Replace the current `<StubPage ... />` body in `src/app/account/profile/page.tsx`.
-- Match the visual language of the existing `/account/notifications` page (`src/app/account/notifications/NotificationsForm.tsx`).
+#### 1. Migration — `tagline` and `location`
+
+File: next available Drizzle migration after P0-A/P0-B.
+
+```sql
+ALTER TABLE "User" ADD COLUMN tagline TEXT;
+ALTER TABLE "User" ADD COLUMN location TEXT;
+ALTER TABLE "User" ADD CONSTRAINT user_tagline_length CHECK (char_length(tagline) <= 80);
+ALTER TABLE "User" ADD CONSTRAINT user_location_length CHECK (char_length(location) <= 60);
+```
+
+Drizzle: `tagline: text('tagline')`, `location: text('location')` on users. Instrumentation guards. Verify the actual table name (`"User"` vs `users`) against `src/server/db/schema.ts` before writing the migration.
+
+#### 2. `/account/profile` page — replace the stub
+
+File: `src/app/account/profile/page.tsx` (replace existing).
+
+Edit pattern: **inline edit-in-place** (per decision 2026-05-23). Tap any field, it becomes editable; blur or Enter saves via PATCH; brief "Saved" indicator on success; inline error on validation failure. No global Save button.
+
+Fields:
+
+| Field | Source | Edit | Constraints |
+|---|---|---|---|
+| Avatar | `users.avatarColor` (P0-B) | View only + "Change photo" button (disabled stub with tooltip "Photo uploads coming soon.") | — |
+| Display name | `users.displayName` | Editable | 1–60 chars; trim |
+| Handle | `users.handle` (P0-A) | Editable, **rate-limited via `users.handleLastChangedAt`** (30 days) | P0-A validator |
+| Phone | `users.phoneNumber` | Read-only display (immutable post-signup per Phase 1) | — |
+| Bio | `users.bio` | Editable | ≤280 chars; trim |
+| Tagline | `users.tagline` | Editable | ≤80 chars; trim |
+| Location | `users.location` | Editable | ≤60 chars; trim |
+| Show authored questions on my profile | `users.authorProfilePublic` | Toggle (same `role="switch"` pattern as `src/app/account/notifications/NotificationsForm.tsx:121-136`) | — |
+
+Note on the handle field: because it's rate-limited, the inline-edit save shouldn't fire on every keystroke. Implement as: edit-in-place input → on blur/Enter, show a confirmation step ("You can change your handle once every 30 days. Continue?") → confirm → PATCH. This is the one exception to the otherwise-frictionless edit pattern.
+
+#### 3. PATCH endpoint
+
+File: `src/app/api/account/profile/route.ts` (new).
+
+`PATCH` — Zod-validates `{ displayName?, bio?, tagline?, location?, authorProfilePublic? }` (handle changes go through the existing `PATCH /api/account/handle` endpoint from P0-A — don't duplicate). All fields optional; at least one required.
+
+Server logic: trim each string field, validate length, write via an extended `src/server/db/queries/account.ts` helper (`updateProfileFields(userId, patch)`). Reuse `updateDisplayName()` at line 171 for the displayName path.
+
+#### 4. Display threading on existing surfaces
+
+Add `@handle` rendering to:
+
+- `src/app/account/page.tsx` profile card — render `@handle` (muted) directly beneath `displayName`. If handle is null (pre-P0-A users who haven't picked yet), omit.
+- `src/app/users/[id]/page.tsx` profile card — same, in all three visibility modes (self, friend, stranger).
+
+Add `tagline` rendering to both surfaces — single line, italicized, beneath the name/handle pair.
+
+Add `location` rendering to both surfaces — lower-weight visual treatment than tagline (smaller, muted text, with a location glyph if the design system has one).
+
+#### 5. Authored-questions visibility enforcement (bug fix on existing code)
+
+File: `src/server/db/queries/questions.ts` — find `getAuthoredQuestionsForUser()`. Today it returns rows regardless of `users.authorProfilePublic` and `questions.visibility`. Fix both:
+
+1. **User-level gate.** Read `users.authorProfilePublic` for the queried user. If `false` AND `viewerUserId !== userId` (i.e. the caller isn't viewing themselves), return empty array.
+2. **Per-question filter.** Append `WHERE questions.visibility = 'public'` to the SELECT. Self-view (`viewerUserId === userId`) bypasses this filter — the author still sees their own private questions on their own profile.
+
+This makes both schema fields actually meaningful. Without this fix, the toggle in §2 above has no effect.
+
+**Preserve the "YOU ANSWERED" annotation** — the existing `<AuthoredQuestionsFeed>` at `src/components/profile/AuthoredQuestionsFeed.tsx` already shows whether the viewer has answered each authored question (visible as a "YOU ANSWERED" pill on the card). The gating change above filters which rows surface; it should not affect the per-row annotation logic. Verify by snapshot or visual after the change.
+
+**Empty state:** when the gate returns zero rows (vs. zero rows from no authored questions existing), the feed should still degrade gracefully. Check `<AuthoredQuestionsFeed>`'s empty rendering — it should not say "Robyn hasn't written any questions yet" when the truth is "Robyn has, but they're private." Better copy in that case is silence (omit the section header) or generic ("No public questions to show.").
+
+### Acceptance
+
+- `/account/profile` renders the inline-editable form with all listed fields.
+- Tapping a field flips it into edit mode; blur or Enter saves via PATCH (handle uses the confirmation step).
+- Each field's constraints are enforced client-side (Zod) AND server-side (Zod + DB CHECK).
+- `@handle` (when set) renders on `/account` and on `/users/[id]` in all three visibility modes.
+- `tagline` and `location` render on both surfaces when set.
+- Toggling "Show authored questions on my profile" off hides the `<AuthoredQuestionsFeed>` for non-self viewers of `/users/[id]`. Self-view still shows it.
+- Setting a question to `visibility='private'` excludes it from the authored feed for non-self viewers; self still sees it.
+- The "Change photo" button is disabled with the "Photo uploads coming soon" tooltip.
+- Handle rate-limit (30 days) is enforced — PATCH attempt within the window returns 429.
+- The existing `<ProfileFriendButton>` unfriend flow is untouched.
 
 ### Out of scope
 
-- The handle picker itself (P0-A).
-- Avatar customization UI (just render `AvatarChip` once P0-B lands).
-- Bio / tagline fields mentioned in the current stub copy — fast-follow.
+- Avatar photo upload (Phase 2; needs file storage + image-resize pipeline).
+- A per-question visibility toggle UI on individual authored questions (this prompt enforces the existing schema field but doesn't add UI to flip questions to `private`; that's fast-follow).
+- Tagline / location rendering on friend cards or feed cards (fast-follow if it adds value).
+- Phone-change endpoint (deferred per B-Friends-4 decision).
 
 **Detailed design work TBD.** This entry is a placeholder to record the dependency. Flesh out before starting P0-A.
 
@@ -581,7 +666,7 @@ On no match: "No one by that name. They may not be on Joshing yet — you can in
 
 Button tooltip: "Coming soon." B-Friends-4 replaces this entire block.
 
-**Block 3 — Existing-invite reflection.** Query: `friend_invitations` rows where `inviter_user_id = currentUserId` AND `invitee_user_id IS NOT NULL` (they joined) AND no active Friendship exists yet between the pair AND no pending `friend_requests` row exists in either direction.
+**Block 3 — Existing-invite reflection.** Query: `friend_invitations` rows where `inviter_user_id = currentUserId` AND `invitee_user_id IS NOT NULL` (they joined) AND no active Friendship exists yet between the pair AND no pending Friendship row exists between them (since after B-Friends-1/2, pending friend requests live as `friendships.status='pending'` — there is no separate `friend_requests` table).
 
 Render rows per spec §9.6.3.4 Block 3:
 
@@ -726,7 +811,9 @@ Drizzle: `phoneHash: text('phone_hash')`. Instrumentation guard.
 
 Run with `npx tsx scripts/backfill-phone-hashes.ts`.
 
-**Signup site:** `src/app/api/auth/verify-otp/route.ts:49-53` (the `provisionUserForPhone` insert). Compute `phone_hash` alongside the insert. Find the existing phone-change endpoint (grep `src/app/api/account/` for phone update) and update it the same way.
+**Signup site:** `src/app/api/auth/verify-otp/route.ts:49-53` (the `provisionUserForPhone` insert). Compute `phone_hash` alongside the insert.
+
+**No phone-change endpoint maintenance needed.** Audit (2026-05-23) confirmed there is no phone-change API. Phase 1 treats phone as immutable post-signup. If/when a phone-change flow is added (Phase 2+), that work must also recompute `phone_hash` — tracked as a fast-follow.
 
 #### 3. Hash salt fetch endpoint
 
@@ -919,7 +1006,7 @@ Four `Explore` agents verified each prompt's codebase-touching assumptions. Deci
 
 All assumptions verified. Implement using these existing patterns:
 
-- ✅ ID helper: `gen_random_uuid()::text` via `id()` at `src/server/db/schema.ts:19`. Use for `friend_requests.id`.
+- ✅ ID helper: `gen_random_uuid()::text` via `id()` at `src/server/db/schema.ts:19`. (No new tables now — Migration C extends the existing `Friendship` table instead.)
 - ✅ Instrumentation guards: `ADD COLUMN IF NOT EXISTS` at `src/instrumentation.ts:463`, `CREATE TABLE IF NOT EXISTS` at `src/instrumentation.ts:163-176`, `DO $$` blocks for FK constraints at `src/instrumentation.ts:178-196`.
 - ✅ Zod pattern to copy: `src/app/api/account/reminders/route.ts:12-26` (object + optional fields + `.refine` + `safeParse`, 400 on fail).
 - ✅ Toggle pattern (no library): inline `role="switch"` button at `src/app/account/notifications/NotificationsForm.tsx:121-136`.
@@ -929,15 +1016,16 @@ All assumptions verified. Implement using these existing patterns:
 
 **Verdict: GREEN.** Implementable as written.
 
-### P0-A handles — BLOCKED on P0-D
+### P0-A handles — GREEN (no longer blocked)
 
 - ✅ User insert site: `src/app/api/auth/verify-otp/route.ts:49-53` via `provisionUserForPhone()`.
 - ✅ Onboarding flow exists at `src/app/onboarding/page.tsx` + `src/app/onboarding/OnboardingFlow.tsx` — natural insertion point for the handle picker.
 - ✅ ID/secret primitive: `gen_random_uuid()::text` for IDs; `randomBytes(N).toString('hex'|'base64url')` for tokens (`src/server/auth/session.ts:102`, `src/server/friends/invitations.ts:166`). No `nanoid` dep. Use `randomBytes(2).toString('hex')` for the 4-char handle suffix.
 - ✅ Top-level reserved routes (20): `account, activities, api, archive, ceremony, creator-notes, daily, dev, feed, friends, games, invite, knowledge, login, new-game, onboarding, questions, replay, share, users`.
 - ✅ Rate-limit prior art: `users.reminderPromptDismissedAt` at `src/server/db/schema.ts:162` + write at `src/server/db/queries/account.ts:162`. Model `handle_last_changed_at` on this.
+- ✅ **Render surface exists.** Reverification on 2026-05-23 (after screenshots from user) confirmed `/account` and `/users/[id]` already render the identity card (avatar, displayName, bio, phone). `@handle` just slots in beneath `displayName` on both surfaces — no new page needed.
 
-**Verdict: BLOCKED on P0-D.** The handle has no rendering home until `/account/profile` (currently a stub) exists. P0-D added as a new prerequisite.
+**Verdict: GREEN.** Previously marked BLOCKED on P0-D in error; P0-D is independent.
 
 ### P0-B avatar_color — GREEN (kept as written)
 
@@ -963,9 +1051,11 @@ All assumptions verified. Implement using these existing patterns:
 
 **Verdict: REWRITTEN.** See updated P0-C body above. Original outer-tab design dropped.
 
-### NEW: P0-D Profile page design
+### P0-D Profile edit page — GREEN
 
-Placeholder added above P0-A. The current `/account/profile` is a stub (`src/app/account/profile/page.tsx`); P0-A's handle needs a rendering surface, so the profile page must come first. Detailed scope TBD — flesh out before starting P0-A.
+Originally added as a "BLOCKED on TBD design" placeholder. Reframed on 2026-05-23 after the deeper audit (and user-supplied screenshots) revealed `/account` and `/users/[id]` already render the read-only profile cards — only the *edit* page is stubbed, and `users.authorProfilePublic` + `questions.visibility` exist in schema but are not enforced. P0-D now: builds the `/account/profile` inline-edit form, adds `tagline` + `location` columns, threads `@handle`/tagline/location into the existing render surfaces, and wires the two dead privacy fields through to `getAuthoredQuestionsForUser()`.
+
+**Verdict: GREEN.** Independent — does not block P0-A.
 
 ### B-Friends-2 — GREEN (re-revised after audit; decision (a) taken)
 
@@ -991,7 +1081,7 @@ What was preserved unchanged:
 
 **Verdict: GREEN.** Implementation-ready.
 
-### B-Friends-3 — YELLOW (two small corrections)
+### B-Friends-3 — GREEN (two corrections applied)
 
 Independent audit on 2026-05-23:
 
@@ -1003,18 +1093,18 @@ Independent audit on 2026-05-23:
 - ✅ Soft cap source: `friends.length` from `src/components/FriendsList.tsx:40,170`. No new query needed.
 - ✅ Onboarding handoff pattern for inviter carry-through has prior art: `acceptFriendInvitation()` at `src/server/friends/invitations.ts:456-540` creates the inviter-invitee Friendship with `formed_via='invitation'` via `upsertInvitationFriendship()`. Reuse this helper for the new route's post-onboarding step.
 
-**Verdict: YELLOW.** Fix the two ⚠️ items inline (done — see below), then it's GREEN.
+**Verdict: GREEN.** Both ⚠️ items fixed inline in the B-Friends-3 prompt body above.
 
-### B-Friends-4 — YELLOW (one decision needed)
+### B-Friends-4 — GREEN (phone-change deferred)
 
 Independent audit on 2026-05-23:
 
 - ✅ Web Crypto + Node Crypto SHA-256 parity is implementable. No prior art in the codebase (`TextEncoder` is used at `src/server/auth/session.ts:92,101` for JWT but not for hashing interop), so a parity unit test is mandatory.
-- ❌ **No phone-change API endpoint exists** under `src/app/api/account/`. The B-Friends-4 prompt assumed one. **Decision needed:** either build a phone-change endpoint as part of B-Friends-4 (broader scope), or document that phone is immutable after signup (current de facto behavior) and recompute `phone_hash` only at signup. Recommend the latter for Phase 1.
+- ✅ **Decision (2026-05-23): defer phone-change endpoint.** Phase 1 treats phone as immutable post-signup. `phone_hash` is computed only at signup (and during one-shot backfill). When a phone-change flow is added in Phase 2+, that work must also recompute `phone_hash`. Tracked as a fast-follow.
 - ✅ Signup insert shape: `src/app/api/auth/verify-otp/route.ts:49-53` accepts a `.values({ phoneNumber })` block. Plug `phoneHash` into the same object.
 - ✅ Nav badge plumbing: `bellBadgeCount` enters Nav at `src/components/Nav.tsx:32,36`; it's computed in the root layout at `src/app/layout.tsx:46-62` via a server-side query. Add a parallel `getNewDiscoveryStatus()` call there and pipe `friendsDotVisible` as a sibling prop.
 - ✅ `INK3 = '#8a8a9a'` exists at `src/components/lately/tokens.ts:3`. Bell badge uses `var(--accent)` at `src/components/Nav.tsx:106` — visually distinct.
 - ✅ `libphonenumber-js` confirmed not in `package.json`. The `/min` variant is the right import for our use case (US-only).
 - ✅ No service worker / PWA manifest exists. Browser fallback path is the only iOS solution for Phase 1.
 
-**Verdict: YELLOW.** Resolve the phone-change decision (recommend: defer, current model treats phone as immutable post-signup), then it's GREEN.
+**Verdict: GREEN.**
