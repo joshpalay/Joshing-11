@@ -48,14 +48,42 @@ export async function register() {
       // initial creation and the additive migration will add these schema pieces.
     }
 
-    // PlayerMastery.territory_type was introduced after the base table. Preview
-    // databases can have the migration recorded without the column present, which
-    // makes Drizzle selects fail with Postgres 42703 before app code can recover.
-    // Add it idempotently before migrate() so answer routes remain usable.
+    // PlayerMastery.territory_type was introduced after the base table and later
+    // (migration 0034) converted from text to a TerritoryType enum. Preview
+    // databases can have either migration recorded without its schema actually
+    // landing, which makes Drizzle selects fail with Postgres 42703 or 22P02
+    // before app code can recover. Mirror 0034's idempotent shape here: create
+    // the enum, ensure the column exists (as enum if fresh, converted if text).
     try {
       await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."TerritoryType" AS ENUM('declared', 'demonstrated');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
         ALTER TABLE "PLAYER_MASTERY"
-          ADD COLUMN IF NOT EXISTS "territory_type" text DEFAULT 'demonstrated' NOT NULL
+          ADD COLUMN IF NOT EXISTS "territory_type" "public"."TerritoryType" DEFAULT 'demonstrated' NOT NULL
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'PLAYER_MASTERY'
+              AND column_name = 'territory_type'
+              AND udt_name = 'text'
+          ) THEN
+            ALTER TABLE "PLAYER_MASTERY" ALTER COLUMN "territory_type" DROP DEFAULT;
+            ALTER TABLE "PLAYER_MASTERY"
+              ALTER COLUMN "territory_type"
+              SET DATA TYPE "public"."TerritoryType"
+              USING "territory_type"::"public"."TerritoryType";
+            ALTER TABLE "PLAYER_MASTERY"
+              ALTER COLUMN "territory_type"
+              SET DEFAULT 'demonstrated'::"public"."TerritoryType";
+          END IF;
+        END $$
       `);
     } catch {
       // PLAYER_MASTERY may not exist yet — migrate() handles initial creation.

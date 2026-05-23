@@ -6,15 +6,19 @@
 -- rows with no matching PlayerMastery row. Seed them now.
 --
 -- Idempotent: the ON CONFLICT clause is a no-op when a row already exists.
+--
+-- season_points_start was renamed to lifetime_points_baseline in 0043; this
+-- migration originally referenced the old name. We omit the column entirely
+-- here so the SQL works whether the rename has happened or not — the schema
+-- default (0) matches the seeded value either way.
 
-INSERT INTO "PLAYER_MASTERY" (user_id, canonical_subcategory, broad_category, total_points, tier, season_points_start, territory_type)
+INSERT INTO "PLAYER_MASTERY" (user_id, canonical_subcategory, broad_category, total_points, tier, territory_type)
 SELECT
   d."userId",
   d.domain,
   d."broadCategory",
   0,
   'establishing'::"MasteryTier",
-  0,
   'declared'
 FROM "DeclaredInterest" d
 LEFT JOIN "PLAYER_MASTERY" pm
