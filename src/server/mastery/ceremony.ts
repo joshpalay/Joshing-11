@@ -59,7 +59,7 @@ type PlayerMasteryMergeRow = Pick<
   | 'totalPoints'
   | 'tier'
   | 'tierReachedAt'
-  | 'seasonPointsStart'
+  | 'lifetimePointsBaseline'
   | 'updatedAt'
 >;
 
@@ -71,7 +71,7 @@ const playerMasteryMergeColumns = {
   totalPoints: playerMastery.totalPoints,
   tier: playerMastery.tier,
   tierReachedAt: playerMastery.tierReachedAt,
-  seasonPointsStart: playerMastery.seasonPointsStart,
+  lifetimePointsBaseline: playerMastery.lifetimePointsBaseline,
   updatedAt: playerMastery.updatedAt,
 };
 
@@ -124,7 +124,7 @@ async function upsertMergedPlayerMastery(
     broadCategory: string | null;
     totalPoints: number;
     tier: MasteryTier;
-    seasonPointsStart: number;
+    lifetimePointsBaseline: number;
     updatedAt: Date;
   },
 ): Promise<void> {
@@ -139,7 +139,7 @@ async function upsertMergedPlayerMastery(
         totalPoints: values.totalPoints,
         tier: values.tier,
         tierReachedAt: null,
-        seasonPointsStart: values.seasonPointsStart,
+        lifetimePointsBaseline: values.lifetimePointsBaseline,
         updatedAt: values.updatedAt,
       })
       .onConflictDoUpdate({
@@ -167,7 +167,7 @@ async function upsertMergedPlayerMastery(
       "total_points",
       "tier",
       "tier_reached_at",
-      "season_points_start",
+      "lifetime_points_baseline",
       "updated_at"
     ) values (
       ${randomUUID()},
@@ -177,7 +177,7 @@ async function upsertMergedPlayerMastery(
       ${values.totalPoints},
       ${values.tier}::"public"."MasteryTier",
       null,
-      ${values.seasonPointsStart},
+      ${values.lifetimePointsBaseline},
       ${values.updatedAt}
     ) on conflict ("user_id", "canonical_subcategory") do update set
       "broad_category" = ${values.broadCategory},
@@ -573,7 +573,7 @@ export async function applyMergesForUser(
         broadCategory,
         totalPoints,
         tier,
-        seasonPointsStart: rowsToTotal.reduce((sum, row) => sum + Number(row.seasonPointsStart ?? 0), 0),
+        lifetimePointsBaseline: rowsToTotal.reduce((sum, row) => sum + Number(row.lifetimePointsBaseline ?? 0), 0),
         updatedAt,
       });
 

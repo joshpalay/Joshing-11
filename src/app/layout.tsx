@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Caveat, Montserrat, Playfair_Display } from 'next/font/google'
+import { Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
@@ -11,13 +11,6 @@ import { getUserOnboardingProfile } from '@/server/db/queries/users';
 const montserrat = Montserrat({
   subsets: ['latin'],
   variable: '--font-sans-body',
-  display: 'swap',
-})
-
-// F5.1: handwriting register (Personal Record, annotations, signature-style microcopy).
-const caveat = Caveat({
-  subsets: ['latin'],
-  variable: '--font-handwriting',
   display: 'swap',
 })
 
@@ -47,7 +40,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${caveat.variable} ${playfair.variable}`}
+      className={`font-sans ${playfair.variable}`}
     >
       <body className={montserrat.className}>
         <Nav

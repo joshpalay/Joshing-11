@@ -205,7 +205,7 @@ describe('applyMergesForUser', () => {
       totalPoints: 42,
       tier: 'solid' as const,
       tierReachedAt: null,
-      seasonPointsStart: 7,
+      lifetimePointsBaseline: 7,
       updatedAt: new Date('2026-05-01T00:00:00.000Z'),
     };
 
@@ -237,7 +237,7 @@ describe('applyMergesForUser', () => {
         broadCategory: 'Literature',
         totalPoints: 42,
         tier: 'solid',
-        seasonPointsStart: 7,
+        lifetimePointsBaseline: 7,
       }),
     ]);
     expect(state.playerMastery).not.toEqual(expect.arrayContaining([
@@ -261,7 +261,7 @@ describe('applyMergesForUser', () => {
       totalPoints: 42,
       tier: 'solid' as const,
       tierReachedAt: null,
-      seasonPointsStart: 7,
+      lifetimePointsBaseline: 7,
       updatedAt: new Date('2026-05-01T00:00:00.000Z'),
     };
 
@@ -309,7 +309,7 @@ describe('applyMergesForUser', () => {
       totalPoints: 42,
       tier: 'solid' as const,
       tierReachedAt: null,
-      seasonPointsStart: 7,
+      lifetimePointsBaseline: 7,
       updatedAt: new Date('2026-05-01T00:00:00.000Z'),
     };
 

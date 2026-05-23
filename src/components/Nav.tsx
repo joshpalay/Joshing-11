@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Brain, Home, Menu, Pencil, Plus, Rss, User, X } from 'lucide-react';
+import { Brain, Home, Menu, Pencil, Plus, User, Users, X } from 'lucide-react';
 import { CreateChooser } from '@/components/CreateChooser';
 
 const navItems = [
   { href: '/', label: 'Home', Icon: Home },
-  { href: '/friends', label: 'Friends', Icon: Rss },
+  { href: '/friends', label: 'Friends', Icon: Users },
   { href: '/questions', label: 'Questions', Icon: Pencil },
   { href: '/knowledge', label: 'Knowledge', Icon: Brain },
   { href: '/account', label: 'Account', Icon: User },

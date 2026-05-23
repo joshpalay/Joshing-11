@@ -35,7 +35,7 @@ export async function openKBDomain(params: {
       broadCategory: params.broadCategory ?? null,
       totalPoints: 0,
       tier: 'establishing',
-      seasonPointsStart: 0,
+      lifetimePointsBaseline: 0,
       territoryType: desiredTerritoryType,
     })
     .onConflictDoNothing({ target: [playerMastery.userId, playerMastery.canonicalSubcategory] });
