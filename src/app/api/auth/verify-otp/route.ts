@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto'
+
 import { eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 
+import { colorForUser } from '@/components/feed/visual'
 import { verifyOtp } from '@/server/auth'
 import { createSession } from '@/server/auth/session'
 import { db, users } from '@/server/db'
@@ -46,9 +49,13 @@ async function findUserByPhone(
 async function provisionUserForPhone(
   phoneNumber: string
 ): Promise<AuthUser> {
+  // Pre-generate the id so we can persist a deterministic avatar_color in the
+  // same insert (colorForUser hashes the id). Without this, avatar_color
+  // would be NULL until the next signup backfill.
+  const id = randomUUID()
   const [created] = await db
     .insert(users)
-    .values({ phoneNumber })
+    .values({ id, phoneNumber, avatarColor: colorForUser(id) })
     .onConflictDoNothing({ target: users.phoneNumber })
     .returning(USER_SELECTION)
 

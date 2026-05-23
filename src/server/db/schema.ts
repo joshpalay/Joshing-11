@@ -167,6 +167,7 @@ export const users = pgTable(
     slug: text('slug'),
     handle: text('handle'),
     handleLastChangedAt: timestamp('handle_last_changed_at', { withTimezone: true }),
+    avatarColor: text('avatar_color'),
     authorProfilePublic: boolean('authorProfilePublic').notNull().default(true),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
     birthYear: integer('birth_year'),

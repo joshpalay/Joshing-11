@@ -323,6 +323,13 @@
       "when": 1780444800000,
       "tag": "0045_user_handle",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1780531200000,
+      "tag": "0046_user_avatar_color",
+      "breakpoints": true
     }
   ]
 }

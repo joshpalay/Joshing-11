@@ -538,6 +538,21 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0046 adds the nullable User.avatar_color column. The value
+    // is computed at signup via colorForUser(id) so the persisted color
+    // matches what the runtime helper already renders. Guard for
+    // preview/production databases that may have the migration recorded
+    // without the column actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "avatar_color" text
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

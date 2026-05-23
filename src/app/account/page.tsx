@@ -19,6 +19,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SettingsGroup, SettingsRow } from '@/components/account/SettingsRow';
+import { colorForUser, initialsFor } from '@/components/feed/visual';
 import type { UserProfile } from '@/server/db/queries/account';
 
 type AccountResponse = {
@@ -26,20 +27,7 @@ type AccountResponse = {
   error?: string;
 };
 
-const AVATAR_COLORS = ['#0f766e', '#7c3aed', '#be123c', '#2563eb', '#b45309', '#15803d'];
 const APP_VERSION = 'v1.0.0';
-
-function initialsFor(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase();
-}
-
-function colorForUser(userId: string): string {
-  const hash = Array.from(userId).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length]!;
-}
 
 function memberSince(value: string): string {
   const date = new Date(value);

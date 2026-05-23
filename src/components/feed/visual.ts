@@ -9,7 +9,7 @@ const CATEGORY_COLORS = [
   '#0369a1',
 ] as const
 
-const AVATAR_COLORS = [
+export const AVATAR_COLORS = [
   '#0f766e',
   '#7c3aed',
   '#be123c',
@@ -17,6 +17,8 @@ const AVATAR_COLORS = [
   '#b45309',
   '#15803d',
 ] as const
+
+export type AvatarColor = (typeof AVATAR_COLORS)[number]
 
 function hashString(str: string): number {
   return Array.from(str).reduce((sum, char) => sum + char.charCodeAt(0), 0)
