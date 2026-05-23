@@ -92,11 +92,6 @@ type FeedResponse = {
   items: FeedApiItem[]
 }
 
-type CeremonyStatus = {
-  nextFireAt: string
-  latestUnviewed: { id: string; firedAt: string } | null
-}
-
 type AnswerResponse = {
   isCorrect?: boolean
   correctAnswer?: string
@@ -457,8 +452,6 @@ type FeedListProps = {
    * changes and infinite-scroll pages still fetch via /api/feed.
    */
   initialPage?: FeedResponse | null
-  /** Server-rendered ceremony status (countdown + unviewed); same rationale as initialPage. */
-  initialCeremonyStatus?: CeremonyStatus | null
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
@@ -483,7 +476,6 @@ function FeedListContent({
   pageSize = 20,
   infinite = false,
   initialPage = null,
-  initialCeremonyStatus = null,
 }: FeedListProps) {
   const searchParams = useSearchParams()
   const initialFilterParam =
@@ -528,7 +520,6 @@ function FeedListContent({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hideToast, setHideToast] = useState<{ category: string } | null>(null)
-  const [ceremonyStatus, setCeremonyStatus] = useState<CeremonyStatus | null>(initialCeremonyStatus)
   // True for the very first render path when we already have server-rendered
   // data; the initial-fetch useEffect skips its work once.
   const skipInitialFetchRef = useRef(initialPageMatchesFilter)
@@ -569,19 +560,6 @@ function FeedListContent({
         )
         setNextCursor(body.next_cursor ?? body.meta?.next_cursor ?? null)
         setHasMore(Boolean(body.has_more ?? body.meta?.has_more))
-
-        if (!isNextPage) {
-          const statusResponse = await fetch('/api/ceremony/status', {
-            cache: 'no-store',
-            credentials: 'include',
-          })
-          const statusBody = (await statusResponse
-            .json()
-            .catch(() => null)) as CeremonyStatus | null
-          setCeremonyStatus(
-            statusResponse.ok && statusBody && 'nextFireAt' in statusBody ? statusBody : null
-          )
-        }
       } catch (caught) {
         setError(
           caught instanceof Error ? caught.message : 'Could not load your Feed.'
@@ -966,7 +944,6 @@ function FeedListContent({
           </button>
         ))}
       </nav>
-      <CeremonyTopOfFeed status={ceremonyStatus} />
 
       {hideToast ? (
         <div
@@ -1183,63 +1160,3 @@ function FeedListContent({
   )
 }
 
-/**
- * Top-of-feed ceremony row. Three states share the same slot so the layout
- * doesn't jump on Sunday morning:
- *   1. Unviewed ceremony exists  → pinned card linking to /ceremony/:id
- *   2. Today is Sunday (UTC)     → hidden (cron is firing; nothing to nag about
- *                                  pre-fire, the pinned card will appear once it
- *                                  fires and the next /status fetch lands)
- *   3. Otherwise                 → countdown "Ceremony in N days"
- *
- * "N days" is whole-day-rounded by UTC date so the number doesn't tick down
- * mid-day as the user reads.
- */
-function CeremonyTopOfFeed({ status }: { status: CeremonyStatus | null }) {
-  if (!status) return null
-
-  if (status.latestUnviewed) {
-    return (
-      <Link
-        href={`/ceremony/${status.latestUnviewed.id}`}
-        className="mb-4 block rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-stone-950 shadow-sm"
-      >
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 text-lg" aria-hidden>
-            ✦
-          </span>
-          <div>
-            <p className="font-medium">Your weekly reflection is ready</p>
-            <p className="mt-1 text-sm text-stone-700">
-              See what you&rsquo;ve been up to {'->'}
-            </p>
-          </div>
-        </div>
-      </Link>
-    )
-  }
-
-  const now = new Date()
-  if (now.getUTCDay() === 0) return null
-
-  const nextFireAt = new Date(status.nextFireAt)
-  const todayUtcMidnight = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-  )
-  const fireUtcMidnight = Date.UTC(
-    nextFireAt.getUTCFullYear(),
-    nextFireAt.getUTCMonth(),
-    nextFireAt.getUTCDate(),
-  )
-  const daysUntil = Math.max(1, Math.round((fireUtcMidnight - todayUtcMidnight) / 86_400_000))
-  const label = daysUntil === 1 ? 'Ceremony tomorrow' : `Ceremony in ${daysUntil} days`
-
-  return (
-    <div className="text-muted-foreground mb-4 flex items-center gap-2 px-1 text-xs font-medium tracking-[0.08em] uppercase">
-      <span aria-hidden>✦</span>
-      <span>{label}</span>
-    </div>
-  )
-}

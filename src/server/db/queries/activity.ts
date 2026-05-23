@@ -18,7 +18,7 @@ import {
   users,
 } from '@/server/db';
 import { getCannedReaction } from '@/lib/reactions';
-import type { ActivityItemType } from '@/server/activity/write-activity';
+import { HOME_TOP3_ELIGIBLE_TYPES, type ActivityItemType } from '@/server/activity/write-activity';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 import type { MasteryTier } from '@/types/db';
 
@@ -703,19 +703,24 @@ async function hydrateDeclaredPromoted(items: ActivityItemRow[]) {
   );
 }
 
-export async function getActivitiesForUser(userId: string): Promise<ActivityItemView[]> {
-  const rows = await db
-    .select()
-    .from(activityItems)
-    .where(and(
-      eq(activityItems.userId, userId),
-      isNull(activityItems.deletedAt),
-      gt(activityItems.createdAt, activityCutoff()),
-    ))
-    .orderBy(desc(activityItems.createdAt))
-    .limit(100);
-
-  const [actorsById, friendshipRequestsById, gamesById, masteryEventsById, reactionsById, directQuestionsById, curatedQuestionsById, creatorNotesById, friendAnsweredQuestionsById, authoredSharedQuestionsById, declaredPromotedById, gradeDisputesById] = await Promise.all([
+async function hydrateActivityRows(
+  rows: ActivityItemRow[],
+  userId: string,
+): Promise<ActivityItemView[]> {
+  const [
+    actorsById,
+    friendshipRequestsById,
+    gamesById,
+    masteryEventsById,
+    reactionsById,
+    directQuestionsById,
+    curatedQuestionsById,
+    creatorNotesById,
+    friendAnsweredQuestionsById,
+    authoredSharedQuestionsById,
+    declaredPromotedById,
+    gradeDisputesById,
+  ] = await Promise.all([
     hydrateActors(rows),
     hydrateFriendshipRequests(rows),
     hydrateGames(rows, userId),
@@ -778,6 +783,40 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
           : undefined,
       },
     }));
+}
+
+export async function getActivitiesForUser(userId: string): Promise<ActivityItemView[]> {
+  const rows = await db
+    .select()
+    .from(activityItems)
+    .where(and(
+      eq(activityItems.userId, userId),
+      isNull(activityItems.deletedAt),
+      gt(activityItems.createdAt, activityCutoff()),
+    ))
+    .orderBy(desc(activityItems.createdAt))
+    .limit(100);
+
+  return hydrateActivityRows(rows, userId);
+}
+
+export async function getRecentActivityForHome(
+  userId: string,
+  limit = 3,
+): Promise<ActivityItemView[]> {
+  const rows = await db
+    .select()
+    .from(activityItems)
+    .where(and(
+      eq(activityItems.userId, userId),
+      isNull(activityItems.deletedAt),
+      gt(activityItems.createdAt, activityCutoff()),
+      inArray(activityItems.type, HOME_TOP3_ELIGIBLE_TYPES as readonly string[]),
+    ))
+    .orderBy(desc(activityItems.createdAt))
+    .limit(limit);
+
+  return hydrateActivityRows(rows, userId);
 }
 
 export async function getUnreadCount(userId: string): Promise<number> {
