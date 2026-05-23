@@ -1,23 +1,18 @@
 import type { Metadata } from 'next'
-import { Caveat, Montserrat, Playfair_Display } from 'next/font/google'
+import { Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 import { getUserOnboardingProfile } from '@/server/db/queries/users';
+import { getUnreadCount } from '@/server/db/queries/activity';
 
+// Caveat removed — was preloaded but unused. Re-add when a handwriting register lands in UI.
 
 // Intentional product choice (2026-05-16): Montserrat is the body font.
 // PRD §typography spec'd Inter, but Montserrat ships. Update PRD to reflect this.
 const montserrat = Montserrat({
   subsets: ['latin'],
   variable: '--font-sans-body',
-  display: 'swap',
-})
-
-// F5.1: handwriting register (Personal Record, annotations, signature-style microcopy).
-const caveat = Caveat({
-  subsets: ['latin'],
-  variable: '--font-handwriting',
   display: 'swap',
 })
 
@@ -43,16 +38,22 @@ export default async function RootLayout({
 }) {
   const sessionToken = await getSessionToken()
   const claims = await readSessionClaims(sessionToken)
-  const profile = claims ? await getUserOnboardingProfile(claims.userId) : null
+  const [profile, bellBadgeCount] = claims
+    ? await Promise.all([
+        getUserOnboardingProfile(claims.userId),
+        getUnreadCount(claims.userId).catch(() => 0),
+      ])
+    : [null, 0]
   return (
     <html
       lang="en"
-      className={`font-sans ${caveat.variable} ${playfair.variable}`}
+      className={`font-sans ${playfair.variable}`}
     >
       <body className={montserrat.className}>
         <Nav
           initialUserId={claims?.userId ?? null}
           initialDisplayName={profile?.displayName ?? null}
+          bellBadgeCount={bellBadgeCount}
         />
         {children}
       </body>
