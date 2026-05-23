@@ -297,7 +297,7 @@ The following pieces from the pre-audit P0-C are explicitly **dropped**:
 
 #### 1. Migrations
 
-Use the `new-migration` skill for each (or one combined file — single file is fine since they're related). Latest existing migration at time of audit is `0044_user_last_activity_bell_opened_at.sql`, so this would be `0047_*` after P0-A and P0-B land.
+Use the `new-migration` skill for each (or one combined file — single file is fine since they're related). Latest existing migration on dev2 is `0047_user_profile_fields.sql` (P0-D), so these are `0048_*` and forward.
 
 **Migration A — discoverability columns on users:**
 
@@ -340,7 +340,7 @@ CREATE INDEX idx_friendship_resolved_decay
 
 Notes:
 
-- Use the actual table name (`"Friendship"`, capitalized — verify against `src/server/db/schema.ts:670` for the exact `pgTable('Friendship', ...)` name).
+- Use the actual table name (`"Friendship"`, capitalized — verified at `src/server/db/schema.ts:676` on dev2).
 - `status` is `text`, not an enum, so adding `'declined'` and `'expired'` as accepted values requires no schema change — just app-level discipline. B-Friends-2 introduces those values.
 - The `friendship_users_distinct` CHECK guards against `userAId = userBId`; if `friendshipPair()` at `src/server/friends/friendships.ts:28-29` has always normalized, this should never have happened in practice, but the CHECK is cheap insurance.
 - Personal note is nullable for backward compat: existing pending rows (created via `createOrReusePendingFriendshipRequest()`) have no note. The 160-char limit is enforced at the DB layer for new writes.
@@ -383,7 +383,7 @@ Renders three rows per spec §9.6.3.2:
 2. ☐ "Suggest me through mutual friends" — bound to `users.discoverable_by_mutual_friends`.
 3. ✓ "Findable by exact handle or phone number" — disabled, informational only. Always checked.
 
-Use whatever toggle component already exists in the project (search for `Toggle`, `Switch`, or check `src/components/`). If none, use a styled `<input type="checkbox">`. Match the visual treatment of other settings rows.
+Reuse the inline `role="switch"` button pattern at `src/app/account/notifications/NotificationsForm.tsx:121-136` (no shared component yet — this is the canonical pattern in the codebase). Match the same Tailwind treatment for consistency with the notifications surface.
 
 Server-render initial state from the user record. Toggle change → `PATCH /api/account/discoverability` (§4) → optimistic update + revert on error.
 
@@ -1012,7 +1012,7 @@ All assumptions verified. Implement using these existing patterns:
 - ✅ Toggle pattern (no library): inline `role="switch"` button at `src/app/account/notifications/NotificationsForm.tsx:121-136`.
 - ✅ `src/server/db/queries/account.ts` exists with coherent neighbors (`getUserProfile`, `updateReminderPreferences`, `updateDisplayName`, `deleteUserAccount`). Add `updateDiscoverability` + `deleteContactHashesForUser` here.
 - ✅ `getSession` canonical import: `@/server/auth/session` (93 usages, no alternatives).
-- ✅ Latest migration: `drizzle/0044_user_last_activity_bell_opened_at.sql` — next is `0045`.
+- ✅ Latest migration on dev2: `drizzle/0047_user_profile_fields.sql` — next is `0048`.
 
 **Verdict: GREEN.** Implementable as written.
 
