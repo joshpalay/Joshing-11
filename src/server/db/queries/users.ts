@@ -186,6 +186,7 @@ export const getUserOnboardingProfile = cache(async (userId: string) => {
       id: users.id,
       phoneNumber: users.phoneNumber,
       displayName: users.displayName,
+      handle: users.handle,
       timezone: users.timezone,
       preferredTheme: users.preferredTheme,
       onboardingComplete: users.onboardingComplete,

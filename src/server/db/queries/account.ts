@@ -11,10 +11,13 @@ import { formatBio } from '@/server/profile/bio';
 export type UserProfile = {
   id: string;
   displayName: string;
+  handle: string | null;
   phoneNumber: string;
   createdAt: string;
   bio: string;
 };
+
+export const HANDLE_CHANGE_COOLDOWN_DAYS = 30;
 
 function formatPhoneNumber(value: string): string {
   const digits = value.replace(/\D/g, '');
@@ -39,6 +42,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     .select({
       id: users.id,
       displayName: users.displayName,
+      handle: users.handle,
       phoneNumber: users.phoneNumber,
       createdAt: users.createdAt,
     })
@@ -76,6 +80,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   return {
     id: user.id,
     displayName: user.displayName?.trim() || fallbackDisplayName(user.phoneNumber),
+    handle: user.handle?.trim() ? user.handle.trim() : null,
     phoneNumber: formatPhoneNumber(user.phoneNumber),
     createdAt: user.createdAt.toISOString(),
     bio,
@@ -183,6 +188,79 @@ export async function updateDisplayName(params: {
     .set({ displayName, updatedAt: new Date() })
     .where(eq(users.id, params.userId));
 
+  return { ok: true };
+}
+
+export type HandleChangeStatus = {
+  handle: string | null;
+  handleLastChangedAt: Date | null;
+};
+
+export async function getHandleChangeStatus(userId: string): Promise<HandleChangeStatus | null> {
+  const [row] = await db
+    .select({ handle: users.handle, handleLastChangedAt: users.handleLastChangedAt })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!row) return null;
+  return { handle: row.handle, handleLastChangedAt: row.handleLastChangedAt };
+}
+
+export type UpdateHandleResult =
+  | { ok: true; handle: string }
+  | { ok: false; reason: 'rate_limited'; retryAfter: Date };
+
+// Writes a new handle, stamping handleLastChangedAt to now. Rate-limit: a
+// successful change locks the user out of further changes for
+// HANDLE_CHANGE_COOLDOWN_DAYS. Callers must validate format/reserved/taken
+// upstream (see src/server/lib/handle-validation.ts).
+export async function updateHandle(params: {
+  userId: string;
+  handle: string;
+}): Promise<UpdateHandleResult> {
+  const handle = params.handle.trim().toLowerCase();
+  const now = new Date();
+
+  const status = await getHandleChangeStatus(params.userId);
+  if (status?.handleLastChangedAt) {
+    const elapsedMs = now.getTime() - status.handleLastChangedAt.getTime();
+    const cooldownMs = HANDLE_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+    if (elapsedMs < cooldownMs) {
+      const retryAfter = new Date(status.handleLastChangedAt.getTime() + cooldownMs);
+      return { ok: false, reason: 'rate_limited', retryAfter };
+    }
+  }
+
+  await db
+    .update(users)
+    .set({ handle, handleLastChangedAt: now, updatedAt: now })
+    .where(eq(users.id, params.userId));
+
+  return { ok: true, handle };
+}
+
+// Initial assignment (no rate-limit gate) — used by the onboarding handle
+// picker and the backfill script. Returns ok:false if the handle was claimed
+// by another user between validation and write (race).
+export async function assignInitialHandle(params: {
+  userId: string;
+  handle: string;
+}): Promise<{ ok: boolean }> {
+  const handle = params.handle.trim().toLowerCase();
+  const now = new Date();
+
+  try {
+    await db
+      .update(users)
+      .set({ handle, updatedAt: now })
+      .where(eq(users.id, params.userId));
+  } catch (err) {
+    if (err instanceof Error && /unique/i.test(err.message)) {
+      return { ok: false };
+    }
+    throw err;
+  }
   return { ok: true };
 }
 

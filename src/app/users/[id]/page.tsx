@@ -95,6 +95,11 @@ export default async function UserProfilePage({
               <h1 className="text-foreground font-serif text-3xl font-semibold">
                 {portrait.user.displayName}
               </h1>
+              {portrait.user.handle ? (
+                <p className="text-muted-foreground mt-1 text-sm">
+                  @{portrait.user.handle}
+                </p>
+              ) : null}
               <p className="text-muted-foreground mt-2 text-sm leading-6">
                 On Joshing since {formatMemberSince(portrait.user.memberSince)}.
               </p>
@@ -176,6 +181,11 @@ export default async function UserProfilePage({
             <h1 className="text-foreground font-serif text-3xl font-semibold">
               {portrait.user.displayName}
             </h1>
+            {portrait.user.handle ? (
+              <p className="text-muted-foreground mt-1 text-sm">
+                @{portrait.user.handle}
+              </p>
+            ) : null}
             <p className="text-muted-foreground mt-2 text-sm leading-6">
               On Joshing since {formatMemberSince(portrait.user.memberSince)}.
             </p>

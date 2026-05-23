@@ -5,7 +5,7 @@ import PeopleYouInvited from '@/components/PeopleYouInvited'
 import { formatRelativeTime } from '@/components/feed/visual'
 import { useCallback, useEffect, useState } from 'react'
 
-type Tab = 'friends' | 'requests' | 'sent'
+type Tab = 'friends' | 'invitations' | 'sent'
 
 type Friend = {
   id: string
@@ -132,13 +132,13 @@ export default function FriendsList() {
         <button
           type="button"
           className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
-            activeTab === 'requests'
+            activeTab === 'invitations'
               ? 'border-b-2 border-foreground text-foreground'
               : 'text-muted-foreground hover:text-foreground'
           }`}
-          onClick={() => setActiveTab('requests')}
+          onClick={() => setActiveTab('invitations')}
         >
-          Requests
+          Invitations
           {incomingRequests.length > 0 ? (
             <span className="bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-xs leading-none">
               {incomingRequests.length}
@@ -226,11 +226,11 @@ export default function FriendsList() {
         </section>
       ) : null}
 
-      {/* Requests tab */}
-      {activeTab === 'requests' ? (
+      {/* Invitations tab */}
+      {activeTab === 'invitations' ? (
         <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
           {loading ? (
-            <p className="text-muted-foreground text-sm">Loading requests…</p>
+            <p className="text-muted-foreground text-sm">Loading invitations…</p>
           ) : incomingRequests.length > 0 ? (
             <div className="space-y-3">
               {incomingRequests.map((request) => (
@@ -293,7 +293,7 @@ export default function FriendsList() {
             </div>
           ) : (
             <p className="text-muted-foreground bg-muted rounded-xl px-3 py-2 text-sm">
-              No incoming requests right now.
+              No incoming invitations right now.
             </p>
           )}
         </section>

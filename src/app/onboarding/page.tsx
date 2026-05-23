@@ -53,6 +53,7 @@ export default async function OnboardingPage() {
       inviterName={seeded.inviterName}
       inviteeDisplayName={seeded.inviteeDisplayName}
       initialDisplayName={user.displayName}
+      initialHandle={user.handle}
     />
   );
 }
