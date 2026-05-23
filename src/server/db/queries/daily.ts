@@ -536,15 +536,35 @@ export async function pickEligibleAuthoredQuestions(
   // queue. The graph is small per user (5 slots/day) so a Node-side scan is
   // simpler than a JSONB containment subquery and dodges driver portability
   // questions. Indexed via DailyQueue_user_id_idx.
-  const pastQueues = await db
-    .select({ slots: dailyQueues.slots })
-    .from(dailyQueues)
-    .where(eq(dailyQueues.userId, viewerUserId));
+  //
+  // ALSO collect every question the viewer has already answered on any surface
+  // (feed, catchup, prior daily). Without this, a friend's authored question
+  // that the viewer answered via the feed gets re-served as a "friend" slot
+  // the next day because no row exists in past daily queues for it.
+  // MASTERY_EVENTS.question_id stores the canonical Question.id for both
+  // feed and daily writes (see writeMasteryEvent / daily/answer route).
+  const [pastQueues, answeredRows] = await Promise.all([
+    db
+      .select({ slots: dailyQueues.slots })
+      .from(dailyQueues)
+      .where(eq(dailyQueues.userId, viewerUserId)),
+    db
+      .select({ questionId: masteryEvents.questionId })
+      .from(masteryEvents)
+      .where(and(
+        eq(masteryEvents.userId, viewerUserId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        isNotNull(masteryEvents.questionId),
+      )),
+  ]);
   const seenQuestionIds = new Set<string>();
   for (const row of pastQueues) {
     for (const slot of asQueueSlots(row.slots)) {
       if (slot.question_id) seenQuestionIds.add(slot.question_id);
     }
+  }
+  for (const row of answeredRows) {
+    if (row.questionId) seenQuestionIds.add(row.questionId);
   }
 
   // Pull a generous over-fetch so the in-memory tier sort has something to
