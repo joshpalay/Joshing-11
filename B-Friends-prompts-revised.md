@@ -726,7 +726,9 @@ Drizzle: `phoneHash: text('phone_hash')`. Instrumentation guard.
 
 Run with `npx tsx scripts/backfill-phone-hashes.ts`.
 
-**Signup site:** `src/app/api/auth/verify-otp/route.ts:49-53` (the `provisionUserForPhone` insert). Compute `phone_hash` alongside the insert. Find the existing phone-change endpoint (grep `src/app/api/account/` for phone update) and update it the same way.
+**Signup site:** `src/app/api/auth/verify-otp/route.ts:49-53` (the `provisionUserForPhone` insert). Compute `phone_hash` alongside the insert.
+
+**No phone-change endpoint maintenance needed.** Audit (2026-05-23) confirmed there is no phone-change API. Phase 1 treats phone as immutable post-signup. If/when a phone-change flow is added (Phase 2+), that work must also recompute `phone_hash` — tracked as a fast-follow.
 
 #### 3. Hash salt fetch endpoint
 
@@ -991,7 +993,7 @@ What was preserved unchanged:
 
 **Verdict: GREEN.** Implementation-ready.
 
-### B-Friends-3 — YELLOW (two small corrections)
+### B-Friends-3 — GREEN (two corrections applied)
 
 Independent audit on 2026-05-23:
 
@@ -1003,18 +1005,18 @@ Independent audit on 2026-05-23:
 - ✅ Soft cap source: `friends.length` from `src/components/FriendsList.tsx:40,170`. No new query needed.
 - ✅ Onboarding handoff pattern for inviter carry-through has prior art: `acceptFriendInvitation()` at `src/server/friends/invitations.ts:456-540` creates the inviter-invitee Friendship with `formed_via='invitation'` via `upsertInvitationFriendship()`. Reuse this helper for the new route's post-onboarding step.
 
-**Verdict: YELLOW.** Fix the two ⚠️ items inline (done — see below), then it's GREEN.
+**Verdict: GREEN.** Both ⚠️ items fixed inline in the B-Friends-3 prompt body above.
 
-### B-Friends-4 — YELLOW (one decision needed)
+### B-Friends-4 — GREEN (phone-change deferred)
 
 Independent audit on 2026-05-23:
 
 - ✅ Web Crypto + Node Crypto SHA-256 parity is implementable. No prior art in the codebase (`TextEncoder` is used at `src/server/auth/session.ts:92,101` for JWT but not for hashing interop), so a parity unit test is mandatory.
-- ❌ **No phone-change API endpoint exists** under `src/app/api/account/`. The B-Friends-4 prompt assumed one. **Decision needed:** either build a phone-change endpoint as part of B-Friends-4 (broader scope), or document that phone is immutable after signup (current de facto behavior) and recompute `phone_hash` only at signup. Recommend the latter for Phase 1.
+- ✅ **Decision (2026-05-23): defer phone-change endpoint.** Phase 1 treats phone as immutable post-signup. `phone_hash` is computed only at signup (and during one-shot backfill). When a phone-change flow is added in Phase 2+, that work must also recompute `phone_hash`. Tracked as a fast-follow.
 - ✅ Signup insert shape: `src/app/api/auth/verify-otp/route.ts:49-53` accepts a `.values({ phoneNumber })` block. Plug `phoneHash` into the same object.
 - ✅ Nav badge plumbing: `bellBadgeCount` enters Nav at `src/components/Nav.tsx:32,36`; it's computed in the root layout at `src/app/layout.tsx:46-62` via a server-side query. Add a parallel `getNewDiscoveryStatus()` call there and pipe `friendsDotVisible` as a sibling prop.
 - ✅ `INK3 = '#8a8a9a'` exists at `src/components/lately/tokens.ts:3`. Bell badge uses `var(--accent)` at `src/components/Nav.tsx:106` — visually distinct.
 - ✅ `libphonenumber-js` confirmed not in `package.json`. The `/min` variant is the right import for our use case (US-only).
 - ✅ No service worker / PWA manifest exists. Browser fallback path is the only iOS solution for Phase 1.
 
-**Verdict: YELLOW.** Resolve the phone-change decision (recommend: defer, current model treats phone as immutable post-signup), then it's GREEN.
+**Verdict: GREEN.**
