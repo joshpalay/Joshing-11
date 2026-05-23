@@ -581,6 +581,62 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0047 adds the editable profile fields: bio (≤280),
+    // tagline (≤80), location (≤60). All nullable; when bio is NULL the
+    // existing formatBio() default in src/server/profile/bio.ts still
+    // renders. Guard for preview/production databases that may have the
+    // migration recorded without the columns or CHECK constraints
+    // actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "bio" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "tagline" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "location" text
+      `);
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'User'
+              AND constraint_name = 'user_bio_length'
+          ) THEN
+            ALTER TABLE "User"
+              ADD CONSTRAINT user_bio_length CHECK (char_length("bio") <= 280);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'User'
+              AND constraint_name = 'user_tagline_length'
+          ) THEN
+            ALTER TABLE "User"
+              ADD CONSTRAINT user_tagline_length CHECK (char_length("tagline") <= 80);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'User'
+              AND constraint_name = 'user_location_length'
+          ) THEN
+            ALTER TABLE "User"
+              ADD CONSTRAINT user_location_length CHECK (char_length("location") <= 60);
+          END IF;
+        END $$
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
