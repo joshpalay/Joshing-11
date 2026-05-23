@@ -336,17 +336,552 @@ Place DB writes in `src/server/db/queries/account.ts` (extend the existing file)
 
 ---
 
-## Still TODO
+## B-Friends-2 (revised) — Friend request flow
 
-B-Friends-2, B-Friends-3, B-Friends-4 from the original document still need a revision pass against the actual schema before they can be run. Notable issues to address in that pass:
+**Goal:** In-app friend request lifecycle. Send → notify → accept or decline → Friendship row.
 
-- **`formedVia` value** — original prompt uses `'in_app_request'`; existing code uses `'direct_request'`. Pick one and stick to it.
-- **Friendships column count** — actual is 11, not 10 (cosmetic).
-- **FriendInvitations column count** — actual is 12, not 10 (cosmetic).
-- **Migration paths** — `drizzle/`, not `src/server/db/migrations/`.
-- **Cron location** — `src/app/api/cron/` + `vercel.json`, not `src/server/jobs/`.
-- **`users.phone_hash` + E.164 backfill** — needs `libphonenumber-js` as a new dependency; the existing `users.phoneNumber` column is not pre-normalized.
-- **No env validation file** — direct `process.env` is the current pattern.
+**Depends on:** B-Friends-1 (`friend_requests` table). P0-A (handles, for the AddFriendButton's target identification) is *helpful* but not strictly required — request flow can use `userId` if handles aren't merged yet.
+
+### Scope
+
+#### 1. AddFriendButton component
+
+File: `src/components/friends/AddFriendButton.tsx` (new).
+
+Generic, reusable. Used here, in B-Friends-3 search results, and in B-Friends-4 contact match cards.
+
+Props:
+
+```ts
+{
+  targetUserId: string;
+  targetDisplayName: string;
+  relationship: 'none' | 'pending_outbound' | 'pending_inbound' | 'friends' | 'recently_sent';
+}
+```
+
+Render rules per spec §9.6.4.1:
+
+- `none` → "Add friend" (primary CTA) → opens `AddFriendRequestModal`.
+- `pending_outbound` → "Pending" pill (disabled, muted).
+- `pending_inbound` → inline "Accept" + "Decline" buttons hitting the accept/decline endpoints.
+- `friends` → "Friends" pill (disabled, with checkmark glyph).
+- `recently_sent` → "Recently sent" pill (disabled, tooltip "You sent a request to this person in the last 30 days.").
+
+Use the existing button primitive at `src/components/ui/button.tsx` for the primary CTA.
+
+#### 2. AddFriendRequestModal
+
+File: `src/components/friends/AddFriendRequestModal.tsx` (new).
+
+Modal per spec §9.6.4.1. Personal note textarea, 160-char limit (Zod + client counter, counter visible once ≥120 chars). On submit → `POST /api/friend-requests`. Optimistic close + flip parent button to `pending_outbound`. Toast "Sent." on success.
+
+Match the visual treatment of `src/components/AddFriendInvite.tsx` (the existing invite-by-phone modal) for consistency.
+
+#### 3. API endpoints
+
+Files: `src/app/api/friend-requests/route.ts`, `src/app/api/friend-requests/[id]/accept/route.ts`, `src/app/api/friend-requests/[id]/decline/route.ts`, `src/app/api/friend-requests/[id]/route.ts` (DELETE).
+
+Auth on all: `getSession()` from `@/server/auth/session`. Zod-validate bodies per the pattern at `src/app/api/account/reminders/route.ts:12-26`.
+
+Place query helpers at `src/server/db/queries/friend-requests.ts` (new) — sibling of the existing `src/server/db/queries/friendships.ts`.
+
+**`POST /api/friend-requests`** — body `{ recipientId: string, personalNote?: string }`.
+
+Server logic:
+
+1. Verify `recipientId` exists and isn't the caller.
+2. Active friendship check: existing accepted Friendship between the pair (with `removed_at IS NULL`). If yes → 409 "Already friends."
+3. Pending duplicate check: existing `friend_requests` row in `pending` with this `(requester, recipient)` pair. If yes → 409 "Request already pending." (The unique index also guards this at the DB layer.)
+4. Cooldown check: any `friend_requests` row with this pair in either direction, status in `('declined','expired')`, with `resolved_at > NOW() - INTERVAL '30 days'`. If yes → 429 "Recently sent — try again later."
+5. Anti-harassment (see §6 below). Blocked → 404 (silently, don't reveal the block).
+6. Insert with `id` defaulted by the DB (`gen_random_uuid()::text` per the column default added in B-Friends-1's `friend_requests` migration), `status='pending'`, `expires_at = NOW() + INTERVAL '30 days'`.
+7. Write an `ActivityItem` of type `'friend_request'` for the recipient via the existing helper at `src/server/activity/write-activity.ts`. Payload includes the requester's user ID and the personal note.
+8. Return 201.
+
+**`POST /api/friend-requests/[id]/accept`** — recipient only.
+
+1. Load the row; verify `recipient_id = currentUserId` and `status = 'pending'`. Else 404.
+2. Insert into `friendships` (use the existing `friendships` query layer at `src/server/db/queries/friendships.ts`). Normalize so `user_a_id < user_b_id`. Set `formed_via = 'direct_request'` (this is the value the existing codebase uses — **not** the original prompt's `'in_app_request'`). Set `requested_by_user_id = <requester>`, `status = 'accepted'`, `formed_at = NOW()`.
+3. Update the friend_requests row: `status='accepted'`, `resolved_at = NOW()`.
+4. Write an `ActivityItem` of type `'friend_request_accepted'` for the **requester** (so they see "Robyn accepted your friend request").
+5. Return 200.
+
+**`POST /api/friend-requests/[id]/decline`** — recipient only.
+
+1. Verify ownership + status. Else 404.
+2. Update: `status='declined'`, `resolved_at = NOW()`.
+3. **No ActivityItem.** Decline is silent to the requester per spec §9.6.4.2.
+4. Return 200.
+
+**`DELETE /api/friend-requests/[id]`** — requester only. Hard-deletes the row (the unique-pair constraint releases, allowing re-send). No ActivityItem. The recipient sees the inbound request disappear from their Invitations list on next refresh.
+
+Rationale for hard-delete vs. a `'cancelled'` status: cancellation is the requester's own choice and shouldn't cool down future re-sends. The 30-day cooldown intentionally only fires on `declined`/`expired` resolutions.
+
+#### 4. Inbound + outbound requests in the Invitations tab
+
+After P0-C, `FriendsList.tsx`'s tab labeled "Invitations" needs its content replaced.
+
+Query (in `src/server/db/queries/friend-requests.ts`):
+
+- `listInboundPending(userId)` — rows where `recipient_id = userId AND status = 'pending'`, ordered `created_at DESC`. JOIN users for requester display data + avatar color.
+- `listOutboundPending(userId)` — rows where `requester_id = userId AND status = 'pending'`, ordered `created_at DESC`. JOIN users for recipient display data.
+
+Wire into `FriendsList.tsx` so the Invitations tab renders, in order:
+
+**Inbound section** — per spec §9.6.4.3:
+
+```
+[Avatar]  Robyn
+          wants to be friends
+          2 days ago
+
+          "I think you'd love these
+           Stoppard questions I've been
+           writing."
+
+          [ Accept ]   [ Decline ]
+```
+
+Personal note rendered in italic with quote marks. Omit the quote block if absent. Avatar via `AvatarChip` from P0-B. Accept / Decline hit the respective endpoints; optimistic remove on click. Toast "You're now friends with Robyn." on accept. No toast on decline.
+
+**Outbound section** — header "SENT (N)". Each row shows the recipient, "sent N days ago", and a "Cancel" button hitting `DELETE /api/friend-requests/:id`. Optimistic remove. No toast.
+
+**Empty states:**
+
+| Condition | Copy |
+|---|---|
+| Zero inbound, zero outbound | "All caught up on invitations." + link to `/friends/find` (Find Friends, lands in B-Friends-3) |
+| Zero pending overall AND zero friends | "No friends yet. Let's find your people." + same CTA |
+| `discoverable_by_contacts = false` AND zero pending | "Turn on discoverability to find people you already know on Joshing." + link to `/account/privacy` |
+
+#### 5. Expiration cron
+
+File: `src/app/api/cron/expire-friend-requests/route.ts` (new). Wire into `vercel.json`'s `crons` array at e.g. `30 6 * * *` (between `daily-assignments` at 6:00 and `weekly-ceremony` at 8:00).
+
+Logic: `UPDATE friend_requests SET status='expired', resolved_at=NOW() WHERE status='pending' AND expires_at < NOW()`. Return the updated row count for logging.
+
+Cron auth: copy the secret-header check pattern from the existing cron routes (inspect `src/app/api/cron/daily-assignments/route.ts` for the exact check — likely a `CRON_SECRET` env var compared against the `Authorization` header).
+
+#### 6. Anti-harassment
+
+Block model for v12: piggybacks on the existing `friendships.removed_at` + `removed_by_user_id` columns. A "block" = soft-deleted Friendship where `removed_by_user_id = <blocker>`. Symmetric exclusion:
+
+- If A soft-removed a friendship with B (`removed_by_user_id = A`), B cannot send a new request to A.
+- If B soft-removed a friendship with A (`removed_by_user_id = B`), A cannot send a new request to B.
+
+Implement as a shared helper `getRelationship(viewerId, targetId)` at `src/server/db/queries/friend-requests.ts`, returning the same enum the `AddFriendButton` consumes. Single source of truth for "what's the state between A and B." Used by:
+
+- `POST /api/friend-requests` (block both directions → 404).
+- Any UI that renders `AddFriendButton`.
+- B-Friends-3 search results.
+- B-Friends-4 contact match results.
+
+Logic:
+
+```
+1. Active Friendship row → 'friends'
+2. Soft-removed Friendship where removed_by is *either* party → block (caller sees 'none' but POST fails)
+3. friend_requests row (pending) where caller is requester → 'pending_outbound'
+4. friend_requests row (pending) where caller is recipient → 'pending_inbound'
+5. friend_requests row resolved within 30 days as declined/expired (either direction) → 'recently_sent'
+6. Otherwise → 'none'
+```
+
+### Acceptance
+
+- POST creates a row with `status='pending'`, `expires_at` 30 days out, `id` defaulted by DB.
+- Recipient sees a new `friend_request` ActivityItem (surfaces in the bell from prior work).
+- Recipient's Invitations tab shows the request with personal note rendered in italic + quotes.
+- Accept creates a Friendship with `user_a_id < user_b_id` (normalized), `formed_via = 'direct_request'`, `requested_by_user_id` set correctly, and writes a `friend_request_accepted` ActivityItem for the **requester**, not the accepter.
+- Decline marks `status='declined'` and writes no ActivityItem.
+- Re-request within 30 days of decline/expiration → 429.
+- The unique `(requester_id, recipient_id)` constraint prevents duplicate pending requests at the DB layer.
+- Expired pending rows transition to `'expired'` on next cron tick.
+- Soft-deleted Friendship with `removed_by_user_id = otherParty` → 404 on POST (not 403; doesn't reveal the block).
+- Personal note > 160 chars fails Zod **and** the CHECK constraint.
+- DELETE by the requester removes the row; recipient gets no notification.
+- Outbound pending section shows the user's sent requests; Cancel removes them silently.
+
+### Out of scope
+
+- Find Friends surface (B-Friends-3).
+- Contact-hash matching (B-Friends-4).
+- Dedicated `user_blocks` table (Phase 2; v12 piggybacks on soft-deleted Friendship).
+- SMS notifications for any of this (Phase 2).
+
+---
+
+## B-Friends-3 (revised) — Find Friends + invite links + soft cap
+
+**Goal:** A `/friends/find` page that lets a player find existing Joshing users (by handle/phone, by past-invitation reflection) and invite new ones (via shareable link). Plus the soft-cap nudge.
+
+**Depends on:** P0-A (`users.handle`), P0-B (`AvatarChip`), B-Friends-1 (discoverability flags), B-Friends-2 (`AddFriendButton` + `getRelationship` helper).
+
+**Does NOT implement contact-hash matching.** Block 2 below is a placeholder — B-Friends-4 replaces it.
+
+### Scope
+
+#### 1. Entry points
+
+- "Find friends" outline button in `src/components/FriendsHubPage.tsx` header, beside the existing "Add friend" button. Links to `/friends/find`.
+- At the top of `FriendsList.tsx`'s Invitations tab (post-P0-C): a card "Find friends already on Joshing or invite someone new →" linking to the same destination.
+
+#### 2. Find Friends page
+
+File: `src/app/friends/find/page.tsx` (new route). Server-rendered shell; client islands per block.
+
+Five blocks in order:
+
+**Block 1 — Search by handle or phone.** Client island. Text input, debounced 400ms or Enter. Calls `GET /api/friends/search?q=<query>`.
+
+Server-side match logic (in `src/server/db/queries/friend-search.ts`, new):
+
+- If `q` matches `/^@?[a-z0-9_]+$/`, look up by `LOWER(users.handle) = LOWER(strip_at(q))` (uses the unique-lower index added in P0-A).
+- Else if `isUsPhoneNumber(q)` (imported from `@/server/auth`, already in use at `src/app/api/friend-invitations/route.ts:4-5`), normalize via `normalizePhone(q)` and look up by exact phone match. **Do not use `formatPhoneNumber` from `account.ts` — it's a display formatter, not a parser.**
+- Else null.
+
+Return `{ match: { id, handle, displayName, avatarColor, createdAt, relationship } | null }`. The `relationship` field comes from `getRelationship` (B-Friends-2 §6) — this gives the search result an `AddFriendButton` with the correct state. Blocked users → return null silently.
+
+On match: render a card with `AvatarChip`, `@handle`, display name, "joined N days ago", and the `AddFriendButton`.
+On no match: "No one by that name. They may not be on Joshing yet — you can invite them below."
+
+**Block 2 — Contact matches (placeholder).** Disabled card per spec §9.6.3.4 with copy:
+
+> Find friends already on Joshing
+> We can check which of your phone contacts are here. We never share your contacts.
+>
+> [ Match my contacts ] *(disabled)*
+
+Button tooltip: "Coming soon." B-Friends-4 replaces this entire block.
+
+**Block 3 — Existing-invite reflection.** Query: `friend_invitations` rows where `inviter_user_id = currentUserId` AND `invitee_user_id IS NOT NULL` (they joined) AND no active Friendship exists yet between the pair AND no pending `friend_requests` row exists in either direction.
+
+Render rows per spec §9.6.3.4 Block 3:
+
+```
+[Avatar]  Bob
+          invited Apr 12 · joined yesterday
+                                    [ Add friend ]
+```
+
+`AddFriendButton` uses `relationship` from `getRelationship`. If zero matches, omit the block.
+
+API: `GET /api/friends/invite-reflections`. Query helper at `src/server/db/queries/friend-invitations.ts` (new — `src/server/friends/invitations.ts` already exists for write-side; queries get their own file).
+
+**Block 4 — Invite someone new.** Two buttons:
+
+- **"Send a personal invite"** — opens the existing `AddFriendInvite` modal at `src/components/AddFriendInvite.tsx`. That flow is already in production and stays exactly as it is: 3-step (identity → suggested topics → handoff), pre-seeds up to 3 interests into the new `friend_invitations` row's `preSeededInterests` jsonb column, generates an `sms:` link the inviter taps to hand off via *their* phone's messaging app (this is **not** server-driven SMS — it's user-initiated, so the Phase 1 SMS-send deferral does not apply). Also offers "Copy message" for non-SMS sharing.
+- **"Copy invite link"** — copies the user's `/invite/<handle>/<token>` URL via `navigator.clipboard.writeText()`. Toast "Link copied." If the user has no `invite_token` yet, hit `GET /api/account/invite-token` first (generates lazily). This is the lightweight version *without* topic pre-seeding — for cases where you want to share your handle link without designing the recipient's first questions.
+
+The two buttons are intentionally side-by-side: the personal invite is the rich path (topics + identity); the handle link is the casual path (just an entry point).
+
+**Block 5 — Suggested via mutual friends (placeholder).** Render muted "Coming soon — suggestions from people you have friends in common with." Hide the entire block if the user has `discoverable_by_mutual_friends = false` (they're opted out of both ends of the mechanism).
+
+#### 3. Invite link mechanics
+
+**Migration** (numbered alongside B-Friends-3 work — `drizzle/0046_user_invite_token.sql` if it lands next):
+
+```sql
+ALTER TABLE users ADD COLUMN invite_token TEXT;
+CREATE UNIQUE INDEX idx_users_invite_token ON users (invite_token) WHERE invite_token IS NOT NULL;
+```
+
+Drizzle: `inviteToken: text('invite_token')` on users. Instrumentation guard.
+
+**Token generation:** `randomBytes(16).toString('base64url')` — same primitive used at `src/server/friends/invitations.ts:166` for `friend_invitations.token`. 22-char URL-safe string.
+
+**API:**
+
+- `GET /api/account/invite-token` — returns `{ token, url }`. Generates and persists if NULL. URL format: `https://joshing.app/invite/<handle>/<token>` — read base URL from `process.env.NEXT_PUBLIC_APP_URL` (or whatever the project already uses; grep for the existing convention before introducing a new env var).
+- `POST /api/account/invite-token/rotate` — replaces, returns `{ token, url }`. Old link 404s.
+
+**Token rotation UI in `/account/privacy`:** Extending the page from B-Friends-1, add a section below the discoverability rows:
+
+```
+Your invite link
+[ https://joshing.app/invite/@handle/<token>     ] (readonly)
+[ Copy ]    [ Rotate link ]
+Rotating invalidates the old link. Use this if you accidentally shared it broadly.
+```
+
+**Link handler route:** `src/app/invite/[handle]/[token]/page.tsx` (new).
+
+Note: `src/app/invite/[token]/page.tsx` already exists and resolves *friend_invitation* tokens (the per-invitation flow used by `AddFriendInvite`). The new `/invite/[handle]/[token]` route is distinct: it resolves the *user's personal* `users.invite_token`. Both must coexist — different mechanisms. Add a comment at the top of the new route's source documenting why.
+
+Server-side resolution:
+
+1. Look up user by `LOWER(handle) = LOWER(:handle)` (case-insensitive handle lookup; case-sensitive token).
+2. If not found OR `invite_token != token`: render 404 page "This invite link is no longer valid."
+3. If visitor not logged in: redirect to onboarding flow, carrying `inviterUserId` in a session cookie (use the existing session-cookie pattern at `src/server/auth/session.ts`). After onboarding completes, create a Friendship row (`formed_via = 'invitation'`, `requested_by_user_id = <inviter>`, `status = 'accepted'`, `formed_at = NOW()`, normalized userA<userB) between the new user and the inviter, then redirect to home.
+4. If visitor is logged in as the inviter themselves: redirect to `/friends`.
+5. If visitor is logged in as someone else: render a Send-Friend-Request screen pre-filled with the inviter as recipient (uses `AddFriendRequestModal` from B-Friends-2 inline).
+
+#### 4. Soft cap nudge
+
+When the user's friend count > 25, render a dismissible row at the top of `FriendsList`'s Friends tab:
+
+```
+Joshing works best with a small group — you're at 28.
+No rule, just a nudge.                                ×
+```
+
+Dismiss state is session-local (in-memory React state or `sessionStorage`). **No DB column.** Comes back next session if count still > 25.
+
+Count source: existing query in `FriendsList.tsx` — it already loads friends. Reuse, don't add a separate count API.
+
+### Acceptance
+
+- "Find Friends" button visible in the Friends Hub header.
+- `/friends/find` renders five blocks in order; Block 2 disabled, Block 5 hidden when user opted out of mutual-friend discovery.
+- Block 1 search returns exact matches only — no partial-match leakage. Handle matches case-insensitively; phone matches after normalization.
+- Block 3 shows previously-invited users who have since joined, with correct `relationship` state via `AddFriendButton`.
+- Block 4 "Send a personal invite" opens the existing `AddFriendInvite` modal (3-step topic-seeding flow) — flow is unchanged from current production. Block 4 "Copy invite link" copies the user's `/invite/<handle>/<token>` URL.
+- `/invite/<handle>/<token>` while logged-out → onboarding with inviter carried through; post-onboarding new user has a Friendship (`formed_via='invitation'`) with the inviter.
+- `/invite/<handle>/<token>` while logged-in as someone else → friend-request compose pre-filled.
+- `/invite/<handle>/<token>` while logged-in as the inviter → redirect to `/friends`.
+- Rotating the invite token 404s the old URL.
+- Soft cap nudge appears at >25 friends; dismissible per session, returns next session.
+
+### Out of scope
+
+- Contact-hash matching (B-Friends-4).
+- Mutual-friend suggestions algorithm (Phase 2).
+- Reflection notifications and Friends-tab dot (B-Friends-4).
+- Server-driven SMS delivery for invitations (Phase 2). Note: the existing user-initiated SMS handoff via `sms:` links in `AddFriendInvite` is not affected — it stays.
+
+---
+
+## B-Friends-4 (revised) — Contact hash matching + reflection signals
+
+**Goal:** Wire up the contact-matching channel. Client-side picker + E.164 normalization + SHA-256 hashing. Server-side upload, storage, match query. Plus the passive reflection signals (Friends-tab dot, Invitations-tab passive row).
+
+**Depends on:** B-Friends-1 (`contact_hashes` table, `PHONE_HASH_SALT`, `hashPhoneNumber` helper), B-Friends-2 (`AddFriendButton` + `getRelationship`), B-Friends-3 (Find Friends page with Block 2 placeholder).
+
+### Scope
+
+#### 1. Add libphonenumber-js
+
+New dependency. `npm install libphonenumber-js` (~150KB gzipped; acceptable). Track bundle-size impact via the existing build pipeline.
+
+File: `src/lib/phone-e164.ts` (new).
+
+```ts
+import { parsePhoneNumber } from 'libphonenumber-js';
+
+export function normalizeToE164(raw: string, defaultCountry: 'US' = 'US'): string | null {
+  try {
+    const parsed = parsePhoneNumber(raw, defaultCountry);
+    return parsed?.isValid() ? parsed.number : null;
+  } catch {
+    return null;
+  }
+}
+```
+
+Default country `'US'`. Country-aware normalization is a known fast-follow (tracked).
+
+#### 2. `users.phone_hash` column + backfill
+
+**Migration** (next available number at the time):
+
+```sql
+ALTER TABLE users ADD COLUMN phone_hash TEXT;
+CREATE INDEX idx_users_phone_hash ON users (phone_hash);
+```
+
+Drizzle: `phoneHash: text('phone_hash')`. Instrumentation guard.
+
+**Backfill script:** `scripts/backfill-phone-hashes.ts`. For every user with non-null `phoneNumber`:
+
+1. `normalizeToE164(user.phoneNumber)` — if null, log + skip (manual review).
+2. `hashPhoneNumber(e164)` — uses `src/server/lib/phone-hashing.ts` from B-Friends-1.
+3. Write to `users.phone_hash`. Idempotent — skip rows already hashed.
+
+Run with `npx tsx scripts/backfill-phone-hashes.ts`.
+
+**Signup site:** `src/app/api/auth/verify-otp/route.ts:49-53` (the `provisionUserForPhone` insert). Compute `phone_hash` alongside the insert. Find the existing phone-change endpoint (grep `src/app/api/account/` for phone update) and update it the same way.
+
+#### 3. Hash salt fetch endpoint
+
+File: `src/app/api/account/phone-hash-salt/route.ts` (new). `GET` — authenticated, returns `{ salt: process.env.PHONE_HASH_SALT }`. 500 if unset (it must be set in production — B-Friends-1 already enforces this at boot).
+
+Security note: the salt is not a true secret — it lives on every authenticated client. Its purpose is rainbow-table defense, not insider-attack defense. Acceptable per spec §9.6.3.6.
+
+#### 4. Client-side contact ingestion
+
+File: `src/components/friends/ContactMatchBlock.tsx` (new). Replaces the disabled Block 2 placeholder in `src/app/friends/find/page.tsx`.
+
+**Browser support check:**
+
+```ts
+const supportsContactsAPI =
+  typeof navigator !== 'undefined' &&
+  'contacts' in navigator &&
+  typeof (navigator as any).contacts?.select === 'function';
+```
+
+**Path A — Contacts API supported (Chrome on Android, etc).** On user gesture (initial opt-in toggle OR "Refresh ↻" button):
+
+1. `await navigator.contacts.select(['tel'], { multiple: true })`.
+2. For each contact, extract phone numbers, normalize each via `normalizeToE164`.
+3. Fetch salt: `GET /api/account/phone-hash-salt`.
+4. Hash each E.164 number client-side using Web Crypto:
+
+   ```ts
+   async function hashPhoneClient(salt: string, e164: string): Promise<string> {
+     const data = new TextEncoder().encode(salt + e164);
+     const buf = await crypto.subtle.digest('SHA-256', data);
+     return Array.from(new Uint8Array(buf))
+       .map(b => b.toString(16).padStart(2, '0'))
+       .join('');
+   }
+   ```
+
+   **This MUST produce identical output to the server's `hashPhoneNumber()`.** Add a parity unit test that imports both implementations and asserts equality on a known input.
+5. POST hashes to `/api/contact-hashes`.
+6. Reload Block 2 with the match list from `/api/contact-hashes/matches`.
+
+**Path B — Contacts API unsupported (iOS Safari and most desktop browsers):** Render fallback:
+
+```
+Your browser doesn't support automatic contact matching.
+You can still:
+  → Search by handle or phone (above)
+  → Send a friend an invite link
+```
+
+Tracked: long-term solutions (native iOS app, or manual phone-paste UI).
+
+#### 5. Hash upload endpoint
+
+File: `src/app/api/contact-hashes/route.ts` (new).
+
+`POST` — Zod-validate `{ hashes: string[] }` (each a 64-char hex string). Max 5000 hashes; 413 above this. Replaces all existing hashes for the user atomically in a Drizzle transaction:
+
+```ts
+await db.transaction(async (tx) => {
+  await tx.delete(contactHashes).where(eq(contactHashes.userId, userId));
+  if (hashes.length > 0) {
+    await tx.insert(contactHashes).values(hashes.map((phoneHash) => ({ userId, phoneHash })));
+  }
+});
+```
+
+Returns `{ uploaded: number, matchCount: number }` where `matchCount` is a preview count of matches against other users who have `discoverable_by_contacts = true`.
+
+`DELETE` — clears all rows for current user. Idempotent.
+
+Query helpers at `src/server/db/queries/contact-hashes.ts` (new).
+
+#### 6. Match query
+
+File: `src/app/api/contact-hashes/matches/route.ts` (new). `GET` — returns users matching the caller's uploaded hashes.
+
+Drizzle query (or raw SQL in the queries module):
+
+```sql
+SELECT u.id, u.handle, u.display_name, u.avatar_color, u.created_at
+FROM contact_hashes ch
+JOIN users u ON u.phone_hash = ch.phone_hash AND u.id != $1
+WHERE ch.user_id = $1
+  AND u.discoverable_by_contacts = TRUE
+ORDER BY u.created_at DESC;
+```
+
+Then for each row, compute `relationship` via `getRelationship` (B-Friends-2 §6). The helper's anti-harassment logic naturally excludes blocked users.
+
+Return `{ matches: Array<{ ...userFields, relationship }> }`.
+
+#### 7. Match results UI in Block 2
+
+Replaces the placeholder. Per spec §9.6.3.4:
+
+```
+CONTACTS ON JOSHING                      Refresh ↻
+[AvatarChip]  Sarah
+              joined 3 days ago         [ Add friend ]
+[AvatarChip]  Robyn
+              joined 2 weeks ago        [ Pending ]
+[AvatarChip]  James M.
+              joined 1 month ago        [ Friends ]
+```
+
+Each row uses `AddFriendButton` with `relationship` from §6. "Refresh ↻" re-runs the picker → hash → upload → reload flow.
+
+#### 8. Weekly debounce
+
+On page-load of `/friends/find`, if `discoverable_by_contacts = TRUE`:
+
+- Server-side: query `MAX(uploaded_at) FROM contact_hashes WHERE user_id = $1`.
+- If null OR `> 7 days ago`: render a "Refresh contact matches?" prompt at the top of Block 2 with a button that runs the upload flow.
+- Else: skip silently.
+
+The Contacts API requires a user gesture, so truly silent re-upload is impossible. The prompt is the gentlest possible reminder.
+
+#### 9. Reflection signals
+
+A new match is "new" when: a user has joined whose `phone_hash` matches a `contact_hashes` row of an existing user, AND the joining user has `discoverable_by_contacts = TRUE`, AND the existing user hasn't visited Find Friends since the joiner joined.
+
+**Schema:**
+
+```sql
+ALTER TABLE users ADD COLUMN last_friend_discovery_check_at TIMESTAMPTZ;
+```
+
+(Numbered alongside other B-Friends-4 migrations.)
+
+**Compute helper:** `getNewDiscoveryStatus(userId)` at `src/server/db/queries/contact-hashes.ts`. Returns `{ hasNew: boolean, count: number }`. Counts:
+
+- Contact-hash matches where the matched user's `created_at > users.last_friend_discovery_check_at` AND no active Friendship and no pending request yet.
+- Plus invite-reflection: users this player invited (via `friend_invitations`) who joined after the same threshold (this overlaps with B-Friends-3 Block 3 but is fine — both signals are valid).
+
+**API:** `GET /api/friends/has-new-discovery` — returns `{ hasNew, count }`. Cache-Control: `max-age=60`.
+
+**Update threshold:** When the user visits `/friends/find`, set `last_friend_discovery_check_at = NOW()` server-side.
+
+**Don't write ActivityItems for this.** Discovery is a passive signal, distinct from the bell (which is news-about-you per the existing bell semantics in `src/server/db/queries/activity.ts`).
+
+#### 10. Friends-tab dot
+
+In `src/components/Nav.tsx`: when `hasNew = true`, render a small dot on the Friends tab icon.
+
+- Binary (visible/hidden), no count.
+- Distinct from the existing bell badge. Use a muted neutral color — the codebase's `INK3` token from `src/components/lately/tokens.ts:1-7` if it's the right shade; otherwise pick a token that's clearly distinguishable from the bell-badge accent.
+- Add a new prop `friendsDotVisible: boolean` on Nav, plumbed from wherever the parent layout already computes `bellBadgeCount` (the existing `bellBadgeCount` prop entered Nav via `src/components/Nav.tsx:32,36,79-81` — same pattern).
+
+#### 11. Passive row in the Invitations tab
+
+When `hasNew = true` on initial load of FriendsList's Invitations tab (post-P0-C), render at the top:
+
+```
+✨  3 new contacts are on Joshing.
+    → Find friends
+```
+
+Count from §9. Tapping navigates to `/friends/find`, which updates the threshold and so removes both the dot and this row on next render.
+
+### Acceptance
+
+- A new user with `discoverable_by_contacts = TRUE` becomes visible via contact matching to other users whose hashes include their phone hash.
+- A user with `discoverable_by_contacts = FALSE` is NOT surfaced even if hashes match.
+- Client-side and server-side hashing produce identical output for the same E.164 input + salt — verified by a unit test that imports both implementations.
+- Toggling `discoverable_by_contacts` OFF deletes the user's `contact_hashes` rows (this is enforced by B-Friends-1; B-Friends-4 relies on it).
+- Match results render with the correct `relationship` state (none / pending_outbound / pending_inbound / friends / recently_sent).
+- Refresh button re-runs the picker + hash + upload flow.
+- Friends-tab dot appears when there are new matches and clears on visiting `/friends/find`.
+- Passive row in Invitations tab shows accurate count and clears on visit.
+- iOS Safari / any browser without the Contacts API renders the fallback copy; the rest of Find Friends still works.
+- Blocked users do not appear in match results (verified through `getRelationship`'s anti-harassment filter).
+- libphonenumber-js bundle size stays under 200KB gzipped (track via the existing build output).
+
+### Out of scope
+
+- Mutual-friend suggestions (Phase 2).
+- Google contacts integration (Phase 2+).
+- Native iOS contact upload (Phase 3+).
+- Country-aware E.164 normalization (fast-follow).
+- Dedicated `user_blocks` table (Phase 2; v12 piggybacks on soft-deleted Friendship).
 
 ---
 
@@ -405,3 +940,66 @@ All assumptions verified. Implement using these existing patterns:
 ### NEW: P0-D Profile page design
 
 Placeholder added above P0-A. The current `/account/profile` is a stub (`src/app/account/profile/page.tsx`); P0-A's handle needs a rendering surface, so the profile page must come first. Detailed scope TBD — flesh out before starting P0-A.
+
+### B-Friends-2 — RED (architectural overlap with existing code; decision needed)
+
+Independent audit on 2026-05-23 surfaced a **critical finding**:
+
+- ❌ **The existing codebase already implements inbound friend requests via `friendships.status = 'pending'`.** Not a new concept. Evidence:
+  - Existing query: `src/server/db/queries/friends.ts:198-214` (`getFriendsHub`) reads pending Friendship rows where `requestedByUserId != userId` as inbound requests.
+  - Existing endpoint: `POST /api/friend-requests/:requestId/:action` is already wired (consumed at `src/components/FriendsList.tsx:90-95`).
+  - Existing ActivityItem writes at `src/server/friends/friendships.ts:83-116,150-156` already emit `'friend_request'` and `'friend_request_accepted'` types.
+  - Existing pending-request flow uses `friendships.requestContext.suggestedInterests` for the personal-touch payload — not freeform text, but the slot exists.
+- The new `friend_requests` table proposed by B-Friends-1 **duplicates** this concept. Two parallel inbound-request systems would coexist, with the FriendsList "Requests/Invitations" tab querying one but not the other.
+- ✅ Other infrastructure verified:
+  - Friendship INSERT helper: `friendshipPair()` at `src/server/friends/friendships.ts:28-29` does the userA<userB normalization.
+  - `formedVia` write sites at `src/server/friends/friendships.ts:100` (`'direct_request'`) and `:267` (`'invitation'`).
+  - Cron auth: `process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET` checked via Bearer token (`src/app/api/cron/daily-assignments/route.ts:24-29`).
+  - `vercel.json` `crons` array shape verified.
+  - Modal pattern: no reusable `<Modal>` exists; copy the fixed-backdrop pattern from `src/components/QuickAddQuestionModal.tsx`.
+  - ActivityItem signature verified at `src/server/activity/write-activity.ts:40-59`; `'friend_request'` + `'friend_request_accepted'` types confirmed.
+
+**Decision needed.** Three viable paths:
+
+1. **(a) Drop `friend_requests` table from B-Friends-1.** Use existing `friendships.status='pending'` as the request representation. Extend the `friendships` schema with the missing pieces:
+   - `personal_note TEXT` (160-char CHECK)
+   - `expires_at TIMESTAMPTZ` (nullable; populated only for `pending` rows)
+   - `'declined'` and `'expired'` status values (extend the implicit enum — `status` is `text` so no migration friction)
+   - `resolved_at TIMESTAMPTZ` (nullable)
+   - Cooldown: query against `friendships` resolved within 30 days.
+
+   Smallest delta. Reuses existing endpoint, existing FriendsList tab, existing ActivityItem writes. B-Friends-2 shrinks to: add `AddFriendRequestModal` (new), extend the existing endpoint to accept `personal_note`, add the expiration cron, add the 30-day cooldown check, add `getRelationship` helper.
+
+2. **(b) Keep `friend_requests` table, migrate the existing flow.** Delete the pending-Friendship request mechanism, port everything to the new table. Larger refactor, but a cleaner end state (Friendship represents only accepted relationships).
+
+3. **(c) Run both in parallel temporarily.** Don't recommend — guarantees a "which is canonical?" question in every future PR.
+
+Until this is decided, B-Friends-2 should not be implemented. The schema in B-Friends-1's Migration C (`friend_requests` table) is on hold pending this decision.
+
+### B-Friends-3 — YELLOW (two small corrections)
+
+Independent audit on 2026-05-23:
+
+- ✅ `AddFriendInvite.tsx` 3-step flow verified at `src/components/AddFriendInvite.tsx:301-527`. Block 4 "Send a personal invite" reuses this modal — confirmed correct after the user's catch.
+- ✅ Existing write endpoint: `POST /api/friend-invitations` at `src/app/api/friend-invitations/route.ts:148-285`. Validates `inviteeDisplayName`, `phone`, `suggestedInterests` (≤3, ≤60 chars each). For existing users it goes straight to `createOrReusePendingFriendshipRequest()` (an existing helper that creates a pending Friendship — reinforces the B-Friends-2 finding above).
+- ⚠️ **`formatPhoneNumber` is display-only** (`src/server/db/queries/account.ts:19-29`). For Block 1 phone search parsing, use `isUsPhoneNumber()` + `normalizePhone()` from `@/server/auth` (already imported by `friend-invitations/route.ts:4-5`). **Update inline below.**
+- ⚠️ **`/invite/[token]/page.tsx` already exists** (`src/app/invite/[token]/page.tsx:24-119`) and resolves the *invitation* token (`friend_invitations.token`), redirecting to `/login?invitationToken={token}`. The new `/invite/[handle]/[token]` route in B-Friends-3 is a **distinct mechanism** — resolves the *user's personal* token (`users.invite_token`). Both routes must coexist. Naming clash isn't an issue (different path shape) but the rationale should be documented in the new route's source.
+- ✅ `NEXT_PUBLIC_APP_URL` env var pattern verified at `src/app/api/friend-invitations/route.ts:158-172` (also `?? APP_URL ?? VERCEL_PROJECT_PRODUCTION_URL ?? request-derived`). Use this fallback chain for the new invite URL builder.
+- ✅ Soft cap source: `friends.length` from `src/components/FriendsList.tsx:40,170`. No new query needed.
+- ✅ Onboarding handoff pattern for inviter carry-through has prior art: `acceptFriendInvitation()` at `src/server/friends/invitations.ts:456-540` creates the inviter-invitee Friendship with `formed_via='invitation'` via `upsertInvitationFriendship()`. Reuse this helper for the new route's post-onboarding step.
+
+**Verdict: YELLOW.** Fix the two ⚠️ items inline (done — see below), then it's GREEN.
+
+### B-Friends-4 — YELLOW (one decision needed)
+
+Independent audit on 2026-05-23:
+
+- ✅ Web Crypto + Node Crypto SHA-256 parity is implementable. No prior art in the codebase (`TextEncoder` is used at `src/server/auth/session.ts:92,101` for JWT but not for hashing interop), so a parity unit test is mandatory.
+- ❌ **No phone-change API endpoint exists** under `src/app/api/account/`. The B-Friends-4 prompt assumed one. **Decision needed:** either build a phone-change endpoint as part of B-Friends-4 (broader scope), or document that phone is immutable after signup (current de facto behavior) and recompute `phone_hash` only at signup. Recommend the latter for Phase 1.
+- ✅ Signup insert shape: `src/app/api/auth/verify-otp/route.ts:49-53` accepts a `.values({ phoneNumber })` block. Plug `phoneHash` into the same object.
+- ✅ Nav badge plumbing: `bellBadgeCount` enters Nav at `src/components/Nav.tsx:32,36`; it's computed in the root layout at `src/app/layout.tsx:46-62` via a server-side query. Add a parallel `getNewDiscoveryStatus()` call there and pipe `friendsDotVisible` as a sibling prop.
+- ✅ `INK3 = '#8a8a9a'` exists at `src/components/lately/tokens.ts:3`. Bell badge uses `var(--accent)` at `src/components/Nav.tsx:106` — visually distinct.
+- ✅ `libphonenumber-js` confirmed not in `package.json`. The `/min` variant is the right import for our use case (US-only).
+- ✅ No service worker / PWA manifest exists. Browser fallback path is the only iOS solution for Phase 1.
+
+**Verdict: YELLOW.** Resolve the phone-change decision (recommend: defer, current model treats phone as immutable post-signup), then it's GREEN.
