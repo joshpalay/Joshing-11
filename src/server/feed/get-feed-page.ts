@@ -7,9 +7,9 @@
  * to hydrate <FeedList /> with the first page (no client round-trip).
  */
 
-import { and, count, eq, inArray, isNull, ne, or } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, ne, notExists, or } from 'drizzle-orm';
 
-import { db, feedItems, friendships, questions, users } from '@/server/db';
+import { db, feedItems, friendships, masteryEvents, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import {
   getDismissedDomains,
@@ -185,6 +185,21 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         feedFilterSourcePredicate(filter),
         inArray(feedItems.state, ['active', 'skipped']),
         or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
+        // Match the visibility rule applied in getFeedForUser so this
+        // diagnostic count reflects what the user actually sees.
+        or(
+          eq(feedItems.sourceType, 'direct_sent'),
+          notExists(
+            db
+              .select({ id: masteryEvents.id })
+              .from(masteryEvents)
+              .where(and(
+                eq(masteryEvents.userId, viewerUserId),
+                eq(masteryEvents.answeredByUserId, viewerUserId),
+                eq(masteryEvents.questionId, feedItems.questionId),
+              )),
+          ),
+        ),
       ))
       .then((rows) => rows[0]?.value ?? 0),
   ]);
