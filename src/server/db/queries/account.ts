@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 
 import {
+  contactHashes,
   db,
   declaredInterests,
   playerMastery,
@@ -400,6 +401,75 @@ export async function assignInitialHandle(params: {
   return { ok: true };
 }
 
+export type DiscoverabilityState = {
+  discoverableByContacts: boolean;
+  discoverableByMutualFriends: boolean;
+};
+
+export async function getDiscoverability(
+  userId: string,
+): Promise<DiscoverabilityState | null> {
+  const [row] = await db
+    .select({
+      discoverableByContacts: users.discoverableByContacts,
+      discoverableByMutualFriends: users.discoverableByMutualFriends,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!row) return null;
+  return row;
+}
+
+export type DiscoverabilityPatch = {
+  contacts?: boolean;
+  mutualFriends?: boolean;
+};
+
+// Updates one or both discoverability flags. Wraps both writes (and the
+// optional ContactHash purge below) in a single transaction so the table
+// can't be left holding rows after the user has revoked their consent.
+//
+// Side effect: when discoverableByContacts is flipped TRUE → FALSE, every
+// ContactHash row for the user is deleted in the same transaction.
+// Re-enabling later requires re-uploading hashes via B-Friends-4 (which
+// will land the upload endpoint).
+export async function updateDiscoverability(
+  userId: string,
+  patch: DiscoverabilityPatch,
+): Promise<DiscoverabilityState | null> {
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({
+        discoverableByContacts: users.discoverableByContacts,
+        discoverableByMutualFriends: users.discoverableByMutualFriends,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!current) return null;
+
+    const set: Record<string, unknown> = { updatedAt: new Date() };
+    if (patch.contacts !== undefined) set.discoverableByContacts = patch.contacts;
+    if (patch.mutualFriends !== undefined) set.discoverableByMutualFriends = patch.mutualFriends;
+
+    await tx.update(users).set(set).where(eq(users.id, userId));
+
+    const turningContactsOff =
+      patch.contacts === false && current.discoverableByContacts === true;
+    if (turningContactsOff) {
+      await tx.delete(contactHashes).where(eq(contactHashes.userId, userId));
+    }
+
+    return {
+      discoverableByContacts: patch.contacts ?? current.discoverableByContacts,
+      discoverableByMutualFriends:
+        patch.mutualFriends ?? current.discoverableByMutualFriends,
+    };
+  });
+}
 
 export async function deleteUserAccount(userId: string): Promise<void> {
   await db.transaction(async (tx) => {

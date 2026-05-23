@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -171,6 +172,8 @@ export const users = pgTable(
     bio: text('bio'),
     tagline: text('tagline'),
     location: text('location'),
+    discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
+    discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
     authorProfilePublic: boolean('authorProfilePublic').notNull().default(true),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
     birthYear: integer('birth_year'),
@@ -686,12 +689,30 @@ export const friendships = pgTable(
     removedAt: timestamp('removedAt', { withTimezone: true }),
     removedByUserId: text('removedByUserId').references(() => users.id),
     requestContext: jsonb('requestContext').$type<{ suggestedInterests?: string[] }>(),
+    personalNote: text('personalNote'),
+    expiresAt: timestamp('expiresAt', { withTimezone: true }),
+    resolvedAt: timestamp('resolvedAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     unique('Friendship_userAId_userBId_key').on(table.userAId, table.userBId),
     index('Friendship_userAId_status_idx').on(table.userAId, table.status),
     index('Friendship_userBId_status_idx').on(table.userBId, table.status),
+  ],
+);
+
+export const contactHashes = pgTable(
+  'ContactHash',
+  {
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    phoneHash: text('phoneHash').notNull(),
+    uploadedAt: timestamp('uploadedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.phoneHash] }),
+    index('ContactHash_phoneHash_idx').on(table.phoneHash),
   ],
 );
 

@@ -1,5 +1,16 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // PHONE_HASH_SALT seeds the SHA-256 used by hashPhoneNumber()
+    // (src/server/lib/phone-hashing.ts) and the client-side hashing path
+    // B-Friends-4 will add. The salt itself isn't a true secret — it lives on
+    // every authenticated client — but losing it invalidates every
+    // ContactHash row, so we fail-fast in production if it's unset.
+    if (process.env.NODE_ENV === 'production' && !process.env.PHONE_HASH_SALT) {
+      throw new Error(
+        'PHONE_HASH_SALT must be set in production; without it contact-hash matching is non-functional',
+      );
+    }
+
     const { migrate } = await import('drizzle-orm/node-postgres/migrator');
     const { drizzle } = await import('drizzle-orm/node-postgres');
     const { Pool } = await import('pg');
@@ -635,6 +646,107 @@ export async function register() {
     } catch {
       // User may not exist yet on a fresh database — migrate() creates it
       // before this migration runs.
+    }
+
+    // Migration 0048 adds the friends/privacy foundation:
+    //   • User.discoverable_by_contacts / .discoverable_by_mutual_friends
+    //     (default FALSE) — read by B-Friends-3/4 once those land.
+    //   • ContactHash table — stores per-user SHA-256 contact hashes for
+    //     the B-Friends-4 matching channel. Cascades on User delete.
+    //   • Friendship extensions — personalNote (≤160), expiresAt,
+    //     resolvedAt + two CHECKs (length, users distinct) + two partial
+    //     indexes (expiry cron, declined/expired decay GC).
+    // Guard for preview/production databases that may have the migration
+    // recorded without the columns/table/constraints actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "discoverable_by_contacts" boolean NOT NULL DEFAULT false
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "discoverable_by_mutual_friends" boolean NOT NULL DEFAULT false
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "ContactHash" (
+          "userId"     text NOT NULL,
+          "phoneHash"  text NOT NULL,
+          "uploadedAt" timestamptz NOT NULL DEFAULT NOW(),
+          PRIMARY KEY ("userId", "phoneHash")
+        )
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          hash_table regclass := to_regclass('public."ContactHash"');
+          user_table regclass := to_regclass('public."User"');
+        BEGIN
+          IF hash_table IS NOT NULL
+            AND user_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'ContactHash_userId_User_id_fk'
+                AND conrelid = hash_table
+            )
+          THEN
+            ALTER TABLE "ContactHash"
+              ADD CONSTRAINT "ContactHash_userId_User_id_fk"
+              FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "ContactHash_phoneHash_idx"
+          ON "ContactHash" ("phoneHash")
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Friendship"
+          ADD COLUMN IF NOT EXISTS "personalNote" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Friendship"
+          ADD COLUMN IF NOT EXISTS "expiresAt" timestamptz
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Friendship"
+          ADD COLUMN IF NOT EXISTS "resolvedAt" timestamptz
+      `);
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'Friendship'
+              AND constraint_name = 'friendship_personal_note_length'
+          ) THEN
+            ALTER TABLE "Friendship"
+              ADD CONSTRAINT friendship_personal_note_length
+              CHECK (char_length("personalNote") <= 160);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'Friendship'
+              AND constraint_name = 'friendship_users_distinct'
+          ) THEN
+            ALTER TABLE "Friendship"
+              ADD CONSTRAINT friendship_users_distinct
+              CHECK ("userAId" <> "userBId");
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Friendship_expiresAt_pending_idx"
+          ON "Friendship" ("expiresAt") WHERE status = 'pending'
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Friendship_resolvedAt_decay_idx"
+          ON "Friendship" ("resolvedAt") WHERE status IN ('declined', 'expired')
+      `);
+    } catch {
+      // User or Friendship may not exist yet on a fresh database — migrate()
+      // creates the base tables before this migration runs.
     }
 
     try {
