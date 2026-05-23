@@ -4,7 +4,7 @@ import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 import { getUserOnboardingProfile } from '@/server/db/queries/users';
-import { getUnreadCount } from '@/server/db/queries/activity';
+import { getBellBadgeCount } from '@/server/db/queries/activity';
 
 // Caveat removed — was preloaded but unused. Re-add when a handwriting register lands in UI.
 
@@ -41,7 +41,7 @@ export default async function RootLayout({
   const [profile, bellBadgeCount] = claims
     ? await Promise.all([
         getUserOnboardingProfile(claims.userId),
-        getUnreadCount(claims.userId).catch(() => 0),
+        getBellBadgeCount(claims.userId).catch(() => 0),
       ])
     : [null, 0]
   return (

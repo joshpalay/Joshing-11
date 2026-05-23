@@ -464,6 +464,20 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0043 adds the nullable User.last_activity_bell_opened_at
+    // timestamp used by getBellBadgeCount to compute "rolled-off + unseen"
+    // counts. Apply it idempotently in case the migration is recorded
+    // without the column actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "last_activity_bell_opened_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
 
 import {
   activityItems,
@@ -861,4 +861,62 @@ export async function markAllRead(userId: string): Promise<void> {
     .update(activityItems)
     .set({ read: true })
     .where(and(eq(activityItems.userId, userId), eq(activityItems.read, false)));
+}
+
+export async function markActivityBellOpened(userId: string): Promise<void> {
+  await db
+    .update(users)
+    .set({ lastActivityBellOpenedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+/**
+ * Bell badge count = events that have rolled off Home's top-3 RecentActivity
+ * AND fired since the user last opened the bell.
+ *
+ * Semantics: "there's value here you can't see from Home." If an event is
+ * still visible on Home, the badge stays quiet. If the bell has never been
+ * opened (NULL), the floor is the activity 90-day cutoff via activityCutoff().
+ *
+ * Returns the raw count; the UI caps the displayed string at "99+".
+ */
+export async function getBellBadgeCount(userId: string): Promise<number> {
+  const [userRow] = await db
+    .select({ lastOpenedAt: users.lastActivityBellOpenedAt })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const lastOpenedAt = userRow?.lastOpenedAt ?? null;
+
+  const topThreeRows = await db
+    .select({ id: activityItems.id })
+    .from(activityItems)
+    .where(and(
+      eq(activityItems.userId, userId),
+      isNull(activityItems.deletedAt),
+      gt(activityItems.createdAt, activityCutoff()),
+      inArray(activityItems.type, HOME_TOP3_ELIGIBLE_TYPES as readonly string[]),
+    ))
+    .orderBy(desc(activityItems.createdAt))
+    .limit(3);
+  const topThreeIds = topThreeRows.map((row) => row.id);
+
+  const sinceFloor = lastOpenedAt ?? activityCutoff();
+
+  const conditions = [
+    eq(activityItems.userId, userId),
+    isNull(activityItems.deletedAt),
+    gt(activityItems.createdAt, sinceFloor),
+    inArray(activityItems.type, HOME_TOP3_ELIGIBLE_TYPES as readonly string[]),
+  ];
+  if (topThreeIds.length > 0) {
+    conditions.push(notInArray(activityItems.id, topThreeIds));
+  }
+
+  const [row] = await db
+    .select({ value: count() })
+    .from(activityItems)
+    .where(and(...conditions));
+
+  return row?.value ?? 0;
 }
