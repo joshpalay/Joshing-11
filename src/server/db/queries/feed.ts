@@ -306,6 +306,14 @@ function visibleQuestionPredicate(dismissedDomains: string[]) {
   return and(...predicates);
 }
 
+// Exclude items where the viewer authored the underlying question — they
+// already know the answer, so it shouldn't surface as a "question to answer"
+// card in their feed. Nullable creatorId (system-generated questions) stays
+// visible.
+function viewerNotAuthorPredicate(userId: string) {
+  return or(isNull(questions.creatorId), ne(questions.creatorId, userId));
+}
+
 async function fetchVisibleFeedItems(
   userId: string,
   dismissedDomains: string[],
@@ -324,6 +332,7 @@ async function fetchVisibleFeedItems(
       feedFilterPredicate(options.filter),
       inArray(feedItems.state, VISIBLE_FEED_STATES),
       visibleQuestionPredicate(dismissedDomains),
+      viewerNotAuthorPredicate(userId),
       cursorPredicate,
     ))
     .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
@@ -350,6 +359,7 @@ async function fetchVisibleFeedItems(
         feedFilterPredicate(options.filter),
         inArray(feedItems.state, VISIBLE_FEED_STATES),
         visibleQuestionPredicate(dismissedDomains),
+        viewerNotAuthorPredicate(userId),
         cursorPredicate,
       ))
       .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
@@ -381,6 +391,7 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
         feedFilterPredicate(filter),
         inArray(feedItems.state, VISIBLE_FEED_STATES),
         visibleQuestionPredicate(dismissedDomains),
+        viewerNotAuthorPredicate(userId),
       )),
   ]);
 

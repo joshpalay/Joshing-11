@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { dbMock, state } = vi.hoisted(() => {
   type Predicate =
     | { op: 'eq'; column: string; value: unknown }
+    | { op: 'ne'; column: string; value: unknown }
     | { op: 'and'; predicates: Array<Predicate | undefined> }
     | { op: 'or'; predicates: Array<Predicate | undefined> }
     | { op: 'inArray'; column: string; values: readonly unknown[] }
@@ -29,6 +30,7 @@ const { dbMock, state } = vi.hoisted(() => {
     visibility: string;
     deletedAt: Date | null;
     canonicalSubcategory: string | null;
+    creatorId?: string | null;
   };
 
   const state = {
@@ -47,6 +49,11 @@ const { dbMock, state } = vi.hoisted(() => {
     switch (predicate.op) {
       case 'eq':
         return columnValue(predicate.column, feedItem, question) === predicate.value;
+      case 'ne': {
+        const v = columnValue(predicate.column, feedItem, question);
+        // SQL: `x != y` is NULL when x is NULL, which is falsy in WHERE.
+        return v != null && v !== predicate.value;
+      }
       case 'and':
         return predicate.predicates.every((part) => evaluate(part, feedItem, question));
       case 'or':
@@ -105,7 +112,10 @@ vi.mock('drizzle-orm', () => ({
   ne: vi.fn((column, value) => ({ op: 'ne', column, value })),
   notInArray: vi.fn((column, values) => ({ op: 'notInArray', column, values })),
   or: vi.fn((...predicates) => ({ op: 'or', predicates })),
-  sql: vi.fn(() => ({ op: 'sql' })),
+  sql: Object.assign(
+    vi.fn(() => ({ op: 'sql', as: (alias: string) => ({ op: 'sql', alias }) })),
+    { raw: vi.fn((value: unknown) => ({ op: 'sql', value })) },
+  ),
 }));
 
 vi.mock('@/server/db', () => ({
@@ -132,6 +142,7 @@ vi.mock('@/server/db', () => ({
     visibility: 'questions.visibility',
     deletedAt: 'questions.deletedAt',
     canonicalSubcategory: 'questions.canonicalSubcategory',
+    creatorId: 'questions.creatorId',
   },
   users: { id: 'users.id', displayName: 'users.displayName' },
 }));
@@ -306,6 +317,63 @@ describe('getFeedForUser feed visibility', () => {
     const result = await getFeedForUser('recipient-1', { limit: 1 });
 
     expect(result.items[0]).toEqual(expect.objectContaining({ id: 'feed-direct-priority' }));
+  });
+
+  it('excludes feed items for questions the viewer authored', async () => {
+    state.questionRows = [
+      // Viewer is the author — must be filtered out
+      { id: 'question-own', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music', creatorId: 'recipient-1' },
+      // Authored by someone else — should remain visible
+      { id: 'question-friend', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music', creatorId: 'author-2' },
+      // System-generated (no author) — should remain visible
+      { id: 'question-system', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music', creatorId: null },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-self-authored',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-own',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+      {
+        id: 'feed-friend-authored',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-friend',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:01:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+      {
+        id: 'feed-system-authored',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-system',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:02:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+    ];
+
+    const result = await getFeedForUser('recipient-1');
+
+    expect(result.items.map((item) => item.id).sort()).toEqual(['feed-friend-authored', 'feed-system-authored']);
+    expect(result.totalCount).toBe(2);
   });
 
   it('applies the from-friends URL filter', async () => {
