@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNull, lt, ne, notInArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
 import { isVisibleFriendAnsweredSource, visibleFeedSourcePredicate } from '@/server/feed/visibility';
@@ -26,6 +26,10 @@ export type CollapsedFeedItem = FeedItem & {
 const VISIBLE_FEED_STATES = ['active', 'skipped', 'answered'] as const;
 const ACTION_REQUIRED_FEED_STATES = ['active', 'skipped'] as const;
 const BLOCKING_FEED_STATES = ['active', 'skipped', 'dismissed'] as const;
+// Homepage feed inbox: only items the viewer can still act on.
+// Answered cards stay in the client's local React state for the current
+// page session (see FeedList.submitAnswer) and disappear on next load.
+const ACTIONABLE_FEED_STATES = ACTION_REQUIRED_FEED_STATES;
 
 const visibleSourcePredicate = visibleFeedSourcePredicate(feedItems);
 
@@ -272,9 +276,26 @@ function feedPinnedPredicate(pinned: boolean | undefined) {
     return and(eq(feedItems.isPinned, true), inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES));
   }
 
+  return eq(feedItems.isPinned, false);
+}
+
+// Hide non-direct_sent items for questions the viewer has already answered
+// elsewhere (joshing game, catchup, an earlier feed card). direct_sent stays
+// — a friend addressed it to them specifically, and the server allows
+// re-grade on direct_sent so the card stays useful.
+function viewerNotAlreadyAnsweredPredicate(userId: string) {
   return or(
-    eq(feedItems.isPinned, false),
-    eq(feedItems.state, 'answered'),
+    eq(feedItems.sourceType, 'direct_sent'),
+    notExists(
+      db
+        .select({ id: masteryEvents.id })
+        .from(masteryEvents)
+        .where(and(
+          eq(masteryEvents.userId, userId),
+          eq(masteryEvents.answeredByUserId, userId),
+          eq(masteryEvents.questionId, feedItems.questionId),
+        )),
+    ),
   );
 }
 
@@ -330,9 +351,10 @@ async function fetchVisibleFeedItems(
       feedPinnedPredicate(options.pinned),
       visibleSourcePredicate,
       feedFilterPredicate(options.filter),
-      inArray(feedItems.state, VISIBLE_FEED_STATES),
+      inArray(feedItems.state, ACTIONABLE_FEED_STATES),
       visibleQuestionPredicate(dismissedDomains),
       viewerNotAuthorPredicate(userId),
+      viewerNotAlreadyAnsweredPredicate(userId),
       cursorPredicate,
     ))
     .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
@@ -357,9 +379,10 @@ async function fetchVisibleFeedItems(
         feedPinnedPredicate(options.pinned),
         visibleSourcePredicate,
         feedFilterPredicate(options.filter),
-        inArray(feedItems.state, VISIBLE_FEED_STATES),
+        inArray(feedItems.state, ACTIONABLE_FEED_STATES),
         visibleQuestionPredicate(dismissedDomains),
         viewerNotAuthorPredicate(userId),
+        viewerNotAlreadyAnsweredPredicate(userId),
         cursorPredicate,
       ))
       .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
@@ -389,9 +412,10 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
         eq(feedItems.recipientUserId, userId),
         visibleSourcePredicate,
         feedFilterPredicate(filter),
-        inArray(feedItems.state, VISIBLE_FEED_STATES),
+        inArray(feedItems.state, ACTIONABLE_FEED_STATES),
         visibleQuestionPredicate(dismissedDomains),
         viewerNotAuthorPredicate(userId),
+        viewerNotAlreadyAnsweredPredicate(userId),
       )),
   ]);
 
