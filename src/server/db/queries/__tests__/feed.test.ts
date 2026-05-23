@@ -9,6 +9,7 @@ const { dbMock, state } = vi.hoisted(() => {
     | { op: 'inArray'; column: string; values: readonly unknown[] }
     | { op: 'isNull'; column: string }
     | { op: 'notInArray'; column: string; values: readonly unknown[] }
+    | { op: 'notExists' }
     | { op: 'lt'; column: string; value: unknown };
 
   type FeedRow = {
@@ -64,6 +65,11 @@ const { dbMock, state } = vi.hoisted(() => {
         return columnValue(predicate.column, feedItem, question) == null;
       case 'notInArray':
         return !predicate.values.includes(columnValue(predicate.column, feedItem, question));
+      case 'notExists':
+        // The tests don't model the masteryEvents table; treat the
+        // viewer-not-already-answered subquery as always passing so the
+        // existing visibility cases continue to drive what's exercised here.
+        return true;
       case 'lt':
         return String(columnValue(predicate.column, feedItem, question)) < String(predicate.value);
     }
@@ -110,6 +116,7 @@ vi.mock('drizzle-orm', () => ({
   isNull: vi.fn((column) => ({ op: 'isNull', column })),
   lt: vi.fn((column, value) => ({ op: 'lt', column, value })),
   ne: vi.fn((column, value) => ({ op: 'ne', column, value })),
+  notExists: vi.fn(() => ({ op: 'notExists' })),
   notInArray: vi.fn((column, values) => ({ op: 'notInArray', column, values })),
   or: vi.fn((...predicates) => ({ op: 'or', predicates })),
   sql: Object.assign(
@@ -187,7 +194,11 @@ describe('getFeedForUser feed visibility', () => {
     expect(result.totalCount).toBe(1);
   });
 
-  it('keeps answered direct_sent items visible without pinned priority', async () => {
+  it('hides answered items from the actionable inbox query', async () => {
+    // The homepage feed is an inbox of things the viewer can still act on.
+    // Once a feed item is in state='answered' the server stops returning it;
+    // the client keeps the just-answered card in local React state for the
+    // current page session and it disappears on the next load.
     const sourceEventAt = new Date('2026-05-14T12:00:00.000Z');
     state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
     state.feedRows = [{
@@ -206,15 +217,8 @@ describe('getFeedForUser feed visibility', () => {
 
     const result = await getFeedForUser('recipient-1');
 
-    expect(result.items).toEqual([
-      expect.objectContaining({
-        id: 'feed-answered-1',
-        sourceType: 'direct_sent',
-        state: 'answered',
-        isPinned: true,
-      }),
-    ]);
-    expect(result.totalCount).toBe(1);
+    expect(result.items).toEqual([]);
+    expect(result.totalCount).toBe(0);
   });
 
 
