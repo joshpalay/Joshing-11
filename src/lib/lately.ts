@@ -7,21 +7,15 @@ export type LatelyBucket = {
   items: LatelyMoment[];
 };
 
-const THEY_GOT_YOU_POOL: ReadonlyArray<string> = [
-  'THEY KNEW YOU',
-  '{NAME} GOT IT',
-  'THEY SAW IT',
+export const SHARED_CAPTIONS = [
+  'SHARED FREQUENCY',
+  'BOTH OF YOU',
+  'COMMON GROUND',
   'A MATCH',
-  'ON YOUR FREQUENCY',
-];
-
-const YOU_GOT_THEM_POOL: ReadonlyArray<string> = [
-  'YOU KNEW THEM',
-  'YOU SAW IT',
-  'YOU NAILED IT',
-  'A MATCH',
-  'ON THEIR FREQUENCY',
-];
+  'ON THE SAME WAVELENGTH',
+  'TWO MINDS, ONE ANSWER',
+  'A SHARED CORNER',
+] as const;
 
 function djb2(input: string): number {
   let hash = 5381;
@@ -33,12 +27,10 @@ function djb2(input: string): number {
 
 export function assignCaption(
   momentId: string,
-  dir: LatelyDirection,
-  friendFirstName: string,
+  _dir: LatelyDirection,
+  _friendFirstName: string,
 ): string {
-  const pool = dir === 'they_got_you' ? THEY_GOT_YOU_POOL : YOU_GOT_THEM_POOL;
-  const template = pool[djb2(momentId) % pool.length];
-  return template.replace('{NAME}', friendFirstName.toUpperCase());
+  return SHARED_CAPTIONS[djb2(momentId) % SHARED_CAPTIONS.length];
 }
 
 function ymdInZone(date: Date, tz: string): string {

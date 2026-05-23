@@ -23,7 +23,6 @@ export function MomentRow({
   defaultOpen = false,
 }: Props) {
   const [open, setOpen] = useState(defaultOpen);
-  const theyGotYou = moment.dir === 'they_got_you';
 
   function handleSend(e: MouseEvent) {
     e.stopPropagation();
@@ -98,11 +97,7 @@ export function MomentRow({
           marginBottom: open ? 14 : 12,
         }}
       >
-        {theyGotYou ? (
-          <>{nameLink} got you on {categorySpan}.</>
-        ) : (
-          <>You got {nameLink} on {categorySpan}.</>
-        )}
+        <>You and {nameLink} both know {categorySpan}.</>
       </div>
 
       {open ? (

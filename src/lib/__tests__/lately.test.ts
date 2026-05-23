@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { assignCaption, bucketMoments, formatMomentTime } from '@/lib/lately';
+import {
+  assignCaption,
+  bucketMoments,
+  formatMomentTime,
+  SHARED_CAPTIONS,
+} from '@/lib/lately';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 
 function moment(overrides: Partial<LatelyMoment> & { answeredAt: Date }): LatelyMoment {
@@ -20,28 +25,17 @@ function moment(overrides: Partial<LatelyMoment> & { answeredAt: Date }): Lately
 }
 
 describe('assignCaption', () => {
-  it('returns a caption from the they_got_you pool when dir is they_got_you', () => {
-    const pool = new Set([
-      'THEY KNEW YOU',
-      'ROBYN GOT IT',
-      'THEY SAW IT',
-      'A MATCH',
-      'ON YOUR FREQUENCY',
-    ]);
-    const caption = assignCaption('any-id', 'they_got_you', 'Robyn');
-    expect(pool.has(caption)).toBe(true);
+  const pool = new Set<string>(SHARED_CAPTIONS);
+
+  it('returns a caption from the shared pool regardless of direction', () => {
+    expect(pool.has(assignCaption('any-id', 'they_got_you', 'Robyn'))).toBe(true);
+    expect(pool.has(assignCaption('any-id', 'you_got_them', 'Robyn'))).toBe(true);
   });
 
-  it('returns a caption from the you_got_them pool when dir is you_got_them', () => {
-    const pool = new Set([
-      'YOU KNEW THEM',
-      'YOU SAW IT',
-      'YOU NAILED IT',
-      'A MATCH',
-      'ON THEIR FREQUENCY',
-    ]);
-    const caption = assignCaption('any-id', 'you_got_them', 'Robyn');
-    expect(pool.has(caption)).toBe(true);
+  it('returns the same caption for both directions given the same momentId', () => {
+    const a = assignCaption('stable-id', 'they_got_you', 'Robyn');
+    const b = assignCaption('stable-id', 'you_got_them', 'Jamie');
+    expect(a).toBe(b);
   });
 
   it('is deterministic across calls', () => {
@@ -49,17 +43,12 @@ describe('assignCaption', () => {
       .toBe(assignCaption('stable-id', 'they_got_you', 'Robyn'));
   });
 
-  it('substitutes the friend first name (uppercase) into the {NAME} slot', () => {
-    // Find an id that lands on the {NAME} template (pool index 1).
-    let id = 'x';
-    for (let i = 0; i < 200; i++) {
-      const c = assignCaption(`probe-${i}`, 'they_got_you', 'jamie');
-      if (c === 'JAMIE GOT IT') {
-        id = `probe-${i}`;
-        break;
-      }
+  it('distributes across the pool over many ids', () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      seen.add(assignCaption(`probe-${i}`, 'they_got_you', 'Robyn'));
     }
-    expect(assignCaption(id, 'they_got_you', 'jamie')).toBe('JAMIE GOT IT');
+    expect(seen.size).toBeGreaterThanOrEqual(3);
   });
 });
 
