@@ -165,6 +165,8 @@ export const users = pgTable(
     knowledgeCardShareToken: text('knowledge_card_share_token'),
     knowledgeCardShareExpiresAt: timestamp('knowledge_card_share_expires_at', { withTimezone: true }),
     slug: text('slug'),
+    handle: text('handle'),
+    handleLastChangedAt: timestamp('handle_last_changed_at', { withTimezone: true }),
     authorProfilePublic: boolean('authorProfilePublic').notNull().default(true),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
     birthYear: integer('birth_year'),

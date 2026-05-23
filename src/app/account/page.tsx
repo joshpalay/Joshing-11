@@ -183,6 +183,9 @@ export default function AccountPage() {
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <h1 className="font-serif text-4xl font-semibold leading-tight">{profile.displayName}</h1>
+          {profile.handle ? (
+            <p className="mt-1 text-sm text-muted-foreground">@{profile.handle}</p>
+          ) : null}
           <p className="mt-2 text-base text-muted-foreground">{profile.bio}</p>
           <p className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
             <PhoneIcon className="size-4" />

@@ -316,6 +316,13 @@
       "when": 1780358400000,
       "tag": "0044_user_last_activity_bell_opened_at",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1780444800000,
+      "tag": "0045_user_handle",
+      "breakpoints": true
     }
   ]
 }
