@@ -36,14 +36,35 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
     case 'friend_answered_your_question': {
       const faq = item.reference.friendAnsweredQuestion
       const correct = faq?.result === 'correct'
+      // Directional v2 wording for the "they_got_you" half. The "incorrect"
+      // half keeps the generic "answered your question" line — it has no
+      // connection-moment counterpart, so the wording isn't redundant.
+      if (correct) {
+        return {
+          headline: (
+            <>
+              <b>{actor}</b> got you on{' '}
+              <em
+                style={{ fontFamily: 'var(--font-display), Georgia, serif' }}
+              >
+                {faq?.domain ?? 'something'}
+              </em>
+              .
+            </>
+          ),
+          secondLine: null,
+          accentColor: '#d97706',
+          href: '/activities',
+        }
+      }
       return {
         headline: (
           <>
-            <b>{actor}</b> {correct ? 'got your question' : 'answered your question'}
+            <b>{actor}</b> answered your question
           </>
         ),
         secondLine: faq?.domain ?? null,
-        accentColor: correct ? '#d97706' : '#a8a29e',
+        accentColor: '#a8a29e',
         href: '/activities',
       }
     }
