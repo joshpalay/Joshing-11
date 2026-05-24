@@ -1,9 +1,10 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useMemo } from 'react'
 
-import { Button } from '@/components/ui/button'
+import { AddFriendButton } from '@/components/friends/AddFriendButton'
+import type { RelationshipResult } from '@/server/db/queries/friend-requests'
 
 type FriendshipShape = {
   id: string
@@ -17,12 +18,27 @@ type ProfileFriendButtonProps = {
   targetDisplayName: string
 }
 
-type Action =
-  | 'create'
-  | 'accept'
-  | 'ignore'
-  | 'cancel'
-  | 'remove'
+// Derives a RelationshipResult from the limited shape the profile page
+// passes today. We don't surface "recently_sent" here — the profile is
+// not a re-send surface, and FriendPortraitData doesn't carry resolvedAt.
+// If a recently-sent state is ever needed on profiles, expand
+// getFriendPortraitData to pass resolvedAt and refine this mapping.
+function deriveRelationship(friendship: FriendshipShape): RelationshipResult {
+  if (!friendship) {
+    return { state: 'none', friendshipId: null, isBlocked: false }
+  }
+  if (friendship.status === 'active') {
+    return { state: 'friends', friendshipId: friendship.id, isBlocked: false }
+  }
+  if (friendship.status === 'pending') {
+    return {
+      state: friendship.viewerIsRequester ? 'pending_outbound' : 'pending_inbound',
+      friendshipId: friendship.id,
+      isBlocked: false,
+    }
+  }
+  return { state: 'none', friendshipId: null, isBlocked: false }
+}
 
 export function ProfileFriendButton({
   targetUserId,
@@ -30,133 +46,16 @@ export function ProfileFriendButton({
   targetDisplayName,
 }: ProfileFriendButtonProps) {
   const router = useRouter()
-  const [pendingAction, setPendingAction] = useState<Action | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  async function run(action: Action, request: () => Promise<Response>) {
-    if (pendingAction) return
-    setPendingAction(action)
-    setError(null)
-    try {
-      const response = await request()
-      if (!response.ok) {
-        setError('Something went wrong. Please try again.')
-        return
-      }
-      router.refresh()
-    } catch {
-      setError('Network error. Please try again.')
-    } finally {
-      setPendingAction(null)
-    }
-  }
-
-  const createRequest = () =>
-    run('create', () =>
-      fetch('/api/friend-requests', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ inviteeUserId: targetUserId }),
-      })
-    )
-
-  const accept = () => {
-    if (!friendship) return
-    return run('accept', () =>
-      fetch(`/api/friend-requests/${friendship.id}/accept`, { method: 'POST' })
-    )
-  }
-
-  const ignore = () => {
-    if (!friendship) return
-    return run('ignore', () =>
-      fetch(`/api/friend-requests/${friendship.id}/ignore`, { method: 'POST' })
-    )
-  }
-
-  const cancel = () => {
-    if (!friendship) return
-    return run('cancel', () =>
-      fetch(`/api/friend-requests/${friendship.id}/cancel`, { method: 'POST' })
-    )
-  }
-
-  const remove = () => {
-    if (!friendship) return
-    const confirmed = window.confirm(
-      `Remove ${targetDisplayName} from your friends?`
-    )
-    if (!confirmed) return
-    return run('remove', () =>
-      fetch(`/api/friend-requests/${friendship.id}/remove`, { method: 'POST' })
-    )
-  }
-
-  const status = friendship?.status ?? null
-  const isPending = status === 'pending'
-  const isActive = status === 'active'
-  const viewerIsRequester = friendship?.viewerIsRequester ?? false
+  const relationship = useMemo(() => deriveRelationship(friendship), [friendship])
 
   return (
-    <div className="mt-4 flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {isActive ? (
-          <>
-            <Button size="sm" variant="secondary" disabled>
-              Friends ✓
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={remove}
-              disabled={pendingAction !== null}
-            >
-              {pendingAction === 'remove' ? 'Removing…' : 'Unfriend'}
-            </Button>
-          </>
-        ) : isPending && viewerIsRequester ? (
-          <>
-            <Button size="sm" variant="secondary" disabled>
-              Request sent
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={cancel}
-              disabled={pendingAction !== null}
-            >
-              {pendingAction === 'cancel' ? 'Cancelling…' : 'Cancel'}
-            </Button>
-          </>
-        ) : isPending && !viewerIsRequester ? (
-          <>
-            <Button
-              size="sm"
-              onClick={accept}
-              disabled={pendingAction !== null}
-            >
-              {pendingAction === 'accept' ? 'Joining…' : 'Accept'}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={ignore}
-              disabled={pendingAction !== null}
-            >
-              {pendingAction === 'ignore' ? 'Setting aside…' : 'Not now'}
-            </Button>
-          </>
-        ) : (
-          <Button
-            size="sm"
-            onClick={createRequest}
-            disabled={pendingAction !== null}
-          >
-            {pendingAction === 'create' ? 'Sending…' : 'Add friend'}
-          </Button>
-        )}
-      </div>
-      {error ? <p className="text-destructive text-xs">{error}</p> : null}
+    <div className="mt-4">
+      <AddFriendButton
+        targetUserId={targetUserId}
+        targetDisplayName={targetDisplayName}
+        relationship={relationship}
+        onChange={() => router.refresh()}
+      />
     </div>
   )
 }
