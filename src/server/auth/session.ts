@@ -70,6 +70,8 @@ function readConfiguredSessionSecret(): string | null {
 }
 
 function getJwtSecret(): Uint8Array {
+  if (cachedJwtSecret) return cachedJwtSecret;
+
   const secret = readConfiguredSessionSecret();
 
   if (!secret && process.env.NODE_ENV === 'production') {
@@ -77,14 +79,20 @@ function getJwtSecret(): Uint8Array {
   }
 
   if (!secret) {
-    return new TextEncoder().encode('development-only-joshing-session-secret');
+    cachedJwtSecret = new TextEncoder().encode('development-only-joshing-session-secret');
+    return cachedJwtSecret;
   }
 
   const decoded = Buffer.from(secret, 'base64');
-  if (decoded.length > 0) return decoded;
-
-  return new TextEncoder().encode(secret);
+  cachedJwtSecret = decoded.length > 0 ? new Uint8Array(decoded) : new TextEncoder().encode(secret);
+  return cachedJwtSecret;
 }
+
+// Memoize across the worker's lifetime. The secret is process-stable; without
+// this, every readSessionClaims / validateSessionToken call re-walks the env
+// lookup chain and re-runs Buffer.from(_, 'base64'). Tests that need to vary
+// the secret should mock this function or use vi.resetModules() between cases.
+let cachedJwtSecret: Uint8Array | null = null;
 
 /**
  * Create a new UserSession for the user and set the session cookie.
