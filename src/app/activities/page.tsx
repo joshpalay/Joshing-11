@@ -453,16 +453,20 @@ export default async function ActivitiesPage() {
   ]);
   const tz = viewer?.timezone ?? 'America/New_York';
 
-  // Connection moments come from getLatelyMoments (both directions). The
-  // legacy activity stream also emits friend_answered_your_question correct
-  // rows for the they_got_you direction — drop those to avoid double-renders.
+  // Connection moments come from getLatelyMoments (both directions). Two
+  // legacy activity types narrate the same event and would double-render:
+  //   - friend_answered_your_question (when correct): the raw "X answered
+  //     your Y question" copy, already covered by the they_got_you moment.
+  //   - declared_promoted: emitted only when a friend correctly answers AND
+  //     the domain transitions to demonstrated — strictly a subset of
+  //     they_got_you. The "SEE YOUR MAP" CTA lives on /knowledge.
   const utilityItems: LatelyFeedItem[] = items
     .filter(
       (i) =>
         !(
           i.type === 'friend_answered_your_question' &&
           i.reference.friendAnsweredQuestion?.result === 'correct'
-        ),
+        ) && i.type !== 'declared_promoted',
     )
     .map(activityToFeedItem);
 
