@@ -5,9 +5,14 @@ import { getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { db, users } from '@/server/db';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { type QueueSlot } from '@/server/daily/types';
+import { runWithConcurrency } from '@/server/lib/concurrency';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
+
+// Capped at 4 to stay one connection below the 5-cap DB pool. Tune down if
+// the SMS provider's per-second rate becomes the binding limit instead of DB.
+const USER_CONCURRENCY = 4;
 
 function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
@@ -51,7 +56,7 @@ export async function GET(request: NextRequest) {
     smsSent: 0,
   };
 
-  for (const user of onboardedUsers) {
+  await runWithConcurrency(onboardedUsers, USER_CONCURRENCY, async (user) => {
     try {
       let queue = await getTodaysDailyQueue(user.id);
       const existingSlots = queue ? asQueueSlots(queue.slots) : [];
@@ -76,7 +81,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       if (error instanceof DailyQueueFillError) {
         results.failed += 1;
-        continue;
+        return;
       }
 
       console.error('[cron/daily-assignments] user failed', {
@@ -85,7 +90,7 @@ export async function GET(request: NextRequest) {
       });
       results.failed += 1;
     }
-  }
+  });
 
   return NextResponse.json(results);
 }
