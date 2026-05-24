@@ -12,12 +12,21 @@ import {
   mapAdaptiveLevelToDifficultyHint,
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
-import { getKnowledgeBase, getRecentDailyQuestionTexts } from '@/server/db/queries/daily';
+import { getKnowledgeBase, getRecentDailyQuestionTexts, getRecentFactKeys } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
+import { normalizeFactKey } from '@/server/questions/fact-key';
 import { resolveDailyBasePoints } from './types';
+
+// Cap the recent question-text block at this many entries inside the prompt.
+// The full recent history (up to 200) is still used to derive the fact-key
+// avoid set; only this slice is shown verbatim to stay within a reasonable
+// token budget.
+const RECENT_QUESTION_TEXT_LIMIT = 80;
+// Cap the recent fact-key block at this many entries inside the prompt.
+const RECENT_FACT_KEY_LIMIT = 200;
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
 
@@ -52,6 +61,20 @@ Do not invent meta-categories. Do not append qualifiers like "themes," "characte
 
 When in doubt: prefer the broader, work-level label. Use the exact domain name provided to you — the canonical_subcategory for a question should match the domain it was generated for.
 
+REPETITION RULES (read carefully):
+The user will supply two avoid lists: previous question texts and previous fact_keys. A "fact" is the underlying piece of trivia, independent of phrasing. Two questions are the SAME FACT if they probe the same answer about the same subject under the same angle — even if the wording, framing, or sentence structure is completely different.
+
+- "What instrument does Hagen play to summon the Gibichungs in Götterdämmerung?" and "Hagen calls the Gibichung vassals to assembly using which instrument?" are the SAME FACT.
+- Do NOT generate a question whose fact appears in either avoid list, even if you can phrase it differently.
+- Pick a genuinely new angle on the domain: a different work, character, scene, technique, year, person, or detail.
+
+For each question, also emit a fact_key: a short hyphenated lowercase identifier for the underlying fact, in the form "<domain-slug>-<subject>-<answer-topic>". Examples:
+- "gotterdammerung-hagen-summons-vassals-instrument"
+- "mrs-dalloway-clarissa-party-guest-arrival-order"
+- "tchaikovsky-pathetique-symphony-final-tempo-marking"
+
+Keep fact_keys under 80 characters. Two questions with the same fact_key are duplicates and will be rejected.
+
 Return ONLY valid JSON. No preamble, no markdown fences, no explanation.
 
 Return format:
@@ -63,7 +86,8 @@ Return format:
       "question_text": "string",
       "answer": "string",
       "explainer": "string, 2-3 sentences of educational context",
-      "difficulty_estimate": "accessible | moderate | specialist"
+      "difficulty_estimate": "accessible | moderate | specialist",
+      "fact_key": "string, short hyphenated lowercase identifier for the underlying fact (see REPETITION RULES)"
     }
   ]
 }`;
@@ -75,6 +99,7 @@ type LlmQuestion = {
   answer: string;
   explainer: string;
   difficulty_estimate: 'accessible' | 'moderate' | 'specialist';
+  fact_key: string | null;
 };
 
 const FIXED_DIFFICULTY_LEVELS: Record<string, number> = {
@@ -97,12 +122,18 @@ function buildUserPrompt(
   domains: string[],
   count: number,
   prev: string[],
+  prevFactKeys: string[],
   domainSkips: ReadonlyMap<string, number> | undefined,
   difficultyPreference?: string,
   domainDifficultyOverrides?: ReadonlyMap<string, string>,
   adaptiveLevel?: number | null,
 ): string {
-  const prevBlock = prev.length > 0 ? prev.slice(-40).join('\n') : '(none yet)';
+  const prevBlock = prev.length > 0
+    ? prev.slice(0, RECENT_QUESTION_TEXT_LIMIT).join('\n')
+    : '(none yet)';
+  const factKeyBlock = prevFactKeys.length > 0
+    ? prevFactKeys.slice(0, RECENT_FACT_KEY_LIMIT).join('\n')
+    : '(none yet)';
 
   let calibration = '';
   if (domainSkips && domainSkips.size > 0) {
@@ -150,8 +181,11 @@ ${lines.join('\n')}`;
 
   return `${domainSection}${calibration}${difficultyHint}
 
-Previously generated questions to avoid repeating:
-${prevBlock}`;
+Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased):
+${prevBlock}
+
+Fact keys already covered for this user (do not produce any question whose fact_key matches one of these):
+${factKeyBlock}`;
 }
 
 function asString(value: unknown): string | null {
@@ -205,6 +239,7 @@ function parseQuestions(raw: string): LlmQuestion[] {
       answer: normalizeCanonicalAnswerLabel(answer),
       explainer,
       difficulty_estimate: difficulty,
+      fact_key: normalizeFactKey(asString(rec.fact_key)),
     });
   }
   return result;
@@ -214,6 +249,7 @@ async function callLlmOnce(
   domains: string[],
   count: number,
   previousQuestionTexts: string[],
+  previousFactKeys: string[],
   domainSkips: ReadonlyMap<string, number> | undefined,
   difficultyPreference?: string,
   domainDifficultyOverrides?: ReadonlyMap<string, string>,
@@ -234,6 +270,7 @@ async function callLlmOnce(
           domains,
           count,
           previousQuestionTexts,
+          previousFactKeys,
           domainSkips,
           difficultyPreference,
           domainDifficultyOverrides,
@@ -257,10 +294,15 @@ export async function generateDailyQuestions(
   difficultyPreference?: string,
   domainDifficultyOverrides?: ReadonlyMap<string, string>,
   adaptiveLevel?: number | null,
+  previousFactKeys: string[] = [],
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
 
-  const avoidList = [...extraAvoidTexts, ...previousQuestionTexts].slice(-40);
+  // Avoid list ordering: newest first so the slice in buildUserPrompt keeps
+  // recency. extraAvoidTexts (caller-supplied, e.g. same-batch peers) goes
+  // first so it always reaches the prompt even if the recent history is long.
+  const avoidList = [...extraAvoidTexts, ...previousQuestionTexts];
+  const factKeyAvoidSet = new Set(previousFactKeys);
 
   let generated: LlmQuestion[] = [];
   try {
@@ -268,6 +310,7 @@ export async function generateDailyQuestions(
       domains,
       count,
       avoidList,
+      previousFactKeys,
       domainSkips,
       difficultyPreference,
       domainDifficultyOverrides,
@@ -279,6 +322,7 @@ export async function generateDailyQuestions(
         domains,
         count,
         avoidList,
+        previousFactKeys,
         domainSkips,
         difficultyPreference,
         domainDifficultyOverrides,
@@ -294,6 +338,7 @@ export async function generateDailyQuestions(
         domains,
         count,
         avoidList,
+        previousFactKeys,
         domainSkips,
         difficultyPreference,
         domainDifficultyOverrides,
@@ -311,6 +356,7 @@ export async function generateDailyQuestions(
 
   const expiresAt = getNextDailyResetBoundary();
   const persisted: GeneratedQuestionRow[] = [];
+  const seenFactKeysThisBatch = new Set<string>();
 
   for (const question of generated.slice(0, count)) {
     const { canonicalDomain } = await reconcileProposedDomain(
@@ -326,6 +372,21 @@ export async function generateDailyQuestions(
       continue;
     }
 
+    // Belt-and-suspenders: even with the avoid list, the LLM occasionally
+    // returns a fact_key that matches a recent one (or duplicates another
+    // question in the same batch). Drop those rather than persist them.
+    const factKey = question.fact_key;
+    if (factKey) {
+      if (factKeyAvoidSet.has(factKey) || seenFactKeysThisBatch.has(factKey)) {
+        console.warn('[daily/generate-questions] skipping question with already-seen fact_key', {
+          factKey,
+          canonicalDomain,
+        });
+        continue;
+      }
+      seenFactKeysThisBatch.add(factKey);
+    }
+
     const basePoints = resolveDailyBasePoints(question.difficulty_estimate);
     const [row] = await db
       .insert(generatedQuestions)
@@ -338,6 +399,7 @@ export async function generateDailyQuestions(
         explainer: question.explainer,
         difficultyEstimate: question.difficulty_estimate,
         basePoints,
+        factKey,
         expiresAt,
         usedInQueue: false,
       })
@@ -402,10 +464,11 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   userId: string,
   count: number,
 ): Promise<GeneratedQuestionRow[]> {
-  const [knowledgeBase, preferences, previousQuestionTexts] = await Promise.all([
+  const [knowledgeBase, preferences, previousQuestionTexts, previousFactKeys] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
     getRecentDailyQuestionTexts(userId),
+    getRecentFactKeys(userId),
   ]);
   const adaptiveLevel = preferences.difficulty === 'adaptive'
     ? await updateAdaptiveLevel(userId)
@@ -437,5 +500,6 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     preferences.difficulty,
     domainDifficultyOverrides,
     adaptiveLevel,
+    previousFactKeys,
   );
 }
