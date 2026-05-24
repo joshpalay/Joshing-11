@@ -32,11 +32,11 @@ describe('Friends page QA surface', () => {
     expect(html).not.toMatch(forbiddenGamificationCopy)
   })
 
-  it('renders the Friends / Requests / Sent tab bar with the friends tab active by default', () => {
+  it('renders the Friends / Invitations / Sent tab bar with the friends tab active by default', () => {
     const html = renderToStaticMarkup(<FriendsList />)
 
     expect(html).toContain('Friends')
-    expect(html).toContain('Requests')
+    expect(html).toContain('Invitations')
     expect(html).toContain('Sent')
     expect(html).toContain('Loading friends')
     expect(html).not.toMatch(forbiddenGamificationCopy)

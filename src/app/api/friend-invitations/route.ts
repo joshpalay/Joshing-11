@@ -556,6 +556,10 @@ export async function POST(request: Request) {
           inviterUserId: session.userId,
           inviteeUserId: existingUser.id,
           suggestedInterests,
+          // SMS-style invitations don't expire under v12. Pass null
+          // explicitly so the new 30-day direct-request default doesn't
+          // bleed into this flow.
+          expiresAt: null,
         })
 
       const inviteUrl = `${getBaseUrl(request)}/activities#friendship-${encodeURIComponent(friendshipRequest.id)}`

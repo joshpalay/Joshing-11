@@ -19,6 +19,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SettingsGroup, SettingsRow } from '@/components/account/SettingsRow';
+import { colorForUser, initialsFor } from '@/components/feed/visual';
 import type { UserProfile } from '@/server/db/queries/account';
 
 type AccountResponse = {
@@ -26,20 +27,7 @@ type AccountResponse = {
   error?: string;
 };
 
-const AVATAR_COLORS = ['#0f766e', '#7c3aed', '#be123c', '#2563eb', '#b45309', '#15803d'];
 const APP_VERSION = 'v1.0.0';
-
-function initialsFor(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase();
-}
-
-function colorForUser(userId: string): string {
-  const hash = Array.from(userId).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length]!;
-}
 
 function memberSince(value: string): string {
   const date = new Date(value);
@@ -183,7 +171,19 @@ export default function AccountPage() {
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <h1 className="font-serif text-4xl font-semibold leading-tight">{profile.displayName}</h1>
+          {profile.handle ? (
+            <p className="mt-1 text-sm text-muted-foreground">@{profile.handle}</p>
+          ) : null}
+          {profile.tagline ? (
+            <p className="mt-2 text-sm italic text-muted-foreground">{profile.tagline}</p>
+          ) : null}
           <p className="mt-2 text-base text-muted-foreground">{profile.bio}</p>
+          {profile.location ? (
+            <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <LocationIcon className="size-3" />
+              {profile.location}
+            </p>
+          ) : null}
           <p className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
             <PhoneIcon className="size-4" />
             {profile.phoneNumber}
@@ -386,6 +386,24 @@ function PhoneIcon({ className }: { className?: string }) {
       aria-hidden="true"
     >
       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.96.36 1.9.7 2.79a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.29-1.29a2 2 0 0 1 2.11-.45c.89.34 1.83.58 2.79.7A2 2 0 0 1 22 16.92Z" />
+    </svg>
+  );
+}
+
+function LocationIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
     </svg>
   );
 }

@@ -95,6 +95,22 @@ export default async function UserProfilePage({
               <h1 className="text-foreground font-serif text-3xl font-semibold">
                 {portrait.user.displayName}
               </h1>
+              {portrait.user.handle ? (
+                <p className="text-muted-foreground mt-1 text-sm">
+                  @{portrait.user.handle}
+                </p>
+              ) : null}
+              {portrait.user.tagline ? (
+                <p className="text-muted-foreground mt-2 text-sm italic leading-6">
+                  {portrait.user.tagline}
+                </p>
+              ) : null}
+              {portrait.user.location ? (
+                <p className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs">
+                  <LocationGlyph className="size-3" />
+                  {portrait.user.location}
+                </p>
+              ) : null}
               <p className="text-muted-foreground mt-2 text-sm leading-6">
                 On Joshing since {formatMemberSince(portrait.user.memberSince)}.
               </p>
@@ -176,6 +192,22 @@ export default async function UserProfilePage({
             <h1 className="text-foreground font-serif text-3xl font-semibold">
               {portrait.user.displayName}
             </h1>
+            {portrait.user.handle ? (
+              <p className="text-muted-foreground mt-1 text-sm">
+                @{portrait.user.handle}
+              </p>
+            ) : null}
+            {portrait.user.tagline ? (
+              <p className="text-muted-foreground mt-2 text-sm italic leading-6">
+                {portrait.user.tagline}
+              </p>
+            ) : null}
+            {portrait.user.location ? (
+              <p className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs">
+                <LocationGlyph className="size-3" />
+                {portrait.user.location}
+              </p>
+            ) : null}
             <p className="text-muted-foreground mt-2 text-sm leading-6">
               On Joshing since {formatMemberSince(portrait.user.memberSince)}.
             </p>
@@ -255,12 +287,32 @@ export default async function UserProfilePage({
         </Link>
       </section>
 
-      <AuthoredQuestionsFeed
-        questions={authoredItems}
-        friendDisplayName={portrait.user.displayName}
-        friendUserId={portrait.user.id}
-        friendProfileHref={`/users/${portrait.user.id}`}
-      />
+      {isSelf || portrait.user.authorProfilePublic ? (
+        <AuthoredQuestionsFeed
+          questions={authoredItems}
+          friendDisplayName={portrait.user.displayName}
+          friendUserId={portrait.user.id}
+          friendProfileHref={`/users/${portrait.user.id}`}
+        />
+      ) : null}
     </main>
+  )
+}
+
+function LocationGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
   )
 }

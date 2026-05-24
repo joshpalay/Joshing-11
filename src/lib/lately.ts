@@ -7,21 +7,21 @@ export type LatelyBucket = {
   items: LatelyMoment[];
 };
 
-const THEY_GOT_YOU_POOL: ReadonlyArray<string> = [
+export const THEY_GOT_YOU_CAPTIONS = [
   'THEY KNEW YOU',
   '{NAME} GOT IT',
   'THEY SAW IT',
   'A MATCH',
   'ON YOUR FREQUENCY',
-];
+] as const;
 
-const YOU_GOT_THEM_POOL: ReadonlyArray<string> = [
+export const YOU_GOT_THEM_CAPTIONS = [
   'YOU KNEW THEM',
   'YOU SAW IT',
   'YOU NAILED IT',
   'A MATCH',
   'ON THEIR FREQUENCY',
-];
+] as const;
 
 function djb2(input: string): number {
   let hash = 5381;
@@ -36,7 +36,8 @@ export function assignCaption(
   dir: LatelyDirection,
   friendFirstName: string,
 ): string {
-  const pool = dir === 'they_got_you' ? THEY_GOT_YOU_POOL : YOU_GOT_THEM_POOL;
+  const pool =
+    dir === 'they_got_you' ? THEY_GOT_YOU_CAPTIONS : YOU_GOT_THEM_CAPTIONS;
   const template = pool[djb2(momentId) % pool.length];
   return template.replace('{NAME}', friendFirstName.toUpperCase());
 }
@@ -61,32 +62,41 @@ function addDays(ymd: string, delta: number): string {
   return `${yy}-${mm}-${dd}`;
 }
 
+export function bucketByDay<T>(
+  items: T[],
+  getDate: (item: T) => Date,
+  tz: string,
+  now: Date = new Date(),
+): { label: LatelyBucketLabel; items: T[] }[] {
+  const today = ymdInZone(now, tz);
+  const yesterday = addDays(today, -1);
+  const sevenAgo = addDays(today, -7);
+
+  const todayItems: T[] = [];
+  const yesterdayItems: T[] = [];
+  const earlierItems: T[] = [];
+
+  for (const item of items) {
+    const ymd = ymdInZone(getDate(item), tz);
+    if (ymd === today) todayItems.push(item);
+    else if (ymd === yesterday) yesterdayItems.push(item);
+    else if (ymd > sevenAgo && ymd < yesterday) earlierItems.push(item);
+    // anything older than 7 days is dropped per spec
+  }
+
+  const buckets: { label: LatelyBucketLabel; items: T[] }[] = [];
+  if (todayItems.length) buckets.push({ label: 'TODAY', items: todayItems });
+  if (yesterdayItems.length) buckets.push({ label: 'YESTERDAY', items: yesterdayItems });
+  if (earlierItems.length) buckets.push({ label: 'EARLIER THIS WEEK', items: earlierItems });
+  return buckets;
+}
+
 export function bucketMoments(
   moments: LatelyMoment[],
   tz: string,
   now: Date = new Date(),
 ): LatelyBucket[] {
-  const today = ymdInZone(now, tz);
-  const yesterday = addDays(today, -1);
-  const sevenAgo = addDays(today, -7);
-
-  const todayItems: LatelyMoment[] = [];
-  const yesterdayItems: LatelyMoment[] = [];
-  const earlierItems: LatelyMoment[] = [];
-
-  for (const m of moments) {
-    const ymd = ymdInZone(m.answeredAt, tz);
-    if (ymd === today) todayItems.push(m);
-    else if (ymd === yesterday) yesterdayItems.push(m);
-    else if (ymd > sevenAgo && ymd < yesterday) earlierItems.push(m);
-    // anything older than 7 days is dropped per spec
-  }
-
-  const buckets: LatelyBucket[] = [];
-  if (todayItems.length) buckets.push({ label: 'TODAY', items: todayItems });
-  if (yesterdayItems.length) buckets.push({ label: 'YESTERDAY', items: yesterdayItems });
-  if (earlierItems.length) buckets.push({ label: 'EARLIER THIS WEEK', items: earlierItems });
-  return buckets;
+  return bucketByDay(moments, (m) => m.answeredAt, tz, now);
 }
 
 export function formatMomentTime(

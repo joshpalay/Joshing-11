@@ -1,5 +1,19 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // PHONE_HASH_SALT seeds the SHA-256 used by hashPhoneNumber()
+    // (src/server/lib/phone-hashing.ts) and the client-side hashing path
+    // B-Friends-4 will add. hashPhoneNumber() already throws at call time if
+    // the salt is missing, so this boot-time check is just a loud warning —
+    // throwing here kills the entire instrumentation hook and 500s every
+    // request, which is the opposite of the desired fail-fast behavior.
+    // B-Friends-4 will re-introduce strict enforcement at the actual call
+    // sites that need it.
+    if (process.env.NODE_ENV === 'production' && !process.env.PHONE_HASH_SALT) {
+      console.error(
+        '[instrumentation] PHONE_HASH_SALT is not set in production; contact-hash matching will throw at call time. Set this env var to enable B-Friends-4 features.',
+      );
+    }
+
     const { migrate } = await import('drizzle-orm/node-postgres/migrator');
     const { drizzle } = await import('drizzle-orm/node-postgres');
     const { Pool } = await import('pg');
@@ -48,14 +62,42 @@ export async function register() {
       // initial creation and the additive migration will add these schema pieces.
     }
 
-    // PlayerMastery.territory_type was introduced after the base table. Preview
-    // databases can have the migration recorded without the column present, which
-    // makes Drizzle selects fail with Postgres 42703 before app code can recover.
-    // Add it idempotently before migrate() so answer routes remain usable.
+    // PlayerMastery.territory_type was introduced after the base table and later
+    // (migration 0034) converted from text to a TerritoryType enum. Preview
+    // databases can have either migration recorded without its schema actually
+    // landing, which makes Drizzle selects fail with Postgres 42703 or 22P02
+    // before app code can recover. Mirror 0034's idempotent shape here: create
+    // the enum, ensure the column exists (as enum if fresh, converted if text).
     try {
       await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."TerritoryType" AS ENUM('declared', 'demonstrated');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
         ALTER TABLE "PLAYER_MASTERY"
-          ADD COLUMN IF NOT EXISTS "territory_type" text DEFAULT 'demonstrated' NOT NULL
+          ADD COLUMN IF NOT EXISTS "territory_type" "public"."TerritoryType" DEFAULT 'demonstrated' NOT NULL
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'PLAYER_MASTERY'
+              AND column_name = 'territory_type'
+              AND udt_name = 'text'
+          ) THEN
+            ALTER TABLE "PLAYER_MASTERY" ALTER COLUMN "territory_type" DROP DEFAULT;
+            ALTER TABLE "PLAYER_MASTERY"
+              ALTER COLUMN "territory_type"
+              SET DATA TYPE "public"."TerritoryType"
+              USING "territory_type"::"public"."TerritoryType";
+            ALTER TABLE "PLAYER_MASTERY"
+              ALTER COLUMN "territory_type"
+              SET DEFAULT 'demonstrated'::"public"."TerritoryType";
+          END IF;
+        END $$
       `);
     } catch {
       // PLAYER_MASTERY may not exist yet — migrate() handles initial creation.
@@ -510,6 +552,241 @@ export async function register() {
       await db.execute(sql`
         ALTER TABLE "User"
           ADD COLUMN IF NOT EXISTS "last_activity_bell_opened_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
+    // Migration 0045 introduces the public-facing User.handle plus the
+    // handle_last_changed_at rate-limit anchor. Guard for preview/production
+    // databases that may have this migration recorded without the column
+    // or unique-lower index actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "handle" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "handle_last_changed_at" timestamp with time zone
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_handle_lower"
+          ON "User" (LOWER("handle")) WHERE "handle" IS NOT NULL
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
+    // Migration 0046 adds the nullable User.avatar_color column. The value
+    // is computed at signup via colorForUser(id) so the persisted color
+    // matches what the runtime helper already renders. Guard for
+    // preview/production databases that may have the migration recorded
+    // without the column actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "avatar_color" text
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
+    // Migration 0047 adds the editable profile fields: bio (≤280),
+    // tagline (≤80), location (≤60). All nullable; when bio is NULL the
+    // existing formatBio() default in src/server/profile/bio.ts still
+    // renders. Guard for preview/production databases that may have the
+    // migration recorded without the columns or CHECK constraints
+    // actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "bio" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "tagline" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "location" text
+      `);
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'User'
+              AND constraint_name = 'user_bio_length'
+          ) THEN
+            ALTER TABLE "User"
+              ADD CONSTRAINT user_bio_length CHECK (char_length("bio") <= 280);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'User'
+              AND constraint_name = 'user_tagline_length'
+          ) THEN
+            ALTER TABLE "User"
+              ADD CONSTRAINT user_tagline_length CHECK (char_length("tagline") <= 80);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'User'
+              AND constraint_name = 'user_location_length'
+          ) THEN
+            ALTER TABLE "User"
+              ADD CONSTRAINT user_location_length CHECK (char_length("location") <= 60);
+          END IF;
+        END $$
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
+    // Migration 0048 adds the friends/privacy foundation:
+    //   • User.discoverable_by_contacts / .discoverable_by_mutual_friends
+    //     (default FALSE) — read by B-Friends-3/4 once those land.
+    //   • ContactHash table — stores per-user SHA-256 contact hashes for
+    //     the B-Friends-4 matching channel. Cascades on User delete.
+    //   • Friendship extensions — personalNote (≤160), expiresAt,
+    //     resolvedAt + two CHECKs (length, users distinct) + two partial
+    //     indexes (expiry cron, declined/expired decay GC).
+    // Guard for preview/production databases that may have the migration
+    // recorded without the columns/table/constraints actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "discoverable_by_contacts" boolean NOT NULL DEFAULT false
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "discoverable_by_mutual_friends" boolean NOT NULL DEFAULT false
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "ContactHash" (
+          "userId"     text NOT NULL,
+          "phoneHash"  text NOT NULL,
+          "uploadedAt" timestamptz NOT NULL DEFAULT NOW(),
+          PRIMARY KEY ("userId", "phoneHash")
+        )
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          hash_table regclass := to_regclass('public."ContactHash"');
+          user_table regclass := to_regclass('public."User"');
+        BEGIN
+          IF hash_table IS NOT NULL
+            AND user_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'ContactHash_userId_User_id_fk'
+                AND conrelid = hash_table
+            )
+          THEN
+            ALTER TABLE "ContactHash"
+              ADD CONSTRAINT "ContactHash_userId_User_id_fk"
+              FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "ContactHash_phoneHash_idx"
+          ON "ContactHash" ("phoneHash")
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Friendship"
+          ADD COLUMN IF NOT EXISTS "personalNote" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Friendship"
+          ADD COLUMN IF NOT EXISTS "expiresAt" timestamptz
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Friendship"
+          ADD COLUMN IF NOT EXISTS "resolvedAt" timestamptz
+      `);
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'Friendship'
+              AND constraint_name = 'friendship_personal_note_length'
+          ) THEN
+            ALTER TABLE "Friendship"
+              ADD CONSTRAINT friendship_personal_note_length
+              CHECK (char_length("personalNote") <= 160);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = 'Friendship'
+              AND constraint_name = 'friendship_users_distinct'
+          ) THEN
+            ALTER TABLE "Friendship"
+              ADD CONSTRAINT friendship_users_distinct
+              CHECK ("userAId" <> "userBId");
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Friendship_expiresAt_pending_idx"
+          ON "Friendship" ("expiresAt") WHERE status = 'pending'
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Friendship_resolvedAt_decay_idx"
+          ON "Friendship" ("resolvedAt") WHERE status IN ('declined', 'expired')
+      `);
+    } catch {
+      // User or Friendship may not exist yet on a fresh database — migrate()
+      // creates the base tables before this migration runs.
+    }
+
+    // Migration 0049 adds the per-user invite token (users.invite_token)
+    // used by /u/<handle>/<token> shareable links. Guard for preview/
+    // production databases that may have the migration recorded without
+    // the column or the unique partial index actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "invite_token" text
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_invite_token"
+          ON "User" ("invite_token") WHERE "invite_token" IS NOT NULL
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
+    // Migration 0050 adds users.phone_hash (the user's own SHA-256(salt+E.164)
+    // for the contact-hash match query) and users.last_friend_discovery_check_at
+    // (the threshold for the Find Friends discovery dot + passive
+    // Invitations-tab row). Guard for preview/production databases that may
+    // have the migration recorded without the columns or index present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "phone_hash" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "last_friend_discovery_check_at" timestamptz
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "idx_users_phone_hash"
+          ON "User" ("phone_hash")
       `);
     } catch {
       // User may not exist yet on a fresh database — migrate() creates it

@@ -1,20 +1,36 @@
+import { randomUUID } from 'node:crypto'
+
 import { eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 
+import { colorForUser } from '@/components/feed/visual'
+import { normalizeToE164 } from '@/lib/phone-e164'
 import { verifyOtp } from '@/server/auth'
 import { createSession } from '@/server/auth/session'
 import { db, users } from '@/server/db'
+import { hashPhoneNumber } from '@/server/lib/phone-hashing'
 import {
   acceptFriendInvitation,
   getValidInvitationForPhone,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE,
   INVITE_REQUIRED_MESSAGE,
 } from '@/server/friends/invitations'
+import { acceptUserInviteLink } from '@/server/friends/user-invite-token'
 
 type VerifyOtpBody = {
   phone?: unknown
   code?: unknown
   invitationToken?: unknown
+  userInvite?: unknown
+}
+
+function parseUserInvite(value: unknown): { handle: string; token: string } | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as { handle?: unknown; token?: unknown }
+  const handle = typeof candidate.handle === 'string' ? candidate.handle.trim() : ''
+  const token = typeof candidate.token === 'string' ? candidate.token.trim() : ''
+  if (!handle || !token) return null
+  return { handle, token }
 }
 
 type AuthUser = {
@@ -43,12 +59,27 @@ async function findUserByPhone(
   return existing ?? null
 }
 
+function computePhoneHash(phoneNumber: string): string | null {
+  // Skip when the salt is unset (dev environments without
+  // PHONE_HASH_SALT — production sets it). The hash can be filled in
+  // later via scripts/backfill-phone-hashes.ts once the salt is set.
+  if (!process.env.PHONE_HASH_SALT) return null
+  const e164 = normalizeToE164(phoneNumber)
+  if (!e164) return null
+  return hashPhoneNumber(e164)
+}
+
 async function provisionUserForPhone(
   phoneNumber: string
 ): Promise<AuthUser> {
+  // Pre-generate the id so we can persist a deterministic avatar_color in the
+  // same insert (colorForUser hashes the id). Without this, avatar_color
+  // would be NULL until the next signup backfill.
+  const id = randomUUID()
+  const phoneHash = computePhoneHash(phoneNumber)
   const [created] = await db
     .insert(users)
-    .values({ phoneNumber })
+    .values({ id, phoneNumber, avatarColor: colorForUser(id), phoneHash })
     .onConflictDoNothing({ target: users.phoneNumber })
     .returning(USER_SELECTION)
 
@@ -96,6 +127,7 @@ export async function POST(request: Request) {
         ? body.invitationToken.trim()
         : ''
     const hasUsableToken = tokenProvided && invitationToken.length > 0
+    const userInvite = parseUserInvite(body?.userInvite)
 
     if (!phone || !code) {
       return NextResponse.json(
@@ -137,6 +169,18 @@ export async function POST(request: Request) {
         })
       }
 
+      // Per-user invite-link flow (B-Friends-3): when the visitor arrived
+      // via /u/<handle>/<token>, create the active friendship now.
+      // Silent on failure — the worst case is the user logs in without
+      // the new friendship, which they can fix via Add Friend.
+      if (userInvite) {
+        await acceptUserInviteLink({
+          handle: userInvite.handle,
+          token: userInvite.token,
+          inviteeUserId: existingUser.id,
+        })
+      }
+
       await createSession(existingUser.id, {
         invitationAccepted: true,
         onboardingComplete: false,
@@ -154,36 +198,54 @@ export async function POST(request: Request) {
       })
     }
 
-    // New-user path: invitation is a hard precondition.
-    if (!hasUsableToken) {
+    // New-user path: an invitation is a hard precondition. Either a
+    // FriendInvitation token (SMS-style) or a per-user invite link
+    // (B-Friends-3) satisfies the gate.
+    if (!hasUsableToken && !userInvite) {
       return inviteRequiredRejection()
     }
 
-    // Pre-validate the invitation read-only so we don't provision a user
-    // for a bad token.
-    const candidateInvitation = await getValidInvitationForPhone({
-      token: invitationToken,
-      verifiedPhone: normalizedPhone,
-    })
+    // Pre-validate the FriendInvitation read-only so we don't provision a
+    // user for a bad token. Only required when no per-user invite link is
+    // present — userInvite alone is a sufficient gate.
+    if (hasUsableToken) {
+      const candidateInvitation = await getValidInvitationForPhone({
+        token: invitationToken,
+        verifiedPhone: normalizedPhone,
+      })
 
-    if (!candidateInvitation) {
-      return invitationRejection()
+      if (!candidateInvitation) {
+        return invitationRejection()
+      }
     }
 
     const user = await provisionUserForPhone(normalizedPhone)
 
-    const invitation = await acceptFriendInvitation({
-      token: invitationToken,
-      inviteeUserId: user.id,
-      verifiedPhone: normalizedPhone,
-    })
+    let invitation: { accepted: boolean } = { accepted: false }
 
-    if (!invitation.accepted) {
-      // Race condition: the invitation was claimed between our pre-validate
-      // and accept. The user row already exists but has no accepted
-      // invitation — future logins will hit the orphan-rejection branch
-      // above, so the access surface is closed.
-      return invitationRejection()
+    if (hasUsableToken) {
+      invitation = await acceptFriendInvitation({
+        token: invitationToken,
+        inviteeUserId: user.id,
+        verifiedPhone: normalizedPhone,
+      })
+
+      if (!invitation.accepted) {
+        // Race condition: the invitation was claimed between our pre-validate
+        // and accept. The user row already exists but has no accepted
+        // invitation — future logins will hit the orphan-rejection branch
+        // above, so the access surface is closed.
+        return invitationRejection()
+      }
+    } else if (userInvite) {
+      // Per-user invite link path: create the active friendship now. If
+      // the link is bad we still let the user through — they're already
+      // provisioned, and a missing friendship is recoverable.
+      invitation = await acceptUserInviteLink({
+        handle: userInvite.handle,
+        token: userInvite.token,
+        inviteeUserId: user.id,
+      })
     }
 
     await createSession(user.id, {

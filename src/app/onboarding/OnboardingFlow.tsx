@@ -9,6 +9,7 @@ import { US_STATES } from '@/lib/onboarding/us-regions'
 
 type CurrentStep =
   | 'display-name'
+  | 'handle'
   | 'invite-suggestions'
   | 'background'
   | 'warmup'
@@ -38,10 +39,22 @@ type OnboardingFlowProps = {
   inviterName?: string | null
   inviteeDisplayName?: string | null
   initialDisplayName?: string | null
+  initialHandle?: string | null
 }
 
 const DISPLAY_NAME_MIN = 2
 const DISPLAY_NAME_MAX = 30
+const HANDLE_MIN = 3
+const HANDLE_MAX = 20
+const HANDLE_FORMAT = /^[a-z][a-z0-9_]{2,19}$/
+
+function sanitizeForHandle(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/^[^a-z]+/, '')
+    .slice(0, HANDLE_MAX)
+}
 
 type CanonicalSuggestion = {
   original: string
@@ -178,11 +191,14 @@ export default function OnboardingFlow({
   inviterName,
   inviteeDisplayName,
   initialDisplayName,
+  initialHandle,
 }: OnboardingFlowProps) {
   const router = useRouter()
   const hasInitialDisplayName = Boolean(initialDisplayName?.trim())
+  const hasInitialHandle = Boolean(initialHandle?.trim())
   const [currentStep, setCurrentStep] = useState<CurrentStep>(() => {
     if (!hasInitialDisplayName) return 'display-name'
+    if (!hasInitialHandle) return 'handle'
     return preSeededInterests.length > 0 ? 'invite-suggestions' : 'background'
   })
   const [displayName, setDisplayName] = useState<string>(() =>
@@ -192,6 +208,20 @@ export default function OnboardingFlow({
   )
   const [isSavingDisplayName, setIsSavingDisplayName] = useState(false)
   const [displayNameError, setDisplayNameError] = useState<string | null>(null)
+  const [handle, setHandle] = useState<string>(() => {
+    const seed = initialHandle?.trim()
+    if (seed) return seed.toLowerCase().slice(0, HANDLE_MAX)
+    return sanitizeForHandle(initialDisplayName ?? inviteeDisplayName ?? '')
+  })
+  const [handleTouched, setHandleTouched] = useState(false)
+  const [handleStatus, setHandleStatus] = useState<
+    | { state: 'idle' }
+    | { state: 'checking' }
+    | { state: 'available' }
+    | { state: 'unavailable'; reason: 'format' | 'reserved' | 'taken' }
+  >({ state: 'idle' })
+  const [isSavingHandle, setIsSavingHandle] = useState(false)
+  const [handleError, setHandleError] = useState<string | null>(null)
   const [birthYear, setBirthYear] = useState('')
   const [grewUpCountry, setGrewUpCountry] = useState('')
   const [grewUpRegion, setGrewUpRegion] = useState('')
@@ -263,6 +293,62 @@ export default function OnboardingFlow({
     ],
     [inviteInterests, proposedInterests]
   )
+
+  useEffect(() => {
+    if (currentStep !== 'handle') return
+
+    const candidate = handle.trim().toLowerCase()
+    const controller = new AbortController()
+
+    const immediate = window.setTimeout(() => {
+      if (candidate.length < HANDLE_MIN) {
+        setHandleStatus({ state: 'idle' })
+        return
+      }
+      if (!HANDLE_FORMAT.test(candidate)) {
+        setHandleStatus({ state: 'unavailable', reason: 'format' })
+        return
+      }
+      setHandleStatus({ state: 'checking' })
+    }, 0)
+
+    const debounced = window.setTimeout(async () => {
+      if (
+        candidate.length < HANDLE_MIN ||
+        !HANDLE_FORMAT.test(candidate)
+      ) {
+        return
+      }
+      try {
+        const response = await fetch(
+          `/api/handle/check?handle=${encodeURIComponent(candidate)}`,
+          { signal: controller.signal },
+        )
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) return
+        if (data?.available === true) {
+          setHandleStatus({ state: 'available' })
+        } else if (typeof data?.reason === 'string') {
+          setHandleStatus({
+            state: 'unavailable',
+            reason: data.reason as 'format' | 'reserved' | 'taken',
+          })
+        }
+      } catch (fetchError) {
+        if (
+          !(fetchError instanceof DOMException && fetchError.name === 'AbortError')
+        ) {
+          setHandleStatus({ state: 'idle' })
+        }
+      }
+    }, 300)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(immediate)
+      window.clearTimeout(debounced)
+    }
+  }, [currentStep, handle])
 
   useEffect(() => {
     if (!isLoading || currentStep !== 'warmup') return
@@ -478,13 +564,56 @@ export default function OnboardingFlow({
       }
 
       setDisplayName(trimmed)
-      setCurrentStep(
-        inviteInterests.length > 0 ? 'invite-suggestions' : 'background'
-      )
+      if (!handle && !hasInitialHandle) {
+        setHandle(sanitizeForHandle(trimmed))
+      }
+      setCurrentStep(hasInitialHandle ? nextStepAfterHandle() : 'handle')
     } catch {
       setDisplayNameError("We couldn't save that name. Try again.")
     } finally {
       setIsSavingDisplayName(false)
+    }
+  }
+
+  function nextStepAfterHandle(): CurrentStep {
+    return inviteInterests.length > 0 ? 'invite-suggestions' : 'background'
+  }
+
+  async function submitHandle() {
+    const candidate = handle.trim().toLowerCase()
+    if (!HANDLE_FORMAT.test(candidate)) {
+      setHandleError(
+        'Handle must be 3–20 characters, start with a letter, and use only lowercase letters, numbers, and underscores.'
+      )
+      return
+    }
+
+    setIsSavingHandle(true)
+    setHandleError(null)
+
+    try {
+      const response = await fetch('/api/account/handle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ handle: candidate }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        setHandleError(
+          typeof data?.message === 'string'
+            ? data.message
+            : "We couldn't save that handle. Try again."
+        )
+        return
+      }
+
+      setHandle(candidate)
+      setCurrentStep(nextStepAfterHandle())
+    } catch {
+      setHandleError("We couldn't save that handle. Try again.")
+    } finally {
+      setIsSavingHandle(false)
     }
   }
 
@@ -668,6 +797,92 @@ export default function OnboardingFlow({
                   }
                 >
                   {isSavingDisplayName ? 'Saving...' : 'Continue'}
+                </button>
+              </form>
+            </div>
+          ) : null}
+
+          {currentStep === 'handle' ? (
+            <div className="flex flex-1 flex-col justify-center gap-8">
+              <StepHeader
+                title="Pick your handle"
+                subtitle={`This is your @ on Joshing — friends use it to find you. ${HANDLE_MIN}–${HANDLE_MAX} characters, lowercase letters, numbers, and underscores. Starts with a letter.`}
+              />
+
+              <form
+                className="space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (!isSavingHandle) void submitHandle()
+                }}
+              >
+                <label className="block">
+                  <span className="text-sm font-medium">Your handle</span>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-muted-foreground text-base">@</span>
+                    <input
+                      type="text"
+                      className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
+                      placeholder="yourhandle"
+                      autoFocus
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      maxLength={HANDLE_MAX}
+                      value={handle}
+                      onChange={(e) => {
+                        setHandleTouched(true)
+                        setHandle(
+                          e.target.value
+                            .toLowerCase()
+                            .replace(/[^a-z0-9_]/g, '')
+                            .slice(0, HANDLE_MAX),
+                        )
+                        if (handleError) setHandleError(null)
+                      }}
+                    />
+                  </div>
+                </label>
+
+                {handleTouched && handle.length >= HANDLE_MIN ? (
+                  <p
+                    className={`text-sm ${
+                      handleStatus.state === 'available'
+                        ? 'text-emerald-600'
+                        : handleStatus.state === 'unavailable'
+                          ? 'text-destructive'
+                          : 'text-muted-foreground'
+                    }`}
+                  >
+                    {handleStatus.state === 'checking'
+                      ? 'Checking…'
+                      : handleStatus.state === 'available'
+                        ? `@${handle} is available.`
+                        : handleStatus.state === 'unavailable'
+                          ? handleStatus.reason === 'taken'
+                            ? 'That handle is already taken.'
+                            : handleStatus.reason === 'reserved'
+                              ? 'That handle is reserved.'
+                              : 'Use only lowercase letters, numbers, and underscores. Start with a letter.'
+                          : null}
+                  </p>
+                ) : null}
+
+                {handleError ? (
+                  <p className="text-destructive text-sm">{handleError}</p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className="btn-primary h-12 w-full"
+                  disabled={
+                    isSavingHandle ||
+                    handle.length < HANDLE_MIN ||
+                    handleStatus.state === 'checking' ||
+                    handleStatus.state === 'unavailable'
+                  }
+                >
+                  {isSavingHandle ? 'Saving…' : 'Continue'}
                 </button>
               </form>
             </div>

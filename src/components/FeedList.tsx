@@ -617,11 +617,12 @@ function FeedListContent({
     ) {
       return "You've focused your Feed. You can re-open domains from your Knowledge page."
     }
-    if (feedMeta.total_item_count > 0) return "You're caught up."
+    if (feedMeta.total_item_count > 0)
+      return "You've answered every question your friends sent. Invite more friends and their questions will show up here."
     return 'Quiet today. Check back when your friends have played.'
   }, [error, feedMeta, loadingInitial])
 
-  const showInviteFriendCta = !loadingInitial && !error && feedMeta && !feedMeta.has_friends
+  const showInviteFriendCta = !loadingInitial && !error && Boolean(feedMeta)
 
   const emptyDiagnostics = useMemo(() => {
     if (process.env.NODE_ENV === 'production' || !feedMeta) return null

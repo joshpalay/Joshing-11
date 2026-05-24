@@ -124,6 +124,11 @@ describe('/users/[id] friend profile page', () => {
       user: {
         id: 'friend-1',
         displayName: 'Frances Friend',
+        handle: null,
+        tagline: null,
+        location: null,
+        bio: null,
+        authorProfilePublic: true,
         memberSince: new Date('2026-01-01T00:00:00.000Z'),
       },
       visibility: 'friend',

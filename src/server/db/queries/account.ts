@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 
 import {
+  contactHashes,
   db,
   declaredInterests,
   playerMastery,
@@ -11,10 +12,28 @@ import { formatBio } from '@/server/profile/bio';
 export type UserProfile = {
   id: string;
   displayName: string;
+  handle: string | null;
   phoneNumber: string;
   createdAt: string;
   bio: string;
+  tagline: string | null;
+  location: string | null;
+  authorProfilePublic: boolean;
 };
+
+export type EditableProfile = {
+  id: string;
+  displayName: string;
+  handle: string | null;
+  handleLastChangedAt: string | null;
+  phoneNumber: string;
+  bio: string | null;
+  tagline: string | null;
+  location: string | null;
+  authorProfilePublic: boolean;
+};
+
+export const HANDLE_CHANGE_COOLDOWN_DAYS = 30;
 
 function formatPhoneNumber(value: string): string {
   const digits = value.replace(/\D/g, '');
@@ -39,8 +58,13 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     .select({
       id: users.id,
       displayName: users.displayName,
+      handle: users.handle,
       phoneNumber: users.phoneNumber,
       createdAt: users.createdAt,
+      bio: users.bio,
+      tagline: users.tagline,
+      location: users.location,
+      authorProfilePublic: users.authorProfilePublic,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -48,38 +72,156 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 
   if (!user) return null;
 
-  const [topDomains, declared] = await Promise.all([
-    db
-      .select({
-        displayName: playerMastery.canonicalSubcategory,
-        points: playerMastery.totalPoints,
-      })
-      .from(playerMastery)
-      .where(eq(playerMastery.userId, userId))
-      .orderBy(desc(playerMastery.totalPoints))
-      .limit(3),
-    db
-      .select({ domain: declaredInterests.domain })
-      .from(declaredInterests)
-      .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
-      .limit(3),
-  ]);
+  // If the user has authored a bio, use it. Otherwise fall back to the
+  // auto-generated mind statement from top mastery domains + declared
+  // interests so existing users keep their previous bio rendering.
+  const storedBio = user.bio?.trim() ? user.bio.trim() : null;
+  let bio: string;
+  if (storedBio) {
+    bio = storedBio;
+  } else {
+    const [topDomains, declared] = await Promise.all([
+      db
+        .select({
+          displayName: playerMastery.canonicalSubcategory,
+          points: playerMastery.totalPoints,
+        })
+        .from(playerMastery)
+        .where(eq(playerMastery.userId, userId))
+        .orderBy(desc(playerMastery.totalPoints))
+        .limit(3),
+      db
+        .select({ domain: declaredInterests.domain })
+        .from(declaredInterests)
+        .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
+        .limit(3),
+    ]);
 
-  const bio = formatBio({
-    topDomains: topDomains.map((row) => ({
-      displayName: row.displayName,
-      points: Number(row.points ?? 0),
-    })),
-    declaredInterests: declared.map((row) => row.domain),
-  });
+    bio = formatBio({
+      topDomains: topDomains.map((row) => ({
+        displayName: row.displayName,
+        points: Number(row.points ?? 0),
+      })),
+      declaredInterests: declared.map((row) => row.domain),
+    });
+  }
 
   return {
     id: user.id,
     displayName: user.displayName?.trim() || fallbackDisplayName(user.phoneNumber),
+    handle: user.handle?.trim() ? user.handle.trim() : null,
     phoneNumber: formatPhoneNumber(user.phoneNumber),
     createdAt: user.createdAt.toISOString(),
     bio,
+    tagline: user.tagline?.trim() ? user.tagline.trim() : null,
+    location: user.location?.trim() ? user.location.trim() : null,
+    authorProfilePublic: user.authorProfilePublic,
   };
+}
+
+export async function getEditableProfile(userId: string): Promise<EditableProfile | null> {
+  const [row] = await db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      handle: users.handle,
+      handleLastChangedAt: users.handleLastChangedAt,
+      phoneNumber: users.phoneNumber,
+      bio: users.bio,
+      tagline: users.tagline,
+      location: users.location,
+      authorProfilePublic: users.authorProfilePublic,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    displayName: row.displayName?.trim() || fallbackDisplayName(row.phoneNumber),
+    handle: row.handle?.trim() ? row.handle.trim() : null,
+    handleLastChangedAt: row.handleLastChangedAt?.toISOString() ?? null,
+    phoneNumber: formatPhoneNumber(row.phoneNumber),
+    bio: row.bio?.trim() ? row.bio.trim() : null,
+    tagline: row.tagline?.trim() ? row.tagline.trim() : null,
+    location: row.location?.trim() ? row.location.trim() : null,
+    authorProfilePublic: row.authorProfilePublic,
+  };
+}
+
+export type ProfileFieldsPatch = {
+  displayName?: string;
+  bio?: string | null;
+  tagline?: string | null;
+  location?: string | null;
+  authorProfilePublic?: boolean;
+};
+
+export type ProfileFieldsUpdateResult =
+  | { ok: true }
+  | { ok: false; reason: 'invalid_display_name' | 'invalid_bio' | 'invalid_tagline' | 'invalid_location' | 'empty_patch' };
+
+// Updates any combination of editable profile fields. Each provided field
+// is trimmed and validated against the same length rules enforced by the
+// DB CHECK constraints in migration 0047. Pass null to clear a nullable
+// field; omit the key to leave it untouched.
+export async function updateProfileFields(
+  userId: string,
+  patch: ProfileFieldsPatch,
+): Promise<ProfileFieldsUpdateResult> {
+  const set: Record<string, unknown> = {};
+
+  if (patch.displayName !== undefined) {
+    const displayName = patch.displayName.trim();
+    if (displayName.length < 1 || displayName.length > 60) {
+      return { ok: false, reason: 'invalid_display_name' };
+    }
+    set.displayName = displayName;
+  }
+
+  if (patch.bio !== undefined) {
+    if (patch.bio === null || patch.bio.trim() === '') {
+      set.bio = null;
+    } else {
+      const bio = patch.bio.trim();
+      if (bio.length > 280) return { ok: false, reason: 'invalid_bio' };
+      set.bio = bio;
+    }
+  }
+
+  if (patch.tagline !== undefined) {
+    if (patch.tagline === null || patch.tagline.trim() === '') {
+      set.tagline = null;
+    } else {
+      const tagline = patch.tagline.trim();
+      if (tagline.length > 80) return { ok: false, reason: 'invalid_tagline' };
+      set.tagline = tagline;
+    }
+  }
+
+  if (patch.location !== undefined) {
+    if (patch.location === null || patch.location.trim() === '') {
+      set.location = null;
+    } else {
+      const location = patch.location.trim();
+      if (location.length > 60) return { ok: false, reason: 'invalid_location' };
+      set.location = location;
+    }
+  }
+
+  if (patch.authorProfilePublic !== undefined) {
+    set.authorProfilePublic = patch.authorProfilePublic;
+  }
+
+  if (Object.keys(set).length === 0) {
+    return { ok: false, reason: 'empty_patch' };
+  }
+
+  set.updatedAt = new Date();
+  await db.update(users).set(set).where(eq(users.id, userId));
+  return { ok: true };
 }
 
 export type ReminderOptInState = 'opted_in' | 'opted_out' | 'not_asked';
@@ -186,6 +328,148 @@ export async function updateDisplayName(params: {
   return { ok: true };
 }
 
+export type HandleChangeStatus = {
+  handle: string | null;
+  handleLastChangedAt: Date | null;
+};
+
+export async function getHandleChangeStatus(userId: string): Promise<HandleChangeStatus | null> {
+  const [row] = await db
+    .select({ handle: users.handle, handleLastChangedAt: users.handleLastChangedAt })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!row) return null;
+  return { handle: row.handle, handleLastChangedAt: row.handleLastChangedAt };
+}
+
+export type UpdateHandleResult =
+  | { ok: true; handle: string }
+  | { ok: false; reason: 'rate_limited'; retryAfter: Date };
+
+// Writes a new handle, stamping handleLastChangedAt to now. Rate-limit: a
+// successful change locks the user out of further changes for
+// HANDLE_CHANGE_COOLDOWN_DAYS. Callers must validate format/reserved/taken
+// upstream (see src/server/lib/handle-validation.ts).
+export async function updateHandle(params: {
+  userId: string;
+  handle: string;
+}): Promise<UpdateHandleResult> {
+  const handle = params.handle.trim().toLowerCase();
+  const now = new Date();
+
+  const status = await getHandleChangeStatus(params.userId);
+  if (status?.handleLastChangedAt) {
+    const elapsedMs = now.getTime() - status.handleLastChangedAt.getTime();
+    const cooldownMs = HANDLE_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+    if (elapsedMs < cooldownMs) {
+      const retryAfter = new Date(status.handleLastChangedAt.getTime() + cooldownMs);
+      return { ok: false, reason: 'rate_limited', retryAfter };
+    }
+  }
+
+  await db
+    .update(users)
+    .set({ handle, handleLastChangedAt: now, updatedAt: now })
+    .where(eq(users.id, params.userId));
+
+  return { ok: true, handle };
+}
+
+// Initial assignment (no rate-limit gate) — used by the onboarding handle
+// picker and the backfill script. Returns ok:false if the handle was claimed
+// by another user between validation and write (race).
+export async function assignInitialHandle(params: {
+  userId: string;
+  handle: string;
+}): Promise<{ ok: boolean }> {
+  const handle = params.handle.trim().toLowerCase();
+  const now = new Date();
+
+  try {
+    await db
+      .update(users)
+      .set({ handle, updatedAt: now })
+      .where(eq(users.id, params.userId));
+  } catch (err) {
+    if (err instanceof Error && /unique/i.test(err.message)) {
+      return { ok: false };
+    }
+    throw err;
+  }
+  return { ok: true };
+}
+
+export type DiscoverabilityState = {
+  discoverableByContacts: boolean;
+  discoverableByMutualFriends: boolean;
+};
+
+export async function getDiscoverability(
+  userId: string,
+): Promise<DiscoverabilityState | null> {
+  const [row] = await db
+    .select({
+      discoverableByContacts: users.discoverableByContacts,
+      discoverableByMutualFriends: users.discoverableByMutualFriends,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!row) return null;
+  return row;
+}
+
+export type DiscoverabilityPatch = {
+  contacts?: boolean;
+  mutualFriends?: boolean;
+};
+
+// Updates one or both discoverability flags. Wraps both writes (and the
+// optional ContactHash purge below) in a single transaction so the table
+// can't be left holding rows after the user has revoked their consent.
+//
+// Side effect: when discoverableByContacts is flipped TRUE → FALSE, every
+// ContactHash row for the user is deleted in the same transaction.
+// Re-enabling later requires re-uploading hashes via B-Friends-4 (which
+// will land the upload endpoint).
+export async function updateDiscoverability(
+  userId: string,
+  patch: DiscoverabilityPatch,
+): Promise<DiscoverabilityState | null> {
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({
+        discoverableByContacts: users.discoverableByContacts,
+        discoverableByMutualFriends: users.discoverableByMutualFriends,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!current) return null;
+
+    const set: Record<string, unknown> = { updatedAt: new Date() };
+    if (patch.contacts !== undefined) set.discoverableByContacts = patch.contacts;
+    if (patch.mutualFriends !== undefined) set.discoverableByMutualFriends = patch.mutualFriends;
+
+    await tx.update(users).set(set).where(eq(users.id, userId));
+
+    const turningContactsOff =
+      patch.contacts === false && current.discoverableByContacts === true;
+    if (turningContactsOff) {
+      await tx.delete(contactHashes).where(eq(contactHashes.userId, userId));
+    }
+
+    return {
+      discoverableByContacts: patch.contacts ?? current.discoverableByContacts,
+      discoverableByMutualFriends:
+        patch.mutualFriends ?? current.discoverableByMutualFriends,
+    };
+  });
+}
 
 export async function deleteUserAccount(userId: string): Promise<void> {
   await db.transaction(async (tx) => {

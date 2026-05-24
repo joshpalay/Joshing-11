@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, type MouseEvent } from 'react';
+import { useState, type KeyboardEvent, type MouseEvent } from 'react';
 
 import type { LatelyMoment } from '@/server/db/queries/lately';
 
@@ -23,7 +23,20 @@ export function MomentRow({
   defaultOpen = false,
 }: Props) {
   const [open, setOpen] = useState(defaultOpen);
-  const theyGotYou = moment.dir === 'they_got_you';
+
+  function toggle() {
+    setOpen((v) => !v);
+  }
+
+  // iOS Safari is unreliable about firing click on plain <div> even with
+  // cursor:pointer; role=button + keyboard handler makes the tap target
+  // unambiguous to the gesture engine and to assistive tech.
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggle();
+    }
+  }
 
   function handleSend(e: MouseEvent) {
     e.stopPropagation();
@@ -64,7 +77,11 @@ export function MomentRow({
 
   return (
     <div
-      onClick={() => setOpen((v) => !v)}
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
+      onClick={toggle}
+      onKeyDown={handleKeyDown}
       style={{
         background: PAPER,
         border: `1.5px solid ${featured ? INK : RULE}`,
@@ -73,6 +90,7 @@ export function MomentRow({
         marginBottom: 14,
         cursor: 'pointer',
         transition: 'border-color 120ms ease',
+        WebkitTapHighlightColor: 'transparent',
       }}
     >
       <div
@@ -98,10 +116,14 @@ export function MomentRow({
           marginBottom: open ? 14 : 12,
         }}
       >
-        {theyGotYou ? (
-          <>{nameLink} got you on {categorySpan}.</>
+        {moment.dir === 'they_got_you' ? (
+          <>
+            {nameLink} got you on {categorySpan}.
+          </>
         ) : (
-          <>You got {nameLink} on {categorySpan}.</>
+          <>
+            You got {nameLink} on {categorySpan}.
+          </>
         )}
       </div>
 

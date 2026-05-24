@@ -30,6 +30,7 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 - **LLM calls:** centralized under `src/server/llm/` (and `src/lib/llm.ts`).
 - **Anthropic model split:** Sonnet (`claude-sonnet-4-6`) for generation; Haiku (`claude-haiku-4-5-20251001`) for grading and categorization. Don't swap these without measuring quality and cost.
 - **`_salvaged/`** is excluded from TypeScript (`tsconfig.json`) and ESLint (`eslint.config.mjs`). **Never edit anything inside it.**
+- **`PHONE_HASH_SALT`** is required in production (enforced at boot in `src/instrumentation.ts`). Used by `src/server/lib/phone-hashing.ts` and the client-side hashing path B-Friends-4 will add. Rotating it invalidates every `ContactHash` row and every persisted `User.phone_hash`.
 
 ## Further reading
 - Architecture overview: `_docs/ARCHITECTURAL-DECISIONS.md` (may contain stale claims — treat as background, not gospel).

@@ -34,17 +34,30 @@ function requestContextForSuggestedInterests(suggestedInterests: string[]): Frie
   return suggestedInterests.length > 0 ? { suggestedInterests } : null
 }
 
+const DIRECT_REQUEST_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000
+
 export async function createOrReusePendingFriendshipRequest({
   inviterUserId,
   inviteeUserId,
   suggestedInterests = [],
+  personalNote,
+  expiresAt,
+  now = new Date(),
 }: {
   inviterUserId: string
   inviteeUserId: string
   suggestedInterests?: string[]
+  personalNote?: string
+  // Defaults to NOW() + 30 days when undefined. Pass null to opt out
+  // (the SMS-invite caller does this — those invitations don't expire).
+  expiresAt?: Date | null
+  now?: Date
 }): Promise<{ friendship: typeof friendships.$inferSelect; state: FriendshipRequestState }> {
   const pair = friendshipPair(inviterUserId, inviteeUserId)
   const requestContext = requestContextForSuggestedInterests(suggestedInterests)
+  const trimmedNote = personalNote?.trim() || null
+  const resolvedExpiresAt =
+    expiresAt === undefined ? new Date(now.getTime() + DIRECT_REQUEST_EXPIRY_MS) : expiresAt
 
   const [existingFriendship] = await db
     .select()
@@ -57,6 +70,7 @@ export async function createOrReusePendingFriendshipRequest({
   }
 
   if (existingFriendship?.status === 'pending') {
+    // Reuse — caller must Cancel first to overwrite the note or expiry.
     return {
       friendship: existingFriendship,
       state: existingFriendship.requestedByUserId === inviterUserId ? 'pending_existing' : 'reverse_pending',
@@ -74,6 +88,11 @@ export async function createOrReusePendingFriendshipRequest({
         removedAt: null,
         removedByUserId: null,
         requestContext,
+        // Reopen: clear resolvedAt, refresh expiry, overwrite note only if
+        // the caller provided one (existing value wins otherwise).
+        resolvedAt: null,
+        expiresAt: resolvedExpiresAt,
+        ...(trimmedNote !== null ? { personalNote: trimmedNote } : {}),
       })
       .where(eq(friendships.id, existingFriendship.id))
       .returning()
@@ -102,6 +121,9 @@ export async function createOrReusePendingFriendshipRequest({
       removedAt: null,
       removedByUserId: null,
       requestContext,
+      personalNote: trimmedNote,
+      expiresAt: resolvedExpiresAt,
+      resolvedAt: null,
     })
     .returning()
 
@@ -134,6 +156,7 @@ export async function acceptPendingFriendshipRequest({
       formedAt: now,
       removedAt: null,
       removedByUserId: null,
+      resolvedAt: now,
     })
     .where(
       and(
@@ -173,6 +196,7 @@ export async function ignorePendingFriendshipRequest({
       status: 'declined',
       removedAt: now,
       removedByUserId: userId,
+      resolvedAt: now,
     })
     .where(
       and(
@@ -202,6 +226,7 @@ export async function cancelPendingFriendshipRequest({
       status: 'cancelled',
       removedAt: now,
       removedByUserId: userId,
+      resolvedAt: now,
     })
     .where(
       and(
