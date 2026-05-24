@@ -3,15 +3,13 @@ export function Hero({ isComplete }: { isComplete: boolean }) {
     return (
       <header className="space-y-3">
         <h1 className="text-foreground font-serif text-4xl leading-tight font-semibold md:text-5xl">
-          Today&rsquo;s done.
+          you contain multitudes
         </h1>
         <div
           aria-hidden="true"
           className="h-px w-12"
           style={{ backgroundColor: 'var(--cream-accent, currentColor)' }}
         />
-        {/* TODO: A/B copy — design review flagged that this second line may
-            undercut the moment. Revisit. */}
         <p
           className="text-muted-foreground text-[13px] italic"
           style={{ fontFamily: 'var(--font-display), Georgia, serif' }}
