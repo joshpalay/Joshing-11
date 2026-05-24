@@ -4,7 +4,8 @@ import {
   assignCaption,
   bucketMoments,
   formatMomentTime,
-  SHARED_CAPTIONS,
+  THEY_GOT_YOU_CAPTIONS,
+  YOU_GOT_THEM_CAPTIONS,
 } from '@/lib/lately';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 
@@ -25,27 +26,41 @@ function moment(overrides: Partial<LatelyMoment> & { answeredAt: Date }): Lately
 }
 
 describe('assignCaption', () => {
-  const pool = new Set<string>(SHARED_CAPTIONS);
+  function expandPool(pool: readonly string[], name: string): Set<string> {
+    return new Set(pool.map((t) => t.replace('{NAME}', name.toUpperCase())));
+  }
 
-  it('returns a caption from the shared pool regardless of direction', () => {
+  it('picks from the they_got_you pool for that direction', () => {
+    const pool = expandPool(THEY_GOT_YOU_CAPTIONS, 'Robyn');
     expect(pool.has(assignCaption('any-id', 'they_got_you', 'Robyn'))).toBe(true);
-    expect(pool.has(assignCaption('any-id', 'you_got_them', 'Robyn'))).toBe(true);
   });
 
-  it('returns the same caption for both directions given the same momentId', () => {
-    const a = assignCaption('stable-id', 'they_got_you', 'Robyn');
-    const b = assignCaption('stable-id', 'you_got_them', 'Jamie');
-    expect(a).toBe(b);
+  it('picks from the you_got_them pool for that direction', () => {
+    const pool = expandPool(YOU_GOT_THEM_CAPTIONS, 'Jamie');
+    expect(pool.has(assignCaption('any-id', 'you_got_them', 'Jamie'))).toBe(true);
   });
 
-  it('is deterministic across calls', () => {
-    expect(assignCaption('stable-id', 'they_got_you', 'Robyn'))
-      .toBe(assignCaption('stable-id', 'they_got_you', 'Robyn'));
+  it('substitutes the friend first name (uppercased) for the {NAME} token', () => {
+    // Find an id that hashes to the {NAME} template in the they_got_you pool.
+    const target = THEY_GOT_YOU_CAPTIONS.indexOf('{NAME} GOT IT');
+    expect(target).toBeGreaterThanOrEqual(0);
+    for (let i = 0; i < 100; i++) {
+      const id = `probe-${i}`;
+      const result = assignCaption(id, 'they_got_you', 'Robyn');
+      if (result === 'ROBYN GOT IT') return; // pass
+    }
+    throw new Error('Never sampled the {NAME} template');
+  });
+
+  it('is deterministic across calls for the same momentId + direction', () => {
+    expect(assignCaption('stable-id', 'they_got_you', 'Robyn')).toBe(
+      assignCaption('stable-id', 'they_got_you', 'Robyn'),
+    );
   });
 
   it('distributes across the pool over many ids', () => {
     const seen = new Set<string>();
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 30; i++) {
       seen.add(assignCaption(`probe-${i}`, 'they_got_you', 'Robyn'));
     }
     expect(seen.size).toBeGreaterThanOrEqual(3);

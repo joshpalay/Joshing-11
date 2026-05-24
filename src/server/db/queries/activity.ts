@@ -60,6 +60,7 @@ export type ActivityItemView = Pick<
       feedItemId: string;
       questionText: string;
       personalMessage: string | null;
+      category: string | null;
     };
     curatedQuestion?: {
       questionText: string;
@@ -438,6 +439,8 @@ async function hydrateDirectQuestions(items: ActivityItemRow[]) {
       feedItemId: feedItems.id,
       personalMessage: feedItems.personalMessage,
       questionText: questions.questionText,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      category: questions.category,
     })
     .from(feedItems)
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
@@ -449,6 +452,7 @@ async function hydrateDirectQuestions(items: ActivityItemRow[]) {
       feedItemId: row.feedItemId,
       questionText: row.questionText,
       personalMessage: row.personalMessage,
+      category: row.canonicalSubcategory?.trim() || row.category || null,
     },
   ] as const));
 }

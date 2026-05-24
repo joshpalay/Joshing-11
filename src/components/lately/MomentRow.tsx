@@ -97,7 +97,15 @@ export function MomentRow({
           marginBottom: open ? 14 : 12,
         }}
       >
-        <>You and {nameLink} both know {categorySpan}.</>
+        {moment.dir === 'they_got_you' ? (
+          <>
+            {nameLink} got you on {categorySpan}.
+          </>
+        ) : (
+          <>
+            You got {nameLink} on {categorySpan}.
+          </>
+        )}
       </div>
 
       {open ? (
