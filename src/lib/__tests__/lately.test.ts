@@ -19,7 +19,6 @@ function moment(overrides: Partial<LatelyMoment> & { answeredAt: Date }): Lately
     questionId: 'q-1',
     questionText: 'q?',
     category: 'a category',
-    gameId: 'g-1',
     gameTitle: 'asterisk',
     ...overrides,
   };

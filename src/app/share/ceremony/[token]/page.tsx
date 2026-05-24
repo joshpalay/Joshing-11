@@ -4,6 +4,12 @@ import { notFound } from 'next/navigation';
 import { ShareCard } from '@/components/ShareCard';
 import type { ShareCardBeatsPayload } from '@/components/ShareCard';
 
+// Public share URLs are immutable per token in the steady state — the only
+// way a payload changes is a manual ceremony re-fire, which is rare. Cache
+// for an hour so social/SMS previews and link-clicks don't repeatedly hit
+// the API. Stale 1-hour content is acceptable for this surface.
+export const revalidate = 3600;
+
 type ShareCardResponse = {
   userName: string;
   cycleStart: string;
@@ -16,7 +22,9 @@ function baseUrl(): string {
 }
 
 async function getShareCard(token: string): Promise<ShareCardResponse | null> {
-  const response = await fetch(`${baseUrl()}/api/share/ceremony/${token}`, { cache: 'no-store' });
+  const response = await fetch(`${baseUrl()}/api/share/ceremony/${token}`, {
+    next: { revalidate: 3600 },
+  });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error('Could not load share card.');
   return response.json();

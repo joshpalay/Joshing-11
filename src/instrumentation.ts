@@ -793,6 +793,25 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0051 adds GeneratedQuestion.fact_key (nullable) plus the
+    // (user_id, fact_key) lookup index used by the fact-level dedup in
+    // persistGeneratedQuestion + the recent-fact-keys avoid list in
+    // generateDailyQuestions. Guard for preview/production databases that may
+    // have the migration recorded without the column or index actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "GeneratedQuestion"
+          ADD COLUMN IF NOT EXISTS "fact_key" text
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "GeneratedQuestion_user_id_fact_key_idx"
+          ON "GeneratedQuestion" ("user_id", "fact_key")
+      `);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

@@ -1,12 +1,6 @@
-import { and, desc, eq, gte, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 
-import {
-  db,
-  joshingGameResponses,
-  joshingGames,
-  questions,
-  users,
-} from '@/server/db';
+import { db, masteryEvents, questions, users } from '@/server/db';
 
 export type LatelyDirection = 'they_got_you' | 'you_got_them';
 
@@ -19,7 +13,6 @@ export type LatelyMoment = {
   questionId: string;
   questionText: string;
   category: string;
-  gameId: string;
   gameTitle: string;
   answeredAt: Date;
 };
@@ -51,41 +44,61 @@ function firstName(displayName: string | null, fallback: string): string {
   return head || fallback;
 }
 
+// Lately surfaces "friend correctly answered your question" (they_got_you) and
+// "you correctly answered friend's question" (you_got_them). Every answer in
+// the app — daily, feed, catchup, joshing game, direct question — writes a
+// masteryEvents row; the legacy JoshingGameResponses table only sees the
+// joshing-game subset, so querying from there missed ~all events.
+//
+// sourceType IN ('live_correct', 'catchup_correct') gates by SURFACE (live
+// vs catchup), not correctness — the naming is misleading. Correctness lives
+// in answerState; 'incorrect' must be excluded so wrong answers don't render
+// as "Robyn got you on …".
+//
+// masteryEvents.userId IS the answerer for these surface rows (only
+// author_credit / curator_credit put a non-answerer there, and those source
+// types are excluded by the sourceType filter).
+const CORRECT_ANSWER_STATES = [
+  'first_correct',
+  'first_correct_after_wrong',
+  'repeat_correct',
+] as const;
+const LIVE_SOURCE_TYPES = ['live_correct', 'catchup_correct'] as const;
+
 export async function getLatelyMoments(userId: string): Promise<LatelyMoment[]> {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-  const friendIdExpr = sql<string>`CASE WHEN ${questions.creatorId} = ${userId} THEN ${joshingGameResponses.userId} ELSE ${questions.creatorId} END`;
+  const friendIdExpr = sql<string>`CASE WHEN ${questions.creatorId} = ${userId} THEN ${masteryEvents.userId} ELSE ${questions.creatorId} END`;
 
   const rows = await db
     .select({
-      momentId: joshingGameResponses.id,
+      momentId: masteryEvents.id,
       creatorId: questions.creatorId,
-      responderId: joshingGameResponses.userId,
+      answererId: masteryEvents.userId,
       friendId: friendIdExpr,
       friendDisplayName: users.displayName,
       questionId: questions.id,
       questionText: questions.questionText,
       canonicalSubcategory: questions.canonicalSubcategory,
       category: questions.category,
-      gameId: joshingGames.id,
-      gameTitle: joshingGames.title,
-      answeredAt: joshingGameResponses.answeredAt,
+      answeredAt: masteryEvents.createdAt,
     })
-    .from(joshingGameResponses)
-    .innerJoin(questions, eq(questions.id, joshingGameResponses.questionId))
-    .innerJoin(joshingGames, eq(joshingGames.id, joshingGameResponses.gameId))
+    .from(masteryEvents)
+    .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
     .innerJoin(users, eq(users.id, friendIdExpr))
     .where(
       and(
-        eq(joshingGameResponses.isCorrect, true),
-        gte(joshingGameResponses.answeredAt, thirtyDaysAgo),
+        inArray(masteryEvents.sourceType, LIVE_SOURCE_TYPES),
+        inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
+        isNotNull(masteryEvents.questionId),
+        gte(masteryEvents.createdAt, thirtyDaysAgo),
         or(
-          and(eq(questions.creatorId, userId), ne(joshingGameResponses.userId, userId)),
-          and(eq(joshingGameResponses.userId, userId), ne(questions.creatorId, userId)),
+          and(eq(questions.creatorId, userId), ne(masteryEvents.userId, userId)),
+          and(eq(masteryEvents.userId, userId), ne(questions.creatorId, userId)),
         ),
       ),
     )
-    .orderBy(desc(joshingGameResponses.answeredAt))
+    .orderBy(desc(masteryEvents.createdAt))
     .limit(200);
 
   const moments: LatelyMoment[] = [];
@@ -104,8 +117,9 @@ export async function getLatelyMoments(userId: string): Promise<LatelyMoment[]> 
       questionId: row.questionId,
       questionText: row.questionText,
       category: prettifyCategory(row.canonicalSubcategory, row.category),
-      gameId: row.gameId,
-      gameTitle: row.gameTitle,
+      // Footnote brand label. v2 spec example uses ASTERISK; not worth
+      // per-surface disambiguation until the user asks for it.
+      gameTitle: 'asterisk',
       answeredAt: row.answeredAt,
     });
   }

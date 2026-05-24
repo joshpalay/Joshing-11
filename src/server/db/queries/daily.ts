@@ -710,7 +710,13 @@ export async function createDailyQueueItemFromAuthored(
   });
 }
 
-export async function getRecentDailyQuestionTexts(userId: string, limit = 60): Promise<string[]> {
+// Default widened from 60 to 200: the LLM repeatedly regenerated canonical
+// trivia (the Götterdämmerung Hagen-summons-vassals question surfaced ~4×)
+// because anything beyond ~12 days fell out of the avoid window. The full list
+// is now used to derive a compact fact-key avoid set; only the most recent
+// slice of full question texts is included verbatim (see RECENT_QUESTION_TEXT_LIMIT
+// in src/server/daily/generate-questions.ts).
+export async function getRecentDailyQuestionTexts(userId: string, limit = 200): Promise<string[]> {
   const rows = await db
     .select({ questionText: generatedQuestions.questionText })
     .from(generatedQuestions)
@@ -719,6 +725,27 @@ export async function getRecentDailyQuestionTexts(userId: string, limit = 60): P
     .limit(limit);
 
   return rows.map((row) => row.questionText);
+}
+
+// Recent fact_keys for the same user, newest first. Used both for the LLM
+// avoid list (compact: ~40 chars per key vs. ~80+ per full question text)
+// and the persist-time dedup check in persistGeneratedQuestion.
+export async function getRecentFactKeys(userId: string, limit = 200): Promise<string[]> {
+  const rows = await db
+    .select({ factKey: generatedQuestions.factKey })
+    .from(generatedQuestions)
+    .where(and(
+      eq(generatedQuestions.userId, userId),
+      isNotNull(generatedQuestions.factKey),
+    ))
+    .orderBy(sql`${generatedQuestions.createdAt} desc`)
+    .limit(limit);
+
+  const out: string[] = [];
+  for (const row of rows) {
+    if (row.factKey) out.push(row.factKey);
+  }
+  return out;
 }
 
 export async function getAnsweredDailyCount(queue: DailyQueueRow): Promise<number> {

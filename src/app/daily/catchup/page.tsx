@@ -117,28 +117,9 @@ export default function DailyCatchupPage() {
               Back home
             </button>
           </div>
-        ) : completed ? (
-          <div
-            className="mt-10 rounded-[var(--radius-md)] border p-5 text-center"
-            style={{
-              borderColor: 'color-mix(in srgb, var(--success) 36%, var(--border))',
-              background: 'color-mix(in srgb, var(--success) 8%, var(--surface-2))',
-            }}
-          >
-            <p className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-[var(--success)]">
-              All handled
-            </p>
-            <h2 className="mt-2 font-serif text-2xl font-semibold text-[var(--text)]">{CATCH_UP_COMPLETION_COPY}</h2>
-            <p className="mt-3 text-sm text-[var(--text-muted)]">
-              {caughtUpCount} caught up - {stats.correct} correct - {stats.dismissed} dismissed
-            </p>
-            <button type="button" className="btn-primary mt-5" onClick={() => router.push('/')}>
-              Back home
-            </button>
-          </div>
         ) : (
           <>
-            {introVisible ? (
+            {introVisible && !completed ? (
               <div
                 className="mb-4 rounded-[var(--radius-md)] border p-3"
                 style={{
@@ -164,7 +145,26 @@ export default function DailyCatchupPage() {
               </div>
             ) : null}
             <GameplayChatThread messages={messages} />
-            {currentItem ? (
+            {completed ? (
+              <div
+                className="mt-6 rounded-[var(--radius-md)] border p-5 text-center"
+                style={{
+                  borderColor: 'color-mix(in srgb, var(--success) 36%, var(--border))',
+                  background: 'color-mix(in srgb, var(--success) 8%, var(--surface-2))',
+                }}
+              >
+                <p className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-[var(--success)]">
+                  All handled
+                </p>
+                <h2 className="mt-2 font-serif text-2xl font-semibold text-[var(--text)]">{CATCH_UP_COMPLETION_COPY}</h2>
+                <p className="mt-3 text-sm text-[var(--text-muted)]">
+                  {caughtUpCount} caught up - {stats.correct} correct - {stats.dismissed} dismissed
+                </p>
+                <button type="button" className="btn-primary mt-5" onClick={() => router.push('/')}>
+                  Back home
+                </button>
+              </div>
+            ) : currentItem ? (
               <div className="mt-1 pl-0.5">
                 <button
                   type="button"
