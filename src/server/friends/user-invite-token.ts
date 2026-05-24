@@ -41,7 +41,7 @@ export async function getOrCreateInviteToken(userId: string): Promise<UserInvite
 }
 
 // Always regenerates + persists. The old token, if any, stops resolving
-// immediately — /invite/<handle>/<old-token> returns 404.
+// immediately — /u/<handle>/<old-token> returns 404.
 export async function rotateInviteToken(userId: string): Promise<UserInviteTokenResult | null> {
   const [row] = await db
     .select({ handle: users.handle })
@@ -83,11 +83,13 @@ export function getBaseUrl(source?: Request | Headers): string {
 }
 
 export function buildInviteUrl(baseUrl: string, handle: string, token: string): string {
-  return `${baseUrl}/invite/${encodeURIComponent(handle)}/${encodeURIComponent(token)}`
+  // Per-user invite URL — see src/app/u/[handle]/[token]/page.tsx for the
+  // route handler and why this isn't under /invite/.
+  return `${baseUrl}/u/${encodeURIComponent(handle)}/${encodeURIComponent(token)}`
 }
 
-// Resolves /invite/<handle>/<token> by looking up the inviter case-
-// insensitively on handle and verifying the token matches exactly.
+// Resolves /u/<handle>/<token> by looking up the inviter case-insensitively
+// on handle and verifying the token matches exactly.
 // Returns null when not found OR mismatched (don't reveal which).
 export type InviteLinkResolution = {
   inviterUserId: string
@@ -120,7 +122,7 @@ export async function resolveInviteLink(handle: string, token: string): Promise<
   }
 }
 
-// Called from verify-otp when the user arrives via /invite/<handle>/<token>.
+// Called from verify-otp when the user arrives via /u/<handle>/<token>.
 // Validates server-side and creates an active Friendship via the existing
 // upsertInvitationFriendship helper. Silent failure (don't block login on
 // any error path — the worst case is the user logs in without the new

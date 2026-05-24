@@ -753,7 +753,7 @@ export async function register() {
     }
 
     // Migration 0049 adds the per-user invite token (users.invite_token)
-    // used by /invite/<handle>/<token> shareable links. Guard for preview/
+    // used by /u/<handle>/<token> shareable links. Guard for preview/
     // production databases that may have the migration recorded without
     // the column or the unique partial index actually present.
     try {

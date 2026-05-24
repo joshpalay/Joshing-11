@@ -170,7 +170,7 @@ export async function POST(request: Request) {
       }
 
       // Per-user invite-link flow (B-Friends-3): when the visitor arrived
-      // via /invite/<handle>/<token>, create the active friendship now.
+      // via /u/<handle>/<token>, create the active friendship now.
       // Silent on failure — the worst case is the user logs in without
       // the new friendship, which they can fix via Add Friend.
       if (userInvite) {

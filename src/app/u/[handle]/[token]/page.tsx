@@ -1,10 +1,16 @@
 // Per-user invite link handler (B-Friends-3).
 //
-// DISTINCT from /invite/[token]/page.tsx — that route resolves a
-// FriendInvitation.token (per-invitation, expires, may pre-seed interests).
-// THIS route resolves the inviter's evergreen users.invite_token, generated
-// on demand at /api/account/invite-token and rotatable from /account/privacy.
-// Both must coexist.
+// Lives at /u/[handle]/[token] rather than /invite/[handle]/[token] because
+// /invite/[token] already owns the /invite/<dynamic> slot — Next.js refuses
+// to build the route trie when two sibling dynamic segments use different
+// slug names ('handle' vs 'token'), and the resulting unhandled rejection
+// hangs every cold-start lambda until the 15-minute task timeout. See the
+// commit that moved this file.
+//
+// /invite/[token]/page.tsx still resolves FriendInvitation.token
+// (per-invitation, expires, may pre-seed interests). THIS route resolves
+// the inviter's evergreen users.invite_token, generated on demand at
+// /api/account/invite-token and rotatable from /account/privacy.
 
 import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
