@@ -2,12 +2,15 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     // PHONE_HASH_SALT seeds the SHA-256 used by hashPhoneNumber()
     // (src/server/lib/phone-hashing.ts) and the client-side hashing path
-    // B-Friends-4 will add. The salt itself isn't a true secret — it lives on
-    // every authenticated client — but losing it invalidates every
-    // ContactHash row, so we fail-fast in production if it's unset.
+    // B-Friends-4 will add. hashPhoneNumber() already throws at call time if
+    // the salt is missing, so this boot-time check is just a loud warning —
+    // throwing here kills the entire instrumentation hook and 500s every
+    // request, which is the opposite of the desired fail-fast behavior.
+    // B-Friends-4 will re-introduce strict enforcement at the actual call
+    // sites that need it.
     if (process.env.NODE_ENV === 'production' && !process.env.PHONE_HASH_SALT) {
-      throw new Error(
-        'PHONE_HASH_SALT must be set in production; without it contact-hash matching is non-functional',
+      console.error(
+        '[instrumentation] PHONE_HASH_SALT is not set in production; contact-hash matching will throw at call time. Set this env var to enable B-Friends-4 features.',
       );
     }
 
