@@ -30,10 +30,12 @@ export function Nav({
   initialUserId = null,
   initialDisplayName = null,
   bellBadgeCount = 0,
+  friendsDotVisible = false,
 }: {
   initialUserId?: string | null;
   initialDisplayName?: string | null;
   bellBadgeCount?: number;
+  friendsDotVisible?: boolean;
 }) {
   const pathname = usePathname();
   const accountInitials = initialDisplayName ? initialsFor(initialDisplayName) || null : null;
@@ -147,7 +149,7 @@ export function Nav({
                   active ? 'text-foreground opacity-100' : 'text-foreground/55 hover:text-foreground',
                 ].join(' ')}
               >
-                <span aria-hidden="true" className="grid place-items-center">
+                <span aria-hidden="true" className="relative grid place-items-center">
                   {isAccount ? (
                     <AccountIcon active={active} />
                   ) : (
@@ -157,6 +159,14 @@ export function Nav({
                       fill={active && label === 'Home' ? 'currentColor' : 'none'}
                     />
                   )}
+                  {/* Discovery indicator for the Friends tab — muted neutral
+                      so it doesn't compete with the bell badge accent. */}
+                  {friendsDotVisible && label === 'Friends' ? (
+                    <span
+                      className="absolute -right-1 -top-1 size-2 rounded-full"
+                      style={{ backgroundColor: '#8a8a9a' }}
+                    />
+                  ) : null}
                 </span>
                 <span
                   className={[

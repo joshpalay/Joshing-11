@@ -4,10 +4,17 @@ import { ChevronLeft } from 'lucide-react'
 
 import AddFriendInvite from '@/components/AddFriendInvite'
 import { AddFriendButton } from '@/components/friends/AddFriendButton'
+import { ContactMatchBlock } from '@/components/friends/ContactMatchBlock'
 import { FindFriendsSearch } from '@/components/friends/FindFriendsSearch'
 import { InviteSomeoneNew } from '@/components/friends/InviteSomeoneNew'
 import { colorForUser, formatRelativeTime } from '@/components/feed/visual'
 import { getSession } from '@/server/auth/session'
+import {
+  getLastContactHashUpload,
+  isRefreshDue,
+  listContactMatches,
+  markDiscoveryChecked,
+} from '@/server/db/queries/contact-hashes'
 import { listInviteReflections } from '@/server/db/queries/friend-invitations'
 import { db, users } from '@/server/db'
 import { eq } from 'drizzle-orm'
@@ -28,6 +35,7 @@ export default async function FindFriendsPage() {
 
   const [viewer] = await db
     .select({
+      discoverableByContacts: users.discoverableByContacts,
       discoverableByMutualFriends: users.discoverableByMutualFriends,
     })
     .from(users)
@@ -36,7 +44,16 @@ export default async function FindFriendsPage() {
 
   if (!viewer) redirect('/login')
 
-  const reflections = await listInviteReflections(session.userId)
+  // Stamp the discovery threshold AS the user lands here — clears the
+  // Nav-tab dot and the Invitations-tab passive row on next render.
+  await markDiscoveryChecked(session.userId)
+
+  const [reflections, contactMatches, lastContactUpload] = await Promise.all([
+    listInviteReflections(session.userId),
+    viewer.discoverableByContacts ? listContactMatches(session.userId) : Promise.resolve([]),
+    viewer.discoverableByContacts ? getLastContactHashUpload(session.userId) : Promise.resolve(null),
+  ])
+  const contactRefreshDue = isRefreshDue(lastContactUpload)
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 pt-10 pb-28">
@@ -58,24 +75,20 @@ export default async function FindFriendsPage() {
         {/* Block 1 — Search by handle or phone */}
         <FindFriendsSearch />
 
-        {/* Block 2 — Contact matches (placeholder; B-Friends-4 replaces) */}
-        <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
-          <h2 className="font-serif text-lg font-semibold">
-            Find friends already on Joshing
-          </h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            We can check which of your phone contacts are here. We never share your contacts.
-          </p>
-          <button
-            type="button"
-            disabled
-            title="Coming soon."
-            aria-disabled
-            className="bg-muted text-muted-foreground mt-3 inline-flex h-11 cursor-not-allowed items-center justify-center rounded-full px-4 text-sm opacity-60"
-          >
-            Match my contacts
-          </button>
-        </section>
+        {/* Block 2 — Contact matches (client island; SSR'd with initial data
+            so the rich UI shows immediately when matches already exist) */}
+        <ContactMatchBlock
+          discoverableByContacts={viewer.discoverableByContacts}
+          initialMatches={contactMatches.map((match) => ({
+            id: match.id,
+            handle: match.handle,
+            displayName: match.displayName,
+            avatarColor: match.avatarColor,
+            createdAt: match.createdAt.toISOString(),
+            relationship: match.relationship,
+          }))}
+          initialRefreshDue={contactRefreshDue}
+        />
 
         {/* Block 3 — Existing-invite reflection */}
         {reflections.length > 0 ? (

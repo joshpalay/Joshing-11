@@ -770,6 +770,29 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0050 adds users.phone_hash (the user's own SHA-256(salt+E.164)
+    // for the contact-hash match query) and users.last_friend_discovery_check_at
+    // (the threshold for the Find Friends discovery dot + passive
+    // Invitations-tab row). Guard for preview/production databases that may
+    // have the migration recorded without the columns or index present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "phone_hash" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "last_friend_discovery_check_at" timestamptz
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "idx_users_phone_hash"
+          ON "User" ("phone_hash")
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
