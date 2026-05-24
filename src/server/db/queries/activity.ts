@@ -58,6 +58,7 @@ export type ActivityItemView = Pick<
     };
     directQuestion?: {
       feedItemId: string;
+      questionId: string;
       questionText: string;
       personalMessage: string | null;
       category: string | null;
@@ -437,6 +438,7 @@ async function hydrateDirectQuestions(items: ActivityItemRow[]) {
   const rows = await db
     .select({
       feedItemId: feedItems.id,
+      questionId: questions.id,
       personalMessage: feedItems.personalMessage,
       questionText: questions.questionText,
       canonicalSubcategory: questions.canonicalSubcategory,
@@ -450,6 +452,7 @@ async function hydrateDirectQuestions(items: ActivityItemRow[]) {
     row.feedItemId,
     {
       feedItemId: row.feedItemId,
+      questionId: row.questionId,
       questionText: row.questionText,
       personalMessage: row.personalMessage,
       category: row.canonicalSubcategory?.trim() || row.category || null,
