@@ -42,7 +42,7 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
             <b>{actor}</b> {correct ? 'got your question' : 'answered your question'}
           </>
         ),
-        secondLine: faq?.domain ?? null,
+        secondLine: faq?.questionText ?? faq?.domain ?? null,
         accentColor: correct ? '#d97706' : '#a8a29e',
         href: '/activities',
       }
@@ -56,7 +56,7 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
             <b>{actor}</b> proved a domain on your map
           </>
         ),
-        secondLine: dp?.domain ?? null,
+        secondLine: dp?.questionText || dp?.domain || null,
         accentColor: '#16a34a',
         href: dp?.domain
           ? `/knowledge/${encodeURIComponent(dp.domain)}`

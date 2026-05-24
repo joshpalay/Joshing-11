@@ -69,7 +69,7 @@ function friendAnsweredActivity(
     createdAt: new Date('2026-05-24T12:00:00.000Z'),
     actor: { displayName: 'A friend' },
     reference: {
-      friendAnsweredQuestion: { domain: 'music', result },
+      friendAnsweredQuestion: { domain: 'music', questionText: null, result },
     },
   };
 }
