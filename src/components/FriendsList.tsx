@@ -279,7 +279,7 @@ export default function FriendsList() {
                     className="bg-background hover:border-foreground/30 block rounded-xl border p-3 transition hover:shadow-sm"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <h3 className="text-primary font-medium underline decoration-primary/40 underline-offset-4 hover:decoration-primary">
                           {friend.displayName}
                         </h3>
@@ -299,7 +299,7 @@ export default function FriendsList() {
                         ) : null}
                       </div>
                       {sharedInterest ? (
-                        <span className="bg-muted text-foreground shrink-0 rounded-full px-3 py-1 text-xs font-medium">
+                        <span className="bg-muted text-foreground shrink-0 max-w-[45%] rounded-full px-3 py-1 text-xs font-medium whitespace-normal break-words text-center">
                           Shared: {sharedInterest}
                         </span>
                       ) : null}
