@@ -399,24 +399,30 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
   const isFirstPage = !options.cursor;
 
   // Pinned items are deliberately returned only on the first page, ahead of the chronological feed.
+  // The totalCount query is also gated to first-page requests: it re-evaluates the same heavy
+  // visibility predicate (notExists masteryEvents join, etc.) as the page query, and its only
+  // downstream consumer is the empty-state copy in FeedList — which can only fire on the first page.
+  // Subsequent paginated loads see `totalCount: 0`; this is a sentinel, not an accurate count.
   const [pinned, nonPinnedRaw, countRows] = await Promise.all([
     isFirstPage
       ? fetchVisibleFeedItems(userId, dismissedDomains, { limit, pinned: true, filter })
       : Promise.resolve([]),
     fetchVisibleFeedItems(userId, dismissedDomains, { limit: limit + 1, cursor: options.cursor, pinned: false, filter }),
-    db
-      .select({ value: count() })
-      .from(feedItems)
-      .innerJoin(questions, eq(feedItems.questionId, questions.id))
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        visibleSourcePredicate,
-        feedFilterPredicate(filter),
-        inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-        visibleQuestionPredicate(dismissedDomains),
-        viewerNotAuthorPredicate(userId),
-        viewerNotAlreadyAnsweredPredicate(userId),
-      )),
+    isFirstPage
+      ? db
+          .select({ value: count() })
+          .from(feedItems)
+          .innerJoin(questions, eq(feedItems.questionId, questions.id))
+          .where(and(
+            eq(feedItems.recipientUserId, userId),
+            visibleSourcePredicate,
+            feedFilterPredicate(filter),
+            inArray(feedItems.state, ACTIONABLE_FEED_STATES),
+            visibleQuestionPredicate(dismissedDomains),
+            viewerNotAuthorPredicate(userId),
+            viewerNotAlreadyAnsweredPredicate(userId),
+          ))
+      : Promise.resolve<{ value: number }[]>([]),
   ]);
 
   const nonPinnedPage = nonPinnedRaw.slice(0, limit);
