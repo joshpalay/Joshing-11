@@ -20,6 +20,15 @@ type IncomingRequest = {
   requesterId: string
   requesterName: string
   suggestedInterests: string[]
+  personalNote: string | null
+  createdAt: string
+}
+
+type OutboundRequest = {
+  id: string
+  recipientId: string
+  recipientName: string
+  personalNote: string | null
   createdAt: string
 }
 
@@ -27,6 +36,7 @@ type FriendsHubResponse = {
   ok: boolean
   friends: Friend[]
   incomingRequests: IncomingRequest[]
+  outboundRequests: OutboundRequest[]
 }
 
 type RequestAction = 'accept' | 'ignore'
@@ -39,6 +49,9 @@ function previewInterests(interests: string[]) {
 export default function FriendsList() {
   const [friends, setFriends] = useState<Friend[]>([])
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>(
+    []
+  )
+  const [outboundRequests, setOutboundRequests] = useState<OutboundRequest[]>(
     []
   )
   const [loading, setLoading] = useState(true)
@@ -69,6 +82,7 @@ export default function FriendsList() {
 
       setFriends(body.friends)
       setIncomingRequests(body.incomingRequests)
+      setOutboundRequests(body.outboundRequests ?? [])
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : 'Could not load friends.'
@@ -108,6 +122,34 @@ export default function FriendsList() {
         caught instanceof Error
           ? caught.message
           : 'Could not update this request.'
+      )
+    } finally {
+      setPendingRequest(null)
+    }
+  }
+
+  async function cancelOutbound(requestId: string) {
+    setPendingRequest(`${requestId}:cancel`)
+    setError(null)
+    // Optimistic: remove the row immediately; restore on error.
+    const previous = outboundRequests
+    setOutboundRequests((current) => current.filter((row) => row.id !== requestId))
+
+    try {
+      const response = await fetch(`/api/friend-requests/${requestId}/cancel`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { message?: string } | null
+        setOutboundRequests(previous)
+        throw new Error(body?.message ?? 'Could not cancel this request.')
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not cancel this request.'
       )
     } finally {
       setPendingRequest(null)
@@ -259,6 +301,11 @@ export default function FriendsList() {
                           No ideas attached — just a friendly hello.
                         </p>
                       )}
+                      {request.personalNote ? (
+                        <blockquote className="border-primary/30 text-muted-foreground mt-3 border-l-2 pl-3 text-sm italic">
+                          “{request.personalNote}”
+                        </blockquote>
+                      ) : null}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 sm:min-w-48">
@@ -300,7 +347,55 @@ export default function FriendsList() {
       ) : null}
 
       {/* Sent tab */}
-      {activeTab === 'sent' ? <PeopleYouInvited /> : null}
+      {activeTab === 'sent' ? (
+        <div className="space-y-6">
+          {outboundRequests.length > 0 ? (
+            <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+              <h2 className="font-serif text-lg font-semibold">
+                Sent friend requests
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Waiting on a reply. They expire after 30 days.
+              </p>
+              <div className="mt-3 space-y-3">
+                {outboundRequests.map((request) => (
+                  <article
+                    key={request.id}
+                    className="bg-background rounded-xl border p-3"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <h3 className="text-foreground font-medium">
+                          {request.recipientName}
+                        </h3>
+                        <p className="text-muted-foreground/70 mt-1 text-xs">
+                          sent {formatRelativeTime(request.createdAt)}
+                        </p>
+                        {request.personalNote ? (
+                          <blockquote className="border-primary/30 text-muted-foreground mt-3 border-l-2 pl-3 text-sm italic">
+                            “{request.personalNote}”
+                          </blockquote>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-ghost min-h-9 self-start rounded-full px-4 text-sm"
+                        disabled={Boolean(pendingRequest)}
+                        onClick={() => void cancelOutbound(request.id)}
+                      >
+                        {pendingRequest === `${request.id}:cancel`
+                          ? 'Cancelling…'
+                          : 'Cancel'}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          <PeopleYouInvited />
+        </div>
+      ) : null}
     </div>
   )
 }
