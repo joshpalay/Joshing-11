@@ -502,6 +502,11 @@ export const generatedQuestions = pgTable(
     explainer: text('explainer').notNull(),
     difficultyEstimate: text('difficulty_estimate').notNull(),
     basePoints: integer('base_points').notNull(),
+    // Normalized identifier for the underlying fact (e.g.
+    // 'gotterdammerung-hagen-summons-vassals-instrument'). Lets us dedup
+    // re-wordings of the same trivia that the text-level check misses.
+    // Nullable so older rows generated before this column existed remain valid.
+    factKey: text('fact_key'),
     createdAt: createdAt(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedInQueue: boolean('used_in_queue').notNull().default(false),
@@ -509,6 +514,7 @@ export const generatedQuestions = pgTable(
   (table) => [
     index('GeneratedQuestion_user_id_idx').on(table.userId),
     index('GeneratedQuestion_user_id_used_in_queue_idx').on(table.userId, table.usedInQueue),
+    index('GeneratedQuestion_user_id_fact_key_idx').on(table.userId, table.factKey),
   ],
 );
 

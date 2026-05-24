@@ -48,6 +48,35 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
       throw new Error(`Generated question not found: ${generatedQuestionId}`);
     }
 
+    // Fact-key dedup: even when the LLM is told to avoid a fact, it sometimes
+    // produces a re-worded version with a fresh question_text — which slips
+    // past the text-level check below. The fact_key column is the canonical
+    // identifier for the underlying trivia (set by the LLM, normalized in
+    // src/server/questions/fact-key.ts) and is shared across re-wordings.
+    // If any prior daily_generated Question is keyed to a GeneratedQuestion
+    // with the same fact_key, reuse that Question rather than create a new
+    // one. Runs before the text-level check because it's the stricter test.
+    const factKey = generated.factKey;
+    if (factKey) {
+      const [factMatch] = await db
+        .select({ id: questions.id })
+        .from(questions)
+        .innerJoin(
+          generatedQuestions,
+          eq(questions.generatedQuestionId, generatedQuestions.id),
+        )
+        .where(and(
+          isNull(questions.deletedAt),
+          eq(questions.source, 'daily_generated'),
+          eq(generatedQuestions.factKey, factKey),
+        ))
+        .limit(1);
+
+      if (factMatch) {
+        return { questionId: factMatch.id, alreadyExisted: true };
+      }
+    }
+
     // Text-level dedup: the LLM occasionally returns identical question text
     // across separate per-user GeneratedQuestion rows. Without this check each
     // generation would land as its own Question, then a "friend answered"
