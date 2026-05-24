@@ -271,9 +271,16 @@ export async function POST(request: NextRequest) {
     // determined correctly across surfaces (F2.1). Falls back to the old
     // behaviour (treat as first attempt) only if persistence failed and we
     // have no canonical id to look up history against.
-    const priorAnswers = canonicalQuestionId
-      ? await readPriorAnswersForQuestion(session.userId, canonicalQuestionId)
-      : [];
+    // priorAnswers (mastery history) and insideJokeForViewer (friendship check)
+    // are independent of each other and of the grader output, so fan them out
+    // in parallel. The viewer joke isn't consumed until nextSlots is built
+    // below; pre-resolving it here removes a serial round-trip.
+    const [priorAnswers, insideJokeForViewer] = await Promise.all([
+      canonicalQuestionId
+        ? readPriorAnswersForQuestion(session.userId, canonicalQuestionId)
+        : Promise.resolve<{ result: 'correct' | 'wrong' }[]>([]),
+      selectInsideJokeForViewer(persistedInsideJoke, persistedCreatorId, session.userId),
+    ]);
     const masteryAnswerState = computeAnswerState(
       isCorrect ? 'correct' : 'wrong',
       priorAnswers,
@@ -311,12 +318,6 @@ export async function POST(request: NextRequest) {
       }
     }
     const pointsAwarded = skipMasteryForUnknownDomain ? 0 : uncheckedPointsAwarded;
-
-    const insideJokeForViewer = await selectInsideJokeForViewer(
-      persistedInsideJoke,
-      persistedCreatorId,
-      session.userId,
-    );
 
     const nextSlots = slots.map((item) => {
       if (item.slot_index !== parsed.slotIndex) return item;
