@@ -68,6 +68,7 @@ export type ActivityItemView = Pick<
     };
     friendAnsweredQuestion?: {
       domain: string | null;
+      questionText: string | null;
       result: 'correct' | 'incorrect';
     };
     authoredSharedQuestion?: {
@@ -616,7 +617,7 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
 
   const [questionRows, masteryRows] = await Promise.all([
     db
-      .select({ id: questions.id, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })
+      .select({ id: questions.id, questionText: questions.questionText, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })
       .from(questions)
       .where(inArray(questions.id, questionIds)),
     db
@@ -630,19 +631,21 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
       )),
   ]);
 
-  const domainByQuestion = new Map(
-    questionRows.map((r) => [r.id, r.canonicalSubcategory ?? r.broadCategory ?? null]),
-  );
+  const questionById = new Map(questionRows.map((r) => [r.id, r]));
   const correctSet = new Set(masteryRows.map((r) => `${r.userId}:${r.questionId}`));
 
   return new Map(
-    relevant.map((item) => [
-      item.id,
-      {
-        domain: domainByQuestion.get(item.referenceId!) ?? null,
-        result: correctSet.has(`${item.actorUserId}:${item.referenceId}`) ? 'correct' : 'incorrect',
-      } satisfies NonNullable<ActivityItemView['reference']['friendAnsweredQuestion']>,
-    ]),
+    relevant.map((item) => {
+      const q = questionById.get(item.referenceId!);
+      return [
+        item.id,
+        {
+          domain: q ? (q.canonicalSubcategory ?? q.broadCategory ?? null) : null,
+          questionText: q?.questionText ?? null,
+          result: correctSet.has(`${item.actorUserId}:${item.referenceId}`) ? 'correct' : 'incorrect',
+        } satisfies NonNullable<ActivityItemView['reference']['friendAnsweredQuestion']>,
+      ];
+    }),
   );
 }
 
