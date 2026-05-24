@@ -361,7 +361,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await updateDomainDifficultyOnAnswer(
+    // Adaptive-difficulty bookkeeping is not consumed by the response; let it
+    // run after we've already returned. The function swallows its own errors
+    // via the .catch below, so an unhandled rejection cannot escape.
+    void updateDomainDifficultyOnAnswer(
       session.userId,
       question.canonicalSubcategory,
       isCorrect,
