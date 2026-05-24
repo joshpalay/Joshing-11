@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { CreatorNoteReadButton } from '@/app/activities/CreatorNoteReadButton';
+import { filterUtilityActivities } from '@/app/activities/filter-utility-activities';
 import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
@@ -453,21 +454,7 @@ export default async function ActivitiesPage() {
   ]);
   const tz = viewer?.timezone ?? 'America/New_York';
 
-  // Connection moments come from getLatelyMoments (both directions). Two
-  // legacy activity types narrate the same event and would double-render:
-  //   - friend_answered_your_question (when correct): the raw "X answered
-  //     your Y question" copy, already covered by the they_got_you moment.
-  //   - declared_promoted: emitted only when a friend correctly answers AND
-  //     the domain transitions to demonstrated — strictly a subset of
-  //     they_got_you. The "SEE YOUR MAP" CTA lives on /knowledge.
-  const utilityItems: LatelyFeedItem[] = items
-    .filter(
-      (i) =>
-        !(
-          i.type === 'friend_answered_your_question' &&
-          i.reference.friendAnsweredQuestion?.result === 'correct'
-        ) && i.type !== 'declared_promoted',
-    )
+  const utilityItems: LatelyFeedItem[] = filterUtilityActivities(items, moments)
     .map(activityToFeedItem);
 
   const momentItems: LatelyFeedItem[] = moments.map((m) => ({
