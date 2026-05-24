@@ -175,6 +175,8 @@ export const users = pgTable(
     location: text('location'),
     discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
+    phoneHash: text('phone_hash'),
+    lastFriendDiscoveryCheckAt: timestamp('last_friend_discovery_check_at', { withTimezone: true }),
     authorProfilePublic: boolean('authorProfilePublic').notNull().default(true),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
     birthYear: integer('birth_year'),

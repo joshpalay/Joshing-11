@@ -62,6 +62,9 @@ export default function FriendsList() {
   const [activeTab, setActiveTab] = useState<Tab>('friends')
   // Session-local: nudge reappears on next page load if still over the cap.
   const [softCapDismissed, setSoftCapDismissed] = useState(false)
+  // Passive Invitations-tab row count — null while loading, 0 when there's
+  // nothing new. Cleared after the user visits /friends/find.
+  const [newDiscoveryCount, setNewDiscoveryCount] = useState<number | null>(null)
 
   const loadFriends = useCallback(async () => {
     setError(null)
@@ -99,6 +102,32 @@ export default function FriendsList() {
   useEffect(() => {
     queueMicrotask(() => void loadFriends())
   }, [loadFriends])
+
+  // Load the discovery signal once on mount. Cache-Control:max-age=60 on
+  // the response keeps repeat navigations cheap. Fire-and-forget — a
+  // failure just means the passive row doesn't render this session.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await fetch('/api/friends/has-new-discovery', {
+          credentials: 'include',
+        })
+        if (!response.ok) return
+        const body = (await response.json().catch(() => null)) as
+          | { hasNew: boolean; count: number }
+          | null
+        if (!cancelled && body) {
+          setNewDiscoveryCount(body.hasNew ? body.count : 0)
+        }
+      } catch {
+        // Swallow — passive signal, OK to skip.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function updateRequest(requestId: string, action: RequestAction) {
     setPendingRequest(`${requestId}:${action}`)
@@ -296,6 +325,17 @@ export default function FriendsList() {
       {/* Invitations tab */}
       {activeTab === 'invitations' ? (
         <div className="space-y-3">
+          {newDiscoveryCount && newDiscoveryCount > 0 ? (
+            <Link
+              href="/friends/find"
+              className="bg-accent/10 hover:border-foreground/30 text-card-foreground block rounded-2xl border p-4 shadow-sm transition"
+            >
+              <p className="text-foreground text-sm font-medium">
+                ✨ {newDiscoveryCount} new {newDiscoveryCount === 1 ? 'contact is' : 'contacts are'} on Joshing.
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">→ Find friends</p>
+            </Link>
+          ) : null}
           <Link
             href="/friends/find"
             className="bg-card hover:border-foreground/30 text-card-foreground block rounded-2xl border p-4 shadow-sm transition"

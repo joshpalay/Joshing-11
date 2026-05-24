@@ -351,6 +351,13 @@
       "when": 1780790400000,
       "tag": "0049_user_invite_token",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1780876800000,
+      "tag": "0050_user_phone_hash_discovery",
+      "breakpoints": true
     }
   ]
 }

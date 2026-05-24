@@ -4,9 +4,11 @@ import { eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 
 import { colorForUser } from '@/components/feed/visual'
+import { normalizeToE164 } from '@/lib/phone-e164'
 import { verifyOtp } from '@/server/auth'
 import { createSession } from '@/server/auth/session'
 import { db, users } from '@/server/db'
+import { hashPhoneNumber } from '@/server/lib/phone-hashing'
 import {
   acceptFriendInvitation,
   getValidInvitationForPhone,
@@ -57,6 +59,16 @@ async function findUserByPhone(
   return existing ?? null
 }
 
+function computePhoneHash(phoneNumber: string): string | null {
+  // Skip when the salt is unset (dev environments without
+  // PHONE_HASH_SALT — production sets it). The hash can be filled in
+  // later via scripts/backfill-phone-hashes.ts once the salt is set.
+  if (!process.env.PHONE_HASH_SALT) return null
+  const e164 = normalizeToE164(phoneNumber)
+  if (!e164) return null
+  return hashPhoneNumber(e164)
+}
+
 async function provisionUserForPhone(
   phoneNumber: string
 ): Promise<AuthUser> {
@@ -64,9 +76,10 @@ async function provisionUserForPhone(
   // same insert (colorForUser hashes the id). Without this, avatar_color
   // would be NULL until the next signup backfill.
   const id = randomUUID()
+  const phoneHash = computePhoneHash(phoneNumber)
   const [created] = await db
     .insert(users)
-    .values({ id, phoneNumber, avatarColor: colorForUser(id) })
+    .values({ id, phoneNumber, avatarColor: colorForUser(id), phoneHash })
     .onConflictDoNothing({ target: users.phoneNumber })
     .returning(USER_SELECTION)
 
