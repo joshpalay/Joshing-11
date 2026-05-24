@@ -7,6 +7,8 @@ import { useCallback, useEffect, useState } from 'react'
 
 type Tab = 'friends' | 'invitations' | 'sent'
 
+const SOFT_CAP = 25
+
 type Friend = {
   id: string
   displayName: string
@@ -58,6 +60,8 @@ export default function FriendsList() {
   const [error, setError] = useState<string | null>(null)
   const [pendingRequest, setPendingRequest] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('friends')
+  // Session-local: nudge reappears on next page load if still over the cap.
+  const [softCapDismissed, setSoftCapDismissed] = useState(false)
 
   const loadFriends = useCallback(async () => {
     setError(null)
@@ -203,6 +207,27 @@ export default function FriendsList() {
       {/* Friends tab */}
       {activeTab === 'friends' ? (
         <section>
+          {friends.length > SOFT_CAP && !softCapDismissed ? (
+            <div className="bg-muted/50 mb-3 flex items-start justify-between gap-3 rounded-xl border p-3">
+              <div className="min-w-0">
+                <p className="text-foreground text-sm font-medium">
+                  Joshing works best with a small group — you&rsquo;re at {friends.length}.
+                </p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  No rule, just a nudge.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => setSoftCapDismissed(true)}
+                className="text-muted-foreground hover:text-foreground -mr-1 px-2 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
+
           {error ? (
             <p className="text-destructive mb-3 text-sm font-medium">{error}</p>
           ) : null}
@@ -270,7 +295,16 @@ export default function FriendsList() {
 
       {/* Invitations tab */}
       {activeTab === 'invitations' ? (
-        <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+        <div className="space-y-3">
+          <Link
+            href="/friends/find"
+            className="bg-card hover:border-foreground/30 text-card-foreground block rounded-2xl border p-4 shadow-sm transition"
+          >
+            <p className="text-foreground text-sm font-medium">
+              Find friends already on Joshing or invite someone new →
+            </p>
+          </Link>
+          <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
           {loading ? (
             <p className="text-muted-foreground text-sm">Loading invitations…</p>
           ) : incomingRequests.length > 0 ? (
@@ -344,6 +378,7 @@ export default function FriendsList() {
             </p>
           )}
         </section>
+        </div>
       ) : null}
 
       {/* Sent tab */}

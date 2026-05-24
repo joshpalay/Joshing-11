@@ -4,6 +4,12 @@ import { ChevronLeft } from 'lucide-react';
 
 import { getSession } from '@/server/auth/session';
 import { getDiscoverability } from '@/server/db/queries/account';
+import {
+  buildInviteUrl,
+  getBaseUrl,
+  getOrCreateInviteToken,
+} from '@/server/friends/user-invite-token';
+import { headers } from 'next/headers';
 
 import { PrivacyForm } from './PrivacyForm';
 
@@ -15,6 +21,16 @@ export default async function PrivacySettingsPage() {
 
   const state = await getDiscoverability(session.userId);
   if (!state) redirect('/login');
+
+  // Build the per-user invite URL server-side so the input renders populated
+  // on first paint. If the user doesn't have a handle yet (pre-P0-A
+  // accounts that haven't picked one), skip — the section won't render.
+  const tokenResult = await getOrCreateInviteToken(session.userId);
+  let inviteUrl: string | null = null;
+  if (tokenResult?.handle) {
+    const requestHeaders = await headers();
+    inviteUrl = buildInviteUrl(getBaseUrl(requestHeaders), tokenResult.handle, tokenResult.token);
+  }
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 pt-10 pb-28">
@@ -32,7 +48,7 @@ export default async function PrivacySettingsPage() {
         Choose how other people can find you on Joshing.
       </p>
 
-      <PrivacyForm initialState={state} />
+      <PrivacyForm initialState={state} initialInviteUrl={inviteUrl} />
     </main>
   );
 }

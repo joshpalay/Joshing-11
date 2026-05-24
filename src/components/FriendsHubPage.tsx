@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import AddFriendInvite from '@/components/AddFriendInvite'
 import FriendsList from '@/components/FriendsList'
 
@@ -16,13 +18,21 @@ export default function FriendsHubPage() {
         <h1 className="text-foreground font-serif text-3xl font-semibold">
           Friends
         </h1>
-        <button
-          type="button"
-          className="btn-primary min-h-10 shrink-0 rounded-full px-4 text-sm"
-          onClick={openAddFriend}
-        >
-          Add friend
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/friends/find"
+            className="btn-ghost min-h-10 rounded-full px-4 text-sm"
+          >
+            Find friends
+          </Link>
+          <button
+            type="button"
+            className="btn-primary min-h-10 rounded-full px-4 text-sm"
+            onClick={openAddFriend}
+          >
+            Add friend
+          </button>
+        </div>
       </header>
 
       <AddFriendInvite />

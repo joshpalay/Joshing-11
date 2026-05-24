@@ -1,14 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { DiscoverabilityState } from '@/server/db/queries/account';
 
 type Props = {
   initialState: DiscoverabilityState;
+  initialInviteUrl: string | null;
 };
 
 type PatchKey = 'contacts' | 'mutualFriends';
+
+type InviteTokenResponse = { token: string; url: string };
 
 async function patchDiscoverability(
   body: Partial<Record<PatchKey, boolean>>,
@@ -79,10 +82,63 @@ function ToggleRow({
   );
 }
 
-export function PrivacyForm({ initialState }: Props) {
+export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
   const [state, setState] = useState<DiscoverabilityState>(initialState);
   const [savingKey, setSavingKey] = useState<PatchKey | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(initialInviteUrl);
+  const [rotating, setRotating] = useState(false);
+  const [inviteToast, setInviteToast] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inviteToast) return;
+    const timer = window.setTimeout(() => setInviteToast(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [inviteToast]);
+
+  async function copyInviteUrl() {
+    if (!inviteUrl) return;
+    setInviteError(null);
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setInviteToast('Link copied.');
+    } catch {
+      setInviteError('Could not copy. Long-press the field to copy manually.');
+    }
+  }
+
+  async function rotateInviteUrl() {
+    if (rotating) return;
+    const confirmed = window.confirm(
+      'Rotate your invite link? The old link will stop working immediately.',
+    );
+    if (!confirmed) return;
+    setRotating(true);
+    setInviteError(null);
+    try {
+      const response = await fetch('/api/account/invite-token/rotate', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+        setInviteError(body?.message ?? 'Could not rotate your link.');
+        return;
+      }
+      const body = (await response.json().catch(() => null)) as InviteTokenResponse | null;
+      if (!body?.url) {
+        setInviteError('Could not build the new link.');
+        return;
+      }
+      setInviteUrl(body.url);
+      setInviteToast('New link generated.');
+    } catch {
+      setInviteError('Network error. Try again.');
+    } finally {
+      setRotating(false);
+    }
+  }
 
   async function toggle(key: PatchKey) {
     const previous = state;
@@ -138,6 +194,48 @@ export function PrivacyForm({ initialState }: Props) {
 
       {errorMessage ? (
         <p className="text-sm text-destructive">{errorMessage}</p>
+      ) : null}
+
+      {inviteUrl ? (
+        <section className="rounded-xl border bg-card p-5 text-card-foreground">
+          <h2 className="font-serif text-lg font-semibold">Your invite link</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Anyone you share this with can join Joshing and land as your friend.
+          </p>
+          <input
+            type="text"
+            readOnly
+            value={inviteUrl}
+            onFocus={(event) => event.currentTarget.select()}
+            className="border-border bg-background text-foreground mt-3 h-11 w-full rounded-md border px-3 text-sm outline-none"
+          />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void copyInviteUrl()}
+              className="btn-primary min-h-9 rounded-full px-4 text-sm"
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={() => void rotateInviteUrl()}
+              disabled={rotating}
+              className="btn-ghost min-h-9 rounded-full px-4 text-sm"
+            >
+              {rotating ? 'Rotating…' : 'Rotate link'}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Rotating invalidates the old link. Use this if you accidentally shared it broadly.
+          </p>
+          {inviteError ? <p className="mt-2 text-sm text-destructive">{inviteError}</p> : null}
+          {inviteToast ? (
+            <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+              {inviteToast}
+            </div>
+          ) : null}
+        </section>
       ) : null}
     </div>
   );
