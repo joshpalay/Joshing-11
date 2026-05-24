@@ -92,9 +92,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       submittedAnswer: parsed.submittedAnswer,
     });
     const completion = await checkJoshingGameCompletion({ gameId: id, userId: session.userId });
-    const freshView = await getJoshingGame({ gameId: id, requestingUserId: session.userId });
-
-    if (!freshView) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
     const answeredQuestion = existingView.questions.find((item) => item.questionId === parsed.questionId);
     const correctAnswer = answeredQuestion?.question.answerText ?? '';
@@ -209,7 +206,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       correctAnswer,
       answerState: grade.answerState,
       breadcrumb: null,
-      viewerStatus: freshView.viewerStatus,
+      viewerStatus: completion.userComplete ? 'complete' : 'in_progress',
       quip,
       insideJoke,
     });
