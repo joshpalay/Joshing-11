@@ -55,6 +55,12 @@ function profileDisplayName(
   return name?.trim() || fallback?.trim() || 'Joshing friend'
 }
 
+// Match interests regardless of case, punctuation, or whitespace so that
+// e.g. "Star Trek: The Next Generation" overlaps with "Star Trek The Next Generation".
+function normalizeInterestKey(domain: string): string {
+  return domain.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+}
+
 export async function getFriendPortraitData(
   userId: string,
   viewerId: string
@@ -99,24 +105,31 @@ export async function getFriendPortraitData(
     )
     .orderBy(asc(declaredInterests.domain))
 
-  const viewerInterests = new Set(
-    interestRows
-      .filter((interest) => interest.userId === normalizedViewerId)
-      .map((interest) => interest.domain)
-  )
+  const viewerInterestsByKey = new Map<string, string>()
+  for (const interest of interestRows) {
+    if (interest.userId !== normalizedViewerId) continue
+    viewerInterestsByKey.set(
+      normalizeInterestKey(interest.domain),
+      interest.domain
+    )
+  }
 
   const interests = interestRows
     .filter((interest) => interest.userId === normalizedUserId)
     .map((interest) => ({
       domain: interest.domain,
       broadCategory: interest.broadCategory,
-      shared: isActiveFriend && viewerInterests.has(interest.domain),
+      shared:
+        isActiveFriend &&
+        viewerInterestsByKey.has(normalizeInterestKey(interest.domain)),
     }))
 
-  const friendInterestDomains = new Set(interests.map((i) => i.domain))
+  const friendInterestKeys = new Set(
+    interests.map((i) => normalizeInterestKey(i.domain))
+  )
   const viewerSoloInterests = isActiveFriend
-    ? Array.from(viewerInterests)
-        .filter((domain) => !friendInterestDomains.has(domain))
+    ? Array.from(viewerInterestsByKey.values())
+        .filter((domain) => !friendInterestKeys.has(normalizeInterestKey(domain)))
         .sort((a, b) => a.localeCompare(b))
     : []
   const friendSoloInterests = isActiveFriend
