@@ -2,12 +2,17 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { db, questions } from '@/server/db';
+import { runWithConcurrency } from '@/server/lib/concurrency';
 import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const BATCH_SIZE = 25;
+// Capped at 4 to stay one connection below the 5-cap DB pool. Each worker
+// holds a Haiku call in flight (~1–2s); tune down if Anthropic tier limits
+// become binding before DB does.
+const VET_CONCURRENCY = 4;
 
 function isAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET;
@@ -53,7 +58,7 @@ export async function GET(request: NextRequest) {
     failed: 0,
   };
 
-  for (const row of pending) {
+  await runWithConcurrency(pending, VET_CONCURRENCY, async (row) => {
     try {
       const verdict = await vetQuestion({
         questionText: row.questionText,
@@ -92,7 +97,7 @@ export async function GET(request: NextRequest) {
         error: error instanceof Error ? error.message : String(error),
       });
     }
-  }
+  });
 
   return NextResponse.json(results);
 }
