@@ -120,6 +120,29 @@ describe('friend portrait data', () => {
     })
   })
 
+  it('treats interests as overlapping when they only differ by case or punctuation', async () => {
+    state.interestRows = [
+      {
+        userId: 'friend-1',
+        domain: 'Star Trek: The Next Generation',
+        broadCategory: 'Television',
+      },
+      { userId: 'friend-1', domain: 'Star Wars', broadCategory: 'Film' },
+      {
+        userId: 'viewer-1',
+        domain: 'star trek the next generation',
+        broadCategory: 'Television',
+      },
+      { userId: 'viewer-1', domain: '90s Cartoons', broadCategory: 'Television' },
+    ]
+
+    const portrait = await getFriendPortraitData('friend-1', 'viewer-1')
+
+    expect(portrait?.sharedInterests).toEqual(['Star Trek: The Next Generation'])
+    expect(portrait?.viewerSoloInterests).toEqual(['90s Cartoons'])
+    expect(portrait?.friendSoloInterests).toEqual(['Star Wars'])
+  })
+
   it('falls back to the verified phone number when a friend has no display name yet', async () => {
     getUserByIdMock.mockResolvedValueOnce({
       id: 'friend-1',
