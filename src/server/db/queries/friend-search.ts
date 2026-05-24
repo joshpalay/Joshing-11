@@ -13,7 +13,11 @@ export type FriendSearchMatch = {
   relationship: RelationshipResult
 }
 
-const HANDLE_QUERY_PATTERN = /^@?[a-z0-9_]{3,20}$/i
+// Mirrors the registration format in src/server/lib/handle-validation.ts:58
+// (leading letter required). The looser /^@?[a-z0-9_]{3,20}$/i pattern used
+// to swallow bare 10-digit phone searches like "7346578284", which then
+// missed the phone branch below and silently returned no match.
+const HANDLE_QUERY_PATTERN = /^@?[a-z][a-z0-9_]{2,19}$/i
 
 function stripAtSign(value: string): string {
   return value.startsWith('@') ? value.slice(1) : value
