@@ -752,6 +752,24 @@ export async function register() {
       // creates the base tables before this migration runs.
     }
 
+    // Migration 0049 adds the per-user invite token (users.invite_token)
+    // used by /invite/<handle>/<token> shareable links. Guard for preview/
+    // production databases that may have the migration recorded without
+    // the column or the unique partial index actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "invite_token" text
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_invite_token"
+          ON "User" ("invite_token") WHERE "invite_token" IS NOT NULL
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

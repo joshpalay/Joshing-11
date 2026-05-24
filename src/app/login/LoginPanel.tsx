@@ -27,18 +27,30 @@ export function readInvitationToken(searchParams: URLSearchParams) {
   return searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token');
 }
 
+export function readUserInvite(searchParams: URLSearchParams) {
+  const handle = searchParams.get('inviteHandle');
+  const token = searchParams.get('inviteUserToken');
+  return handle && token ? { handle, token } : null;
+}
+
 export function buildVerifyOtpRequestBody(
   phone: string,
   code: string,
   searchParams: URLSearchParams
 ) {
-  return { phone, code, invitationToken: readInvitationToken(searchParams) };
+  return {
+    phone,
+    code,
+    invitationToken: readInvitationToken(searchParams),
+    userInvite: readUserInvite(searchParams),
+  };
 }
 
 export default function LoginPanel() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitationToken = readInvitationToken(searchParams);
+  const userInvite = readUserInvite(searchParams);
 
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -56,7 +68,7 @@ export default function LoginPanel() {
       return;
     }
 
-    if (invitationToken) sendTelemetry('friend_invite_auth_started');
+    if (invitationToken || userInvite) sendTelemetry('friend_invite_auth_started');
 
     setLoading(true);
     try {

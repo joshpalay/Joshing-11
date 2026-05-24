@@ -168,6 +168,7 @@ export const users = pgTable(
     slug: text('slug'),
     handle: text('handle'),
     handleLastChangedAt: timestamp('handle_last_changed_at', { withTimezone: true }),
+    inviteToken: text('invite_token'),
     avatarColor: text('avatar_color'),
     bio: text('bio'),
     tagline: text('tagline'),
