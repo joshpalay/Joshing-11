@@ -27,12 +27,22 @@ export type IncomingFriendRequest = {
   requesterId: string
   requesterName: string
   suggestedInterests: string[]
+  personalNote: string | null
+  createdAt: Date
+}
+
+export type OutboundFriendRequest = {
+  id: string
+  recipientId: string
+  recipientName: string
+  personalNote: string | null
   createdAt: Date
 }
 
 export type FriendsHub = {
   friends: FriendHubFriend[]
   incomingRequests: IncomingFriendRequest[]
+  outboundRequests: OutboundFriendRequest[]
 }
 
 function displayName(name: string | null, fallback: string): string {
@@ -202,6 +212,7 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
       requesterDisplayName: users.displayName,
       requesterPhoneNumber: users.phoneNumber,
       requestContext: friendships.requestContext,
+      personalNote: friendships.personalNote,
       createdAt: friendships.createdAt,
     })
     .from(friendships)
@@ -212,6 +223,39 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
       or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
     ))
     .orderBy(asc(friendships.createdAt))
+
+  const outboundRows = await db
+    .select({
+      id: friendships.id,
+      recipientUserAId: friendships.userAId,
+      recipientUserBId: friendships.userBId,
+      personalNote: friendships.personalNote,
+      createdAt: friendships.createdAt,
+    })
+    .from(friendships)
+    .where(and(
+      eq(friendships.status, 'pending'),
+      eq(friendships.requestedByUserId, userId),
+      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+    ))
+    .orderBy(desc(friendships.createdAt))
+
+  const outboundRecipientIds = outboundRows.map((row) => (
+    row.recipientUserAId === userId ? row.recipientUserBId : row.recipientUserAId
+  ))
+
+  const outboundRecipients = outboundRecipientIds.length === 0
+    ? []
+    : await db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        phoneNumber: users.phoneNumber,
+      })
+      .from(users)
+      .where(inArray(users.id, outboundRecipientIds))
+
+  const outboundRecipientById = new Map(outboundRecipients.map((row) => [row.id, row] as const))
 
   return {
     friends: friendRows.map((friend) => {
@@ -229,8 +273,23 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
       requesterId: request.requesterId,
       requesterName: displayName(request.requesterDisplayName, request.requesterPhoneNumber),
       suggestedInterests: normalizeSuggestedInterests(request.requestContext),
+      personalNote: request.personalNote,
       createdAt: request.createdAt,
     })),
+    outboundRequests: outboundRows
+      .map((row) => {
+        const recipientId = row.recipientUserAId === userId ? row.recipientUserBId : row.recipientUserAId
+        const recipient = outboundRecipientById.get(recipientId)
+        if (!recipient) return null
+        return {
+          id: row.id,
+          recipientId,
+          recipientName: displayName(recipient.displayName, recipient.phoneNumber),
+          personalNote: row.personalNote,
+          createdAt: row.createdAt,
+        }
+      })
+      .filter((row): row is OutboundFriendRequest => row !== null),
   }
 }
 
