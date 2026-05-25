@@ -1,8 +1,17 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import { db, declaredInterests } from '@/server/db'
-import { getFriends, getFriendship } from '@/server/db/queries/friends'
+import { areFriends, getFriends, getFriendship } from '@/server/db/queries/friends'
 import { getUserById } from '@/server/db/queries/users'
+import type { PreviewAs } from '@/server/profile/preview'
+import {
+  canViewSection,
+  getSectionVisibilities,
+  PROFILE_SECTIONS,
+  type EffectiveViewer,
+  type ProfileSection,
+  type SectionVisibility,
+} from '@/server/profile/visibility'
 
 type FriendProfileVisibility = 'self' | 'friend' | 'stranger'
 
@@ -46,6 +55,25 @@ export type FriendPortraitData = {
   friendSoloInterests: string[]
   mutualFriends: FriendPortraitMutualFriend[]
   mutualFriendsOverflow: number
+  // True iff the requester is the profile owner. Distinct from
+  // `visibility === 'self'` only when `previewedAs` is set (in which
+  // case `visibility` reflects the simulated viewer but `isOwnerView`
+  // still reports the underlying truth). Pages use this to gate
+  // owner-only UI like the gear icon and the Preview-as button.
+  isOwnerView: boolean
+  // The owner's per-section visibility choices. Only populated when
+  // `isOwnerView` is true so non-owners can't introspect another
+  // user's settings via the portrait API.
+  sectionSettings: Record<ProfileSection, SectionVisibility> | null
+  // Per-section gate evaluated against the EFFECTIVE viewer (i.e. the
+  // simulated viewer when `previewedAs` is set). Pages render each
+  // section behind `sectionVisibleTo[section]`. Phase 2 only widens
+  // the contract — the page does not yet consume these fields.
+  sectionVisibleTo: Record<ProfileSection, boolean>
+  // The kind of viewer being simulated by `?previewAs=`, or null when
+  // no preview is active. Pages use this to show the preview banner
+  // and hide owner-only controls during preview.
+  previewedAs: 'stranger' | 'friend' | null
 }
 
 function profileDisplayName(
@@ -63,7 +91,8 @@ function normalizeInterestKey(domain: string): string {
 
 export async function getFriendPortraitData(
   userId: string,
-  viewerId: string
+  viewerId: string,
+  previewAs?: PreviewAs | null
 ): Promise<FriendPortraitData | null> {
   const normalizedUserId = userId.trim()
   const normalizedViewerId = viewerId.trim()
@@ -72,19 +101,50 @@ export async function getFriendPortraitData(
   const viewedUser = await getUserById(normalizedUserId)
   if (!viewedUser) return null
 
-  const isSelf = normalizedUserId === normalizedViewerId
-  const friendship = isSelf
+  const isOwnerView = normalizedUserId === normalizedViewerId
+  const friendship = isOwnerView
     ? null
     : await getFriendship(normalizedViewerId, normalizedUserId)
 
-  const isActiveFriend = !isSelf && friendship?.status === 'active'
-  const visibility: FriendProfileVisibility = isSelf
+  const isActiveFriend = !isOwnerView && friendship?.status === 'active'
+  const realViewer: FriendProfileVisibility = isOwnerView
     ? 'self'
     : isActiveFriend
       ? 'friend'
       : 'stranger'
 
-  const interestOwnerIds = isSelf
+  // `previewAs` is only honored when the requester is the owner.
+  // `resolvePreviewAs` already enforces this server-side, but we double-
+  // check here so a misuse from another caller can't bypass it.
+  const activePreview: PreviewAs | null = isOwnerView ? (previewAs ?? null) : null
+  let effectiveViewer: EffectiveViewer = realViewer
+  let previewedAs: 'stranger' | 'friend' | null = null
+  if (activePreview === 'stranger') {
+    effectiveViewer = 'stranger'
+    previewedAs = 'stranger'
+  } else if (activePreview === 'friend') {
+    effectiveViewer = 'friend'
+    previewedAs = 'friend'
+  } else if (activePreview && typeof activePreview === 'object') {
+    // Specific-user preview: resolve based on whether THAT user is an
+    // active friend of the owner (the viewed user). The requester's own
+    // friendships are irrelevant — we're simulating what the target
+    // would see when they look at the owner's profile.
+    const targetIsFriend = await areFriends(activePreview.userId, normalizedUserId)
+    effectiveViewer = targetIsFriend ? 'friend' : 'stranger'
+    previewedAs = targetIsFriend ? 'friend' : 'stranger'
+  }
+
+  // `visibility` continues to reflect the EFFECTIVE viewer so existing
+  // call sites (the page's stranger short-circuit at users/[id]/page.tsx:74,
+  // the section gates in Phase 4+) behave correctly when preview is on.
+  const visibility: FriendProfileVisibility = effectiveViewer
+
+  // Data fetching below mirrors the REAL viewer's relationship to the
+  // owner, not the effective (previewed) viewer — preview only affects
+  // visibility gates. Phase 5 may revisit interest/mutual semantics if
+  // previewing as a friend should expose different counts.
+  const interestOwnerIds = isOwnerView
     ? [normalizedUserId]
     : isActiveFriend
       ? [normalizedUserId, normalizedViewerId]
@@ -138,7 +198,7 @@ export async function getFriendPortraitData(
 
   let mutualFriends: FriendPortraitMutualFriend[] = []
   let mutualFriendsOverflow = 0
-  if (!isSelf) {
+  if (!isOwnerView) {
     const [viewerFriends, viewedUserFriends] = await Promise.all([
       getFriends(normalizedViewerId),
       getFriends(normalizedUserId),
@@ -165,6 +225,18 @@ export async function getFriendPortraitData(
       }
     : null
 
+  // Batch-fetch the owner's per-section visibility settings exactly once,
+  // then evaluate the gate purely against the effective viewer. Owners
+  // get the full settings map back (for editing UI); other viewers get
+  // null so they can't introspect another user's choices.
+  const sectionSettings = await getSectionVisibilities(normalizedUserId)
+  const sectionVisibleTo: Record<ProfileSection, boolean> = Object.fromEntries(
+    PROFILE_SECTIONS.map((section) => [
+      section,
+      canViewSection(sectionSettings, section, effectiveViewer),
+    ])
+  ) as Record<ProfileSection, boolean>
+
   return {
     user: {
       id: viewedUser.id,
@@ -189,5 +261,9 @@ export async function getFriendPortraitData(
     friendSoloInterests,
     mutualFriends,
     mutualFriendsOverflow,
+    isOwnerView,
+    sectionSettings: isOwnerView ? sectionSettings : null,
+    sectionVisibleTo,
+    previewedAs,
   }
 }
