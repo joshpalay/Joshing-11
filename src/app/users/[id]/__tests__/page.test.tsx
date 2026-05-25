@@ -10,6 +10,8 @@ const {
   getKnowledgePageDataMock,
   getAuthoredQuestionsForUserMock,
   getEditableProfileMock,
+  getFriendsMock,
+  resolvePreviewAsMock,
 } = vi.hoisted(() => ({
   getFriendPortraitDataMock: vi.fn(),
   getSessionMock: vi.fn(),
@@ -20,6 +22,8 @@ const {
   getKnowledgePageDataMock: vi.fn(),
   getAuthoredQuestionsForUserMock: vi.fn(),
   getEditableProfileMock: vi.fn(),
+  getFriendsMock: vi.fn(async () => []),
+  resolvePreviewAsMock: vi.fn(async () => null),
 }))
 
 vi.mock('next/link', () => ({
@@ -66,6 +70,14 @@ vi.mock('@/server/db/queries/questions', () => ({
 vi.mock('@/server/db/queries/account', () => ({
   getEditableProfile: getEditableProfileMock,
   HANDLE_CHANGE_COOLDOWN_DAYS: 30,
+}))
+
+vi.mock('@/server/db/queries/friends', () => ({
+  getFriends: getFriendsMock,
+}))
+
+vi.mock('@/server/profile/preview', () => ({
+  resolvePreviewAs: resolvePreviewAsMock,
 }))
 
 vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
@@ -186,12 +198,14 @@ describe('/users/[id] friend profile page', () => {
   it('renders the friend profile shell and shared-interests overlap', async () => {
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
+      searchParams: Promise.resolve({}),
     })
     const html = renderToStaticMarkup(element)
 
     expect(getFriendPortraitDataMock).toHaveBeenCalledWith(
       'friend-1',
       'viewer-1',
+      null,
     )
     expect(getAuthoredQuestionsForUserMock).toHaveBeenCalledWith({
       userId: 'friend-1',
@@ -211,6 +225,7 @@ describe('/users/[id] friend profile page', () => {
   it('renders the trimmed knowledge map with a link to the full overview', async () => {
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
+      searchParams: Promise.resolve({}),
     })
     const html = renderToStaticMarkup(element)
 
@@ -244,6 +259,7 @@ describe('/users/[id] friend profile page', () => {
 
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
+      searchParams: Promise.resolve({}),
     })
     const html = renderToStaticMarkup(element)
 
@@ -256,13 +272,108 @@ describe('/users/[id] friend profile page', () => {
   it('handles unauthenticated and unavailable profiles with notFound', async () => {
     getSessionMock.mockResolvedValueOnce(null)
     await expect(
-      UserProfilePage({ params: Promise.resolve({ id: 'friend-1' }) }),
+      UserProfilePage({
+        params: Promise.resolve({ id: 'friend-1' }),
+        searchParams: Promise.resolve({}),
+      }),
     ).rejects.toThrow('NEXT_NOT_FOUND')
 
     getSessionMock.mockResolvedValueOnce({ userId: 'viewer-1' })
     getFriendPortraitDataMock.mockResolvedValueOnce(null)
     await expect(
-      UserProfilePage({ params: Promise.resolve({ id: 'stranger-1' }) }),
+      UserProfilePage({
+        params: Promise.resolve({ id: 'stranger-1' }),
+        searchParams: Promise.resolve({}),
+      }),
     ).rejects.toThrow('NEXT_NOT_FOUND')
+  })
+
+  it('forwards previewAs through resolvePreviewAs into the portrait fetch', async () => {
+    resolvePreviewAsMock.mockResolvedValueOnce('stranger')
+    // Once preview is on, the portrait re-renders as that simulated viewer.
+    getFriendPortraitDataMock.mockResolvedValueOnce({
+      user: {
+        id: 'self-1',
+        displayName: 'Owner',
+        handle: 'owner',
+        tagline: 'On the line',
+        location: null,
+        bio: null,
+        authorProfilePublic: true,
+        memberSince: new Date('2026-01-01T00:00:00.000Z'),
+      },
+      visibility: 'stranger',
+      friendship: null,
+      interests: [],
+      sharedInterests: [],
+      viewerSoloInterests: [],
+      friendSoloInterests: [],
+      mutualFriends: [],
+      mutualFriendsOverflow: 0,
+      isOwnerView: true,
+      sectionSettings: {
+        bio: 'public',
+        tagline: 'public',
+        location: 'public',
+        knowledge_map: 'public',
+        mind_expanding: 'public',
+        friends_list: 'friends',
+        authored_questions: 'public',
+      },
+      sectionVisibleTo: {
+        bio: true,
+        tagline: true,
+        location: false,
+        knowledge_map: true,
+        mind_expanding: true,
+        friends_list: false,
+        authored_questions: true,
+      },
+      previewedAs: 'stranger',
+    })
+    getSessionMock.mockResolvedValueOnce({ userId: 'self-1' })
+
+    const element = await UserProfilePage({
+      params: Promise.resolve({ id: 'self-1' }),
+      searchParams: Promise.resolve({ previewAs: 'stranger' }),
+    })
+    const html = renderToStaticMarkup(element)
+
+    expect(resolvePreviewAsMock).toHaveBeenCalledWith(
+      'stranger',
+      'self-1',
+      'self-1',
+    )
+    expect(getFriendPortraitDataMock).toHaveBeenCalledWith(
+      'self-1',
+      'self-1',
+      'stranger',
+    )
+    // Banner + exit link appear at the top.
+    expect(html).toContain('Previewing your profile as a stranger.')
+    expect(html).toContain('href="/users/self-1"')
+    // Stranger short-circuit fires because visibility is 'stranger' — the
+    // page renders the stranger card, gated on the simulated viewer.
+    expect(html).toContain('Become friends to see')
+    // Owner is previewing as a stranger of themselves — the friend
+    // button must NOT render (you can't befriend yourself).
+    expect(html).not.toContain('Add friend')
+  })
+
+  it('ignores invalid previewAs (resolved to null) and renders normally', async () => {
+    resolvePreviewAsMock.mockResolvedValueOnce(null)
+
+    const element = await UserProfilePage({
+      params: Promise.resolve({ id: 'friend-1' }),
+      searchParams: Promise.resolve({ previewAs: 'nope' }),
+    })
+    const html = renderToStaticMarkup(element)
+
+    expect(getFriendPortraitDataMock).toHaveBeenCalledWith(
+      'friend-1',
+      'viewer-1',
+      null,
+    )
+    expect(html).not.toContain('Previewing your profile')
   })
 })

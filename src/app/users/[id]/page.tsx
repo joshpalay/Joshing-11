@@ -7,6 +7,8 @@ import { AuthoredQuestionsFeed } from '@/components/profile/AuthoredQuestionsFee
 import { InlineEditableField } from '@/components/profile/InlineEditableField'
 import { InlineHandleField } from '@/components/profile/InlineHandleField'
 import { MutualFriendsSection } from '@/components/profile/MutualFriendsSection'
+import { PreviewAsButton } from '@/components/profile/PreviewAsButton'
+import { PreviewBanner } from '@/components/profile/PreviewBanner'
 import { ProfileFriendButton } from '@/components/profile/ProfileFriendButton'
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle'
 import { SharedInterestsOverlap } from '@/components/profile/SharedInterestsOverlap'
@@ -15,6 +17,7 @@ import {
   getEditableProfile,
   HANDLE_CHANGE_COOLDOWN_DAYS,
 } from '@/server/db/queries/account'
+import { getFriends } from '@/server/db/queries/friends'
 import {
   getKnowledgePageData,
   getUserMasteryOverview,
@@ -25,9 +28,11 @@ import {
   toKnowledgeCardDomain,
   topPointPositiveDomains,
 } from '@/server/profile/knowledge-view'
+import { resolvePreviewAs } from '@/server/profile/preview'
 
 type UserProfilePageProps = {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ previewAs?: string }>
 }
 
 function formatMemberSince(value: Date) {
@@ -61,17 +66,40 @@ function buildMindStatement(
 
 export default async function UserProfilePage({
   params,
+  searchParams,
 }: UserProfilePageProps) {
   const session = await getSession()
   if (!session) notFound()
 
   const { id } = await params
-  const portrait = await getFriendPortraitData(id, session.userId)
+  const { previewAs: rawPreviewAs } = await searchParams
+  // resolvePreviewAs enforces owner-only — non-owner requests return null
+  // even if the URL has ?previewAs=… so a shared URL is inert.
+  const previewAs = await resolvePreviewAs(rawPreviewAs, id, session.userId)
+  const portrait = await getFriendPortraitData(id, session.userId, previewAs)
   if (!portrait) notFound()
 
+  // isOwnerView: the requester is the real profile owner, regardless of
+  // any active preview. Drives owner-only chrome (inline editors, gear,
+  // preview button, section toggles).
+  // editable: like isOwnerView but ALSO false during preview, so editors
+  // and toggles vanish while previewing. Banner stays as the only chrome.
+  const isOwnerView = portrait.isOwnerView
+  const editable = isOwnerView && !portrait.previewedAs
+  // visibility reflects the EFFECTIVE viewer. Stranger short-circuit
+  // continues to fire when the simulated viewer is a stranger.
   const isSelf = portrait.visibility === 'self'
   const isStranger = portrait.visibility === 'stranger'
   const friendFirstName = firstName(portrait.user.displayName)
+
+  // Banner shown for both stranger and friend previews. Exit returns to
+  // the canonical URL without ?previewAs=…
+  const previewBannerLabel = !portrait.previewedAs
+    ? null
+    : portrait.previewedAs === 'stranger'
+      ? 'a stranger'
+      : 'a friend'
+  const exitPreviewHref = `/users/${portrait.user.id}`
 
   const profileLabel = isSelf
     ? 'Your profile'
@@ -82,6 +110,9 @@ export default async function UserProfilePage({
   if (isStranger) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5">
+        {previewBannerLabel ? (
+          <PreviewBanner label={previewBannerLabel} exitHref={exitPreviewHref} />
+        ) : null}
         <div className="mb-5">
           <Link
             href="/friends"
@@ -122,11 +153,13 @@ export default async function UserProfilePage({
               <p className="text-muted-foreground mt-2 text-sm leading-6">
                 On Joshing since {formatMemberSince(portrait.user.memberSince)}.
               </p>
-              <ProfileFriendButton
-                targetUserId={portrait.user.id}
-                friendship={portrait.friendship}
-                targetDisplayName={portrait.user.displayName}
-              />
+              {!isOwnerView ? (
+                <ProfileFriendButton
+                  targetUserId={portrait.user.id}
+                  friendship={portrait.friendship}
+                  targetDisplayName={portrait.user.displayName}
+                />
+              ) : null}
             </div>
           </div>
         </section>
@@ -146,7 +179,7 @@ export default async function UserProfilePage({
     )
   }
 
-  const [mastery, pageData, authoredQuestions, editableProfile] = await Promise.all([
+  const [mastery, pageData, authoredQuestions, editableProfile, ownerFriends] = await Promise.all([
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
     getAuthoredQuestionsForUser({
@@ -156,9 +189,12 @@ export default async function UserProfilePage({
       viewer: portrait.visibility,
       sectionVisible: portrait.sectionVisibleTo.authored_questions,
     }),
-    // editableProfile is only needed for the inline-edit header card.
-    // Fetch it conditionally so non-self views skip the extra query.
-    isSelf ? getEditableProfile(session.userId) : Promise.resolve(null),
+    // editableProfile and ownerFriends are only needed when the owner is
+    // viewing their own profile (with or without preview); skip those
+    // queries for non-owner views. ownerFriends populates the Preview-as
+    // picker's "specific friend" list.
+    isOwnerView ? getEditableProfile(session.userId) : Promise.resolve(null),
+    isOwnerView ? getFriends(session.userId) : Promise.resolve([]),
   ])
 
   const sortedDomains = [...pageData.allDomains].sort(
@@ -184,6 +220,9 @@ export default async function UserProfilePage({
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5">
+      {previewBannerLabel ? (
+        <PreviewBanner label={previewBannerLabel} exitHref={exitPreviewHref} />
+      ) : null}
       <div className="mb-5">
         <Link
           href="/friends"
@@ -194,14 +233,23 @@ export default async function UserProfilePage({
       </div>
 
       <section className="bg-card text-card-foreground relative rounded-3xl border p-5 shadow-sm">
-        {isSelf ? (
-          <Link
-            href="/account"
-            aria-label="Settings"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-md transition"
-          >
-            <SettingsIcon className="size-5" />
-          </Link>
+        {editable ? (
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <PreviewAsButton
+              profileHref={`/users/${portrait.user.id}`}
+              friends={ownerFriends.map((u) => ({
+                id: u.id,
+                displayName: u.displayName?.trim() || u.phoneNumber,
+              }))}
+            />
+            <Link
+              href="/account"
+              aria-label="Settings"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex h-9 w-9 items-center justify-center rounded-md transition"
+            >
+              <SettingsIcon className="size-5" />
+            </Link>
+          </div>
         ) : null}
         <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
           {profileLabel}
@@ -211,7 +259,7 @@ export default async function UserProfilePage({
             {portrait.user.displayName.slice(0, 1).toUpperCase() || 'J'}
           </div>
           <div className="min-w-0 flex-1">
-            {isSelf && editableProfile ? (
+            {editable && editableProfile ? (
               <div className="text-foreground font-serif text-3xl font-semibold">
                 <InlineEditableField
                   field="displayName"
@@ -228,7 +276,7 @@ export default async function UserProfilePage({
               </h1>
             )}
 
-            {isSelf ? (
+            {editable ? (
               <div className="mt-1">
                 <InlineHandleField
                   initialValue={portrait.user.handle}
@@ -242,8 +290,8 @@ export default async function UserProfilePage({
               </p>
             ) : null}
 
-            {isSelf || portrait.sectionVisibleTo.tagline ? (
-              isSelf ? (
+            {editable || portrait.sectionVisibleTo.tagline ? (
+              editable ? (
                 <div className="text-muted-foreground mt-2 text-sm italic leading-6">
                   <InlineEditableField
                     field="tagline"
@@ -260,8 +308,8 @@ export default async function UserProfilePage({
               ) : null
             ) : null}
 
-            {isSelf || portrait.sectionVisibleTo.bio ? (
-              isSelf ? (
+            {editable || portrait.sectionVisibleTo.bio ? (
+              editable ? (
                 <div className="text-foreground mt-2 text-sm leading-6">
                   <InlineEditableField
                     field="bio"
@@ -279,8 +327,8 @@ export default async function UserProfilePage({
               ) : null
             ) : null}
 
-            {isSelf || portrait.sectionVisibleTo.location ? (
-              isSelf ? (
+            {editable || portrait.sectionVisibleTo.location ? (
+              editable ? (
                 <div className="text-muted-foreground mt-2 inline-flex items-center gap-1 text-xs">
                   <LocationGlyph className="size-3" />
                   <InlineEditableField
@@ -307,7 +355,7 @@ export default async function UserProfilePage({
                 Friends since {formatMemberSince(portrait.friendship.formedAt)}.
               </p>
             ) : null}
-            {!isSelf ? (
+            {!isOwnerView ? (
               <ProfileFriendButton
                 targetUserId={portrait.user.id}
                 friendship={portrait.friendship}
@@ -315,7 +363,7 @@ export default async function UserProfilePage({
               />
             ) : null}
 
-            {isSelf && portrait.sectionSettings ? (
+            {editable && portrait.sectionSettings ? (
               <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t pt-3">
                 <ProfileFieldVisibility
                   label="Tagline"
@@ -361,7 +409,7 @@ export default async function UserProfilePage({
             <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
               Knowledge portrait
             </p>
-            {isSelf && portrait.sectionSettings ? (
+            {editable && portrait.sectionSettings ? (
               <SectionVisibilityToggle
                 section="knowledge_map"
                 label="knowledge portrait"
@@ -410,7 +458,7 @@ export default async function UserProfilePage({
         </section>
       ) : null}
 
-      {isSelf && portrait.sectionSettings ? (
+      {editable && portrait.sectionSettings ? (
         <div className="mt-5 flex flex-wrap items-baseline justify-between gap-3 border-t pt-3">
           <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
             Friends list visibility
@@ -426,7 +474,7 @@ export default async function UserProfilePage({
 
       {portrait.sectionVisibleTo.authored_questions ? (
         <section className="mt-5" aria-label="Authored questions">
-          {isSelf && portrait.sectionSettings ? (
+          {editable && portrait.sectionSettings ? (
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
               <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
                 Authored questions
