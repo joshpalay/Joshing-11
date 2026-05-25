@@ -491,6 +491,7 @@ LENIENCY RULES — mark as correct if:
 - The answer is phonetically close and contextually plausible (account for voice transcription errors)
 - The answer includes the correct answer among other text (e.g. "I think it's Bucephalus" is correct)
 - If the canonical answer is long or explanatory (more than ~10 words), focus on whether the submitted answer captures the core concept or mechanism. Do not require matching supporting detail, background context, or explanatory sentences. A short answer that demonstrates clear understanding of the key idea should be marked correct even if it omits elaboration.
+- If the canonical answer contains a parenthetical generic descriptor (e.g. "A Ressikan flute (a small flute)", "Bucephalus (a horse)", "The Eroica (a symphony)"), the parenthetical signals that the descriptor is itself an acceptable answer. Mark as correct when the submission matches the descriptor — including a recognizable member of that category (e.g. "penny whistle" or "tin whistle" for "a small flute"; "stallion" or "warhorse" for "a horse") — even with hedging filler like "thing", "thingy", "thingamajig", or "something". Filler does not make an otherwise-correct categorical answer vague.
 
 STRICTNESS RULES — mark as wrong if:
 - The answer is a different person, place, or thing entirely
