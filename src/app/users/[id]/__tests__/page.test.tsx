@@ -9,6 +9,7 @@ const {
   getUserMasteryOverviewMock,
   getKnowledgePageDataMock,
   getAuthoredQuestionsForUserMock,
+  getEditableProfileMock,
 } = vi.hoisted(() => ({
   getFriendPortraitDataMock: vi.fn(),
   getSessionMock: vi.fn(),
@@ -18,6 +19,7 @@ const {
   getUserMasteryOverviewMock: vi.fn(),
   getKnowledgePageDataMock: vi.fn(),
   getAuthoredQuestionsForUserMock: vi.fn(),
+  getEditableProfileMock: vi.fn(),
 }))
 
 vi.mock('next/link', () => ({
@@ -59,6 +61,11 @@ vi.mock('@/server/db/queries/knowledge', () => ({
 
 vi.mock('@/server/db/queries/questions', () => ({
   getAuthoredQuestionsForUser: getAuthoredQuestionsForUserMock,
+}))
+
+vi.mock('@/server/db/queries/account', () => ({
+  getEditableProfile: getEditableProfileMock,
+  HANDLE_CHANGE_COOLDOWN_DAYS: 30,
 }))
 
 vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
@@ -120,6 +127,7 @@ describe('/users/[id] friend profile page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getSessionMock.mockResolvedValue({ userId: 'viewer-1' })
+    getEditableProfileMock.mockResolvedValue(null)
     getFriendPortraitDataMock.mockResolvedValue({
       user: {
         id: 'friend-1',
@@ -145,6 +153,18 @@ describe('/users/[id] friend profile page', () => {
       friendSoloInterests: ['Roman roads'],
       mutualFriends: [],
       mutualFriendsOverflow: 0,
+      isOwnerView: false,
+      sectionSettings: null,
+      sectionVisibleTo: {
+        bio: true,
+        tagline: true,
+        location: true,
+        knowledge_map: true,
+        mind_expanding: true,
+        friends_list: true,
+        authored_questions: true,
+      },
+      previewedAs: null,
     })
     getUserMasteryOverviewMock.mockResolvedValue({
       totalPoints: 0,
@@ -177,6 +197,8 @@ describe('/users/[id] friend profile page', () => {
       userId: 'friend-1',
       limit: 25,
       viewerUserId: 'viewer-1',
+      viewer: 'friend',
+      sectionVisible: true,
     })
     expect(html).toContain('Friend profile')
     expect(html).toContain('Frances Friend')

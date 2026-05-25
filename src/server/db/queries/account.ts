@@ -156,7 +156,6 @@ export type ProfileFieldsPatch = {
   bio?: string | null;
   tagline?: string | null;
   location?: string | null;
-  authorProfilePublic?: boolean;
 };
 
 export type ProfileFieldsUpdateResult =
@@ -209,10 +208,6 @@ export async function updateProfileFields(
       if (location.length > 60) return { ok: false, reason: 'invalid_location' };
       set.location = location;
     }
-  }
-
-  if (patch.authorProfilePublic !== undefined) {
-    set.authorProfilePublic = patch.authorProfilePublic;
   }
 
   if (Object.keys(set).length === 0) {
