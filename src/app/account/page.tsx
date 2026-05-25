@@ -246,7 +246,7 @@ export default function AccountPage() {
           <SettingsRow
             icon={Sun}
             title="Trigger noon reset"
-            subtitle="Simulate daily reset (noon ET)"
+            subtitle="Simulate daily reset"
             href="/dev/noon-reset"
           />
           <SettingsRow

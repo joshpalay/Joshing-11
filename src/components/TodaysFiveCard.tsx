@@ -2,7 +2,15 @@
 
 import Link from 'next/link'
 import { CheckCircle2, Clock, MessageCircleQuestion, Settings } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+
+import { formatNextResetTimeLocal } from '@/lib/games/timezone'
+
+// useSyncExternalStore inputs for the client-only reset-time label. Hoisted so
+// the subscribe/snapshot functions are stable across renders.
+const subscribeNoop = () => () => {}
+const getResetTimeSnapshot = () => formatNextResetTimeLocal()
+const getResetTimeServerSnapshot = (): string | null => null
 
 export type SlotOutcome = 'correct' | 'incorrect' | 'skipped' | 'unanswered'
 
@@ -80,6 +88,12 @@ export default function TodaysFiveCard({
   const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences)
   const [resetting, setResetting] = useState(false)
   const [resetError, setResetError] = useState<string | null>(null)
+  // Client-only reset-time label; null during SSR to keep hydration stable.
+  const resetTime = useSyncExternalStore(
+    subscribeNoop,
+    getResetTimeSnapshot,
+    getResetTimeServerSnapshot,
+  )
   // Skip the initial /api/daily/* fetch when the server already provided both.
   const skipInitialFetchRef = useRef(initialStatus !== null && initialPreferences !== null)
 
@@ -160,7 +174,9 @@ export default function TodaysFiveCard({
       ? 'Resume round'
       : 'Play now'
   const subtext = isComplete
-    ? 'Today done · Five new at noon tomorrow'
+    ? resetTime
+      ? `Today done · Five new at ${resetTime} tomorrow`
+      : 'Today done · Five new tomorrow'
     : answered > 0
       ? `${answered} of 5 answered`
       : 'Ready when you are'
