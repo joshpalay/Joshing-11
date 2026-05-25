@@ -812,6 +812,87 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0052 adds a 'friends' value to QuestionVisibility and creates
+    // the PROFILE_SECTION_VISIBILITY table (with backfill from the legacy
+    // User.portrait_visibility and User.authorProfilePublic columns). The
+    // enum addition must be pre-applied here because Postgres forbids
+    // referencing a newly-added enum value inside the same transaction that
+    // adds it — Drizzle wraps the migrator in a transaction, so subsequent
+    // code paths that read 'friends' from a preview database where 0052 is
+    // recorded-but-not-fully-applied would 22P02 without this guard.
+    try {
+      await db.execute(sql`
+        ALTER TYPE "public"."QuestionVisibility" ADD VALUE IF NOT EXISTS 'friends'
+      `);
+    } catch {
+      // QuestionVisibility may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+    try {
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE t.typname = 'ProfileSection' AND n.nspname = 'public'
+          ) THEN
+            CREATE TYPE "public"."ProfileSection" AS ENUM(
+              'bio', 'tagline', 'location',
+              'knowledge_map', 'mind_expanding',
+              'friends_list', 'authored_questions'
+            );
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "PROFILE_SECTION_VISIBILITY" (
+          "id"          text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          "user_id"     text NOT NULL,
+          "section"     "public"."ProfileSection" NOT NULL,
+          "visibility"  text NOT NULL DEFAULT 'public',
+          "updated_at"  timestamptz NOT NULL DEFAULT NOW(),
+          CONSTRAINT "PROFILE_SECTION_VISIBILITY_visibility_check"
+            CHECK ("visibility" IN ('public', 'friends', 'private'))
+        )
+      `);
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'PROFILE_SECTION_VISIBILITY_user_id_User_id_fk'
+              AND conrelid = to_regclass('public."PROFILE_SECTION_VISIBILITY"')
+          ) THEN
+            ALTER TABLE "PROFILE_SECTION_VISIBILITY"
+              ADD CONSTRAINT "PROFILE_SECTION_VISIBILITY_user_id_User_id_fk"
+              FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'PROFILE_SECTION_VISIBILITY_user_id_section_key'
+              AND conrelid = to_regclass('public."PROFILE_SECTION_VISIBILITY"')
+          ) THEN
+            ALTER TABLE "PROFILE_SECTION_VISIBILITY"
+              ADD CONSTRAINT "PROFILE_SECTION_VISIBILITY_user_id_section_key"
+              UNIQUE ("user_id", "section");
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "PROFILE_SECTION_VISIBILITY_user_id_idx"
+          ON "PROFILE_SECTION_VISIBILITY" ("user_id")
+      `);
+    } catch {
+      // User table may not exist yet on a fresh database — migrate() creates
+      // both User and PROFILE_SECTION_VISIBILITY before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

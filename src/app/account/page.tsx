@@ -11,15 +11,12 @@ import {
   LogOut,
   MessageSquare,
   Palette,
-  Pencil,
   RefreshCw,
   Sun,
-  User,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { SettingsGroup, SettingsRow } from '@/components/account/SettingsRow';
-import { colorForUser, initialsFor } from '@/components/feed/visual';
 import type { UserProfile } from '@/server/db/queries/account';
 
 type AccountResponse = {
@@ -38,14 +35,7 @@ function memberSince(value: string): string {
 function LoadingSkeleton() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-28">
-      <div className="mb-8 flex items-start gap-4">
-        <div className="size-24 animate-pulse rounded-full bg-muted" />
-        <div className="flex flex-1 flex-col gap-2">
-          <div className="h-8 w-44 animate-pulse rounded-md bg-muted" />
-          <div className="h-4 w-full animate-pulse rounded-md bg-muted" />
-          <div className="h-4 w-3/4 animate-pulse rounded-md bg-muted" />
-        </div>
-      </div>
+      <div className="mb-8 h-10 w-32 animate-pulse rounded-md bg-muted" />
       <div className="mb-6 h-6 w-24 animate-pulse rounded bg-muted" />
       <div className="mb-8 h-64 animate-pulse rounded-xl border bg-muted" />
       <div className="mb-6 h-6 w-40 animate-pulse rounded bg-muted" />
@@ -97,7 +87,6 @@ export default function AccountPage() {
     return () => window.clearTimeout(timer);
   }, [loadProfile]);
 
-  const initials = useMemo(() => initialsFor(profile?.displayName ?? ''), [profile]);
   const canDeleteAccount = deleteConfirmation === 'DELETE';
 
   async function confirmDeleteAccount() {
@@ -161,52 +150,19 @@ export default function AccountPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-28">
-      <section className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-start">
-        <div
-          className="grid size-24 flex-none place-items-center rounded-full text-2xl font-semibold text-white shadow-sm"
-          style={{ backgroundColor: colorForUser(profile.id) }}
-          aria-hidden="true"
-        >
-          {initials}
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <h1 className="font-serif text-4xl font-semibold leading-tight">{profile.displayName}</h1>
-          {profile.handle ? (
-            <p className="mt-1 text-sm text-muted-foreground">@{profile.handle}</p>
-          ) : null}
-          {profile.tagline ? (
-            <p className="mt-2 text-sm italic text-muted-foreground">{profile.tagline}</p>
-          ) : null}
-          <p className="mt-2 text-base text-muted-foreground">{profile.bio}</p>
-          {profile.location ? (
-            <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <LocationIcon className="size-3" />
-              {profile.location}
-            </p>
-          ) : null}
-          <p className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
-            <PhoneIcon className="size-4" />
-            {profile.phoneNumber}
-          </p>
-        </div>
+      <section className="mb-10 flex items-center justify-between gap-4">
+        <h1 className="font-serif text-4xl font-semibold leading-tight">Settings</h1>
         <Link
-          href="/account/profile"
-          className="inline-flex h-11 flex-none items-center gap-2 self-start rounded-lg border bg-card px-4 text-sm font-medium text-card-foreground shadow-sm hover:bg-muted"
+          href="/users/me"
+          className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
         >
-          <Pencil className="size-4" />
-          Edit profile
+          View your profile →
         </Link>
       </section>
 
       <section className="mb-10">
         <h2 className="mb-3 font-serif text-2xl font-semibold">Account</h2>
         <SettingsGroup>
-          <SettingsRow
-            icon={User}
-            title="Profile"
-            subtitle="Name, photo, bio, and tagline"
-            href="/account/profile"
-          />
           <SettingsRow
             icon={Lock}
             title="Privacy & visibility"
@@ -370,40 +326,5 @@ export default function AccountPage() {
         Joshing {APP_VERSION} · {memberSince(profile.createdAt)}
       </footer>
     </main>
-  );
-}
-
-function PhoneIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.96.36 1.9.7 2.79a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.29-1.29a2 2 0 0 1 2.11-.45c.89.34 1.83.58 2.79.7A2 2 0 0 1 22 16.92Z" />
-    </svg>
-  );
-}
-
-function LocationIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
   );
 }
