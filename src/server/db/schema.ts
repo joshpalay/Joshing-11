@@ -35,7 +35,7 @@ export const categoryEnum = pgEnum('Category', [
   'general_knowledge',
 ]);
 
-export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public']);
+export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends']);
 export const publicStatusEnum = pgEnum('PublicStatus', [
   'not_scored',
   'eligible_pending',
@@ -142,6 +142,15 @@ export const masterySourceTypeEnum = pgEnum('MasterySourceType', [
 ]);
 export const feedbackSignalEnum = pgEnum('FeedbackSignal', ['thumbs_up', 'thumbs_down']);
 export const territoryTypeEnum = pgEnum('TerritoryType', ['declared', 'demonstrated']);
+export const profileSectionEnum = pgEnum('ProfileSection', [
+  'bio',
+  'tagline',
+  'location',
+  'knowledge_map',
+  'mind_expanding',
+  'friends_list',
+  'authored_questions',
+]);
 
 export const users = pgTable(
   'User',
@@ -640,6 +649,25 @@ export const userDomainExclusions = pgTable(
       table.userId,
       table.scope,
       table.canonicalSubcategory,
+    ),
+  ],
+);
+
+export const profileSectionVisibility = pgTable(
+  'PROFILE_SECTION_VISIBILITY',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    section: profileSectionEnum('section').notNull(),
+    visibility: text('visibility').$type<'public' | 'friends' | 'private'>().notNull().default('public'),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique('PROFILE_SECTION_VISIBILITY_user_id_section_key').on(table.userId, table.section),
+    index('PROFILE_SECTION_VISIBILITY_user_id_idx').on(table.userId),
+    check(
+      'PROFILE_SECTION_VISIBILITY_visibility_check',
+      sql`${table.visibility} IN ('public', 'friends', 'private')`,
     ),
   ],
 );

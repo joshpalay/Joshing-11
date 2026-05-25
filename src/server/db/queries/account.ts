@@ -545,6 +545,7 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     await tx.execute(sql`delete from "USER_DOMAIN_DIFFICULTY" where "user_id" = ${userId}`);
     await tx.execute(sql`delete from "USER_DOMAIN_EXCLUSIONS" where "user_id" = ${userId}`);
     await tx.execute(sql`delete from "PROFILE_DOMAIN_VISIBILITY" where "user_id" = ${userId}`);
+    await tx.execute(sql`delete from "PROFILE_SECTION_VISIBILITY" where "user_id" = ${userId}`);
     await tx.execute(sql`delete from "DeclaredInterest" where "userId" = ${userId}`);
     await tx.execute(sql`delete from "FeedDismissedDomain" where "userId" = ${userId}`);
     await tx.execute(sql`delete from "BiweeklyCeremony" where "userId" = ${userId}`);
