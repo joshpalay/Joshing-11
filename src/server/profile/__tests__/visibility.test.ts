@@ -23,11 +23,7 @@ function settings(
   overrides: Partial<Record<ProfileSection, SectionVisibility>> = {}
 ): Record<ProfileSection, SectionVisibility> {
   const base: Record<ProfileSection, SectionVisibility> = {
-    bio: 'public',
-    tagline: 'public',
-    location: 'public',
-    knowledge_map: 'public',
-    mind_expanding: 'public',
+    knowledge_base: 'public',
     friends_list: 'friends',
     authored_questions: 'public',
   }
@@ -37,9 +33,8 @@ function settings(
 describe('canViewSection', () => {
   it('always returns true for the owner regardless of section visibility', () => {
     const s = settings({
-      bio: 'private',
-      tagline: 'friends',
-      knowledge_map: 'private',
+      knowledge_base: 'private',
+      authored_questions: 'private',
     })
     for (const section of PROFILE_SECTIONS) {
       expect(canViewSection(s, section, 'self')).toBe(true)
@@ -47,9 +42,9 @@ describe('canViewSection', () => {
   })
 
   it('public sections are visible to friends and strangers', () => {
-    const s = settings({ bio: 'public' })
-    expect(canViewSection(s, 'bio', 'friend')).toBe(true)
-    expect(canViewSection(s, 'bio', 'stranger')).toBe(true)
+    const s = settings({ knowledge_base: 'public' })
+    expect(canViewSection(s, 'knowledge_base', 'friend')).toBe(true)
+    expect(canViewSection(s, 'knowledge_base', 'stranger')).toBe(true)
   })
 
   it('friends-only sections are visible to friends but hidden from strangers', () => {
@@ -59,9 +54,9 @@ describe('canViewSection', () => {
   })
 
   it('private sections are hidden from both friends and strangers', () => {
-    const s = settings({ knowledge_map: 'private' })
-    expect(canViewSection(s, 'knowledge_map', 'friend')).toBe(false)
-    expect(canViewSection(s, 'knowledge_map', 'stranger')).toBe(false)
+    const s = settings({ knowledge_base: 'private' })
+    expect(canViewSection(s, 'knowledge_base', 'friend')).toBe(false)
+    expect(canViewSection(s, 'knowledge_base', 'stranger')).toBe(false)
   })
 
   it('uses the friends_list default of friends-only when no setting is provided', () => {

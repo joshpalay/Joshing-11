@@ -145,9 +145,6 @@ describe('/users/[id] friend profile page', () => {
         id: 'friend-1',
         displayName: 'Frances Friend',
         handle: null,
-        tagline: null,
-        location: null,
-        bio: null,
         memberSince: new Date('2026-01-01T00:00:00.000Z'),
       },
       visibility: 'friend',
@@ -167,11 +164,7 @@ describe('/users/[id] friend profile page', () => {
       isOwnerView: false,
       sectionSettings: null,
       sectionVisibleTo: {
-        bio: true,
-        tagline: true,
-        location: true,
-        knowledge_map: true,
-        mind_expanding: true,
+        knowledge_base: true,
         friends_list: true,
         authored_questions: true,
       },
@@ -213,7 +206,6 @@ describe('/users/[id] friend profile page', () => {
       viewer: 'friend',
       sectionVisible: true,
     })
-    expect(html).toContain('Friend profile')
     expect(html).toContain('Frances Friend')
     expect(html).toContain('shared-interests-overlap')
     expect(html).toContain('Jazz piano')
@@ -221,19 +213,16 @@ describe('/users/[id] friend profile page', () => {
     expect(html).toContain('href="/friends"')
   })
 
-  it('renders the trimmed knowledge map with a link to the full overview', async () => {
+  it('renders the knowledge base section with a link to the full overview', async () => {
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
       searchParams: Promise.resolve({}),
     })
     const html = renderToStaticMarkup(element)
 
-    expect(html).toContain('Knowledge map')
+    expect(html).toContain('Knowledge base')
     expect(html).toContain('href="/users/friend-1/knowledge"')
-    expect(html).toContain('full knowledge map')
-    // Boxed KnowledgeCard / PortraitCircles previews removed from this page.
-    expect(html).not.toContain('data-testid="knowledge-card"')
-    expect(html).not.toContain('data-testid="portrait-circles"')
+    expect(html).toContain('full knowledge base')
   })
 
   it('passes authored questions with viewer-answer status to the feed component', async () => {
@@ -295,9 +284,6 @@ describe('/users/[id] friend profile page', () => {
         id: 'self-1',
         displayName: 'Owner',
         handle: 'owner',
-        tagline: 'On the line',
-        location: null,
-        bio: null,
         memberSince: new Date('2026-01-01T00:00:00.000Z'),
       },
       visibility: 'stranger',
@@ -310,20 +296,12 @@ describe('/users/[id] friend profile page', () => {
       mutualFriendsOverflow: 0,
       isOwnerView: true,
       sectionSettings: {
-        bio: 'public',
-        tagline: 'public',
-        location: 'public',
-        knowledge_map: 'public',
-        mind_expanding: 'public',
+        knowledge_base: 'public',
         friends_list: 'friends',
         authored_questions: 'public',
       },
       sectionVisibleTo: {
-        bio: true,
-        tagline: true,
-        location: false,
-        knowledge_map: true,
-        mind_expanding: true,
+        knowledge_base: true,
         friends_list: false,
         authored_questions: true,
       },
@@ -347,8 +325,9 @@ describe('/users/[id] friend profile page', () => {
       'self-1',
       'stranger',
     )
-    // Banner + exit link appear at the top.
-    expect(html).toContain('Previewing your profile as a stranger.')
+    // Banner + exit link appear at the top. The 'stranger' preview value
+    // surfaces in the UI as 'public'.
+    expect(html).toContain('Previewing your profile as public.')
     expect(html).toContain('href="/users/self-1"')
     // Stranger short-circuit fires because visibility is 'stranger' — the
     // page renders the stranger card, gated on the simulated viewer.

@@ -56,6 +56,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (question.visibility !== 'public') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
+  // Authors can't answer their own questions — they already know the
+  // answer, so any submission would be a grading no-op (or worse, a
+  // self-credit). Feed surfaces filter these out at query time, but
+  // direct POSTs reach this endpoint without that gate.
+  if (question.creatorId && question.creatorId === session.userId) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
 
   const domain = question.canonicalSubcategory || question.broadCategory || question.category;
   const grade = await gradeAnswer(

@@ -4,19 +4,20 @@ import { Check, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Generic in-place text editor for the unified profile header card.
-// Extracted from the deleted /account/profile/ProfileEditForm.tsx and
-// generalized so any single string field on the user record can use it.
+// Migration 0054 narrowed the surface to just displayName — bio, tagline,
+// and location were removed. The component keeps its general shape so
+// future single-field editors can plug in by extending the Field union.
 //
 // Behavior:
 //   - Click the rendered value to start editing.
 //   - Single-line fields commit on blur OR Enter.
-//   - Multi-line fields (bio) commit on Cmd/Ctrl+Enter (Enter alone
-//     inserts a newline as expected); blur also commits.
+//   - Multi-line fields commit on Cmd/Ctrl+Enter (Enter alone inserts a
+//     newline as expected); blur also commits.
 //   - Escape cancels and restores the previous value.
 //   - PATCH goes to a single endpoint; the field key is sent as the body
 //     key. Required fields can't be saved empty.
 
-type Field = 'displayName' | 'bio' | 'tagline' | 'location';
+type Field = 'displayName';
 
 type Props = {
   field: Field;

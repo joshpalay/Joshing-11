@@ -5,14 +5,10 @@ import { db, profileSectionVisibility } from '@/server/db';
 /**
  * Sections of a user profile whose visibility can be controlled
  * independently. Mirrors the Postgres `ProfileSection` enum defined in
- * `src/server/db/schema.ts` and migration 0052.
+ * `src/server/db/schema.ts` and migration 0054.
  */
 export type ProfileSection =
-  | 'bio'
-  | 'tagline'
-  | 'location'
-  | 'knowledge_map'
-  | 'mind_expanding'
+  | 'knowledge_base'
   | 'friends_list'
   | 'authored_questions';
 
@@ -27,27 +23,19 @@ export type SectionVisibility = 'public' | 'friends' | 'private';
 export type EffectiveViewer = 'self' | 'friend' | 'stranger';
 
 export const PROFILE_SECTIONS: readonly ProfileSection[] = [
-  'bio',
-  'tagline',
-  'location',
-  'knowledge_map',
-  'mind_expanding',
+  'knowledge_base',
   'friends_list',
   'authored_questions',
 ] as const;
 
 /**
  * Defaults used when a user has no row in PROFILE_SECTION_VISIBILITY for
- * the given section. Existing users have backfill rows for `knowledge_map`
- * and `authored_questions` from migration 0052; everything else falls back
- * here on first read.
+ * the given section. Migration 0054 backfills `knowledge_base` from the
+ * legacy `knowledge_map` + `mind_expanding` rows; everything else falls
+ * back here on first read.
  */
 const DEFAULTS: Record<ProfileSection, SectionVisibility> = {
-  bio: 'public',
-  tagline: 'public',
-  location: 'public',
-  knowledge_map: 'public',
-  mind_expanding: 'public',
+  knowledge_base: 'public',
   // Friends list defaults to friends-only so that a fresh user's social
   // graph isn't exposed before they make a deliberate choice.
   friends_list: 'friends',
@@ -60,11 +48,7 @@ function isSectionVisibility(value: unknown): value is SectionVisibility {
 
 function isProfileSection(value: unknown): value is ProfileSection {
   return (
-    value === 'bio' ||
-    value === 'tagline' ||
-    value === 'location' ||
-    value === 'knowledge_map' ||
-    value === 'mind_expanding' ||
+    value === 'knowledge_base' ||
     value === 'friends_list' ||
     value === 'authored_questions'
   );
@@ -109,7 +93,7 @@ export async function getSectionVisibilities(
  *
  * Precedence note: this gate is **strictly additive** with respect to
  * per-domain knowledge visibility (`PROFILE_DOMAIN_VISIBILITY`). When the
- * `knowledge_map` section is visible, per-domain rules still apply to
+ * `knowledge_base` section is visible, per-domain rules still apply to
  * individual domains inside it; when the section is hidden, no domains
  * render regardless of their per-domain settings.
  */

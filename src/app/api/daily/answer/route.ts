@@ -35,6 +35,7 @@ type DailyAnswerErrorCode =
   | 'not_found'
   | 'invalid_state'
   | 'question_not_found'
+  | 'forbidden'
   | 'unexpected';
 
 function dailyAnswerErrorResponse(status: number, error: DailyAnswerErrorCode, message: string) {
@@ -265,6 +266,14 @@ export async function POST(request: NextRequest) {
       persistedDomainForCreator =
         canonicalRow?.domain || canonicalRow?.broadCategory || canonicalRow?.category || null;
       persistedInsideJoke = canonicalRow?.insideJoke ?? null;
+    }
+
+    // Authors can't answer their own questions. The Daily Five candidate
+    // selection at src/server/db/queries/daily.ts:612 already filters out
+    // viewer-authored questions, but direct POSTs (e.g. against a stale
+    // queue slot) would otherwise still be accepted here.
+    if (persistedCreatorId && persistedCreatorId === session.userId) {
+      return dailyAnswerErrorResponse(403, 'forbidden', 'You can’t answer your own question.');
     }
 
     // Compute answer_state against masteryEvents history so first_correct

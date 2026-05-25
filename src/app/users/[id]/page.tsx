@@ -1,13 +1,20 @@
-import { Settings as SettingsIcon } from 'lucide-react'
+import {
+  Brain,
+  Globe,
+  type LucideIcon,
+  Pencil,
+  Settings as SettingsIcon,
+  Users as UsersIcon,
+} from 'lucide-react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { SettingsGroup, SettingsRow } from '@/components/account/SettingsRow'
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard'
 import { AuthoredQuestionsFeed } from '@/components/profile/AuthoredQuestionsFeed'
 import { InlineEditableField } from '@/components/profile/InlineEditableField'
 import { InlineHandleField } from '@/components/profile/InlineHandleField'
 import { MutualFriendsSection } from '@/components/profile/MutualFriendsSection'
-import { PreviewAsButton } from '@/components/profile/PreviewAsButton'
 import { PreviewBanner } from '@/components/profile/PreviewBanner'
 import { ProfileFriendButton } from '@/components/profile/ProfileFriendButton'
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle'
@@ -17,7 +24,6 @@ import {
   getEditableProfile,
   HANDLE_CHANGE_COOLDOWN_DAYS,
 } from '@/server/db/queries/account'
-import { getFriends } from '@/server/db/queries/friends'
 import {
   getKnowledgePageData,
   getUserMasteryOverview,
@@ -49,6 +55,8 @@ function firstName(displayName: string): string {
   return first ?? trimmed
 }
 
+// Builds the auto-generated tagline rendered at the top of every profile.
+// Replaces the manual `tagline` field that was dropped in migration 0054.
 function buildMindStatement(
   displayName: string,
   topDomains: { displayName: string }[],
@@ -80,33 +88,133 @@ export default async function UserProfilePage({
   if (!portrait) notFound()
 
   // isOwnerView: the requester is the real profile owner, regardless of
-  // any active preview. Drives owner-only chrome (inline editors, gear,
-  // preview button, section toggles).
-  // editable: like isOwnerView but ALSO false during preview, so editors
-  // and toggles vanish while previewing. Banner stays as the only chrome.
+  // any active preview. Drives owner-only chrome.
+  // ownerSelfView: the owner is on their own profile WITHOUT any active
+  // preview — this is the settings-style management view.
   const isOwnerView = portrait.isOwnerView
-  const editable = isOwnerView && !portrait.previewedAs
-  // visibility reflects the EFFECTIVE viewer. Stranger short-circuit
-  // continues to fire when the simulated viewer is a stranger.
-  const isSelf = portrait.visibility === 'self'
+  const ownerSelfView = isOwnerView && !portrait.previewedAs
   const isStranger = portrait.visibility === 'stranger'
   const friendFirstName = firstName(portrait.user.displayName)
 
-  // Banner shown for both stranger and friend previews. Exit returns to
-  // the canonical URL without ?previewAs=…
+  // The simulated viewer's label for the banner. 'public' is the new
+  // user-facing word for what the preview module still calls 'stranger'.
   const previewBannerLabel = !portrait.previewedAs
     ? null
     : portrait.previewedAs === 'stranger'
-      ? 'a stranger'
+      ? 'public'
       : 'a friend'
   const exitPreviewHref = `/users/${portrait.user.id}`
 
-  const profileLabel = isSelf
-    ? 'Your profile'
-    : isStranger
-      ? 'Joshing member'
-      : 'Friend profile'
+  const [mastery, pageData, authoredQuestions, editableProfile] = await Promise.all([
+    getUserMasteryOverview(portrait.user.id),
+    getKnowledgePageData(portrait.user.id),
+    getAuthoredQuestionsForUser({
+      userId: portrait.user.id,
+      limit: 25,
+      viewerUserId: session.userId,
+      viewer: portrait.visibility,
+      sectionVisible: portrait.sectionVisibleTo.authored_questions,
+    }),
+    // editableProfile is only needed for the owner-self management view
+    // and the inline editors during a preview.
+    isOwnerView ? getEditableProfile(session.userId) : Promise.resolve(null),
+  ])
 
+  const sortedDomains = [...pageData.allDomains].sort(
+    (a, b) =>
+      b.points - a.points || a.displayName.localeCompare(b.displayName),
+  )
+  const topDomains = topPointPositiveDomains(sortedDomains, 5)
+  const totalPointPositiveDomains = sortedDomains.filter(
+    (domain) => domain.points > 0,
+  ).length
+  const mindStatement = buildMindStatement(portrait.user.displayName, topDomains)
+  const tierSignature = `${new Intl.NumberFormat().format(
+    Math.round(mastery.totalPoints),
+  )} knowledge points across ${sortedDomains.length} territories`
+
+  // Owner self-view: the redesigned management surface modeled on
+  // /account — header card + privacy toggles + preview links + settings.
+  // No content body; previewing or being a friend/public viewer is what
+  // surfaces the knowledge portrait, authored questions, etc.
+  if (ownerSelfView && editableProfile && portrait.sectionSettings) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-28">
+        <ProfileHeaderCard
+          displayName={editableProfile.displayName}
+          handle={portrait.user.handle}
+          handleLastChangedAt={editableProfile.handleLastChangedAt}
+          mindStatement={mindStatement}
+          memberSince={portrait.user.memberSince}
+          editable
+        />
+
+        <section className="mb-8">
+          <h2 className="mb-3 font-serif text-2xl font-semibold">Privacy</h2>
+          <SettingsGroup>
+            <PrivacyRow
+              icon={Brain}
+              title="Knowledge base"
+              subtitle="Your domains, points, and the mind statement above."
+              section="knowledge_base"
+              visibility={portrait.sectionSettings.knowledge_base}
+            />
+            <PrivacyRow
+              icon={Pencil}
+              title="Questions"
+              subtitle="The questions you've authored."
+              section="authored_questions"
+              visibility={portrait.sectionSettings.authored_questions}
+            />
+            <PrivacyRow
+              icon={UsersIcon}
+              title="Friends list"
+              subtitle="Who can see your friends."
+              section="friends_list"
+              visibility={portrait.sectionSettings.friends_list}
+            />
+          </SettingsGroup>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="mb-3 font-serif text-2xl font-semibold">Preview</h2>
+          <SettingsGroup>
+            <SettingsRow
+              icon={UsersIcon}
+              title="View as friend"
+              subtitle="See what an active mutual friend sees."
+              href={`/users/${portrait.user.id}?previewAs=friend`}
+            />
+            <SettingsRow
+              icon={Globe}
+              title="View as public"
+              subtitle="See only what's public to everyone else."
+              href={`/users/${portrait.user.id}?previewAs=public`}
+            />
+          </SettingsGroup>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="mb-3 font-serif text-2xl font-semibold">Settings</h2>
+          <SettingsGroup>
+            <SettingsRow
+              icon={SettingsIcon}
+              title="Account settings"
+              subtitle="Notifications, preferences, and more."
+              href="/account"
+            />
+          </SettingsGroup>
+        </section>
+
+        <footer className="mt-auto pt-6 text-center text-xs text-muted-foreground">
+          On Joshing since {formatMemberSince(portrait.user.memberSince)}.
+        </footer>
+      </main>
+    )
+  }
+
+  // Stranger short-circuit: non-friend viewers (and the owner previewing
+  // as public) get the minimal teaser card without rich content.
   if (isStranger) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5">
@@ -122,47 +230,23 @@ export default async function UserProfilePage({
           </Link>
         </div>
 
-        <section className="bg-card text-card-foreground rounded-3xl border p-5 shadow-sm">
-          <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-            {profileLabel}
-          </p>
-          <div className="mt-4 flex items-start gap-4">
-            <div className="bg-primary/10 text-primary flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl font-serif text-3xl font-semibold">
-              {portrait.user.displayName.slice(0, 1).toUpperCase() || 'J'}
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-foreground font-serif text-3xl font-semibold">
-                {portrait.user.displayName}
-              </h1>
-              {portrait.user.handle ? (
-                <p className="text-muted-foreground mt-1 text-sm">
-                  @{portrait.user.handle}
-                </p>
-              ) : null}
-              {portrait.user.tagline ? (
-                <p className="text-muted-foreground mt-2 text-sm italic leading-6">
-                  {portrait.user.tagline}
-                </p>
-              ) : null}
-              {portrait.user.location ? (
-                <p className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs">
-                  <LocationGlyph className="size-3" />
-                  {portrait.user.location}
-                </p>
-              ) : null}
-              <p className="text-muted-foreground mt-2 text-sm leading-6">
-                On Joshing since {formatMemberSince(portrait.user.memberSince)}.
-              </p>
-              {!isOwnerView ? (
-                <ProfileFriendButton
-                  targetUserId={portrait.user.id}
-                  friendship={portrait.friendship}
-                  targetDisplayName={portrait.user.displayName}
-                />
-              ) : null}
-            </div>
-          </div>
-        </section>
+        <ProfileHeaderCard
+          displayName={portrait.user.displayName}
+          handle={portrait.user.handle}
+          handleLastChangedAt={null}
+          mindStatement={mindStatement}
+          memberSince={portrait.user.memberSince}
+          editable={false}
+          friendButton={
+            !isOwnerView ? (
+              <ProfileFriendButton
+                targetUserId={portrait.user.id}
+                friendship={portrait.friendship}
+                targetDisplayName={portrait.user.displayName}
+              />
+            ) : null
+          }
+        />
 
         <MutualFriendsSection
           friends={portrait.mutualFriends}
@@ -179,37 +263,9 @@ export default async function UserProfilePage({
     )
   }
 
-  const [mastery, pageData, authoredQuestions, editableProfile, ownerFriends] = await Promise.all([
-    getUserMasteryOverview(portrait.user.id),
-    getKnowledgePageData(portrait.user.id),
-    getAuthoredQuestionsForUser({
-      userId: portrait.user.id,
-      limit: 25,
-      viewerUserId: session.userId,
-      viewer: portrait.visibility,
-      sectionVisible: portrait.sectionVisibleTo.authored_questions,
-    }),
-    // editableProfile and ownerFriends are only needed when the owner is
-    // viewing their own profile (with or without preview); skip those
-    // queries for non-owner views. ownerFriends populates the Preview-as
-    // picker's "specific friend" list.
-    isOwnerView ? getEditableProfile(session.userId) : Promise.resolve(null),
-    isOwnerView ? getFriends(session.userId) : Promise.resolve([]),
-  ])
-
-  const sortedDomains = [...pageData.allDomains].sort(
-    (a, b) =>
-      b.points - a.points || a.displayName.localeCompare(b.displayName),
-  )
-  const topDomains = topPointPositiveDomains(sortedDomains, 5)
-  const totalPointPositiveDomains = sortedDomains.filter(
-    (domain) => domain.points > 0,
-  ).length
-  const mindStatement = buildMindStatement(portrait.user.displayName, topDomains)
-  const tierSignature = `${new Intl.NumberFormat().format(
-    Math.round(mastery.totalPoints),
-  )} knowledge points across ${sortedDomains.length} territories`
-
+  // Friend view (also reached when the owner previews as a friend): show
+  // the full content profile with the existing sections, gated by the
+  // simulated viewer's section visibility.
   const authoredItems = authoredQuestions.map((question) => ({
     id: question.id,
     questionText: question.questionText,
@@ -217,9 +273,10 @@ export default async function UserProfilePage({
     createdAt: question.createdAt,
     viewerAnswered: question.viewerAnswered,
   }))
+  const isSelf = portrait.visibility === 'self'
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5">
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5 pb-28">
       {previewBannerLabel ? (
         <PreviewBanner label={previewBannerLabel} exitHref={exitPreviewHref} />
       ) : null}
@@ -232,159 +289,24 @@ export default async function UserProfilePage({
         </Link>
       </div>
 
-      <section className="bg-card text-card-foreground relative rounded-3xl border p-5 shadow-sm">
-        {editable ? (
-          <div className="absolute right-4 top-4 flex items-center gap-2">
-            <PreviewAsButton
-              profileHref={`/users/${portrait.user.id}`}
-              friends={ownerFriends.map((u) => ({
-                id: u.id,
-                displayName: u.displayName?.trim() || u.phoneNumber,
-              }))}
+      <ProfileHeaderCard
+        displayName={portrait.user.displayName}
+        handle={portrait.user.handle}
+        handleLastChangedAt={null}
+        mindStatement={mindStatement}
+        memberSince={portrait.user.memberSince}
+        editable={false}
+        friendshipFormedAt={portrait.friendship?.formedAt ?? null}
+        friendButton={
+          !isOwnerView ? (
+            <ProfileFriendButton
+              targetUserId={portrait.user.id}
+              friendship={portrait.friendship}
+              targetDisplayName={portrait.user.displayName}
             />
-            <Link
-              href="/account"
-              aria-label="Settings"
-              className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex h-9 w-9 items-center justify-center rounded-md transition"
-            >
-              <SettingsIcon className="size-5" />
-            </Link>
-          </div>
-        ) : null}
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-          {profileLabel}
-        </p>
-        <div className="mt-4 flex items-start gap-4">
-          <div className="bg-primary/10 text-primary flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl font-serif text-3xl font-semibold">
-            {portrait.user.displayName.slice(0, 1).toUpperCase() || 'J'}
-          </div>
-          <div className="min-w-0 flex-1">
-            {editable && editableProfile ? (
-              <div className="text-foreground font-serif text-3xl font-semibold">
-                <InlineEditableField
-                  field="displayName"
-                  label="Display name"
-                  placeholder="What people call you"
-                  initialValue={editableProfile.displayName}
-                  maxLength={60}
-                  required
-                />
-              </div>
-            ) : (
-              <h1 className="text-foreground font-serif text-3xl font-semibold">
-                {portrait.user.displayName}
-              </h1>
-            )}
-
-            {editable ? (
-              <div className="mt-1">
-                <InlineHandleField
-                  initialValue={portrait.user.handle}
-                  initialLastChangedAt={editableProfile?.handleLastChangedAt ?? null}
-                  cooldownDays={HANDLE_CHANGE_COOLDOWN_DAYS}
-                />
-              </div>
-            ) : portrait.user.handle ? (
-              <p className="text-muted-foreground mt-1 text-sm">
-                @{portrait.user.handle}
-              </p>
-            ) : null}
-
-            {editable || portrait.sectionVisibleTo.tagline ? (
-              editable ? (
-                <div className="text-muted-foreground mt-2 text-sm italic leading-6">
-                  <InlineEditableField
-                    field="tagline"
-                    label="Tagline"
-                    placeholder="A short phrase that fits in one line."
-                    initialValue={portrait.user.tagline ?? ''}
-                    maxLength={80}
-                  />
-                </div>
-              ) : portrait.user.tagline ? (
-                <p className="text-muted-foreground mt-2 text-sm italic leading-6">
-                  {portrait.user.tagline}
-                </p>
-              ) : null
-            ) : null}
-
-            {editable || portrait.sectionVisibleTo.bio ? (
-              editable ? (
-                <div className="text-foreground mt-2 text-sm leading-6">
-                  <InlineEditableField
-                    field="bio"
-                    label="Bio"
-                    placeholder="Tell others what you’re about."
-                    initialValue={portrait.user.bio ?? ''}
-                    maxLength={280}
-                    multiline
-                  />
-                </div>
-              ) : portrait.user.bio ? (
-                <p className="text-foreground mt-2 text-sm leading-6">
-                  {portrait.user.bio}
-                </p>
-              ) : null
-            ) : null}
-
-            {editable || portrait.sectionVisibleTo.location ? (
-              editable ? (
-                <div className="text-muted-foreground mt-2 inline-flex items-center gap-1 text-xs">
-                  <LocationGlyph className="size-3" />
-                  <InlineEditableField
-                    field="location"
-                    label="Location"
-                    placeholder="City, region, or country"
-                    initialValue={portrait.user.location ?? ''}
-                    maxLength={60}
-                  />
-                </div>
-              ) : portrait.user.location ? (
-                <p className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs">
-                  <LocationGlyph className="size-3" />
-                  {portrait.user.location}
-                </p>
-              ) : null
-            ) : null}
-
-            <p className="text-muted-foreground mt-2 text-sm leading-6">
-              On Joshing since {formatMemberSince(portrait.user.memberSince)}.
-            </p>
-            {portrait.friendship?.formedAt ? (
-              <p className="text-muted-foreground mt-1 text-sm leading-6">
-                Friends since {formatMemberSince(portrait.friendship.formedAt)}.
-              </p>
-            ) : null}
-            {!isOwnerView ? (
-              <ProfileFriendButton
-                targetUserId={portrait.user.id}
-                friendship={portrait.friendship}
-                targetDisplayName={portrait.user.displayName}
-              />
-            ) : null}
-
-            {editable && portrait.sectionSettings ? (
-              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t pt-3">
-                <ProfileFieldVisibility
-                  label="Tagline"
-                  section="tagline"
-                  visibility={portrait.sectionSettings.tagline}
-                />
-                <ProfileFieldVisibility
-                  label="Bio"
-                  section="bio"
-                  visibility={portrait.sectionSettings.bio}
-                />
-                <ProfileFieldVisibility
-                  label="Location"
-                  section="location"
-                  visibility={portrait.sectionSettings.location}
-                />
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </section>
+          ) : null
+        }
+      />
 
       {!isSelf && portrait.sectionVisibleTo.friends_list ? (
         <>
@@ -403,21 +325,11 @@ export default async function UserProfilePage({
         </>
       ) : null}
 
-      {portrait.sectionVisibleTo.knowledge_map ? (
-        <section className="mt-5" aria-label="Knowledge portrait">
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-              Knowledge portrait
-            </p>
-            {editable && portrait.sectionSettings ? (
-              <SectionVisibilityToggle
-                section="knowledge_map"
-                label="knowledge portrait"
-                initialVisibility={portrait.sectionSettings.knowledge_map}
-                size="compact"
-              />
-            ) : null}
-          </div>
+      {portrait.sectionVisibleTo.knowledge_base ? (
+        <section className="mt-5" aria-label="Knowledge base">
+          <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+            Knowledge base
+          </p>
           {!isSelf && topDomains.length > 0 ? (
             <div className="mt-3">
               <KnowledgeCard
@@ -438,55 +350,26 @@ export default async function UserProfilePage({
               />
             </div>
           ) : (
-            <>
-              <h2 className="mt-1 font-serif text-xl font-semibold">
-                {mindStatement}
-              </h2>
-              <p className="text-muted-foreground mt-2 text-sm leading-6">
-                {tierSignature}.
-              </p>
-            </>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              {tierSignature}.
+            </p>
           )}
           <Link
             href={`/users/${portrait.user.id}/knowledge`}
             className="mt-3 inline-flex text-sm font-semibold text-stone-950 underline-offset-4 hover:underline"
           >
             {isSelf
-              ? 'View your full knowledge portrait →'
-              : `View ${friendFirstName}’s full knowledge portrait →`}
+              ? 'View your full knowledge base →'
+              : `View ${friendFirstName}’s full knowledge base →`}
           </Link>
         </section>
       ) : null}
 
-      {editable && portrait.sectionSettings ? (
-        <div className="mt-5 flex flex-wrap items-baseline justify-between gap-3 border-t pt-3">
-          <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-            Friends list visibility
-          </p>
-          <SectionVisibilityToggle
-            section="friends_list"
-            label="friends list"
-            initialVisibility={portrait.sectionSettings.friends_list}
-            size="compact"
-          />
-        </div>
-      ) : null}
-
       {portrait.sectionVisibleTo.authored_questions ? (
         <section className="mt-5" aria-label="Authored questions">
-          {editable && portrait.sectionSettings ? (
-            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
-              <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-                Authored questions
-              </p>
-              <SectionVisibilityToggle
-                section="authored_questions"
-                label="authored questions"
-                initialVisibility={portrait.sectionSettings.authored_questions}
-                size="compact"
-              />
-            </div>
-          ) : null}
+          <p className="mb-3 text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+            Authored questions
+          </p>
           <AuthoredQuestionsFeed
             questions={authoredItems}
             friendDisplayName={portrait.user.displayName}
@@ -499,47 +382,119 @@ export default async function UserProfilePage({
   )
 }
 
-// Small wrapper that pairs a field label with the section toggle for the
-// header card's bio/tagline/location triplet. Keeps the per-field
-// visibility controls in one compact row instead of three separate cards.
-function ProfileFieldVisibility({
-  label,
+// Header card shown at the top of every profile variant. The mind
+// statement (auto-generated from top mastery domains) replaces the
+// manual tagline that was dropped in migration 0054.
+function ProfileHeaderCard({
+  displayName,
+  handle,
+  handleLastChangedAt,
+  mindStatement,
+  memberSince,
+  editable,
+  friendshipFormedAt = null,
+  friendButton = null,
+}: {
+  displayName: string
+  handle: string | null
+  handleLastChangedAt: string | null
+  mindStatement: string
+  memberSince: Date
+  editable: boolean
+  friendshipFormedAt?: Date | null
+  friendButton?: React.ReactNode
+}) {
+  return (
+    <section className="bg-card text-card-foreground rounded-3xl border p-5 shadow-sm">
+      <div className="flex items-start gap-4">
+        <div className="bg-primary/10 text-primary flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl font-serif text-3xl font-semibold">
+          {displayName.slice(0, 1).toUpperCase() || 'J'}
+        </div>
+        <div className="min-w-0 flex-1">
+          {editable ? (
+            <div className="text-foreground font-serif text-3xl font-semibold">
+              <InlineEditableField
+                field="displayName"
+                label="Display name"
+                placeholder="What people call you"
+                initialValue={displayName}
+                maxLength={60}
+                required
+              />
+            </div>
+          ) : (
+            <h1 className="text-foreground font-serif text-3xl font-semibold">
+              {displayName}
+            </h1>
+          )}
+
+          {editable ? (
+            <div className="mt-1">
+              <InlineHandleField
+                initialValue={handle}
+                initialLastChangedAt={handleLastChangedAt}
+                cooldownDays={HANDLE_CHANGE_COOLDOWN_DAYS}
+              />
+            </div>
+          ) : handle ? (
+            <p className="text-muted-foreground mt-1 text-sm">@{handle}</p>
+          ) : null}
+
+          <p className="text-muted-foreground mt-2 text-sm italic leading-6">
+            {mindStatement}
+          </p>
+
+          <p className="text-muted-foreground mt-2 text-sm leading-6">
+            On Joshing since {formatMemberSince(memberSince)}.
+          </p>
+          {friendshipFormedAt ? (
+            <p className="text-muted-foreground mt-1 text-sm leading-6">
+              Friends since {formatMemberSince(friendshipFormedAt)}.
+            </p>
+          ) : null}
+          {friendButton}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// Settings-style row that renders a 3-level visibility toggle on the
+// right instead of a chevron. Reused for each toggle in the Privacy
+// section of the owner self-view.
+function PrivacyRow({
+  icon: Icon,
+  title,
+  subtitle,
   section,
   visibility,
 }: {
-  label: string
-  section: 'bio' | 'tagline' | 'location'
+  icon: LucideIcon
+  title: string
+  subtitle: string
+  section: 'knowledge_base' | 'authored_questions' | 'friends_list'
   visibility: 'public' | 'friends' | 'private'
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-muted-foreground text-xs font-medium uppercase tracking-[0.08em]">
-        {label}
+    <div className="flex w-full items-center gap-4 px-4 py-4">
+      <span
+        className="grid size-10 flex-none place-items-center rounded-full bg-muted text-foreground/70"
+        aria-hidden="true"
+      >
+        <Icon className="size-5" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="font-serif text-base font-semibold leading-tight">
+          {title}
+        </span>
+        <span className="mt-0.5 text-sm text-muted-foreground">{subtitle}</span>
       </span>
       <SectionVisibilityToggle
         section={section}
-        label={label.toLowerCase()}
+        label={title.toLowerCase()}
         initialVisibility={visibility}
         size="compact"
       />
     </div>
-  )
-}
-
-function LocationGlyph({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
   )
 }

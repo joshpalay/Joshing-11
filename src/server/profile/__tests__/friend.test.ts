@@ -16,11 +16,7 @@ const {
       broadCategory: string | null
     }>,
     sectionSettings: {
-      bio: 'public',
-      tagline: 'public',
-      location: 'public',
-      knowledge_map: 'public',
-      mind_expanding: 'public',
+      knowledge_base: 'public',
       friends_list: 'friends',
       authored_questions: 'public',
     } as Record<string, 'public' | 'friends' | 'private'>,
@@ -96,9 +92,6 @@ describe('friend portrait data', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101010',
       handle: null,
-      tagline: null,
-      location: null,
-      bio: null,
     })
     getFriendshipMock.mockResolvedValue({
       id: 'friendship-1',
@@ -123,10 +116,7 @@ describe('friend portrait data', () => {
         id: 'friend-1',
         displayName: 'Frances Friend',
         handle: null,
-        tagline: null,
-        location: null,
-        bio: null,
-          memberSince: new Date('2026-01-01T00:00:00.000Z'),
+        memberSince: new Date('2026-01-01T00:00:00.000Z'),
       },
       visibility: 'friend',
       friendship: {
@@ -151,11 +141,7 @@ describe('friend portrait data', () => {
       // Friend can see everything (default settings, friends_list defaults
       // to 'friends' which is visible to friends).
       sectionVisibleTo: {
-        bio: true,
-        tagline: true,
-        location: true,
-        knowledge_map: true,
-        mind_expanding: true,
+        knowledge_base: true,
         friends_list: true,
         authored_questions: true,
       },
@@ -292,11 +278,7 @@ describe('friend portrait data', () => {
     expect(portrait?.sectionSettings).toEqual(state.sectionSettings)
     // Owner sees everything regardless of section settings.
     expect(portrait?.sectionVisibleTo).toEqual({
-      bio: true,
-      tagline: true,
-      location: true,
-      knowledge_map: true,
-      mind_expanding: true,
+      knowledge_base: true,
       friends_list: true,
       authored_questions: true,
     })
@@ -310,19 +292,18 @@ describe('friend portrait data', () => {
       phoneNumber: '+15550101013',
     })
     getFriendshipMock.mockResolvedValueOnce(null)
-    // Knowledge map is friends-only; everything else is the default 'public'.
+    // Knowledge base is friends-only; everything else is the default 'public'.
     state.sectionSettings = {
       ...state.sectionSettings,
-      knowledge_map: 'friends',
+      knowledge_base: 'friends',
       authored_questions: 'private',
     }
 
     const portrait = await getFriendPortraitData('stranger-3', 'viewer-1')
 
     expect(portrait?.visibility).toBe('stranger')
-    expect(portrait?.sectionVisibleTo.knowledge_map).toBe(false)
+    expect(portrait?.sectionVisibleTo.knowledge_base).toBe(false)
     expect(portrait?.sectionVisibleTo.authored_questions).toBe(false)
-    expect(portrait?.sectionVisibleTo.bio).toBe(true)
     // friends_list defaults to 'friends' so a stranger cannot see it.
     expect(portrait?.sectionVisibleTo.friends_list).toBe(false)
   })
@@ -362,7 +343,7 @@ describe('friend portrait data', () => {
     })
     state.sectionSettings = {
       ...state.sectionSettings,
-      knowledge_map: 'friends',
+      knowledge_base: 'friends',
       friends_list: 'friends',
       authored_questions: 'private',
     }
@@ -376,10 +357,9 @@ describe('friend portrait data', () => {
     expect(portrait?.isOwnerView).toBe(true)
     expect(portrait?.previewedAs).toBe('stranger')
     expect(portrait?.visibility).toBe('stranger')
-    expect(portrait?.sectionVisibleTo.knowledge_map).toBe(false)
+    expect(portrait?.sectionVisibleTo.knowledge_base).toBe(false)
     expect(portrait?.sectionVisibleTo.friends_list).toBe(false)
     expect(portrait?.sectionVisibleTo.authored_questions).toBe(false)
-    expect(portrait?.sectionVisibleTo.bio).toBe(true)
     // Even in preview mode, the owner can still see their settings map.
     expect(portrait?.sectionSettings).toEqual(state.sectionSettings)
   })

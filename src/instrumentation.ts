@@ -595,61 +595,11 @@ export async function register() {
       // before this migration runs.
     }
 
-    // Migration 0047 adds the editable profile fields: bio (≤280),
-    // tagline (≤80), location (≤60). All nullable; when bio is NULL the
-    // existing formatBio() default in src/server/profile/bio.ts still
-    // renders. Guard for preview/production databases that may have the
-    // migration recorded without the columns or CHECK constraints
-    // actually present.
-    try {
-      await db.execute(sql`
-        ALTER TABLE "User"
-          ADD COLUMN IF NOT EXISTS "bio" text
-      `);
-      await db.execute(sql`
-        ALTER TABLE "User"
-          ADD COLUMN IF NOT EXISTS "tagline" text
-      `);
-      await db.execute(sql`
-        ALTER TABLE "User"
-          ADD COLUMN IF NOT EXISTS "location" text
-      `);
-      await db.execute(sql`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM information_schema.table_constraints
-            WHERE table_schema = 'public'
-              AND table_name = 'User'
-              AND constraint_name = 'user_bio_length'
-          ) THEN
-            ALTER TABLE "User"
-              ADD CONSTRAINT user_bio_length CHECK (char_length("bio") <= 280);
-          END IF;
-          IF NOT EXISTS (
-            SELECT 1 FROM information_schema.table_constraints
-            WHERE table_schema = 'public'
-              AND table_name = 'User'
-              AND constraint_name = 'user_tagline_length'
-          ) THEN
-            ALTER TABLE "User"
-              ADD CONSTRAINT user_tagline_length CHECK (char_length("tagline") <= 80);
-          END IF;
-          IF NOT EXISTS (
-            SELECT 1 FROM information_schema.table_constraints
-            WHERE table_schema = 'public'
-              AND table_name = 'User'
-              AND constraint_name = 'user_location_length'
-          ) THEN
-            ALTER TABLE "User"
-              ADD CONSTRAINT user_location_length CHECK (char_length("location") <= 60);
-          END IF;
-        END $$
-      `);
-    } catch {
-      // User may not exist yet on a fresh database — migrate() creates it
-      // before this migration runs.
-    }
+    // Migration 0047 added User.bio / .tagline / .location plus length
+    // CHECKs. Migration 0054 drops all three columns + their CHECKs as part
+    // of the profile redesign — no app code references them after 0054.
+    // The 0047 guards have been removed accordingly; 0054 runs IF EXISTS
+    // drops idempotently so a partially-recorded 0054 is still safe.
 
     // Migration 0048 adds the friends/privacy foundation:
     //   • User.discoverable_by_contacts / .discoverable_by_mutual_friends
@@ -891,6 +841,22 @@ export async function register() {
     } catch {
       // User table may not exist yet on a fresh database — migrate() creates
       // both User and PROFILE_SECTION_VISIBILITY before this migration runs.
+    }
+
+    // Migration 0054 adds a 'knowledge_base' value to ProfileSection (which
+    // collapses the legacy 'knowledge_map' and 'mind_expanding' sections into
+    // one) and drops User.bio / .tagline / .location plus their CHECKs. The
+    // enum addition must be pre-applied here because Postgres forbids
+    // referencing a newly-added enum value inside the same transaction that
+    // adds it — Drizzle wraps the migrator in a transaction, so the
+    // backfill INSERT inside 0054 would 22P02 without this guard.
+    try {
+      await db.execute(sql`
+        ALTER TYPE "public"."ProfileSection" ADD VALUE IF NOT EXISTS 'knowledge_base'
+      `);
+    } catch {
+      // ProfileSection may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
     }
 
     try {
