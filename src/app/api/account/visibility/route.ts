@@ -8,17 +8,11 @@ export const dynamic = 'force-dynamic';
 
 // Single chokepoint for per-section visibility writes. Validated against
 // the same enum + tier values as the underlying PROFILE_SECTION_VISIBILITY
-// table; the helper does the upsert.
+// table; the helper does the upsert. Migration 0054 retired the legacy
+// 'bio', 'tagline', 'location', 'knowledge_map', and 'mind_expanding'
+// sections — only the three current toggles are accepted here.
 const bodySchema = z.object({
-  section: z.enum([
-    'bio',
-    'tagline',
-    'location',
-    'knowledge_map',
-    'mind_expanding',
-    'friends_list',
-    'authored_questions',
-  ]),
+  section: z.enum(['knowledge_base', 'friends_list', 'authored_questions']),
   visibility: z.enum(['public', 'friends', 'private']),
 });
 

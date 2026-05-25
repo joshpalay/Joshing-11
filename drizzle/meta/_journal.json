@@ -379,6 +379,13 @@
       "when": 1781136000000,
       "tag": "0053_drop_legacy_profile_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1781222400000,
+      "tag": "0054_redesign_profile",
+      "breakpoints": true
     }
   ]
 }

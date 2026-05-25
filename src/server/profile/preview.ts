@@ -6,7 +6,9 @@ import { getUserById } from '@/server/db/queries/users';
  * Preview-as request: lets the profile owner re-render their own page as
  * if a different viewer were looking at it. Three shapes:
  *
- *   - `'stranger'`  — simulate a logged-out / non-friend viewer.
+ *   - `'stranger'`  — simulate a non-friend / public viewer. The literal
+ *                     `'public'` is accepted as a friendlier URL alias
+ *                     and resolves to the same value.
  *   - `'friend'`    — simulate an unspecified active friend.
  *   - `{ userId }`  — simulate a specific user; resolves to `friend` if
  *                     that user is an active friend of the owner, else
@@ -21,8 +23,9 @@ export type PreviewAs = 'stranger' | 'friend' | { userId: string };
 /**
  * Zod schema for the raw `?previewAs=` query-string value before
  * resolution. The wire format is a single string: literal `'stranger'`,
- * literal `'friend'`, or any other non-empty string (interpreted as a
- * user id). `resolvePreviewAs` does the ownership + existence checks.
+ * literal `'public'` (alias), literal `'friend'`, or any other non-empty
+ * string (interpreted as a user id). `resolvePreviewAs` does the
+ * ownership + existence checks.
  */
 export const previewAsSchema = z
   .string()
@@ -54,7 +57,10 @@ export async function resolvePreviewAs(
   if (!parsed.success) return null;
   const value = parsed.data;
 
-  if (value === 'stranger') return 'stranger';
+  // 'public' is the user-facing label for the same non-friend view that
+  // 'stranger' has always referenced internally. Both spellings work so
+  // older links keep functioning.
+  if (value === 'stranger' || value === 'public') return 'stranger';
   if (value === 'friend') return 'friend';
 
   // Treat anything else as a user id. Confirm it exists so we don't

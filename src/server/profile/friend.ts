@@ -41,9 +41,6 @@ export type FriendPortraitData = {
     id: string
     displayName: string
     handle: string | null
-    tagline: string | null
-    location: string | null
-    bio: string | null
     memberSince: Date
   }
   visibility: FriendProfileVisibility
@@ -244,9 +241,6 @@ export async function getFriendPortraitData(
         viewedUser.phoneNumber
       ),
       handle: viewedUser.handle?.trim() ? viewedUser.handle.trim() : null,
-      tagline: viewedUser.tagline?.trim() ? viewedUser.tagline.trim() : null,
-      location: viewedUser.location?.trim() ? viewedUser.location.trim() : null,
-      bio: viewedUser.bio?.trim() ? viewedUser.bio.trim() : null,
       memberSince: viewedUser.createdAt,
     },
     visibility,

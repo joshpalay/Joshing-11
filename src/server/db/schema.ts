@@ -141,12 +141,13 @@ export const masterySourceTypeEnum = pgEnum('MasterySourceType', [
 ]);
 export const feedbackSignalEnum = pgEnum('FeedbackSignal', ['thumbs_up', 'thumbs_down']);
 export const territoryTypeEnum = pgEnum('TerritoryType', ['declared', 'demonstrated']);
+// Migration 0054 added the 'knowledge_base' value and stopped using
+// 'bio', 'tagline', 'location', 'knowledge_map', and 'mind_expanding'.
+// Postgres doesn't support dropping individual enum values, so the legacy
+// values remain in the DB enum type as zombies. They are deliberately
+// omitted here so app code can't reintroduce a reference.
 export const profileSectionEnum = pgEnum('ProfileSection', [
-  'bio',
-  'tagline',
-  'location',
-  'knowledge_map',
-  'mind_expanding',
+  'knowledge_base',
   'friends_list',
   'authored_questions',
 ]);
@@ -177,9 +178,6 @@ export const users = pgTable(
     handleLastChangedAt: timestamp('handle_last_changed_at', { withTimezone: true }),
     inviteToken: text('invite_token'),
     avatarColor: text('avatar_color'),
-    bio: text('bio'),
-    tagline: text('tagline'),
-    location: text('location'),
     discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
     phoneHash: text('phone_hash'),
