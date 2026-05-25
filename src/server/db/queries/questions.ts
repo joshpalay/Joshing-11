@@ -9,7 +9,6 @@ import {
   masteryEvents,
   questions,
   userQuestionBank,
-  users,
 } from '@/server/db';
 import { broadCategoryDisplayName } from '@/lib/question-categorization';
 import { pgErrorCode } from '@/server/db/pg-error';
@@ -281,47 +280,33 @@ export async function getAuthoredQuestionsForUser(params: {
   limit?: number;
   viewerUserId?: string;
   // The effective viewer relationship to the author, precomputed by the
-  // caller (the profile page uses portrait.visibility). When omitted, the
-  // helper falls back to the legacy authorProfilePublic gate so older
-  // callers continue to work — that fallback is removed in phase 6.
+  // caller (the profile page uses portrait.visibility). Defaults to
+  // 'self' when viewerUserId matches userId, else 'stranger' — the most
+  // conservative interpretation.
   viewer?: 'self' | 'friend' | 'stranger';
   // Whether the authored_questions section is visible to the effective
   // viewer per PROFILE_SECTION_VISIBILITY. If false, returns []. Defaults
-  // to true so legacy callers still hit the per-question filter.
+  // to true so callers that don't yet thread the section gate still see
+  // questions (subject to the per-question filter below).
   sectionVisible?: boolean;
 }): Promise<AuthoredQuestionPreview[]> {
   const limit = Math.max(1, Math.min(params.limit ?? 25, 100));
-  const isSelfView = params.viewerUserId === params.userId;
-  const viewer = params.viewer ?? (isSelfView ? 'self' : undefined);
+  const viewer =
+    params.viewer ??
+    (params.viewerUserId === params.userId ? 'self' : 'stranger');
 
-  // Section-level gate (new authoritative gate). When the caller supplies
-  // sectionVisible=false, render nothing — the section is hidden entirely.
-  // The owner can still see their own authored questions in preview mode
-  // only if the caller passes sectionVisible=true (preview banner UX).
+  // Section-level gate: when the section is hidden to the effective
+  // viewer, render nothing regardless of per-question visibility.
   if (params.sectionVisible === false) return [];
 
-  // Legacy user-level fallback: when no viewer is supplied (legacy
-  // callers), gate non-self viewers on the old authorProfilePublic column.
-  // Phase 6 removes this block once the column is dropped.
-  if (viewer === undefined && !isSelfView) {
-    const [author] = await db
-      .select({ authorProfilePublic: users.authorProfilePublic })
-      .from(users)
-      .where(eq(users.id, params.userId))
-      .limit(1);
-
-    if (!author || !author.authorProfilePublic) return [];
-  }
-
   // Per-question filter: self sees everything; friends see public+friends;
-  // strangers see only public. When viewer is undefined (legacy call), we
-  // fall back to the old "public only for non-self" filter.
+  // strangers see only public.
   const whereClauses = [
     eq(questions.creatorId, params.userId),
     isNull(questions.deletedAt),
     eq(questions.source, 'authored'),
   ];
-  if (viewer === 'stranger' || (viewer === undefined && !isSelfView)) {
+  if (viewer === 'stranger') {
     whereClauses.push(eq(questions.visibility, 'public'));
   } else if (viewer === 'friend') {
     whereClauses.push(inArray(questions.visibility, ['public', 'friends']));

@@ -18,7 +18,6 @@ export type UserProfile = {
   bio: string;
   tagline: string | null;
   location: string | null;
-  authorProfilePublic: boolean;
 };
 
 export type EditableProfile = {
@@ -30,7 +29,6 @@ export type EditableProfile = {
   bio: string | null;
   tagline: string | null;
   location: string | null;
-  authorProfilePublic: boolean;
 };
 
 export const HANDLE_CHANGE_COOLDOWN_DAYS = 30;
@@ -64,7 +62,6 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
       bio: users.bio,
       tagline: users.tagline,
       location: users.location,
-      authorProfilePublic: users.authorProfilePublic,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -115,7 +112,6 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     bio,
     tagline: user.tagline?.trim() ? user.tagline.trim() : null,
     location: user.location?.trim() ? user.location.trim() : null,
-    authorProfilePublic: user.authorProfilePublic,
   };
 }
 
@@ -130,7 +126,6 @@ export async function getEditableProfile(userId: string): Promise<EditableProfil
       bio: users.bio,
       tagline: users.tagline,
       location: users.location,
-      authorProfilePublic: users.authorProfilePublic,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -147,7 +142,6 @@ export async function getEditableProfile(userId: string): Promise<EditableProfil
     bio: row.bio?.trim() ? row.bio.trim() : null,
     tagline: row.tagline?.trim() ? row.tagline.trim() : null,
     location: row.location?.trim() ? row.location.trim() : null,
-    authorProfilePublic: row.authorProfilePublic,
   };
 }
 

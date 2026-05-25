@@ -124,7 +124,6 @@ export const themePreferenceEnum = pgEnum('ThemePreference', [
   'parlor_index',
 ]);
 export const subscriptionPlanEnum = pgEnum('SubscriptionPlan', ['free', 'plus_monthly', 'plus_yearly']);
-export const portraitVisibilityEnum = pgEnum('PortraitVisibility', ['public', 'private']);
 export const masteryTierEnum = pgEnum('MasteryTier', ['establishing', 'familiar', 'solid', 'mastery']);
 export const domainExclusionScopeEnum = pgEnum('DomainExclusionScope', [
   'subcategory',
@@ -171,7 +170,6 @@ export const users = pgTable(
     pendingEmail: text('pending_email'),
     reminderPromptDismissedAt: timestamp('reminder_prompt_dismissed_at', { withTimezone: true }),
     lastActivityBellOpenedAt: timestamp('last_activity_bell_opened_at', { withTimezone: true }),
-    portraitVisibility: portraitVisibilityEnum('portrait_visibility').notNull().default('public'),
     knowledgeCardShareToken: text('knowledge_card_share_token'),
     knowledgeCardShareExpiresAt: timestamp('knowledge_card_share_expires_at', { withTimezone: true }),
     slug: text('slug'),
@@ -186,7 +184,6 @@ export const users = pgTable(
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
     phoneHash: text('phone_hash'),
     lastFriendDiscoveryCheckAt: timestamp('last_friend_discovery_check_at', { withTimezone: true }),
-    authorProfilePublic: boolean('authorProfilePublic').notNull().default(true),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
     birthYear: integer('birth_year'),
     grewUpCountry: text('grew_up_country'),

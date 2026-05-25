@@ -44,7 +44,6 @@ export type FriendPortraitData = {
     tagline: string | null
     location: string | null
     bio: string | null
-    authorProfilePublic: boolean
     memberSince: Date
   }
   visibility: FriendProfileVisibility
@@ -248,7 +247,6 @@ export async function getFriendPortraitData(
       tagline: viewedUser.tagline?.trim() ? viewedUser.tagline.trim() : null,
       location: viewedUser.location?.trim() ? viewedUser.location.trim() : null,
       bio: viewedUser.bio?.trim() ? viewedUser.bio.trim() : null,
-      authorProfilePublic: viewedUser.authorProfilePublic,
       memberSince: viewedUser.createdAt,
     },
     visibility,

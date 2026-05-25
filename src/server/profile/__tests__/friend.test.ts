@@ -99,7 +99,6 @@ describe('friend portrait data', () => {
       tagline: null,
       location: null,
       bio: null,
-      authorProfilePublic: true,
     })
     getFriendshipMock.mockResolvedValue({
       id: 'friendship-1',
@@ -127,8 +126,7 @@ describe('friend portrait data', () => {
         tagline: null,
         location: null,
         bio: null,
-        authorProfilePublic: true,
-        memberSince: new Date('2026-01-01T00:00:00.000Z'),
+          memberSince: new Date('2026-01-01T00:00:00.000Z'),
       },
       visibility: 'friend',
       friendship: {
@@ -284,7 +282,6 @@ describe('friend portrait data', () => {
       displayName: 'Owner',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101000',
-      authorProfilePublic: true,
     })
 
     const portrait = await getFriendPortraitData('viewer-1', 'viewer-1')
@@ -311,7 +308,6 @@ describe('friend portrait data', () => {
       displayName: 'Locked Down',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101013',
-      authorProfilePublic: true,
     })
     getFriendshipMock.mockResolvedValueOnce(null)
     // Knowledge map is friends-only; everything else is the default 'public'.
@@ -363,7 +359,6 @@ describe('friend portrait data', () => {
       displayName: 'Owner',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101000',
-      authorProfilePublic: true,
     })
     state.sectionSettings = {
       ...state.sectionSettings,
@@ -395,7 +390,6 @@ describe('friend portrait data', () => {
       displayName: 'Owner',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101000',
-      authorProfilePublic: true,
     })
     areFriendsMock.mockResolvedValueOnce(true)
     state.sectionSettings = {
@@ -419,7 +413,6 @@ describe('friend portrait data', () => {
       displayName: 'Owner',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101000',
-      authorProfilePublic: true,
     })
     areFriendsMock.mockResolvedValueOnce(false)
     state.sectionSettings = {
