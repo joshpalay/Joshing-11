@@ -11,7 +11,7 @@ const navItems = [
   { href: '/friends', label: 'Friends', Icon: Users },
   { href: '/questions', label: 'Questions', Icon: Pencil },
   { href: '/knowledge', label: 'Knowledge', Icon: Brain },
-  { href: '/account', label: 'Account', Icon: User },
+  { href: '/users/me', label: 'Profile', Icon: User },
 ];
 
 function initialsFor(name: string): string {
@@ -78,6 +78,20 @@ export function Nav({
     );
   }
 
+  // The Profile tab is active across three URL shapes: the canonical
+  // /users/<self-id>, the /users/me alias before it redirects, and the
+  // /account/* settings sub-pages (which are reached only via the gear
+  // icon on the profile, so the bottom-nav highlight stays on Profile).
+  function isProfileTabActive(href: string): boolean {
+    if (href !== '/users/me') return false;
+    if (pathname === '/users/me') return true;
+    if (pathname.startsWith('/account')) return true;
+    if (currentUserId && pathname.startsWith(`/users/${currentUserId}`)) {
+      return true;
+    }
+    return false;
+  }
+
   const showBadge = bellBadgeCount > 0;
   const badgeText = formatBadgeCount(bellBadgeCount);
 
@@ -135,8 +149,12 @@ export function Nav({
           role="list"
         >
           {navItems.map(({ href, label, Icon }) => {
-            const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
-            const isAccount = label === 'Account';
+            const isProfile = label === 'Profile';
+            const active = isProfile
+              ? isProfileTabActive(href)
+              : href === '/'
+                ? pathname === '/'
+                : pathname.startsWith(href);
 
             return (
               <Link
@@ -150,7 +168,7 @@ export function Nav({
                 ].join(' ')}
               >
                 <span aria-hidden="true" className="relative grid place-items-center">
-                  {isAccount ? (
+                  {isProfile ? (
                     <AccountIcon active={active} />
                   ) : (
                     <Icon

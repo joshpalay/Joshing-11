@@ -1,3 +1,4 @@
+import { Settings as SettingsIcon } from 'lucide-react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
@@ -180,7 +181,16 @@ export default async function UserProfilePage({
         </Link>
       </div>
 
-      <section className="bg-card text-card-foreground rounded-3xl border p-5 shadow-sm">
+      <section className="bg-card text-card-foreground relative rounded-3xl border p-5 shadow-sm">
+        {isSelf ? (
+          <Link
+            href="/account"
+            aria-label="Settings"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-md transition"
+          >
+            <SettingsIcon className="size-5" />
+          </Link>
+        ) : null}
         <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
           {profileLabel}
         </p>
