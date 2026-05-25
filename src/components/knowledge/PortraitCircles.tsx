@@ -226,6 +226,7 @@ export function PortraitDomainCircle({
     entry.tier !== 'establishing' &&
     entry.authoredAnsweredCount > 0
   const resolvedCircleSlotSize = Math.max(circleSlotSize ?? size, size)
+  const countFontSize = Math.min(48, Math.max(10, Math.round(size * 0.13)))
 
   const handleClick = () => {
     if (!editMode || !onToggleHidden || pending) return
@@ -258,6 +259,7 @@ export function PortraitDomainCircle({
       style={{
         ...circleItemStyle,
         width: Math.max(90, resolvedCircleSlotSize + 8),
+        maxWidth: '100%',
         cursor: interactive ? (pending ? 'wait' : 'pointer') : undefined,
         userSelect: interactive ? 'none' : undefined,
         opacity: pending ? 0.6 : 1,
@@ -288,7 +290,7 @@ export function PortraitDomainCircle({
             {showMasteryCount && (
               <span
                 style={{
-                  fontSize: size > 52 ? 13 : 10,
+                  fontSize: countFontSize,
                   color: dc.primary,
                   fontFamily: 'Georgia, "Times New Roman", serif',
                   fontWeight: 'bold',
@@ -359,7 +361,7 @@ export function PortraitDomainCircle({
           fontFamily: 'Georgia, "Times New Roman", serif',
           textAlign: 'center',
           lineHeight: 1.3,
-          maxWidth: 90,
+          maxWidth: Math.max(90, resolvedCircleSlotSize),
           wordWrap: 'break-word',
           opacity: labelOpacity,
           textDecoration: dimForHidden ? 'line-through' : undefined,

@@ -3,15 +3,15 @@ export type CircleSizingTier = 'establishing' | 'familiar' | 'solid' | 'mastery'
 const TIER_RANGES_DESKTOP: Record<CircleSizingTier, { min: number; max: number }> = {
   establishing: { min: 18, max: 28 },
   familiar: { min: 32, max: 48 },
-  solid: { min: 52, max: 72 },
-  mastery: { min: 76, max: 96 },
+  solid: { min: 156, max: 216 },
+  mastery: { min: 304, max: 384 },
 };
 
 const TIER_RANGES_MOBILE: Record<CircleSizingTier, { min: number; max: number }> = {
   establishing: { min: 15, max: 22 },
   familiar: { min: 26, max: 38 },
-  solid: { min: 42, max: 56 },
-  mastery: { min: 60, max: 76 },
+  solid: { min: 126, max: 168 },
+  mastery: { min: 240, max: 304 },
 };
 
 export function getDomainCircleSize(
