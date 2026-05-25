@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
 } from 'react'
 
@@ -17,11 +18,18 @@ import { AddToBankAction } from '@/components/AddToBankAction'
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
 import MasteryMoment from '@/components/review/MasteryMoment'
 import { cn } from '@/lib/utils'
+import { formatNextResetTimeLocal } from '@/lib/games/timezone'
 import type {
   DailySummaryView,
   QuestionRecap,
 } from '@/server/db/queries/daily-summary'
 import { RoundReminderCard } from './RoundReminderCard'
+
+// useSyncExternalStore inputs for the client-only reset-time label. Hoisted so
+// the subscribe/snapshot functions are stable across renders.
+const subscribeNoop = () => () => {}
+const getResetTimeSnapshot = () => formatNextResetTimeLocal()
+const getResetTimeServerSnapshot = (): string | null => null
 
 type FeedbackSignal = 'thumbs_up' | 'thumbs_down'
 
@@ -129,6 +137,12 @@ export default function DailySummaryPage() {
   const [summary, setSummary] = useState<DailySummaryView | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Client-only reset-time label; null during SSR to keep hydration stable.
+  const resetTime = useSyncExternalStore(
+    subscribeNoop,
+    getResetTimeSnapshot,
+    getResetTimeServerSnapshot,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -273,7 +287,7 @@ export default function DailySummaryPage() {
       <section className="card mt-5 px-5 py-4">
         <h2 style={titleStyle}>Tomorrow</h2>
         <p className="text-foreground mt-2 text-sm leading-6">
-          Five new at noon.
+          {resetTime ? `Five new at ${resetTime}.` : 'Five new tomorrow.'}
         </p>
       </section>
 

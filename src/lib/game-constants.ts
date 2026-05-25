@@ -9,7 +9,7 @@ import { CATEGORIES } from '@/lib/questions-types';
 export const QUESTIONS_PER_DAY = 5;
 /** @deprecated Legacy flat scoring constant. Use `canonicalPointsForAnswer` instead. */
 export const POINTS_PER_CORRECT = 3;
-/** Daily reset hour in UTC — noon EST (UTC-5). New questions available at 17:00 UTC every day. */
+/** Global daily reset boundary, in UTC. Every player worldwide shares this instant; UI formats it into each viewer's local timezone. */
 export const DAILY_RESET_HOUR_UTC = 17;
 export const DEFAULT_MINIMUM_QUESTIONS = 5;
 export const MINIMUM_QUESTIONS_FLOOR = 5;

@@ -4,7 +4,7 @@ export default function DevNoonResetPage() {
   return (
     <StubPage
       title="Trigger noon reset"
-      description="Simulate daily reset (noon ET)."
+      description="Simulate daily reset."
     />
   );
 }
