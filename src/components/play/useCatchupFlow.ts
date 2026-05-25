@@ -277,6 +277,7 @@ export function useCatchupFlow() {
           correctAnswer: isCorrect ? null : data.correctAnswer ?? data.answer ?? item.correctAnswer,
           consolation: data.consolation ?? data.quip ?? null,
           breadcrumb: null,
+          explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
           copyVariant: item.queueAge,
           creatorName: 'Joshing',
           canonicalSubcategory: item.domain,

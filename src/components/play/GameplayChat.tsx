@@ -71,6 +71,8 @@ export type ChatMessage =
       canonicalSubcategory?: string | null;
       /** Per-answer commentary quip shown below the result bubble */
       quip?: string | null;
+      /** Question's stored factual explainer. Rendered as a fallback below the verdict when no breadcrumb arrives (e.g. feed-sourced catch-up items, or when /api/breadcrumb times out). */
+      explanation?: string | null;
       reactionPrompt?: ReactionPromptData | null;
       pointsAwarded?: number | null;
       pointsLabel?: string | null;
@@ -370,6 +372,29 @@ function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: stri
   );
 }
 
+function ExplanationLine({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        marginTop: '9px',
+        borderLeft: '2px solid color-mix(in srgb, var(--text) 20%, transparent)',
+        paddingLeft: '8px',
+      }}
+    >
+      <p
+        style={{
+          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontSize: '0.9rem',
+          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
+          lineHeight: 1.4,
+        }}
+      >
+        {text}
+      </p>
+    </div>
+  );
+}
+
 function RelationalFeedbackFade({ text }: { text: string }) {
   const [faded, setFaded] = useState(false);
   useEffect(() => {
@@ -617,6 +642,7 @@ function ResultRow({
   insideJoke,
   breadcrumb,
   quip,
+  explanation,
   copyVariant,
   creatorName,
   relationalFeedbackLine,
@@ -633,6 +659,7 @@ function ResultRow({
   insideJoke?: string | null;
   breadcrumb: string | null;
   quip?: string | null;
+  explanation?: string | null;
   copyVariant: number;
   creatorName: string | null;
   relationalFeedbackLine?: string | null;
@@ -818,7 +845,9 @@ function ResultRow({
             ) : null}
           </>
         )}
-        {breadcrumb ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} /> : null}
+        {breadcrumb
+          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} />
+          : explanation ? <ExplanationLine text={explanation} /> : null}
         {quip ? <QuipLine text={quip} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
@@ -1070,6 +1099,7 @@ export function GameplayChatThread({
                 insideJoke={m.insideJoke}
                 breadcrumb={m.breadcrumb}
                 quip={m.quip}
+                explanation={m.explanation}
                 copyVariant={m.copyVariant}
                 creatorName={m.creatorName}
                 relationalFeedbackLine={m.relationalFeedbackLine}
