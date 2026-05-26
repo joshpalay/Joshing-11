@@ -101,11 +101,18 @@ export async function playGame(params: {
       ? canonical
       : wrongAnswerFor(canonical ?? 'unknown');
 
-    await page.locator('input[placeholder="Your answer..."]').fill(answer);
+    const input = page.locator('input[placeholder="Your answer..."]');
+    await input.fill(answer);
     await snap(page, params.runId, `q${index}-before-submit`, log);
 
     const responsePromise = page.waitForResponse(answerUrlMatcher, { timeout: 15_000 }).catch(() => null);
-    await page.locator('button[type="submit"]').click();
+    // Press Enter rather than clicking [type="submit"]. The bottom <nav
+    // aria-label="Primary navigation"> is fixed at the same bottom edge as
+    // the sticky answer form and intercepts pointer events on the Send
+    // button — that's a real mobile UX bug worth noting (see the LLM
+    // review section of the report), and it would make the harness flaky
+    // if we relied on the click.
+    await input.press('Enter');
     log.events.push({ kind: 'answer_submitted', index, text: answer, intent, at: now() });
 
     const response = await responsePromise;
