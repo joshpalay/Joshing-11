@@ -78,14 +78,11 @@ export function Nav({
     );
   }
 
-  // The Profile tab is active across three URL shapes: the canonical
-  // /users/<self-id>, the /users/me alias before it redirects, and the
-  // /account/* settings sub-pages (which are reached only via the gear
-  // icon on the profile, so the bottom-nav highlight stays on Profile).
+  // The Profile tab is active for both the canonical /users/<self-id>
+  // route and the /users/me alias before it redirects.
   function isProfileTabActive(href: string): boolean {
     if (href !== '/users/me') return false;
     if (pathname === '/users/me') return true;
-    if (pathname.startsWith('/account')) return true;
     if (currentUserId && pathname.startsWith(`/users/${currentUserId}`)) {
       return true;
     }

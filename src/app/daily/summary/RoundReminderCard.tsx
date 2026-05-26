@@ -44,7 +44,7 @@ export function RoundReminderCard() {
           We&apos;ve saved your preference. Texts will start when reminders launch.
         </p>
         <p className="text-muted-foreground mt-2 text-xs">
-          <Link href="/account/notifications" className="underline underline-offset-2">
+          <Link href="/users/me#notifications" className="underline underline-offset-2">
             Manage in settings
           </Link>
         </p>
@@ -60,7 +60,7 @@ export function RoundReminderCard() {
           Got it — we&apos;ll verify {state.email} and email you once reminders launch.
         </p>
         <p className="text-muted-foreground mt-2 text-xs">
-          <Link href="/account/notifications" className="underline underline-offset-2">
+          <Link href="/users/me#notifications" className="underline underline-offset-2">
             Manage in settings
           </Link>
         </p>

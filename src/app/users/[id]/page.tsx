@@ -3,13 +3,12 @@ import {
   Globe,
   type LucideIcon,
   Pencil,
-  Settings as SettingsIcon,
   Users as UsersIcon,
 } from 'lucide-react'
 import Link from 'next/link'
+import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 
-import { SettingsGroup, SettingsRow } from '@/components/account/SettingsRow'
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard'
 import { AuthoredQuestionsFeed } from '@/components/profile/AuthoredQuestionsFeed'
 import { InlineEditableField } from '@/components/profile/InlineEditableField'
@@ -18,10 +17,17 @@ import { MutualFriendsSection } from '@/components/profile/MutualFriendsSection'
 import { PreviewBanner } from '@/components/profile/PreviewBanner'
 import { ProfileFriendButton } from '@/components/profile/ProfileFriendButton'
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle'
+import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow'
 import { SharedInterestsOverlap } from '@/components/profile/SharedInterestsOverlap'
+import { AccountActions } from '@/components/profile/settings/AccountActions'
+import { NotificationsForm } from '@/components/profile/settings/NotificationsForm'
+import { PrivacyForm } from '@/components/profile/settings/PrivacyForm'
+import { maskPhone } from '@/components/profile/settings/phone-mask'
 import { getSession } from '@/server/auth/session'
 import {
+  getDiscoverability,
   getEditableProfile,
+  getReminderState,
   HANDLE_CHANGE_COOLDOWN_DAYS,
 } from '@/server/db/queries/account'
 import {
@@ -35,6 +41,15 @@ import {
   topPointPositiveDomains,
 } from '@/server/profile/knowledge-view'
 import { resolvePreviewAs } from '@/server/profile/preview'
+import {
+  buildInviteUrl,
+  getBaseUrl,
+  getOrCreateInviteToken,
+} from '@/server/friends/user-invite-token'
+
+const APP_VERSION = 'v1.0.0'
+
+export const dynamic = 'force-dynamic'
 
 type UserProfilePageProps = {
   params: Promise<{ id: string }>
@@ -105,7 +120,15 @@ export default async function UserProfilePage({
       : 'a friend'
   const exitPreviewHref = `/users/${portrait.user.id}`
 
-  const [mastery, pageData, authoredQuestions, editableProfile] = await Promise.all([
+  const [
+    mastery,
+    pageData,
+    authoredQuestions,
+    editableProfile,
+    discoverability,
+    reminderState,
+    inviteTokenResult,
+  ] = await Promise.all([
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
     getAuthoredQuestionsForUser({
@@ -118,7 +141,23 @@ export default async function UserProfilePage({
     // editableProfile is only needed for the owner-self management view
     // and the inline editors during a preview.
     isOwnerView ? getEditableProfile(session.userId) : Promise.resolve(null),
+    // Settings data only fetched for the owner-self management view (the
+    // only place these forms render). Skipped for friend/stranger/preview
+    // variants to avoid pointless queries.
+    isOwnerView ? getDiscoverability(session.userId) : Promise.resolve(null),
+    isOwnerView ? getReminderState(session.userId) : Promise.resolve(null),
+    isOwnerView ? getOrCreateInviteToken(session.userId) : Promise.resolve(null),
   ])
+
+  let inviteUrl: string | null = null
+  if (isOwnerView && inviteTokenResult?.handle) {
+    const requestHeaders = await headers()
+    inviteUrl = buildInviteUrl(
+      getBaseUrl(requestHeaders),
+      inviteTokenResult.handle,
+      inviteTokenResult.token,
+    )
+  }
 
   const sortedDomains = [...pageData.allDomains].sort(
     (a, b) =>
@@ -133,11 +172,18 @@ export default async function UserProfilePage({
     Math.round(mastery.totalPoints),
   )} knowledge points across ${sortedDomains.length} territories`
 
-  // Owner self-view: the redesigned management surface modeled on
-  // /account — header card + privacy toggles + preview links + settings.
-  // No content body; previewing or being a friend/public viewer is what
-  // surfaces the knowledge portrait, authored questions, etc.
-  if (ownerSelfView && editableProfile && portrait.sectionSettings) {
+  // Owner self-view: the consolidated profile + settings surface. Header
+  // card, visibility toggles, preview links, discovery + invite, reminder
+  // prefs, dev tools, and account actions all live inline here. Previewing
+  // or being a friend/public viewer is what surfaces the knowledge
+  // portrait, authored questions, etc.
+  if (
+    ownerSelfView &&
+    editableProfile &&
+    portrait.sectionSettings &&
+    discoverability &&
+    reminderState
+  ) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-28">
         <ProfileHeaderCard
@@ -194,20 +240,35 @@ export default async function UserProfilePage({
           </SettingsGroup>
         </section>
 
-        <section className="mb-8">
-          <h2 className="mb-3 font-serif text-2xl font-semibold">Settings</h2>
-          <SettingsGroup>
-            <SettingsRow
-              icon={<SettingsIcon className="size-5" />}
-              title="Account settings"
-              subtitle="Notifications, preferences, and more."
-              href="/account"
-            />
-          </SettingsGroup>
+        <section className="mb-8" id="privacy-discovery">
+          <h2 className="mb-3 font-serif text-2xl font-semibold">
+            Privacy &amp; discovery
+          </h2>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Choose how other people can find you on Joshing.
+          </p>
+          <PrivacyForm
+            initialState={discoverability}
+            initialInviteUrl={inviteUrl}
+          />
         </section>
 
+        <section className="mb-8" id="notifications">
+          <h2 className="mb-3 font-serif text-2xl font-semibold">Notifications</h2>
+          <p className="mb-3 text-sm text-muted-foreground">
+            We&apos;ll only message you when a new round opens. One per day, max.
+          </p>
+          <NotificationsForm
+            initialState={reminderState}
+            maskedPhone={maskPhone(reminderState.phoneNumber)}
+          />
+        </section>
+
+        <AccountActions />
+
         <footer className="mt-auto pt-6 text-center text-xs text-muted-foreground">
-          On Joshing since {formatMemberSince(portrait.user.memberSince)}.
+          Joshing {APP_VERSION} · On Joshing since{' '}
+          {formatMemberSince(portrait.user.memberSince)}.
         </footer>
       </main>
     )
