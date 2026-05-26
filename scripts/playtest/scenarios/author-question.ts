@@ -53,6 +53,7 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
           correctAnswer: ANSWER_TEXT,
           alternateAnswers: ['paris'],
           verified: true,
+          critiqueIterations: 0,
         },
       });
       const bodyText = await response.text().catch(() => '');
