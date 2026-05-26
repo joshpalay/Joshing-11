@@ -55,10 +55,33 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
           verified: true,
         },
       });
-      const body = (await response.json().catch(() => null)) as { question?: { id: string } } | null;
+      const bodyText = await response.text().catch(() => '');
+      const body = (() => {
+        try { return JSON.parse(bodyText) as { question?: { id: string }; error?: string; message?: string }; }
+        catch { return null; }
+      })();
 
-      asserts.expectEqual('POST /api/questions returns 2xx', Math.floor(response.status() / 100), 2);
-      asserts.expectTruthy('response contains question.id', typeof body?.question?.id === 'string');
+      const status = response.status();
+      const ok2xx = Math.floor(status / 100) === 2;
+      if (!ok2xx) {
+        // Surface the actual error body so the report tells us exactly
+        // why the route refused. The most common rejection in this
+        // environment is `category_too_generic` (422) — fires when
+        // ANTHROPIC_API_KEY is unset and the deterministic fallback
+        // can't find a hyper-specific subcategory from question text alone.
+        asserts.fail(
+          `POST /api/questions returns 2xx (got ${status})`,
+          `body: ${bodyText.slice(0, 300)}`,
+        );
+        events.push({
+          kind: 'error',
+          message: `POST /api/questions returned ${status}: ${bodyText.slice(0, 300)}`,
+          at: now(),
+        });
+      } else {
+        asserts.pass(`POST /api/questions returns 2xx (got ${status})`);
+        asserts.expectTruthy('response contains question.id', typeof body?.question?.id === 'string');
+      }
 
       // DB-level: the row exists with the right creatorId.
       const [row] = await db

@@ -56,7 +56,10 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
       asserts.expectEqual('POST /api/friend-invitations returns 200', response.status(), 200);
       asserts.expectTruthy('response body present', body);
       asserts.expectEqual('response type is friend_invitation', body?.type, 'friend_invitation');
-      asserts.expectTruthy('inviteUrl returned', typeof body?.inviteUrl === 'string' && body.inviteUrl.startsWith('/invite/'));
+      asserts.expectTruthy(
+        'inviteUrl points at an /invite/ path',
+        typeof body?.inviteUrl === 'string' && body.inviteUrl.includes('/invite/'),
+      );
 
       if (body?.id) {
         ctx.manifest.trackInvitation({

@@ -80,7 +80,10 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
 
       // 2. Click through to /login?invitationToken=…
       const seeNoteLink = page.locator('a', { hasText: 'See the note' }).first();
-      await seeNoteLink.click();
+      await Promise.all([
+        page.waitForURL((url) => url.pathname.startsWith('/login'), { timeout: 10_000 }).catch(() => undefined),
+        seeNoteLink.click(),
+      ]);
       await page.waitForLoadState('networkidle').catch(() => undefined);
       events.push({ kind: 'navigated', url: page.url(), at: now() });
       asserts.check(
