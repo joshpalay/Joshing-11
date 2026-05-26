@@ -35,14 +35,23 @@ function ids<K extends TrackedRow['kind']>(
 async function assertTestUsersOnly(userIds: string[]): Promise<void> {
   if (userIds.length === 0) return;
   const rows = await db
-    .select({ id: users.id, displayName: users.displayName })
+    .select({ id: users.id, displayName: users.displayName, phoneNumber: users.phoneNumber })
     .from(users)
     .where(inArray(users.id, userIds));
-  const bad = rows.filter((row) => !(row.displayName ?? '').startsWith('[TEST]'));
+  // A row is "ours" if its displayName starts with [TEST] OR its phone is in
+  // the +15557 test block. The second branch covers users created by the
+  // signup flow (e.g. the accept-invitation scenario's invitee) where the
+  // OTP route doesn't set a displayName — but the test-phone allocation
+  // still proves intent.
+  const bad = rows.filter((row) => {
+    const tagged = (row.displayName ?? '').startsWith('[TEST]');
+    const inTestBlock = (row.phoneNumber ?? '').startsWith('+15557');
+    return !(tagged || inTestBlock);
+  });
   if (bad.length > 0) {
     throw new Error(
-      `[playtest/cleanup] refusing to delete users whose display_name does not start with "[TEST]": ` +
-        bad.map((b) => `${b.id}=${JSON.stringify(b.displayName)}`).join(', '),
+      `[playtest/cleanup] refusing to delete users without [TEST] displayName or +15557 phone: ` +
+        bad.map((b) => `${b.id}=${JSON.stringify({ name: b.displayName, phone: b.phoneNumber })}`).join(', '),
     );
   }
 }
