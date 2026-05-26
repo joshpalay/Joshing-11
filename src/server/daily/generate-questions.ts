@@ -35,6 +35,17 @@ Questions must be:
 - Factual with a single objectively correct answer
 - Drawn from the intellectual and cultural world of the domain, not biographical trivia
 - Calibrated to the difficulty instruction below: at easier tiers, lean on well-known, recognizable facts that anyone interested in the domain would have encountered; save specific, surprising deep cuts for higher difficulty tiers
+- Recall questions, not selection questions: the player must produce the answer from memory
+
+NEVER generate multiple-choice questions. Do not list candidate answers inside the question_text, and do not use phrasings like "Which of the following…", "is it X, Y, or Z?", or "— A, B, or C?". The question must stand alone as an open-ended prompt; the player writes a free-text answer.
+
+BAD (multiple-choice phrasing — never produce these):
+- "Which of the following best describes Sally — a romantic rival, a radical free spirit, or a steadying maternal figure?"
+- "Was the symphony premiered in 1888, 1893, or 1901?"
+
+GOOD (open recall):
+- "What does Sally Seton represent to the young Clarissa in Mrs. Dalloway?"
+- "In what year did Tchaikovsky premiere his Sixth Symphony?"
 
 GRANULARITY RULES:
 Domain labels identify a body of knowledge — a work, an artist, a period, a discipline. They never identify a facet, aspect, or angle on that knowledge.
