@@ -1,11 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, type LucideIcon } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+// `icon` is a ReactNode (pre-rendered JSX) rather than a LucideIcon
+// component reference so that server components can use this client
+// component without violating the RSC serialization rule that forbids
+// passing functions (lucide icons are forwardRef refs) across the
+// server→client boundary as props.
 type CommonProps = {
-  icon: LucideIcon;
+  icon: ReactNode;
   title: string;
   subtitle: string;
   tone?: 'default' | 'destructive';
@@ -19,7 +24,6 @@ type ButtonProps = CommonProps & {
 };
 
 export function SettingsRow(props: LinkProps | ButtonProps): ReactNode {
-  const Icon = props.icon;
   const tone = props.tone ?? 'default';
   const titleClass = tone === 'destructive' ? 'text-destructive' : '';
   const iconWrap =
@@ -33,7 +37,7 @@ export function SettingsRow(props: LinkProps | ButtonProps): ReactNode {
         className={`grid size-10 flex-none place-items-center rounded-full ${iconWrap}`}
         aria-hidden="true"
       >
-        <Icon className="size-5" />
+        {props.icon}
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className={`font-serif text-base font-semibold leading-tight ${titleClass}`}>

@@ -180,13 +180,13 @@ export default async function UserProfilePage({
           <h2 className="mb-3 font-serif text-2xl font-semibold">Preview</h2>
           <SettingsGroup>
             <SettingsRow
-              icon={UsersIcon}
+              icon={<UsersIcon className="size-5" />}
               title="View as friend"
               subtitle="See what an active mutual friend sees."
               href={`/users/${portrait.user.id}?previewAs=friend`}
             />
             <SettingsRow
-              icon={Globe}
+              icon={<Globe className="size-5" />}
               title="View as public"
               subtitle="See only what's public to everyone else."
               href={`/users/${portrait.user.id}?previewAs=public`}
@@ -198,7 +198,7 @@ export default async function UserProfilePage({
           <h2 className="mb-3 font-serif text-2xl font-semibold">Settings</h2>
           <SettingsGroup>
             <SettingsRow
-              icon={SettingsIcon}
+              icon={<SettingsIcon className="size-5" />}
               title="Account settings"
               subtitle="Notifications, preferences, and more."
               href="/account"

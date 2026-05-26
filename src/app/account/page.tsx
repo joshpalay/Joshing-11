@@ -164,19 +164,19 @@ export default function AccountPage() {
         <h2 className="mb-3 font-serif text-2xl font-semibold">Account</h2>
         <SettingsGroup>
           <SettingsRow
-            icon={Lock}
+            icon={<Lock className="size-5" />}
             title="Privacy & visibility"
             subtitle="Control what others can see"
             href="/account/privacy"
           />
           <SettingsRow
-            icon={MessageSquare}
+            icon={<MessageSquare className="size-5" />}
             title="SMS & notifications"
             subtitle="Manage how you get updates"
             href="/account/notifications"
           />
           <SettingsRow
-            icon={Palette}
+            icon={<Palette className="size-5" />}
             title="App preferences"
             subtitle="Theme, language, and more"
             href="/account/preferences"
@@ -188,31 +188,31 @@ export default function AccountPage() {
         <h2 className="mb-3 font-serif text-2xl font-semibold">Developer Tools</h2>
         <SettingsGroup>
           <SettingsRow
-            icon={FlaskConical}
+            icon={<FlaskConical className="size-5" />}
             title="Create test game"
             subtitle="Spin up a test game instantly"
             href="/dev/test-game"
           />
           <SettingsRow
-            icon={RefreshCw}
+            icon={<RefreshCw className="size-5" />}
             title="Reset session"
             subtitle="Clear current session data"
             href="/dev/reset-session"
           />
           <SettingsRow
-            icon={Sun}
+            icon={<Sun className="size-5" />}
             title="Trigger noon reset"
             subtitle="Simulate daily reset"
             href="/dev/noon-reset"
           />
           <SettingsRow
-            icon={Code2}
+            icon={<Code2 className="size-5" />}
             title="View staging flags"
             subtitle="See feature flag status"
             href="/dev/flags"
           />
           <SettingsRow
-            icon={BarChart3}
+            icon={<BarChart3 className="size-5" />}
             title="Points diagnostic"
             subtitle="Inspect a user's mastery events and where points came from"
             href="/dev/points-diagnostic"
@@ -222,7 +222,7 @@ export default function AccountPage() {
         <div className="mt-4">
           <SettingsGroup>
             <SettingsRow
-              icon={LogOut}
+              icon={<LogOut className="size-5" />}
               title="Log out"
               subtitle="Sign out of your account"
               onClick={() => {
