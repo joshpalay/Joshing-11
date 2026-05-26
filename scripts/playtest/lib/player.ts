@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import type { BrowserContext, ConsoleMessage, Page, Request, Response } from 'playwright';
 
+import { quickWrongAnswer } from './claude';
 import { canonicalAnswerFor } from './seed';
 import { screenshotDir } from './manifest';
 
@@ -34,8 +35,18 @@ async function snap(page: Page, runId: string, label: string, log: PlayerLog): P
   log.events.push({ kind: 'screenshot', file, note: label, at: now() });
 }
 
-function wrongAnswerFor(canonical: string): string {
-  return `definitely-not-${canonical.toLowerCase()}-${Math.floor(Math.random() * 1000)}`;
+async function wrongAnswerFor(canonical: string): Promise<string> {
+  // Prefer a Haiku-generated near-miss (same domain, factually off) so the
+  // grader is being exercised on realistic inputs — "Venus" for Mercury,
+  // "1990" for the Berlin Wall — not on obvious junk strings. Falls back to
+  // a deterministic junk string when ANTHROPIC_API_KEY isn't set.
+  const candidate = await quickWrongAnswer(canonical);
+  const normalizedCandidate = candidate.trim().toLowerCase();
+  const normalizedCanonical = canonical.trim().toLowerCase();
+  if (!normalizedCandidate || normalizedCandidate === normalizedCanonical) {
+    return `definitely-not-${normalizedCanonical}-${Math.floor(Math.random() * 1000)}`;
+  }
+  return candidate.trim();
 }
 
 function pickIntent(rate: number): 'correct' | 'wrong' {
@@ -74,9 +85,11 @@ export async function playGame(params: {
   });
   page.on('response', (response: Response) => {
     const status = response.status();
-    if (status >= 500) {
-      log.events.push({ kind: 'network_error', url: response.url(), status, at: now() });
-    }
+    if (status < 400) return;
+    const u = response.url();
+    // favicon.ico 404s on dev are noise; everything else is signal.
+    if (u.endsWith('/favicon.ico')) return;
+    log.events.push({ kind: 'network_error', url: u, status, at: now() });
   });
 
   const url = `${params.baseUrl}/games/${params.gameId}`;
@@ -120,7 +133,7 @@ export async function playGame(params: {
     const canonical = canonicalAnswerFor(questionText);
     const answer = intent === 'correct' && canonical
       ? canonical
-      : wrongAnswerFor(canonical ?? 'unknown');
+      : await wrongAnswerFor(canonical ?? 'unknown');
 
     const input = page.locator('input[placeholder="Your answer..."]');
     await input.fill(answer);
