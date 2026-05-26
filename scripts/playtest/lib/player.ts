@@ -85,10 +85,31 @@ export async function playGame(params: {
   log.events.push({ kind: 'navigated', url: page.url(), at: now() });
   await snap(page, params.runId, 'arrived', log);
 
+  // The first answer input must mount within a few seconds. If it doesn't,
+  // something is broken upstream (commonly: Next.js dev server ChunkLoadError
+  // on stale .next/, an unauthenticated session that landed on /login, or a
+  // proxy redirect loop). Surface it loudly — without this guard, the loop
+  // below would exit with zero iterations and the run would falsely report
+  // success.
+  const inputLocator = page.locator('input[placeholder="Your answer..."]');
+  try {
+    await inputLocator.first().waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    const overlay = await page.locator('[data-nextjs-dialog], #nextjs__container_errors_label').first().innerText().catch(() => '');
+    const trimmedOverlay = overlay.trim();
+    const detail = trimmedOverlay
+      ? ` Next.js error overlay: ${trimmedOverlay.slice(0, 200)}`
+      : ` URL ended at ${page.url()}.`;
+    throw new Error(
+      `[playtest] answer input never appeared on /games/${params.gameId} for ${params.displayName}.` +
+        `${detail} Check the dev server: rm .next, restart, and look for the ChunkLoadError.`,
+    );
+  }
+
   const answerUrlMatcher = `**/api/joshing-games/${params.gameId}/answer`;
   let index = 0;
   while (true) {
-    if ((await page.locator('input[placeholder="Your answer..."]').count()) === 0) break;
+    if ((await inputLocator.count()) === 0) break;
     if (index >= 5) break;
     index += 1;
 
