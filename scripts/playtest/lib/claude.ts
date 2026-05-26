@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { getAnthropicClient, HAIKU_MODEL, loggedMessagesCreate, ANTHROPIC_MODEL, extractTextContent } from '@/lib/llm';
 
-import type { PlayerLog } from './player';
+import type { ScenarioLog } from './scenario-context';
 
 export type ReviewResult = {
   ok: boolean;
@@ -41,13 +41,18 @@ function parseReview(text: string): ReviewResult {
   }
 }
 
-function pickReviewScreenshots(logs: PlayerLog[], limit = 6): string[] {
+function pickReviewScreenshots(logs: ScenarioLog[], perScenarioLimit = 2, totalLimit = 12): string[] {
   const files: string[] = [];
   for (const log of logs) {
+    let perScenario = 0;
     for (const event of log.events) {
-      if (event.kind === 'screenshot') files.push(event.file);
-      if (files.length >= limit) return files;
+      if (event.kind !== 'screenshot') continue;
+      files.push(event.file);
+      perScenario += 1;
+      if (perScenario >= perScenarioLimit) break;
+      if (files.length >= totalLimit) return files;
     }
+    if (files.length >= totalLimit) return files;
   }
   return files;
 }
@@ -58,7 +63,7 @@ function imageBlock(filePath: string): { type: 'image'; source: { type: 'base64'
 }
 
 export async function reviewSession(params: {
-  logs: PlayerLog[];
+  logs: ScenarioLog[];
   runId: string;
 }): Promise<ReviewResult> {
   const client = getAnthropicClient();
@@ -66,7 +71,13 @@ export async function reviewSession(params: {
 
   const screenshots = pickReviewScreenshots(params.logs);
   const transcript = params.logs.map((log) => ({
-    player: log.displayName,
+    scenario: log.scenarioId,
+    displayName: log.displayName,
+    status: log.status,
+    durationMs: log.durationMs,
+    assertions: log.assertions.map((a) =>
+      a.kind === 'assert_pass' ? { pass: a.label } : { fail: a.label, message: a.message },
+    ),
     events: log.events.map((e) => {
       if (e.kind === 'screenshot') return { kind: e.kind, note: e.note, file: path.basename(e.file) };
       return e;
@@ -77,11 +88,11 @@ export async function reviewSession(params: {
     {
       type: 'text',
       text:
-        'You are reviewing a multi-player playthrough of "Joshing", a small trivia game. ' +
-        'Several test players just played a 3-question game. Look at the transcript and screenshots below, then ' +
-        'return JSON only with this shape: ' +
-        '{"summary": "<one paragraph>", "observations": [<short strings>], "bugs": [<short strings>], "uxNotes": [<short strings>]}. ' +
-        'Be specific. Even on a clean run, you must surface at least one UX observation worth investigating. ' +
+        'You are reviewing an automated regression run of "Joshing", a multi-player trivia app. ' +
+        'Several scenarios just executed (each a distinct user flow). For EACH scenario, look at the assertions, transcript events, and screenshots. ' +
+        'Return JSON only: ' +
+        '{"summary": "<one paragraph across all scenarios>", "observations": [<short strings>], "bugs": [<short strings>], "uxNotes": [<short strings>]}. ' +
+        'Surface at least one UX observation worth investigating even on a clean run. Be specific — name the scenario when a bug or note is scenario-specific. ' +
         `Transcript: ${JSON.stringify(transcript)}`,
     },
     ...screenshots.map(imageBlock),

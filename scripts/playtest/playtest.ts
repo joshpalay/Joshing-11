@@ -3,14 +3,14 @@ import 'dotenv/config';
 import { pool } from '@/server/db';
 
 import { parsePlaytestArgs } from './lib/args';
-import { launchBrowser, contextForPlayer } from './lib/browser';
+import { launchBrowser } from './lib/browser';
 import { wipeTestData } from './lib/cleanup';
 import { reviewSession } from './lib/claude';
-import { ensureRunDirs, newRunId, readManifest, runDir, writeManifest } from './lib/manifest';
-import { playGame } from './lib/player';
+import { ensureRunDirs, newRunId, readManifest, runDir } from './lib/manifest';
 import { preflight } from './lib/preflight';
 import { writeReport } from './lib/report';
-import { seed } from './lib/seed';
+import { runSuite, selectScenarios } from './lib/suite';
+import { allScenarios } from './scenarios';
 
 async function main(): Promise<void> {
   const args = parsePlaytestArgs(process.argv);
@@ -28,41 +28,22 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Validate scenario ids before doing anything expensive.
+  const picked = selectScenarios(allScenarios, args);
+
   const runId = args.runId ?? newRunId();
   ensureRunDirs(runId);
   console.log(`[playtest] starting run ${runId} (audits/playtest-${runId}/)`);
-  console.log(`[playtest] seeding ${args.players} players, ${args.questions} questions against ${args.baseUrl}`);
-
-  const manifest = await seed({
-    runId,
-    baseUrl: args.baseUrl,
-    numPlayers: args.players,
-    numQuestions: args.questions,
-  });
-  writeManifest(manifest);
-  console.log(`[playtest] seeded game ${manifest.gameId}`);
+  console.log(`[playtest] running ${picked.length} scenario(s): ${picked.map((s) => s.id).join(', ')}`);
 
   const browser = await launchBrowser(args.headed);
   try {
-    const logs = [];
-    for (const player of manifest.players) {
-      console.log(`[playtest] playing as ${player.displayName}`);
-      const context = await contextForPlayer(browser, args.baseUrl, player.sessionCookie);
-      try {
-        const log = await playGame({
-          context,
-          baseUrl: args.baseUrl,
-          runId,
-          gameId: manifest.gameId,
-          playerId: player.id,
-          displayName: player.displayName,
-          correctnessRate: args.correctnessRate,
-        });
-        logs.push(log);
-      } finally {
-        await context.close();
-      }
-    }
+    const { manifest, logs } = await runSuite({
+      scenarios: picked,
+      args,
+      browser,
+      runId,
+    });
 
     console.log('[playtest] running LLM review');
     const review = await reviewSession({ logs, runId });
@@ -70,6 +51,12 @@ async function main(): Promise<void> {
     const reportFile = writeReport({ manifest, logs, review });
     console.log(`[playtest] report written → ${reportFile}`);
     console.log(`[playtest] run dir → ${runDir(runId)}`);
+
+    const failedScenarios = logs.filter((log) => log.status === 'fail');
+    if (failedScenarios.length > 0) {
+      console.error(`[playtest] ${failedScenarios.length} scenario(s) failed: ${failedScenarios.map((s) => s.scenarioId).join(', ')}`);
+      process.exitCode = 1;
+    }
 
     if (!args.keep) {
       console.log('[playtest] --keep=false: cleaning up test rows immediately');

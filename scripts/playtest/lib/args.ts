@@ -7,6 +7,7 @@ export type PlaytestArgs = {
   clean: boolean;
   runId: string | null;
   keep: boolean;
+  scenarioIds: string[];
 };
 
 function readFlag(args: string[], name: string): string | null {
@@ -44,6 +45,18 @@ function readFloatFlag(args: string[], name: string, fallback: number): number {
 
 export function parsePlaytestArgs(argv: string[]): PlaytestArgs {
   const args = argv.slice(2);
+
+  const single = readFlag(args, 'scenario');
+  const multi = readFlag(args, 'scenarios');
+  const scenarioIds: string[] = [];
+  if (single) scenarioIds.push(single.trim());
+  if (multi) {
+    for (const id of multi.split(',')) {
+      const trimmed = id.trim();
+      if (trimmed) scenarioIds.push(trimmed);
+    }
+  }
+
   return {
     players: readIntFlag(args, 'players', 3),
     questions: readIntFlag(args, 'questions', 3),
@@ -53,5 +66,6 @@ export function parsePlaytestArgs(argv: string[]): PlaytestArgs {
     clean: args.includes('--clean'),
     runId: readFlag(args, 'run-id'),
     keep: readBoolFlag(args, 'keep', true),
+    scenarioIds,
   };
 }

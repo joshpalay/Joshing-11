@@ -5,17 +5,17 @@ import { eq } from 'drizzle-orm';
 import { db, questions, users } from '@/server/db';
 import { createJoshingGame } from '@/server/db/queries/joshing-game';
 
-import { authenticateAsTestUser } from './auth';
-import type { PlaytestManifest } from './manifest';
+import { authenticateAsTestUser, type SessionCookie } from './auth';
+import type { ManifestBuilder } from './scenario-context';
 
 const PHONE_BASE = '+15557000000';
 
-function phoneFor(index: number): string {
+export function phoneFor(index: number): string {
   const tail = PHONE_BASE.length - String(index).length;
   return PHONE_BASE.slice(0, tail) + String(index);
 }
 
-type SeededQuestion = {
+export type SeededQuestion = {
   questionText: string;
   answerText: string;
   acceptedAlternatives: string[];
@@ -24,7 +24,7 @@ type SeededQuestion = {
   canonicalSubcategory: string;
 };
 
-const TEST_QUESTIONS: SeededQuestion[] = [
+export const TEST_QUESTIONS: SeededQuestion[] = [
   {
     questionText: '[TEST] What is the name of the dog in Peanuts?',
     answerText: 'Snoopy',
@@ -67,12 +67,14 @@ const TEST_QUESTIONS: SeededQuestion[] = [
   },
 ];
 
-async function provisionUser(params: {
+export type ProvisionedUser = { id: string; phone: string; displayName: string };
+
+export async function provisionTestUser(params: {
   phone: string;
   displayName: string;
-}): Promise<{ id: string }> {
-  // Mark onboardingComplete so the edge proxy doesn't redirect to /onboarding.
-  // refresh-onboarding-claim will re-mint the JWT to match on first nav.
+  scenarioId: string;
+  manifest: ManifestBuilder;
+}): Promise<ProvisionedUser> {
   const id = randomUUID();
   await db
     .insert(users)
@@ -85,31 +87,50 @@ async function provisionUser(params: {
     })
     .onConflictDoNothing({ target: users.phoneNumber });
 
-  const [existing] = await db
+  const [row] = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.phoneNumber, params.phone))
     .limit(1);
-  if (!existing) {
+  if (!row) {
     throw new Error(`[playtest/seed] failed to provision user for ${params.phone}`);
   }
-  return existing;
+
+  params.manifest.trackUser({
+    id: row.id,
+    phone: params.phone,
+    displayName: params.displayName,
+    scenarioId: params.scenarioId,
+  });
+
+  return { id: row.id, phone: params.phone, displayName: params.displayName };
 }
 
-async function insertQuestions(
-  inviterId: string,
-  count: number,
-): Promise<string[]> {
-  const picks = TEST_QUESTIONS.slice(0, count);
-  if (picks.length < count) {
-    throw new Error(`[playtest/seed] only ${TEST_QUESTIONS.length} canned questions available; requested ${count}`);
+export async function authenticateAndCookie(
+  baseUrl: string,
+  phone: string,
+): Promise<SessionCookie> {
+  return authenticateAsTestUser(baseUrl, phone);
+}
+
+export async function insertTestQuestions(params: {
+  creatorId: string;
+  count: number;
+  scenarioId: string;
+  manifest: ManifestBuilder;
+}): Promise<string[]> {
+  const picks = TEST_QUESTIONS.slice(0, params.count);
+  if (picks.length < params.count) {
+    throw new Error(
+      `[playtest/seed] only ${TEST_QUESTIONS.length} canned questions available; requested ${params.count}`,
+    );
   }
 
   const rows = await db
     .insert(questions)
     .values(
       picks.map((q) => ({
-        creatorId: inviterId,
+        creatorId: params.creatorId,
         questionText: q.questionText,
         answerText: q.answerText,
         acceptedAlternatives: q.acceptedAlternatives,
@@ -124,45 +145,33 @@ async function insertQuestions(
     )
     .returning({ id: questions.id });
 
+  for (const row of rows) {
+    params.manifest.trackQuestion({
+      id: row.id,
+      creatorId: params.creatorId,
+      scenarioId: params.scenarioId,
+    });
+  }
+
   return rows.map((row) => row.id);
 }
 
-export async function seed(params: {
-  runId: string;
-  baseUrl: string;
-  numPlayers: number;
-  numQuestions: number;
-}): Promise<PlaytestManifest> {
-  const inviterPhone = phoneFor(0);
-  const inviter = await provisionUser({ phone: inviterPhone, displayName: '[TEST] Inviter' });
-
-  const players: PlaytestManifest['players'] = [];
-  for (let i = 1; i <= params.numPlayers; i += 1) {
-    const phone = phoneFor(i);
-    const displayName = `[TEST] Player ${i}`;
-    const user = await provisionUser({ phone, displayName });
-    const cookie = await authenticateAsTestUser(params.baseUrl, phone);
-    players.push({ id: user.id, phone, displayName, sessionCookie: cookie.value });
-  }
-
-  const questionIds = await insertQuestions(inviter.id, params.numQuestions);
-
-  const { id: gameId } = await createJoshingGame({
-    title: '[TEST] Automated Playtest',
-    creatorId: inviter.id,
-    recipientIds: players.map((p) => p.id),
-    questionIds,
+export async function createTestGame(params: {
+  title: string;
+  creatorId: string;
+  recipientIds: string[];
+  questionIds: string[];
+  scenarioId: string;
+  manifest: ManifestBuilder;
+}): Promise<string> {
+  const { id } = await createJoshingGame({
+    title: params.title,
+    creatorId: params.creatorId,
+    recipientIds: params.recipientIds,
+    questionIds: params.questionIds,
   });
-
-  return {
-    runId: params.runId,
-    baseUrl: params.baseUrl,
-    createdAt: new Date().toISOString(),
-    inviter: { id: inviter.id, phone: inviterPhone, displayName: '[TEST] Inviter' },
-    players,
-    questionIds,
-    gameId,
-  };
+  params.manifest.trackGame({ id, scenarioId: params.scenarioId });
+  return id;
 }
 
 export function canonicalAnswerFor(questionText: string): string | null {
