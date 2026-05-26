@@ -3,8 +3,7 @@
 import { Check, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
-// Extracted from the deleted /account/profile/ProfileEditForm.tsx. Handle
-// editing has its own endpoint (PATCH /api/account/handle owns the
+// Handle editing has its own endpoint (PATCH /api/account/handle owns the
 // 30-day rate limit) and a two-step confirm because handle changes are
 // throttled.
 

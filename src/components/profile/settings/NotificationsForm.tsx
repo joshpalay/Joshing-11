@@ -73,12 +73,12 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
   }
 
   return (
-    <div className="mt-8 space-y-6">
+    <div className="space-y-4">
       <section className="rounded-xl border bg-card p-5 text-card-foreground">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-serif text-lg font-semibold">SMS reminders</h2>
+              <h3 className="font-serif text-lg font-semibold">SMS reminders</h3>
               <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
                 Coming soon
               </span>
@@ -110,7 +110,7 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
       <section className="rounded-xl border bg-card p-5 text-card-foreground">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col">
-            <h2 className="font-serif text-lg font-semibold">Email reminders</h2>
+            <h3 className="font-serif text-lg font-semibold">Email reminders</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {hasVerifiedEmail
                 ? `Email ${state.email} when a new round opens.`

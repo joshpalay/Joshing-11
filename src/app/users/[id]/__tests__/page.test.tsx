@@ -10,6 +10,9 @@ const {
   getKnowledgePageDataMock,
   getAuthoredQuestionsForUserMock,
   getEditableProfileMock,
+  getDiscoverabilityMock,
+  getReminderStateMock,
+  getOrCreateInviteTokenMock,
   getFriendsMock,
   resolvePreviewAsMock,
 } = vi.hoisted(() => ({
@@ -22,6 +25,9 @@ const {
   getKnowledgePageDataMock: vi.fn(),
   getAuthoredQuestionsForUserMock: vi.fn(),
   getEditableProfileMock: vi.fn(),
+  getDiscoverabilityMock: vi.fn(),
+  getReminderStateMock: vi.fn(),
+  getOrCreateInviteTokenMock: vi.fn(),
   getFriendsMock: vi.fn(async () => []),
   resolvePreviewAsMock: vi.fn(async () => null),
 }))
@@ -69,6 +75,8 @@ vi.mock('@/server/db/queries/questions', () => ({
 
 vi.mock('@/server/db/queries/account', () => ({
   getEditableProfile: getEditableProfileMock,
+  getDiscoverability: getDiscoverabilityMock,
+  getReminderState: getReminderStateMock,
   HANDLE_CHANGE_COOLDOWN_DAYS: 30,
 }))
 
@@ -78,6 +86,17 @@ vi.mock('@/server/db/queries/friends', () => ({
 
 vi.mock('@/server/profile/preview', () => ({
   resolvePreviewAs: resolvePreviewAsMock,
+}))
+
+vi.mock('@/server/friends/user-invite-token', () => ({
+  getOrCreateInviteToken: getOrCreateInviteTokenMock,
+  buildInviteUrl: (baseUrl: string, handle: string, token: string) =>
+    `${baseUrl}/u/${handle}/${token}`,
+  getBaseUrl: () => 'https://example.com',
+}))
+
+vi.mock('next/headers', () => ({
+  headers: () => Promise.resolve(new Headers()),
 }))
 
 vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
@@ -140,6 +159,9 @@ describe('/users/[id] friend profile page', () => {
     vi.clearAllMocks()
     getSessionMock.mockResolvedValue({ userId: 'viewer-1' })
     getEditableProfileMock.mockResolvedValue(null)
+    getDiscoverabilityMock.mockResolvedValue(null)
+    getReminderStateMock.mockResolvedValue(null)
+    getOrCreateInviteTokenMock.mockResolvedValue(null)
     getFriendPortraitDataMock.mockResolvedValue({
       user: {
         id: 'friend-1',
@@ -335,6 +357,78 @@ describe('/users/[id] friend profile page', () => {
     // Owner is previewing as a stranger of themselves — the friend
     // button must NOT render (you can't befriend yourself).
     expect(html).not.toContain('Add friend')
+  })
+
+  it('renders the owner self-view with consolidated settings sections', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'self-1' })
+    getEditableProfileMock.mockResolvedValueOnce({
+      id: 'self-1',
+      displayName: 'Owner',
+      handle: 'owner',
+      handleLastChangedAt: null,
+      phoneNumber: '+15555550100',
+    })
+    getDiscoverabilityMock.mockResolvedValueOnce({
+      discoverableByContacts: false,
+      discoverableByMutualFriends: true,
+    })
+    getReminderStateMock.mockResolvedValueOnce({
+      phoneNumber: '+15555550100',
+      smsOptIn: 'not_asked',
+      emailOptIn: 'not_asked',
+      email: null,
+      pendingEmail: null,
+      emailVerified: false,
+    })
+    getOrCreateInviteTokenMock.mockResolvedValueOnce({
+      handle: 'owner',
+      token: 'invite-token-abc',
+    })
+    getFriendPortraitDataMock.mockResolvedValueOnce({
+      user: {
+        id: 'self-1',
+        displayName: 'Owner',
+        handle: 'owner',
+        memberSince: new Date('2026-01-01T00:00:00.000Z'),
+      },
+      visibility: 'self',
+      friendship: null,
+      interests: [],
+      sharedInterests: [],
+      viewerSoloInterests: [],
+      friendSoloInterests: [],
+      mutualFriends: [],
+      mutualFriendsOverflow: 0,
+      isOwnerView: true,
+      sectionSettings: {
+        knowledge_base: 'public',
+        friends_list: 'friends',
+        authored_questions: 'public',
+      },
+      sectionVisibleTo: {
+        knowledge_base: true,
+        friends_list: true,
+        authored_questions: true,
+      },
+      previewedAs: null,
+    })
+
+    const element = await UserProfilePage({
+      params: Promise.resolve({ id: 'self-1' }),
+      searchParams: Promise.resolve({}),
+    })
+    const html = renderToStaticMarkup(element)
+
+    expect(html).toContain('Privacy &amp; discovery')
+    expect(html).toContain('Notifications')
+    expect(html).toContain('Developer tools')
+    expect(html).toContain('Log out')
+    expect(html).toContain('Delete account')
+    expect(html).toContain('id="privacy-discovery"')
+    expect(html).toContain('id="notifications"')
+    expect(html).toContain('Your invite link')
+    expect(html).not.toContain('href="/account"')
+    expect(html).not.toContain('href="/account/')
   })
 
   it('ignores invalid previewAs (resolved to null) and renders normally', async () => {

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
 import { AddFriendButton } from '@/components/friends/AddFriendButton'
@@ -91,12 +92,12 @@ export function ContactMatchBlock({
           Turn on contact matching to see which of your contacts are here. We hash
           your contacts on your device and never share them.
         </p>
-        <a
-          href="/account/privacy"
+        <Link
+          href="/users/me#privacy-discovery"
           className="btn-primary mt-3 inline-flex h-11 items-center rounded-full px-4 text-sm"
         >
           Open privacy settings
-        </a>
+        </Link>
       </section>
     )
   }
