@@ -36,13 +36,15 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
     case 'friend_answered_your_question': {
       const faq = item.reference.friendAnsweredQuestion
       const correct = faq?.result === 'correct'
+      const verb = correct ? 'got' : 'answered'
+      const domain = faq?.domain?.trim() || null
       return {
         headline: (
           <>
-            <b>{actor}</b> {correct ? 'got your question' : 'answered your question'}
+            <b>{actor}</b> {verb} your{domain ? ` ${domain}` : ''} question
           </>
         ),
-        secondLine: faq?.questionText ?? faq?.domain ?? null,
+        secondLine: faq?.questionText ?? null,
         accentColor: correct ? '#d97706' : '#a8a29e',
         href: '/activities',
       }
@@ -50,16 +52,20 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
 
     case 'declared_promoted': {
       const dp = item.reference.declaredPromoted
+      const domain = dp?.domain?.trim() || null
       return {
         headline: (
           <>
-            <b>{actor}</b> proved a domain on your map
+            <b>{actor}</b>{' '}
+            {domain
+              ? <>opened up the domain in <b>{domain}</b></>
+              : 'opened up a new domain on your map'}
           </>
         ),
-        secondLine: dp?.questionText || dp?.domain || null,
+        secondLine: dp?.questionText || null,
         accentColor: '#16a34a',
-        href: dp?.domain
-          ? `/knowledge/${encodeURIComponent(dp.domain)}`
+        href: domain
+          ? `/knowledge/${encodeURIComponent(domain)}`
           : '/knowledge',
       }
     }
