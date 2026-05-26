@@ -843,6 +843,57 @@ export async function register() {
       // both User and PROFILE_SECTION_VISIBILITY before this migration runs.
     }
 
+    // Migration 0055 creates the EmailVerificationToken table that backs the
+    // /verify-email confirm-link flow. The send + confirm routes hit this
+    // table on every email-verification request, so a preview/production
+    // database with the migration recorded but the table missing would 42P01
+    // before migrate() could repair it. Pre-create the table, FK, and
+    // indexes idempotently outside the migrator transaction.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "EmailVerificationToken" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL,
+          "email" text NOT NULL,
+          "token_hash" text NOT NULL,
+          "expires_at" timestamp with time zone NOT NULL,
+          "consumed_at" timestamp with time zone,
+          "created_at" timestamp with time zone DEFAULT now() NOT NULL
+        )
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          token_table regclass := to_regclass('public."EmailVerificationToken"');
+          user_table regclass := to_regclass('public."User"');
+        BEGIN
+          IF token_table IS NOT NULL
+            AND user_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'EmailVerificationToken_user_id_User_id_fk'
+                AND conrelid = token_table
+            )
+          THEN
+            ALTER TABLE "EmailVerificationToken"
+              ADD CONSTRAINT "EmailVerificationToken_user_id_User_id_fk"
+              FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "EmailVerificationToken_token_hash_key"
+          ON "EmailVerificationToken" ("token_hash")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "EmailVerificationToken_user_id_idx"
+          ON "EmailVerificationToken" ("user_id")
+      `);
+    } catch {
+      // User table may not exist yet on a fresh database — migrate() creates
+      // it before this migration runs.
+    }
+
     // Migration 0054 adds a 'knowledge_base' value to ProfileSection (which
     // collapses the legacy 'knowledge_map' and 'mind_expanding' sections into
     // one) and drops User.bio / .tagline / .location plus their CHECKs. The
