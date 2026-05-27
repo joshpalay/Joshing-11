@@ -24,6 +24,7 @@ type CreateQuestionResponse = {
   question?: QuestionView;
   id?: string;
   error?: string;
+  message?: string;
   feedShare?: {
     requested: boolean;
     createdCount: number;
@@ -161,7 +162,7 @@ function QuestionsPageContent() {
       body: JSON.stringify(values),
     });
     const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
-    if (!response.ok || !body?.question) throw new Error(body?.error ?? 'Could not save that question.');
+    if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not save that question.');
     setQuestions((current) => [body.question!, ...current]);
     setDrawer({ mode: 'closed' });
     if (values.sendToFriendIds.length > 0) {
@@ -184,8 +185,8 @@ function QuestionsPageContent() {
       credentials: 'include',
       body: JSON.stringify(values),
     });
-    const body = await response.json().catch(() => null) as { question?: QuestionView; error?: string } | null;
-    if (!response.ok || !body?.question) throw new Error(body?.error ?? 'Could not update that question.');
+    const body = await response.json().catch(() => null) as { question?: QuestionView; error?: string; message?: string } | null;
+    if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not update that question.');
     setQuestions((current) => current.map((question) => question.id === questionId ? body.question! : question));
     setDrawer({ mode: 'closed' });
     setToast('Question updated.');

@@ -131,3 +131,102 @@ describe('categorizeQuestion final subcategory guard', () => {
     expect(persistedDomain).not.toBe(result.broad_category)
   })
 })
+
+describe('categorizeQuestion de-leak retry', () => {
+  beforeEach(() => {
+    createMessageMock.mockReset()
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key-with-enough-length'
+    process.env.LLM_ENABLED = 'true'
+  })
+
+  it('re-prompts when the LLM picks the answer as the subcategory', async () => {
+    createMessageMock
+      .mockResolvedValueOnce(
+        anthropicTextResponse({
+          subcategory: "Robert's Rules of Order",
+          broad_category: 'Civics',
+          confidence: 0.9,
+        })
+      )
+      .mockResolvedValueOnce(
+        anthropicTextResponse({ subcategory: 'Parliamentary Procedure' })
+      )
+
+    const categorizeQuestion = await importCategorizer()
+    const result = await categorizeQuestion(
+      'What is the standard parliamentary authority used by most US organizations?',
+      "Robert's Rules of Order",
+      ['RONR', "Robert's Rules", 'Rules of Order']
+    )
+
+    expect(createMessageMock).toHaveBeenCalledTimes(2)
+    expect(result.subcategory).toBe('Parliamentary Procedure')
+  })
+
+  it('re-prompts when the LLM picks an alternate answer as the subcategory', async () => {
+    createMessageMock
+      .mockResolvedValueOnce(
+        anthropicTextResponse({
+          subcategory: 'Soil Acidity',
+          broad_category: 'Gardening',
+          confidence: 0.85,
+        })
+      )
+      .mockResolvedValueOnce(
+        anthropicTextResponse({ subcategory: 'Hydrangea Cultivation' })
+      )
+
+    const categorizeQuestion = await importCategorizer()
+    const result = await categorizeQuestion(
+      'What is the factor that makes hydrangeas pink or blue?',
+      'Soil pH',
+      ['Soil acidity', 'Aluminum availability']
+    )
+
+    expect(createMessageMock).toHaveBeenCalledTimes(2)
+    expect(result.subcategory).toBe('Hydrangea Cultivation')
+  })
+
+  it('keeps the original leaky subcategory if the retry also leaks (API guard handles it)', async () => {
+    createMessageMock
+      .mockResolvedValueOnce(
+        anthropicTextResponse({
+          subcategory: "Robert's Rules of Order",
+          broad_category: 'Civics',
+          confidence: 0.9,
+        })
+      )
+      .mockResolvedValueOnce(
+        anthropicTextResponse({ subcategory: 'Rules of Order' })
+      )
+
+    const categorizeQuestion = await importCategorizer()
+    const result = await categorizeQuestion(
+      'What is the standard parliamentary authority used by most US organizations?',
+      "Robert's Rules of Order",
+      ['Rules of Order']
+    )
+
+    expect(createMessageMock).toHaveBeenCalledTimes(2)
+    expect(result.subcategory).toBe("Robert's Rules of Order")
+  })
+
+  it('does not retry when the subcategory does not leak the answer', async () => {
+    createMessageMock.mockResolvedValueOnce(
+      anthropicTextResponse({
+        subcategory: 'Parliamentary Procedure',
+        broad_category: 'Civics',
+        confidence: 0.9,
+      })
+    )
+
+    const categorizeQuestion = await importCategorizer()
+    const result = await categorizeQuestion(
+      'What is the standard parliamentary authority used by most US organizations?',
+      "Robert's Rules of Order"
+    )
+
+    expect(createMessageMock).toHaveBeenCalledTimes(1)
+    expect(result.subcategory).toBe('Parliamentary Procedure')
+  })
+})

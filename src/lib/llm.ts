@@ -12,6 +12,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
+import { textContainsAnswer } from '@/server/questions/self-answering';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type GradeResult = 'correct' | 'wrong';
@@ -552,7 +554,8 @@ Return only valid JSON with keys: result, confidence, reason, consolation. No ex
 
 export async function categorizeQuestion(
   questionText: string,
-  answerText: string
+  answerText: string,
+  alternateAnswers: readonly string[] = []
 ): Promise<CategoryResult> {
   const systemPrompt = `You are a hyper-specific categorizer for a personal trivia game.
 Return exactly this JSON shape:
@@ -572,6 +575,7 @@ Rules:
 - The subcategory must always be narrower than the broad_category. Never return the broad_category value itself as the subcategory (e.g. if broad_category is "Pop Culture", the subcategory must be something more specific than "Pop Culture"; if broad_category is "Music", the subcategory must be more specific than "Music").
 - For music, film, TV, or pop culture questions: name the specific artist, franchise, era, or cultural moment — not the genre or medium (e.g. "Late-Career David Bowie", "MCU Phase 3", "Drag Race Seasons 1–5", "Early 2010s Internet Memes", "Survivor Original Era").
 - Include temporal or stylistic specificity whenever it meaningfully narrows the territory (e.g. "Golden Age Hip-Hop" not "Hip-Hop", "New Hollywood Cinema" not "Film").
+- The subcategory must NOT contain the correct answer or any alternate answer as a token (case- and punctuation-insensitive). If the natural niche label IS the answer, step one level out to the surrounding territory or one level over to the domain. Example: answer "Robert's Rules of Order" → use "Parliamentary Procedure" (NOT "Robert's Rules of Order" / "Rules of Order"). Example: answer "Soil pH" → use "Hydrangea Cultivation" or "Garden Soil Chemistry" (NOT "Soil pH" / "Soil Acidity").
 
 STRICT PROHIBITION — never use these as subcategory values (they are too generic):
 "Pop Culture", "Music", "Literature", "History", "World History", "Film", "Television",
@@ -590,8 +594,11 @@ Bad subcategories: "Classical Music", "Rock Music", "Musical Theatre", "Literatu
 
 Return JSON only.`;
 
+  const alternatesLine = alternateAnswers.length > 0
+    ? `\nAccepted alternates (do NOT use as the subcategory label): ${alternateAnswers.join(' | ')}`
+    : '';
   const userMessage = `Question: ${questionText}
-Answer: ${answerText}
+Answer: ${answerText}${alternatesLine}
 Categorize this question. Return JSON only.`;
 
   try {
@@ -667,6 +674,56 @@ Return JSON only.`;
       const refined = asTrimmedString(refinementParsed?.subcategory);
       if (refined && !isTooGenericSubcategory(refined, broadCategory)) {
         subcategory = refined;
+      }
+    }
+
+    if (textContainsAnswer(subcategory, answerText, alternateAnswers)) {
+      const leakPrompt = `You refine trivia subcategories so they do NOT give away the answer.
+Return valid JSON only:
+{ "subcategory": "<label>" }
+
+Rules:
+- The subcategory must NOT contain the correct answer or any alternate answer as a token (case- and punctuation-insensitive).
+- Step one level out: name the surrounding territory or domain, not the answer itself.
+- Keep it hyper-specific in flavor (era/person/movement/topic), just not the answer phrase.
+- Keep title case. Never return generic labels like "Music", "History", "General Knowledge".
+
+Examples:
+- Answer "Robert's Rules of Order" → "Parliamentary Procedure" (NOT "Robert's Rules of Order", NOT "Rules of Order")
+- Answer "Soil pH" → "Hydrangea Cultivation" (NOT "Soil pH", NOT "Soil Acidity")
+- Answer "The Waste Land" → "Modernist Poetry" (NOT "The Waste Land", NOT "Waste Land")`;
+      const altLine = alternateAnswers.length > 0
+        ? `\nAlternates to avoid: ${alternateAnswers.join(' | ')}`
+        : '';
+      const leakMessage = `Question: ${questionText}
+Answer: ${answerText}${altLine}
+Broad category: ${broadCategory}
+Current subcategory (leaks the answer): ${subcategory}
+Return JSON only.`;
+
+      const leakResponse = await loggedMessagesCreate(client, 'categorize-deleak', {
+        model: ANTHROPIC_MODEL,
+        max_tokens: 120,
+        temperature: 0,
+        system: [{ type: 'text', text: leakPrompt, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: leakMessage }],
+      });
+
+      const leakText = extractTextContent(leakResponse.content);
+      const leakParsed = parseJsonObject(leakText);
+      const deleaked = asTrimmedString(leakParsed?.subcategory);
+      if (
+        deleaked
+        && !isTooGenericSubcategory(deleaked, broadCategory)
+        && !textContainsAnswer(deleaked, answerText, alternateAnswers)
+      ) {
+        subcategory = deleaked;
+      } else {
+        console.warn('[categorizeQuestion] could not de-leak subcategory after retry', {
+          subcategory,
+          deleaked,
+          answer: answerText,
+        });
       }
     }
 
