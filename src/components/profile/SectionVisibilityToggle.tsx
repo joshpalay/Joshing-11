@@ -22,6 +22,10 @@ type Props = {
   // 3-column grid. Use compact when the toggle sits next to a section
   // header or inline with a field.
   size?: 'default' | 'compact';
+  // Stretches the pill to fill its container with three equal columns
+  // instead of sizing to content. Useful when the toggle is stacked
+  // below a label rather than placed inline beside it.
+  fullWidth?: boolean;
 };
 
 // Generalization of DomainVisibilityToggle (which is per-knowledge-domain).
@@ -35,6 +39,7 @@ export function SectionVisibilityToggle({
   initialVisibility,
   onSaved,
   size = 'default',
+  fullWidth = false,
 }: Props) {
   const [visibility, setVisibility] = useState<SectionVisibility>(initialVisibility);
   const [isSaving, setIsSaving] = useState(false);
@@ -65,13 +70,17 @@ export function SectionVisibilityToggle({
 
   const baseBtn =
     size === 'compact'
-      ? 'px-2 py-1 text-xs'
+      ? 'min-h-9 px-3 py-1.5 text-xs'
       : 'min-h-10 px-3 text-sm';
+
+  const wrapperLayout = fullWidth
+    ? 'grid w-full grid-cols-3'
+    : 'inline-grid grid-cols-3';
 
   return (
     <div>
       <div
-        className="inline-grid grid-cols-3 rounded-full border bg-card p-1 font-medium"
+        className={`${wrapperLayout} rounded-full border bg-card p-1 font-medium`}
         aria-label={`Visibility for ${label}`}
       >
         {OPTIONS.map((option) => (
