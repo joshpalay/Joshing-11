@@ -475,6 +475,7 @@ export default function DailyPage() {
           consolation: slot.reveal_quip ?? null,
           insideJoke: slot.reveal_inside_joke ?? null,
           breadcrumb: slot.reveal_breadcrumb ?? null,
+          explanation: slot.reveal_explainer ?? null,
           copyVariant: slot.slot_index,
           creatorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
           canonicalSubcategory: slot.domain,

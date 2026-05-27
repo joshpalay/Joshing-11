@@ -73,6 +73,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const question = row.question;
+  // Authors can't answer their own questions. The feed query helper at
+  // src/server/db/queries/feed.ts:334 already excludes authored items
+  // from the feed surface, but a stale FeedItem row id sent directly
+  // here would still otherwise be accepted.
+  if (question.creatorId && question.creatorId === session.userId) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
   const domain = question.canonicalSubcategory || question.broadCategory || question.category;
   const grade = await gradeAnswer(
     parsed.submittedAnswer,

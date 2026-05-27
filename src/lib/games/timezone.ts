@@ -1,7 +1,8 @@
 /**
- * Daily reset helpers — Wordle-style noon EST cutoff.
- * The "day" runs from noon EST (17:00 UTC) to the next noon EST.
- * All players worldwide share the same daily window regardless of timezone.
+ * Daily reset helpers — Wordle-style fixed UTC cutoff.
+ * The "day" runs from 17:00 UTC to the next 17:00 UTC. All players worldwide
+ * share the same daily window; UI formats that instant in each viewer's local
+ * timezone (see `formatNextResetTimeLocal`).
  */
 
 import { DAILY_RESET_HOUR_UTC } from '@/lib/game-constants';
@@ -99,4 +100,28 @@ export function getNextDailyResetBoundary(from: Date = new Date()): Date {
  */
 export function getMsUntilNextDailyResetBoundary(from: Date = new Date()): number {
   return Math.max(0, getNextDailyResetBoundary(from).getTime() - from.getTime());
+}
+
+/**
+ * Format the next daily reset boundary as a wall-clock time string in the
+ * viewer's local timezone. Falls back to the browser's resolved zone when none
+ * is passed. Examples: "1 PM" (Eastern DST), "10 AM" (Pacific DST),
+ * "10:30 PM" (India). On-the-hour minutes are dropped for readability.
+ */
+export function formatNextResetTimeLocal(
+  timezone?: string,
+  from: Date = new Date(),
+): string {
+  const next = getNextDailyResetBoundary(from);
+  const tz = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: tz,
+  }).formatToParts(next);
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '';
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '';
+  const period = parts.find((p) => p.type === 'dayPeriod')?.value ?? '';
+  return minute === '00' ? `${hour} ${period}` : `${hour}:${minute} ${period}`;
 }

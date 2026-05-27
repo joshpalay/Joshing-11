@@ -26,7 +26,7 @@ export function CreateChooser({ open, onClose }: { open: boolean; onClose: () =>
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/35 px-0 pb-0 md:items-center md:px-4 md:pb-4" role="dialog" aria-modal="true" aria-labelledby="create-chooser-title">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 px-0 pb-0 md:items-center md:px-4 md:pb-4" role="dialog" aria-modal="true" aria-labelledby="create-chooser-title">
       <button className="absolute inset-0 cursor-default" type="button" aria-label="Close create chooser" onClick={onClose} />
       <section className="relative w-full rounded-t-2xl bg-background p-5 shadow-xl md:max-w-md md:rounded-2xl">
         <h2 id="create-chooser-title" className="font-serif text-2xl font-semibold">Create</h2>

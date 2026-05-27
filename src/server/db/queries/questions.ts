@@ -9,7 +9,6 @@ import {
   masteryEvents,
   questions,
   userQuestionBank,
-  users,
 } from '@/server/db';
 import { broadCategoryDisplayName } from '@/lib/question-categorization';
 import { pgErrorCode } from '@/server/db/pg-error';
@@ -280,32 +279,37 @@ export async function getAuthoredQuestionsForUser(params: {
   userId: string;
   limit?: number;
   viewerUserId?: string;
+  // The effective viewer relationship to the author, precomputed by the
+  // caller (the profile page uses portrait.visibility). Defaults to
+  // 'self' when viewerUserId matches userId, else 'stranger' — the most
+  // conservative interpretation.
+  viewer?: 'self' | 'friend' | 'stranger';
+  // Whether the authored_questions section is visible to the effective
+  // viewer per PROFILE_SECTION_VISIBILITY. If false, returns []. Defaults
+  // to true so callers that don't yet thread the section gate still see
+  // questions (subject to the per-question filter below).
+  sectionVisible?: boolean;
 }): Promise<AuthoredQuestionPreview[]> {
   const limit = Math.max(1, Math.min(params.limit ?? 25, 100));
-  const isSelfView = params.viewerUserId === params.userId;
+  const viewer =
+    params.viewer ??
+    (params.viewerUserId === params.userId ? 'self' : 'stranger');
 
-  // User-level gate: when the author has hidden their authored questions
-  // from public view, return nothing to non-self viewers. Self-view always
-  // sees their own authored questions (regardless of either gate).
-  if (!isSelfView) {
-    const [author] = await db
-      .select({ authorProfilePublic: users.authorProfilePublic })
-      .from(users)
-      .where(eq(users.id, params.userId))
-      .limit(1);
+  // Section-level gate: when the section is hidden to the effective
+  // viewer, render nothing regardless of per-question visibility.
+  if (params.sectionVisible === false) return [];
 
-    if (!author || !author.authorProfilePublic) return [];
-  }
-
-  // Per-question filter: non-self viewers only see questions with
-  // visibility='public'. Self-view sees private questions as well.
+  // Per-question filter: self sees everything; friends see public+friends;
+  // strangers see only public.
   const whereClauses = [
     eq(questions.creatorId, params.userId),
     isNull(questions.deletedAt),
     eq(questions.source, 'authored'),
   ];
-  if (!isSelfView) {
+  if (viewer === 'stranger') {
     whereClauses.push(eq(questions.visibility, 'public'));
+  } else if (viewer === 'friend') {
+    whereClauses.push(inArray(questions.visibility, ['public', 'friends']));
   }
 
   const rows = await db

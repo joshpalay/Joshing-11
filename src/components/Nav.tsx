@@ -11,7 +11,7 @@ const navItems = [
   { href: '/friends', label: 'Friends', Icon: Users },
   { href: '/questions', label: 'Questions', Icon: Pencil },
   { href: '/knowledge', label: 'Knowledge', Icon: Brain },
-  { href: '/account', label: 'Account', Icon: User },
+  { href: '/users/me', label: 'Profile', Icon: User },
 ];
 
 function initialsFor(name: string): string {
@@ -78,6 +78,17 @@ export function Nav({
     );
   }
 
+  // The Profile tab is active for both the canonical /users/<self-id>
+  // route and the /users/me alias before it redirects.
+  function isProfileTabActive(href: string): boolean {
+    if (href !== '/users/me') return false;
+    if (pathname === '/users/me') return true;
+    if (currentUserId && pathname.startsWith(`/users/${currentUserId}`)) {
+      return true;
+    }
+    return false;
+  }
+
   const showBadge = bellBadgeCount > 0;
   const badgeText = formatBadgeCount(bellBadgeCount);
 
@@ -135,8 +146,12 @@ export function Nav({
           role="list"
         >
           {navItems.map(({ href, label, Icon }) => {
-            const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
-            const isAccount = label === 'Account';
+            const isProfile = label === 'Profile';
+            const active = isProfile
+              ? isProfileTabActive(href)
+              : href === '/'
+                ? pathname === '/'
+                : pathname.startsWith(href);
 
             return (
               <Link
@@ -150,7 +165,7 @@ export function Nav({
                 ].join(' ')}
               >
                 <span aria-hidden="true" className="relative grid place-items-center">
-                  {isAccount ? (
+                  {isProfile ? (
                     <AccountIcon active={active} />
                   ) : (
                     <Icon

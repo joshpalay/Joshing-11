@@ -367,6 +367,13 @@ function pickOpenedNewTerritory(raw: unknown): boolean {
   return r.openedNewTerritory === true
 }
 
+function pickOpenedTerritoryDomain(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  if (r.openedNewTerritory !== true) return null
+  return typeof r.domain === 'string' && r.domain.trim() ? r.domain : null
+}
+
 function pickBroadCategory(
   raw: unknown,
   item: FeedApiItem
@@ -1151,6 +1158,7 @@ function FeedListContent({
             quip={result.quip}
             insideJoke={result.insideJoke}
             openedNewTerritory={pickOpenedNewTerritory(result.masteryDelta)}
+            openedTerritoryDomain={pickOpenedTerritoryDomain(result.masteryDelta)}
             questionId={sheetItem.question_id}
             feedItemId={sheetItem.id}
             onClose={() => setFeedbackSheetId(null)}

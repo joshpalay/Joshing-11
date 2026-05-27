@@ -35,7 +35,7 @@ export const categoryEnum = pgEnum('Category', [
   'general_knowledge',
 ]);
 
-export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public']);
+export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends']);
 export const publicStatusEnum = pgEnum('PublicStatus', [
   'not_scored',
   'eligible_pending',
@@ -124,7 +124,6 @@ export const themePreferenceEnum = pgEnum('ThemePreference', [
   'parlor_index',
 ]);
 export const subscriptionPlanEnum = pgEnum('SubscriptionPlan', ['free', 'plus_monthly', 'plus_yearly']);
-export const portraitVisibilityEnum = pgEnum('PortraitVisibility', ['public', 'private']);
 export const masteryTierEnum = pgEnum('MasteryTier', ['establishing', 'familiar', 'solid', 'mastery']);
 export const domainExclusionScopeEnum = pgEnum('DomainExclusionScope', [
   'subcategory',
@@ -142,6 +141,16 @@ export const masterySourceTypeEnum = pgEnum('MasterySourceType', [
 ]);
 export const feedbackSignalEnum = pgEnum('FeedbackSignal', ['thumbs_up', 'thumbs_down']);
 export const territoryTypeEnum = pgEnum('TerritoryType', ['declared', 'demonstrated']);
+// Migration 0054 added the 'knowledge_base' value and stopped using
+// 'bio', 'tagline', 'location', 'knowledge_map', and 'mind_expanding'.
+// Postgres doesn't support dropping individual enum values, so the legacy
+// values remain in the DB enum type as zombies. They are deliberately
+// omitted here so app code can't reintroduce a reference.
+export const profileSectionEnum = pgEnum('ProfileSection', [
+  'knowledge_base',
+  'friends_list',
+  'authored_questions',
+]);
 
 export const users = pgTable(
   'User',
@@ -162,7 +171,6 @@ export const users = pgTable(
     pendingEmail: text('pending_email'),
     reminderPromptDismissedAt: timestamp('reminder_prompt_dismissed_at', { withTimezone: true }),
     lastActivityBellOpenedAt: timestamp('last_activity_bell_opened_at', { withTimezone: true }),
-    portraitVisibility: portraitVisibilityEnum('portrait_visibility').notNull().default('public'),
     knowledgeCardShareToken: text('knowledge_card_share_token'),
     knowledgeCardShareExpiresAt: timestamp('knowledge_card_share_expires_at', { withTimezone: true }),
     slug: text('slug'),
@@ -170,14 +178,10 @@ export const users = pgTable(
     handleLastChangedAt: timestamp('handle_last_changed_at', { withTimezone: true }),
     inviteToken: text('invite_token'),
     avatarColor: text('avatar_color'),
-    bio: text('bio'),
-    tagline: text('tagline'),
-    location: text('location'),
     discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
     phoneHash: text('phone_hash'),
     lastFriendDiscoveryCheckAt: timestamp('last_friend_discovery_check_at', { withTimezone: true }),
-    authorProfilePublic: boolean('authorProfilePublic').notNull().default(true),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
     birthYear: integer('birth_year'),
     grewUpCountry: text('grew_up_country'),
@@ -507,6 +511,11 @@ export const generatedQuestions = pgTable(
     // re-wordings of the same trivia that the text-level check misses.
     // Nullable so older rows generated before this column existed remain valid.
     factKey: text('fact_key'),
+    // 1-3 short tags identifying which facets of the domain this question
+    // covers (e.g. "Septimus shell shock", "Cymbeline allusion"). Aggregated
+    // per domain and fed back to the generation prompt as positive guidance:
+    // "you've covered X, Y, Z — pick something else." See migration 0055.
+    subAngles: text('sub_angles').array().notNull().default([]),
     createdAt: createdAt(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedInQueue: boolean('used_in_queue').notNull().default(false),
@@ -640,6 +649,25 @@ export const userDomainExclusions = pgTable(
       table.userId,
       table.scope,
       table.canonicalSubcategory,
+    ),
+  ],
+);
+
+export const profileSectionVisibility = pgTable(
+  'PROFILE_SECTION_VISIBILITY',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    section: profileSectionEnum('section').notNull(),
+    visibility: text('visibility').$type<'public' | 'friends' | 'private'>().notNull().default('public'),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique('PROFILE_SECTION_VISIBILITY_user_id_section_key').on(table.userId, table.section),
+    index('PROFILE_SECTION_VISIBILITY_user_id_idx').on(table.userId),
+    check(
+      'PROFILE_SECTION_VISIBILITY_visibility_check',
+      sql`${table.visibility} IN ('public', 'friends', 'private')`,
     ),
   ],
 );

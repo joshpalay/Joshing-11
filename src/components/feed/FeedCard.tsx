@@ -97,7 +97,7 @@ export function FeedCard({
           </div>
 
           <p
-            className="mt-3 line-clamp-4 text-[17px] leading-snug text-[var(--ink)]"
+            className="mt-3 text-[17px] leading-snug text-[var(--ink)]"
             style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
           >
             &ldquo;{item.question}&rdquo;
@@ -194,7 +194,7 @@ export function FeedCard({
 
         <p
           className={cn(
-            'mt-3 line-clamp-4 leading-snug text-[var(--ink)]',
+            'mt-3 leading-snug text-[var(--ink)]',
             dimQuestion ? 'text-[14px]' : 'text-[17px]',
           )}
           style={{

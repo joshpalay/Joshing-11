@@ -1,4 +1,12 @@
-import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
+import {
+  ANTHROPIC_MODEL,
+  INSTRUCTION_USER_INPUT_GUIDANCE,
+  extractTextContent,
+  getAnthropicClient,
+  loggedMessagesCreate,
+  parseJsonObject,
+  wrapUserInput,
+} from '@/lib/llm';
 
 export type AnswerRecheckDecision = 'accept' | 'reject' | 'needs_human';
 
@@ -77,22 +85,23 @@ Return JSON only with exactly these keys:
   "confidence": 0.0,
   "reason": "one concise sentence for the player",
   "accepted_alternative": "the submitted answer normalized for future accepted alternatives, or null"
-}`;
+}${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
-  const userMessage = `Question: ${params.questionText}
-Canonical answer: ${params.canonicalAnswer}
-Already accepted alternatives: ${(params.acceptedAlternatives ?? []).join(' | ') || '(none)'}
-Submitted answer to recheck: ${params.submittedAnswer}
-Question type: ${params.questionType}
+  const userMessage = `${wrapUserInput('question', params.questionText)}
+${wrapUserInput('canonical_answer', params.canonicalAnswer)}
+${wrapUserInput('accepted_alternatives', (params.acceptedAlternatives ?? []).join(' | ') || '(none)')}
+${wrapUserInput('submitted_answer', params.submittedAnswer)}
+${wrapUserInput('question_type', params.questionType)}
 
 Should this challenged answer count? Return JSON only.`;
 
   try {
+    // ~600 tokens — below Sonnet's 1024 cache threshold; plain string.
     const response = await loggedMessagesCreate(client, 'recheck', {
       model: ANTHROPIC_MODEL,
       max_tokens: 400,
       temperature: 0,
-      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     });
 

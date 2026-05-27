@@ -36,51 +36,36 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
     case 'friend_answered_your_question': {
       const faq = item.reference.friendAnsweredQuestion
       const correct = faq?.result === 'correct'
-      // Directional v2 wording for the "they_got_you" half. The "incorrect"
-      // half keeps the generic "answered your question" line — it has no
-      // connection-moment counterpart, so the wording isn't redundant.
-      if (correct) {
-        return {
-          headline: (
-            <>
-              <b>{actor}</b> got you on{' '}
-              <em
-                style={{ fontFamily: 'var(--font-display), Georgia, serif' }}
-              >
-                {faq?.domain ?? 'something'}
-              </em>
-              .
-            </>
-          ),
-          secondLine: null,
-          accentColor: '#d97706',
-          href: '/activities',
-        }
-      }
+      const verb = correct ? 'got' : 'answered'
+      const domain = faq?.domain?.trim() || null
       return {
         headline: (
           <>
-            <b>{actor}</b> answered your question
+            <b>{actor}</b> {verb} your{domain ? ` ${domain}` : ''} question
           </>
         ),
-        secondLine: faq?.domain ?? null,
-        accentColor: '#a8a29e',
+        secondLine: faq?.questionText ?? null,
+        accentColor: correct ? '#d97706' : '#a8a29e',
         href: '/activities',
       }
     }
 
     case 'declared_promoted': {
       const dp = item.reference.declaredPromoted
+      const domain = dp?.domain?.trim() || null
       return {
         headline: (
           <>
-            <b>{actor}</b> proved a domain on your map
+            <b>{actor}</b>{' '}
+            {domain
+              ? <>opened up the domain in <b>{domain}</b></>
+              : 'opened up a new domain on your map'}
           </>
         ),
-        secondLine: dp?.domain ?? null,
+        secondLine: dp?.questionText || null,
         accentColor: '#16a34a',
-        href: dp?.domain
-          ? `/knowledge/${encodeURIComponent(dp.domain)}`
+        href: domain
+          ? `/knowledge/${encodeURIComponent(domain)}`
           : '/knowledge',
       }
     }

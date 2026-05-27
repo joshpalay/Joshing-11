@@ -14,10 +14,13 @@
 
 import {
   HAIKU_MODEL,
+  HAIKU_GATE_TIMEOUT_MS,
+  INSTRUCTION_USER_INPUT_GUIDANCE,
   extractTextContent,
   getAnthropicClient,
   loggedMessagesCreate,
   parseJsonObject,
+  wrapUserInput,
 } from '@/lib/llm';
 
 export { verdictToPublicStatus } from '@/server/llm/vet-verdict';
@@ -59,21 +62,21 @@ Also emit:
 - overall_score: number 0..1 — your composite confidence the question belongs in a shared pool.
 - reason: short single sentence explaining the verdict (≤ 140 chars), human-readable, no markdown.
 
-Return only valid JSON with keys: factual, quality, safety, answer_leaked, overall_score, reason. No prose outside the object.`;
+Return only valid JSON with keys: factual, quality, safety, answer_leaked, overall_score, reason. No prose outside the object.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
 function buildUserMessage(input: VetQuestionInput): string {
   const lines = [
-    `Question: ${input.questionText}`,
-    `Stated answer: ${input.answer}`,
+    wrapUserInput('question', input.questionText),
+    wrapUserInput('stated_answer', input.answer),
   ];
   if (input.alternateAnswers && input.alternateAnswers.length > 0) {
-    lines.push(`Accepted alternates: ${input.alternateAnswers.join(' | ')}`);
+    lines.push(wrapUserInput('accepted_alternates', input.alternateAnswers.join(' | ')));
   }
   if (input.explanation) {
-    lines.push(`Author explanation: ${input.explanation}`);
+    lines.push(wrapUserInput('author_explanation', input.explanation));
   }
   if (input.canonicalSubcategory) {
-    lines.push(`Categorised as: ${input.canonicalSubcategory}${input.broadCategory ? ` (${input.broadCategory})` : ''}`);
+    lines.push(wrapUserInput('categorised_as', `${input.canonicalSubcategory}${input.broadCategory ? ` (${input.broadCategory})` : ''}`));
   }
   lines.push('Vet this submission. Return JSON only.');
   return lines.join('\n');
@@ -106,13 +109,14 @@ export async function vetQuestion(input: VetQuestionInput): Promise<VetVerdict> 
 
   let response;
   try {
+    // ~700 tokens — below Haiku's 2048 cacheable threshold; plain string.
     response = await loggedMessagesCreate(client, 'vet-question', {
       model: HAIKU_MODEL,
       max_tokens: 400,
       temperature: 0,
-      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: buildUserMessage(input) }],
-    });
+    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
   } catch (error) {
     console.warn('[vetQuestion] request_failed', {
       message: error instanceof Error ? error.message : String(error),

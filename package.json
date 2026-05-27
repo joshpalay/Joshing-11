@@ -11,6 +11,7 @@
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
     "smoke:daily-catchup": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/daily-catchup.smoke.mjs",
     "smoke:question-vetting": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/question-vetting.smoke.mjs",
+    "smoke:gameplay": "tsx scripts/playtest/playtest.ts",
     "format": "prettier --write ."
   },
   "dependencies": {
@@ -45,6 +46,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "latest",
     "eslint-config-next": "16.1.6",
+    "playwright": "^1.60.0",
     "postcss": "latest",
     "prettier": "latest",
     "prettier-plugin-tailwindcss": "latest",
