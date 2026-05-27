@@ -105,13 +105,12 @@ Trivia gets monotonous when every question follows the same template ("What is t
 - "who_did_what": asks which character/person performs a specific act (e.g. "Who kills Polonius?")
 - "sequence_or_order": asks for ordering of events, items, or steps
 - "technique_or_term": asks for the technical term for a described concept
-- "true_false_or_choice": offers 2-4 options and asks which is correct (state options inline in the question text)
 - "what_happens_next": asks what immediately follows a described scene/event
 
 Rules:
 - Within a single batch of questions, no two questions may share the same question_shape unless the batch has more questions than there are shapes in the catalog.
 - "identification" is the most over-used shape — use it sparingly.
-- Pick the shape that best fits the underlying fact; don't force a multiple-choice when the natural form is identification.
+- Pick the shape that best fits the underlying fact.
 
 Also emit sub_angles: a list of 1-3 short tags (each ≤ 40 chars) naming the facets of the domain this question covers. Tags should be specific enough that two questions on the same facet share a tag, but broad enough to reuse across questions. Examples:
 - For "What instrument does Hagen play to summon the Gibichungs?": ["Hagen", "Götterdämmerung Act II", "summons vassals"]
@@ -134,7 +133,7 @@ Return format:
       "difficulty_estimate": "accessible | moderate | specialist",
       "fact_key": "string, short hyphenated lowercase identifier for the underlying fact (see REPETITION RULES)",
       "sub_angles": ["1-3 short tags identifying the facets of the domain covered (see above)"],
-      "question_shape": "one of: identification | year_or_date | in_which_work | who_did_what | sequence_or_order | technique_or_term | true_false_or_choice | what_happens_next"
+      "question_shape": "one of: identification | year_or_date | in_which_work | who_did_what | sequence_or_order | technique_or_term | what_happens_next"
     }
   ]
 }`;
@@ -146,7 +145,6 @@ const QUESTION_SHAPES = [
   'who_did_what',
   'sequence_or_order',
   'technique_or_term',
-  'true_false_or_choice',
   'what_happens_next',
 ] as const;
 type QuestionShape = (typeof QUESTION_SHAPES)[number];
