@@ -1,10 +1,14 @@
 import {
   ANTHROPIC_MODEL,
+  GENERATION_TIMEOUT_MS,
+  HAIKU_GATE_TIMEOUT_MS,
   HAIKU_MODEL,
+  INSTRUCTION_USER_INPUT_GUIDANCE,
   extractTextContent,
   getAnthropicClient,
   loggedMessagesCreate,
   parseJsonObject,
+  wrapUserInput,
 } from '@/lib/llm';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
@@ -136,7 +140,7 @@ Return format:
       "question_shape": "one of: identification | year_or_date | in_which_work | who_did_what | sequence_or_order | technique_or_term | what_happens_next"
     }
   ]
-}`;
+}${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
 const QUESTION_SHAPES = [
   'identification',
@@ -295,10 +299,10 @@ ${perDomain.join('\n')}`;
   return `${domainSection}${calibration}${difficultyHint}${subAnglesHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
-${prevBlock}
+${wrapUserInput('recent_questions', prevBlock)}
 
 Fact keys already covered for this user (do not produce any question whose fact_key matches one of these). Each entry is prefixed with [<source domain>] for the same cross-domain reason:
-${factKeyBlock}`;
+${wrapUserInput('recent_fact_keys', factKeyBlock)}`;
 }
 
 function asString(value: unknown): string | null {
@@ -405,19 +409,20 @@ For each duplicate pair, mark exactly one index to drop (prefer dropping the mor
 Return JSON only:
 { "duplicate_indices": [list of zero-based indices to drop] }
 
-If there are no duplicates, return { "duplicate_indices": [] }.`;
+If there are no duplicates, return { "duplicate_indices": [] }.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
 async function findBatchDuplicates(questions: LlmQuestion[]): Promise<Set<number>> {
   if (questions.length < 2) return new Set();
   const client = getAnthropicClient();
   if (!client) return new Set();
 
-  const userMessage = questions
+  const body = questions
     .map(
       (q, i) =>
         `[${i}] domain=${q.canonical_subcategory}\n    q=${q.question_text}\n    a=${q.answer}`,
     )
     .join('\n\n');
+  const userMessage = wrapUserInput('batch', body);
 
   try {
     const response = await loggedMessagesCreate(client, 'batch-dedupe', {
@@ -426,7 +431,7 @@ async function findBatchDuplicates(questions: LlmQuestion[]): Promise<Set<number
       temperature: 0,
       system: BATCH_DEDUPE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
-    });
+    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
     const parsed = parseJsonObject(extractTextContent(response.content));
     const rawList = parsed?.duplicate_indices;
     if (!Array.isArray(rawList)) return new Set();
@@ -464,7 +469,7 @@ A high bar applies — flag a question only when one of these defects is clearly
 Return JSON only:
 { "drop_indices": [list of zero-based indices to drop], "reasons": { "<index>": "<short reason>" } }
 
-If no questions are defective, return { "drop_indices": [], "reasons": {} }.`;
+If no questions are defective, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
 async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   toDrop: Set<number>;
@@ -474,12 +479,13 @@ async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   const client = getAnthropicClient();
   if (!client) return { toDrop: new Set(), reasons: {} };
 
-  const userMessage = generated
+  const body = generated
     .map(
       (q, i) =>
         `[${i}] domain=${q.canonical_subcategory}\n    q=${q.question_text}\n    a=${q.answer}`,
     )
     .join('\n\n');
+  const userMessage = wrapUserInput('batch', body);
 
   try {
     const response = await loggedMessagesCreate(client, 'quality-gate', {
@@ -488,7 +494,7 @@ async function findQualityFailures(generated: LlmQuestion[]): Promise<{
       temperature: 0,
       system: QUALITY_GATE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
-    });
+    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
     const parsed = parseJsonObject(extractTextContent(response.content));
     const rawList = parsed?.drop_indices;
     const rawReasons = parsed?.reasons;
@@ -533,7 +539,7 @@ Two questions probe the same fact if they would test the same answer about the s
 Return JSON only:
 { "duplicate_indices": [list of NEW indices that duplicate any RECENT entry] }
 
-If no NEW question duplicates a RECENT one, return { "duplicate_indices": [] }.`;
+If no NEW question duplicates a RECENT one, return { "duplicate_indices": [] }.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
 async function findRecentHistoryDuplicates(
   generated: LlmQuestion[],
@@ -552,10 +558,10 @@ async function findRecentHistoryDuplicates(
     .join('\n');
 
   const userMessage = `RECENT (already asked):
-${recentBlock}
+${wrapUserInput('recent', recentBlock)}
 
 NEW (just generated, indexed):
-${newBlock}
+${wrapUserInput('new_batch', newBlock)}
 
 Which NEW indices duplicate any RECENT entry?`;
 
@@ -566,7 +572,7 @@ Which NEW indices duplicate any RECENT entry?`;
       temperature: 0,
       system: RECENT_HISTORY_GATE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
-    });
+    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
     const parsed = parseJsonObject(extractTextContent(response.content));
     const rawList = parsed?.duplicate_indices;
     if (!Array.isArray(rawList)) return new Set();
@@ -605,11 +611,15 @@ async function callLlmOnce(
   const client = getAnthropicClient();
   if (!client) return [];
 
+  // SYSTEM_PROMPT is ~1500 tokens — above the 1024-token Sonnet cache
+  // threshold. The cron fans out with USER_CONCURRENCY=4, so concurrent
+  // batches hit the cache. The 5-min TTL means later sequential batches
+  // miss, but the concurrent slice is worth the surcharge.
   const response = await loggedMessagesCreate(client, 'generate-questions', {
     model: ANTHROPIC_MODEL,
     max_tokens: 2000,
     temperature: 0.8,
-    system: SYSTEM_PROMPT,
+    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     messages: [
       {
         role: 'user',
@@ -626,7 +636,7 @@ async function callLlmOnce(
         ),
       },
     ],
-  });
+  }, { timeoutMs: GENERATION_TIMEOUT_MS });
 
   const text = extractTextContent(response.content);
   return parseQuestions(text);
@@ -712,45 +722,40 @@ export async function generateDailyQuestions(
 
   if (generated.length === 0) return [];
 
-  // Drop near-duplicate questions inside this batch before we persist. The
-  // LLM occasionally returns two questions that probe the same fact in a
-  // single call (e.g. two Assassins/Proprietor questions on 2026-05-20), and
-  // the fact_key-based persist guard only catches them when both rows have a
-  // non-null fact_key — which has historically been rare.
-  const duplicateIndices = await findBatchDuplicates(generated);
-  if (duplicateIndices.size > 0) {
+  // Three independent gates run against the same input batch, then the drop
+  // sets are unioned. Sequential awaits would 3x the gate-phase latency for
+  // no benefit — none of the gates depend on each other's verdicts.
+  //
+  // - findBatchDuplicates: catches intra-batch dupes (e.g. two Proprietor
+  //   questions in one call on 2026-05-20). Persist-time fact_key guard only
+  //   catches these when both rows have non-null fact_keys, historically rare.
+  // - findRecentHistoryDuplicates: enforces semantic dedup against the last
+  //   RECENT_HISTORY_GATE_LIMIT questions. The prompt-level avoid list is
+  //   advisory; this is the actual enforcement boundary. Older history is
+  //   covered by fact_key dedup at persist time.
+  // - findQualityFailures: LLM-generated counterpart to critiqueQuestion() —
+  //   catches answer-leakage, opinion/vague, false-premise, self-answering.
+  const recentForGate = avoidList.slice(0, RECENT_HISTORY_GATE_LIMIT);
+  const [batchDuplicates, recentDuplicates, qualityResult] = await Promise.all([
+    findBatchDuplicates(generated),
+    findRecentHistoryDuplicates(generated, recentForGate),
+    findQualityFailures(generated),
+  ]);
+
+  if (batchDuplicates.size > 0) {
     console.warn('[daily/generate-questions] dropping intra-batch duplicates', {
-      droppedCount: duplicateIndices.size,
-      droppedIndices: [...duplicateIndices].sort((a, b) => a - b),
+      droppedCount: batchDuplicates.size,
+      droppedIndices: [...batchDuplicates].sort((a, b) => a - b),
       originalCount: generated.length,
     });
-    generated = generated.filter((_, i) => !duplicateIndices.has(i));
-    if (generated.length === 0) return [];
   }
-
-  // Enforced recent-history dedup. The avoid list in the prompt is advisory
-  // and the model regularly slips past it; this Haiku gate is the actual
-  // enforcement boundary. We check only the latest RECENT_HISTORY_GATE_LIMIT
-  // entries since older history is already protected by fact_key dedup at
-  // persist time.
-  const recentForGate = avoidList.slice(0, RECENT_HISTORY_GATE_LIMIT);
-  const recentDuplicates = await findRecentHistoryDuplicates(generated, recentForGate);
   if (recentDuplicates.size > 0) {
     console.warn('[daily/generate-questions] dropping recent-history duplicates', {
       droppedCount: recentDuplicates.size,
       droppedIndices: [...recentDuplicates].sort((a, b) => a - b),
       originalCount: generated.length,
     });
-    generated = generated.filter((_, i) => !recentDuplicates.has(i));
-    if (generated.length === 0) return [];
   }
-
-  // Quality gate: drop questions with answer-leakage, opinion/vague targets,
-  // false premises, or self-answering phrasing. This is the LLM-generated
-  // counterpart to critiqueQuestion() which already runs on user-authored
-  // submissions — gives us the same defect filter on bot output without
-  // burning a per-question call (single Haiku per batch).
-  const qualityResult = await findQualityFailures(generated);
   if (qualityResult.toDrop.size > 0) {
     console.warn('[daily/generate-questions] dropping low-quality questions', {
       droppedCount: qualityResult.toDrop.size,
@@ -758,7 +763,15 @@ export async function generateDailyQuestions(
       reasons: qualityResult.reasons,
       originalCount: generated.length,
     });
-    generated = generated.filter((_, i) => !qualityResult.toDrop.has(i));
+  }
+
+  const allDrops = new Set<number>([
+    ...batchDuplicates,
+    ...recentDuplicates,
+    ...qualityResult.toDrop,
+  ]);
+  if (allDrops.size > 0) {
+    generated = generated.filter((_, i) => !allDrops.has(i));
     if (generated.length === 0) return [];
   }
 

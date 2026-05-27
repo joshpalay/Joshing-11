@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
     const canonicalAnswer = question.answer;
 
     const grade = parsed.gaveUp
-      ? { result: 'wrong' as const, consolation: null }
+      ? { result: 'wrong' as const, consolation: null, confidence: 1, gradedVia: 'exact' as const }
       : await gradeAnswer(
           parsed.submittedAnswer,
           canonicalAnswer,
@@ -204,6 +204,17 @@ export async function POST(request: NextRequest) {
           question.questionText,
           'factual',
         );
+    // TODO: when grade.gradedVia === 'fallback', the LLM grader was unreachable
+    // and the slot is being marked wrong as a deterministic safeguard. Wire this
+    // to /api/daily/recheck or surface an "answer pending review" UI so users
+    // aren't silently penalised for an Anthropic outage.
+    if (grade.gradedVia === 'fallback') {
+      console.warn('[daily/answer] grading fell back to deterministic wrong', {
+        queueId: parsed.queueId,
+        slotIndex: parsed.slotIndex,
+        userId: session.userId,
+      });
+    }
     const isCorrect = grade.result === 'correct';
     const answerState = isCorrect ? 'correct' : 'incorrect';
     const quip = parsed.gaveUp ? null : selectQuip({ isCorrect, surface: 'daily', friendResult: null });
