@@ -144,32 +144,38 @@ export async function POST(request: NextRequest) {
     subcategory: canonicalSubcategory,
     domain: canonicalSubcategory,
   };
+  // Difficulty assessment, inside joke, and Haiku-vet all consume the same
+  // inputs (question + answer + category) and don't depend on each other's
+  // output — run them in parallel so the route's wall-clock is ~1× a single
+  // LLM call instead of 3×. Categorization upstream is the only true
+  // sequencing dependency in this handler. Haiku-vet failure is meant to be
+  // non-fatal (the /api/cron/vet-questions sweep retries), but bundling it
+  // here is fine because Promise.all rejects fast and we treat the trio as
+  // a single enrichment stage.
   try {
-    difficultyAssessment = await assessQuestionDifficulty({
-      questionText: questionFields.text,
-      correctAnswer: questionFields.correctAnswer,
-      broadCategory: questionFields.broadCategory,
-      canonicalSubcategory: questionFields.canonicalSubcategory,
-      explanation: questionFields.explanation,
-    });
-    insideJoke = await generateInsideJoke({
-      questionText: questionFields.text,
-      correctAnswer: questionFields.correctAnswer,
-      broadCategory: questionFields.broadCategory,
-      canonicalSubcategory: questionFields.canonicalSubcategory,
-    });
-    // Haiku-vet for the shared Daily 5 pool — approved questions become eligible
-    // to surface in other users' games (prioritised by friends + friends-of-
-    // friends). Failure is non-fatal: we leave publicStatus at 'not_scored'
-    // and the /api/cron/vet-questions sweep will retry.
-    verdict = await vetQuestion({
-      questionText: questionFields.text,
-      answer: questionFields.correctAnswer,
-      alternateAnswers: questionFields.alternateAnswers,
-      explanation: questionFields.explanation ?? null,
-      broadCategory: questionFields.broadCategory,
-      canonicalSubcategory: questionFields.canonicalSubcategory,
-    });
+    [difficultyAssessment, insideJoke, verdict] = await Promise.all([
+      assessQuestionDifficulty({
+        questionText: questionFields.text,
+        correctAnswer: questionFields.correctAnswer,
+        broadCategory: questionFields.broadCategory,
+        canonicalSubcategory: questionFields.canonicalSubcategory,
+        explanation: questionFields.explanation,
+      }),
+      generateInsideJoke({
+        questionText: questionFields.text,
+        correctAnswer: questionFields.correctAnswer,
+        broadCategory: questionFields.broadCategory,
+        canonicalSubcategory: questionFields.canonicalSubcategory,
+      }),
+      vetQuestion({
+        questionText: questionFields.text,
+        answer: questionFields.correctAnswer,
+        alternateAnswers: questionFields.alternateAnswers,
+        explanation: questionFields.explanation ?? null,
+        broadCategory: questionFields.broadCategory,
+        canonicalSubcategory: questionFields.canonicalSubcategory,
+      }),
+    ]);
   } catch (error) {
     console.error('[questions/create] unexpected_failure', {
       stage: 'enrichment',
