@@ -537,25 +537,30 @@ function PrivacyRow({
   visibility: 'public' | 'friends' | 'private'
 }) {
   return (
-    <div className="flex w-full items-center gap-4 px-4 py-4">
-      <span
-        className="grid size-10 flex-none place-items-center rounded-full bg-muted text-foreground/70"
-        aria-hidden="true"
-      >
-        <Icon className="size-5" />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="font-serif text-base font-semibold leading-tight">
-          {title}
+    <div className="flex w-full flex-col gap-3 px-4 py-4">
+      <div className="flex w-full items-center gap-4">
+        <span
+          className="grid size-10 flex-none place-items-center rounded-full bg-muted text-foreground/70"
+          aria-hidden="true"
+        >
+          <Icon className="size-5" />
         </span>
-        <span className="mt-0.5 text-sm text-muted-foreground">{subtitle}</span>
-      </span>
-      <SectionVisibilityToggle
-        section={section}
-        label={title.toLowerCase()}
-        initialVisibility={visibility}
-        size="compact"
-      />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="font-serif text-base font-semibold leading-tight">
+            {title}
+          </span>
+          <span className="mt-0.5 text-sm text-muted-foreground">{subtitle}</span>
+        </span>
+      </div>
+      <div className="pl-14">
+        <SectionVisibilityToggle
+          section={section}
+          label={title.toLowerCase()}
+          initialVisibility={visibility}
+          size="compact"
+          fullWidth
+        />
+      </div>
     </div>
   )
 }
