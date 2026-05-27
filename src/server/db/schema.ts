@@ -511,6 +511,11 @@ export const generatedQuestions = pgTable(
     // re-wordings of the same trivia that the text-level check misses.
     // Nullable so older rows generated before this column existed remain valid.
     factKey: text('fact_key'),
+    // 1-3 short tags identifying which facets of the domain this question
+    // covers (e.g. "Septimus shell shock", "Cymbeline allusion"). Aggregated
+    // per domain and fed back to the generation prompt as positive guidance:
+    // "you've covered X, Y, Z — pick something else." See migration 0055.
+    subAngles: text('sub_angles').array().notNull().default([]),
     createdAt: createdAt(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedInQueue: boolean('used_in_queue').notNull().default(false),

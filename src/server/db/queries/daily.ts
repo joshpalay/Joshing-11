@@ -710,29 +710,225 @@ export async function createDailyQueueItemFromAuthored(
   });
 }
 
+export type RecentDailyQuestionEntry = {
+  domain: string;
+  text: string;
+};
+
+export type RecentFactKeyEntry = {
+  domain: string;
+  factKey: string;
+};
+
 // Default widened from 60 to 200: the LLM repeatedly regenerated canonical
 // trivia (the Götterdämmerung Hagen-summons-vassals question surfaced ~4×)
 // because anything beyond ~12 days fell out of the avoid window. The full list
 // is now used to derive a compact fact-key avoid set; only the most recent
 // slice of full question texts is included verbatim (see RECENT_QUESTION_TEXT_LIMIT
 // in src/server/daily/generate-questions.ts).
-export async function getRecentDailyQuestionTexts(userId: string, limit = 200): Promise<string[]> {
+//
+// Each entry carries the source domain so the prompt can label cross-domain
+// overlap explicitly (e.g. a Mrs. Dalloway fact asked under "Virginia Woolf's
+// Novels and Essays" still counts when generating for the "Mrs. Dalloway"
+// domain). The avoid list itself is already cross-domain (user-scoped),
+// so this is purely about giving the LLM the signal to use it.
+export async function getRecentDailyQuestionTexts(
+  userId: string,
+  limit = 200,
+): Promise<RecentDailyQuestionEntry[]> {
   const rows = await db
-    .select({ questionText: generatedQuestions.questionText })
+    .select({
+      questionText: generatedQuestions.questionText,
+      domain: generatedQuestions.canonicalSubcategory,
+    })
     .from(generatedQuestions)
     .where(eq(generatedQuestions.userId, userId))
     .orderBy(sql`${generatedQuestions.createdAt} desc`)
     .limit(limit);
 
-  return rows.map((row) => row.questionText);
+  return rows.map((row) => ({
+    domain: row.domain ?? 'unknown',
+    text: row.questionText,
+  }));
+}
+
+export type AccessibleBankSource = {
+  questionText: string;
+  answer: string;
+  explainer: string;
+  broadCategory: string;
+  canonicalSubcategory: string;
+  difficultyEstimate: string;
+  basePoints: number;
+  factKey: string;
+  subAngles: string[];
+};
+
+// Pull one previously-generated "accessible" question for the given domain
+// that the current user has NOT seen, sourced from any OTHER user. Lets us
+// reuse canonical accessible trivia ("Mrs. Lovett's name", "Send in the
+// Clowns") instead of re-discovering it via Sonnet each week.
+//
+// Restrictions:
+// - fact_key must be present (predates 2026-05-24; older rows lack it)
+// - created within the last 30 days (filters out the worst pre-quality-gate
+//   historical drift)
+// - not authored by the viewer
+// - fact_key not already in the viewer's recent avoid set
+//
+// Returns null when the bank is empty for this domain — caller falls back
+// to fresh LLM generation, which incidentally grows the bank.
+export async function pickAccessibleBankSource(
+  userId: string,
+  domain: string,
+  avoidFactKeys: ReadonlySet<string>,
+): Promise<AccessibleBankSource | null> {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  let candidates: Array<typeof generatedQuestions.$inferSelect>;
+  try {
+    candidates = await db
+      .select()
+      .from(generatedQuestions)
+      .where(and(
+        eq(generatedQuestions.canonicalSubcategory, domain),
+        eq(generatedQuestions.difficultyEstimate, 'accessible'),
+        isNotNull(generatedQuestions.factKey),
+        sql`${generatedQuestions.userId} <> ${userId}`,
+        gte(generatedQuestions.createdAt, since),
+      ))
+      .orderBy(sql`random()`)
+      .limit(8);
+  } catch (error) {
+    // Tolerate the brief window where the sub_angles column is missing
+    // (migration 0055): a hard failure here would silently disable the
+    // entire bank-pick path until the migration lands.
+    if (pgErrorCode(error) === '42703') return null;
+    throw error;
+  }
+
+  for (const row of candidates) {
+    if (!row.factKey) continue;
+    if (avoidFactKeys.has(row.factKey)) continue;
+    return {
+      questionText: row.questionText,
+      answer: row.answer,
+      explainer: row.explainer,
+      broadCategory: row.broadCategory,
+      canonicalSubcategory: row.canonicalSubcategory,
+      difficultyEstimate: row.difficultyEstimate,
+      basePoints: row.basePoints,
+      factKey: row.factKey,
+      subAngles: Array.isArray(row.subAngles) ? row.subAngles : [],
+    };
+  }
+  return null;
+}
+
+// Counts of recent generations per canonical_subcategory for a user, scoped
+// to a lookback window. Used by `selectDiverseDomains` to deprioritise
+// over-saturated domains so a user with 10 active interests doesn't see
+// the same 2-3 domains every day.
+export async function getRecentDomainCounts(
+  userId: string,
+  lookbackDays = 7,
+): Promise<Map<string, number>> {
+  const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      domain: generatedQuestions.canonicalSubcategory,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(generatedQuestions)
+    .where(and(
+      eq(generatedQuestions.userId, userId),
+      gte(generatedQuestions.createdAt, since),
+    ))
+    .groupBy(generatedQuestions.canonicalSubcategory);
+
+  const result = new Map<string, number>();
+  for (const row of rows) {
+    if (row.domain) result.set(row.domain, Number(row.count) || 0);
+  }
+  return result;
+}
+
+// Aggregate recent sub_angles per domain for positive guidance in the
+// generation prompt. We only care about domains the next generation will
+// target, so the caller scopes the lookup. Returns a Map keyed by domain
+// with the deduped sub-angle tag list (newest-first up to the per-domain
+// cap). An empty Map is returned if the column is missing on a preview DB
+// that hasn't run migration 0055.
+export async function getRecentSubAnglesByDomain(
+  userId: string,
+  domains: string[],
+  perDomainLimit = 20,
+  rowLimit = 200,
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (domains.length === 0) return result;
+
+  let rows: { domain: string; subAngles: string[] }[];
+  try {
+    rows = await db
+      .select({
+        domain: generatedQuestions.canonicalSubcategory,
+        subAngles: generatedQuestions.subAngles,
+      })
+      .from(generatedQuestions)
+      .where(and(
+        eq(generatedQuestions.userId, userId),
+        inArray(generatedQuestions.canonicalSubcategory, domains),
+      ))
+      .orderBy(sql`${generatedQuestions.createdAt} desc`)
+      .limit(rowLimit);
+  } catch (error) {
+    // sub_angles column is added by migration 0055; tolerate the brief window
+    // where the column is missing rather than 500ing the daily generation.
+    if (pgErrorCode(error) === '42703') return result;
+    throw error;
+  }
+
+  const perDomainSeen = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const angles = Array.isArray(row.subAngles) ? row.subAngles : [];
+    if (angles.length === 0) continue;
+    const domain = row.domain;
+    let bucket = result.get(domain);
+    let seen = perDomainSeen.get(domain);
+    if (!bucket) {
+      bucket = [];
+      result.set(domain, bucket);
+    }
+    if (!seen) {
+      seen = new Set<string>();
+      perDomainSeen.set(domain, seen);
+    }
+    for (const angle of angles) {
+      if (typeof angle !== 'string') continue;
+      const trimmed = angle.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      bucket.push(trimmed);
+      if (bucket.length >= perDomainLimit) break;
+    }
+  }
+  return result;
 }
 
 // Recent fact_keys for the same user, newest first. Used both for the LLM
 // avoid list (compact: ~40 chars per key vs. ~80+ per full question text)
 // and the persist-time dedup check in persistGeneratedQuestion.
-export async function getRecentFactKeys(userId: string, limit = 200): Promise<string[]> {
+export async function getRecentFactKeys(
+  userId: string,
+  limit = 200,
+): Promise<RecentFactKeyEntry[]> {
   const rows = await db
-    .select({ factKey: generatedQuestions.factKey })
+    .select({
+      factKey: generatedQuestions.factKey,
+      domain: generatedQuestions.canonicalSubcategory,
+    })
     .from(generatedQuestions)
     .where(and(
       eq(generatedQuestions.userId, userId),
@@ -741,9 +937,11 @@ export async function getRecentFactKeys(userId: string, limit = 200): Promise<st
     .orderBy(sql`${generatedQuestions.createdAt} desc`)
     .limit(limit);
 
-  const out: string[] = [];
+  const out: RecentFactKeyEntry[] = [];
   for (const row of rows) {
-    if (row.factKey) out.push(row.factKey);
+    if (row.factKey) {
+      out.push({ domain: row.domain ?? 'unknown', factKey: row.factKey });
+    }
   }
   return out;
 }

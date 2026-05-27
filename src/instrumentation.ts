@@ -859,6 +859,21 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0055 adds GeneratedQuestion.sub_angles (text[]) for positive
+    // sub-angle guidance in daily question generation. Guard for preview/
+    // production databases that may have the migration recorded without the
+    // column actually present — code paths that select sub_angles would 42703
+    // before app code can recover.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "GeneratedQuestion"
+          ADD COLUMN IF NOT EXISTS "sub_angles" text[] NOT NULL DEFAULT '{}'
+      `);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
