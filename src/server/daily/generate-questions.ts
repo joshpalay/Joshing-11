@@ -29,6 +29,7 @@ import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/serve
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { resolveDailyBasePoints } from './types';
+import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
 
 // Cap the recent question-text block at this many entries inside the prompt.
 // The full recent history (up to 200) is still used to derive the fact-key
@@ -42,7 +43,7 @@ export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
 
 const SYSTEM_PROMPT = `You are generating trivia questions for Joshing, a social trivia game played among friends.
 Questions must be:
-- Factual with a single objectively correct answer
+- Factual with a single objectively correct answer, or — for the "name_multiple" shape only — a small fixed set of correct answers (typically 2–4)
 - Drawn from the intellectual and cultural world of the domain, not biographical trivia
 - Calibrated to the difficulty instruction below: at easier tiers, lean on well-known, recognizable facts that anyone interested in the domain would have encountered; save specific, surprising deep cuts for higher difficulty tiers
 - Recall questions, not selection questions: the player must produce the answer from memory
@@ -56,6 +57,13 @@ BAD (multiple-choice phrasing — never produce these):
 GOOD (open recall):
 - "What does Sally Seton represent to the young Clarissa in Mrs. Dalloway?"
 - "In what year did Tchaikovsky premiere his Sixth Symphony?"
+
+STYLE EXEMPLARS (match this register, specificity, and concision):
+These are gold-standard Joshing questions. Mimic their tone — literate, confident, and specific. Pull from comparable depth (named characters, named works, technical terms, specific years, named figures) rather than vague appreciation or "explain why" questions. Notice how they assume a cultured audience without condescension.
+
+${STYLE_EXEMPLAR_BLOCK}
+
+Do NOT copy these questions or their underlying facts. Use them only as a model for how a Joshing question should feel.
 
 GRANULARITY RULES:
 Domain labels identify a body of knowledge — a work, an artist, a period, a discipline. They never identify a facet, aspect, or angle on that knowledge.
@@ -104,8 +112,11 @@ Trivia gets monotonous when every question follows the same template ("What is t
 - "in_which_work": asks which work, scene, chapter, movement, or section something appears in
 - "who_did_what": asks which character/person performs a specific act (e.g. "Who kills Polonius?")
 - "sequence_or_order": asks for ordering of events, items, or steps
-- "technique_or_term": asks for the technical term for a described concept
+- "technique_or_term": asks for the technical term for a described concept (e.g. "What is it called when Venice floods?")
 - "what_happens_next": asks what immediately follows a described scene/event
+- "fill_in_blank": gives a short line with one word elided and asks the player to supply it (e.g. "Fill in the blank in this line from Don Giovanni: Don Giovanni a …… teco")
+- "complete_the_quote": gives the opening of a well-known quote and asks for the remainder (e.g. "Complete the Shakespeare quote: 'A horse, a horse, ……'")
+- "name_multiple": asks for a small fixed set of items — only use when the canonical answer is a closed enumeration of 2–4 items (e.g. "Name the four operas that make up Wagner's Ring Cycle."). For this shape, emit the canonical answers in the "answer" field as a semicolon-delimited list (e.g. "Das Rheingold; Die Walküre; Siegfried; Götterdämmerung"). NOTE: do not emit "name_multiple" until further notice — the grading path does not yet handle multi-answer questions. Choose another shape instead.
 
 Rules:
 - Within a single batch of questions, no two questions may share the same question_shape unless the batch has more questions than there are shapes in the catalog.
@@ -133,7 +144,7 @@ Return format:
       "difficulty_estimate": "accessible | moderate | specialist",
       "fact_key": "string, short hyphenated lowercase identifier for the underlying fact (see REPETITION RULES)",
       "sub_angles": ["1-3 short tags identifying the facets of the domain covered (see above)"],
-      "question_shape": "one of: identification | year_or_date | in_which_work | who_did_what | sequence_or_order | technique_or_term | what_happens_next"
+      "question_shape": "one of: identification | year_or_date | in_which_work | who_did_what | sequence_or_order | technique_or_term | what_happens_next | fill_in_blank | complete_the_quote | name_multiple (held back — do not emit)"
     }
   ]
 }`;
@@ -146,6 +157,9 @@ const QUESTION_SHAPES = [
   'sequence_or_order',
   'technique_or_term',
   'what_happens_next',
+  'fill_in_blank',
+  'complete_the_quote',
+  'name_multiple',
 ] as const;
 type QuestionShape = (typeof QUESTION_SHAPES)[number];
 
@@ -460,6 +474,12 @@ const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-gene
 4. SELF_ANSWERING — the question names the answer in its own text ("Who wrote the 1922 poem 'The Waste Land' by T. S. Eliot?").
 
 A high bar applies — flag a question only when one of these defects is clearly present. Subtle wordsmithing concerns are NOT defects.
+
+The following styles are explicitly ACCEPTABLE and must NOT be flagged on style grounds alone — fill-in-the-blank, complete-the-quote, name-multiple, and concise idiomatic questions all belong in Joshing. Reference exemplars:
+
+${STYLE_EXEMPLAR_BLOCK}
+
+Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, or SELF_ANSWERING.
 
 Return JSON only:
 { "drop_indices": [list of zero-based indices to drop], "reasons": { "<index>": "<short reason>" } }
