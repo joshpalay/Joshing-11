@@ -1,4 +1,12 @@
-import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
+import {
+  ANTHROPIC_MODEL,
+  INSTRUCTION_USER_INPUT_GUIDANCE,
+  extractTextContent,
+  getAnthropicClient,
+  loggedMessagesCreate,
+  parseJsonObject,
+  wrapUserInput,
+} from '@/lib/llm';
 
 export type CritiqueResult =
   | { ok: true }
@@ -49,7 +57,7 @@ A question is NOT OK if:
 - It is so broad that a correct answer could be any of dozens of things
 - It contains or telegraphs its own answer ("What is the capital of France, which is Paris?" — self-answering; "Who wrote the 1922 poem 'The Waste Land' by T. S. Eliot?" — names the author it is asking for)
 
-Question to review: ${JSON.stringify(questionText)}
+Question to review: ${wrapUserInput('question', questionText)}
 
 Respond in JSON only.
 If the question is OK: { "ok": true }
@@ -64,16 +72,15 @@ Issue descriptions should be short (under 12 words each), specific, and helpful.
 Reformulations should preserve the author's apparent intent while fixing the issue. Provide 2-4 reformulations, ordered most to least faithful to the original.`;
 
   try {
-    const response = await Promise.race([
-      loggedMessagesCreate(client, 'critique', {
-        model: ANTHROPIC_MODEL,
-        max_tokens: 700,
-        temperature: 0.2,
-        system: 'Return only valid JSON. No markdown or prose outside JSON.',
-        messages: [{ role: 'user', content: prompt }],
-      }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('critique timeout')), CRITIQUE_TIMEOUT_MS)),
-    ]);
+    // loggedMessagesCreate enforces the timeout via AbortSignal — no more
+    // Promise.race + setTimeout (which leaked a timer on the success path).
+    const response = await loggedMessagesCreate(client, 'critique', {
+      model: ANTHROPIC_MODEL,
+      max_tokens: 700,
+      temperature: 0.2,
+      system: `Return only valid JSON. No markdown or prose outside JSON.${INSTRUCTION_USER_INPUT_GUIDANCE}`,
+      messages: [{ role: 'user', content: prompt }],
+    }, { timeoutMs: CRITIQUE_TIMEOUT_MS });
     const rawText = extractTextContent(response.content);
     const result = parseCritique(rawText);
     console.info('[llm/critique] completed', { input: questionText, output: result });

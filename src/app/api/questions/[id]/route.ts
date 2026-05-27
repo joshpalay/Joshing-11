@@ -126,22 +126,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const shouldRecategorize = values.text !== undefined || values.correctAnswer !== undefined;
   if (shouldRecategorize) {
-    const categorization = await categorizeQuestion(effectiveText, effectiveAnswer);
+    const categorization = await categorizeQuestion(effectiveText, effectiveAnswer, effectiveAlternates);
     const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
     const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
     if (textContainsAnswer(canonicalSubcategory, effectiveAnswer, effectiveAlternates)) {
-      console.warn('[questions/patch] rejected category that leaks answer', {
+      console.warn('[questions/patch] category leaks answer (saving anyway)', {
         subcategory: canonicalSubcategory,
         answer: effectiveAnswer,
       });
-      return NextResponse.json(
-        {
-          error: 'category_leaks_answer',
-          message:
-            "This question's category would give away the answer. Try rephrasing the question so a different category fits.",
-        },
-        { status: 422 },
-      );
     }
     values.category = category;
     values.broadCategory = broadCategoryDisplayName(category);

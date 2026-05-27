@@ -209,7 +209,7 @@ export default function ArchivePage() {
         <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
           <Link href="/" className="underline underline-offset-2">HOME</Link>
           {' / '}
-          <Link href="/account" className="underline underline-offset-2">ACCOUNT</Link>
+          <Link href="/users/me" className="underline underline-offset-2">PROFILE</Link>
           {' / ARCHIVE'}
         </p>
         <h1 className="mt-3 font-serif text-4xl font-semibold leading-tight text-foreground">Your Archive</h1>

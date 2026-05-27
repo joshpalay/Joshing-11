@@ -42,6 +42,20 @@ function questionBadges(q: QuestionRow): Array<{ label: string; tone?: 'warning'
   return [level === 'specialist' ? { label, tone: 'warning' as const } : { label }];
 }
 
+function pickExplainer(question: QuestionRow, isCorrect: boolean): string | null {
+  const correctFirst = question.explainerFullCorrect
+    ?? question.explainerFull
+    ?? question.explainerBriefCorrect
+    ?? question.explainerBrief
+    ?? question.factualExplanation;
+  const wrongFirst = question.explainerFullWrong
+    ?? question.explainerFull
+    ?? question.explainerBriefWrong
+    ?? question.explainerBrief
+    ?? question.factualExplanation;
+  return (isCorrect ? correctFirst : wrongFirst) ?? null;
+}
+
 type GradeResponse = {
   isCorrect: boolean;
   explanation: string;
@@ -89,6 +103,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
         correctAnswer: response.isCorrect ? null : item.question.answerText,
         consolation: null,
         breadcrumb: null,
+        explanation: pickExplainer(item.question, Boolean(response.isCorrect)),
         copyVariant: item.position,
           creatorName: game.creator.displayName,
           canonicalSubcategory: item.question.canonicalSubcategory,
@@ -165,6 +180,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
           consolation: null,
           insideJoke: body.insideJoke ?? null,
           breadcrumb: null,
+          explanation: body.explanation ?? pickExplainer(currentQuestion.question, body.isCorrect),
           copyVariant: currentQuestion.position,
           creatorName: game.creator.displayName,
           canonicalSubcategory: currentQuestion.question.canonicalSubcategory,

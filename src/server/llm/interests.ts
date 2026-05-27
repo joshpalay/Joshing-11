@@ -1,10 +1,12 @@
 import {
   ANTHROPIC_MODEL,
   HAIKU_MODEL,
+  INSTRUCTION_USER_INPUT_GUIDANCE,
   extractTextContent,
   getAnthropicClient,
   loggedMessagesCreate,
   parseJsonObject,
+  wrapUserInput,
 } from '@/lib/llm';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 
@@ -216,16 +218,20 @@ Rules:
 - Each rationale must briefly tie the candidate to a specific warm-up answer or demographic context.
 - broadCategory is a stable top-level bucket, such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, General Knowledge. It must not be an author/work/movement-specific territory; for example, James Joyce, Irish Modernism, novels, poetry, and fiction all use Literature.
 - Never return "Other" as a broadCategory. Use "General Knowledge" only when no more precise top-level bucket applies.
-- Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}`;
+- Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
+  const warmupBody = cleanAnswers.map(({ field, answer }) => `- ${WARMUP_LABELS[field]}: ${answer}`).join('\n');
   const userMessage = `Warm-up answers:
-${cleanAnswers.map(({ field, answer }) => `- ${WARMUP_LABELS[field]}: ${answer}`).join('\n')}
+${wrapUserInput('warmup_answers', warmupBody)}
 
 Propose candidate interests. Return JSON array only.`;
 
   const client = getAnthropicClient();
   if (!client) return fallbackInterests(cleanAnswers);
 
+  // System prompt with cultural anchor lands ~1100-1400 tokens, crossing
+  // Sonnet's 1024 cache threshold; keep cache_control for the warm-path hit
+  // (onboarding bursts often process multiple users back-to-back).
   const response = await loggedMessagesCreate(client, 'interests-suggest', {
     model: ANTHROPIC_MODEL,
     max_tokens: 1600,
@@ -284,14 +290,15 @@ export async function canonicalizeInterest(rawInput: string): Promise<Canonicali
 Suggest a more hyper-specific version that would generate good trivia questions. If the input is already specific enough, return it unchanged.
 Avoid broad categories like "Music", "Literature", "History". Prefer forms like "Late Tchaikovsky", "Russian 19th-Century Novels", "Weimar-Era Cinema".
 Never return "Other" as broadCategory; use "General Knowledge" only when no precise top-level bucket applies.
-Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation": "..." }`;
+Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation": "..." }${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
+  // ~200 tokens — below Haiku's 2048 cache threshold; plain string.
   const response = await loggedMessagesCreate(client, 'interests-canonicalize', {
     model: CANONICALIZE_MODEL,
     max_tokens: 260,
     temperature: 0.2,
-    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: cleanInput }],
+    system: systemPrompt,
+    messages: [{ role: 'user', content: wrapUserInput('interest_input', cleanInput) }],
   });
 
   const text = extractTextContent(response.content);

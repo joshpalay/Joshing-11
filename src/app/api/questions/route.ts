@@ -76,7 +76,28 @@ export async function POST(request: NextRequest) {
   }
 
   const { sendToFriendIds, shareToFeed, ...rawQuestionFields } = value;
-  const categorization = await categorizeQuestion(rawQuestionFields.text, rawQuestionFields.correctAnswer);
+
+  let categorization;
+  let difficultyAssessment;
+  let insideJoke;
+  let verdict;
+  try {
+    categorization = await categorizeQuestion(
+      rawQuestionFields.text,
+      rawQuestionFields.correctAnswer,
+      rawQuestionFields.alternateAnswers,
+    );
+  } catch (error) {
+    console.error('[questions/create] unexpected_failure', {
+      stage: 'categorize',
+      userId: session.userId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json(
+      { error: 'server_error', message: 'Something went wrong saving that question. Try again.' },
+      { status: 500 },
+    );
+  }
   const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
   const normalizedSubcategory = normalizeCanonicalSubcategory(categorization.subcategory);
 
@@ -99,19 +120,20 @@ export async function POST(request: NextRequest) {
       { status: 422 },
     );
   }
-  if (textContainsAnswer(normalizedSubcategory, value.correctAnswer, value.alternateAnswers)) {
-    console.warn('[questions/create] rejected category that leaks answer', {
+  // The categorizer has its own de-leak retry (see categorizeQuestion in
+  // src/lib/llm.ts). If a leaky label still slipped through, save anyway and
+  // mark the question ineligible for the shared pool — the user wrote a
+  // legitimate question and we shouldn't block them on the categorizer.
+  const categoryLeaksAnswer = textContainsAnswer(
+    normalizedSubcategory,
+    value.correctAnswer,
+    value.alternateAnswers,
+  );
+  if (categoryLeaksAnswer) {
+    console.warn('[questions/create] category leaks answer (saving anyway)', {
       subcategory: normalizedSubcategory,
       answer: value.correctAnswer,
     });
-    return NextResponse.json(
-      {
-        error: 'category_leaks_answer',
-        message:
-          "This question's category would give away the answer. Try rephrasing the question so a different category fits.",
-      },
-      { status: 422 },
-    );
   }
   const canonicalSubcategory = normalizedSubcategory;
   const questionFields = {
@@ -122,37 +144,63 @@ export async function POST(request: NextRequest) {
     subcategory: canonicalSubcategory,
     domain: canonicalSubcategory,
   };
-  const difficultyAssessment = await assessQuestionDifficulty({
-    questionText: questionFields.text,
-    correctAnswer: questionFields.correctAnswer,
-    broadCategory: questionFields.broadCategory,
-    canonicalSubcategory: questionFields.canonicalSubcategory,
-    explanation: questionFields.explanation,
-  });
-  const insideJoke = await generateInsideJoke({
-    questionText: questionFields.text,
-    correctAnswer: questionFields.correctAnswer,
-    broadCategory: questionFields.broadCategory,
-    canonicalSubcategory: questionFields.canonicalSubcategory,
-  });
-  // Haiku-vet for the shared Daily 5 pool — approved questions become eligible
-  // to surface in other users' games (prioritised by friends + friends-of-
-  // friends). Failure is non-fatal: we leave publicStatus at 'not_scored'
-  // and the /api/cron/vet-questions sweep will retry.
-  const verdict = await vetQuestion({
-    questionText: questionFields.text,
-    answer: questionFields.correctAnswer,
-    alternateAnswers: questionFields.alternateAnswers,
-    explanation: questionFields.explanation ?? null,
-    broadCategory: questionFields.broadCategory,
-    canonicalSubcategory: questionFields.canonicalSubcategory,
-  });
-  const publicScoring = verdictToPublicStatus(verdict);
+  // Difficulty assessment, inside joke, and Haiku-vet all consume the same
+  // inputs (question + answer + category) and don't depend on each other's
+  // output — run them in parallel so the route's wall-clock is ~1× a single
+  // LLM call instead of 3×. Categorization upstream is the only true
+  // sequencing dependency in this handler. Haiku-vet failure is meant to be
+  // non-fatal (the /api/cron/vet-questions sweep retries), but bundling it
+  // here is fine because Promise.all rejects fast and we treat the trio as
+  // a single enrichment stage.
+  try {
+    [difficultyAssessment, insideJoke, verdict] = await Promise.all([
+      assessQuestionDifficulty({
+        questionText: questionFields.text,
+        correctAnswer: questionFields.correctAnswer,
+        broadCategory: questionFields.broadCategory,
+        canonicalSubcategory: questionFields.canonicalSubcategory,
+        explanation: questionFields.explanation,
+      }),
+      generateInsideJoke({
+        questionText: questionFields.text,
+        correctAnswer: questionFields.correctAnswer,
+        broadCategory: questionFields.broadCategory,
+        canonicalSubcategory: questionFields.canonicalSubcategory,
+      }),
+      vetQuestion({
+        questionText: questionFields.text,
+        answer: questionFields.correctAnswer,
+        alternateAnswers: questionFields.alternateAnswers,
+        explanation: questionFields.explanation ?? null,
+        broadCategory: questionFields.broadCategory,
+        canonicalSubcategory: questionFields.canonicalSubcategory,
+      }),
+    ]);
+  } catch (error) {
+    console.error('[questions/create] unexpected_failure', {
+      stage: 'enrichment',
+      userId: session.userId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json(
+      { error: 'server_error', message: 'Something went wrong saving that question. Try again.' },
+      { status: 500 },
+    );
+  }
+  let publicScoring = verdictToPublicStatus(verdict);
+  if (categoryLeaksAnswer && publicScoring.publicStatus !== 'rejected') {
+    publicScoring = {
+      publicStatus: 'rejected',
+      publicEligibilityScore: publicScoring.publicEligibilityScore,
+      publicEligibilityReason: 'category_leaks_answer',
+    };
+  }
   console.info('[questions/vet]', {
     userId: session.userId,
     verdictStatus: verdict.status,
     overallScore: publicScoring.publicEligibilityScore,
     publicStatus: publicScoring.publicStatus,
+    categoryLeaksAnswer,
   });
 
   const categorizedQuestionFields = {

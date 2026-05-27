@@ -55,7 +55,7 @@ function ToggleRow({
     <section className="rounded-xl border bg-card p-5 text-card-foreground">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-col">
-          <h2 className="font-serif text-lg font-semibold">{title}</h2>
+          <h3 className="font-serif text-lg font-semibold">{title}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
         <button
@@ -168,7 +168,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
   }
 
   return (
-    <div className="mt-8 space-y-6">
+    <div className="space-y-4">
       <ToggleRow
         title="Match my phone contacts to other Joshing players"
         description="When you tap Refresh on Find Friends, we hash your contacts on your device and compare them against other players who also opted in. We never store the raw numbers."
@@ -198,7 +198,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
 
       {inviteUrl ? (
         <section className="rounded-xl border bg-card p-5 text-card-foreground">
-          <h2 className="font-serif text-lg font-semibold">Your invite link</h2>
+          <h3 className="font-serif text-lg font-semibold">Your invite link</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             Anyone you share this with can join Joshing and land as your friend.
           </p>

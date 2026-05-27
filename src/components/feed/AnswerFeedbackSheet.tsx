@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Sparkles, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { AddToDailyFivePrompt } from './AddToDailyFivePrompt'
 import { visibleFeedCategory } from './category'
 
 type AnswerFeedbackSheetProps = {
@@ -17,6 +18,7 @@ type AnswerFeedbackSheetProps = {
   quip: string | null
   insideJoke?: string | null
   openedNewTerritory?: boolean
+  openedTerritoryDomain?: string | null
   questionId: string
   feedItemId: string
   onClose: () => void
@@ -35,12 +37,14 @@ export function AnswerFeedbackSheet({
   quip,
   insideJoke = null,
   openedNewTerritory = false,
+  openedTerritoryDomain = null,
   questionId,
   feedItemId,
   onClose,
 }: AnswerFeedbackSheetProps) {
   const visibleCategory = visibleFeedCategory(category)
   const showNewTerritory = openedNewTerritory && isCorrect
+  const showAddToDailyFive = Boolean(openedTerritoryDomain) && isCorrect
   const [bankState, setBankState] = useState<BankState>('idle')
   const hasAutoSavedRef = useRef(false)
 
@@ -181,6 +185,10 @@ export function AnswerFeedbackSheet({
                 </p>
               </div>
             </div>
+          ) : null}
+
+          {showAddToDailyFive && openedTerritoryDomain ? (
+            <AddToDailyFivePrompt domain={openedTerritoryDomain} />
           ) : null}
 
           <p className="pb-3 font-serif text-lg leading-7 text-stone-950">
