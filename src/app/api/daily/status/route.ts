@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 
 export const dynamic = 'force-dynamic';
@@ -62,8 +62,13 @@ export async function GET() {
   const answered = slots.filter((slot) => slot.answered).length;
   const total = DAILY_QUEUE_SIZE;
   const questionsAnswered = Math.min(answered, DAILY_QUEUE_SIZE);
-  const questionsRemaining = Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0);
-  const isComplete = questionsAnswered >= DAILY_QUEUE_SIZE;
+  // Completion follows "no slot left to play", not "5 answered" — a skipped
+  // slot whose replacement failed to generate leaves nothing pending, so the
+  // round is genuinely over even though fewer than five were answered.
+  const isComplete = isRoundComplete(slots);
+  const questionsRemaining = isComplete
+    ? 0
+    : Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0);
 
   return NextResponse.json({
     questionsRemaining,

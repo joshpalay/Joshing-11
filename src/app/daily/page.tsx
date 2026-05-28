@@ -9,7 +9,7 @@ import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionR
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { categoryLabel } from '@/lib/questions-types';
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
 
 type ExclusionScope = 'subcategory' | 'broad_category' | 'category';
@@ -84,7 +84,13 @@ function answerFailureMessage(body: FailedAnswerResponse | null): string {
   return body?.message ?? (body?.error ? ANSWER_ERROR_MESSAGES[body.error] : undefined) ?? 'Could not record that answer.';
 }
 
+// Returns the slot the player should be on, or null when the round is over.
+// The `!answered && !skipped` predicate is the canonical "pending" definition
+// shared with the status API via isRoundComplete (see @/server/daily/types) —
+// when nothing is pending we redirect to the summary, and the home card now
+// agrees by treating the round as complete instead of offering "Resume".
 function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
+  if (!hasPendingSlot(slots)) return null;
   return slots.find((slot) => !slot.answered && !slot.skipped) ?? null;
 }
 

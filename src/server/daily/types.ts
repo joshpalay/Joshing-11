@@ -84,6 +84,23 @@ export const DAILY_SKIP_LIMIT = 5;
 export const PERSONAL_DAILY_SESSION_CONTEXT = 'personal_daily';
 export const DAILY_QUEUE_SIZE = 5;
 
+/** A slot the player can still act on (neither answered nor skipped). */
+export function hasPendingSlot(slots: QueueSlot[]): boolean {
+  return slots.some((slot) => !slot.answered && !slot.skipped);
+}
+
+/**
+ * A round is complete once it has slots and none of them are still pending.
+ *
+ * This is the canonical definition of "done" — the status API and the play
+ * page both derive from it so the home card and the player can't disagree
+ * (a skipped-but-unreplaced slot used to leave the round advertising "Resume"
+ * while the player bounced straight to the summary).
+ */
+export function isRoundComplete(slots: QueueSlot[]): boolean {
+  return slots.length > 0 && !hasPendingSlot(slots);
+}
+
 /**
  * Difficulty → base points for B9 personal daily. Always prefer
  * calibrated_difficulty, fall back to llm_difficulty, then difficulty_estimate.
