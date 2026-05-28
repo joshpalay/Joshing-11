@@ -3,8 +3,8 @@ import { after, NextRequest, NextResponse } from 'next/server';
 
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
-import { dailyQueues, db, generatedQuestions, gradeDisputes } from '@/server/db';
-import { type QueueSlot } from '@/server/daily/types';
+import { dailyQueues, db, generatedQuestions, gradeDisputes, questions } from '@/server/db';
+import { resolveDailyBasePoints, type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
@@ -88,32 +88,79 @@ export async function POST(request: NextRequest) {
     if (slot.recheck_status) {
       return errorResponse(400, 'invalid_state', 'That answer has already been rechecked.');
     }
-    if (!slot.generated_question_id) {
-      return errorResponse(400, 'invalid_state', 'Only Daily generated questions can be rechecked here.');
+    if (!slot.generated_question_id && !slot.question_id) {
+      return errorResponse(400, 'invalid_state', 'That Daily Five slot has no question to recheck.');
     }
 
-    const [question] = await db
-      .select()
-      .from(generatedQuestions)
-      .where(and(
-        eq(generatedQuestions.id, slot.generated_question_id),
-        eq(generatedQuestions.userId, session.userId),
-      ))
-      .limit(1);
+    // Daily 5 slots come in two shapes — bot (generatedQuestions) and
+    // friend-authored (canonical questions). Normalise into a single struct
+    // so the recheck flow doesn't care which pool the slot came from.
+    type RecheckQuestion = {
+      generatedId: string | null;
+      canonicalId: string | null;
+      questionText: string;
+      answer: string;
+      acceptedAlternatives: string[];
+      domain: string;
+      broadCategory: string | null;
+      basePoints: number;
+    };
 
-    if (!question) return errorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+    let question: RecheckQuestion;
+    if (slot.generated_question_id) {
+      const [row] = await db
+        .select()
+        .from(generatedQuestions)
+        .where(and(
+          eq(generatedQuestions.id, slot.generated_question_id),
+          eq(generatedQuestions.userId, session.userId),
+        ))
+        .limit(1);
+      if (!row) return errorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+      const repairedAnswer = await resolveCanonicalAnswer(row);
+      question = {
+        generatedId: row.id,
+        canonicalId: null,
+        questionText: row.questionText,
+        answer: repairedAnswer,
+        acceptedAlternatives: [],
+        domain: row.canonicalSubcategory,
+        broadCategory: row.broadCategory,
+        basePoints: Math.round(row.basePoints),
+      };
+    } else {
+      const [row] = await db
+        .select()
+        .from(questions)
+        .where(eq(questions.id, slot.question_id!))
+        .limit(1);
+      if (!row || row.deletedAt) {
+        return errorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+      }
+      const difficulty = row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate ?? null;
+      question = {
+        generatedId: null,
+        canonicalId: row.id,
+        questionText: row.questionText,
+        answer: row.answerText,
+        acceptedAlternatives: row.acceptedAlternatives ?? [],
+        domain: row.canonicalSubcategory ?? slot.domain,
+        broadCategory: row.broadCategory,
+        basePoints: resolveDailyBasePoints(difficulty),
+      };
+    }
 
-    const canonicalAnswer = slot.reveal_canonical_answer ?? await resolveCanonicalAnswer(question);
+    const canonicalAnswer = slot.reveal_canonical_answer ?? question.answer;
     const review = await recheckAnswerWithLLM({
       questionText: question.questionText,
       canonicalAnswer,
       submittedAnswer: slot.submitted_answer,
       questionType: 'factual',
-      acceptedAlternatives: [],
+      acceptedAlternatives: question.acceptedAlternatives,
     });
 
     const accepted = review.decision === 'accept';
-    const pointsAwarded = accepted ? Math.round(question.basePoints) : 0;
+    const pointsAwarded = accepted ? question.basePoints : 0;
     const recheckStatus = accepted ? 'accepted' : review.decision === 'reject' ? 'rejected' : 'needs_human';
     const disputeStatus = accepted ? 'alternative_added' : review.decision === 'reject' ? 'dismissed' : 'pending';
     const answerId = `daily:${queue.id}:${parsed.slotIndex}:${session.userId}`;
@@ -130,17 +177,48 @@ export async function POST(request: NextRequest) {
       } satisfies QueueSlot;
     });
 
+    // gradeDisputes.questionId must reference questions.id. Bot slots are
+    // persisted into the canonical table below before the dispute insert;
+    // friend slots already have it.
+    let canonicalQuestionId: string | null = question.canonicalId;
+    if (question.generatedId) {
+      let persistAttempt = 0;
+      while (persistAttempt < 2 && canonicalQuestionId === null) {
+        persistAttempt += 1;
+        try {
+          const persisted = await persistGeneratedQuestion(question.generatedId, question.domain);
+          canonicalQuestionId = persisted.questionId;
+        } catch (error) {
+          const finalAttempt = persistAttempt >= 2;
+          console.warn(
+            finalAttempt
+              ? '[daily/recheck] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
+              : '[daily/recheck] persistGeneratedQuestion failed; retrying once',
+            {
+              generatedQuestionId: question.generatedId,
+              attempt: persistAttempt,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          );
+        }
+      }
+    }
+
     await db.transaction(async (tx) => {
       await tx
         .update(dailyQueues)
         .set({ slots: nextSlots })
         .where(eq(dailyQueues.id, queue.id));
 
+      // If persist failed for a bot slot, fall back to the generated id so the
+      // dispute row still records *something* the reviewer can trace. Friend
+      // slots always have a canonical id by this point.
+      const disputeQuestionId = canonicalQuestionId ?? question.generatedId ?? question.canonicalId!;
       await tx
         .insert(gradeDisputes)
         .values({
           answerId,
-          questionId: question.id,
+          questionId: disputeQuestionId,
           creatorId: session.userId,
           submittedAnswer: slot.submitted_answer ?? '',
           canonicalAnswer,
@@ -169,37 +247,10 @@ export async function POST(request: NextRequest) {
 
     let masteryDelta = null;
     if (accepted) {
-      // Promote the bot question to a canonical row BEFORE writing the
-      // mastery event so the question_id column links to questions.id and
-      // friend-feed propagation has a canonical id to key on. Without this
-      // the mastery event records question_id=NULL and friend feeds never
-      // see the answer — same failure mode that the daily/answer route had.
-      let canonicalQuestionId: string | null = null;
-      let persistAttempt = 0;
-      while (persistAttempt < 2 && canonicalQuestionId === null) {
-        persistAttempt += 1;
-        try {
-          const persisted = await persistGeneratedQuestion(question.id, question.canonicalSubcategory);
-          canonicalQuestionId = persisted.questionId;
-        } catch (error) {
-          const finalAttempt = persistAttempt >= 2;
-          console.warn(
-            finalAttempt
-              ? '[daily/recheck] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
-              : '[daily/recheck] persistGeneratedQuestion failed; retrying once',
-            {
-              generatedQuestionId: question.id,
-              attempt: persistAttempt,
-              error: error instanceof Error ? error.message : String(error),
-            },
-          );
-        }
-      }
-
       masteryDelta = await writeMasteryEvent({
         userId: session.userId,
-        questionId: question.id,
-        domain: question.canonicalSubcategory,
+        questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,
+        domain: question.domain,
         answerState: 'first_correct',
         pointsAwarded,
         sourceType: 'daily',
@@ -213,21 +264,22 @@ export async function POST(request: NextRequest) {
         return null;
       });
 
-      await updateDomainDifficultyOnAnswer(session.userId, question.canonicalSubcategory, true).catch((error) => {
+      await updateDomainDifficultyOnAnswer(session.userId, question.domain, true).catch((error) => {
         console.warn('[daily/recheck] updateDomainDifficultyOnAnswer failed', error);
       });
 
       if (canonicalQuestionId) {
         try {
+          const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
           after(() => createFeedItemsForFriendsFromAnswer(
             session.userId,
             canonicalQuestionId,
             'correct',
-            `daily:${question.id}:${session.userId}`,
+            `daily:${propagationKey}:${session.userId}`,
           ));
         } catch (error) {
           console.warn('[daily/recheck] feed propagation failed', {
-            generatedQuestionId: question.id,
+            generatedQuestionId: question.generatedId,
             canonicalQuestionId,
             error: error instanceof Error ? error.message : String(error),
           });
