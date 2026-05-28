@@ -64,12 +64,42 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     );
   }
 
+  // Cross-source dedup by normalized question text. The authored picker
+  // dedupes by question_id against past queues, and the generator has its
+  // own batch/history dedup — but neither knows about the other, so the
+  // same prompt can land in two slots of the same queue (e.g. an authored
+  // "Apples are in what plant family?" alongside an LLM-generated one).
+  const seenTexts = new Set<string>();
+  const normalize = (text: string) => text.trim().toLowerCase();
+  for (const pick of authored) {
+    seenTexts.add(normalize(pick.questionText));
+  }
+  const dedupedGenerated: typeof generated = [];
+  let droppedDuplicates = 0;
+  for (const question of generated) {
+    const key = normalize(question.questionText);
+    if (seenTexts.has(key)) {
+      droppedDuplicates += 1;
+      continue;
+    }
+    seenTexts.add(key);
+    dedupedGenerated.push(question);
+  }
+  if (droppedDuplicates > 0) {
+    console.warn('[daily/queue-orchestrator] dropped duplicate generated questions', {
+      userId,
+      droppedDuplicates,
+      authoredCount: authored.length,
+      generatedCount: generated.length,
+    });
+  }
+
   let position = 0;
   for (const pick of authored) {
     await createDailyQueueItemFromAuthored(userId, pick, position);
     position += 1;
   }
-  for (const question of generated.slice(0, DAILY_QUEUE_SIZE - position)) {
+  for (const question of dedupedGenerated.slice(0, DAILY_QUEUE_SIZE - position)) {
     await createDailyQueueItem(userId, question.id, position);
     position += 1;
   }
