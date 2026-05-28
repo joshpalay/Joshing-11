@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check } from 'lucide-react';
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
+import LoadingScreen from '@/components/LoadingScreen';
 
 type Difficulty = 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive';
 type DomainMode = 'random' | 'custom';
@@ -253,11 +254,7 @@ function DailySetupContent() {
   }, [canStart, difficulty, domainMode, hasUnstartedQueue, roundComplete, router, selectedDomains]);
 
   if (loading) {
-    return (
-      <main className="mx-auto max-w-xl px-4 py-8">
-        <p className="text-sm uppercase tracking-[0.12em] text-muted-foreground">Loading...</p>
-      </main>
-    );
+    return <LoadingScreen fullScreen />;
   }
 
   return (
