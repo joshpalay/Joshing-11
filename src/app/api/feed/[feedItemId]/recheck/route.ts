@@ -64,8 +64,13 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     });
 
     const accepted = review.decision === 'accept';
+    // A disputed answer key reads as "taking another look", not a rejection.
     const recheckStatus = accepted ? 'accepted' : review.decision === 'reject' ? 'rejected' : 'needs_human';
-    const disputeStatus = accepted ? 'alternative_added' : review.decision === 'reject' ? 'dismissed' : 'pending';
+    // Only an accept auto-resolves; rejects and disputed keys stay 'pending'
+    // for human review rather than auto-dismissed. reviewDecision preserves
+    // the exact verdict for the review queue.
+    const disputeStatus = accepted ? 'alternative_added' : 'pending';
+    const reviewedAt = accepted ? new Date() : null;
     const domain = question.canonicalSubcategory || question.broadCategory || question.category;
 
     let pointsAwarded = 0;
@@ -95,7 +100,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
           reviewReason: review.reason,
           acceptedAlternative: review.acceptedAlternative,
           status: disputeStatus,
-          reviewedAt: review.decision === 'needs_human' ? null : new Date(),
+          reviewedAt,
         })
         .returning({ id: gradeDisputes.id });
       return inserted?.id ?? null;

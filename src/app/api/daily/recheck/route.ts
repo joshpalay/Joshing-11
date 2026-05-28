@@ -161,8 +161,16 @@ export async function POST(request: NextRequest) {
 
     const accepted = review.decision === 'accept';
     const pointsAwarded = accepted ? question.basePoints : 0;
+    // User-facing outcome. A disputed answer key reads as "we're taking
+    // another look" rather than a confident rejection — we will not tell the
+    // player they were wrong against an answer the reviewer flagged as wrong.
     const recheckStatus = accepted ? 'accepted' : review.decision === 'reject' ? 'rejected' : 'needs_human';
-    const disputeStatus = accepted ? 'alternative_added' : review.decision === 'reject' ? 'dismissed' : 'pending';
+    // Backend dispute lifecycle. Only an accept auto-resolves (the alternative
+    // is added). Everything else — including plain rejects — now stays 'pending'
+    // so a human can review it, instead of being auto-dismissed. The precise
+    // verdict is preserved in reviewDecision below for the review queue.
+    const disputeStatus = accepted ? 'alternative_added' : 'pending';
+    const reviewedAt = accepted ? new Date() : null;
     const answerId = `daily:${queue.id}:${parsed.slotIndex}:${session.userId}`;
 
     const nextSlots = slots.map((item) => {
@@ -228,7 +236,7 @@ export async function POST(request: NextRequest) {
           reviewReason: review.reason,
           acceptedAlternative: review.acceptedAlternative,
           status: disputeStatus,
-          reviewedAt: review.decision === 'needs_human' ? null : new Date(),
+          reviewedAt,
         })
         .onConflictDoUpdate({
           target: gradeDisputes.answerId,
@@ -240,7 +248,7 @@ export async function POST(request: NextRequest) {
             reviewReason: review.reason,
             acceptedAlternative: review.acceptedAlternative,
             status: disputeStatus,
-            reviewedAt: review.decision === 'needs_human' ? null : new Date(),
+            reviewedAt,
           },
         });
     });
