@@ -550,6 +550,100 @@ async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   }
 }
 
+// Factual-correctness gate. The dedup and quality gates above never check
+// whether the *stated answer is actually correct for the question* — they
+// only catch repeats, leaks, vagueness, and false premises in the setup. A
+// generator hallucination that pairs a good question with the wrong answer
+// (e.g. asking who wrote "Rubyfruit Jungle" but answering with a politician)
+// sails straight through. User-authored questions get this check via
+// vetQuestion() on the /api/questions path; bot-generated daily questions
+// had no equivalent until this gate. Like the others it is batch-based,
+// runs in parallel, and fails open.
+const FACTUAL_GATE_SYSTEM_PROMPT = `You are fact-checking a small batch of just-generated trivia questions before they are served to a player. Each item has a question and the stated answer the game will mark as correct. Your only job is to catch questions whose stated answer is WRONG.
+
+For each question decide:
+- WRONG — the stated answer is factually incorrect for the question, OR the question's clearly-correct answer is a different thing/person than the stated answer, OR the question and answer come from mismatched subjects (e.g. a literature question answered with an unrelated political figure).
+- OK — the stated answer is correct, or a reasonable equivalent/alternate form of the correct answer.
+- UNVERIFIABLE — you genuinely cannot verify the fact (extremely niche, recent, or personal). Treat these as OK; do NOT flag them.
+
+Flag (drop) ONLY questions you judge WRONG with high confidence. A high bar applies — when in doubt, leave it. Do not flag for style, difficulty, phrasing, or ambiguity; only for a factually incorrect stated answer.
+
+Return JSON only:
+{ "drop_indices": [list of zero-based indices whose stated answer is wrong], "reasons": { "<index>": "<short reason naming the correct answer>" } }
+
+If no answers are wrong, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+export function parseFactualGateResponse(
+  raw: string,
+  batchSize: number,
+): { toDrop: Set<number>; reasons: Record<number, string> } {
+  const parsed = parseJsonObject(raw);
+  const toDrop = new Set<number>();
+  const reasons: Record<number, string> = {};
+  if (!parsed) return { toDrop, reasons };
+
+  const rawList = parsed.drop_indices;
+  if (Array.isArray(rawList)) {
+    for (const value of rawList) {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        value >= 0 &&
+        value < batchSize
+      ) {
+        toDrop.add(value);
+      }
+    }
+  }
+
+  const rawReasons = parsed.reasons;
+  if (rawReasons && typeof rawReasons === 'object' && !Array.isArray(rawReasons)) {
+    for (const [key, value] of Object.entries(rawReasons as Record<string, unknown>)) {
+      const idx = Number.parseInt(key, 10);
+      if (Number.isInteger(idx) && toDrop.has(idx) && typeof value === 'string') {
+        reasons[idx] = value.slice(0, 200);
+      }
+    }
+  }
+
+  return { toDrop, reasons };
+}
+
+async function findFactualFailures(generated: LlmQuestion[]): Promise<{
+  toDrop: Set<number>;
+  reasons: Record<number, string>;
+}> {
+  if (generated.length === 0) return { toDrop: new Set(), reasons: {} };
+  const client = getAnthropicClient();
+  if (!client) return { toDrop: new Set(), reasons: {} };
+
+  const body = generated
+    .map(
+      (q, i) =>
+        `[${i}] domain=${q.canonical_subcategory}\n    q=${q.question_text}\n    a=${q.answer}`,
+    )
+    .join('\n\n');
+  const userMessage = wrapUserInput('batch', body);
+
+  try {
+    const response = await loggedMessagesCreate(client, 'factual-gate', {
+      model: HAIKU_MODEL,
+      max_tokens: 500,
+      temperature: 0,
+      system: FACTUAL_GATE_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userMessage }],
+    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
+    return parseFactualGateResponse(extractTextContent(response.content), generated.length);
+  } catch (err) {
+    // Fail open: a Haiku outage should not block the daily queue. A wrong
+    // answer slipping through is no worse than the pre-gate status quo.
+    console.warn('[daily/generate-questions] factual gate failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { toDrop: new Set(), reasons: {} };
+  }
+}
+
 const RECENT_HISTORY_GATE_LIMIT = 30;
 
 const RECENT_HISTORY_GATE_SYSTEM_PROMPT = `You are reviewing newly-generated trivia questions against a list of questions this same user has already been asked. For each NEW question, decide whether it probes the same underlying fact as ANY of the RECENT questions.
@@ -755,11 +849,14 @@ export async function generateDailyQuestions(
   //   covered by fact_key dedup at persist time.
   // - findQualityFailures: LLM-generated counterpart to critiqueQuestion() —
   //   catches answer-leakage, opinion/vague, false-premise, self-answering.
+  // - findFactualFailures: verifies the stated answer is actually correct for
+  //   the question — the one defect class the other gates never inspect.
   const recentForGate = avoidList.slice(0, RECENT_HISTORY_GATE_LIMIT);
-  const [batchDuplicates, recentDuplicates, qualityResult] = await Promise.all([
+  const [batchDuplicates, recentDuplicates, qualityResult, factualResult] = await Promise.all([
     findBatchDuplicates(generated),
     findRecentHistoryDuplicates(generated, recentForGate),
     findQualityFailures(generated),
+    findFactualFailures(generated),
   ]);
 
   if (batchDuplicates.size > 0) {
@@ -784,11 +881,20 @@ export async function generateDailyQuestions(
       originalCount: generated.length,
     });
   }
+  if (factualResult.toDrop.size > 0) {
+    console.warn('[daily/generate-questions] dropping factually-wrong questions', {
+      droppedCount: factualResult.toDrop.size,
+      droppedIndices: [...factualResult.toDrop].sort((a, b) => a - b),
+      reasons: factualResult.reasons,
+      originalCount: generated.length,
+    });
+  }
 
   const allDrops = new Set<number>([
     ...batchDuplicates,
     ...recentDuplicates,
     ...qualityResult.toDrop,
+    ...factualResult.toDrop,
   ]);
   if (allDrops.size > 0) {
     generated = generated.filter((_, i) => !allDrops.has(i));

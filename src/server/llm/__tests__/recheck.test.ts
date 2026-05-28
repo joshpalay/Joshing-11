@@ -20,4 +20,19 @@ describe('answer recheck parser', () => {
       acceptedAlternative: null,
     });
   });
+
+  it('parses a canonical_disputed verdict and never carries an accepted alternative', () => {
+    expect(
+      parseAnswerRecheck(
+        '{"decision":"canonical_disputed","confidence":0.88,"reason":"Rubyfruit Jungle was written by Rita Mae Brown, not the canonical answer.","accepted_alternative":"Rita Mae Brown"}',
+      ),
+    ).toEqual({
+      decision: 'canonical_disputed',
+      confidence: 0.88,
+      reason: 'Rubyfruit Jungle was written by Rita Mae Brown, not the canonical answer.',
+      // accepted_alternative is only honoured for an accept; a disputed key
+      // must not silently add the submitted text as an alternative.
+      acceptedAlternative: null,
+    });
+  });
 });
