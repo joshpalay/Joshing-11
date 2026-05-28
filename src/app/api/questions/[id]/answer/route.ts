@@ -1,5 +1,5 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
 import { gradeAnswer, selectQuip } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
@@ -166,12 +166,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (isCorrect) {
-    void createFeedItemsForFriendsFromAnswer(
+    after(() => createFeedItemsForFriendsFromAnswer(
       session.userId,
       question.id,
       'correct',
       sourceId,
-    );
+    ));
   }
 
   if (!isCorrect) {

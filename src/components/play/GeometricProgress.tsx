@@ -20,7 +20,7 @@ export function GeometricProgress({
         const done = !!res;
 
         const dotColor = res === 'correct'
-          ? 'var(--right)'
+          ? 'var(--success)'
           : res === 'wrong'
             ? 'var(--wrong)'
             : res === 'expired'

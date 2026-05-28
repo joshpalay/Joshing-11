@@ -1,5 +1,5 @@
 import { and, eq, sql } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
 import { gradeAnswer, selectQuip } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
@@ -208,12 +208,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Only correct Feed answers are eligible to become public/social friend Feed cards.
   // Incorrect answers persist privately on this viewer's Feed item as answered_by_you.
   if (isCorrect) {
-    void createFeedItemsForFriendsFromAnswer(
+    after(() => createFeedItemsForFriendsFromAnswer(
       session.userId,
       question.id,
       'correct',
       `feed:${feedItemId}:${session.userId}`,
-    );
+    ));
   }
 
   if (!isCorrect) {

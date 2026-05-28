@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
 import { writeActivity } from '@/server/activity/write-activity';
 import { selectQuip, type FriendResult } from '@/server/grading';
@@ -108,12 +108,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
-    void createFeedItemsForFriendsFromAnswer(
+    after(() => createFeedItemsForFriendsFromAnswer(
       session.userId,
       parsed.questionId,
       grade.isCorrect ? 'correct' : 'incorrect',
       `joshing_game:${id}:${parsed.questionId}:${session.userId}`,
-    );
+    ));
 
     if (!grade.isCorrect) {
       void promptCreatorNoteAfterWrongAnswer({
