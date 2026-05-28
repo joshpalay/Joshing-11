@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
@@ -219,12 +219,12 @@ export async function POST(request: NextRequest) {
 
       if (canonicalQuestionId) {
         try {
-          void createFeedItemsForFriendsFromAnswer(
+          after(() => createFeedItemsForFriendsFromAnswer(
             session.userId,
             canonicalQuestionId,
             'correct',
             `daily:${question.id}:${session.userId}`,
-          );
+          ));
         } catch (error) {
           console.warn('[daily/recheck] feed propagation failed', {
             generatedQuestionId: question.id,

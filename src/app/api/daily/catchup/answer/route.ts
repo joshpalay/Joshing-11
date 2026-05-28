@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { NextRequest } from 'next/server';
+import { after, NextRequest } from 'next/server';
 
 import { gradeAnswer, selectQuip } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
@@ -264,12 +264,12 @@ async function handleDailyCatchupAnswer({
         });
       }
 
-      void createFeedItemsForFriendsFromAnswer(
+      after(() => createFeedItemsForFriendsFromAnswer(
         userId,
         canonicalQuestionId,
         isCorrect ? 'correct' : 'incorrect',
         `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
-      );
+      ));
     } catch (error) {
       console.warn('[daily/catchup/answer] feed propagation failed', {
         generatedQuestionId: catchupItem.questionId,
@@ -422,12 +422,12 @@ async function handleFeedCatchupAnswer({
   }
 
   if (isCorrect) {
-    void createFeedItemsForFriendsFromAnswer(
+    after(() => createFeedItemsForFriendsFromAnswer(
       userId,
       feedRow.question.id,
       'correct',
       `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
-    );
+    ));
   }
 
   const nextItem = (await getCatchupQuestions(userId))[0] ?? null;

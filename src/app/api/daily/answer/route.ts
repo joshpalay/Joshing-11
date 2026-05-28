@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
 import { gradeAnswer, selectQuip } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
@@ -466,13 +466,15 @@ export async function POST(request: NextRequest) {
 
         // Fan-out runs after the response is sent: the user-visible reveal does
         // not depend on this work, and the propagation function swallows its
-        // own errors (see create-feed-items-for-answer.ts).
-        void createFeedItemsForFriendsFromAnswer(
+        // own errors (see create-feed-items-for-answer.ts). after() keeps the
+        // function alive past the response so Vercel doesn't freeze the work
+        // mid-flight — bare `void` would drop the promise on production lambdas.
+        after(() => createFeedItemsForFriendsFromAnswer(
           session.userId,
           canonicalQuestionId,
           isCorrect ? 'correct' : 'incorrect',
           `daily:${propagationKey}:${session.userId}`,
-        );
+        ));
       } catch (error) {
         console.warn('[daily/answer] feed propagation failed', {
           generatedQuestionId: question.generatedId,
