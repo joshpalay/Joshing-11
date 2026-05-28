@@ -174,3 +174,27 @@
     @apply inline-flex min-h-10 items-center justify-center rounded-md border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45;
   }
 }
+
+@keyframes triangle-breathe {
+  0%, 100% { opacity: var(--tri-opacity-low, 0.75); }
+  50%      { opacity: var(--tri-opacity-high, 1); }
+}
+
+@keyframes triangle-drift {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  50%  { transform: translate(var(--tri-dx, 0), var(--tri-dy, 0)) rotate(var(--tri-dr, 0deg)); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+@keyframes loading-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%           { opacity: 1;    transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .triangle-loader-tri,
+  .triangle-loader-float,
+  .triangle-loader-dot {
+    animation: none !important;
+  }
+}
