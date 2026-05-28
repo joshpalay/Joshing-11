@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Flag, Heart, MoreHorizontal, X } from 'lucide-react'
+import LoadingScreen from '@/components/LoadingScreen'
 import {
   type CSSProperties,
   useCallback,
@@ -190,13 +191,7 @@ export default function DailySummaryPage() {
   const firstTierCrossing = summary?.tierCrossings[0] ?? null
 
   if (loading) {
-    return (
-      <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
-        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          Loading summary...
-        </p>
-      </main>
-    )
+    return <LoadingScreen fullScreen label="Loading summary" />
   }
 
   if (error || !summary) {

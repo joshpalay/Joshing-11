@@ -7,6 +7,7 @@ import { X } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
+import LoadingScreen from '@/components/LoadingScreen';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { categoryLabel } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
@@ -691,7 +692,7 @@ export default function DailyPage() {
         style={{ paddingBottom: "calc(24px + env(safe-area-inset-bottom))" }}
       >
         {loading ? (
-          <p className="text-sm text-[var(--text-muted)]">Loading today...</p>
+          <LoadingScreen fullScreen label="Loading today" />
         ) : error ? (
           <div className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm text-[var(--danger)]" style={{ borderColor: 'var(--danger)' }}>
             {error}
