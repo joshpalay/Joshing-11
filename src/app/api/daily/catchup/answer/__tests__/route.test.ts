@@ -2,37 +2,61 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createFeedItemsForFriendsFromAnswerMock,
+  dbMock,
   getCatchupQuestionsMock,
   getSessionMock,
   gradeAnswerMock,
   persistGeneratedQuestionMock,
   promoteDeclaredToDemonstratedMock,
   readPriorAnswersForQuestionMock,
+  selectCallChain,
   selectQuipMock,
   updateDomainDifficultyOnAnswerMock,
   writeMasteryEventMock,
-} = vi.hoisted(() => ({
-  createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
-  getCatchupQuestionsMock: vi.fn(),
-  getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
-  gradeAnswerMock: vi.fn(),
-  persistGeneratedQuestionMock: vi.fn(async () => ({
-    questionId: 'canonical-q-1',
-    alreadyExisted: false,
-  })),
-  promoteDeclaredToDemonstratedMock: vi.fn(),
-  readPriorAnswersForQuestionMock: vi.fn(async () => []),
-  selectQuipMock: vi.fn(() => 'quip'),
-  updateDomainDifficultyOnAnswerMock: vi.fn(async () => undefined),
-  writeMasteryEventMock: vi.fn(async () => ({
-    domain: 'history',
-    points: 0,
-    previousTier: 'establishing',
-    newTier: 'establishing',
-    tierChanged: false,
-    openedNewTerritory: false,
-  })),
-}))
+} = vi.hoisted(() => {
+  const selectCallChain: Array<() => Promise<unknown[]>> = []
+  const dbMock = {
+    select: vi.fn(() => {
+      const handler = selectCallChain.shift() ?? (async () => [])
+      return {
+        from: () => ({
+          where: () => ({
+            limit: handler,
+          }),
+        }),
+      }
+    }),
+    update: vi.fn(() => ({
+      set: () => ({
+        where: vi.fn(async () => undefined),
+      }),
+    })),
+  }
+  return {
+    createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
+    dbMock,
+    getCatchupQuestionsMock: vi.fn(),
+    getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
+    gradeAnswerMock: vi.fn(),
+    persistGeneratedQuestionMock: vi.fn(async () => ({
+      questionId: 'canonical-q-1',
+      alreadyExisted: false,
+    })),
+    promoteDeclaredToDemonstratedMock: vi.fn(),
+    readPriorAnswersForQuestionMock: vi.fn(async () => []),
+    selectCallChain,
+    selectQuipMock: vi.fn(() => 'quip'),
+    updateDomainDifficultyOnAnswerMock: vi.fn(async () => undefined),
+    writeMasteryEventMock: vi.fn(async () => ({
+      domain: 'history',
+      points: 0,
+      previousTier: 'establishing',
+      newTier: 'establishing',
+      tierChanged: false,
+      openedNewTerritory: false,
+    })),
+  }
+})
 
 const CATCHUP_ITEM = {
   dailyQueueItemId: 'queue-1:0',
@@ -71,26 +95,6 @@ const PERSISTED_QUESTION = {
   domain: 'history',
   broadCategory: 'humanities',
   category: 'humanities',
-}
-
-const selectCallChain: Array<() => Promise<unknown[]>> = []
-
-const dbMock = {
-  select: vi.fn(() => {
-    const handler = selectCallChain.shift() ?? (async () => [])
-    return {
-      from: () => ({
-        where: () => ({
-          limit: handler,
-        }),
-      }),
-    }
-  }),
-  update: vi.fn(() => ({
-    set: () => ({
-      where: vi.fn(async () => undefined),
-    }),
-  })),
 }
 
 vi.mock('@/server/grading', () => ({
@@ -249,7 +253,7 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
     )
   })
 
-  it('prior wrong then correct catch-up: writes first_correct_after_wrong with 6.25% of base (0.25 × 0.25)', async () => {
+  it('prior wrong then correct catch-up: writes first_correct_after_wrong with RECOVERY_STATE_WEIGHT × full base', async () => {
     setupDbChain()
     readPriorAnswersForQuestionMock.mockResolvedValueOnce([{ result: 'wrong' }])
     gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
@@ -259,7 +263,10 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
     expect(writeMasteryEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         answerState: 'first_correct_after_wrong',
-        pointsAwarded: 6, // round(100 * 0.25 * 0.25) = round(6.25) = 6
+        // Recovery on catch-up = RECOVERY_STATE_WEIGHT (0.25) applied to the
+        // full base, not the already-reduced catch-up base. See route comment
+        // at handleDailyCatchupAnswer: round(100 * 0.25) = 25.
+        pointsAwarded: 25,
       }),
     )
   })
@@ -304,10 +311,13 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
     expect(order).toEqual(['persist', 'writeMastery'])
   })
 
-  it('graceful fallback when persist fails: mastery event still written with null eventQuestionId', async () => {
+  it('graceful fallback when persist fails on every retry: mastery event still written with null eventQuestionId', async () => {
     setupDbChain()
     gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+    // Route retries persistGeneratedQuestion once on failure; reject both
+    // attempts to exercise the graceful-fallback branch.
     persistGeneratedQuestionMock.mockRejectedValueOnce(new Error('persist boom'))
+    persistGeneratedQuestionMock.mockRejectedValueOnce(new Error('persist boom retry'))
 
     await POST(jsonRequest(VALID_BODY) as never)
 

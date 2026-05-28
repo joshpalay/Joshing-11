@@ -300,30 +300,85 @@ async function getDailyCatchupItems(
   const generatedIds = candidateSlots
     .map(({ slot }) => slot.generated_question_id)
     .filter((id): id is string => Boolean(id));
+  const canonicalIds = candidateSlots
+    .filter(({ slot }) => !slot.generated_question_id)
+    .map(({ slot }) => slot.question_id)
+    .filter((id): id is string => Boolean(id));
 
-  if (generatedIds.length === 0) return [];
+  if (generatedIds.length === 0 && canonicalIds.length === 0) return [];
 
-  const questions = await db
-    .select()
-    .from(generatedQuestions)
-    .where(and(
-      eq(generatedQuestions.userId, userId),
-      inArray(generatedQuestions.id, generatedIds),
-    ));
-  const questionById = new Map(questions.map((question) => [question.id, question]));
+  const [generatedRows, canonicalRows] = await Promise.all([
+    generatedIds.length > 0
+      ? db
+          .select()
+          .from(generatedQuestions)
+          .where(and(
+            eq(generatedQuestions.userId, userId),
+            inArray(generatedQuestions.id, generatedIds),
+          ))
+      : Promise.resolve<typeof generatedQuestions.$inferSelect[]>([]),
+    canonicalIds.length > 0
+      ? db
+          .select()
+          .from(canonicalQuestions)
+          .where(inArray(canonicalQuestions.id, canonicalIds))
+      : Promise.resolve<typeof canonicalQuestions.$inferSelect[]>([]),
+  ]);
+  const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
+  const canonicalById = new Map(canonicalRows.map((question) => [question.id, question]));
 
   return candidateSlots
     .map(({ queue, slot }): CatchupQuestion | null => {
-      const question = slot.generated_question_id ? questionById.get(slot.generated_question_id) : null;
-      if (!question) return null;
       const queueDate = String(queue.queueDate);
       const expiresAt = catchUpExpiresAt(queueDate);
-      const domain = slot.domain || question.canonicalSubcategory;
-      // Suppress catchup items whose domain is a bucket-level label
-      // ("general", "general knowledge", "trivia", etc.). These would
-      // otherwise replay an earlier generation that slipped past the
-      // upstream guard.
-      if (isGenericSubcategory(domain)) return null;
+
+      if (slot.generated_question_id) {
+        const question = generatedById.get(slot.generated_question_id);
+        if (!question) return null;
+        const domain = slot.domain || question.canonicalSubcategory;
+        // Suppress catchup items whose domain is a bucket-level label
+        // ("general", "general knowledge", "trivia", etc.). These would
+        // otherwise replay an earlier generation that slipped past the
+        // upstream guard.
+        if (isGenericSubcategory(domain)) return null;
+        return {
+          dailyQueueItemId: dailyQueueItemId(queue.id, slot.slot_index),
+          surface: 'daily',
+          queueId: queue.id,
+          slotIndex: slot.slot_index,
+          feedItemId: null,
+          queueDate,
+          queueAge: queueAgeInDays(queueDate, assignmentDateStr),
+          expiresAt,
+          expiresSoon: expiresWithin24Hours(expiresAt),
+          questionId: question.id,
+          questionText: slot.question_text || question.questionText,
+          correctAnswer: question.answer,
+          alternateAnswers: [] as string[],
+          explanation: question.explainer,
+          domain,
+          domainDisplayName: categoryLabel(domain),
+          broadCategory: question.broadCategory,
+          basePoints: question.basePoints,
+          difficultyEstimate: asQueueSlotDifficulty(question.difficultyEstimate) ?? null,
+          submittedAnswer: slot.submitted_answer ?? null,
+          wasSkipped: Boolean(slot.skipped),
+        } satisfies CatchupQuestion;
+      }
+
+      if (!slot.question_id) return null;
+      const question = canonicalById.get(slot.question_id);
+      if (!question || question.deletedAt) return null;
+      const domain = slot.domain || question.canonicalSubcategory || question.broadCategory || question.category;
+      if (!domain || isGenericSubcategory(domain)) return null;
+      const difficulty = asQueueSlotDifficulty(
+        question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null,
+      ) ?? null;
+      const explanation = question.explainerFullWrong
+        ?? question.explainerFull
+        ?? question.explainerBrief
+        ?? question.factualExplanation
+        ?? null;
       return {
         dailyQueueItemId: dailyQueueItemId(queue.id, slot.slot_index),
         surface: 'daily',
@@ -336,14 +391,14 @@ async function getDailyCatchupItems(
         expiresSoon: expiresWithin24Hours(expiresAt),
         questionId: question.id,
         questionText: slot.question_text || question.questionText,
-        correctAnswer: question.answer,
-        alternateAnswers: [] as string[],
-        explanation: question.explainer,
+        correctAnswer: question.answerText,
+        alternateAnswers: question.acceptedAlternatives ?? [],
+        explanation,
         domain,
         domainDisplayName: categoryLabel(domain),
-        broadCategory: question.broadCategory,
-        basePoints: question.basePoints,
-        difficultyEstimate: asQueueSlotDifficulty(question.difficultyEstimate) ?? null,
+        broadCategory: question.broadCategory ?? domain,
+        basePoints: getBasePoints(difficulty, 'first_correct'),
+        difficultyEstimate: difficulty,
         submittedAnswer: slot.submitted_answer ?? null,
         wasSkipped: Boolean(slot.skipped),
       } satisfies CatchupQuestion;

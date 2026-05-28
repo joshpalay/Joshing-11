@@ -141,36 +141,59 @@ async function handleDailyCatchupAnswer({
 
   // Promote the bot question to a canonical row BEFORE writing the mastery
   // event so cross-surface dedup can key on the canonical Question.id
-  // (F2.2 — same shape as F2.1 in the live Daily route).
+  // (F2.2 — same shape as F2.1 in the live Daily route). Friend-authored
+  // slots already live in the canonical table, so we resolve creator info
+  // directly without going through persistGeneratedQuestion.
   let canonicalQuestionId: string | null = null;
   let persistedCreatorId: string | null = null;
   let persistedDomainForCreator: string | null = null;
-  let persistAttempt = 0;
-  while (persistAttempt < 2 && canonicalQuestionId === null) {
-    persistAttempt += 1;
-    try {
-      const persisted = await persistGeneratedQuestion(catchupItem.questionId, catchupItem.domain);
-      canonicalQuestionId = persisted.questionId;
-      const [persistedQuestion] = await db
-        .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
-        .from(questions)
-        .where(eq(questions.id, persisted.questionId))
-        .limit(1);
-      persistedCreatorId = persistedQuestion?.creatorId ?? null;
-      persistedDomainForCreator =
-        persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
-    } catch (error) {
-      const finalAttempt = persistAttempt >= 2;
-      console.warn(
-        finalAttempt
-          ? '[daily/catchup/answer] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
-          : '[daily/catchup/answer] persistGeneratedQuestion failed; retrying once',
-        {
-          generatedQuestionId: catchupItem.questionId,
-          attempt: persistAttempt,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      );
+
+  if (slot.source === 'friend') {
+    if (!slot.question_id) {
+      return catchUpErrorResponse(500, 'invalid_state', 'Friend catch-up slot missing canonical question id');
+    }
+    canonicalQuestionId = slot.question_id;
+    const [canonicalRow] = await db
+      .select({
+        creatorId: questions.creatorId,
+        domain: questions.canonicalSubcategory,
+        broadCategory: questions.broadCategory,
+        category: questions.category,
+      })
+      .from(questions)
+      .where(eq(questions.id, slot.question_id))
+      .limit(1);
+    persistedCreatorId = canonicalRow?.creatorId ?? null;
+    persistedDomainForCreator =
+      canonicalRow?.domain || canonicalRow?.broadCategory || canonicalRow?.category || null;
+  } else {
+    let persistAttempt = 0;
+    while (persistAttempt < 2 && canonicalQuestionId === null) {
+      persistAttempt += 1;
+      try {
+        const persisted = await persistGeneratedQuestion(catchupItem.questionId, catchupItem.domain);
+        canonicalQuestionId = persisted.questionId;
+        const [persistedQuestion] = await db
+          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+          .from(questions)
+          .where(eq(questions.id, persisted.questionId))
+          .limit(1);
+        persistedCreatorId = persistedQuestion?.creatorId ?? null;
+        persistedDomainForCreator =
+          persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+      } catch (error) {
+        const finalAttempt = persistAttempt >= 2;
+        console.warn(
+          finalAttempt
+            ? '[daily/catchup/answer] persistGeneratedQuestion failed after retry; canonical id will be backfilled later'
+            : '[daily/catchup/answer] persistGeneratedQuestion failed; retrying once',
+          {
+            generatedQuestionId: catchupItem.questionId,
+            attempt: persistAttempt,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
     }
   }
 
