@@ -15,5 +15,12 @@ export function FriendLikedCard({ item, overflow, onAnswer }: FriendLikedCardPro
     avatarName: item.avatarName ?? item.friendName,
     authorHref: item.authorHref ?? item.friendHref ?? null,
   }
-  return <FeedCard item={merged} overflow={overflow} onAnswer={onAnswer} />
+  return (
+    <FeedCard
+      item={merged}
+      overflow={overflow}
+      onAnswer={onAnswer}
+      verb="thought you would like this"
+    />
+  )
 }

@@ -15,5 +15,5 @@ export function DirectSentCard({ item, overflow, onAnswer }: DirectSentCardProps
     avatarName: item.avatarName ?? item.senderName,
     authorHref: item.authorHref ?? item.senderHref ?? null,
   }
-  return <FeedCard item={merged} overflow={overflow} onAnswer={onAnswer} />
+  return <FeedCard item={merged} overflow={overflow} onAnswer={onAnswer} verb="sent you this" />
 }

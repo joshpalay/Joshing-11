@@ -96,6 +96,7 @@ export function FriendAnsweredCard({
       onAnswer={viewerAnswered ? undefined : onAnswer}
       footer={footer}
       headerContent={headerContent}
+      verb="knows"
       dimQuestion={viewerAnswered}
     />
   )

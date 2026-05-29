@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { CheckCircle2, Clock, MessageCircleQuestion, Settings } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 import { formatNextResetTimeLocal } from '@/lib/games/timezone'
@@ -180,6 +180,12 @@ export default function TodaysFiveCard({
     : answered > 0
       ? `${answered} of 5 answered`
       : 'Ready when you are'
+  // Editorial serif headline (display/Body-Serif), contextual to round state.
+  const headline = isComplete
+    ? 'Today, done.'
+    : hasStartedRound
+      ? 'Pick up where you left off'
+      : 'Ready when you are!'
 
   const resetForToday = async () => {
     if (resetting) return
@@ -205,91 +211,81 @@ export default function TodaysFiveCard({
   }
 
   return (
-    <div className="bg-card text-card-foreground w-full rounded-lg border p-4">
-      <div className="flex items-start gap-3">
-        <span className="bg-muted text-foreground grid size-10 shrink-0 place-items-center rounded-md">
-          {isComplete ? (
-            <CheckCircle2 className="size-5" aria-hidden="true" />
-          ) : (
-            <MessageCircleQuestion className="size-5" aria-hidden="true" />
-          )}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
-              Today&apos;s Five
-            </p>
-            <Link
-              href="/daily/setup"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Set up daily round"
-            >
-              <Settings className="size-4" aria-hidden="true" />
-            </Link>
-          </div>
-          <p className="text-foreground mt-2 text-sm leading-6">
-            Five questions to keep your knowledge map moving.
-          </p>
-          {preferences ? (
-            <p className="text-muted-foreground mt-0.5 text-xs leading-5">
-              {preferenceSummary(preferences)}
-            </p>
-          ) : null}
-          <p className="text-muted-foreground mt-1 text-sm leading-6">
-            {subtext}
-          </p>
-          <div
-            className="mt-3 flex items-center gap-1.5"
-            aria-label={`${answered} of 5 answered`}
-          >
-            {Array.from({ length: 5 }, (_, index) => {
-              const outcome = effectiveStatus.slotOutcomes[index] ?? 'unanswered'
-              const isFilled = outcome !== 'unanswered'
-              const background =
-                outcome === 'correct'
-                  ? 'var(--success)'
-                  : outcome === 'incorrect'
-                    ? 'var(--destructive)'
-                    : outcome === 'skipped'
-                      ? 'color-mix(in srgb, var(--foreground) 35%, transparent)'
-                      : 'transparent'
-              const label =
-                outcome === 'correct'
-                  ? 'Correct'
-                  : outcome === 'incorrect'
-                    ? 'Wrong'
-                    : outcome === 'skipped'
-                      ? 'Skipped'
-                      : 'Not answered'
-              return (
-                <span
-                  key={index}
-                  className="block rounded-full"
-                  aria-label={label}
-                  title={label}
-                  style={{
-                    width: isFilled ? 9 : 8,
-                    height: isFilled ? 9 : 8,
-                    background,
-                    border: isFilled
-                      ? 'none'
-                      : '1px solid color-mix(in srgb, var(--foreground) 35%, transparent)',
-                    opacity: isFilled ? 0.95 : 0.7,
-                  }}
-                />
-              )
-            })}
-          </div>
-        </div>
+    <div className="bg-card text-card-foreground w-full rounded-md border border-[var(--brand-border)] px-4 py-5 shadow-[0_4px_12px_rgba(40,32,30,0.04)]">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
+          Today&apos;s Five
+        </p>
+        <Link
+          href="/daily/setup"
+          className="text-[var(--brand-ink-400)] transition-colors hover:text-[var(--brand-ink)]"
+          aria-label="Set up daily round"
+        >
+          <Settings className="size-4" aria-hidden="true" />
+        </Link>
       </div>
+
+      <h2 className="mt-1.5 font-serif text-[32px] leading-[1.1] font-medium tracking-tight text-[var(--brand-ink)]">
+        {headline}
+      </h2>
+
+      <div
+        className="mt-3 flex items-center gap-2"
+        aria-label={`${answered} of 5 answered`}
+      >
+        {Array.from({ length: 5 }, (_, index) => {
+          const outcome = effectiveStatus.slotOutcomes[index] ?? 'unanswered'
+          const isFilled = outcome !== 'unanswered'
+          const background =
+            outcome === 'correct'
+              ? 'var(--success)'
+              : outcome === 'incorrect'
+                ? 'var(--destructive)'
+                : outcome === 'skipped'
+                  ? 'color-mix(in srgb, var(--brand-ink) 35%, transparent)'
+                  : 'transparent'
+          const label =
+            outcome === 'correct'
+              ? 'Correct'
+              : outcome === 'incorrect'
+                ? 'Wrong'
+                : outcome === 'skipped'
+                  ? 'Skipped'
+                  : 'Not answered'
+          return (
+            <span
+              key={index}
+              className="block rounded-full"
+              aria-label={label}
+              title={label}
+              style={{
+                width: 11,
+                height: 11,
+                background,
+                border: isFilled
+                  ? 'none'
+                  : '1px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
+                opacity: isFilled ? 0.95 : 0.7,
+              }}
+            />
+          )
+        })}
+      </div>
+
+      {answered > 0 || preferences ? (
+        <p className="mt-2.5 text-xs leading-5 text-[var(--brand-ink-400)]">
+          {answered > 0 ? subtext : null}
+          {answered > 0 && preferences ? ' · ' : null}
+          {preferences ? preferenceSummary(preferences) : null}
+        </p>
+      ) : null}
 
       {isComplete ? (
         <>
           <Link
             href={playHref}
-            className="btn-ghost mt-4 min-h-11 w-full justify-center gap-2"
+            className="btn-ghost mt-4 min-h-12 w-full justify-center rounded-md text-base font-bold tracking-wide"
           >
-            <Clock className="size-4" aria-hidden="true" />
             {actionLabel}
           </Link>
           <button
@@ -298,7 +294,7 @@ export default function TodaysFiveCard({
               void resetForToday()
             }}
             disabled={resetting}
-            className="text-muted-foreground mt-2 w-full text-center text-xs font-medium tracking-[0.08em] uppercase underline underline-offset-4 disabled:opacity-60"
+            className="mt-2 w-full text-center text-xs font-medium tracking-[0.08em] text-[var(--brand-ink-400)] uppercase underline underline-offset-4 disabled:opacity-60"
           >
             {resetting ? 'Resetting…' : 'Reset game for today and play again'}
           </button>
@@ -309,9 +305,8 @@ export default function TodaysFiveCard({
       ) : (
         <Link
           href={playHref}
-          className="btn-primary mt-4 min-h-11 w-full justify-center gap-2"
+          className="btn-primary mt-4 min-h-12 w-full justify-center rounded-md text-base font-bold tracking-wide"
         >
-          <MessageCircleQuestion className="size-4" aria-hidden="true" />
           {actionLabel}
         </Link>
       )}

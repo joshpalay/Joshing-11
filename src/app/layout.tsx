@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Caveat, Montserrat, Playfair_Display } from 'next/font/google'
+import { Caveat, Cormorant_Garamond, Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
@@ -22,6 +22,18 @@ const playfair = Playfair_Display({
   subsets: ['latin'],
   style: ['italic'],
   variable: '--font-display',
+  display: 'swap',
+})
+
+// Editorial serif register from the Figma design system (display/Body-Serif,
+// display/card/question|update|action). Cormorant Garamond is the project's
+// "Garamond" — used for headlines and feed-card question/answer text. Exposed
+// via --font-cormorant and surfaced to Tailwind as `font-serif` in globals.css.
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['500', '600'],
+  style: ['normal', 'italic'],
+  variable: '--font-cormorant',
   display: 'swap',
 })
 
@@ -54,7 +66,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${playfair.variable} ${caveat.variable}`}
+      className={`font-sans ${playfair.variable} ${caveat.variable} ${cormorant.variable}`}
     >
       <body className={montserrat.className}>
         <Nav

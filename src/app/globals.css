@@ -7,6 +7,7 @@
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
+    --font-serif: var(--font-cormorant, Georgia, "Times New Roman", serif);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,24 +50,54 @@
 
 :root {
     --font-sans: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+
+    /* ── Joshing brand foundation ───────────────────────────────────────────
+       Sourced from the Figma design system (JOSHING DESIGN SYSTEM): navy ink
+       on warm off-white, with an orange accent and the triangle palette. These
+       named tokens are the single source of truth; the shadcn semantic tokens
+       below are repointed at them so the brand applies app-wide. The triangle
+       values intentionally mirror the LoadingScreen PALETTE for consistency. */
+    --brand-ink:         #0a1f3d;  /* ink/900 — primary text / headings        */
+    --brand-ink-700:     #3a4a5f;  /* ink/700 — secondary text                 */
+    --brand-ink-400:     #8a8a8a;  /* ink/400 — muted / timestamps             */
+    --brand-navy:        #1f3a5a;  /* navy/500 — wordmark, primary buttons     */
+    --brand-link:        #4a5d75;  /* Link — inline links                      */
+    --brand-orange:      #d15e36;  /* triangle/orange — accent links           */
+    --brand-cream:       #f8e6c7;  /* triangle/cream                           */
+    --brand-cream-page:  #fcf8f2;  /* Color/Game/Background — app page surface  */
+    --brand-card:        #fdfcfb;  /* cream/50 — content card surface          */
+    --brand-cream-card:  #f6edd6;  /* warm cream card (login screens only)     */
+    --brand-border:      #e9e2d2;  /* warm hairline border                     */
+    --brand-rule:        rgba(60, 50, 40, 0.14); /* border/rule — divider      */
+    --domain-language:   #7a9eaa;
+    --domain-science:    #8aa68a;
+    --tri-orange:        #d15e36;
+    --tri-cream:         #f8e6c7;
+    --tri-darkteal:      #6d837f;
+    --tri-lightteal:     #adb19e;
+    --tri-darkyellow:    #deae5c;
+    --tri-lighttan:      #edd2a3;
+    --tri-amber:         #d9a82e;
+    /* ──────────────────────────────────────────────────────────────────── */
+
+    --background: var(--brand-cream-page);
+    --foreground: var(--brand-ink);
+    --card: var(--brand-card);
+    --card-foreground: var(--brand-ink);
+    --popover: var(--brand-card);
+    --popover-foreground: var(--brand-ink);
+    --primary: var(--brand-navy);
+    --primary-foreground: #fbf4e3;
+    --secondary: #f1ebdd;
+    --secondary-foreground: var(--brand-ink);
+    --muted: #f1ebdd;
+    --muted-foreground: var(--brand-ink-400);
+    --accent: #f1ebdd;
+    --accent-foreground: var(--brand-ink);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --border: var(--brand-border);
+    --input: var(--brand-border);
+    --ring: var(--brand-navy);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
