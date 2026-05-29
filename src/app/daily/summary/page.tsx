@@ -413,25 +413,41 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
 
   return (
     <article
-      className={cn(
-        'card relative p-5',
+      className="card relative p-5"
+      style={
         question.isSkipped
-          ? 'border-stone-200 bg-stone-50'
+          ? { borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 30%, transparent)' }
           : question.isCorrect
-            ? 'border-emerald-200 bg-emerald-50'
-            : 'border-rose-200 bg-rose-50'
-      )}
+            ? {
+                background: 'color-mix(in srgb, var(--success) 9%, var(--brand-card))',
+                borderColor: 'color-mix(in srgb, var(--success) 30%, var(--brand-border))',
+                borderLeft: '3px solid var(--success)',
+              }
+            : {
+                background: 'color-mix(in srgb, #b42318 7%, var(--brand-card))',
+                borderColor: 'color-mix(in srgb, #b42318 24%, var(--brand-border))',
+                borderLeft: '3px solid #b42318',
+              }
+      }
     >
       <div className="flex flex-wrap items-start gap-2 pr-11">
         <span
-          className={cn(
-            'rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase',
+          className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase"
+          style={
             question.isSkipped
-              ? 'border-stone-300 bg-stone-100 text-stone-700'
+              ? { borderColor: 'var(--brand-border)', background: 'var(--secondary)', color: 'var(--brand-ink-400)' }
               : question.isCorrect
-                ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
-                : 'border-rose-300 bg-rose-100 text-rose-800'
-          )}
+                ? {
+                    borderColor: 'color-mix(in srgb, var(--success) 35%, var(--brand-border))',
+                    background: 'color-mix(in srgb, var(--success) 14%, var(--brand-card))',
+                    color: '#0f5c30',
+                  }
+                : {
+                    borderColor: 'color-mix(in srgb, #b42318 35%, var(--brand-border))',
+                    background: 'color-mix(in srgb, #b42318 12%, var(--brand-card))',
+                    color: '#8b1f16',
+                  }
+          }
         >
           {question.isSkipped
             ? 'SKIPPED'

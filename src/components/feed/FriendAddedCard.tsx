@@ -65,7 +65,7 @@ export function FriendAddedCard({
           <button
             type="button"
             onClick={onHideCategory}
-            className="font-medium text-[#1d4ed8] hover:underline"
+            className="font-medium text-[var(--brand-link)] hover:underline"
           >
             Hide questions about {visibleCategory}
           </button>
