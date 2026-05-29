@@ -8,7 +8,6 @@ import { X } from 'lucide-react';
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import LoadingScreen from '@/components/LoadingScreen';
-import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { categoryLabel } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
@@ -31,8 +30,12 @@ function buildExclusionTicks(slot: QueueSlot): ExclusionTick[] {
 }
 
 function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
-  const tier = difficultyEstimateToTierLabel(slot.difficulty_estimate);
-  return tier ? [{ label: tier }] : [];
+  // Figma shows the topic/category as the question chip (not the difficulty tier).
+  const category =
+    (slot.broad_category && slot.broad_category.trim()) ||
+    (slot.category ? categoryLabel(slot.category) : '') ||
+    slot.domain;
+  return category ? [{ label: category }] : [];
 }
 
 type QueueResponse = {
