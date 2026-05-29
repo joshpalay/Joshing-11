@@ -180,10 +180,34 @@
   50%      { opacity: var(--tri-opacity-high, 1); }
 }
 
+@keyframes triangle-color-swap {
+  0%, 49%   { fill: var(--tri-color-a, currentColor); }
+  50%, 100% { fill: var(--tri-color-b, currentColor); }
+}
+
 @keyframes triangle-drift {
-  0%   { transform: translate(0, 0) rotate(0deg); }
-  50%  { transform: translate(var(--tri-dx, 0), var(--tri-dy, 0)) rotate(var(--tri-dr, 0deg)); }
-  100% { transform: translate(0, 0) rotate(0deg); }
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50%  { transform: translate(var(--tri-dx, 0), var(--tri-dy, 0)) rotate(var(--tri-dr, 0deg)) scale(var(--tri-ds, 1)); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+
+@keyframes triangle-sweep {
+  0%   { transform: translate3d(-110%, -50%, 0) rotate(-22deg); opacity: 0; }
+  20%  { opacity: 0.7; }
+  80%  { opacity: 0.7; }
+  100% { transform: translate3d(110%, -50%, 0) rotate(-22deg); opacity: 0; }
+}
+
+.triangle-loader-sweep {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 235, 211, 0) 0%,
+    rgba(245, 235, 211, 0.55) 50%,
+    rgba(245, 235, 211, 0) 100%
+  );
+  mix-blend-mode: screen;
+  animation: triangle-sweep 4.5s linear infinite;
+  will-change: transform, opacity;
 }
 
 @keyframes loading-dot {
@@ -194,6 +218,7 @@
 @media (prefers-reduced-motion: reduce) {
   .triangle-loader-tri,
   .triangle-loader-float,
+  .triangle-loader-sweep,
   .triangle-loader-dot {
     animation: none !important;
   }

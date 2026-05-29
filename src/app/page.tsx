@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import FeedList from '@/components/FeedList'
+import LoadingScreen from '@/components/LoadingScreen'
 import TodaysFiveCard, {
   type DailyPreferences,
   type DailyStatus,
@@ -202,8 +203,8 @@ function HeroSkeleton() {
 
 function FeedSkeleton() {
   return (
-    <div className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
-      Loading feed…
+    <div className="overflow-hidden rounded-lg">
+      <LoadingScreen label="Loading feed" />
     </div>
   )
 }

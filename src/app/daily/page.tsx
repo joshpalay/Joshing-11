@@ -7,9 +7,10 @@ import { X } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
+import LoadingScreen from '@/components/LoadingScreen';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { categoryLabel } from '@/lib/questions-types';
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
 
 type ExclusionScope = 'subcategory' | 'broad_category' | 'category';
@@ -84,7 +85,13 @@ function answerFailureMessage(body: FailedAnswerResponse | null): string {
   return body?.message ?? (body?.error ? ANSWER_ERROR_MESSAGES[body.error] : undefined) ?? 'Could not record that answer.';
 }
 
+// Returns the slot the player should be on, or null when the round is over.
+// The `!answered && !skipped` predicate is the canonical "pending" definition
+// shared with the status API via isRoundComplete (see @/server/daily/types) —
+// when nothing is pending we redirect to the summary, and the home card now
+// agrees by treating the round as complete instead of offering "Resume".
 function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
+  if (!hasPendingSlot(slots)) return null;
   return slots.find((slot) => !slot.answered && !slot.skipped) ?? null;
 }
 
@@ -685,7 +692,7 @@ export default function DailyPage() {
         style={{ paddingBottom: "calc(24px + env(safe-area-inset-bottom))" }}
       >
         {loading ? (
-          <p className="text-sm text-[var(--text-muted)]">Loading today...</p>
+          <LoadingScreen fullScreen label="Loading today" />
         ) : error ? (
           <div className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm text-[var(--danger)]" style={{ borderColor: 'var(--danger)' }}>
             {error}
