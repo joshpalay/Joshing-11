@@ -70,11 +70,11 @@ function buildTriangles(): Tri[] {
       let colorBIdx = Math.floor(r4 * PALETTE.length);
       if (colorBIdx === colorAIdx) colorBIdx = (colorBIdx + 1) % PALETTE.length;
 
-      const breatheDuration = 1.6 + r2 * 1.4;
+      const breatheDuration = 5 + r2 * 4;
       const breatheDelay = -r3 * breatheDuration;
-      const swapDuration = 3 + r5 * 3;
+      const swapDuration = 10 + r5 * 6;
       const swapDelay = -r1 * swapDuration;
-      const opacityLow = 0.25 + r1 * 0.2;
+      const opacityLow = 0.55 + r1 * 0.2;
       const opacityHigh = 0.95 + r2 * 0.05;
 
       tris.push({
@@ -134,11 +134,11 @@ function buildFloaters(): FloatTri[] {
       .map(([x, y]) => `${x},${y}`)
       .join(" ");
     const seed = i + 1;
-    const dx = (rand(seed * 31) - 0.5) * 240;
-    const dy = (rand(seed * 47) - 0.5) * 240;
-    const dr = (rand(seed * 59) - 0.5) * 120;
-    const ds = 1 + rand(seed * 67) * 0.3;
-    const duration = 5 + rand(seed * 71) * 5;
+    const dx = (rand(seed * 31) - 0.5) * 100;
+    const dy = (rand(seed * 47) - 0.5) * 100;
+    const dr = (rand(seed * 59) - 0.5) * 40;
+    const ds = 1 + rand(seed * 67) * 0.1;
+    const duration = 16 + rand(seed * 71) * 10;
     const delay = -rand(seed * 89) * duration;
 
     return { points, color, cx, cy, dx, dy, dr, ds, duration, delay, opacity };
