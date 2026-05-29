@@ -66,7 +66,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${playfair.variable} ${caveat.variable} ${cormorant.variable}`}
+      className={`font-sans ${montserrat.variable} ${playfair.variable} ${caveat.variable} ${cormorant.variable}`}
     >
       <body className={montserrat.className}>
         <Nav
