@@ -57,13 +57,6 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     ? await generateDailyQuestionsFromKnowledgeBase(userId, remaining)
     : [];
 
-  if (authored.length === 0 && generated.length === 0) {
-    throw new DailyQueueFillError(
-      'generation_failed',
-      "Today's Daily Five is taking longer than usual.",
-    );
-  }
-
   // Cross-source dedup by normalized question text. The authored picker
   // dedupes by question_id against past queues, and the generator has its
   // own batch/history dedup — but neither knows about the other, so the
@@ -92,6 +85,19 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       authoredCount: authored.length,
       generatedCount: generated.length,
     });
+  }
+
+  // A short queue used to be persisted silently when generation returned
+  // fewer than the requested count (or when cross-source dedup dropped some):
+  // the play page treats "no pending slot" as round-over, so a 2-slot queue
+  // ended the round after 2 answers with three blank progress dots. Fail
+  // loudly instead so /api/daily/queue surfaces a 503 and the play page
+  // shows the fill-error UI.
+  if (authored.length + dedupedGenerated.length < DAILY_QUEUE_SIZE) {
+    throw new DailyQueueFillError(
+      'generation_failed',
+      "Today's Daily Five is taking longer than usual.",
+    );
   }
 
   let position = 0;
