@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
 import {
   dailyQueues,
@@ -38,7 +39,10 @@ export type ArchiveItem = {
   canUseQuestionActions: boolean;
   creatorNote: DeliveredCreatorNote | null;
   verified: boolean;
+  askerName: string;
 };
+
+export type ArchiveKind = 'all' | 'answered';
 
 export type ArchiveResult = {
   items: ArchiveItem[];
@@ -178,6 +182,15 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
   const questionById = new Map(questionRows.map((question) => [question.id, question]));
 
+  const creatorIds = [...new Set(questionRows.map((q) => q.creatorId).filter((id): id is string => Boolean(id)))];
+  const creatorRows = creatorIds.length
+    ? await db
+        .select({ id: users.id, displayName: users.displayName })
+        .from(users)
+        .where(inArray(users.id, creatorIds))
+    : [];
+  const creatorById = new Map(creatorRows.map((row) => [row.id, row.displayName]));
+
   return queues.flatMap((queue) =>
     asQueueSlots(queue.slots)
       .filter((slot) => slot.answered || slot.skipped)
@@ -186,6 +199,7 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
         const bankQuestion = slot.question_id ? questionById.get(slot.question_id) : null;
         const domain = slot.domain || generated?.canonicalSubcategory || questionDomain(bankQuestion);
         const questionId = slot.question_id ?? slot.generated_question_id ?? `${queue.id}:${slot.slot_index}`;
+        const askerDisplay = bankQuestion?.creatorId ? creatorById.get(bankQuestion.creatorId) ?? null : null;
         return {
           id: `daily:${queue.id}:${slot.slot_index}`,
           questionId,
@@ -205,21 +219,25 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
           canUseQuestionActions: Boolean(slot.question_id),
           creatorNote: null,
           verified: bankQuestion?.verified ?? true,
+          askerName: askerDisplay ?? (generated ? 'Daily Five' : ''),
         } satisfies ArchiveItem;
       }),
   );
 }
 
 async function readFeedItems(userId: string, source?: ArchiveSource): Promise<ArchiveItem[]> {
+  const creatorUsers = alias(users, 'creator_users');
   const rows = await db
     .select({
       feedItem: feedItems,
       question: questions,
       sourceUser: { displayName: users.displayName },
+      creatorUser: { displayName: creatorUsers.displayName },
     })
     .from(feedItems)
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
     .innerJoin(users, eq(feedItems.sourceUserId, users.id))
+    .leftJoin(creatorUsers, eq(questions.creatorId, creatorUsers.id))
     .where(and(eq(feedItems.recipientUserId, userId), eq(feedItems.state, 'answered')))
     .orderBy(desc(feedItems.sourceEventAt));
 
@@ -252,7 +270,7 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
     if (feedId) eventByFeedId.set(feedId, event);
   }
 
-  return relevantRows.map(({ feedItem, question, sourceUser }) => {
+  return relevantRows.map(({ feedItem, question, sourceUser, creatorUser }) => {
     const sourceName = personName(sourceUser.displayName);
     const domain = questionDomain(question);
     const correctEvent = eventByFeedId.get(feedItem.id);
@@ -266,7 +284,7 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       source: archiveSource,
       sourceLabel: feedItem.sourceType === 'direct_sent' ? `From ${sourceName}` : `Feed · ${sourceName}`,
       result: correctEvent ? 'correct' : 'incorrect',
-      submittedAnswer: null,
+      submittedAnswer: feedItem.submittedAnswer ?? null,
       correctAnswer: question.answerText,
       explanation: questionExplanation(question),
       pointsAwarded: correctEvent ? Number(correctEvent.awardedPoints ?? 0) : 0,
@@ -276,24 +294,28 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       canUseQuestionActions: true,
       creatorNote: null,
       verified: question.verified,
+      askerName: creatorUser?.displayName ?? '',
     } satisfies ArchiveItem;
   });
 }
 
 async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
+  const creatorUsers = alias(users, 'creator_users_jg');
   const rows = await db
     .select({
       response: joshingGameResponses,
       question: questions,
       game: { title: joshingGames.title },
+      creatorUser: { displayName: creatorUsers.displayName },
     })
     .from(joshingGameResponses)
     .innerJoin(questions, eq(joshingGameResponses.questionId, questions.id))
     .innerJoin(joshingGames, eq(joshingGameResponses.gameId, joshingGames.id))
+    .leftJoin(creatorUsers, eq(questions.creatorId, creatorUsers.id))
     .where(eq(joshingGameResponses.userId, userId))
     .orderBy(desc(joshingGameResponses.answeredAt));
 
-  return rows.map(({ response, question, game }) => {
+  return rows.map(({ response, question, game, creatorUser }) => {
     const domain = questionDomain(question);
     return {
       id: `joshing_game:${response.id}`,
@@ -314,6 +336,7 @@ async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
       canUseQuestionActions: true,
       creatorNote: null,
       verified: question.verified,
+      askerName: creatorUser?.displayName ?? '',
     } satisfies ArchiveItem;
   });
 }
@@ -368,16 +391,21 @@ async function readWrittenByMeItems(userId: string): Promise<ArchiveItem[]> {
       canUseQuestionActions: true,
       creatorNote: null,
       verified: question.verified,
+      askerName: '',
     } satisfies ArchiveItem;
   });
 }
 
-async function readAllArchiveItems(userId: string, source?: ArchiveSource): Promise<ArchiveItem[]> {
+async function readAllArchiveItems(
+  userId: string,
+  source?: ArchiveSource,
+  kind: ArchiveKind = 'all',
+): Promise<ArchiveItem[]> {
   const readers: Promise<ArchiveItem[]>[] = [];
   if (!source || source === 'daily') readers.push(readDailyItems(userId));
   if (!source || source === 'feed' || source === 'sent_to_me') readers.push(readFeedItems(userId, source));
   if (!source || source === 'joshing_game') readers.push(readJoshingGameItems(userId));
-  if (!source || source === 'written_by_me') readers.push(readWrittenByMeItems(userId));
+  if (kind !== 'answered' && (!source || source === 'written_by_me')) readers.push(readWrittenByMeItems(userId));
 
   const items = (await Promise.all(readers)).flat();
   return decorateItems(userId, items);
@@ -401,11 +429,14 @@ export async function getArchiveForUser(params: {
   result?: ArchiveResultFilter;
   limit?: number;
   cursor?: string;
+  kind?: ArchiveKind;
 }): Promise<ArchiveResult> {
   const limit = Math.min(Math.max(params.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const cursor = decodeCursor(params.cursor);
-  const allItems = applyFilters(await readAllArchiveItems(params.userId, params.source), params)
-    .sort(compareArchiveItems);
+  const allItems = applyFilters(
+    await readAllArchiveItems(params.userId, params.source, params.kind),
+    params,
+  ).sort(compareArchiveItems);
   const cursorItems = cursor ? allItems.filter((item) => afterCursor(item, cursor)) : allItems;
   const pageItems = cursorItems.slice(0, limit);
 
