@@ -8,6 +8,12 @@ import { type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export const dynamic = 'force-dynamic';
+// The POST path can fall through to synchronous LLM generation when the cron
+// hasn't pre-built today's queue. A single Sonnet batch is capped at
+// GENERATION_TIMEOUT_MS (35s) and a bounded top-up can follow, so the default
+// function budget is too small — give it headroom so the work completes
+// instead of being platform-killed mid-generation. See queue-orchestrator.ts.
+export const maxDuration = 90;
 
 function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
