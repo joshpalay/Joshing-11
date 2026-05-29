@@ -579,13 +579,24 @@ export type AuthoredPick = {
  * vetter in src/server/llm/vet-question.ts). The viewer is never offered
  * their own question, deleted questions, or questions that have already
  * appeared in any of their past daily queues.
+ *
+ * `allowedSubcategories` constrains candidates to canonical subcategories
+ * that are in the viewer's knowledge base (declared interests + demonstrated
+ * mastery in random mode, selected domains in custom mode). Bot-generated
+ * questions go through generateDailyQuestionsFromKnowledgeBase which is
+ * already domain-constrained; without this set the authored picker was
+ * serving the entire vetted public pool regardless of the viewer's
+ * interests, so a viewer who declared only "Star Wars" + "UX design"
+ * could end up with a Rodgers & Hammerstein question in their Daily 5.
  */
 export async function pickEligibleAuthoredQuestions(
   viewerUserId: string,
   socialGraph: { direct: Set<string>; extended: Set<string> },
   limit: number,
+  allowedSubcategories: ReadonlySet<string>,
 ): Promise<AuthoredPick[]> {
   if (limit <= 0) return [];
+  if (allowedSubcategories.size === 0) return [];
 
   // Collect every question id the viewer has already seen on any past daily
   // queue. The graph is small per user (5 slots/day) so a Node-side scan is
@@ -593,12 +604,17 @@ export async function pickEligibleAuthoredQuestions(
   // questions. Indexed via DailyQueue_user_id_idx.
   //
   // ALSO collect every question the viewer has already answered on any surface
-  // (feed, catchup, prior daily). Without this, a friend's authored question
-  // that the viewer answered via the feed gets re-served as a "friend" slot
-  // the next day because no row exists in past daily queues for it.
-  // MASTERY_EVENTS.question_id stores the canonical Question.id for both
-  // feed and daily writes (see writeMasteryEvent / daily/answer route).
-  const [pastQueues, answeredRows] = await Promise.all([
+  // (feed, catchup, prior daily). MASTERY_EVENTS.question_id stores the
+  // canonical Question.id for both feed and daily writes (see writeMasteryEvent
+  // / daily/answer route) — but only `live_correct` and `catchup_correct` were
+  // covered before, so a feed delivery the viewer never opened (or answered
+  // wrong) used to re-surface as a "friend" Daily slot the next day.
+  //
+  // ALSO collect every question the viewer has been *sent* via FeedItem,
+  // regardless of state. The feed is the other distribution surface for
+  // friend questions; once a question has hit the viewer's feed we should not
+  // re-serve it as a Daily slot in any state.
+  const [pastQueues, answeredRows, feedRows] = await Promise.all([
     db
       .select({ slots: dailyQueues.slots })
       .from(dailyQueues)
@@ -611,6 +627,13 @@ export async function pickEligibleAuthoredQuestions(
         inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
         isNotNull(masteryEvents.questionId),
       )),
+    db
+      .select({ questionId: feedItems.questionId })
+      .from(feedItems)
+      .where(and(
+        eq(feedItems.recipientUserId, viewerUserId),
+        isNotNull(feedItems.questionId),
+      )),
   ]);
   const seenQuestionIds = new Set<string>();
   for (const row of pastQueues) {
@@ -619,6 +642,9 @@ export async function pickEligibleAuthoredQuestions(
     }
   }
   for (const row of answeredRows) {
+    if (row.questionId) seenQuestionIds.add(row.questionId);
+  }
+  for (const row of feedRows) {
     if (row.questionId) seenQuestionIds.add(row.questionId);
   }
 
@@ -648,6 +674,7 @@ export async function pickEligibleAuthoredQuestions(
       eq(canonicalQuestions.visibility, 'public'),
       isNotNull(canonicalQuestions.creatorId),
       isNotNull(canonicalQuestions.canonicalSubcategory),
+      inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
       isNull(canonicalQuestions.deletedAt),
     ))
     .orderBy(
