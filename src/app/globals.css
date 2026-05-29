@@ -78,7 +78,17 @@
     --tri-darkyellow:    #deae5c;
     --tri-lighttan:      #edd2a3;
     --tri-amber:         #d9a82e;
-    /* ──────────────────────────────────────────────────────────────────── */
+    /* ──────────────────────────────────────────────────────────────────────
+       Conventions:
+       • Cream tones — `--brand-cream-page` (#fcf8f2) is the app background;
+         `--brand-card` (#fdfcfb, near-white) is the default CONTENT card;
+         `--brand-cream-card` (#f6edd6, warmer) is reserved for ENTRY/branded
+         surfaces (login, knowledge portrait, sparkle envelope).
+       • Card radius — content cards use `rounded-md`; entry/branded cards use
+         the softer `rounded-2xl` (login) / `rounded-[1.5rem]` (envelope).
+       • Correct/wrong — use `--success` (#178245) and #b42318 (destructive ink)
+         with a 3px colored left border (see GameplayChat ResultRow + summary).
+       ──────────────────────────────────────────────────────────────────── */
 
     --background: var(--brand-cream-page);
     --foreground: var(--brand-ink);
