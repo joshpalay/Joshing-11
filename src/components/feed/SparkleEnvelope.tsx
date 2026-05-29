@@ -66,13 +66,13 @@ export function SparkleEnvelope({
   return (
     <article
       className={cn(
-        'overflow-hidden rounded-[1.5rem] bg-[var(--ink)] p-[6px] shadow-[0_10px_24px_-8px_rgb(0_0_0/0.28)]',
+        'overflow-hidden rounded-[1.5rem] bg-[var(--brand-navy)] p-[6px] shadow-[0_10px_24px_-8px_rgb(0_0_0/0.28)]',
         className,
       )}
     >
       <p
         className="px-3 pb-[10px] pt-[6px] text-[10px] font-bold uppercase leading-none tracking-[0.22em]"
-        style={{ color: 'var(--cream)' }}
+        style={{ color: '#fbf4e3' }}
       >
         {eyebrow}
       </p>
@@ -116,8 +116,7 @@ export function SparkleEnvelope({
 
           <div className="mt-4 flex items-center gap-4 sm:gap-5">
             <p
-              className="min-w-0 flex-1 text-[19px] leading-snug text-[var(--ink)] sm:text-[22px]"
-              style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+              className="min-w-0 flex-1 font-serif text-[20px] leading-snug text-[var(--ink)] sm:text-[23px]"
             >
               <span aria-hidden className="opacity-60">&ldquo;</span>
               {question}
@@ -128,7 +127,7 @@ export function SparkleEnvelope({
               <button
                 type="button"
                 onClick={onAnswer}
-                className="shrink-0 rounded-full bg-[#1d4ed8] px-5 py-2.5 text-[14px] font-medium text-white shadow-sm transition hover:bg-[#1e40af] active:translate-y-px"
+                className="shrink-0 rounded-full bg-[var(--brand-navy)] px-5 py-2.5 text-[14px] font-semibold text-[#fbf4e3] shadow-sm transition hover:opacity-90 active:translate-y-px"
               >
                 {answerLabel}
               </button>
