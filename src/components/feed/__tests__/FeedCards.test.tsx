@@ -122,7 +122,7 @@ describe('Feed unanswered card actions', () => {
       />
     )
 
-    expect(rendered).toContain('Answer →')
+    expect(rendered).toContain('Answer this')
     expect(rendered).not.toContain('Skip')
     expect(rendered).not.toContain('Not my focus')
     expect(rendered).not.toContain('Bookmark')
@@ -132,7 +132,7 @@ describe('Feed unanswered card actions', () => {
     const rendered = html(
       <DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />
     )
-    expect(rendered).not.toContain('Answer →')
+    expect(rendered).not.toContain('Answer this')
   })
 
   it('shows overflow menu when passed', () => {
