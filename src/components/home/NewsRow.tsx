@@ -41,10 +41,10 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
       return {
         headline: (
           <>
-            <b>{actor}</b> {verb} your{domain ? ` ${domain}` : ''} question
+            <b>{actor}</b> {verb} your question
           </>
         ),
-        secondLine: faq?.questionText ?? null,
+        secondLine: domain,
         accentColor: correct ? '#d97706' : '#a8a29e',
         href: '/activities',
       }
@@ -57,12 +57,10 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
         headline: (
           <>
             <b>{actor}</b>{' '}
-            {domain
-              ? <>opened up the domain in <b>{domain}</b></>
-              : 'opened up a new domain on your map'}
+            {domain ? 'opened a new domain in' : 'opened up a new domain on your map'}
           </>
         ),
-        secondLine: dp?.questionText || null,
+        secondLine: domain,
         accentColor: '#16a34a',
         href: domain
           ? `/knowledge/${encodeURIComponent(domain)}`
@@ -114,19 +112,17 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
         href: '/activities',
       }
 
-    case 'question_curated': {
-      const curated = item.reference.curatedQuestion
+    case 'question_curated':
       return {
         headline: (
           <>
             <b>{actor}</b> saved your question
           </>
         ),
-        secondLine: curated?.questionText ?? null,
+        secondLine: null,
         accentColor: '#7c3aed',
         href: '/activities',
       }
-    }
 
     case 'authored_question_shared': {
       const shared = item.reference.authoredSharedQuestion
