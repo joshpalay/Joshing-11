@@ -6,13 +6,21 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { MyQuestionCard } from '@/components/questions/MyQuestionCard';
+import { AnsweredQuestionsList, type AnsweredQuestionItem } from '@/components/questions/AnsweredQuestionsList';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
+type Tab = 'authored' | 'answered';
 type DrawerState =
   | { mode: 'closed' }
   | { mode: 'create' }
   | { mode: 'edit'; question: QuestionView };
+
+type AnsweredApiResponse = {
+  items?: AnsweredQuestionItem[];
+  error?: string;
+  message?: string;
+};
 
 type QuestionsApiResponse = {
   questions?: QuestionView[] | null;
@@ -85,9 +93,13 @@ export default function QuestionsPage() {
 
 function QuestionsPageContent() {
   const searchParams = useSearchParams();
+  const [tab, setTab] = useState<Tab>('authored');
   const [questions, setQuestions] = useState<QuestionView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [answered, setAnswered] = useState<AnsweredQuestionItem[] | null>(null);
+  const [answeredLoading, setAnsweredLoading] = useState(false);
+  const [answeredError, setAnsweredError] = useState<string | null>(null);
   const [domainFilter, setDomainFilter] = useState('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
@@ -121,6 +133,29 @@ function QuestionsPageContent() {
   useEffect(() => {
     void Promise.resolve().then(loadQuestions);
   }, [loadQuestions]);
+
+  const loadAnswered = useCallback(async () => {
+    setAnsweredLoading(true);
+    setAnsweredError(null);
+    try {
+      const response = await fetch('/api/questions/answered', { cache: 'no-store', credentials: 'include' });
+      const body = await response.json().catch(() => null) as AnsweredApiResponse | null;
+      if (!response.ok || !Array.isArray(body?.items)) {
+        throw new Error(body?.message ?? body?.error ?? 'Could not load your answered questions.');
+      }
+      setAnswered(body.items);
+    } catch (caught) {
+      setAnsweredError(caught instanceof Error ? caught.message : 'Could not load your answered questions.');
+    } finally {
+      setAnsweredLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab !== 'answered') return;
+    if (answered !== null || answeredLoading) return;
+    void Promise.resolve().then(loadAnswered);
+  }, [tab, answered, answeredLoading, loadAnswered]);
 
   useEffect(() => {
     if (!toast) return;
@@ -222,9 +257,9 @@ function QuestionsPageContent() {
     }, 180);
   }
 
-  if (loading) return <LoadingSkeleton />;
+  if (loading && tab === 'authored') return <LoadingSkeleton />;
 
-  if (error) {
+  if (error && tab === 'authored') {
     return (
       <main className="mx-auto flex min-h-dvh max-w-2xl flex-col items-center justify-center px-4 py-10 text-center">
         <h1 className="font-serif text-3xl font-semibold">Could not load your questions</h1>
@@ -238,84 +273,140 @@ function QuestionsPageContent() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-6 pb-24">
-      <header className="mb-5 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-serif text-3xl font-semibold">Your Questions</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{questions.length} questions</p>
-        </div>
-        <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={() => setDrawer({ mode: 'create' })}>
-          <Plus className="size-4" />
-          Write a question
+      <div className="mb-5 flex border-b">
+        <button
+          type="button"
+          className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+            tab === 'authored'
+              ? 'border-b-2 border-foreground text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setTab('authored')}
+        >
+          Your Questions
         </button>
-      </header>
-
-      <section className="mb-5 grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3 sm:p-3">
-        <select
-          value={domainFilter}
-          onChange={(event) => setDomainFilter(event.target.value)}
-          className="h-11 rounded-md border bg-background px-3 text-sm"
-          aria-label="Filter by domain"
+        <button
+          type="button"
+          className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+            tab === 'answered'
+              ? 'border-b-2 border-foreground text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setTab('answered')}
         >
-          <option value="all">All domains</option>
-          {availableDomains.map((item) => (
-            <option key={item.domain} value={item.domain}>{item.label}</option>
-          ))}
-        </select>
-        <select
-          value={sortMode}
-          onChange={(event) => setSortMode(event.target.value as SortMode)}
-          className="h-11 rounded-md border bg-background px-3 text-sm"
-          aria-label="Sort by"
-        >
-          <option value="newest">Newest</option>
-          <option value="most_answered">Most answered</option>
-          <option value="hardest">Hardest</option>
-          <option value="easiest">Easiest</option>
-        </select>
-        <label className="relative col-span-2 sm:col-span-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search questions..."
-            className="h-11 w-full rounded-md border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary"
-          />
-        </label>
-      </section>
+          Answered
+        </button>
+      </div>
 
-      {questions.length === 0 ? (
-        <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-          <h2 className="font-serif text-2xl font-semibold">No questions yet.</h2>
-          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-            You haven&apos;t written any questions yet. Write one to get started.
-          </p>
-          <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create' })}>
-            Write a question
-          </button>
-        </section>
-      ) : filteredQuestions.length === 0 ? (
-        <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-          <h2 className="font-serif text-2xl font-semibold">No questions match your filter.</h2>
-          <button className="mt-3 text-sm text-primary underline" type="button" onClick={clearFilters}>
-            Clear filters
-          </button>
-        </section>
+      {tab === 'authored' ? (
+        <>
+          <header className="mb-5 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="font-serif text-3xl font-semibold">Your Questions</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{questions.length} questions</p>
+            </div>
+            <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={() => setDrawer({ mode: 'create' })}>
+              <Plus className="size-4" />
+              Write a question
+            </button>
+          </header>
+
+          <section className="mb-5 grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3 sm:p-3">
+            <select
+              value={domainFilter}
+              onChange={(event) => setDomainFilter(event.target.value)}
+              className="h-11 rounded-md border bg-background px-3 text-sm"
+              aria-label="Filter by domain"
+            >
+              <option value="all">All domains</option>
+              {availableDomains.map((item) => (
+                <option key={item.domain} value={item.domain}>{item.label}</option>
+              ))}
+            </select>
+            <select
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value as SortMode)}
+              className="h-11 rounded-md border bg-background px-3 text-sm"
+              aria-label="Sort by"
+            >
+              <option value="newest">Newest</option>
+              <option value="most_answered">Most answered</option>
+              <option value="hardest">Hardest</option>
+              <option value="easiest">Easiest</option>
+            </select>
+            <label className="relative col-span-2 sm:col-span-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search questions..."
+                className="h-11 w-full rounded-md border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary"
+              />
+            </label>
+          </section>
+
+          {questions.length === 0 ? (
+            <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+              <h2 className="font-serif text-2xl font-semibold">No questions yet.</h2>
+              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                You haven&apos;t written any questions yet. Write one to get started.
+              </p>
+              <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create' })}>
+                Write a question
+              </button>
+            </section>
+          ) : filteredQuestions.length === 0 ? (
+            <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+              <h2 className="font-serif text-2xl font-semibold">No questions match your filter.</h2>
+              <button className="mt-3 text-sm text-primary underline" type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            </section>
+          ) : (
+            <section className="space-y-3">
+              {filteredQuestions.map((question) => (
+                <MyQuestionCard
+                  key={question.id}
+                  question={question}
+                  confirming={confirmingId === question.id}
+                  cardError={cardError[question.id]}
+                  deleting={removingId === question.id}
+                  onEdit={() => setDrawer({ mode: 'edit', question })}
+                  onDeleteRequest={() => setConfirmingId(question.id)}
+                  onConfirmDelete={() => void confirmDelete(question)}
+                  onCancelConfirm={() => setConfirmingId(null)}
+                />
+              ))}
+            </section>
+          )}
+        </>
       ) : (
-        <section className="space-y-3">
-          {filteredQuestions.map((question) => (
-            <MyQuestionCard
-              key={question.id}
-              question={question}
-              confirming={confirmingId === question.id}
-              cardError={cardError[question.id]}
-              deleting={removingId === question.id}
-              onEdit={() => setDrawer({ mode: 'edit', question })}
-              onDeleteRequest={() => setConfirmingId(question.id)}
-              onConfirmDelete={() => void confirmDelete(question)}
-              onCancelConfirm={() => setConfirmingId(null)}
-            />
-          ))}
-        </section>
+        <>
+          <header className="mb-5 border-b pb-5">
+            <h1 className="font-serif text-3xl font-semibold">Answered</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {answered === null ? 'Loading…' : `${answered.length} answered`}
+            </p>
+          </header>
+
+          {answeredLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="h-16 animate-pulse rounded-lg border bg-card" />
+              ))}
+            </div>
+          ) : answeredError ? (
+            <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+              <h2 className="font-serif text-2xl font-semibold">Could not load your answers</h2>
+              <p className="mt-2 text-sm text-muted-foreground">{answeredError}</p>
+              <button className="btn-primary mt-5" type="button" onClick={() => void loadAnswered()}>
+                Try again
+              </button>
+            </section>
+          ) : (
+            <AnsweredQuestionsList items={answered ?? []} />
+          )}
+        </>
       )}
 
       {drawer.mode !== 'closed' ? (
