@@ -579,13 +579,24 @@ export type AuthoredPick = {
  * vetter in src/server/llm/vet-question.ts). The viewer is never offered
  * their own question, deleted questions, or questions that have already
  * appeared in any of their past daily queues.
+ *
+ * `allowedSubcategories` constrains candidates to canonical subcategories
+ * that are in the viewer's knowledge base (declared interests + demonstrated
+ * mastery in random mode, selected domains in custom mode). Bot-generated
+ * questions go through generateDailyQuestionsFromKnowledgeBase which is
+ * already domain-constrained; without this set the authored picker was
+ * serving the entire vetted public pool regardless of the viewer's
+ * interests, so a viewer who declared only "Star Wars" + "UX design"
+ * could end up with a Rodgers & Hammerstein question in their Daily 5.
  */
 export async function pickEligibleAuthoredQuestions(
   viewerUserId: string,
   socialGraph: { direct: Set<string>; extended: Set<string> },
   limit: number,
+  allowedSubcategories: ReadonlySet<string>,
 ): Promise<AuthoredPick[]> {
   if (limit <= 0) return [];
+  if (allowedSubcategories.size === 0) return [];
 
   // Collect every question id the viewer has already seen on any past daily
   // queue. The graph is small per user (5 slots/day) so a Node-side scan is
@@ -663,6 +674,7 @@ export async function pickEligibleAuthoredQuestions(
       eq(canonicalQuestions.visibility, 'public'),
       isNotNull(canonicalQuestions.creatorId),
       isNotNull(canonicalQuestions.canonicalSubcategory),
+      inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
       isNull(canonicalQuestions.deletedAt),
     ))
     .orderBy(

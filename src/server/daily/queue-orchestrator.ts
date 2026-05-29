@@ -49,8 +49,26 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   // QueueSlot schema already supports both bot and friend sources
   // (src/server/daily/types.ts), so this is a picker change — no slot-shape
   // migration required.
+  //
+  // Constrain authored picks to the viewer's effective knowledge base — in
+  // custom mode that's the explicit selectedDomains list, in random mode
+  // it's the full knowledge base (which getKnowledgeBase already filters
+  // against userDomainExclusions). Without this, the authored picker
+  // surfaced any vetted public question regardless of the viewer's declared
+  // or demonstrated interests.
+  const allowedSubcategories: ReadonlySet<string> = new Set(
+    preferences.domainMode === 'custom'
+      ? preferences.selectedDomains
+      : knowledgeBase.map((domain) => domain.domain),
+  );
+
   const socialGraph = await getFriendAndFoFUserIds(userId);
-  const authored = await pickEligibleAuthoredQuestions(userId, socialGraph, DAILY_QUEUE_SIZE);
+  const authored = await pickEligibleAuthoredQuestions(
+    userId,
+    socialGraph,
+    DAILY_QUEUE_SIZE,
+    allowedSubcategories,
+  );
 
   const remaining = DAILY_QUEUE_SIZE - authored.length;
   const generated = remaining > 0
