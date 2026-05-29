@@ -33,7 +33,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
             <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               A note from a friend
             </p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-normal">
+            <h1 className="mt-2 font-serif text-3xl font-semibold leading-tight">
               {invitation.inviterName} thought of you for Joshing.
             </h1>
           </div>
@@ -56,7 +56,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             Invitation expired
           </p>
-          <h1 className="text-2xl font-semibold tracking-normal">
+          <h1 className="font-serif text-2xl font-semibold leading-tight">
             This invitation has expired. Ask {invitation.inviterName} to send
             you a new one.
           </h1>
@@ -78,7 +78,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             Invitation already used
           </p>
-          <h1 className="text-2xl font-semibold tracking-normal">
+          <h1 className="font-serif text-2xl font-semibold leading-tight">
             This invitation has already been used.
           </h1>
           <p className="text-muted-foreground text-sm leading-6">

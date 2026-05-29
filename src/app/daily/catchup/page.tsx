@@ -201,7 +201,7 @@ export default function DailyCatchupPage() {
               style={{ borderColor: 'var(--border)' }}
             />
             <button type="submit" className="btn-primary shrink-0" disabled={submitting || isResolvingTurn || !answer.trim()}>
-              {submitting ? '...' : 'Send'}
+              {submitting ? '...' : 'Answer'}
             </button>
           </div>
           <div className="mt-2 flex items-center gap-3">

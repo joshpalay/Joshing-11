@@ -7,11 +7,10 @@ import TodaysFiveCard, {
   type SlotOutcome,
 } from '@/components/TodaysFiveCard'
 import { CeremonyPin } from '@/components/home/CeremonyPin'
-import { Hero } from '@/components/home/Hero'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { RecentActivitySection } from '@/components/home/RecentActivitySection'
 import { getSession } from '@/server/auth/session'
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types'
+import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getRecentActivityForHome } from '@/server/db/queries/activity'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
@@ -25,14 +24,21 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-4 py-6 pb-32 md:py-10">
-      {session ? (
-        <Suspense fallback={<HeroSkeleton />}>
-          <HeroSection userId={session.userId} />
-        </Suspense>
-      ) : (
-        <Hero isComplete={false} />
-      )}
+    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-4 py-6 pb-32 md:py-10">
+      {/* Triangle banner (Figma Mask group): a brand band behind the top of the
+          page that fades into the cream surface. Decorative only. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 overflow-hidden"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/Variant4.png"
+          alt=""
+          className="h-full w-full object-cover object-top"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[var(--brand-cream-page)]/10 via-[var(--brand-cream-page)]/55 to-[var(--brand-cream-page)]" />
+      </div>
 
       {session ? (
         <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
@@ -74,12 +80,6 @@ export default async function Home() {
       </section>
     </main>
   )
-}
-
-async function HeroSection({ userId }: { userId: string }) {
-  const queue = await getTodaysDailyQueue(userId)
-  const status = buildDailyStatusSnapshot(queue)
-  return <Hero isComplete={status.isComplete} />
 }
 
 async function TodaysFiveSection({ userId }: { userId: string }) {
@@ -175,8 +175,14 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
   const slots: QueueSlot[] = Array.isArray(queue.slots) ? (queue.slots as QueueSlot[]) : []
   const answered = slots.filter((slot) => slot.answered).length
   const questionsAnswered = Math.min(answered, DAILY_QUEUE_SIZE)
-  const questionsRemaining = Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0)
-  const isComplete = questionsAnswered >= DAILY_QUEUE_SIZE
+  // Mirror the /api/daily/status predicate: a round is complete when no slot is
+  // pending (answered or skipped), not when 5 are answered. Skipped slots whose
+  // replacement failed to generate left the home card stuck on "Resume round"
+  // while /daily bounced straight to the summary.
+  const isComplete = isRoundComplete(slots)
+  const questionsRemaining = isComplete
+    ? 0
+    : Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0)
   return {
     questionsRemaining,
     questionsAnswered,
@@ -195,10 +201,6 @@ function CardSkeleton({ minHeight }: { minHeight: string }) {
       aria-hidden="true"
     />
   )
-}
-
-function HeroSkeleton() {
-  return <div className="h-32" aria-hidden="true" />
 }
 
 function FeedSkeleton() {

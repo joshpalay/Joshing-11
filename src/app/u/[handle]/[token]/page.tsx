@@ -54,7 +54,7 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
           <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
             Link not valid
           </p>
-          <h1 className="text-2xl font-semibold tracking-normal">
+          <h1 className="font-serif text-2xl font-semibold leading-tight">
             This invite link is no longer valid.
           </h1>
           <p className="text-muted-foreground text-sm leading-6">
@@ -89,7 +89,7 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
             <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
               You were invited
             </p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-normal">
+            <h1 className="mt-2 font-serif text-3xl font-semibold leading-tight">
               {displayName} invited you to connect on Joshing.
             </h1>
           </div>

@@ -22,15 +22,15 @@ export function RecentActivitySection({
         </p>
       ) : (
         <>
-          <div className="divide-y rounded-lg border bg-card">
+          <div className="flex flex-col gap-4">
             {items.map((item) => (
               <NewsRow key={item.id} item={item} />
             ))}
           </div>
-          <div className="mt-2 flex justify-end">
+          <div className="mt-4 flex justify-end">
             <Link
               href="/activities"
-              className="text-muted-foreground hover:text-foreground text-xs font-medium tracking-[0.06em] uppercase"
+              className="text-xs font-medium tracking-[0.08em] text-[var(--brand-link)] uppercase hover:opacity-70"
             >
               See all activity →
             </Link>

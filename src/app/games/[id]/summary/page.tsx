@@ -33,11 +33,11 @@ const monoStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-  fontSize: '1.05rem',
-  fontWeight: 600,
-  color: '#111111',
+  fontSize: '0.8rem',
+  fontWeight: 700,
+  color: 'var(--brand-ink)',
   textTransform: 'uppercase',
-  letterSpacing: '0.05em',
+  letterSpacing: '0.1em',
 };
 
 function domainFor(question: JoshingGameView['questions'][number]['question']) {
@@ -232,18 +232,8 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
           {view.game.title}
           {' / SUMMARY'}
         </p>
-        <h1
-          style={{
-            marginTop: '10px',
-            fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-            fontSize: '1.45rem',
-            fontWeight: 700,
-            color: '#111111',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}
-        >
-          How You Did
+        <h1 className="mt-2 font-serif text-[2rem] leading-tight text-[var(--brand-ink)]">
+          How you did
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">{formatGameDate(view.game.createdAt)}</p>
       </header>
@@ -256,7 +246,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         }}
       >
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>Total</p>
-        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[#111111]">+{Math.round(totalPoints)}</p>
+        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[var(--brand-ink)]">+{Math.round(totalPoints)}</p>
         <p style={{ ...monoStyle, marginTop: '12px', color: 'var(--text-muted)' }}>
           {viewerCorrect}/{questionCount} correct{viewerSkipped > 0 ? ` · ${viewerSkipped} skipped` : ''}
         </p>

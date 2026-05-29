@@ -236,7 +236,7 @@ export default function ReplayPage() {
               style={{ borderColor: 'var(--border)' }}
             />
             <button type="submit" className="btn-primary shrink-0" disabled={submitting || !answer.trim()}>
-              {submitting ? '...' : 'Send'}
+              {submitting ? '...' : 'Answer'}
             </button>
           </div>
         </form>
