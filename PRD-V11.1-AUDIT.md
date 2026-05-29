@@ -4,6 +4,18 @@
 **Audit date:** 2026-05-05  
 **Methodology:** Function-body and route logic reviewed per section; statuses use ✅ 🟡 🔴 ⚠️ ❓ as specified.
 
+> **⚠️ Partially superseded (correction added 2026-05-29).** This is a
+> point-in-time snapshot. **Section 2 ("Broadcast Share Rollback"), and the
+> related rows in §9 (9.1) and §12, are no longer accurate.** The broadcast
+> "share to all friends" path (`shareToFeed` → `authored_shared` feed rows)
+> was **reintroduced in PR #254 (`1897977`, 2026-05-17)** and is now an active
+> feature: `QuestionForm` has a "Share with all friends" checkbox, the
+> `/api/questions` POST writes `authored_shared` rows, and those render as the
+> `friend_added` "Handwritten" sparkle envelope (`FriendAddedCard`). The
+> cleanup script (`scripts/cleanup-authored-shared-feed-items.ts`) would now
+> delete/convert **live** feature data — do not run it. The rest of the audit
+> has not been re-verified against the current tree.
+
 ---
 
 ## Section 1 — Build Health

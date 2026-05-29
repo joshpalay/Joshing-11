@@ -5,11 +5,14 @@ import type { feedItems, questions } from '@/server/db';
 export const SOCIAL_FEED_SOURCE_TYPE = 'friend_answered' as const;
 export const DIRECT_SENT_FEED_SOURCE_TYPE = 'direct_sent' as const;
 
-// 'authored_shared' and 'thumbs_upped' are legacy-read-only source types.
-// PRD v11.1 §8.2 killed authored_shared as a write path. thumbs_upped was
-// retired earlier. Both values may still exist in DB rows written before those
-// decisions; read queries include them for legacy support only. Do not write
-// new rows with these sourceType values.
+// 'authored_shared' is an ACTIVE write path again: PRD v11.1 §8.2 removed the
+// broadcast "share to all friends" path, but it was reintroduced in PR #254
+// (2026-05-17) and now backs the "Share with all friends" checkbox in question
+// creation — these rows render as the friend_added "Handwritten" envelope.
+// (PRD-V11.1-AUDIT.md §2/§9/§12 predate that reintroduction and are stale.)
+//
+// 'thumbs_upped' is genuinely legacy-read-only: it was retired and is no longer
+// written. Read queries still include it so pre-retirement rows keep rendering.
 
 export const ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES = [
   'authored_shared',
@@ -68,7 +71,7 @@ export function isMainFeedSourceVisible(sourceType: string, sourceResult: string
 
 export function visibleFeedSourcePredicate(feedItemColumns: FeedItemsVisibilityColumns) {
   return or(
-    eq(feedItemColumns.sourceType, 'authored_shared'), // legacy-read-only
+    eq(feedItemColumns.sourceType, 'authored_shared'), // active: friend_added envelope
     eq(feedItemColumns.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
     eq(feedItemColumns.sourceType, 'thumbs_upped'), // legacy-read-only
     and(
