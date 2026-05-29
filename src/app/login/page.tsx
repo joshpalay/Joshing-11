@@ -21,7 +21,7 @@ function TitleCard() {
 export default function LoginPage() {
   return (
     <TriangleBackground>
-      <main className="relative z-10 flex min-h-screen flex-col items-center justify-center gap-5 px-6 py-10">
+      <main className="relative z-10 flex min-h-screen flex-col items-center justify-start gap-5 px-6 pt-14 pb-10">
         <TitleCard />
         <Suspense
           fallback={
