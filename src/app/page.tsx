@@ -11,7 +11,7 @@ import { Hero } from '@/components/home/Hero'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { RecentActivitySection } from '@/components/home/RecentActivitySection'
 import { getSession } from '@/server/auth/session'
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types'
+import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getRecentActivityForHome } from '@/server/db/queries/activity'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
@@ -175,8 +175,14 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
   const slots: QueueSlot[] = Array.isArray(queue.slots) ? (queue.slots as QueueSlot[]) : []
   const answered = slots.filter((slot) => slot.answered).length
   const questionsAnswered = Math.min(answered, DAILY_QUEUE_SIZE)
-  const questionsRemaining = Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0)
-  const isComplete = questionsAnswered >= DAILY_QUEUE_SIZE
+  // Mirror the /api/daily/status predicate: a round is complete when no slot is
+  // pending (answered or skipped), not when 5 are answered. Skipped slots whose
+  // replacement failed to generate left the home card stuck on "Resume round"
+  // while /daily bounced straight to the summary.
+  const isComplete = isRoundComplete(slots)
+  const questionsRemaining = isComplete
+    ? 0
+    : Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0)
   return {
     questionsRemaining,
     questionsAnswered,
