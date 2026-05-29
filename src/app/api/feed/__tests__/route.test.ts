@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { checkBankedQuestionsMock, dbMock, getDismissedDomainsMock, getFeedForUserMock, getSessionMock, state } = vi.hoisted(() => {
@@ -45,6 +46,9 @@ vi.mock('drizzle-orm', () => ({
   count: vi.fn(() => ({ expression: 'count' })),
   eq: vi.fn((column, value) => ({ op: 'eq', column, value })),
   inArray: vi.fn((column, values) => ({ op: 'inArray', column, values })),
+  isNull: vi.fn((column) => ({ op: 'isNull', column })),
+  ne: vi.fn((column, value) => ({ op: 'ne', column, value })),
+  notExists: vi.fn((query) => ({ op: 'notExists', query })),
   or: vi.fn((...parts) => ({ op: 'or', parts })),
 }));
 
@@ -61,11 +65,18 @@ vi.mock('@/server/db', () => ({
     recipientUserId: 'feedItems.recipientUserId',
     state: 'feedItems.state',
     sourceType: 'feedItems.sourceType',
+    questionId: 'feedItems.questionId',
   },
   friendships: {
     status: 'friendships.status',
     userAId: 'friendships.userAId',
     userBId: 'friendships.userBId',
+  },
+  masteryEvents: {
+    id: 'masteryEvents.id',
+    userId: 'masteryEvents.userId',
+    answeredByUserId: 'masteryEvents.answeredByUserId',
+    questionId: 'masteryEvents.questionId',
   },
   questions: 'questions',
   users: {
@@ -126,7 +137,7 @@ describe('GET /api/feed', () => {
   });
 
   it('includes direct_sent items in the API feed response', async () => {
-    const response = await GET(new Request('https://joshing.example/api/feed') as never);
+    const response = await GET(new NextRequest('https://joshing.example/api/feed'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -134,7 +145,6 @@ describe('GET /api/feed', () => {
       expect.objectContaining({
         id: 'feed-direct-1',
         card_type: 'direct_sent',
-        type: 'direct_sent',
         source_type: 'direct_sent',
         state: 'active',
         is_pinned: true,
@@ -175,13 +185,12 @@ describe('GET /api/feed', () => {
       totalCount: 1,
     });
 
-    const response = await GET(new Request('https://joshing.example/api/feed?filter=sent-to-me') as never);
+    const response = await GET(new NextRequest('https://joshing.example/api/feed?filter=sent-to-me'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.items[0]).toEqual(expect.objectContaining({
       card_type: 'answered_by_you',
-      type: 'answered_by_you',
       state: 'answered',
       answer_result: 'incorrect',
       is_correct: false,
@@ -225,16 +234,26 @@ describe('GET /api/feed', () => {
       totalCount: 1,
     });
 
-    const response = await GET(new Request('https://joshing.example/api/feed') as never);
+    const response = await GET(new NextRequest('https://joshing.example/api/feed'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    // The wire payload carries the discriminator as `card_type`; the client
+    // derives its own `type` from it (see toTypedFeedItem in FeedList), and
+    // compactNulls strips `source_result` when it is null. So assert the
+    // card_type mapping that drives card selection (e.g. authored_shared ->
+    // friend_added -> the "Handwritten" envelope).
     expect(body.items[0]).toEqual(expect.objectContaining({
       source_type: sourceType,
-      source_result: sourceResult,
       card_type: cardType,
-      type: cardType,
     }));
+    if (sourceResult !== null) {
+      expect(body.items[0]).toEqual(
+        expect.objectContaining({ source_result: sourceResult }),
+      );
+    } else {
+      expect(body.items[0]).not.toHaveProperty('source_result');
+    }
   });
 
   it('omits suppressed category labels from Feed item payloads', async () => {
@@ -245,12 +264,13 @@ describe('GET /api/feed', () => {
       category: 'Unknown',
     }];
 
-    const response = await GET(new Request('https://joshing.example/api/feed') as never);
+    const response = await GET(new NextRequest('https://joshing.example/api/feed'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    // compactNulls strips the suppressed (null) domain_pill from the wire.
+    expect(body.items[0]).not.toHaveProperty('domain_pill');
     expect(body.items[0]).toEqual(expect.objectContaining({
-      domain_pill: null,
       source_attribution: 'Sender Friend sent you a question',
     }));
   });
@@ -280,7 +300,7 @@ describe('GET /api/feed', () => {
       totalCount: 1,
     });
 
-    const response = await GET(new Request('https://joshing.example/api/feed') as never);
+    const response = await GET(new NextRequest('https://joshing.example/api/feed'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -292,7 +312,7 @@ describe('GET /api/feed', () => {
   });
 
   it('rejects unsupported Feed filters', async () => {
-    const response = await GET(new Request('https://joshing.example/api/feed?filter=hidden-categories') as never);
+    const response = await GET(new NextRequest('https://joshing.example/api/feed?filter=hidden-categories'));
     await expect(response.json()).resolves.toEqual({ error: 'invalid_filter' });
     expect(response.status).toBe(400);
   });
