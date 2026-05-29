@@ -474,6 +474,10 @@ function KnowledgePageContent() {
 
   return (
     <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
+      <h1 className="m-0 px-[0.2rem] font-serif text-[2.2rem] leading-tight text-[var(--brand-ink)]">
+        Knowledge
+      </h1>
+
       {tierCrossed && highlightedDomainSlug && (
         <section className="bg-[var(--cream-accent)] text-[var(--ink)] px-[0.95rem] py-3 text-base">
           You reached {tierCrossed} in this domain this session.
