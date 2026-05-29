@@ -114,7 +114,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
+      <div className="fixed inset-0 z-[55] flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
         <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={onClose} />
         <aside className="relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-lg bg-background shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
           <header className="flex items-center justify-between gap-3 border-b p-5">
