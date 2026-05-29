@@ -266,8 +266,16 @@ export default function DailyPage() {
           cache: 'no-store',
         });
         if (!createResponse.ok) {
-          router.replace('/daily/setup');
-          return;
+          const createBody = await createResponse.json().catch(() => null);
+          // 409 (no_knowledge_base) means the user genuinely has nothing to
+          // generate from — send them to setup. A 503 (generation_failed) is a
+          // transient/slow-generation hiccup; surface the retryable message
+          // instead of bouncing a user with a valid knowledge base to setup.
+          if (createResponse.status === 409) {
+            router.replace('/daily/setup');
+            return;
+          }
+          throw new Error(createBody?.message ?? 'Could not load today.');
         }
         const refetchResponse = await fetch('/api/daily/queue', { cache: 'no-store', credentials: 'include' });
         const refetchBody = await refetchResponse.json().catch(() => null);

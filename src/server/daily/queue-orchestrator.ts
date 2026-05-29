@@ -23,7 +23,14 @@ function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
+// Only start a recovery top-up generation while this much of the function
+// budget is still unspent. A second generation call can take up to
+// GENERATION_TIMEOUT_MS (35s); gating it on elapsed time keeps the retry from
+// pushing the request past the route's maxDuration.
+const TOP_UP_TIME_BUDGET_MS = 30_000;
+
 export async function fillDailyQueueForUser(userId: string): Promise<void> {
+  const startedAt = Date.now();
   const existing = await getTodaysDailyQueue(userId);
   if (existing && asQueueSlots(existing.slots).length > 0) return;
 
@@ -105,13 +112,42 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     });
   }
 
+  // If the first pass came up short — the LLM returned fewer usable questions
+  // than requested, or the quality/dedup gates dropped some — attempt a single
+  // bounded top-up for just the missing slots before failing. A transient slow
+  // or partial Anthropic response (e.g. prod request 9lssf-…, where one Sonnet
+  // call ran ~34s and the queue fell one slot short) otherwise 503s the entire
+  // Daily Five even though most slots generated fine. The top-up is gated on
+  // remaining time budget so the recovery can't push the request past the
+  // route's maxDuration.
+  const topUpGenerated: typeof dedupedGenerated = [];
+  const shortfall = DAILY_QUEUE_SIZE - (authored.length + dedupedGenerated.length);
+  if (shortfall > 0 && Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS) {
+    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, shortfall);
+    for (const question of extra) {
+      const key = normalize(question.questionText);
+      if (seenTexts.has(key)) continue;
+      seenTexts.add(key);
+      topUpGenerated.push(question);
+    }
+    if (topUpGenerated.length > 0) {
+      console.info('[daily/queue-orchestrator] topped up short queue', {
+        userId,
+        shortfall,
+        recovered: topUpGenerated.length,
+      });
+    }
+  }
+
+  const generatedForQueue = [...dedupedGenerated, ...topUpGenerated];
+
   // A short queue used to be persisted silently when generation returned
   // fewer than the requested count (or when cross-source dedup dropped some):
   // the play page treats "no pending slot" as round-over, so a 2-slot queue
   // ended the round after 2 answers with three blank progress dots. Fail
   // loudly instead so /api/daily/queue surfaces a 503 and the play page
   // shows the fill-error UI.
-  if (authored.length + dedupedGenerated.length < DAILY_QUEUE_SIZE) {
+  if (authored.length + generatedForQueue.length < DAILY_QUEUE_SIZE) {
     throw new DailyQueueFillError(
       'generation_failed',
       "Today's Daily Five is taking longer than usual.",
@@ -123,7 +159,7 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     await createDailyQueueItemFromAuthored(userId, pick, position);
     position += 1;
   }
-  for (const question of dedupedGenerated.slice(0, DAILY_QUEUE_SIZE - position)) {
+  for (const question of generatedForQueue.slice(0, DAILY_QUEUE_SIZE - position)) {
     await createDailyQueueItem(userId, question.id, position);
     position += 1;
   }
