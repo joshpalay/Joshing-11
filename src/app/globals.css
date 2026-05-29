@@ -124,20 +124,23 @@
     --success: #178245;
     --danger: var(--destructive);
     --wrong: var(--destructive);
-    /* Joshing brand palette — INK on CREAM editorial register */
-    --ink:             oklch(0.14 0.018 55);    /* ≈ #1a1208 warm near-black */
-    --cream:           oklch(0.976 0.010 80);   /* ≈ #fdfbf6 off-white surface */
-    --cream-warm:      oklch(0.962 0.018 80);   /* ≈ #f5f0e8 slightly deeper warm */
-    --cream-accent:    oklch(0.930 0.030 80);   /* ≈ #f0e6c8 highlight/accent */
-    --border-warm:     oklch(0.876 0.016 80);   /* ≈ #ddd6c7 warm border */
-    --border-light:    oklch(0.905 0.010 80);   /* ≈ #e8e2d6 lighter inner border */
-    --text-muted-warm: oklch(0.600 0.020 60);   /* ≈ #696257 muted editorial text */
+    /* Legacy editorial aliases — re-pointed at the brand tokens so older
+       surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
+       Knowledge page, replay/catch-up) render with navy ink instead of warm
+       near-black. Keep the names; only the values changed. */
+    --ink:             var(--brand-ink);        /* navy #0a1f3d (was warm near-black) */
+    --cream:           var(--brand-card);        /* #fdfcfb content surface */
+    --cream-warm:      var(--brand-cream-card);  /* #f6edd6 warm card */
+    --cream-accent:    var(--brand-cream);       /* #f8e6c7 highlight/accent */
+    --border-warm:     var(--brand-border);      /* #e9e2d2 warm border */
+    --border-light:    #eee7d8;                  /* lighter inner border */
+    --text-muted-warm: var(--brand-ink-400);     /* #8a8a8a muted text */
     --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    /* F5.2: prefer Playfair Display italic for editorial/category labels.
-       Falls back to Georgia if next/font hasn't loaded yet or in non-browser
-       contexts. The next/font variable is wired in src/app/layout.tsx. */
-    --font-literata: var(--font-display, Georgia), "Times New Roman", serif;
+    /* Editorial serif — Cormorant Garamond (the brand serif). Playfair Display
+       italic remains available via --font-display for the few editorial labels
+       that intentionally use it (PortraitCircles, Hero subtitle). */
+    --font-literata: var(--font-cormorant, Georgia), "Times New Roman", serif;
     --radius-sm: 0.375rem;
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;

@@ -299,7 +299,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
         <p
           className="mt-3 text-[16px] leading-snug"
           style={{
-            fontFamily: 'Georgia, "Times New Roman", serif',
+            fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
             color: 'var(--ink)',
             opacity: 0.65,
           }}

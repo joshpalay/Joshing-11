@@ -54,7 +54,7 @@ export function DirectSentCard({ item, overflow, onAnswer }: DirectSentCardProps
       {item.personalMessage ? (
         <span
           className="mt-1 block italic"
-          style={{ fontFamily: 'Georgia, "Times New Roman", serif', opacity: 0.9 }}
+          style={{ fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif', opacity: 0.9 }}
         >
           &ldquo;{item.personalMessage}&rdquo;
         </span>
