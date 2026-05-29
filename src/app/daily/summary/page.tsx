@@ -57,11 +57,11 @@ const monoStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-  fontSize: '1.05rem',
-  fontWeight: 600,
-  color: '#111111',
+  fontSize: '0.8rem',
+  fontWeight: 700,
+  color: 'var(--brand-ink)',
   textTransform: 'uppercase',
-  letterSpacing: '0.05em',
+  letterSpacing: '0.1em',
 }
 
 function formatDate(value: string) {
@@ -216,18 +216,8 @@ export default function DailySummaryPage() {
           </Link>
           {' / DAILY FIVE / SUMMARY'}
         </p>
-        <h1
-          style={{
-            marginTop: '10px',
-            fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-            fontSize: '1.45rem',
-            fontWeight: 700,
-            color: '#111111',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}
-        >
-          How You Did
+        <h1 className="mt-2 font-serif text-[2rem] leading-tight text-[var(--brand-ink)]">
+          How you did
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
           {formatDate(summary.date)}

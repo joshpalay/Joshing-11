@@ -236,13 +236,15 @@ function QuestionRow({
         style={{
           alignSelf: 'flex-start',
           maxWidth: '88%',
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
+          background: 'var(--brand-card)',
+          border: '1px solid var(--brand-rule)',
           borderRadius: 'var(--radius-md)',
-          padding: '12px 16px',
-          fontSize: '0.98rem',
-          color: 'var(--text)',
-          lineHeight: 1.45,
+          padding: '14px 16px',
+          fontFamily: 'var(--font-cormorant), Georgia, serif',
+          fontSize: '1.3rem',
+          letterSpacing: '0.01em',
+          color: 'var(--brand-ink)',
+          lineHeight: 1.35,
         }}
       >
         <p style={{ margin: 0 }}>{questionText}</p>
@@ -319,11 +321,13 @@ function UserRow({ text }: { text: string }) {
       <div
         style={{
           maxWidth: '88%',
-          background: 'var(--user-bubble)',
+          background: 'var(--brand-navy)',
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
-          padding: '10px 14px',
+          padding: '10px 16px',
           fontSize: '0.9rem',
-          color: 'var(--user-bubble-foreground)',
+          fontWeight: 600,
+          letterSpacing: '0.01em',
+          color: '#fbf4e3',
         }}
       >
         {text}
@@ -693,24 +697,30 @@ function ResultRow({
     }
   }, [recheckAction, recheckState]);
 
+  // Color-coded left border per the Figma result cards (green "nailed it",
+  // red "not quite"); neutral for expired/gave-up.
   const resultToneStyle: CSSProperties = expired
     ? {
       background: 'var(--surface-2)',
       border: '1px solid var(--border)',
+      borderLeft: '3px solid var(--border)',
     }
     : correct
       ? {
         background: 'color-mix(in srgb, var(--success) 9%, var(--surface-2))',
         border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))',
+        borderLeft: '3px solid var(--success)',
       }
       : gaveUp
         ? {
           background: 'var(--surface-2)',
           border: '1px solid var(--border)',
+          borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
         }
         : {
           background: 'color-mix(in srgb, #b42318 7%, var(--surface-2))',
           border: '1px solid color-mix(in srgb, #b42318 24%, var(--border))',
+          borderLeft: '3px solid #b42318',
         };
 
   return (
@@ -771,8 +781,16 @@ function ResultRow({
               {wrongHeadline(copyVariant)}
             </p>
             {correctAnswer ? (
-              <p style={{ marginTop: '8px', fontSize: '0.9rem', color: 'var(--text)' }}>
-                <span style={{ fontWeight: 600 }}>Answer:</span> {correctAnswer}
+              <p
+                style={{
+                  marginTop: '8px',
+                  fontFamily: 'var(--font-cormorant), Georgia, serif',
+                  fontSize: '1.3rem',
+                  color: 'var(--brand-ink)',
+                  lineHeight: 1.2,
+                }}
+              >
+                {correctAnswer}
               </p>
             ) : null}
             <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>

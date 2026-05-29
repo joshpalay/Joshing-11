@@ -60,7 +60,7 @@ export default function MasteryMoment({
         border: 'none',
         padding: '24px',
         cursor: 'pointer',
-        background: '#f5f0e8',
+        background: 'var(--brand-cream-page)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -77,9 +77,9 @@ export default function MasteryMoment({
       >
         <p
           style={{
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontFamily: 'var(--font-cormorant), ui-serif, Georgia, serif',
             fontSize: 'clamp(1.2rem, 4vw, 1.6rem)',
-            color: 'rgba(26,18,8,0.72)',
+            color: 'var(--brand-ink-700)',
             marginBottom: '12px',
           }}
         >
@@ -87,16 +87,16 @@ export default function MasteryMoment({
         </p>
         <p
           style={{
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontFamily: 'var(--font-cormorant), ui-serif, Georgia, serif',
             fontSize: 'clamp(2rem, 7vw, 3rem)',
             fontWeight: 700,
-            color: 'rgba(26,18,8,0.9)',
+            color: 'var(--brand-ink)',
             marginBottom: '16px',
           }}
         >
           {formatTierLabel(newTier)}
         </p>
-        <p style={{ fontSize: '0.95rem', color: 'rgba(26,18,8,0.48)', maxWidth: '22rem', lineHeight: 1.45 }}>
+        <p style={{ fontSize: '0.95rem', color: 'var(--brand-ink-400)', maxWidth: '22rem', lineHeight: 1.45 }}>
           {copyForTier(newTier, subcategory)}
         </p>
       </div>

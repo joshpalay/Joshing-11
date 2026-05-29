@@ -56,7 +56,12 @@ export function Nav({
     isOtherUserProfilePath;
   const showNewGameShortcut = !hidesNewGameShortcut;
 
-  if (pathname === '/onboarding' || pathname.startsWith('/daily')) {
+  if (
+    pathname === '/onboarding' ||
+    pathname.startsWith('/daily') ||
+    pathname === '/login' ||
+    pathname.startsWith('/invite/')
+  ) {
     return null;
   }
 

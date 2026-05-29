@@ -3,8 +3,23 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { MessagesSquare, Phone } from 'lucide-react';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
+
+/** Format a stored E.164 US number as (734)-277-6819 for display. */
+function formatPhoneForDisplay(e164: string): string {
+  const digits = e164.replace(/\D/g, '').replace(/^1/, '');
+  if (digits.length !== 10) return e164;
+  return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+const CARD_CLASS =
+  'w-full max-w-sm rounded-2xl bg-[var(--brand-cream-card)] px-7 py-8 shadow-[0_8px_24px_rgba(20,18,8,0.18)] ring-1 ring-black/5';
+const INPUT_CLASS =
+  'h-12 w-full rounded-md border border-[var(--brand-border)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none ring-offset-2 ring-offset-[var(--brand-cream-card)] focus:ring-2 focus:ring-[var(--brand-navy)]';
+const SUBMIT_CLASS =
+  'h-12 w-full rounded-md bg-[var(--brand-navy)] px-4 text-sm font-bold uppercase tracking-[0.08em] text-[#fbf4e3] transition hover:opacity-90 disabled:opacity-60';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {
@@ -124,67 +139,71 @@ export default function LoginPanel() {
   }
 
   return (
-    <section className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-sm">
-      <div className="mb-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {step === 'phone' ? 'Login with phone' : 'Enter code'}
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-normal">Joshing</h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Trivia you wish you were asked.
-        </p>
-      </div>
-
+    <section className={CARD_CLASS}>
       {step === 'phone' ? (
-        <form className="space-y-3" onSubmit={continueWithPhone}>
-          <label className="block text-sm font-medium" htmlFor="phone">
-            Phone number
+        <form className="space-y-5" onSubmit={continueWithPhone}>
+          <Phone className="mx-auto h-9 w-9 text-[var(--brand-navy)]" strokeWidth={2.25} aria-hidden="true" />
+          <label
+            className="block text-center text-base font-semibold text-[var(--brand-navy)]"
+            htmlFor="phone"
+          >
+            What is your phone number?
           </label>
           <input
             id="phone"
             type="tel"
             inputMode="tel"
             autoComplete="tel"
-            className="h-11 w-full rounded-md border bg-background px-3 text-base outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+            className={INPUT_CLASS}
             placeholder="555-123-4567"
             value={phone}
             onChange={(event) => setPhone(event.target.value.replace(/\D/g, ''))}
             disabled={loading}
           />
-          <button
-            type="submit"
-            className="h-11 w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
-            disabled={loading}
-          >
-            {loading ? 'Continuing...' : 'Continue'}
+          <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+            {loading ? 'Continuing…' : 'Continue'}
           </button>
         </form>
       ) : (
-        <form className="space-y-3" onSubmit={verifyCode}>
-          <label className="block text-sm font-medium" htmlFor="code">
-            Temporary code
+        <form className="space-y-5" onSubmit={verifyCode}>
+          <MessagesSquare
+            className="mx-auto h-9 w-9 text-[var(--brand-orange)]"
+            strokeWidth={2.25}
+            aria-hidden="true"
+          />
+          <label
+            className="block text-center text-base font-semibold leading-6 text-[var(--brand-navy)]"
+            htmlFor="code"
+          >
+            Enter your code for{' '}
+            <span className="whitespace-nowrap">{formatPhoneForDisplay(phone)}</span>
           </label>
           <input
             id="code"
             type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
-            className="h-11 w-full rounded-md border bg-background px-3 text-base outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+            className={INPUT_CLASS}
             placeholder="000000"
             value={code}
             onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
             disabled={loading}
           />
-          <button
-            type="submit"
-            className="h-11 w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
-            disabled={loading}
-          >
-            {loading ? 'Verifying...' : 'Verify code'}
+          <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+            {loading ? 'Verifying…' : 'Continue'}
           </button>
+
+          <div className="flex items-center gap-3" aria-hidden="true">
+            <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+            <span className="text-xs font-medium uppercase tracking-wide text-[var(--brand-navy)]/60">
+              or
+            </span>
+            <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+          </div>
+
           <button
             type="button"
-            className="h-9 w-full text-sm text-muted-foreground"
+            className="mx-auto block text-xs font-bold uppercase tracking-[0.12em] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
             onClick={() => {
               setCode('');
               setError(null);
@@ -198,7 +217,7 @@ export default function LoginPanel() {
       )}
 
       {error ? (
-        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
           {error}
         </p>
       ) : null}

@@ -1,10 +1,13 @@
-export const INK = '#1a1a2e';
-export const INK2 = '#3a3a4e';
-export const INK3 = '#8a8a9a';
-export const CREAM = '#faf8f2';
-export const PAPER = '#fffdf7';
-export const RULE = '#d8d4c8';
-export const HILITE = '#f5d76e';
+// Re-pointed to the JOSHING brand palette so the Lately surface matches the
+// rest of the app. The Playfair "Lately." flourish (FS), Caveat accent (FH),
+// and warm highlighter (HILITE) are kept as intentional editorial character.
+export const INK = '#0a1f3d'; // --brand-ink
+export const INK2 = '#3a4a5f'; // --brand-ink-700
+export const INK3 = '#8a8a8a'; // --brand-ink-400
+export const CREAM = '#fcf8f2'; // --brand-cream-page
+export const PAPER = '#fdfcfb'; // --brand-card
+export const RULE = '#e9e2d2'; // --brand-border
+export const HILITE = '#e9c97a'; // warm brand-aligned highlighter
 
 // Body font intentionally uses the project default (Montserrat via next/font);
 // CSS var resolves to it. The mockup spec'd Inter — project decision to keep

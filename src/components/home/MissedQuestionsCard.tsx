@@ -8,38 +8,31 @@ export function MissedQuestionsCard({
   expiringCount: number
 }) {
   if (count === 0) return null
+  const missedLabel = count === 1 ? '1 missed question' : `${count} missed questions`
   return (
     <div
-      className="bg-card text-card-foreground rounded-lg border p-4"
+      className="bg-card text-card-foreground flex items-center justify-between gap-3 rounded-md border border-[var(--brand-rule)] px-3 py-4"
       style={
         expiringCount > 0
-          ? {
-              borderColor: 'color-mix(in srgb, #b45309 32%, var(--border))',
-              boxShadow:
-                '0 0 0 1px color-mix(in srgb, #b45309 10%, transparent)',
-            }
+          ? { borderColor: 'color-mix(in srgb, var(--brand-orange) 40%, var(--brand-rule))' }
           : undefined
       }
     >
-      <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-        Reinforce what you learned
-      </p>
-      <p className="text-foreground mt-2 text-sm font-semibold">
-        {count === 1 ? '1 question to revisit' : `${count} questions to revisit`}
-      </p>
-      {expiringCount > 0 ? (
-        <p
-          className="mt-1 text-xs font-medium tracking-[0.08em] uppercase"
-          style={{ color: '#b45309' }}
-        >
-          {expiringCount} expires tomorrow
+      <div className="min-w-0">
+        <p className="text-[15px] font-medium tracking-[0.02em] text-[var(--brand-ink)]">
+          Learn More!
         </p>
-      ) : null}
+        <p className="mt-1 text-xs font-medium tracking-[0.06em] text-[var(--brand-ink-400)]">
+          {missedLabel}
+          {expiringCount > 0 ? ` · ${expiringCount} expire tomorrow` : ''}
+        </p>
+      </div>
       <Link
         href="/daily/catchup"
-        className="btn-ghost mt-4 min-h-11 w-full justify-center"
+        className="font-serif text-lg font-semibold tracking-wide whitespace-nowrap text-[var(--brand-link)] underline underline-offset-4"
+        aria-label={`Catch up on ${missedLabel}`}
       >
-        Catch up →
+        Play →
       </Link>
     </div>
   )
