@@ -1,21 +1,24 @@
+// Brand-muted palette (triangle + domain colors from the Figma design system)
+// so category accents (feed top bars) and avatars stay on-brand instead of the
+// old vibrant Tailwind-600 set.
 const CATEGORY_COLORS = [
-  '#0f766e',
-  '#7c3aed',
-  '#be123c',
-  '#2563eb',
-  '#b45309',
-  '#15803d',
-  '#c2410c',
-  '#0369a1',
+  '#1f3a5a', // navy
+  '#d15e36', // triangle orange
+  '#6d837f', // dark teal
+  '#7a9eaa', // domain language
+  '#8aa68a', // domain science
+  '#d9a82e', // amber
+  '#9a6a4e', // warm tan
+  '#adb19e', // light teal
 ] as const
 
 export const AVATAR_COLORS = [
-  '#0f766e',
-  '#7c3aed',
-  '#be123c',
-  '#2563eb',
-  '#b45309',
-  '#15803d',
+  '#1f3a5a',
+  '#d15e36',
+  '#6d837f',
+  '#7a9eaa',
+  '#8aa68a',
+  '#9a6a4e',
 ] as const
 
 export type AvatarColor = (typeof AVATAR_COLORS)[number]
