@@ -47,7 +47,7 @@ export function AnswerSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className="fixed inset-0 z-[55] flex items-end justify-center">
       <button
         type="button"
         className="absolute inset-0 bg-black/40"
