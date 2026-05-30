@@ -53,10 +53,10 @@ export function AnswerSheet({
         onClick={onClose}
         aria-label="Dismiss"
       />
-      <div className="relative w-full max-w-lg rounded-t-3xl bg-white shadow-2xl">
+      <div className="relative w-full max-w-lg rounded-t-3xl bg-[var(--brand-card)] shadow-2xl">
         <div className="flex items-center justify-between px-5 pt-5 pb-2">
           {visibleCategory ? (
-            <p className="text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-stone-500">
+            <p className="text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-[var(--brand-ink-400)]">
               {visibleCategory.toUpperCase()}
             </p>
           ) : (
@@ -66,13 +66,13 @@ export function AnswerSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="inline-flex size-8 items-center justify-center rounded-full text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+            className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <p className="px-5 pb-5 font-serif text-xl leading-8 text-stone-950">
+        <p className="px-5 pb-5 font-serif text-xl leading-8 text-[var(--brand-ink)]">
           {question}
         </p>
 
@@ -88,12 +88,12 @@ export function AnswerSheet({
             placeholder="Your answer…"
             disabled={loading}
             autoComplete="off"
-            className="w-full min-h-11 rounded-xl border border-stone-300 bg-stone-50 px-4 text-base outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200 disabled:opacity-60"
+            className="w-full min-h-11 rounded-xl border bg-background px-4 text-base outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={loading || !value.trim()}
-            className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-stone-950 px-4 text-sm font-medium text-white transition hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
+            className="btn-primary mt-3 w-full"
           >
             {loading ? 'Submitting…' : 'Submit answer'}
           </button>

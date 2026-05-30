@@ -120,6 +120,11 @@ const monoStyle: CSSProperties = {
   letterSpacing: '0.06em',
 };
 
+// Darkened triangle-gold so warning/inside-joke labels clear AA on the cream
+// surface (raw --tri-amber #d9a82e is too light for small text). Mirrors the
+// GOLD_INK used on the feed answer sheets.
+const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))';
+
 const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
   (name) => `${name}’s world includes this`,
   (name) => `${name} carries this one`,
@@ -267,9 +272,9 @@ function QuestionRow({
                 borderRadius: '999px',
                 border: '1px solid var(--border)',
                 background: badge.tone === 'warning'
-                  ? 'color-mix(in srgb, #b45309 12%, var(--surface))'
+                  ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
                   : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
-                color: badge.tone === 'warning' ? '#b45309' : 'var(--text-muted)',
+                color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
                 padding: '3px 9px',
               }}
             >
@@ -337,7 +342,7 @@ function UserRow({ text }: { text: string }) {
           fontWeight: 600,
           letterSpacing: '0.01em',
           lineHeight: 1.3,
-          color: '#fbf4e3',
+          color: 'var(--primary-foreground)',
         }}
       >
         {text}
@@ -856,9 +861,9 @@ function ResultRow({
                         alignItems: 'center',
                         gap: '8px',
                         borderRadius: 'var(--radius-md)',
-                        border: '1px solid color-mix(in srgb, var(--success) 35%, var(--border))',
-                        background: 'color-mix(in srgb, var(--success) 12%, var(--surface))',
-                        color: '#065f46',
+                        border: '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
+                        background: 'color-mix(in srgb, var(--game-correct) 12%, var(--surface))',
+                        color: 'var(--game-correct)',
                         padding: '8px 12px',
                         fontSize: '0.85rem',
                         fontWeight: 500,
@@ -895,8 +900,8 @@ function ResultRow({
             marginTop: '8px',
             width: '100%',
             borderRadius: 'var(--radius-md)',
-            border: '1px solid color-mix(in srgb, #b58a2b 24%, var(--border))',
-            background: 'color-mix(in srgb, #f6c97a 14%, var(--surface-2))',
+            border: '1px solid color-mix(in srgb, var(--tri-amber) 40%, var(--border))',
+            background: 'color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))',
             padding: '10px 14px',
             color: 'var(--text)',
           }}
@@ -905,7 +910,7 @@ function ResultRow({
             style={{
               ...monoStyle,
               fontSize: '0.55rem',
-              color: 'color-mix(in srgb, #6b4a10 80%, var(--text-muted))',
+              color: GOLD_INK,
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
             }}

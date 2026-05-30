@@ -48,10 +48,21 @@ function resolvedDifficulty(question: JoshingGameView['questions'][number]['ques
   return question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null;
 }
 
-function difficultyPillClasses(level: string): string {
-  if (level === 'specialist') return 'border-rose-200 bg-rose-50 text-rose-700';
-  if (level === 'moderate') return 'border-amber-200 bg-amber-50 text-amber-700';
-  return 'border-sky-200 bg-sky-50 text-sky-700';
+// Difficulty pills use the triangle palette (amber/dark-yellow/dark-teal) so the
+// 3-level metadata scale reads as distinct from the green/terracotta CORRECT/WRONG
+// pill beside it. Text is mixed toward --brand-ink so the lighter tones clear AA.
+function difficultyPillStyle(level: string): CSSProperties {
+  const tone =
+    level === 'specialist'
+      ? 'var(--tri-amber)'
+      : level === 'moderate'
+        ? 'var(--tri-darkyellow)'
+        : 'var(--tri-darkteal)';
+  return {
+    borderColor: `color-mix(in srgb, ${tone} 35%, var(--border))`,
+    backgroundColor: `color-mix(in srgb, ${tone} 12%, var(--surface))`,
+    color: `color-mix(in srgb, ${tone} 55%, var(--brand-ink))`,
+  };
 }
 
 type ExplainerOutcome = 'correct' | 'wrong' | 'expired';
@@ -292,17 +303,29 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       {(() => {
                         const level = resolvedDifficulty(gameQuestion.question);
                         return level ? (
-                          <span className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${difficultyPillClasses(level)}`}>
+                          <span
+                            className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                            style={difficultyPillStyle(level)}
+                          >
                             {difficultyCopyFromEstimate(level) ?? 'Unrated'}
                           </span>
                         ) : null;
                       })()}
                       <span
-                        className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
+                        className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                        style={
                           correct
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-rose-200 bg-rose-50 text-rose-700'
-                        }`}
+                            ? {
+                                borderColor: 'color-mix(in srgb, var(--game-correct) 30%, var(--border))',
+                                backgroundColor: 'color-mix(in srgb, var(--game-correct) 10%, var(--surface))',
+                                color: 'var(--game-correct)',
+                              }
+                            : {
+                                borderColor: 'color-mix(in srgb, var(--game-wrong-strong) 30%, var(--border))',
+                                backgroundColor: 'color-mix(in srgb, var(--game-wrong-strong) 10%, var(--surface))',
+                                color: 'var(--game-wrong-strong)',
+                              }
+                        }
                       >
                         {resultLabel(response?.isCorrect)}
                       </span>

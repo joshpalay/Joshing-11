@@ -15,7 +15,7 @@ const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   fontSize: '1.05rem',
   fontWeight: 600,
-  color: '#111111',
+  color: 'var(--warm-ink)',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
 };
@@ -28,11 +28,11 @@ export type GrowthRow = {
   hasAnsweredInDomain?: boolean;
 };
 
-const G_INK = '#0e0e0e';
-const G_INK3 = '#8a8a8a';
+const G_INK = 'var(--warm-ink)';
+const G_INK3 = 'var(--brand-ink-400)';
 const G_FM = "'Courier New', monospace";
 const G_FF = "'Georgia', serif";
-const G_RULE = '#e0dbd0';
+const G_RULE = 'var(--warm-border)';
 
 function GrowthCircleRow({
   row,
