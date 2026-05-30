@@ -254,6 +254,28 @@ export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow
   return queue ?? null;
 }
 
+/**
+ * Deletes today's daily queue ONLY when the user hasn't started it yet (no slot
+ * answered or skipped). Returns true if a queue was deleted.
+ *
+ * Used when daily preferences (topics / domain mode / difficulty) change before
+ * play: dropping the untouched queue lets the next queue load regenerate it from
+ * the new settings (POST /api/daily/queue → fillDailyQueueForUser reads current
+ * preferences). An in-progress round is left intact so points already earned
+ * today are never discarded — the new settings then take effect next day, when
+ * the cron rebuilds the queue.
+ */
+export async function invalidateTodaysDailyQueueIfUntouched(userId: string): Promise<boolean> {
+  const queue = await getTodaysDailyQueue(userId);
+  if (!queue) return false;
+
+  const started = asQueueSlots(queue.slots).some((slot) => slot.answered || slot.skipped);
+  if (started) return false;
+
+  await db.delete(dailyQueues).where(eq(dailyQueues.id, queue.id));
+  return true;
+}
+
 export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
   const generatedIds = asQueueSlots(queue.slots)
     .map((slot) => slot.generated_question_id)

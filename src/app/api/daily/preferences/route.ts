@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { getKnowledgeBase } from '@/server/db/queries/daily';
+import { getKnowledgeBase, invalidateTodaysDailyQueueIfUntouched } from '@/server/db/queries/daily';
 import {
   DAILY_DIFFICULTIES,
   DAILY_DOMAIN_MODES,
@@ -30,6 +30,15 @@ function parseStringArray(value: unknown): string[] | null {
     if (trimmed) result.push(trimmed);
   }
   return [...new Set(result)];
+}
+
+// Order-insensitive comparison; both inputs are already de-duped upstream
+// (normalizeSelectedDomains / parseStringArray), so a length + membership check
+// is sufficient to decide whether the topic selection actually changed.
+function selectedDomainsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((domain) => set.has(domain));
 }
 
 async function requireUserId() {
@@ -117,11 +126,28 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  const before = await getDailyPreferences(userId);
+
   const preferences = await updateDailyPreferences(userId, {
     ...(isValidDifficulty(difficultyValue) ? { difficulty: difficultyValue } : {}),
     ...(nextDomainMode ? { domainMode: nextDomainMode } : {}),
     ...(sanitizedDomains ? { selectedDomains: sanitizedDomains } : {}),
   });
+
+  // A change to the question-defining preferences — topics (selected domains),
+  // domain mode, or difficulty — should give the player a Daily Five that
+  // matches the new settings rather than the set the cron pre-built under the
+  // old ones. Drop today's queue if it hasn't been started yet; the next load
+  // of /api/daily/queue (always a POST → fillDailyQueueForUser) regenerates it
+  // from these preferences. An in-progress round is left intact, so points
+  // already earned today survive and the change instead applies next day.
+  const questionInputsChanged =
+    before.difficulty !== preferences.difficulty ||
+    before.domainMode !== preferences.domainMode ||
+    !selectedDomainsEqual(before.selectedDomains, preferences.selectedDomains);
+  if (questionInputsChanged) {
+    await invalidateTodaysDailyQueueIfUntouched(userId);
+  }
 
   return NextResponse.json({ preferences: serializePreferences(preferences) });
 }
