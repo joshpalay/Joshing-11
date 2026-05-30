@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { X } from 'lucide-react';
 
 import { GameplayChatThread, type ChatMessage } from '@/components/play/GameplayChat';
 
@@ -64,6 +66,22 @@ type GradeResponse = {
   breadcrumb?: string | null;
   insideJoke?: string | null;
   viewerStatus: 'not_started' | 'in_progress' | 'complete';
+};
+
+// Mono underlined link style for the per-question actions ("Show me the answer",
+// "Skip"), mirroring the dismiss link inside QuestionRow.
+const questionActionStyle = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  cursor: 'pointer',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '0.58rem',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.06em',
+  color: 'var(--text-muted)',
+  textDecoration: 'underline',
+  textUnderlineOffset: '2px',
 };
 
 export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameView; viewerId: string }) {
@@ -225,18 +243,110 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
     }
   }
 
+  // Consume the current question locally and advance to the next one (or the
+  // summary when none remain). Shared by "Show me the answer" and "Skip", which
+  // — like the daily catch-up give-up — resolve client-side without recording a
+  // server response; unanswered questions surface as "skipped" on the summary.
+  function consumeCurrentAndAdvance(consumed: JoshingGameView['questions'][number], appended: ChatMessage[]) {
+    if (nextQuestionTimerRef.current) window.clearTimeout(nextQuestionTimerRef.current);
+    const nextAnswered = new Set(answeredIds);
+    nextAnswered.add(consumed.questionId);
+    setAnsweredIds(nextAnswered);
+    const nextQuestion = orderedQuestions.find((question) => !nextAnswered.has(question.questionId));
+    setError(null);
+    setAnswer('');
+    setPausingAfterAnswer(true);
+    if (appended.length > 0) setMessages((current) => [...current, ...appended]);
+    nextQuestionTimerRef.current = window.setTimeout(() => {
+      setPausingAfterAnswer(false);
+      if (nextQuestion) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: `current-${nextQuestion.questionId}`,
+            kind: 'question' as const,
+            assignmentId: nextQuestion.questionId,
+            questionText: nextQuestion.question.questionText,
+            creatorName: game.creator.displayName,
+            badges: questionBadges(nextQuestion.question),
+          },
+        ]);
+      } else {
+        router.push(`/games/${game.game.id}/summary`);
+      }
+    }, 850);
+  }
+
+  function revealCurrentAnswer() {
+    if (!currentQuestion || pending || pausingAfterAnswer) return;
+    consumeCurrentAndAdvance(currentQuestion, [
+      {
+        id: `reveal-${currentQuestion.questionId}`,
+        kind: 'result',
+        assignmentId: currentQuestion.questionId,
+        questionText: currentQuestion.question.questionText,
+        result: 'gave_up',
+        submitted: '',
+        correctAnswer: currentQuestion.question.answerText,
+        consolation: null,
+        breadcrumb: null,
+        explanation: pickExplainer(currentQuestion.question, false),
+        copyVariant: currentQuestion.position,
+        creatorName: game.creator.displayName,
+        canonicalSubcategory: currentQuestion.question.canonicalSubcategory,
+        reactionPrompt: null,
+      },
+    ]);
+  }
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col px-0">
-      <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Joshing Game</p>
-        <h1 className="font-serif text-xl font-semibold">{game.game.title}</h1>
-        <p className="text-sm text-muted-foreground">{answeredIds.size} of {orderedQuestions.length}</p>
+      <header className="sticky top-0 z-20 flex items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
+        <h1
+          className="min-w-0 truncate font-serif text-[1.75rem] font-semibold leading-none"
+          style={{ color: 'var(--brand-ink)', letterSpacing: 0 }}
+        >
+          {game.game.title}
+        </h1>
+        {/* Progress dots (Figma "Game" header) — filled for answered, hollow for
+            the rest — replacing the old "N of M" text counter. */}
+        <div className="flex flex-1 items-center justify-center gap-1.5" aria-hidden>
+          {orderedQuestions.map((question, index) => (
+            <span
+              key={question.questionId}
+              className="size-2 rounded-full"
+              style={
+                index < answeredIds.size
+                  ? { background: 'var(--brand-navy)' }
+                  : { border: '1.5px solid color-mix(in srgb, var(--brand-navy) 35%, transparent)' }
+              }
+            />
+          ))}
+        </div>
+        <p className="sr-only" aria-live="polite">
+          {answeredIds.size} of {orderedQuestions.length} answered
+        </p>
+        <Link
+          href="/"
+          aria-label="Exit game"
+          className="inline-flex size-8 shrink-0 items-center justify-center transition hover:opacity-70"
+          style={{ color: 'var(--brand-ink)' }}
+        >
+          <X className="size-5" strokeWidth={1.8} />
+        </Link>
       </header>
       <section
         className="flex-1 overflow-y-auto px-4 py-4"
-        style={{ paddingBottom: 'calc(140px + env(safe-area-inset-bottom))' }}
+        style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom))' }}
       >
         <GameplayChatThread messages={messages} />
+        {currentQuestion && !pending && !pausingAfterAnswer ? (
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 pl-0.5">
+            <button type="button" onClick={revealCurrentAnswer} style={questionActionStyle}>
+              Show me the answer
+            </button>
+          </div>
+        ) : null}
         {error ? <p className="mt-4 rounded-md border border-destructive p-3 text-sm text-destructive">{error}</p> : null}
       </section>
       {currentQuestion ? (
@@ -254,8 +364,12 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
             placeholder="Your answer..."
             className="min-h-11 flex-1 rounded-md border bg-background px-4 text-base outline-none"
           />
-          <button type="submit" className="btn-primary" disabled={pending || !answer.trim()}>
-            {pending ? '...' : 'Send'}
+          <button
+            type="submit"
+            className="btn-primary font-serif text-base font-semibold"
+            disabled={pending || !answer.trim()}
+          >
+            {pending ? '...' : 'Answer'}
           </button>
         </form>
       ) : null}

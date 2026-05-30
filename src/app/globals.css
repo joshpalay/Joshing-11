@@ -80,6 +80,15 @@
     --tri-darkyellow:    #deae5c;
     --tri-lighttan:      #edd2a3;
     --tri-amber:         #d9a82e;
+    /* Gameplay surface — sourced from the Figma "Game" frame variables.
+       game/card/question fill, plus the forest-green/terracotta result accents
+       (Correct, text/wrong, Color/game/wrong/in-question). These intentionally
+       differ from the vivid --success/destructive used elsewhere. */
+    --game-card-question: #faf4e9;  /* game/card/question — question bubble fill */
+    --game-correct:       #366045;  /* Correct — forest green result accent      */
+    --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
+    --game-wrong:         #c96b4a;  /* text/wrong — terracotta result accent     */
+    --game-wrong-strong:  #c33d14;  /* game/wrong/in-question — strong terracotta */
     /* ──────────────────────────────────────────────────────────────────────
        Conventions:
        • Cream tones — `--brand-cream-page` (#fcf8f2) is the app background;
