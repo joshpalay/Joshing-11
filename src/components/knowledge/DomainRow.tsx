@@ -113,8 +113,8 @@ const rowStyle: CSSProperties = {
 };
 
 const highlightStyle: CSSProperties = {
-  backgroundColor: 'rgba(43, 110, 242, 0.08)',
-  borderColor: '#1a1208',
+  backgroundColor: 'color-mix(in srgb, var(--brand-navy) 8%, transparent)',
+  borderColor: 'var(--brand-ink)',
 };
 
 const contentStyle: CSSProperties = {

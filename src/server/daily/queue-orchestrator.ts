@@ -31,10 +31,16 @@ function asQueueSlots(value: unknown): QueueSlot[] {
 const TOP_UP_TIME_BUDGET_MS = 30_000;
 
 // The generator's quality/factual/history-dedup gates routinely drop ~half (and
-// for some niche domains far more) of each batch as hallucinated, answer-leaking,
-// or duplicate. Requesting exactly the gap therefore lands short and 503s. Ask
-// for a multiple so enough survive the gates in a single call (no extra
-// round-trips — excess survivors are trimmed to DAILY_QUEUE_SIZE downstream).
+// for some niche or deep-history domains far more) of each batch. Requesting
+// exactly the gap therefore lands short. Ask for a multiple so enough survive
+// the gates; excess survivors are trimmed to DAILY_QUEUE_SIZE downstream.
+//
+// Over-requesting is only safe because generateDailyQuestionsFromKnowledgeBase
+// now splits the request into GENERATION_CHUNK_SIZE-capped PARALLEL Sonnet calls
+// — each reply stays well under the generator's 2000-token cap, so a large count
+// no longer truncates the JSON to zero (the 2026-05-30 over-provision regression)
+// and total latency stays at one chunk. The graceful-degrade below still backstops
+// any residual shortfall.
 const GENERATION_OVERPROVISION = 2;
 const overRequest = (needed: number) =>
   Math.min(needed * GENERATION_OVERPROVISION, DAILY_QUEUE_SIZE * 2);

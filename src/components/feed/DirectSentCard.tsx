@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { visibleFeedCategory } from './category'
 import { SparkleEnvelope } from './SparkleEnvelope'
 import type { DirectSentFeedItem } from './types'
-import { colorForCategory } from './visual'
 
 type DirectSentCardProps = {
   item: DirectSentFeedItem
@@ -14,48 +13,24 @@ type DirectSentCardProps = {
 
 export function DirectSentCard({ item, overflow, onAnswer }: DirectSentCardProps) {
   const visibleCategory = visibleFeedCategory(item.category)
-  const accent = colorForCategory(item.category)
   const senderName = item.senderName || item.avatarName || 'A friend'
   const senderHref = item.senderHref ?? item.authorHref ?? null
 
-  const eyebrow = (
-    <>
-      Sent to you <span className="opacity-50">·</span> From {senderName}
-    </>
-  )
-
-  const kicker = (
-    <>
-      For you
-      {visibleCategory ? (
-        <>
-          <span className="mx-1.5 opacity-60">·</span>
-          {visibleCategory}
-        </>
-      ) : null}
-    </>
-  )
-
+  // Figma header line: actor in the link slate, the rest in black, with the
+  // optional personal note in italic serif beneath.
   const signal = (
     <>
       {senderHref ? (
-        <Link
-          href={senderHref}
-          className="font-semibold text-[var(--ink)] underline underline-offset-2"
-          style={{ textDecorationColor: 'rgb(0 0 0 / 0.3)' }}
-        >
+        <Link href={senderHref} className="font-semibold text-[var(--brand-link)] hover:opacity-70">
           {senderName}
         </Link>
       ) : (
-        <span className="font-semibold text-[var(--ink)]">{senderName}</span>
+        <span className="font-semibold text-[var(--brand-link)]">{senderName}</span>
       )}{' '}
       thought you&rsquo;d like this
       {visibleCategory ? <> about {visibleCategory}</> : null}.
       {item.personalMessage ? (
-        <span
-          className="mt-1 block italic"
-          style={{ fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif', opacity: 0.9 }}
-        >
+        <span className="mt-1 block font-serif text-[14px] italic leading-snug text-[var(--brand-ink-700)]">
           &ldquo;{item.personalMessage}&rdquo;
         </span>
       ) : null}
@@ -64,14 +39,10 @@ export function DirectSentCard({ item, overflow, onAnswer }: DirectSentCardProps
 
   return (
     <SparkleEnvelope
-      eyebrow={eyebrow}
-      accent={accent}
-      kicker={kicker}
       signal={signal}
       question={item.question}
-      timestamp={item.timestamp}
       overflow={overflow}
-      onAnswer={onAnswer}
+      onAnswer={item.viewerIsAuthor ? undefined : onAnswer}
     />
   )
 }

@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Sparkles, X } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import { AddToDailyFivePrompt } from './AddToDailyFivePrompt'
 import { visibleFeedCategory } from './category'
 
@@ -259,13 +258,13 @@ export function AnswerFeedbackSheet({
         </div>
 
         <div className="px-5 pt-2 pb-8">
-          <Button
+          <button
             type="button"
             onClick={onClose}
-            className="w-full bg-stone-950 text-white hover:bg-stone-800"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-stone-950 px-4 text-sm font-medium text-white transition hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2"
           >
             Done
-          </Button>
+          </button>
         </div>
       </div>
     </div>

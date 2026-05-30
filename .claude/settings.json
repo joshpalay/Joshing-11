@@ -1,5 +1,19 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "mcp__vercel__get_runtime_logs",
+      "mcp__plugin_vercel_vercel__get_runtime_logs",
+      "mcp__plugin_figma_figma__get_screenshot",
+      "mcp__plugin_figma_figma__get_design_context",
+      "mcp__plugin_vercel_vercel__list_deployments",
+      "mcp__supabase__list_tables",
+      "mcp__plugin_figma_figma__get_metadata",
+      "mcp__vercel__web_fetch_vercel_url",
+      "mcp__plugin_figma_figma__get_variable_defs"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

@@ -8,6 +8,7 @@ import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import type { MasteryTier } from '@/types/db'
 
 import { visibleFeedCategory } from './category'
+import { FeedActionLink } from './FeedActionLink'
 import type { AnsweredByYouFeedItem, AnsweredByYouPairedFriend } from './types'
 import { colorForCategory, colorForUser, initialsFor, isDarkColor } from './visual'
 
@@ -184,23 +185,15 @@ function AnsweredResult({
       {(onRetry || (recheckAction && recheckState !== 'done')) ? (
         <div className="flex items-center justify-end gap-4 pt-2">
           {onRetry ? (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="font-serif text-[16px] font-semibold tracking-wide text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70"
-            >
-              Try again →
-            </button>
+            <FeedActionLink onClick={onRetry}>Try again →</FeedActionLink>
           ) : null}
           {recheckAction && recheckState !== 'done' ? (
-            <button
-              type="button"
+            <FeedActionLink
               onClick={() => void requestRecheck()}
               disabled={recheckState === 'submitting'}
-              className="font-serif text-[16px] font-semibold tracking-wide text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 disabled:opacity-60"
             >
               {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
-            </button>
+            </FeedActionLink>
           ) : null}
         </div>
       ) : null}

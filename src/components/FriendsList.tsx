@@ -328,7 +328,7 @@ export default function FriendsList() {
           {newDiscoveryCount && newDiscoveryCount > 0 ? (
             <Link
               href="/friends/find"
-              className="bg-accent/10 hover:border-foreground/30 text-card-foreground block rounded-2xl border p-4 shadow-sm transition"
+              className="bg-primary/5 ring-primary/20 hover:border-foreground/30 text-card-foreground block rounded-2xl border ring-1 p-4 shadow-sm transition"
             >
               <p className="text-foreground text-sm font-medium">
                 ✨ {newDiscoveryCount} new {newDiscoveryCount === 1 ? 'contact is' : 'contacts are'} on Joshing.

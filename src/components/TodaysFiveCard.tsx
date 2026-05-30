@@ -211,7 +211,7 @@ export default function TodaysFiveCard({
   }
 
   return (
-    <div className="bg-card text-card-foreground w-full rounded-md border border-[var(--brand-border)] px-4 py-5 shadow-[0_4px_12px_rgba(40,32,30,0.04)]">
+    <div className="bg-card text-card-foreground w-full rounded-[4px] border border-[var(--brand-border)] px-4 py-5 shadow-[0_4px_12px_rgba(40,32,30,0.04)]">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five
@@ -225,7 +225,7 @@ export default function TodaysFiveCard({
         </Link>
       </div>
 
-      <h2 className="mt-1.5 font-serif text-[32px] leading-[1.1] font-medium tracking-tight text-[var(--brand-ink)]">
+      <h2 className="mt-1.5 font-serif text-[32px] leading-[40px] font-medium tracking-normal text-black">
         {headline}
       </h2>
 
@@ -305,7 +305,7 @@ export default function TodaysFiveCard({
       ) : (
         <Link
           href={playHref}
-          className="btn-primary mt-4 min-h-12 w-full justify-center rounded-md text-base font-bold tracking-wide"
+          className="btn-primary mt-4 min-h-12 w-full justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
         >
           {actionLabel}
         </Link>

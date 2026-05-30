@@ -56,11 +56,20 @@ export function Nav({
     isOtherUserProfilePath;
   const showNewGameShortcut = !hidesNewGameShortcut;
 
+  // The Joshing-game play screen (/games/<id>) is a focused flow with its own
+  // in-screen header (title + progress dots + X-to-exit) per the Figma "Game"
+  // frame, so the global app chrome is suppressed there — matching how the
+  // sibling /daily gameplay flow already hides Nav. The summary route
+  // (/games/<id>/summary) keeps the nav.
+  const gameSegments = pathname.split('/').filter(Boolean);
+  const isGamePlayScreen = gameSegments[0] === 'games' && gameSegments.length === 2;
+
   if (
     pathname === '/onboarding' ||
     pathname.startsWith('/daily') ||
     pathname === '/login' ||
-    pathname.startsWith('/invite/')
+    pathname.startsWith('/invite/') ||
+    isGamePlayScreen
   ) {
     return null;
   }
@@ -106,7 +115,7 @@ export function Nav({
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           <Link
             href="/"
-            className="font-sans text-[22px] font-semibold leading-none tracking-[0.01em] text-foreground"
+            className="font-sans text-[22px] font-semibold leading-none tracking-[0.05em] text-foreground"
           >
             Joshing
           </Link>
@@ -121,7 +130,7 @@ export function Nav({
             {showBadge ? (
               <span
                 className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-white"
-                style={{ backgroundColor: 'var(--accent)' }}
+                style={{ backgroundColor: 'var(--destructive)' }}
                 aria-hidden="true"
               >
                 {badgeText}

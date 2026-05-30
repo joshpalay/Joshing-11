@@ -20,7 +20,7 @@ export function MissedQuestionsCard({
     >
       <div className="min-w-0">
         <p className="text-[15px] font-medium tracking-[0.02em] text-[var(--brand-ink)]">
-          Learn More!
+          Catch up
         </p>
         <p className="mt-1 text-xs font-medium tracking-[0.06em] text-[var(--brand-ink-400)]">
           {missedLabel}

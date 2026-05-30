@@ -712,6 +712,16 @@ Which NEW indices duplicate any RECENT entry?`;
   }
 }
 
+// Max questions requested per Sonnet call. The generator caps each response at
+// 2000 output tokens (~33s at Sonnet's output rate, sized to fit the 90s live
+// route with a retry). A full question with explainer is ~300-400 tokens, so a
+// single call for more than ~5 overflows the cap: the JSON truncates mid-array,
+// parseQuestions returns [], and the queue fails (prod 2026-05-30 — an
+// over-provisioned no-authored user requested 10 and hit generatedRaw:0). Three
+// questions (~1100 tokens, ~18s) leave comfortable headroom under both limits;
+// larger batches are split into parallel chunks so wall-clock stays at one chunk.
+const GENERATION_CHUNK_SIZE = 3;
+
 async function callLlmOnce(
   domains: string[],
   count: number,
@@ -784,41 +794,17 @@ export async function generateDailyQuestions(
   const avoidList: AvoidQuestionEntry[] = [...extraEntries, ...previousQuestionTexts];
   const factKeyAvoidSet = new Set(previousFactKeys.map((entry) => entry.factKey));
 
-  let generated: LlmQuestion[] = [];
-  try {
-    generated = await callLlmOnce(
-      domains,
-      count,
-      avoidList,
-      previousFactKeys,
-      domainSkips,
-      difficultyPreference,
-      domainDifficultyOverrides,
-      adaptiveLevel,
-      subAnglesByDomain,
-    );
-    if (generated.length === 0) {
-      console.warn('[daily/generate-questions] first attempt returned no usable questions, retrying');
-      generated = await callLlmOnce(
-        domains,
-        count,
-        avoidList,
-        previousFactKeys,
-        domainSkips,
-        difficultyPreference,
-        domainDifficultyOverrides,
-        adaptiveLevel,
-        subAnglesByDomain,
-      );
-    }
-  } catch (err) {
-    console.warn('[daily/generate-questions] retrying after error', {
-      error: err instanceof Error ? err.message : 'unknown',
-    });
+  // One Sonnet call per chunk, run concurrently. callLlmOnce caps output at
+  // 2000 tokens; keeping each request <= GENERATION_CHUNK_SIZE keeps the reply
+  // well short of that cap (no truncation) and well under the 35s timeout, so
+  // we can over-generate to absorb the gate drop rate without any single call
+  // failing. Because the chunks run in parallel, total latency is one chunk,
+  // not the sum — a batch of 9 is three ~18s calls finishing together, not 54s.
+  const runChunk = async (chunkDomains: string[], chunkCount: number): Promise<LlmQuestion[]> => {
     try {
-      generated = await callLlmOnce(
-        domains,
-        count,
+      const out = await callLlmOnce(
+        chunkDomains,
+        chunkCount,
         avoidList,
         previousFactKeys,
         domainSkips,
@@ -827,13 +813,54 @@ export async function generateDailyQuestions(
         adaptiveLevel,
         subAnglesByDomain,
       );
-    } catch (err2) {
-      console.error('[daily/generate-questions] second attempt failed', {
-        error: err2 instanceof Error ? err2.message : 'unknown',
+      if (out.length > 0) return out;
+      console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
+        chunkCount,
+      });
+      return await callLlmOnce(
+        chunkDomains,
+        chunkCount,
+        avoidList,
+        previousFactKeys,
+        domainSkips,
+        difficultyPreference,
+        domainDifficultyOverrides,
+        adaptiveLevel,
+        subAnglesByDomain,
+      );
+    } catch (err) {
+      // A single chunk failing (timeout / aborted) must not sink the batch —
+      // the other chunks still return usable questions, and the queue
+      // orchestrator's top-up + graceful-degrade absorb the shortfall.
+      console.warn('[daily/generate-questions] chunk failed, dropping it', {
+        chunkCount,
+        error: err instanceof Error ? err.message : 'unknown',
       });
       return [];
     }
+  };
+
+  // Partition the request into chunks while preserving buildUserPrompt's domain
+  // contract. In 1:1 mode (domains.length === count, one question per listed
+  // domain) the domain list is sliced so each chunk still has domains.length
+  // === count and the per-domain prompt branch fires. In pool mode every chunk
+  // gets the full domain list with a sub-count.
+  const chunkSpecs: Array<{ domains: string[]; count: number }> = [];
+  if (domains.length === count) {
+    for (let i = 0; i < domains.length; i += GENERATION_CHUNK_SIZE) {
+      const slice = domains.slice(i, i + GENERATION_CHUNK_SIZE);
+      chunkSpecs.push({ domains: slice, count: slice.length });
+    }
+  } else {
+    for (let remaining = count; remaining > 0; remaining -= GENERATION_CHUNK_SIZE) {
+      chunkSpecs.push({ domains, count: Math.min(GENERATION_CHUNK_SIZE, remaining) });
+    }
   }
+
+  const chunkResults = await Promise.all(
+    chunkSpecs.map((spec) => runChunk(spec.domains, spec.count)),
+  );
+  let generated: LlmQuestion[] = chunkResults.flat();
 
   if (generated.length === 0) return [];
 
