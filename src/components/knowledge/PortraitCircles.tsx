@@ -9,6 +9,11 @@ import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import type { MasteryTier } from '@/types/db'
 
+// The portrait is a roomy, free-wrapping showcase, so it gets a larger diameter
+// bound than the tight progression grid — but still small enough that a mastery
+// circle fits a phone without overflowing. (Design audit C8 — column-bounded scale.)
+const PORTRAIT_CIRCLE_BOUNDS = { minDiameter: 24, maxDiameter: 168 } as const
+
 type PortraitTier = MasteryTier
 type SortMode = 'domain' | 'mastery'
 
@@ -209,7 +214,8 @@ export function PortraitDomainCircle({
     getDomainCircleSize(
       entry.tier as CircleSizingTier,
       entry.totalMasteryPoints,
-      maxPointsForTier
+      maxPointsForTier,
+      PORTRAIT_CIRCLE_BOUNDS
     ) * circleScale
   )
   const baseOpacity = forceFullOpacity
@@ -381,7 +387,8 @@ function getPortraitEntryCircleSize(
     getDomainCircleSize(
       entry.tier as CircleSizingTier,
       entry.totalMasteryPoints,
-      maxPointsForTier
+      maxPointsForTier,
+      PORTRAIT_CIRCLE_BOUNDS
     )
   )
 }

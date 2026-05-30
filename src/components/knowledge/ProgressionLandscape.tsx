@@ -51,9 +51,20 @@ function consumeScrollHint(): boolean {
   }
 }
 
+// Bound circles to a single grid column so a mastery domain never overflows the
+// cell. The mobile column is 160px (MOBILE_COL_WIDTH); desktop columns are
+// minmax(100px, 1fr), so keep the max comfortably inside the narrow end.
+const GRID_CIRCLE_BOUNDS_DESKTOP = { minDiameter: 18, maxDiameter: 120 } as const;
+const GRID_CIRCLE_BOUNDS_MOBILE = { minDiameter: 15, maxDiameter: 108 } as const;
+
 function getCircleDiameter(correctAnswerCount: number, tier: Tier, maxForTier: number, isMobile: boolean): number {
   if (correctAnswerCount === 0) return isMobile ? GHOST_CIRCLE_DIAMETER_MOBILE : GHOST_CIRCLE_DIAMETER;
-  return getDomainCircleSize(tier, correctAnswerCount, maxForTier, isMobile);
+  return getDomainCircleSize(
+    tier,
+    correctAnswerCount,
+    maxForTier,
+    isMobile ? GRID_CIRCLE_BOUNDS_MOBILE : GRID_CIRCLE_BOUNDS_DESKTOP,
+  );
 }
 
 export function ProgressionLandscape({
