@@ -29,3 +29,8 @@ dev-stderr.txt
  
 # TypeScript incremental build cache 
 *.tsbuildinfo 
+
+# Local Claude overrides & scratch
+.claude/settings.local.json
+audits/
+supabase/
