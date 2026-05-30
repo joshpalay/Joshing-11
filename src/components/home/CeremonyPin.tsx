@@ -61,7 +61,7 @@ export function CeremonyPin({ status }: { status: CeremonyPinStatus | null }) {
     daysUntil === 1 ? 'Ceremony tomorrow' : `Ceremony in ${daysUntil} days`
 
   return (
-    <div className="text-muted-foreground flex items-center gap-2 px-1 text-xs font-medium tracking-[0.08em] uppercase">
+    <div className="text-muted-foreground flex items-center gap-2 px-4 text-xs font-medium tracking-[0.08em] uppercase">
       <span aria-hidden>✦</span>
       <span>{label}</span>
     </div>
