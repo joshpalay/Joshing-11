@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 
 import { visibleFeedCategory } from './category'
 import { FeedActionLink } from './FeedActionLink'
+import { FeedCardShell } from './FeedCardShell'
 import type { FeedCardBaseItem } from './types'
 import { colorForCategory, colorForUser } from './visual'
 
@@ -19,12 +20,6 @@ type FeedCardProps = {
   verb?: string
   dimQuestion?: boolean
 }
-
-// Shared card chrome from the Figma feed cards: near-white surface, hairline
-// border/rule, 4px radius (space/1), soft shadow. The category/domain accent is
-// a 2px bar across the top (Figma renders it via an inset top shadow).
-const CARD_CLASS =
-  'relative overflow-hidden rounded-[4px] border border-[var(--brand-rule)] bg-[var(--brand-card)] shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
 
 // display/card/update — category line in Cormorant SemiBold (Figma 16/24/0.64px/black).
 function CategoryLine({ category }: { category: string }) {
@@ -72,18 +67,9 @@ export function FeedCard({
   // Sarah slate); fall back to the link slate when no user id is present.
   const nameColor = item.avatarUserId ? colorForUser(item.avatarUserId) : 'var(--brand-link)'
 
-  const topBar = (
-    <span
-      aria-hidden
-      className="absolute inset-x-0 top-0 h-[2px]"
-      style={{ backgroundColor: categoryColor }}
-    />
-  )
-
   if (item.viewerIsAuthor) {
     return (
-      <article className={cn(CARD_CLASS, className)}>
-        {topBar}
+      <FeedCardShell accentColor={categoryColor} className={className}>
         <div className="p-[14px]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -111,13 +97,12 @@ export function FeedCard({
 
           {footer ? <div className="mt-3">{footer}</div> : null}
         </div>
-      </article>
+      </FeedCardShell>
     )
   }
 
   return (
-    <article className={cn(CARD_CLASS, className)}>
-      {topBar}
+    <FeedCardShell accentColor={categoryColor} className={className}>
       <div className="p-[14px]">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -160,6 +145,6 @@ export function FeedCard({
           <div className="mt-3">{footer}</div>
         ) : null}
       </div>
-    </article>
+    </FeedCardShell>
   )
 }
