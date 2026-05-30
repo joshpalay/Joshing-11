@@ -148,6 +148,25 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   // loudly instead so /api/daily/queue surfaces a 503 and the play page
   // shows the fill-error UI.
   if (authored.length + generatedForQueue.length < DAILY_QUEUE_SIZE) {
+    // Diagnostic: capture WHY the queue came up short so failedGeneration in the
+    // cron breakdown is actionable. Distinguishes thin knowledge base (low
+    // knowledgeBaseDomains) vs the LLM returning few (low generatedRaw) vs the
+    // dedup gate dropping many (high droppedDuplicates) vs the top-up being
+    // skipped on the time budget (elapsedMs >= TOP_UP_TIME_BUDGET_MS).
+    console.warn('[daily/queue-orchestrator] generation_failed (short queue)', {
+      userId,
+      achieved: authored.length + generatedForQueue.length,
+      needed: DAILY_QUEUE_SIZE,
+      authoredCount: authored.length,
+      generatedRaw: generated.length,
+      dedupedGenerated: dedupedGenerated.length,
+      topUpRecovered: topUpGenerated.length,
+      droppedDuplicates,
+      knowledgeBaseDomains: knowledgeBase.length,
+      domainMode: preferences.domainMode,
+      selectedDomains: preferences.selectedDomains.length,
+      elapsedMs: Date.now() - startedAt,
+    });
     throw new DailyQueueFillError(
       'generation_failed',
       "Today's Daily Five is taking longer than usual.",
