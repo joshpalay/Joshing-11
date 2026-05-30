@@ -331,6 +331,10 @@ export default function DailyPage() {
   const actualCurrentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
   const currentSlot = pausedAfterSlotIndex === null ? actualCurrentSlot : null;
   const completedCount = queue?.slots.filter((slot) => slot.answered).length ?? 0;
+  // Use the ACTUAL queue length, not DAILY_QUEUE_SIZE — a low-yield domain can
+  // produce a graceful-degraded shorter queue, and the progress dots should
+  // match the real number of questions rather than always showing five.
+  const queueLength = queue && queue.slots.length > 0 ? queue.slots.length : DAILY_QUEUE_SIZE;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
 
 
@@ -684,8 +688,8 @@ export default function DailyPage() {
         </div>
         <div className="flex items-center gap-2">
           <GeometricProgress
-            total={DAILY_QUEUE_SIZE}
-            current={Math.min(completedCount + 1, DAILY_QUEUE_SIZE)}
+            total={queueLength}
+            current={Math.min(completedCount + 1, queueLength)}
             results={results}
           />
           <Link
