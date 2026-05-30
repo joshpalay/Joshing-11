@@ -23,7 +23,8 @@ import {
   getRecentDomainCounts,
   getRecentFactKeys,
   getRecentSubAnglesByDomain,
-  pickAccessibleBankSource,
+  pickBankSource,
+  type BankDifficulty,
   type RecentDailyQuestionEntry,
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
@@ -1094,12 +1095,13 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
 
-  // Try to fill any accessible-difficulty slots from the cross-user bank
-  // (previously-generated questions for the same domain) before burning
-  // fresh Sonnet calls. The bank only ever returns rows the viewer hasn't
-  // seen — empty bank for a domain falls through to LLM generation, which
-  // incidentally adds new accessible rows back into the pool.
-  const bankPicks = await pickBankPicksForAccessibleDomains(
+  // Try to fill slots from the cross-user bank (previously-generated questions
+  // for the same domain AND difficulty tier) before burning fresh Sonnet calls.
+  // The bank only ever returns rows the viewer hasn't seen — an empty bank for
+  // a domain falls through to LLM generation, which incidentally adds new rows
+  // back into the pool. Spans accessible/moderate/specialist so harder slots
+  // are reused too, not just warm-ups.
+  const bankPicks = await pickBankPicksForDomains(
     userId,
     domainsForRound,
     preferences.difficulty,
@@ -1132,24 +1134,33 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   return [...bankPicks, ...llmGenerated];
 }
 
-function resolvesToAccessible(
+// Resolve the difficulty *tier* a freshly-generated question for this domain
+// would land at, so a bank reuse matches the player's intended difficulty.
+// Mirrors the generation prompt's own difficulty resolution: fixed preferences
+// map through FIXED_DIFFICULTY_LEVELS, adaptive uses the per-domain override (if
+// any) or the user's current adaptive level — and both run through the same
+// mapAdaptiveLevelToDifficultyHint estimate the generator targets.
+function resolveDomainDifficulty(
   domain: string,
   difficultyPreference: string | undefined,
   overrides: ReadonlyMap<string, string> | undefined,
   adaptiveLevel: number | null,
-): boolean {
-  if (!difficultyPreference) return false;
-  if (difficultyPreference === 'normal') return true;
+): BankDifficulty | null {
+  if (!difficultyPreference) return null;
+
   if (difficultyPreference === 'adaptive') {
     const override = overrides?.get(domain);
-    if (override === 'normal') return true;
-    if (override === 'moderate' || override === 'challenging') return false;
-    return (adaptiveLevel ?? 1) < 1.5;
+    const overrideLevel = override ? FIXED_DIFFICULTY_LEVELS[override] : undefined;
+    const level = overrideLevel ?? adaptiveLevel ?? 1;
+    return mapAdaptiveLevelToDifficultyHint(level).estimate;
   }
-  return false;
+
+  const fixedLevel = FIXED_DIFFICULTY_LEVELS[difficultyPreference];
+  if (fixedLevel === undefined) return null;
+  return mapAdaptiveLevelToDifficultyHint(fixedLevel).estimate;
 }
 
-async function pickBankPicksForAccessibleDomains(
+async function pickBankPicksForDomains(
   userId: string,
   domains: string[],
   difficultyPreference: string | undefined,
@@ -1162,10 +1173,14 @@ async function pickBankPicksForAccessibleDomains(
   const expiresAt = getNextDailyResetBoundary();
 
   for (const domain of domains) {
-    if (!resolvesToAccessible(domain, difficultyPreference, domainDifficultyOverrides, adaptiveLevel)) {
-      continue;
-    }
-    const source = await pickAccessibleBankSource(userId, domain, avoidFactKeys).catch(() => null);
+    const difficulty = resolveDomainDifficulty(
+      domain,
+      difficultyPreference,
+      domainDifficultyOverrides,
+      adaptiveLevel,
+    );
+    if (!difficulty) continue;
+    const source = await pickBankSource(userId, domain, difficulty, avoidFactKeys).catch(() => null);
     if (!source) continue;
     if (isGenericSubcategory(source.canonicalSubcategory)) continue;
 

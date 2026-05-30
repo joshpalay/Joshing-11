@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm';
 
 import {
   dailyPreferences,
@@ -17,7 +17,7 @@ import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
-import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId } from '@/server/daily/catchup';
+import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
 import type { QueueSlot } from '@/server/daily/types';
 import {
   catchUpExpiresAt,
@@ -252,6 +252,110 @@ export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow
     .limit(1);
 
   return queue ?? null;
+}
+
+/**
+ * Deletes the user's untouched daily queues (none of whose slots are answered or
+ * skipped) within the catch-up window. Returns the number of queues deleted.
+ *
+ * Used when daily preferences (topics / domain mode / difficulty) change before
+ * play: dropping untouched queues lets the next queue load regenerate from the
+ * new settings (POST /api/daily/queue → fillDailyQueueForUser reads current
+ * preferences). We clear not just today's queue but every still-eligible prior
+ * untouched queue, because carryForwardUntouchedDailyQueue would otherwise
+ * re-date one of those old-settings queues onto today and defeat the change.
+ *
+ * Started queues (any slot answered or skipped) are left intact, so points
+ * already earned survive and that day's questions remain available in catch-up;
+ * the new settings take effect on the next freshly generated queue.
+ */
+export async function invalidateUntouchedDailyQueues(userId: string): Promise<number> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+  const oldestEligible = minusUtcDays(assignmentDateStr, CATCHUP_LOOKBACK_DAYS);
+
+  const queues = await db
+    .select()
+    .from(dailyQueues)
+    .where(and(
+      eq(dailyQueues.userId, userId),
+      lte(dailyQueues.queueDate, assignmentDateStr),
+      gte(dailyQueues.queueDate, oldestEligible),
+    ));
+
+  const untouchedIds = queues
+    .filter((queue) => !asQueueSlots(queue.slots).some((slot) => slot.answered || slot.skipped))
+    .map((queue) => queue.id);
+
+  if (untouchedIds.length === 0) return 0;
+
+  await db.delete(dailyQueues).where(inArray(dailyQueues.id, untouchedIds));
+  return untouchedIds.length;
+}
+
+/**
+ * Rolls an unplayed previous Daily Five forward to today instead of generating
+ * a brand-new (LLM-billed) set the user may again skip. Returns true when the
+ * caller should treat today's queue as ready (either it already existed, or a
+ * prior untouched queue was re-dated to today); false when there's nothing to
+ * carry forward and the caller should generate.
+ *
+ * Rationale: the cron builds a queue for every onboarded user every day with no
+ * activity filter, so a user who's been away for N days accrued N fresh
+ * generations they never saw. Their previous queue is still sitting unplayed
+ * (and surfaces in catch-up for CATCHUP_LOOKBACK_DAYS), so re-dating it gives
+ * them the same five at zero LLM cost. A *played* prior queue (any slot answered
+ * or skipped) is left alone — that user is engaged and should get a fresh set.
+ *
+ * Re-dating reuses the same row, so the carried-forward queue keeps rolling
+ * forward each day until the user actually plays it; only real engagement (or
+ * no prior queue at all) triggers generation.
+ */
+export async function carryForwardUntouchedDailyQueue(userId: string): Promise<boolean> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+
+  const today = await getTodaysDailyQueue(userId);
+  if (today && asQueueSlots(today.slots).length > 0) return true;
+
+  // Only carry forward a queue still inside the catch-up window. An older queue
+  // has already aged out of catch-up, so re-dating it would surface stale
+  // questions the user can no longer otherwise reach; let that regenerate.
+  const oldestEligible = minusUtcDays(assignmentDateStr, CATCHUP_LOOKBACK_DAYS);
+  const [prior] = await db
+    .select()
+    .from(dailyQueues)
+    .where(and(
+      eq(dailyQueues.userId, userId),
+      lt(dailyQueues.queueDate, assignmentDateStr),
+      gte(dailyQueues.queueDate, oldestEligible),
+    ))
+    .orderBy(desc(dailyQueues.queueDate))
+    .limit(1);
+
+  if (!prior) return false;
+
+  const priorSlots = asQueueSlots(prior.slots);
+  if (priorSlots.length === 0) return false;
+  if (priorSlots.some((slot) => slot.answered || slot.skipped)) return false;
+
+  // Clear any empty/partial today-row first so the unique (user, queue_date)
+  // constraint doesn't block the re-date.
+  if (today) {
+    await db.delete(dailyQueues).where(eq(dailyQueues.id, today.id));
+  }
+
+  try {
+    await db
+      .update(dailyQueues)
+      .set({ queueDate: assignmentDateStr })
+      .where(eq(dailyQueues.id, prior.id));
+    return true;
+  } catch (error) {
+    // 23505 = unique_violation: a today-row was created concurrently (e.g. the
+    // on-demand POST raced the cron). Let the caller fall through; the existing
+    // queue stands.
+    if (pgErrorCode(error) === '23505') return false;
+    throw error;
+  }
 }
 
 export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
@@ -834,7 +938,7 @@ export async function getRecentDailyQuestionTexts(
   }));
 }
 
-export type AccessibleBankSource = {
+export type BankSource = {
   questionText: string;
   answer: string;
   explainer: string;
@@ -846,10 +950,17 @@ export type AccessibleBankSource = {
   subAngles: string[];
 };
 
-// Pull one previously-generated "accessible" question for the given domain
-// that the current user has NOT seen, sourced from any OTHER user. Lets us
-// reuse canonical accessible trivia ("Mrs. Lovett's name", "Send in the
+export type BankDifficulty = 'accessible' | 'moderate' | 'specialist';
+
+// Pull one previously-generated question of the requested difficulty tier for
+// the given domain that the current user has NOT seen, sourced from any OTHER
+// user. Lets us reuse canonical trivia ("Mrs. Lovett's name", "Send in the
 // Clowns") instead of re-discovering it via Sonnet each week.
+//
+// Originally accessible-only; now spans accessible/moderate/specialist so the
+// harder slots draw from the shared pool before billing the LLM too. The
+// caller passes the difficulty the slot would otherwise generate at, so a
+// reused question always matches the player's intended difficulty.
 //
 // Restrictions:
 // - fact_key must be present (predates 2026-05-24; older rows lack it)
@@ -858,13 +969,14 @@ export type AccessibleBankSource = {
 // - not authored by the viewer
 // - fact_key not already in the viewer's recent avoid set
 //
-// Returns null when the bank is empty for this domain — caller falls back
-// to fresh LLM generation, which incidentally grows the bank.
-export async function pickAccessibleBankSource(
+// Returns null when the bank is empty for this domain+difficulty — caller
+// falls back to fresh LLM generation, which incidentally grows the bank.
+export async function pickBankSource(
   userId: string,
   domain: string,
+  difficulty: BankDifficulty,
   avoidFactKeys: ReadonlySet<string>,
-): Promise<AccessibleBankSource | null> {
+): Promise<BankSource | null> {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   let candidates: Array<typeof generatedQuestions.$inferSelect>;
   try {
@@ -873,7 +985,7 @@ export async function pickAccessibleBankSource(
       .from(generatedQuestions)
       .where(and(
         eq(generatedQuestions.canonicalSubcategory, domain),
-        eq(generatedQuestions.difficultyEstimate, 'accessible'),
+        eq(generatedQuestions.difficultyEstimate, difficulty),
         isNotNull(generatedQuestions.factKey),
         sql`${generatedQuestions.userId} <> ${userId}`,
         gte(generatedQuestions.createdAt, since),

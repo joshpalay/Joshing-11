@@ -1,4 +1,5 @@
 import {
+  carryForwardUntouchedDailyQueue,
   createDailyQueueItem,
   createDailyQueueItemFromAuthored,
   getKnowledgeBase,
@@ -48,6 +49,14 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const startedAt = Date.now();
   const existing = await getTodaysDailyQueue(userId);
   if (existing && asQueueSlots(existing.slots).length > 0) return;
+
+  // Before billing the LLM for a new set, roll a previous *unplayed* queue
+  // forward to today. The cron builds a queue for every onboarded user daily
+  // with no activity filter, so an absent user would otherwise accrue a fresh
+  // generation every day for questions they never opened. Their last queue is
+  // still sitting unplayed; re-dating it gives them the same five at zero cost.
+  // A played prior queue is left alone, so engaged users still get a fresh set.
+  if (await carryForwardUntouchedDailyQueue(userId)) return;
 
   const [knowledgeBase, preferences] = await Promise.all([
     getKnowledgeBase(userId),
