@@ -1,20 +1,20 @@
 export type CircleSizingTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 
-// One continuous scale for every knowledge circle (design audit C8).
+// Two sizing scales, because the two knowledge surfaces want opposite things:
 //
-// Previously each tier had its own absolute px range with large gaps between them
-// (familiar maxed at 48px, then solid *started* at 156px; solid maxed at 216px,
-// mastery started at 304px and ran to 384px) — so circle size jumped
-// discontinuously at tier boundaries and the biggest circles overflowed their
-// column. Now the four tiers occupy *contiguous* bands of a single 0→1 progression
-// axis: each tier's upper bound is the next tier's lower bound, so a domain at the
-// top of one tier is the same size as one just entering the next. Within a tier,
-// size still interpolates by pointsInTier / maxPointsInTier.
+//  • getDomainCircleSize — a CONTINUOUS, caller-bounded scale for the progression
+//    *grid* (ProgressionLandscape), whose tier columns are only ~100-190px wide.
+//    The four tiers occupy contiguous bands of a single 0→1 axis (each tier's top
+//    == the next tier's floor → no jump), and the caller passes the diameter
+//    bounds so a circle can never overflow its column. This is the original C8 fix
+//    for the grid, where the old absolute ranges blew past the column width.
 //
-// Absolute pixels are no longer baked in here — the caller passes the diameter
-// bounds for its own layout via `bounds`, which is how the scale stays
-// "column-bounded": a tight grid cell passes a small maxDiameter, a roomy portrait
-// passes a larger one, and circles never overflow either container.
+//  • getPortraitCircleSize — the original DRAMATIC per-tier ranges for the knowledge
+//    *portrait* (PortraitCircles), which is a free-wrapping hero showcase, not a
+//    grid. Big mastery circles are the point there ("size = depth"), so it keeps
+//    the large, intentionally non-continuous ranges (establishing barely visible,
+//    mastery up to 384px). The portrait never overflowed — it just wraps — so it
+//    was wrong to shrink it; this restores it.
 const TIER_BANDS: Record<CircleSizingTier, readonly [number, number]> = {
   establishing: [0, 0.18],
   familiar: [0.18, 0.42],
@@ -44,4 +44,25 @@ export function getDomainCircleSize(
   const t = maxPointsInTier > 0 ? Math.min(1, Math.max(0, pointsInTier / maxPointsInTier)) : 0;
   const progress = bandLo + t * (bandHi - bandLo);
   return Math.round(minDiameter + progress * (maxDiameter - minDiameter));
+}
+
+// The portrait's large, dramatic per-tier diameters. Intentionally non-continuous
+// (a familiar domain tops out at 48px; a solid domain starts at 156px) — the
+// portrait is a hero showcase where the size jump between casual and serious
+// domains is the visual story, and it free-wraps so big circles never overflow.
+const PORTRAIT_TIER_RANGES: Record<CircleSizingTier, { min: number; max: number }> = {
+  establishing: { min: 18, max: 28 },
+  familiar: { min: 32, max: 48 },
+  solid: { min: 156, max: 216 },
+  mastery: { min: 304, max: 384 },
+};
+
+export function getPortraitCircleSize(
+  tier: CircleSizingTier,
+  pointsInTier: number,
+  maxPointsInTier: number,
+): number {
+  const range = PORTRAIT_TIER_RANGES[tier];
+  const t = maxPointsInTier > 0 ? Math.min(1, Math.max(0, pointsInTier / maxPointsInTier)) : 0;
+  return Math.round(range.min + t * (range.max - range.min));
 }

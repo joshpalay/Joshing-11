@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { getDomainCircleSize, type CircleSizingTier } from './circle-sizing';
+import {
+  getDomainCircleSize,
+  getPortraitCircleSize,
+  type CircleSizingTier,
+} from './circle-sizing';
 
 const BOUNDS = { minDiameter: 18, maxDiameter: 120 } as const;
 
@@ -47,6 +51,24 @@ describe('getDomainCircleSize', () => {
   it('treats a zero/missing max as the tier floor (no divide-by-zero)', () => {
     expect(getDomainCircleSize('mastery', 5, 0, BOUNDS)).toBe(
       getDomainCircleSize('mastery', 0, 100, BOUNDS),
+    );
+  });
+});
+
+describe('getPortraitCircleSize', () => {
+  it('keeps the large, dramatic per-tier diameters for the hero portrait', () => {
+    // Mastery domains are intentionally big (304-384px) — the portrait free-wraps
+    // and the size jump between tiers is the point.
+    expect(getPortraitCircleSize('mastery', 100, 100)).toBe(384);
+    expect(getPortraitCircleSize('mastery', 0, 100)).toBe(304);
+    expect(getPortraitCircleSize('solid', 100, 100)).toBe(216);
+    expect(getPortraitCircleSize('familiar', 100, 100)).toBe(48);
+    expect(getPortraitCircleSize('establishing', 0, 100)).toBe(18);
+  });
+
+  it('grows with points within a tier', () => {
+    expect(getPortraitCircleSize('mastery', 50, 100)).toBeGreaterThan(
+      getPortraitCircleSize('mastery', 0, 100),
     );
   });
 });

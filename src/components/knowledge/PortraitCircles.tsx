@@ -2,18 +2,13 @@
 
 import { useState, useMemo, type CSSProperties } from 'react'
 import {
-  getDomainCircleSize,
+  getPortraitCircleSize,
   type CircleSizingTier,
 } from '@/lib/knowledge/circle-sizing'
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import type { MasteryTier } from '@/types/db'
-
-// The portrait is a roomy, free-wrapping showcase, so it gets a larger diameter
-// bound than the tight progression grid — but still small enough that a mastery
-// circle fits a phone without overflowing. (Design audit C8 — column-bounded scale.)
-const PORTRAIT_CIRCLE_BOUNDS = { minDiameter: 24, maxDiameter: 168 } as const
 
 type PortraitTier = MasteryTier
 type SortMode = 'domain' | 'mastery'
@@ -212,11 +207,10 @@ export function PortraitDomainCircle({
   const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge'
   const dc = getPortraitDomainColor(broadCategory)
   const size = Math.round(
-    getDomainCircleSize(
+    getPortraitCircleSize(
       entry.tier as CircleSizingTier,
       entry.totalMasteryPoints,
-      maxPointsForTier,
-      PORTRAIT_CIRCLE_BOUNDS
+      maxPointsForTier
     ) * circleScale
   )
   const baseOpacity = forceFullOpacity
@@ -377,11 +371,10 @@ function getPortraitEntryCircleSize(
   maxPointsForTier: number
 ): number {
   return Math.round(
-    getDomainCircleSize(
+    getPortraitCircleSize(
       entry.tier as CircleSizingTier,
       entry.totalMasteryPoints,
-      maxPointsForTier,
-      PORTRAIT_CIRCLE_BOUNDS
+      maxPointsForTier
     )
   )
 }
