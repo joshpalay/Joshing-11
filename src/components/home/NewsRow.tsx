@@ -6,11 +6,28 @@ type NewsRowCopy = {
   headline: React.ReactNode
   secondLine: string | null
   accentColor: string
-  href: string | null
 }
 
 function actorName(item: ActivityItemView): string {
   return item.actor?.displayName ?? 'Someone'
+}
+
+// The actor's name is the only link in a news row — it points at their
+// profile. When we don't have a user id (e.g. "You shared…" rows) it stays
+// plain bold text.
+function ActorName({ item }: { item: ActivityItemView }) {
+  const name = actorName(item)
+  if (!item.actorUserId) {
+    return <b>{name}</b>
+  }
+  return (
+    <Link
+      href={`/users/${item.actorUserId}`}
+      className="font-bold text-[var(--brand-link)] transition hover:opacity-70"
+    >
+      {name}
+    </Link>
+  )
 }
 
 function relativeTime(value: Date): string {
@@ -29,9 +46,9 @@ function relativeTime(value: Date): string {
 }
 
 // Compact second-line copy for Home — full subcopy lives on /activities.
-function buildCopy(item: ActivityItemView): NewsRowCopy {
-  const actor = actorName(item)
-
+// `actor` is the rendered actor name node (a profile link when we have a user
+// id); it's the only interactive element in the row.
+function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy {
   switch (item.type) {
     case 'friend_answered_your_question': {
       const faq = item.reference.friendAnsweredQuestion
@@ -41,12 +58,11 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
       return {
         headline: (
           <>
-            <b>{actor}</b> {verb} your question
+            {actor} {verb} your question
           </>
         ),
         secondLine: domain,
         accentColor: correct ? '#d97706' : '#a8a29e',
-        href: '/activities',
       }
     }
 
@@ -56,15 +72,12 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
       return {
         headline: (
           <>
-            <b>{actor}</b>{' '}
+            {actor}{' '}
             {domain ? 'opened a new domain in' : 'opened up a new domain on your map'}
           </>
         ),
         secondLine: domain,
         accentColor: '#16a34a',
-        href: domain
-          ? `/knowledge/${encodeURIComponent(domain)}`
-          : '/knowledge',
       }
     }
 
@@ -74,12 +87,11 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
       return {
         headline: (
           <>
-            <b>{actor}</b> reached {tier}
+            {actor} reached {tier}
           </>
         ),
         secondLine: mastery?.domain ?? null,
         accentColor: '#ca8a04',
-        href: '/activities',
       }
     }
 
@@ -91,12 +103,11 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
       return {
         headline: (
           <>
-            <b>{actor}</b> reacted to your question
+            {actor} reacted to your question
           </>
         ),
         secondLine: label,
         accentColor: '#ea580c',
-        href: '/activities',
       }
     }
 
@@ -104,24 +115,22 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
       return {
         headline: (
           <>
-            <b>{actor}</b> sent a note about a question you missed
+            {actor} sent a note about a question you missed
           </>
         ),
         secondLine: null,
         accentColor: '#2563eb',
-        href: '/activities',
       }
 
     case 'question_curated':
       return {
         headline: (
           <>
-            <b>{actor}</b> saved your question
+            {actor} saved your question
           </>
         ),
         secondLine: null,
         accentColor: '#7c3aed',
-        href: '/activities',
       }
 
     case 'authored_question_shared': {
@@ -136,7 +145,6 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
         ),
         secondLine: shared?.domain ?? null,
         accentColor: '#78716c',
-        href: '/activities',
       }
     }
 
@@ -145,16 +153,15 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
         headline: <>Something happened on Joshing</>,
         secondLine: null,
         accentColor: '#78716c',
-        href: '/activities',
       }
   }
 }
 
 export function NewsRow({ item }: { item: ActivityItemView }) {
-  const copy = buildCopy(item)
+  const copy = buildCopy(item, <ActorName item={item} />)
   const timestamp = relativeTime(item.createdAt)
 
-  const inner = (
+  return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
         <p className="text-[15px] leading-[23px] text-[var(--brand-ink)] [&_b]:font-bold [&_b]:text-[var(--brand-link)]">
@@ -171,16 +178,4 @@ export function NewsRow({ item }: { item: ActivityItemView }) {
       </span>
     </div>
   )
-
-  const className = 'block transition hover:opacity-70'
-
-  if (copy.href) {
-    return (
-      <Link href={copy.href} className={className}>
-        {inner}
-      </Link>
-    )
-  }
-
-  return <div className={className}>{inner}</div>
 }
