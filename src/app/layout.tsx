@@ -31,7 +31,9 @@ const playfair = Playfair_Display({
 // via --font-cormorant and surfaced to Tailwind as `font-serif` in globals.css.
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
-  weight: ['500', '600'],
+  // 700 added for the gameplay question/answer text (Figma display/game/question
+  // is Cormorant Bold 28). Without it the bold synthesizes from 600.
+  weight: ['500', '600', '700'],
   style: ['normal', 'italic'],
   variable: '--font-cormorant',
   display: 'swap',
