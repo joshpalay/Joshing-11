@@ -12,6 +12,8 @@ const {
   updateDomainDifficultyOnAnswerMock,
   writeMasteryEventMock,
   dbState,
+  selectCallChain,
+  dbMock,
 } = vi.hoisted(() => {
   const QUEUE = {
     id: 'queue-1',
@@ -50,6 +52,31 @@ const {
     },
   }
 
+  // Drizzle chain mock: db.select().from().where().limit() — returns canned rows
+  // based on which "table" was selected. We dispatch on the order of select()
+  // calls within a single request: queue → question → persistedQuestion. Defined
+  // inside vi.hoisted() so it's initialized before the hoisted vi.mock factory
+  // below references it (otherwise: "Cannot access 'dbMock' before initialization").
+  const selectCallChain: Array<() => Promise<unknown[]>> = []
+
+  const dbMock = {
+    select: vi.fn(() => {
+      const handler = selectCallChain.shift() ?? (async () => [])
+      return {
+        from: () => ({
+          where: () => ({
+            limit: handler,
+          }),
+        }),
+      }
+    }),
+    update: vi.fn(() => ({
+      set: () => ({
+        where: vi.fn(async () => undefined),
+      }),
+    })),
+  }
+
   return {
     createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
     getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
@@ -72,31 +99,10 @@ const {
       openedNewTerritory: false,
     })),
     dbState,
+    selectCallChain,
+    dbMock,
   }
 })
-
-// Drizzle chain mock: db.select().from().where().limit() — returns canned rows
-// based on which "table" was selected. We dispatch on the order of select()
-// calls within a single request: queue → question → persistedQuestion.
-const selectCallChain: Array<() => Promise<unknown[]>> = []
-
-const dbMock = {
-  select: vi.fn(() => {
-    const handler = selectCallChain.shift() ?? (async () => [])
-    return {
-      from: () => ({
-        where: () => ({
-          limit: handler,
-        }),
-      }),
-    }
-  }),
-  update: vi.fn(() => ({
-    set: () => ({
-      where: vi.fn(async () => undefined),
-    }),
-  })),
-}
 
 vi.mock('@/server/grading', () => ({
   gradeAnswer: gradeAnswerMock,
@@ -121,7 +127,10 @@ vi.mock('@/server/db', () => ({
     canonicalSubcategory: 'q.cs',
     broadCategory: 'q.bc',
     category: 'q.c',
+    insideJoke: 'q.ij',
   },
+  // PRD §8.4.3: bot slots with points run an extra playerMastery domain check.
+  playerMastery: { userId: 'pm.userId', canonicalSubcategory: 'pm.cs' },
 }))
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({
@@ -156,11 +165,19 @@ vi.mock('@/server/answer-history', () => ({
 import { POST } from '@/app/api/daily/answer/route'
 
 function setupDbChain() {
-  // Reset and re-seed for one full POST: queue, question, persistedQuestion.
+  // Reset and re-seed the select() responses in the order the route issues them
+  // for a bot slot: dailyQueues (queue) → generatedQuestions (question) →
+  // questions (persisted creator info, post-persist) → playerMastery (the
+  // §8.4.3 domain check). The domain row must be truthy so the route doesn't
+  // zero out points / skip the mastery write for an "unknown domain". When
+  // persistGeneratedQuestion throws, the route skips the creator select, so the
+  // playerMastery check consumes the creator handler instead — still truthy, so
+  // both the happy path and the persist-failure path resolve correctly.
   selectCallChain.length = 0
   selectCallChain.push(async () => [dbState.queue])
   selectCallChain.push(async () => [dbState.question])
   selectCallChain.push(async () => [dbState.persistedQuestion])
+  selectCallChain.push(async () => [{ canonicalSubcategory: 'history' }])
 }
 
 function jsonRequest(body: unknown) {
@@ -303,7 +320,10 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
   it('when persist fails, still records mastery event but with null eventQuestionId (graceful fallback)', async () => {
     setupDbChain()
     gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
-    persistGeneratedQuestionMock.mockRejectedValueOnce(new Error('persist boom'))
+    // The route retries persistence once (persistAttempt < 2), so reject ALL
+    // calls — not just the first — to exercise the full-failure fallback this
+    // test asserts (canonicalQuestionId stays null → eventQuestionId null).
+    persistGeneratedQuestionMock.mockRejectedValue(new Error('persist boom'))
 
     await POST(jsonRequest(VALID_BODY) as never)
 
