@@ -13,7 +13,7 @@ export type CeremonyPinStatus = {
  * Three states:
  *   1. Unviewed ceremony → amber link card "Your weekly reflection is ready"
  *   2. Today is Sunday (UTC) → hidden (cron is firing; nothing to nag about)
- *   3. Otherwise → countdown "Ceremony in N days"
+ *   3. Otherwise → countdown "Weekly Summary in N days"
  */
 export function CeremonyPin({ status }: { status: CeremonyPinStatus | null }) {
   if (!status) return null
@@ -58,10 +58,12 @@ export function CeremonyPin({ status }: { status: CeremonyPinStatus | null }) {
     Math.round((fireUtcMidnight - todayUtcMidnight) / 86_400_000),
   )
   const label =
-    daysUntil === 1 ? 'Ceremony tomorrow' : `Ceremony in ${daysUntil} days`
+    daysUntil === 1
+      ? 'Weekly Summary tomorrow'
+      : `Weekly Summary in ${daysUntil} days`
 
   return (
-    <div className="text-muted-foreground flex items-center gap-2 px-1 text-xs font-medium tracking-[0.08em] uppercase">
+    <div className="-my-2 flex items-center justify-center gap-2 text-xs font-medium tracking-[0.08em] text-[#D9A82E] uppercase">
       <span aria-hidden>✦</span>
       <span>{label}</span>
     </div>

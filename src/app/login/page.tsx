@@ -6,12 +6,12 @@ import LoginPanel from './LoginPanel';
 
 function TitleCard() {
   return (
-    <section className="w-full max-w-sm rounded-2xl bg-[var(--brand-cream-card)] px-8 py-7 text-center shadow-[0_8px_24px_rgba(20,18,8,0.18)] ring-1 ring-black/5">
+    <section className="w-full max-w-sm rounded-2xl bg-[var(--brand-cream-card)] px-8 py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5">
       <h1 className="font-sans text-4xl font-extrabold tracking-[0.06em] text-[var(--brand-navy)]">
         JOSHING
       </h1>
-      <div className="mx-auto mt-4 h-0.5 w-14 rounded-full bg-[var(--brand-navy)]/40" aria-hidden="true" />
-      <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--brand-navy)]/80">
+      <div className="mx-auto mt-4 h-0.5 w-14 rounded-full bg-[var(--tri-amber)]" aria-hidden="true" />
+      <p className="mt-4 text-center font-inter text-[18px] font-normal uppercase leading-6 tracking-[3.6px] text-black">
         Trivia you wish you were asked
       </p>
     </section>
@@ -25,7 +25,7 @@ export default function LoginPage() {
         <TitleCard />
         <Suspense
           fallback={
-            <div className="h-72 w-full max-w-sm rounded-2xl bg-[var(--brand-cream-card)] shadow-[0_8px_24px_rgba(20,18,8,0.18)] ring-1 ring-black/5" />
+            <div className="h-72 w-full max-w-sm rounded-2xl bg-[var(--brand-cream-card)] shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5" />
           }
         >
           <LoginPanel />

@@ -103,7 +103,7 @@ export function Nav({
         className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur"
         aria-label="Primary header"
       >
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           <Link
             href="/"
             className="font-sans text-[22px] font-semibold leading-none tracking-[0.01em] text-foreground"
@@ -146,7 +146,7 @@ export function Nav({
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div
-          className="mx-auto grid max-w-4xl"
+          className="mx-auto grid max-w-2xl"
           style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
           role="list"
         >
