@@ -315,7 +315,7 @@ const domainNameStyle: CSSProperties = {
   margin: 0,
   color: '#1a1208',
   fontFamily: 'var(--font-literata), Georgia, serif',
-  fontSize: '0.8rem',
+  fontSize: '0.92rem',
   fontWeight: 700,
   lineHeight: 1.18,
   overflowWrap: 'anywhere',
