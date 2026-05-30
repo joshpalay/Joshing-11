@@ -225,7 +225,7 @@ export default function TodaysFiveCard({
         </Link>
       </div>
 
-      <h2 className="mt-1.5 font-serif text-[32px] leading-[1.1] font-medium tracking-tight text-[var(--brand-ink)]">
+      <h2 className="mt-3 mb-2 font-serif text-[32px] leading-[1.1] font-medium tracking-tight text-[var(--brand-ink)]">
         {headline}
       </h2>
 
