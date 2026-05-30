@@ -182,7 +182,7 @@ function FeedPersonLink({
   return (
     <Link
       href={href}
-      className="font-semibold text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-stone-700"
+      className="font-semibold text-[var(--brand-ink)] underline decoration-[var(--brand-rule)] underline-offset-2 hover:decoration-[var(--brand-ink)]"
     >
       {name}
     </Link>
@@ -944,8 +944,8 @@ function FeedListContent({
             aria-current={feedFilter === option.value ? 'page' : undefined}
             className={
               feedFilter === option.value
-                ? 'rounded-full bg-stone-950 px-3 py-1.5 text-sm font-medium text-white'
-                : 'rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50'
+                ? 'inline-flex min-h-11 items-center rounded-full bg-[var(--brand-navy)] px-4 text-sm font-medium text-[var(--primary-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+                : 'inline-flex min-h-11 items-center rounded-full border bg-[var(--brand-card)] px-4 text-sm font-medium text-[var(--brand-ink-700)] transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
             }
           >
             {option.label}

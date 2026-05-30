@@ -150,14 +150,13 @@ function AnsweredResult({
     }
   }, [recheckAction, recheckState])
 
-  const summaryClass = item.isCorrect
-    ? 'text-[14px] font-medium text-emerald-700'
-    : 'text-[14px] font-medium text-stone-800'
-
   return (
     <div className="w-full space-y-1.5">
       <div className="flex items-start justify-between gap-3">
-        <p className={summaryClass}>
+        <p
+          className="text-[14px] font-medium"
+          style={{ color: item.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)' }}
+        >
           {item.answerSummary ?? 'You answered this question.'}
         </p>
         {item.isCorrect ? <KnowledgeGainIndicator item={item} /> : null}
@@ -204,9 +203,9 @@ function AnsweredResult({
             aria-live="polite"
             className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium"
             style={{
-              backgroundColor: 'color-mix(in srgb, #047857 10%, var(--cream))',
-              borderColor: 'color-mix(in srgb, #047857 35%, var(--border-warm))',
-              color: '#065f46',
+              backgroundColor: 'color-mix(in srgb, var(--game-correct) 12%, var(--cream))',
+              borderColor: 'color-mix(in srgb, var(--game-correct) 35%, var(--border-warm))',
+              color: 'var(--game-correct)',
             }}
           >
             <span aria-hidden className="text-[15px] leading-none">✓</span>
@@ -218,7 +217,7 @@ function AnsweredResult({
             aria-live="polite"
             className="text-[11px]"
             style={{
-              color: recheckState === 'error' ? '#b91c1c' : 'var(--ink)',
+              color: recheckState === 'error' ? 'var(--game-wrong-strong)' : 'var(--ink)',
               opacity: recheckState === 'error' ? 1 : 0.6,
             }}
           >
