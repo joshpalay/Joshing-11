@@ -25,8 +25,10 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-4 py-6 pb-32 md:py-10">
-      {/* Triangle banner (Figma Mask group): a brand band behind the top of the
-          page that fades into the cream surface. Decorative only. */}
+      {/* Triangle banner (Figma Mask group): the SAME Variant4 pattern as the
+          login background, rendered at the same full-viewport-cover scale and
+          clipped to a band so the triangles match login in size. No gradient —
+          a clean band the cards overlap. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 overflow-hidden"
@@ -35,9 +37,8 @@ export default async function Home() {
         <img
           src="/images/Variant4.png"
           alt=""
-          className="h-full w-full object-cover object-top"
+          className="absolute inset-x-0 top-0 h-screen w-full object-cover object-center"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[var(--brand-cream-page)]/10 via-[var(--brand-cream-page)]/55 to-[var(--brand-cream-page)]" />
       </div>
 
       {session ? (

@@ -182,13 +182,12 @@ function AnsweredResult({
         </p>
       ) : null}
       {(onRetry || (recheckAction && recheckState !== 'done')) ? (
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex items-center justify-end gap-4 pt-2">
           {onRetry ? (
             <button
               type="button"
               onClick={onRetry}
-              className="inline-flex items-center border-[1.5px] border-[var(--ink)] bg-[var(--cream)] px-[8px] py-[4px] text-[12px] text-[var(--ink)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
-              style={{ boxShadow: '3px 3px 0 var(--ink)' }}
+              className="font-serif text-[16px] font-semibold tracking-wide text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70"
             >
               Try again →
             </button>
@@ -198,10 +197,9 @@ function AnsweredResult({
               type="button"
               onClick={() => void requestRecheck()}
               disabled={recheckState === 'submitting'}
-              className="inline-flex items-center border-[1.5px] border-[var(--ink)] bg-[var(--cream)] px-[8px] py-[4px] text-[12px] text-[var(--ink)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-default disabled:opacity-60"
-              style={{ boxShadow: '3px 3px 0 var(--ink)' }}
+              className="font-serif text-[16px] font-semibold tracking-wide text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 disabled:opacity-60"
             >
-              {recheckState === 'submitting' ? 'Rechecking...' : 'Recheck →'}
+              {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
             </button>
           ) : null}
         </div>
