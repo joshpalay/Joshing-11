@@ -149,22 +149,41 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   }
 
   const generatedForQueue = [...dedupedGenerated, ...topUpGenerated];
+  const achieved = authored.length + generatedForQueue.length;
 
-  // A short queue used to be persisted silently when generation returned
-  // fewer than the requested count (or when cross-source dedup dropped some):
-  // the play page treats "no pending slot" as round-over, so a 2-slot queue
-  // ended the round after 2 answers with three blank progress dots. Fail
-  // loudly instead so /api/daily/queue surfaces a 503 and the play page
-  // shows the fill-error UI.
-  if (authored.length + generatedForQueue.length < DAILY_QUEUE_SIZE) {
-    // Diagnostic: capture WHY the queue came up short so failedGeneration in the
-    // cron breakdown is actionable. Distinguishes thin knowledge base (low
-    // knowledgeBaseDomains) vs the LLM returning few (low generatedRaw) vs the
-    // dedup gate dropping many (high droppedDuplicates) vs the top-up being
-    // skipped on the time budget (elapsedMs >= TOP_UP_TIME_BUDGET_MS).
-    console.warn('[daily/queue-orchestrator] generation_failed (short queue)', {
+  // Graceful degrade: persist whatever we have instead of failing on a short
+  // queue. Some niche domains have very low generation yield — the
+  // quality/factual/dedup gates correctly reject most of each batch — so even
+  // over-provisioned generation can land short. A shorter Daily Five (the good
+  // questions we did get) beats a 503; the daily cron retries for a full set on
+  // later days. The play flow and home completion are slot-driven (isRound
+  // complete + progress read the ACTUAL slot count), so an N<5 queue renders
+  // and completes correctly — no more "round ends early with blank dots".
+  //
+  // Only fail when there's nothing usable at all, so /api/daily/queue still
+  // surfaces a retryable 503 + the fill-error UI in the genuine zero case.
+  if (achieved === 0) {
+    console.warn('[daily/queue-orchestrator] generation_failed (no usable questions)', {
       userId,
-      achieved: authored.length + generatedForQueue.length,
+      knowledgeBaseDomains: knowledgeBase.length,
+      generatedRaw: generated.length,
+      droppedDuplicates,
+      domainMode: preferences.domainMode,
+      selectedDomains: preferences.selectedDomains.length,
+      elapsedMs: Date.now() - startedAt,
+    });
+    throw new DailyQueueFillError(
+      'generation_failed',
+      "Today's Daily Five is taking longer than usual.",
+    );
+  }
+  if (achieved < DAILY_QUEUE_SIZE) {
+    // Persisted a short queue. Log the cause so it's still visible/actionable:
+    // thin KB (knowledgeBaseDomains) vs low LLM yield (generatedRaw) vs
+    // aggressive dedup (droppedDuplicates) vs skipped top-up (elapsedMs).
+    console.warn('[daily/queue-orchestrator] persisted short queue', {
+      userId,
+      achieved,
       needed: DAILY_QUEUE_SIZE,
       authoredCount: authored.length,
       generatedRaw: generated.length,
@@ -176,10 +195,6 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       selectedDomains: preferences.selectedDomains.length,
       elapsedMs: Date.now() - startedAt,
     });
-    throw new DailyQueueFillError(
-      'generation_failed',
-      "Today's Daily Five is taking longer than usual.",
-    );
   }
 
   let position = 0;
