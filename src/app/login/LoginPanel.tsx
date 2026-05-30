@@ -161,7 +161,9 @@ export default function LoginPanel() {
     >
       {step === 'phone' ? (
         <form className="space-y-[14px]" onSubmit={continueWithPhone}>
-          <Phone className="mx-auto h-9 w-9 text-[var(--brand-navy)]" strokeWidth={2.25} aria-hidden="true" />
+          {/* Solid filled handset, matching the Figma black phone glyph
+              (and the filled treatment of the OTP step's bubble icon). */}
+          <Phone className="mx-auto h-12 w-12 fill-black text-black" strokeWidth={1.5} aria-hidden="true" />
           <label
             className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
             htmlFor="phone"
