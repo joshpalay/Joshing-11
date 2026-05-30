@@ -11,6 +11,11 @@ export type AdaptiveDifficultyHint = {
   targetCorrectRate: number;
   difficultyLabel: string;
   promptHint: string;
+  // The difficulty_estimate tier a question generated at this level targets.
+  // The generator only emits three tiers, so the two hardest adaptive bands
+  // both map to 'specialist'. Lets the bank-reuse path request a stored
+  // question whose tier matches what fresh generation would have produced.
+  estimate: 'accessible' | 'moderate' | 'specialist';
 };
 
 type RecentAnswerRow = {
@@ -122,6 +127,7 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
       targetCorrectRate: 0.78,
       difficultyLabel: 'approachable trivia',
       promptHint: 'Target roughly a 78% correct rate. Write friendly, recognizable questions a casually interested person in the domain would get — lean on well-known facts, not deep cuts.',
+      estimate: 'accessible',
     };
   }
 
@@ -130,6 +136,7 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
       targetCorrectRate: 0.62,
       difficultyLabel: 'fair and familiar',
       promptHint: 'Target roughly a 62% correct rate. Write questions a reasonably engaged fan of the domain should know without needing specialist depth.',
+      estimate: 'moderate',
     };
   }
 
@@ -138,6 +145,7 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
       targetCorrectRate: 0.35,
       difficultyLabel: 'hard for someone with depth',
       promptHint: 'Target roughly a 35% correct rate. Write questions that are hard even for someone with real depth in the domain.',
+      estimate: 'specialist',
     };
   }
 
@@ -145,6 +153,7 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
     targetCorrectRate: 0.15,
     difficultyLabel: 'expert-level deep cuts',
     promptHint: 'Target roughly a 15% correct rate. Write expert-level deep cuts with specific facts, dates, terminology, or details.',
+    estimate: 'specialist',
   };
 }
 

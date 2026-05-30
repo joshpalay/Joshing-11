@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { getKnowledgeBase, invalidateTodaysDailyQueueIfUntouched } from '@/server/db/queries/daily';
+import { getKnowledgeBase, invalidateUntouchedDailyQueues } from '@/server/db/queries/daily';
 import {
   DAILY_DIFFICULTIES,
   DAILY_DOMAIN_MODES,
@@ -137,16 +137,18 @@ export async function PATCH(request: NextRequest) {
   // A change to the question-defining preferences — topics (selected domains),
   // domain mode, or difficulty — should give the player a Daily Five that
   // matches the new settings rather than the set the cron pre-built under the
-  // old ones. Drop today's queue if it hasn't been started yet; the next load
+  // old ones. Drop every untouched queue in the catch-up window; the next load
   // of /api/daily/queue (always a POST → fillDailyQueueForUser) regenerates it
-  // from these preferences. An in-progress round is left intact, so points
-  // already earned today survive and the change instead applies next day.
+  // from these preferences. Clearing prior untouched queues too — not just
+  // today's — keeps carry-forward from re-dating an old-settings queue onto
+  // today. In-progress rounds are left intact, so points already earned survive
+  // and the change instead applies to the next freshly generated queue.
   const questionInputsChanged =
     before.difficulty !== preferences.difficulty ||
     before.domainMode !== preferences.domainMode ||
     !selectedDomainsEqual(before.selectedDomains, preferences.selectedDomains);
   if (questionInputsChanged) {
-    await invalidateTodaysDailyQueueIfUntouched(userId);
+    await invalidateUntouchedDailyQueues(userId);
   }
 
   return NextResponse.json({ preferences: serializePreferences(preferences) });
