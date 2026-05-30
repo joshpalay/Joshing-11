@@ -10,6 +10,7 @@ import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getFriendAndFoFUserIds } from '@/server/db/queries/friends';
 import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
 
@@ -118,7 +119,16 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   }
   const dedupedGenerated: typeof generated = [];
   let droppedDuplicates = 0;
+  let droppedGeneric = 0;
   for (const question of generated) {
+    // Drop bucket-level domains ("general"/"trivia"/short labels) BEFORE the
+    // shortfall count below, so a generic pick is treated as a missing slot the
+    // top-up can backfill — rather than persisting it and letting the read path
+    // (api/daily/queue) silently filter it out, leaving the user one short.
+    if (isGenericSubcategory(question.canonicalSubcategory)) {
+      droppedGeneric += 1;
+      continue;
+    }
     const key = normalize(question.questionText);
     if (seenTexts.has(key)) {
       droppedDuplicates += 1;
@@ -149,6 +159,10 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   if (shortfall > 0 && Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS) {
     const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(shortfall));
     for (const question of extra) {
+      if (isGenericSubcategory(question.canonicalSubcategory)) {
+        droppedGeneric += 1;
+        continue;
+      }
       const key = normalize(question.questionText);
       if (seenTexts.has(key)) continue;
       seenTexts.add(key);
@@ -183,6 +197,7 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       knowledgeBaseDomains: knowledgeBase.length,
       generatedRaw: generated.length,
       droppedDuplicates,
+      droppedGeneric,
       domainMode: preferences.domainMode,
       selectedDomains: preferences.selectedDomains.length,
       elapsedMs: Date.now() - startedAt,
@@ -205,6 +220,7 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       dedupedGenerated: dedupedGenerated.length,
       topUpRecovered: topUpGenerated.length,
       droppedDuplicates,
+      droppedGeneric,
       knowledgeBaseDomains: knowledgeBase.length,
       domainMode: preferences.domainMode,
       selectedDomains: preferences.selectedDomains.length,
