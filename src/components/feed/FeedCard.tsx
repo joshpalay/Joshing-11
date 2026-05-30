@@ -23,23 +23,23 @@ type FeedCardProps = {
 // border/rule, 4px radius (space/1), soft shadow. The category/domain accent is
 // a 2px bar across the top (Figma renders it via an inset top shadow).
 const CARD_CLASS =
-  'relative overflow-hidden rounded-md border border-[var(--brand-rule)] bg-[var(--brand-card)] shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
+  'relative overflow-hidden rounded-[4px] border border-[var(--brand-rule)] bg-[var(--brand-card)] shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
 
-// display/card/update — category line in Cormorant serif.
+// display/card/update — category line in Cormorant SemiBold (Figma 16/24/0.64px/black).
 function CategoryLine({ category }: { category: string }) {
   return (
-    <p className="font-serif text-[16px] leading-[24px] tracking-[0.03em] text-[var(--brand-ink)]">
+    <p className="font-serif text-[16px] font-semibold leading-[24px] tracking-[0.04em] text-black">
       {category}
     </p>
   )
 }
 
-// display/card/question — the focal serif question.
+// display/card/question — the focal serif question (Figma Cormorant SemiBold 24/32/1.2px).
 function QuestionText({ question, dim }: { question: string; dim?: boolean }) {
   return (
     <p
       className={cn(
-        'mt-3 font-serif leading-[32px] tracking-[0.04em] text-[var(--brand-ink)]',
+        'mt-3 font-serif font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]',
         dim ? 'text-[16px] opacity-65' : 'text-[24px]',
       )}
     >
@@ -124,7 +124,7 @@ export function FeedCard({
               headerContent
             ) : (
               <>
-                <p className="text-[15px] leading-[23px] tracking-[0.02em] text-[var(--brand-ink)]">
+                <p className="text-[15px] leading-[23px] tracking-[0.05em] text-black">
                   {item.authorHref ? (
                     <Link href={item.authorHref} className="font-medium" style={{ color: nameColor }}>
                       {authorName}
@@ -156,7 +156,7 @@ export function FeedCard({
             <button
               type="button"
               onClick={onAnswer}
-              className="font-serif text-[18px] font-semibold tracking-wide text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70"
+              className="font-serif text-[18px] font-semibold tracking-[0.05em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70"
             >
               Answer →
             </button>
