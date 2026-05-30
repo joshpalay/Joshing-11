@@ -241,8 +241,8 @@ const sectionStyle: CSSProperties = {
 };
 
 const tierCrossedBannerStyle: CSSProperties = {
-  background: '#f0e6c8',
-  color: '#1a1208',
+  background: 'var(--brand-cream)',
+  color: 'var(--warm-ink)',
   padding: '0.75rem 0.95rem',
   fontSize: 16,
 };

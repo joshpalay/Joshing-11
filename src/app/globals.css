@@ -156,6 +156,20 @@
     --border-warm:     var(--brand-border);      /* #e9e2d2 warm border */
     --border-light:    #eee7d8;                  /* lighter inner border */
     --text-muted-warm: var(--brand-ink-400);     /* #8a8a8a muted text */
+    /* Warm-brown ink ramp — the Knowledge/Portrait surface intentionally uses a
+       warmer ink than the navy --brand-ink. These were raw hex (#1a1208/#8a8070/
+       #696257/#e8e2d6/…) scattered inline across the knowledge components; the
+       2026-05-30 audit flagged the drift. Tokenized here, kept warm (product
+       decision) rather than re-pointed at the navy ramp. Near-duplicate blacks
+       (#111111, #0e0e0e) collapse onto --warm-ink. */
+    --warm-ink:         #1a1208;  /* primary ink — brown-black            */
+    --warm-ink-700:     #696257;  /* secondary text                       */
+    --warm-ink-500:     #7d7568;  /* muted-strong                         */
+    --warm-ink-400:     #8a8070;  /* muted / timestamps                   */
+    --warm-border:      #e8e2d6;  /* warm hairline border                 */
+    --warm-border-soft: #ddd6c7;  /* lighter warm border                  */
+    --warm-paper:       #faf8f2;  /* warm off-white surface (share chrome)*/
+    --warm-cream:       #f5f0e8;  /* warm cream panel                     */
     --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     /* Editorial serif — Cormorant Garamond (the brand serif). Playfair Display
