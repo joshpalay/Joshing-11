@@ -9,6 +9,17 @@ import { runWithConcurrency } from '@/server/lib/concurrency';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
+// Scheduled at 17:05 UTC (vercel.json) to fire just after the 17:00 UTC daily
+// reset (DAILY_RESET_HOUR_UTC), so it pre-builds the window users are about to
+// play. The previous 06:00 UTC schedule built the window that expired at 17:00
+// UTC and left the 17:00→06:00 UTC span uncovered, forcing evening-US / APAC
+// users onto the synchronous /api/daily/queue generation path.
+//
+// This fans out generation across every onboarded user at USER_CONCURRENCY,
+// each costing up to GENERATION_TIMEOUT_MS, so the default function budget is
+// far too small for a non-trivial user base — give it the plan maximum so the
+// tail of the user list doesn't get dropped by a platform timeout mid-run.
+export const maxDuration = 300;
 
 // Capped at 4 to stay one connection below the 5-cap DB pool. Tune down if
 // the SMS provider's per-second rate becomes the binding limit instead of DB.
