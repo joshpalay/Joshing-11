@@ -6,6 +6,7 @@ import {
   type CircleSizingTier,
 } from '@/lib/knowledge/circle-sizing'
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
+import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import type { MasteryTier } from '@/types/db'
 
@@ -279,19 +280,11 @@ export function PortraitDomainCircle({
         }}
       >
         <div style={{ position: 'relative', width: size, height: size }}>
-          <div
-            style={{
-              width: size,
-              height: size,
-              borderRadius: '50%',
-              background: `radial-gradient(circle at 38% 38%, ${dc.light.replace('0.12', '0.22')}, ${dc.light})`,
-              opacity,
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              filter: dimForHidden ? 'grayscale(0.6)' : undefined,
-            }}
+          <KnowledgeBubble
+            diameter={size}
+            light={dc.light}
+            opacity={opacity}
+            style={{ filter: dimForHidden ? 'grayscale(0.6)' : undefined }}
           >
             {showMasteryCount && (
               <span
@@ -306,7 +299,7 @@ export function PortraitDomainCircle({
                 {entry.authoredAnsweredCount}
               </span>
             )}
-          </div>
+          </KnowledgeBubble>
           {selected && (
             <div
               aria-hidden
