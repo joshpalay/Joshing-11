@@ -24,7 +24,7 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-4 py-6 pb-32 md:py-10">
+    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-[18px] px-4 py-6 pb-32 md:py-10">
       {/* Triangle banner (Figma Mask group): the SAME Variant4 pattern as the
           login background, rendered at the same full-viewport-cover scale and
           clipped to a band so the triangles match login in size. No gradient —
