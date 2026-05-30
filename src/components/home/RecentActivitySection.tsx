@@ -9,7 +9,7 @@ export function RecentActivitySection({
   items: ActivityItemView[]
 }) {
   return (
-    <section className="px-4">
+    <section>
       <p className="text-muted-foreground mb-2 text-xs font-medium tracking-[0.1em] uppercase">
         What&rsquo;s happening
       </p>
