@@ -17,7 +17,14 @@ const breadcrumbCache = new Map<string, string | null>();
 
 function cacheKey(params: GenerateBreadcrumbParams): string {
   const questionKey = params.questionId?.trim() || params.questionText.trim().toLowerCase();
-  return `${questionKey}:${params.isCorrect ? 'correct' : 'wrong'}`;
+  // Correct-answer breadcrumbs don't reference the submitted text, so they're
+  // shareable per question. Wrong-answer breadcrumbs embed the exact guess
+  // ("you answered X instead of Y"), so they MUST be keyed by that guess —
+  // otherwise the first miss poisons the shared cache and every later user who
+  // misses the same question sees the first user's answer.
+  if (params.isCorrect) return `${questionKey}:correct`;
+  const answerKey = params.submittedAnswer.trim().toLowerCase();
+  return `${questionKey}:wrong:${answerKey}`;
 }
 
 function setCacheEntry(key: string, value: string | null): void {
