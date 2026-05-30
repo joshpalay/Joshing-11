@@ -15,11 +15,11 @@ function formatPhoneForDisplay(e164: string): string {
 }
 
 const CARD_CLASS =
-  'w-full max-w-sm rounded-2xl bg-[var(--brand-cream-card)] px-7 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
+  'w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-[46px] py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
 const INPUT_CLASS =
-  'h-12 w-full rounded-md border border-[var(--tri-amber)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none ring-offset-2 ring-offset-[var(--brand-cream-card)] focus:ring-2 focus:ring-[var(--brand-navy)]';
+  'h-11 w-full rounded-[4px] border border-[var(--tri-amber)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none ring-offset-2 ring-offset-[var(--brand-cream-card)] focus:ring-2 focus:ring-[var(--brand-navy)]';
 const SUBMIT_CLASS =
-  'h-12 w-full rounded-md bg-[var(--brand-navy)] px-4 text-sm font-bold text-[#fbf4e3] transition hover:opacity-90 disabled:opacity-60';
+  'h-11 w-full rounded-[4px] bg-[var(--brand-navy)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {
@@ -160,7 +160,7 @@ export default function LoginPanel() {
       }}
     >
       {step === 'phone' ? (
-        <form className="space-y-5" onSubmit={continueWithPhone}>
+        <form className="space-y-[14px]" onSubmit={continueWithPhone}>
           <Phone className="mx-auto h-9 w-9 text-[var(--brand-navy)]" strokeWidth={2.25} aria-hidden="true" />
           <label
             className="block text-center text-base font-semibold text-[var(--brand-navy)]"
