@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessagesSquare, Phone } from 'lucide-react';
+import { MessageCircle, Phone } from 'lucide-react';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
 
@@ -163,7 +163,7 @@ export default function LoginPanel() {
         <form className="space-y-[14px]" onSubmit={continueWithPhone}>
           <Phone className="mx-auto h-9 w-9 text-[var(--brand-navy)]" strokeWidth={2.25} aria-hidden="true" />
           <label
-            className="block text-center text-base font-semibold text-[var(--brand-navy)]"
+            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
             htmlFor="phone"
           >
             What is your phone number?
@@ -184,14 +184,22 @@ export default function LoginPanel() {
           </button>
         </form>
       ) : (
-        <form className="space-y-5" onSubmit={verifyCode}>
-          <MessagesSquare
-            className="mx-auto h-9 w-9 text-[var(--brand-orange)]"
-            strokeWidth={2.25}
-            aria-hidden="true"
-          />
+        <form className="space-y-[14px]" onSubmit={verifyCode}>
+          {/* Two overlapping speech bubbles (orange in front, navy behind),
+              recreating the Figma two-tone icon. The front bubble takes a cream
+              stroke so it reads as a crescent where it crosses the navy one. */}
+          <div className="mx-auto flex w-fit flex-row-reverse items-end" aria-hidden="true">
+            <MessageCircle
+              className="h-12 w-12 -translate-x-3 -scale-x-100 fill-[var(--brand-navy)] text-[var(--brand-navy)]"
+              strokeWidth={1.5}
+            />
+            <MessageCircle
+              className="h-12 w-12 fill-[var(--brand-orange)] text-[var(--brand-cream-card)]"
+              strokeWidth={2.5}
+            />
+          </div>
           <label
-            className="block text-center text-base font-semibold leading-6 text-[var(--brand-navy)]"
+            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
             htmlFor="code"
           >
             Enter your code for{' '}
@@ -208,29 +216,32 @@ export default function LoginPanel() {
             onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
             disabled={loading}
           />
-          <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
-            {loading ? 'Verifying…' : 'Continue'}
-          </button>
 
-          <div className="flex items-center gap-3" aria-hidden="true">
-            <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
-            <span className="text-xs font-medium uppercase tracking-wide text-[var(--brand-navy)]/60">
-              or
-            </span>
-            <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+          {/* Button + divider + Change number form a tight 6px cluster (Figma
+              Frame 3), separate from the 14px rhythm of the fields above. */}
+          <div className="space-y-1.5">
+            <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+              {loading ? 'Verifying…' : 'Continue'}
+            </button>
+
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+              <span className="text-[17px] font-medium text-black">or</span>
+              <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+            </div>
+
+            <button
+              type="button"
+              className="mx-auto block text-[14px] font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              onClick={() => {
+                setCode('');
+                swapStep('phone');
+              }}
+              disabled={loading}
+            >
+              Change number
+            </button>
           </div>
-
-          <button
-            type="button"
-            className="mx-auto block text-xs font-bold uppercase tracking-[0.12em] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
-            onClick={() => {
-              setCode('');
-              swapStep('phone');
-            }}
-            disabled={loading}
-          >
-            Change number
-          </button>
         </form>
       )}
 
