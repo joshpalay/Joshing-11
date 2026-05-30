@@ -234,7 +234,7 @@ describe('Feed answered states', () => {
     expect(rendered).toContain('>You<')
   })
 
-  it('uses the Joshing offset-shadow recheck button on wrong answers', () => {
+  it('uses the serif slate link recheck action on wrong answers (no boxed button)', () => {
     const recheckAction = { onSubmit: async () => ({ accepted: false, message: '' }) }
     const rendered = html(
       <AnsweredByYouCard
@@ -243,7 +243,9 @@ describe('Feed answered states', () => {
       />
     )
     expect(rendered).toContain('Recheck →')
-    expect(rendered).toContain('3px 3px 0 var(--ink)')
+    // Brand action-link treatment (matches "Answer →"): serif, slate, underlined — no offset-shadow box.
+    expect(rendered).toContain('text-[var(--brand-link)]')
+    expect(rendered).not.toContain('3px 3px 0 var(--ink)')
   })
 })
 

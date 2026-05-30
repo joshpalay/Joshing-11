@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MessagesSquare, Phone } from 'lucide-react';
@@ -72,6 +72,18 @@ export default function LoginPanel() {
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Controls the bottom-card transition: the title card (in page.tsx) stays
+  // fixed; only this form card animates out, swaps content, then animates in.
+  const [entering, setEntering] = useState(true);
+
+  const swapStep = useCallback((next: 'phone' | 'code') => {
+    setEntering(false); // exit: fade + slide down
+    window.setTimeout(() => {
+      setStep(next); // swap content while hidden
+      setError(null);
+      requestAnimationFrame(() => setEntering(true)); // enter: fade + slide in
+    }, 200);
+  }, []);
 
   async function continueWithPhone(event: FormEvent) {
     event.preventDefault();
@@ -100,7 +112,7 @@ export default function LoginPanel() {
       }
 
       setPhone(normalized);
-      setStep('code');
+      swapStep('code');
     } finally {
       setLoading(false);
     }
@@ -139,7 +151,14 @@ export default function LoginPanel() {
   }
 
   return (
-    <section className={CARD_CLASS}>
+    <section
+      className={CARD_CLASS}
+      style={{
+        opacity: entering ? 1 : 0,
+        transform: entering ? 'translateY(0)' : 'translateY(10px)',
+        transition: 'opacity 200ms ease, transform 200ms ease',
+      }}
+    >
       {step === 'phone' ? (
         <form className="space-y-5" onSubmit={continueWithPhone}>
           <Phone className="mx-auto h-9 w-9 text-[var(--brand-navy)]" strokeWidth={2.25} aria-hidden="true" />
@@ -206,8 +225,7 @@ export default function LoginPanel() {
             className="mx-auto block text-xs font-bold uppercase tracking-[0.12em] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
             onClick={() => {
               setCode('');
-              setError(null);
-              setStep('phone');
+              swapStep('phone');
             }}
             disabled={loading}
           >
