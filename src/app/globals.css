@@ -59,6 +59,7 @@
        below are repointed at them so the brand applies app-wide. The triangle
        values intentionally mirror the LoadingScreen PALETTE for consistency. */
     --brand-ink:         #0a1f3d;  /* ink/900 — primary text / headings        */
+    --brand-ink-950:     #091729;  /* ink/950 — JOSHING wordmark (Figma fill)  */
     --brand-ink-700:     #3a4a5f;  /* ink/700 — secondary text                 */
     --brand-ink-400:     #8a8a8a;  /* ink/400 — muted / timestamps             */
     --brand-navy:        #1f3a5a;  /* navy/500 — wordmark, primary buttons     */
@@ -67,7 +68,7 @@
     --brand-cream:       #f8e6c7;  /* triangle/cream                           */
     --brand-cream-page:  #fcf8f2;  /* Color/Game/Background — app page surface  */
     --brand-card:        #fdfcfb;  /* cream/50 — content card surface          */
-    --brand-cream-card:  #f6edd6;  /* warm cream card (login screens only)     */
+    --brand-cream-card:  #fbf5e9;  /* warm cream card (login screens only)     */
     --brand-border:      #e9e2d2;  /* warm hairline border                     */
     --brand-rule:        rgba(60, 50, 40, 0.14); /* border/rule — divider      */
     --domain-language:   #7a9eaa;
@@ -79,14 +80,23 @@
     --tri-darkyellow:    #deae5c;
     --tri-lighttan:      #edd2a3;
     --tri-amber:         #d9a82e;
+    /* Gameplay surface — sourced from the Figma "Game" frame variables.
+       game/card/question fill, plus the forest-green/terracotta result accents
+       (Correct, text/wrong, Color/game/wrong/in-question). These intentionally
+       differ from the vivid --success/destructive used elsewhere. */
+    --game-card-question: #faf4e9;  /* game/card/question — question bubble fill */
+    --game-correct:       #366045;  /* Correct — forest green result accent      */
+    --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
+    --game-wrong:         #c96b4a;  /* text/wrong — terracotta result accent     */
+    --game-wrong-strong:  #c33d14;  /* game/wrong/in-question — strong terracotta */
     /* ──────────────────────────────────────────────────────────────────────
        Conventions:
        • Cream tones — `--brand-cream-page` (#fcf8f2) is the app background;
          `--brand-card` (#fdfcfb, near-white) is the default CONTENT card;
-         `--brand-cream-card` (#f6edd6, warmer) is reserved for ENTRY/branded
+         `--brand-cream-card` (#fbf5e9, warmer) is reserved for ENTRY/branded
          surfaces (login, knowledge portrait, sparkle envelope).
-       • Card radius — content cards use `rounded-md`; entry/branded cards use
-         the softer `rounded-2xl` (login) / `rounded-[1.5rem]` (envelope).
+       • Card radius — content cards use `rounded-md`; the login cards use
+         `rounded-[8px]` (Figma) and the envelope uses `rounded-[1.5rem]`.
        • Correct/wrong — use `--success` (#178245) and #b42318 (destructive ink)
          with a 3px colored left border (see GameplayChat ResultRow + summary).
        ──────────────────────────────────────────────────────────────────── */
@@ -141,7 +151,7 @@
        near-black. Keep the names; only the values changed. */
     --ink:             var(--brand-ink);        /* navy #0a1f3d (was warm near-black) */
     --cream:           var(--brand-card);        /* #fdfcfb content surface */
-    --cream-warm:      var(--brand-cream-card);  /* #f6edd6 warm card */
+    --cream-warm:      var(--brand-cream-card);  /* #fbf5e9 warm card */
     --cream-accent:    var(--brand-cream);       /* #f8e6c7 highlight/accent */
     --border-warm:     var(--brand-border);      /* #e9e2d2 warm border */
     --border-light:    #eee7d8;                  /* lighter inner border */

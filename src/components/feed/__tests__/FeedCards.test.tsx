@@ -122,7 +122,7 @@ describe('Feed unanswered card actions', () => {
       />
     )
 
-    expect(rendered).toContain('Answer this')
+    expect(rendered).toContain('Answer →')
     expect(rendered).not.toContain('Skip')
     expect(rendered).not.toContain('Not my focus')
     expect(rendered).not.toContain('Bookmark')
@@ -301,13 +301,13 @@ describe('FriendAnsweredCard viewer-already-answered footer', () => {
 })
 
 describe('Authored-by-viewer card', () => {
-  it('renders a "New question" eyebrow with the italic category', () => {
+  it('renders the authored attribution and category (Figma triangle card has no eyebrow)', () => {
     const rendered = html(
       <FriendAddedCard
         item={feedCardPreviewFixtures.authoredByViewerUnanswered}
       />
     )
-    expect(rendered).toContain('New question')
+    expect(rendered).toContain('added a question')
     expect(rendered).toContain('Detroit Techno')
   })
 

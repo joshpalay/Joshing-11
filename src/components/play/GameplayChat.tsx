@@ -236,15 +236,18 @@ function QuestionRow({
         style={{
           alignSelf: 'flex-start',
           maxWidth: '88%',
-          background: 'var(--brand-card)',
+          background: 'var(--game-card-question)',
           border: '1px solid var(--brand-rule)',
           borderRadius: 'var(--radius-md)',
-          padding: '14px 16px',
+          // effect/card/question — soft layered drop shadow.
+          boxShadow: '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
+          padding: '16px 18px',
           fontFamily: 'var(--font-cormorant), Georgia, serif',
-          fontSize: '1.3rem',
-          letterSpacing: '0.01em',
+          fontSize: '1.75rem',
+          fontWeight: 700,
+          letterSpacing: 0,
           color: 'var(--brand-ink)',
-          lineHeight: 1.35,
+          lineHeight: 1.3,
         }}
       >
         <p style={{ margin: 0 }}>{questionText}</p>
@@ -255,15 +258,19 @@ function QuestionRow({
             <span
               key={badge.label}
               style={{
-                ...monoStyle,
+                // Figma display/pill/sans — Georgia, 12px, title-case (not the
+                // mono uppercase used elsewhere).
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                fontSize: '0.75rem',
+                lineHeight: 1.1,
+                letterSpacing: '0.01em',
                 borderRadius: '999px',
                 border: '1px solid var(--border)',
                 background: badge.tone === 'warning'
                   ? 'color-mix(in srgb, #b45309 12%, var(--surface))'
                   : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
                 color: badge.tone === 'warning' ? '#b45309' : 'var(--text-muted)',
-                fontSize: '0.52rem',
-                padding: '2px 6px',
+                padding: '3px 9px',
               }}
             >
               {badge.label}
@@ -324,9 +331,12 @@ function UserRow({ text }: { text: string }) {
           background: 'var(--brand-navy)',
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
           padding: '10px 16px',
-          fontSize: '0.9rem',
+          // Figma answer bubble — Cormorant serif, not the sans body font.
+          fontFamily: 'var(--font-cormorant), Georgia, serif',
+          fontSize: '1.15rem',
           fontWeight: 600,
           letterSpacing: '0.01em',
+          lineHeight: 1.3,
           color: '#fbf4e3',
         }}
       >
@@ -707,9 +717,11 @@ function ResultRow({
     }
     : correct
       ? {
-        background: 'color-mix(in srgb, var(--success) 9%, var(--surface-2))',
-        border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))',
-        borderLeft: '3px solid var(--success)',
+        // Figma Correct (#366045) — forest green, lighter card body than the
+        // vivid --success used elsewhere.
+        background: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
+        border: '1px solid color-mix(in srgb, var(--game-correct) 26%, var(--border))',
+        borderLeft: '3px solid var(--game-correct)',
       }
       : gaveUp
         ? {
@@ -718,9 +730,10 @@ function ResultRow({
           borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
         }
         : {
-          background: 'color-mix(in srgb, #b42318 7%, var(--surface-2))',
-          border: '1px solid color-mix(in srgb, #b42318 24%, var(--border))',
-          borderLeft: '3px solid #b42318',
+          // Figma text/wrong (#c96b4a) body + game/wrong/in-question (#c33d14) bar.
+          background: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
+          border: '1px solid color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
+          borderLeft: '3px solid var(--game-wrong-strong)',
         };
 
   return (
@@ -740,8 +753,8 @@ function ResultRow({
           <span style={{ color: 'var(--text-muted)' }}>This one wasn&apos;t recorded in time.</span>
         ) : correct ? (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif' }}>
-              <span style={{ color: '#178245', marginRight: '6px' }}>✓</span>
+            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-correct)', fontWeight: 600 }}>
+              <span style={{ color: 'var(--game-correct)', marginRight: '6px' }}>✓</span>
               {copy.headline}
             </p>
             <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
@@ -776,18 +789,20 @@ function ResultRow({
           </>
         ) : (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif' }}>
-              <span style={{ color: '#8b1f16', marginRight: '6px' }}>✕</span>
+            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-wrong-strong)', fontWeight: 600 }}>
+              <span style={{ color: 'var(--game-wrong-strong)', marginRight: '6px' }}>✕</span>
               {wrongHeadline(copyVariant)}
             </p>
             {correctAnswer ? (
               <p
                 style={{
                   marginTop: '8px',
+                  // Figma question/game/answer — Cormorant Bold 28.
                   fontFamily: 'var(--font-cormorant), Georgia, serif',
-                  fontSize: '1.3rem',
+                  fontSize: '1.75rem',
+                  fontWeight: 700,
                   color: 'var(--brand-ink)',
-                  lineHeight: 1.2,
+                  lineHeight: 1.3,
                 }}
               >
                 {correctAnswer}
