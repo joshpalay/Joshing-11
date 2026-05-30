@@ -211,7 +211,7 @@ export function ProgressionLandscape({
               ref={(el) => {
                 headerRefs.current[tier] = el;
               }}
-              style={{ ...colHeaderStyle, borderRight: i < 3 ? '1px solid #e8e2d6' : undefined }}
+              style={{ ...colHeaderStyle, borderRight: i < 3 ? '1px solid var(--warm-border)' : undefined }}
             >
               {KNOWLEDGE_TIER_LABEL[tier].toUpperCase()}
             </div>
@@ -222,7 +222,7 @@ export function ProgressionLandscape({
               {TIERS.map((tier, colIdx) => {
                 const cellDomains = tierCategoryDomains.get(tier)?.get(category) ?? [];
                 return (
-                  <div key={`${category}-${tier}`} style={{ ...cellStyle, borderRight: colIdx < 3 ? '1px solid #e8e2d6' : undefined }}>
+                  <div key={`${category}-${tier}`} style={{ ...cellStyle, borderRight: colIdx < 3 ? '1px solid var(--warm-border)' : undefined }}>
                     <div style={categoryLabelStyle}>{colIdx === 0 ? (category || 'General Knowledge') : ''}</div>
                     {cellDomains.map((domain) => {
                       const isGhost = domain.correctAnswerCount === 0;
@@ -265,7 +265,7 @@ const mobileFadeStyle: CSSProperties = {
   right: 0,
   bottom: 0,
   width: 40,
-  background: 'linear-gradient(to right, transparent, #f5f0e8)',
+  background: 'linear-gradient(to right, transparent, var(--warm-cream))',
   pointerEvents: 'none',
   zIndex: 2,
 };
@@ -273,7 +273,7 @@ const mobileFadeStyle: CSSProperties = {
 const colHeaderStyle: CSSProperties = {
   fontSize: 10,
   fontVariant: 'small-caps',
-  color: '#8a8070',
+  color: 'var(--warm-ink-400)',
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   textAlign: 'center',
   padding: '8px 4px 6px',
@@ -291,7 +291,7 @@ const categoryLabelStyle: CSSProperties = {
   alignItems: 'center',
   fontSize: 9,
   fontVariant: 'small-caps',
-  color: '#8a8070',
+  color: 'var(--warm-ink-400)',
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   letterSpacing: '0.06em',
   whiteSpace: 'nowrap',
@@ -308,7 +308,7 @@ const circleRowStyle: CSSProperties = {
 const scrollHintStyle: CSSProperties = {
   marginTop: 10,
   fontSize: 10,
-  color: '#8a8070',
+  color: 'var(--warm-ink-400)',
   fontVariant: 'small-caps',
   letterSpacing: '0.06em',
   textAlign: 'center',

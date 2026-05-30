@@ -5,7 +5,6 @@ import type { ActivityItemView } from '@/server/db/queries/activity'
 type NewsRowCopy = {
   headline: React.ReactNode
   secondLine: string | null
-  accentColor: string
 }
 
 function actorName(item: ActivityItemView): string {
@@ -62,7 +61,6 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: domain,
-        accentColor: correct ? '#d97706' : '#a8a29e',
       }
     }
 
@@ -77,7 +75,6 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: domain,
-        accentColor: '#16a34a',
       }
     }
 
@@ -91,7 +88,6 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: mastery?.domain ?? null,
-        accentColor: '#ca8a04',
       }
     }
 
@@ -107,7 +103,6 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: label,
-        accentColor: '#ea580c',
       }
     }
 
@@ -119,7 +114,6 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: null,
-        accentColor: '#2563eb',
       }
 
     case 'question_curated':
@@ -130,7 +124,6 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: null,
-        accentColor: '#7c3aed',
       }
 
     case 'authored_question_shared': {
@@ -144,7 +137,6 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: shared?.domain ?? null,
-        accentColor: '#78716c',
       }
     }
 
@@ -152,7 +144,6 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
       return {
         headline: <>Something happened on Joshing</>,
         secondLine: null,
-        accentColor: '#78716c',
       }
   }
 }
@@ -164,11 +155,11 @@ export function NewsRow({ item }: { item: ActivityItemView }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] leading-[23px] tracking-[0.05em] text-black [&_b]:font-bold [&_b]:text-[var(--brand-link)]">
+        <p className="text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)] [&_b]:font-bold [&_b]:text-[var(--brand-link)]">
           {copy.headline}
         </p>
         {copy.secondLine ? (
-          <p className="mt-0.5 line-clamp-2 font-serif text-[14px] leading-[22px] tracking-[0.08em] text-black">
+          <p className="mt-0.5 line-clamp-2 font-serif text-[14px] leading-[22px] tracking-[0.08em] text-[var(--brand-ink)]">
             {copy.secondLine}
           </p>
         ) : null}
