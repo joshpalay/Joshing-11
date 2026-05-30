@@ -14,8 +14,16 @@ name: External crons (Hobby workaround)
 #   - Scheduled runs only fire once this file is on the default branch (main).
 #     Before then (or any time), use Actions > "External crons" > Run workflow.
 #
-# Mirrors the schedules in vercel.json. The routes are idempotent, so if a
-# Vercel Hobby cron also happens to fire, there is no double work.
+# The routes are idempotent, so if a Vercel Hobby cron also happens to fire,
+# there is no double work.
+#
+# REVERT NOTE (2026-05-30): /api/cron/daily-assignments was REMOVED from
+# vercel.json — it's the only cron that also sends SMS (NOT idempotent), so a
+# Hobby cron firing it alongside this workflow could double-text users. GitHub
+# Actions is now its sole scheduler; the other three crons remain in vercel.json
+# as fallback. To restore the Vercel scheduler for it, re-add to vercel.json
+# "crons":  { "path": "/api/cron/daily-assignments", "schedule": "5 17 * * *" }
+# and remove the '5 17 * * *' entry below to avoid duplicate runs/SMS.
 
 on:
   schedule:

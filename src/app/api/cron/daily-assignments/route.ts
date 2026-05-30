@@ -64,6 +64,14 @@ export async function GET(request: NextRequest) {
     generated: 0,
     existing: 0,
     failed: 0,
+    // Breakdown of `failed` by cause so a non-zero count is self-explaining:
+    //  - no_knowledge_base: benign — user hasn't declared interests yet, so
+    //    there's nothing to generate from (they're routed to /daily/setup, not 503).
+    //  - generation: the real failure mode — generation came up short / errored.
+    //  - other: an unexpected (non-DailyQueueFillError) exception.
+    failedNoKnowledgeBase: 0,
+    failedGeneration: 0,
+    failedOther: 0,
     smsSent: 0,
   };
 
@@ -90,16 +98,28 @@ export async function GET(request: NextRequest) {
         results.smsSent += 1;
       }
     } catch (error) {
+      results.failed += 1;
+
       if (error instanceof DailyQueueFillError) {
-        results.failed += 1;
+        if (error.code === 'no_knowledge_base') {
+          results.failedNoKnowledgeBase += 1;
+        } else {
+          results.failedGeneration += 1;
+        }
+        // Was previously swallowed silently; log the reason so a non-zero
+        // `failed` count is diagnosable from the logs as well as the response.
+        console.warn('[cron/daily-assignments] user skipped', {
+          userId: user.id,
+          code: error.code,
+        });
         return;
       }
 
+      results.failedOther += 1;
       console.error('[cron/daily-assignments] user failed', {
         userId: user.id,
         error: error instanceof Error ? error.message : String(error),
       });
-      results.failed += 1;
     }
   });
 
