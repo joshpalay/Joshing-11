@@ -78,7 +78,7 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
       <p className="mb-3 text-sm text-[var(--text-muted)]">
         Pick up to {maxSelect} questions from your bank to contribute.
         {selected.size > 0 && (
-          <span className="ml-2 font-mono text-xs uppercase text-[var(--accent)]">
+          <span className="ml-2 font-mono text-xs uppercase text-[var(--primary)]">
             {selected.size} selected
           </span>
         )}
@@ -89,7 +89,7 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
           <p className="text-sm text-[var(--text-muted)]">Your question bank is empty.</p>
           <Link
             href="/questions"
-            className="mt-2 inline-block font-mono text-xs uppercase text-[var(--accent)] hover:underline"
+            className="mt-2 inline-block font-mono text-xs uppercase text-[var(--primary)] hover:underline"
           >
             Add questions first
           </Link>
@@ -104,10 +104,10 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
                 <label
                   className={`flex cursor-pointer items-start gap-3 rounded border p-3 transition-colors ${
                     isSelected
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+                      ? 'border-[var(--primary)] bg-[var(--primary)]/5'
                       : isDisabled
                       ? 'cursor-not-allowed border-[var(--border)] bg-[var(--card-bg)] opacity-50'
-                      : 'border-[var(--border)] bg-[var(--card-bg)] hover:border-[var(--accent)]/50'
+                      : 'border-[var(--border)] bg-[var(--card-bg)] hover:border-[var(--primary)]/50'
                   }`}
                 >
                   <input
@@ -115,7 +115,7 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
                     checked={isSelected}
                     disabled={isDisabled}
                     onChange={() => toggle(q.id)}
-                    className="mt-0.5 shrink-0 accent-[var(--accent)]"
+                    className="mt-0.5 shrink-0 accent-[var(--primary)]"
                   />
                   <div className="min-w-0">
                     {q.short_label && (

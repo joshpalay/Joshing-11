@@ -97,6 +97,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
   const [error, setError] = useState<string | null>(null);
   const [pausingAfterAnswer, setPausingAfterAnswer] = useState(false);
   const nextQuestionTimerRef = useRef<number | null>(null);
+  const answerInputRef = useRef<HTMLInputElement | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const rows: ChatMessage[] = [{ id: 'intro', kind: 'system', text: game.game.title }];
     for (const response of game.responses.filter((item) => item.userId === viewerId)) {
@@ -158,6 +159,14 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
 
   const actualCurrentQuestion = orderedQuestions.find((question) => !answeredIds.has(question.questionId));
   const currentQuestion = pausingAfterAnswer ? undefined : actualCurrentQuestion;
+
+  // Return focus to the answer input whenever a fresh question becomes active
+  // (initial mount, and after each grading pause resolves). The input stays
+  // mounted-but-disabled during grading, so focus is never lost from the DOM —
+  // we just re-assert it when the field becomes editable again.
+  useEffect(() => {
+    if (currentQuestion && !pending) answerInputRef.current?.focus();
+  }, [currentQuestion?.questionId, pending]);
 
   async function submitAnswer() {
     if (!currentQuestion || !answer.trim() || pending) return;
@@ -347,30 +356,50 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
             </button>
           </div>
         ) : null}
-        {error ? <p className="mt-4 rounded-md border border-destructive p-3 text-sm text-destructive">{error}</p> : null}
       </section>
-      {currentQuestion ? (
+      {actualCurrentQuestion ? (
         <form
-          className="sticky bottom-0 flex gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur"
+          className="sticky bottom-0 border-t bg-background/95 px-4 py-3 backdrop-blur"
           onSubmit={(event) => {
             event.preventDefault();
             void submitAnswer();
           }}
         >
-          <input
-            value={answer}
-            onChange={(event) => setAnswer(event.target.value)}
-            disabled={pending}
-            placeholder="Your answer..."
-            className="min-h-11 flex-1 rounded-md border bg-background px-4 text-base outline-none"
-          />
-          <button
-            type="submit"
-            className="btn-primary font-serif text-base font-semibold"
-            disabled={pending || !answer.trim()}
-          >
-            {pending ? '...' : 'Answer'}
-          </button>
+          {error ? (
+            <p
+              role="alert"
+              aria-live="assertive"
+              className="mb-2 rounded-md border p-3 text-sm"
+              style={{ borderColor: 'var(--game-wrong-strong)', color: 'var(--game-wrong-strong)' }}
+            >
+              {error}
+            </p>
+          ) : null}
+          <div className="flex gap-2">
+            <label htmlFor="game-answer-input" className="sr-only">
+              Your answer
+            </label>
+            <input
+              id="game-answer-input"
+              ref={answerInputRef}
+              value={answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              disabled={pending || pausingAfterAnswer}
+              placeholder="Your answer..."
+              aria-label="Your answer"
+              autoComplete="off"
+              autoCapitalize="sentences"
+              enterKeyHint="send"
+              className="min-h-11 flex-1 rounded-md border bg-background px-4 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1"
+            />
+            <button
+              type="submit"
+              className="btn-primary font-serif text-base font-semibold"
+              disabled={pending || pausingAfterAnswer || !answer.trim()}
+            >
+              {pending ? '...' : 'Answer'}
+            </button>
+          </div>
         </form>
       ) : null}
     </main>

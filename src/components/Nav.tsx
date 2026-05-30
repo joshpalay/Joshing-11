@@ -130,7 +130,7 @@ export function Nav({
             {showBadge ? (
               <span
                 className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-white"
-                style={{ backgroundColor: 'var(--accent)' }}
+                style={{ backgroundColor: 'var(--destructive)' }}
                 aria-hidden="true"
               >
                 {badgeText}

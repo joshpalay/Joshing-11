@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-import { Button } from '@/components/ui/button'
-
 const MAX_NOTE_LENGTH = 160
 const COUNTER_VISIBLE_AT = 120
 
@@ -193,23 +191,22 @@ export function AddFriendRequestModal({
           <p className="text-destructive mt-2 text-sm">{error}</p>
         ) : null}
         <div className="mt-4 flex justify-end gap-2">
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
+            className="btn-ghost"
             onClick={onClose}
             disabled={sending}
           >
             Cancel
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            size="sm"
+            className="btn-primary"
             onClick={() => void send()}
             disabled={sending}
           >
             {sending ? 'Sending…' : 'Send'}
-          </Button>
+          </button>
         </div>
       </div>
     </>

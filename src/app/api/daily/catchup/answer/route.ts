@@ -226,6 +226,12 @@ async function handleDailyCatchupAnswer({
       reveal_canonical_answer: catchupItem.correctAnswer,
       reveal_explainer: catchupItem.explanation ?? '',
       reveal_quip: grade.consolation,
+      // Drop any breadcrumb persisted from the original (often wrong) live
+      // answer. This slot is being re-answered in catch-up, so the old
+      // breadcrumb no longer matches the submitted answer or verdict; leaving
+      // it would make /api/breadcrumb short-circuit on the stale value and
+      // render a correction for an answer the user never gave this turn.
+      reveal_breadcrumb: null,
       quip,
     } satisfies QueueSlot;
   });

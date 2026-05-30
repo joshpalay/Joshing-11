@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
 import { visibleFeedCategory } from './category'
+import { FeedActionLink } from './FeedActionLink'
 import type { FeedCardBaseItem } from './types'
 import { colorForCategory, colorForUser } from './visual'
 
@@ -153,13 +154,7 @@ export function FeedCard({
 
         {onAnswer ? (
           <div className="mt-3 flex justify-end">
-            <button
-              type="button"
-              onClick={onAnswer}
-              className="font-serif text-[18px] font-semibold tracking-[0.05em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70"
-            >
-              Answer →
-            </button>
+            <FeedActionLink onClick={onAnswer}>Answer →</FeedActionLink>
           </div>
         ) : footer ? (
           <div className="mt-3">{footer}</div>

@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
+import { FeedActionLink } from './FeedActionLink'
+
 type SparkleEnvelopeProps = {
   /** Attribution line — e.g. "<actor> thought you'd like this about <category>." */
   signal: ReactNode
@@ -56,13 +58,7 @@ export function SparkleEnvelope({
           </p>
 
           {onAnswer ? (
-            <button
-              type="button"
-              onClick={onAnswer}
-              className="font-serif text-[18px] font-semibold tracking-[0.05em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70"
-            >
-              {answerLabel}
-            </button>
+            <FeedActionLink onClick={onAnswer}>{answerLabel}</FeedActionLink>
           ) : null}
         </div>
       </div>

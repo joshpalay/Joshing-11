@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 
-import { Button } from '@/components/ui/button'
 import { AddFriendRequestModal } from '@/components/friends/AddFriendRequestModal'
 import type { RelationshipResult } from '@/server/db/queries/friend-requests'
 
@@ -100,82 +99,78 @@ export function AddFriendButton({
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2">
         {relationship.state === 'none' ? (
-          <Button
+          <button
             type="button"
-            size="sm"
+            className="btn-primary"
             onClick={handleAddClick}
             disabled={pendingAction !== null}
           >
             Add friend
-          </Button>
+          </button>
         ) : null}
 
         {relationship.state === 'pending_outbound' ? (
           <>
-            <Button type="button" size="sm" variant="secondary" disabled>
+            <button type="button" className="btn-ghost" disabled>
               Request sent
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              size="sm"
-              variant="ghost"
+              className="btn-ghost"
               onClick={handleCancel}
               disabled={pendingAction !== null}
             >
               {pendingAction === 'cancel' ? 'Cancelling…' : 'Cancel'}
-            </Button>
+            </button>
           </>
         ) : null}
 
         {relationship.state === 'pending_inbound' ? (
           <>
-            <Button
+            <button
               type="button"
-              size="sm"
+              className="btn-primary"
               onClick={handleAccept}
               disabled={pendingAction !== null}
             >
               {pendingAction === 'accept' ? 'Joining…' : 'Accept'}
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              size="sm"
-              variant="ghost"
+              className="btn-ghost"
               onClick={handleIgnore}
               disabled={pendingAction !== null}
             >
               {pendingAction === 'ignore' ? 'Setting aside…' : 'Not now'}
-            </Button>
+            </button>
           </>
         ) : null}
 
         {relationship.state === 'friends' ? (
           <>
-            <Button type="button" size="sm" variant="secondary" disabled>
+            <button type="button" className="btn-ghost" disabled>
               Friends ✓
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              size="sm"
-              variant="ghost"
+              className="btn-ghost"
               onClick={handleRemove}
               disabled={pendingAction !== null}
             >
               {pendingAction === 'remove' ? 'Removing…' : 'Unfriend'}
-            </Button>
+            </button>
           </>
         ) : null}
 
         {relationship.state === 'recently_sent' ? (
-          <Button
+          <button
             type="button"
-            size="sm"
-            variant="secondary"
+            className="btn-ghost"
             disabled
             title="You sent a request to this person in the last 30 days."
           >
             Recently sent
-          </Button>
+          </button>
         ) : null}
       </div>
 
