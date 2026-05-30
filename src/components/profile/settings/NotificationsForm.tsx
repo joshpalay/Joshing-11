@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { Switch } from '@/components/ui/Switch';
 import type { ReminderState } from '@/server/db/queries/account';
 
 type Props = {
@@ -89,21 +90,13 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
               when a new round opens.
             </p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={smsOn}
-            aria-disabled
+          <Switch
+            checked={smsOn}
+            onCheckedChange={() => {}}
+            label="SMS reminders"
             disabled
             title="SMS notifications are coming soon"
-            className="relative inline-flex h-7 w-12 flex-none cursor-not-allowed items-center rounded-full border bg-muted border-border opacity-60"
-          >
-            <span
-              className={`inline-block size-5 rounded-full bg-white shadow transition ${
-                smsOn ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
+          />
         </div>
       </section>
 
@@ -118,22 +111,12 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
             </p>
           </div>
           {hasVerifiedEmail ? (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={emailOn}
+            <Switch
+              checked={emailOn}
+              onCheckedChange={() => void toggleEmail()}
+              label="Email reminders"
               disabled={savingEmailToggle}
-              onClick={() => void toggleEmail()}
-              className={`relative inline-flex h-7 w-12 flex-none items-center rounded-full border transition ${
-                emailOn ? 'bg-emerald-500 border-emerald-500' : 'bg-muted border-border'
-              } ${savingEmailToggle ? 'opacity-60' : ''}`}
-            >
-              <span
-                className={`inline-block size-5 rounded-full bg-white shadow transition ${
-                  emailOn ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            />
           ) : null}
         </div>
 

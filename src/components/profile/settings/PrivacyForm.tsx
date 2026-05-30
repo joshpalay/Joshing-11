@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { Switch } from '@/components/ui/Switch';
 import type { DiscoverabilityState } from '@/server/db/queries/account';
 
 type Props = {
@@ -58,25 +59,12 @@ function ToggleRow({
           <h3 className="font-serif text-lg font-semibold">{title}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={checked}
-          aria-disabled={disabled || undefined}
+        <Switch
+          checked={checked}
+          onCheckedChange={() => onToggle?.()}
+          label={title}
           disabled={disabled || saving}
-          onClick={onToggle}
-          className={`relative inline-flex h-7 w-12 flex-none items-center rounded-full border transition ${
-            checked ? 'bg-emerald-500 border-emerald-500' : 'bg-muted border-border'
-          } ${disabled ? 'cursor-not-allowed opacity-60' : ''} ${
-            saving ? 'opacity-60' : ''
-          }`}
-        >
-          <span
-            className={`inline-block size-5 rounded-full bg-white shadow transition ${
-              checked ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
+        />
       </div>
     </section>
   );

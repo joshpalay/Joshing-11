@@ -3,7 +3,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import { visibleFeedCategory } from './category'
 
 type AnswerSheetProps = {
@@ -91,13 +90,13 @@ export function AnswerSheet({
             autoComplete="off"
             className="w-full min-h-11 rounded-xl border border-stone-300 bg-stone-50 px-4 text-base outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200 disabled:opacity-60"
           />
-          <Button
+          <button
             type="submit"
             disabled={loading || !value.trim()}
-            className="mt-3 w-full bg-stone-950 text-white hover:bg-stone-800 disabled:opacity-40"
+            className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-stone-950 px-4 text-sm font-medium text-white transition hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
           >
             {loading ? 'Submitting…' : 'Submit answer'}
-          </Button>
+          </button>
         </form>
       </div>
     </div>
