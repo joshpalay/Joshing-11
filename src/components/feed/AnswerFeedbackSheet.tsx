@@ -167,28 +167,11 @@ export function AnswerFeedbackSheet({
             ) : null}
           </div>
 
-          {showNewTerritory ? (
-            <div className="mb-3 flex items-start gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3">
-              <span
-                className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700"
-                aria-hidden
-              >
-                <Sparkles className="size-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="font-serif text-[15px] leading-snug font-semibold text-amber-900">
-                  You opened new territory
-                  {visibleCategory ? <> in {visibleCategory}</> : null}.
-                </p>
-                <p className="mt-0.5 text-[12px] text-amber-800/80">
-                  First time you&rsquo;ve gotten a question right here. It&rsquo;s on your map now.
-                </p>
-              </div>
-            </div>
-          ) : null}
-
           {showAddToDailyFive && openedTerritoryDomain ? (
-            <AddToDailyFivePrompt domain={openedTerritoryDomain} />
+            <AddToDailyFivePrompt
+              domain={openedTerritoryDomain}
+              category={visibleCategory}
+            />
           ) : null}
 
           <p className="pb-3 font-serif text-lg leading-7 text-stone-950">
