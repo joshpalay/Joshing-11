@@ -29,12 +29,20 @@ function asQueueSlots(value: unknown): QueueSlot[] {
 // pushing the request past the route's maxDuration.
 const TOP_UP_TIME_BUDGET_MS = 30_000;
 
-// NOTE: do NOT over-request the generation count to absorb the gate drop rate.
-// The generator caps output at 2000 tokens; asking for more than ~DAILY_QUEUE_SIZE
-// questions overflows that budget, truncates the JSON, and yields ZERO parseable
-// questions (and the larger response flirts with the 35s GENERATION_TIMEOUT_MS).
-// Request the actual gap and let the graceful-degrade below persist whatever
-// survives the gates — a short queue beats an empty one.
+// The generator's quality/factual/history-dedup gates routinely drop ~half (and
+// for some niche or deep-history domains far more) of each batch. Requesting
+// exactly the gap therefore lands short. Ask for a multiple so enough survive
+// the gates; excess survivors are trimmed to DAILY_QUEUE_SIZE downstream.
+//
+// Over-requesting is only safe because generateDailyQuestionsFromKnowledgeBase
+// now splits the request into GENERATION_CHUNK_SIZE-capped PARALLEL Sonnet calls
+// — each reply stays well under the generator's 2000-token cap, so a large count
+// no longer truncates the JSON to zero (the 2026-05-30 over-provision regression)
+// and total latency stays at one chunk. The graceful-degrade below still backstops
+// any residual shortfall.
+const GENERATION_OVERPROVISION = 2;
+const overRequest = (needed: number) =>
+  Math.min(needed * GENERATION_OVERPROVISION, DAILY_QUEUE_SIZE * 2);
 
 export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const startedAt = Date.now();
@@ -86,7 +94,7 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
 
   const remaining = DAILY_QUEUE_SIZE - authored.length;
   const generated = remaining > 0
-    ? await generateDailyQuestionsFromKnowledgeBase(userId, remaining)
+    ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining))
     : [];
 
   // Cross-source dedup by normalized question text. The authored picker
@@ -130,7 +138,7 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const topUpGenerated: typeof dedupedGenerated = [];
   const shortfall = DAILY_QUEUE_SIZE - (authored.length + dedupedGenerated.length);
   if (shortfall > 0 && Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS) {
-    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, shortfall);
+    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(shortfall));
     for (const question of extra) {
       const key = normalize(question.questionText);
       if (seenTexts.has(key)) continue;
