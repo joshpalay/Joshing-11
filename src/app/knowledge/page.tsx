@@ -597,20 +597,21 @@ function KnowledgePageContent() {
       </section>
 
       {dismissedDomains.length > 0 && (
-        <section id="focused-feed" className="bg-white border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Dismissed domains">
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">FOCUSED FEED</p>
-          <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — RE-OPEN ANY TIME</p>
+        <section id="focused-feed" className="bg-white border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Hidden areas">
+          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">HIDDEN AREAS</p>
+          <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — UN-HIDE ANY TIME</p>
           <div className="mt-3 flex flex-col gap-2">
             {dismissedDomains.map((domain) => (
               <div key={domain} className="flex items-center justify-between gap-2">
                 <span className="text-sm">{domain}</span>
                 <button
                   type="button"
-                  className="mt-2 border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]"
+                  className="border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]"
                   onClick={() => void reinstateDomain(domain)}
                   disabled={reinstating === domain}
+                  aria-label={`Un-hide ${domain} in your feed`}
                 >
-                  {reinstating === domain ? 'Reopening...' : `Re-open ${domain} in your Feed`}
+                  {reinstating === domain ? 'Un-hiding…' : 'Un-hide'}
                 </button>
               </div>
             ))}
