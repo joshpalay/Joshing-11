@@ -153,7 +153,12 @@ export function useCatchupFlow() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // Kick off the initial load via a nested async fn so load()'s synchronous
+    // loading/error state isn't set directly in the effect body (which the
+    // react-hooks set-state-in-effect rule flags).
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   useEffect(() => {

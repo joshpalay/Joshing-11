@@ -37,19 +37,19 @@ export type PortraitState = 'empty' | 'sparse' | 'developing' | 'rich';
 export async function getPortraitData(userId: string): Promise<PortraitResponse> {
   // TODO Phase 8: port to Drizzle when friend profiles are built
   void userId;
-  return null as any;
+  return null as unknown as PortraitResponse;
 }
 
 export async function getMasteryData(userId: string): Promise<MasteryRow[]> {
   // TODO Phase 8: port to Drizzle when friend profiles are built
   void userId;
-  return null as any;
+  return null as unknown as MasteryRow[];
 }
 
 export async function getLatestRoundIdForUser(userId: string): Promise<string | null> {
   // TODO Phase 8: port to Drizzle when friend profiles are built
   void userId;
-  return null as any;
+  return null;
 }
 
 export function getPortraitState(categoryCount: number): PortraitState {

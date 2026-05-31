@@ -76,6 +76,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState<string | null>(initialInviteUrl);
   const [rotating, setRotating] = useState(false);
+  const [confirmingRotate, setConfirmingRotate] = useState(false);
   const [inviteToast, setInviteToast] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
@@ -98,10 +99,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
 
   async function rotateInviteUrl() {
     if (rotating) return;
-    const confirmed = window.confirm(
-      'Rotate your invite link? The old link will stop working immediately.',
-    );
-    if (!confirmed) return;
+    setConfirmingRotate(false);
     setRotating(true);
     setInviteError(null);
     try {
@@ -205,14 +203,34 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
             >
               Copy
             </button>
-            <button
-              type="button"
-              onClick={() => void rotateInviteUrl()}
-              disabled={rotating}
-              className="btn-ghost min-h-9 rounded-full px-4 text-sm"
-            >
-              {rotating ? 'Rotating…' : 'Rotate link'}
-            </button>
+            {confirmingRotate ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void rotateInviteUrl()}
+                  disabled={rotating}
+                  className="btn-danger min-h-9 rounded-full px-4 text-sm"
+                >
+                  {rotating ? 'Rotating…' : 'Rotate — old link stops working'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingRotate(false)}
+                  disabled={rotating}
+                  className="btn-ghost min-h-9 rounded-full px-4 text-sm"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingRotate(true)}
+                className="btn-ghost min-h-9 rounded-full px-4 text-sm"
+              >
+                Rotate link
+              </button>
+            )}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             Rotating invalidates the old link. Use this if you accidentally shared it broadly.

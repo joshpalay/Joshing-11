@@ -28,7 +28,15 @@ export function AddToBankAction({
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  useEffect(() => setInBank(initialInBank), [initialInBank]);
+  // Re-sync local state when the prop changes, without an effect (react-hooks's
+  // set-state-in-effect flags synchronous setState in effects). Adjusting during
+  // render via a stored previous value is the React-docs pattern for this.
+  const [prevInitialInBank, setPrevInitialInBank] = useState(initialInBank);
+  if (initialInBank !== prevInitialInBank) {
+    setPrevInitialInBank(initialInBank);
+    setInBank(initialInBank);
+  }
+
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 1800);

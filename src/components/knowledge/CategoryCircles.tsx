@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
+import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import type { MasteryTier } from '@/types/db';
 
@@ -146,15 +147,11 @@ export function KnowledgeCircle({
         flexShrink: 0,
       }}
     >
-      <div
-        style={{
-          width: displaySize,
-          height: displaySize,
-          borderRadius: '50%',
-          background: `radial-gradient(circle at 38% 38%, ${dc.light.replace('0.12', '0.22')}, ${dc.light})`,
-          opacity,
-          transition: animate ? undefined : 'none',
-        }}
+      <KnowledgeBubble
+        diameter={displaySize}
+        light={dc.light}
+        opacity={opacity}
+        style={{ transition: animate ? undefined : 'none' }}
       />
     </div>
   );

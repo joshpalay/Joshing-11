@@ -4,6 +4,7 @@ import {
 } from '@/components/icons/domain-icons'
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
+import { KnowledgeBubble, domainBubbleGradient } from '@/components/knowledge/KnowledgeBubble'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import type { MasteryTier } from '@/types/db'
 import type { CSSProperties } from 'react'
@@ -54,7 +55,7 @@ export function DomainCircle({
     ? getPortraitDomainColor(normalizedCategory)
     : null
   const circleBackground = domainColor
-    ? `radial-gradient(circle at 38% 38%, ${domainColor.light.replace('0.12', '0.22')}, ${domainColor.light})`
+    ? domainBubbleGradient(domainColor.light)
     : territoryType === 'declared'
       ? 'rgba(245, 240, 232, 0.3)'
       : '#f5f0e8'
@@ -81,17 +82,11 @@ export function DomainCircle({
             height: `${resolvedCircleSlotSize}px`,
           }}
         >
-          <div
-            style={{
-              width: `${diameter}px`,
-              height: `${diameter}px`,
-              borderRadius: '999px',
-              border: '1px dashed #c8c0b0',
-              background: 'transparent',
-              display: 'grid',
-              placeItems: 'center',
-              opacity: 0.5,
-            }}
+          <KnowledgeBubble
+            diameter={diameter}
+            background="transparent"
+            border="1px dashed #c8c0b0"
+            opacity={0.5}
           >
             {Icon ? (
               <Icon size={iconSize} color="#0a1f3d" />
@@ -102,7 +97,7 @@ export function DomainCircle({
                 label={canonicalSubcategory}
               />
             )}
-          </div>
+          </KnowledgeBubble>
         </div>
         <p style={{ ...nameStyle, opacity: 0.3 }}>{canonicalSubcategory}</p>
       </div>
@@ -127,15 +122,11 @@ export function DomainCircle({
           height: `${resolvedCircleSlotSize}px`,
         }}
       >
-        <div
+        <KnowledgeBubble
+          diameter={diameter}
+          background={circleBackground}
+          border={`1px solid ${circleBorder}`}
           style={{
-            width: `${diameter}px`,
-            height: `${diameter}px`,
-            borderRadius: '999px',
-            border: `1px solid ${circleBorder}`,
-            background: circleBackground,
-            display: 'grid',
-            placeItems: 'center',
             transition: 'border-color 300ms ease, box-shadow 300ms ease',
             boxShadow: highlighted ? '0 0 8px #f0c060' : undefined,
           }}
@@ -149,7 +140,7 @@ export function DomainCircle({
               label={canonicalSubcategory}
             />
           )}
-        </div>
+        </KnowledgeBubble>
       </div>
       <p style={nameStyle}>{canonicalSubcategory}</p>
       {showTierLabel && currentTier && (

@@ -116,13 +116,17 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
   },
 );
 
-const INK = '#1a1208';
-const INK_MUTED = '#766d5f';
-const CREAM = '#f5f0e8';
-const PAPER = '#fffaf1';
-const RULE = '#e1d7c8';
-const MONO = "'Courier New', monospace";
-const SERIF = "Georgia, 'Times New Roman', serif";
+// Live DOM (not rasterized — rendered on the public /share/ceremony/[token] page
+// and the in-app ceremony review), so this references brand tokens and re-themes.
+// The receipt aesthetic is preserved via the warm-ink ramp + brand cream surfaces.
+// INK's old literal (#1a1208) was already exactly the --warm-ink token value.
+const INK = 'var(--warm-ink)';
+const INK_MUTED = 'var(--warm-ink-500)';
+const CREAM = 'var(--brand-cream-card)';
+const PAPER = 'var(--brand-card)';
+const RULE = 'var(--brand-border)';
+const MONO = 'var(--font-mono)';
+const SERIF = "var(--font-cormorant), Georgia, 'Times New Roman', serif";
 
 const cardStyle: CSSProperties = {
   background: `linear-gradient(180deg, ${PAPER} 0%, ${CREAM} 100%)`,

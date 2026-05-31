@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import {
   AnsweredByYouCard,
   DirectSentCard,
+  FeedCardShell,
   FeedOverflowMenu,
   FriendAddedCard,
   FriendAnsweredCard,
@@ -329,6 +330,53 @@ describe('Authored-by-viewer card', () => {
       />
     )
     expect(rendered).not.toContain('Answer →')
+  })
+})
+
+describe('FeedCardShell (shared C7 shell)', () => {
+  it('renders a top accent bar by default', () => {
+    const rendered = html(
+      <FeedCardShell accentColor="#abc123">
+        <p>body</p>
+      </FeedCardShell>
+    )
+    expect(rendered).toContain('inset-x-0 top-0 h-[2px]')
+    expect(rendered).not.toContain('w-[2px]')
+    expect(rendered).toContain('background-color:#abc123')
+    expect(rendered).toContain('border-[var(--brand-rule)]')
+    expect(rendered).toContain('bg-[var(--brand-card)]')
+  })
+
+  it('moves the accent bar to the left edge when requested', () => {
+    const rendered = html(
+      <FeedCardShell accentColor="#abc123" accentPlacement="left">
+        <p>body</p>
+      </FeedCardShell>
+    )
+    expect(rendered).toContain('inset-y-0 left-0 w-[2px]')
+    expect(rendered).not.toContain('h-[2px]')
+  })
+
+  it('omits the accent bar entirely when no color is given', () => {
+    const rendered = html(
+      <FeedCardShell>
+        <p>body</p>
+      </FeedCardShell>
+    )
+    expect(rendered).not.toContain('h-[2px]')
+    expect(rendered).not.toContain('w-[2px]')
+  })
+
+  it('renders the triangle mat variant with an inset brand-card panel', () => {
+    const rendered = html(
+      <FeedCardShell variant="triangle">
+        <p>body</p>
+      </FeedCardShell>
+    )
+    expect(rendered).toContain('/images/Variant4.png')
+    expect(rendered).toContain('bg-[var(--brand-card)]')
+    // triangle mat has no hairline border (the mat itself is the frame)
+    expect(rendered).not.toContain('border-[var(--brand-rule)]')
   })
 })
 

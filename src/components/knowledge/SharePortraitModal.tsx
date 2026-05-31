@@ -4,14 +4,6 @@ import { useRef, useState, useCallback, useEffect, type CSSProperties } from 're
 import type { PortraitEntry } from '@/components/knowledge/PortraitCircles';
 import { SharePortraitCard } from '@/components/knowledge/SharePortraitCard';
 
-// ── Design tokens ──────────────────────────────────────────────────────────────
-
-const INK = '#0e0e0e';
-const INK2 = '#3a3a3a';
-const INK3 = '#8a8a8a';
-const CREAM = '#faf8f2';
-const FM = "'Courier New', monospace";
-
 const PLAYFAIR_URL =
   'https://fonts.gstatic.com/s/playfairdisplay/v37/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKdFvXDXbtY.woff2';
 
@@ -157,7 +149,7 @@ export function SharePortraitModal({
             type="button"
             onClick={handleDownload}
             disabled={isCapturing}
-            style={primaryButtonStyle}
+            className="btn-primary px-8"
           >
             {isCapturing ? 'Saving…' : 'Download'}
           </button>
@@ -167,7 +159,7 @@ export function SharePortraitModal({
               type="button"
               onClick={handleShare}
               disabled={isCapturing}
-              style={primaryButtonStyle}
+              className="btn-primary px-8"
             >
               {isCapturing ? 'Sharing…' : 'Share'}
             </button>
@@ -177,7 +169,7 @@ export function SharePortraitModal({
             type="button"
             onClick={onClose}
             disabled={isCapturing}
-            style={cancelButtonStyle}
+            className="btn-ghost px-6"
           >
             Cancel
           </button>
@@ -220,35 +212,10 @@ const buttonRowStyle: CSSProperties = {
   justifyContent: 'center',
 };
 
-const primaryButtonStyle: CSSProperties = {
-  padding: '11px 32px',
-  border: `1.5px solid ${INK}`,
-  backgroundColor: INK,
-  color: CREAM,
-  fontSize: 12,
-  fontFamily: FM,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
-  cursor: 'pointer',
-  boxShadow: `2px 2px 0 ${INK2}`,
-};
-
-const cancelButtonStyle: CSSProperties = {
-  padding: '11px 24px',
-  border: `1.5px solid ${INK3}`,
-  backgroundColor: 'transparent',
-  color: INK3,
-  fontSize: 12,
-  fontFamily: FM,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
-  cursor: 'pointer',
-};
-
 const errorStyle: CSSProperties = {
   fontSize: 11,
-  fontFamily: FM,
-  color: INK3,
+  fontFamily: 'var(--font-mono)',
+  color: 'var(--destructive)',
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
 };

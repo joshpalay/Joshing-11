@@ -129,7 +129,7 @@ export function Nav({
             <Bell className="size-5" strokeWidth={1.9} />
             {showBadge ? (
               <span
-                className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-white"
+                className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
                 style={{ backgroundColor: 'var(--destructive)' }}
                 aria-hidden="true"
               >
@@ -175,7 +175,10 @@ export function Nav({
                 role="listitem"
                 className={[
                   'flex min-h-14 flex-col items-center justify-center gap-1 py-2 transition',
-                  active ? 'text-foreground opacity-100' : 'text-foreground/55 hover:text-foreground',
+                  // Inactive tabs use a legible secondary navy (--brand-ink-700,
+                  // ~7:1 on cream) rather than the old text-foreground/55, which
+                  // dimmed to ~2.5:1 and failed AA.
+                  active ? 'text-foreground' : 'text-[var(--brand-ink-700)] hover:text-foreground',
                 ].join(' ')}
               >
                 <span aria-hidden="true" className="relative grid place-items-center">
@@ -199,7 +202,7 @@ export function Nav({
                 </span>
                 <span
                   className={[
-                    'font-mono text-[9px] uppercase tracking-[0.08em]',
+                    'font-mono text-[10px] uppercase tracking-[0.06em]',
                     active ? 'font-semibold' : 'font-medium',
                   ].join(' ')}
                 >

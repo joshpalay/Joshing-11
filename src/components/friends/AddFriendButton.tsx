@@ -12,9 +12,8 @@ type Props = {
   // Called after a successful add / cancel / accept / ignore / remove so
   // the parent can refresh its data (router.refresh() or refetch).
   onChange?: () => void
-  // If true, confirm Unfriend via window.confirm (the existing
-  // ProfileFriendButton behavior we want to preserve when this component
-  // is used on profile pages). Defaults to true.
+  // If true, Unfriend asks for inline confirmation (a Remove/Keep step in the
+  // app's own button language) before removing. Defaults to true.
   confirmUnfriend?: boolean
 }
 
@@ -31,6 +30,7 @@ export function AddFriendButton({
   const [modalOpen, setModalOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
 
   useEffect(() => {
     if (!toast) return
@@ -89,9 +89,17 @@ export function AddFriendButton({
   function handleRemove() {
     if (!relationship.friendshipId) return
     if (confirmUnfriend) {
-      const confirmed = window.confirm(`Remove ${targetDisplayName} from your friends?`)
-      if (!confirmed) return
+      // Swap the Unfriend button for an inline Remove/Keep confirmation rather
+      // than punching out to native window.confirm chrome.
+      setConfirmingRemove(true)
+      return
     }
+    void runAction('remove', relationship.friendshipId, 'Removed.')
+  }
+
+  function confirmRemove() {
+    if (!relationship.friendshipId) return
+    setConfirmingRemove(false)
     void runAction('remove', relationship.friendshipId, 'Removed.')
   }
 
@@ -147,19 +155,47 @@ export function AddFriendButton({
         ) : null}
 
         {relationship.state === 'friends' ? (
-          <>
-            <button type="button" className="btn-ghost" disabled>
-              Friends ✓
-            </button>
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={handleRemove}
-              disabled={pendingAction !== null}
+          confirmingRemove ? (
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="group"
+              aria-label={`Remove ${targetDisplayName} from your friends?`}
             >
-              {pendingAction === 'remove' ? 'Removing…' : 'Unfriend'}
-            </button>
-          </>
+              <span className="text-sm text-foreground">
+                Remove {targetDisplayName}?
+              </span>
+              <button
+                type="button"
+                className="btn-danger"
+                onClick={confirmRemove}
+                disabled={pendingAction !== null}
+              >
+                {pendingAction === 'remove' ? 'Removing…' : 'Remove'}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setConfirmingRemove(false)}
+                disabled={pendingAction !== null}
+              >
+                Keep
+              </button>
+            </div>
+          ) : (
+            <>
+              <button type="button" className="btn-ghost" disabled>
+                Friends ✓
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={handleRemove}
+                disabled={pendingAction !== null}
+              >
+                Unfriend
+              </button>
+            </>
+          )
         ) : null}
 
         {relationship.state === 'recently_sent' ? (

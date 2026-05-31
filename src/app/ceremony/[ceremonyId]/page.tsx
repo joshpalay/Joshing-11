@@ -261,7 +261,7 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
       </p>
       {beat.content.topQuestion ? (
         <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-stone-300">
-          Your most-played: "{beat.content.topQuestion.text}"
+          Your most-played: &ldquo;{beat.content.topQuestion.text}&rdquo;
         </p>
       ) : null}
     </div>
@@ -364,7 +364,7 @@ export default function CeremonyPage() {
       <div className="relative z-10 w-full">
         {isEnd ? (
           <div className="mx-auto max-w-2xl text-center">
-            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">That's your week.</h1>
+            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">That&rsquo;s your week.</h1>
             <p className="mt-8 text-lg text-stone-200 sm:text-xl">See you next Sunday.</p>
             <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
               <button
