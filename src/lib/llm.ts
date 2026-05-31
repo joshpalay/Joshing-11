@@ -219,15 +219,19 @@ export async function loggedMessagesCreate(
     const response = await client.messages.create(params, {
       signal: AbortSignal.timeout(timeoutMs),
     });
+    // Telemetry is a side effect — never let a missing/partial usage block
+    // throw and convert a successful LLM call into a caught failure (which then
+    // silently degrades callers to their fallback path). Real non-streaming
+    // responses always include usage; guarding keeps logging robust.
     const usage = response.usage;
     console.info('[llm]', {
       scope,
       model: params.model,
       duration_ms: Date.now() - startedAt,
-      input_tokens: usage.input_tokens,
-      output_tokens: usage.output_tokens,
-      cache_read_tokens: usage.cache_read_input_tokens ?? 0,
-      cache_create_tokens: usage.cache_creation_input_tokens ?? 0,
+      input_tokens: usage?.input_tokens ?? 0,
+      output_tokens: usage?.output_tokens ?? 0,
+      cache_read_tokens: usage?.cache_read_input_tokens ?? 0,
+      cache_create_tokens: usage?.cache_creation_input_tokens ?? 0,
     });
     return response;
   } catch (error) {
