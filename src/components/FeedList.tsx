@@ -494,7 +494,7 @@ function FeedListContent({
   // initialPage is only valid for the 'all' filter (that's what the server
   // pre-fetches). If the URL pins a different filter, fall back to client fetch.
   const initialPageMatchesFilter = initialPage !== null && initialFilter === 'all'
-  const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
+  const [feedFilter] = useState<FeedFilter>(initialFilter)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const [items, setItems] = useState<FeedApiItem[]>(
     initialPageMatchesFilter ? initialPage!.items : []
@@ -927,32 +927,8 @@ function FeedListContent({
     []
   )
 
-  const filterOptions: Array<{ value: FeedFilter; label: string }> = [
-    { value: 'all', label: 'All' },
-    { value: 'sent-to-me', label: 'Sent to me' },
-    { value: 'from-friends', label: 'From friends' },
-  ]
-
   return (
     <>
-      <nav className="mb-4 flex flex-wrap gap-2" aria-label="Feed filters">
-        {filterOptions.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setFeedFilter(option.value)}
-            aria-current={feedFilter === option.value ? 'page' : undefined}
-            className={
-              feedFilter === option.value
-                ? 'inline-flex min-h-11 items-center rounded-full bg-[var(--brand-navy)] px-4 text-sm font-medium text-[var(--primary-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-                : 'inline-flex min-h-11 items-center rounded-full border bg-[var(--brand-card)] px-4 text-sm font-medium text-[var(--brand-ink-700)] transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-            }
-          >
-            {option.label}
-          </button>
-        ))}
-      </nav>
-
       {hideToast ? (
         <div
           role="status"
@@ -998,7 +974,7 @@ function FeedListContent({
         <section className="space-y-3 pb-8">
           {groupItemsByRecency(items).map((group) => (
             <Fragment key={group.key}>
-              <h2 className="text-muted-foreground pt-4 text-xs font-semibold tracking-[0.18em] uppercase first:pt-0">
+              <h2 className="text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0">
                 {group.label}
               </h2>
               {group.items.map((item) => {
