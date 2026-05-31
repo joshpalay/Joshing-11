@@ -48,7 +48,7 @@ export default async function CeremonySharePage({ params }: { params: Promise<{ 
 
         <section className="w-full space-y-4 text-center">
           <details className="rounded-md border border-stone-700 bg-stone-900/70 px-4 py-3 text-left">
-            <summary className="cursor-pointer text-sm font-medium text-stone-100">What's this?</summary>
+            <summary className="cursor-pointer text-sm font-medium text-stone-100">What&rsquo;s this?</summary>
             <p className="mt-3 text-sm leading-6 text-stone-300">
               Joshing is a private knowledge game with friends. Every week, it turns what you learned,
               wrote, and shared into a small reflection.

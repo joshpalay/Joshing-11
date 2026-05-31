@@ -77,7 +77,11 @@ export default function ReplayPage() {
   }, [loadBatch]);
 
   useEffect(() => {
-    void initialLoad();
+    // Nested async fn so initialLoad()'s synchronous loading/error state isn't
+    // set directly in the effect body (react-hooks set-state-in-effect).
+    void (async () => {
+      await initialLoad();
+    })();
   }, [initialLoad]);
 
   useEffect(() => {
