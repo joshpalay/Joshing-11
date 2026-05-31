@@ -18,7 +18,7 @@ import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interes
 import { pgErrorCode } from '@/server/db/pg-error';
 import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
 import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
-import type { QueueSlot } from '@/server/daily/types';
+import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import {
   catchUpExpiresAt,
   expiresWithin24Hours,
@@ -334,7 +334,13 @@ export async function carryForwardUntouchedDailyQueue(userId: string): Promise<b
   if (!prior) return false;
 
   const priorSlots = asQueueSlots(prior.slots);
-  if (priorSlots.length === 0) return false;
+  // Only carry forward a *full* untouched queue. A short prior queue (a low-yield
+  // or transiently-failed generation day) must be allowed to regenerate — rolling
+  // it forward freezes the shortfall, so a one-off bad day (e.g. the 2026-05-29
+  // over-provision truncation that yielded 3) gives the user the same partial set
+  // every day until they happen to play it. Re-dating is purely a cost saver for
+  // absent users; a fresh generation for a short queue is the right trade.
+  if (priorSlots.length < DAILY_QUEUE_SIZE) return false;
   if (priorSlots.some((slot) => slot.answered || slot.skipped)) return false;
 
   // Clear any empty/partial today-row first so the unique (user, queue_date)
@@ -356,6 +362,39 @@ export async function carryForwardUntouchedDailyQueue(userId: string): Promise<b
     if (pgErrorCode(error) === '23505') return false;
     throw error;
   }
+}
+
+/**
+ * If today's queue is a SHORT, UNTOUCHED set that was carried over from a prior
+ * day, delete it so the caller can regenerate a fresh, full set. Returns true
+ * when it cleared one.
+ *
+ * carryForwardUntouchedDailyQueue re-dates a prior unplayed queue onto today but
+ * leaves createdAt untouched, so a carried queue's createdAt predates today's
+ * assignment window. A short queue *built today* (createdAt within the window)
+ * is graceful-degrade for a genuinely low-yield day and is left intact —
+ * regenerating it on every page load would re-bill the LLM. Only a carried-over
+ * shortfall is stale: without this, a one-off bad generation day (e.g. the
+ * 2026-05-29 over-provision truncation that yielded 3) freezes the user's Daily
+ * Five short and rolls forward unchanged until they happen to play it.
+ */
+export async function clearStaleShortTodayQueue(userId: string): Promise<boolean> {
+  const today = await getTodaysDailyQueue(userId);
+  if (!today) return false;
+
+  const slots = asQueueSlots(today.slots);
+  if (slots.length === 0 || slots.length >= DAILY_QUEUE_SIZE) return false;
+  if (slots.some((slot) => slot.answered || slot.skipped)) return false;
+
+  // assignmentDate is the UTC calendar date of the current window's start. A row
+  // physically created during this window (createdAt >= assignmentDate) was built
+  // for today — keep it even if short. A carried-forward queue keeps its original,
+  // earlier createdAt, so it falls before assignmentDate and is cleared.
+  const { assignmentDate } = getDailyAssignmentBounds();
+  if (today.createdAt >= assignmentDate) return false; // built for today — keep it
+
+  await db.delete(dailyQueues).where(eq(dailyQueues.id, today.id));
+  return true;
 }
 
 export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
