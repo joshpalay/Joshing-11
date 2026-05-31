@@ -209,6 +209,45 @@ describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
     expect(rendered).toContain('Undo')
     expect(rendered).not.toContain('Not into')
   })
+
+  it('reveals the answer on the card back when loaded', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category="Roman aqueducts"
+        answer="Pont du Gard"
+        answerLoading={false}
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismissed')
+    expect(rendered).toContain('Pont du Gard')
+  })
+
+  it('shows a loading state while the answer is being fetched', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category={null}
+        answerLoading
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Revealing answer')
+  })
+
+  it('falls back to an unavailable message when the answer fetch errors', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category={null}
+        answerError
+        answerLoading={false}
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Answer unavailable')
+  })
 })
 
 describe('Feed answered states', () => {
