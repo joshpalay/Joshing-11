@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
 
+import { cn } from '@/lib/utils'
+
 import { FeedActionLink } from './FeedActionLink'
 import { FeedCardShell } from './FeedCardShell'
+import { FeedDismissButton } from './FeedDismissButton'
 
 type SparkleEnvelopeProps = {
   /** Attribution line — e.g. "<actor> thought you'd like this about <category>." */
@@ -9,6 +12,8 @@ type SparkleEnvelopeProps = {
   question: string
   overflow?: ReactNode
   onAnswer?: () => void
+  /** Quiet, secondary dismiss control (bottom-left, opposite Answer). View-state only. */
+  onDismiss?: () => void
   answerLabel?: string
   className?: string
 }
@@ -25,6 +30,7 @@ export function SparkleEnvelope({
   question,
   overflow,
   onAnswer,
+  onDismiss,
   answerLabel = 'Answer →',
   className,
 }: SparkleEnvelopeProps) {
@@ -51,8 +57,18 @@ export function SparkleEnvelope({
             </span>
           </p>
 
-          {onAnswer ? (
-            <FeedActionLink onClick={onAnswer}>{answerLabel}</FeedActionLink>
+          {onAnswer || onDismiss ? (
+            <div
+              className={cn(
+                'flex w-full items-center gap-3',
+                onDismiss ? 'justify-between' : 'justify-end',
+              )}
+            >
+              {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
+              {onAnswer ? (
+                <FeedActionLink onClick={onAnswer}>{answerLabel}</FeedActionLink>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>

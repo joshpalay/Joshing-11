@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { visibleFeedCategory } from './category'
 import { FeedActionLink } from './FeedActionLink'
 import { FeedCardShell } from './FeedCardShell'
+import { FeedDismissButton } from './FeedDismissButton'
 import type { FeedCardBaseItem } from './types'
 import { colorForCategory, colorForUser } from './visual'
 
@@ -13,6 +14,8 @@ type FeedCardProps = {
   item: FeedCardBaseItem
   overflow?: ReactNode
   onAnswer?: () => void
+  /** Quiet, secondary dismiss control (bottom-left, opposite Answer). View-state only. */
+  onDismiss?: () => void
   footer?: ReactNode
   className?: string
   headerContent?: ReactNode
@@ -54,6 +57,7 @@ export function FeedCard({
   item,
   overflow,
   onAnswer,
+  onDismiss,
   footer,
   className,
   headerContent,
@@ -138,7 +142,13 @@ export function FeedCard({
         ) : null}
 
         {onAnswer ? (
-          <div className="mt-3 flex justify-end">
+          <div
+            className={cn(
+              'mt-3 flex items-center gap-3',
+              onDismiss ? 'justify-between' : 'justify-end',
+            )}
+          >
+            {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
             <FeedActionLink onClick={onAnswer}>Answer →</FeedActionLink>
           </div>
         ) : footer ? (

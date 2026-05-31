@@ -9,9 +9,10 @@ type DirectSentCardProps = {
   item: DirectSentFeedItem
   overflow?: ReactNode
   onAnswer?: () => void
+  onDismiss?: () => void
 }
 
-export function DirectSentCard({ item, overflow, onAnswer }: DirectSentCardProps) {
+export function DirectSentCard({ item, overflow, onAnswer, onDismiss }: DirectSentCardProps) {
   const visibleCategory = visibleFeedCategory(item.category)
   const senderName = item.senderName || item.avatarName || 'A friend'
   const senderHref = item.senderHref ?? item.authorHref ?? null
@@ -43,6 +44,7 @@ export function DirectSentCard({ item, overflow, onAnswer }: DirectSentCardProps
       question={item.question}
       overflow={overflow}
       onAnswer={item.viewerIsAuthor ? undefined : onAnswer}
+      onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
     />
   )
 }
