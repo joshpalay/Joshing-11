@@ -1,5 +1,6 @@
 import {
   carryForwardUntouchedDailyQueue,
+  clearStaleShortTodayQueue,
   createDailyQueueItem,
   createDailyQueueItemFromAuthored,
   getKnowledgeBase,
@@ -49,7 +50,17 @@ const overRequest = (needed: number) =>
 export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const startedAt = Date.now();
   const existing = await getTodaysDailyQueue(userId);
-  if (existing && asQueueSlots(existing.slots).length > 0) return;
+  if (existing && asQueueSlots(existing.slots).length > 0) {
+    // A populated today-queue normally stands. The exception is a SHORT,
+    // UNTOUCHED queue that carryForwardUntouchedDailyQueue rolled over from a
+    // prior day: that freezes a one-off low-yield day (e.g. the 2026-05-29
+    // over-provision truncation that built a 3-of-5 queue) and re-dates it
+    // forward unchanged every day until the user plays it. clearStaleShort-
+    // TodayQueue drops only that case (a short queue actually built today is
+    // left alone so we don't re-bill the LLM on every load) and lets us fall
+    // through to regenerate a fresh, full set.
+    if (!(await clearStaleShortTodayQueue(userId))) return;
+  }
 
   // Before billing the LLM for a new set, roll a previous *unplayed* queue
   // forward to today. The cron builds a queue for every onboarded user daily

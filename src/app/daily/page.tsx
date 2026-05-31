@@ -13,23 +13,6 @@ import { categoryLabel } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
 
-type ExclusionScope = 'subcategory' | 'broad_category' | 'category';
-
-type ExclusionTick = { scope: ExclusionScope; label: string; value: string };
-
-function buildExclusionTicks(slot: QueueSlot): ExclusionTick[] {
-  const ticks: ExclusionTick[] = [
-    { scope: 'subcategory', label: slot.domain, value: slot.domain },
-  ];
-  if (slot.broad_category && slot.broad_category.trim()) {
-    ticks.push({ scope: 'broad_category', label: slot.broad_category, value: slot.broad_category });
-  }
-  if (slot.category && slot.category.trim()) {
-    ticks.push({ scope: 'category', label: categoryLabel(slot.category), value: slot.category });
-  }
-  return ticks;
-}
-
 function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
   // Figma shows the topic/category as the question chip (not the difficulty tier).
   const category =
@@ -117,130 +100,6 @@ function sessionCloseLines(slots: QueueSlot[]): { scoreLine: string; interpretiv
   return buildSessionCloseLines(summaries);
 }
 
-function UnfamiliarDialog({
-  ticks,
-  busy,
-  onExclude,
-  onSkipOnly,
-  onCancel,
-}: {
-  ticks: ExclusionTick[];
-  busy: boolean;
-  onExclude: (tick: ExclusionTick) => void;
-  onSkipOnly: () => void;
-  onCancel: () => void;
-}) {
-  const [tickIndex, setTickIndex] = useState(0);
-  const maxIndex = Math.max(0, ticks.length - 1);
-  const safeIndex = Math.min(tickIndex, maxIndex);
-  const selected = ticks[safeIndex] ?? ticks[0];
-
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onCancel]);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="unfamiliar-dialog-title"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 60,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '1rem',
-        background: 'rgba(0,0,0,0.45)',
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      <div
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '1.5rem',
-          maxWidth: '24rem',
-          width: '100%',
-        }}
-      >
-        <p id="unfamiliar-dialog-title" className="text-sm font-semibold text-[var(--text)]">
-          How familiar are you with this?
-        </p>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Slide to the scope you&rsquo;d like to skip going forward.
-        </p>
-
-        {ticks.length > 1 ? (
-          <div className="mt-5">
-            <input
-              type="range"
-              min={0}
-              max={maxIndex}
-              step={1}
-              value={safeIndex}
-              onChange={(event) => setTickIndex(Number(event.target.value))}
-              aria-label="Unfamiliarity scope"
-              style={{ width: '100%' }}
-            />
-            <div className="mt-2 flex justify-between gap-1 text-[0.65rem] uppercase tracking-[0.06em] text-[var(--text-muted)]">
-              {ticks.map((tick, i) => (
-                <span
-                  key={`${tick.scope}-${i}`}
-                  style={{
-                    flex: '1 1 0',
-                    textAlign: i === 0 ? 'left' : i === ticks.length - 1 ? 'right' : 'center',
-                    color: i === safeIndex ? 'var(--text)' : 'var(--text-muted)',
-                    fontWeight: i === safeIndex ? 600 : 400,
-                  }}
-                >
-                  {tick.label}
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <p className="mt-4 text-sm text-[var(--text-muted)]">
-          We&rsquo;ll stop sending you questions about{' '}
-          <span className="font-semibold text-[var(--text)]">{selected?.label ?? ''}</span>.
-        </p>
-
-        <div className="mt-4 flex flex-col gap-2">
-          <button
-            type="button"
-            className="btn-primary w-full"
-            disabled={busy || !selected}
-            onClick={() => { if (selected) onExclude(selected); }}
-          >
-            {busy ? '...' : 'Remove from my topics'}
-          </button>
-          <button
-            type="button"
-            className="w-full rounded-[var(--radius-md)] border px-4 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--surface-raised)] transition-colors"
-            style={{ borderColor: 'var(--border)' }}
-            disabled={busy}
-            onClick={onSkipOnly}
-          >
-            Just skip this one
-          </button>
-          <button
-            type="button"
-            className="text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function DailyPage() {
   const router = useRouter();
   const [queue, setQueue] = useState<QueueResponse | null>(null);
@@ -249,8 +108,6 @@ export default function DailyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
-  const [showUnfamiliarDialog, setShowUnfamiliarDialog] = useState(false);
-  const [excludingDomain, setExcludingDomain] = useState(false);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
   const [areaTopUp, setAreaTopUp] = useState<{ existing: TopUpInterest[]; maxNew: number } | null>(null);
 
@@ -370,87 +227,6 @@ export default function DailyPage() {
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
 
 
-  const skipCurrent = useCallback(async () => {
-    if (!queue || !currentSlot || submitting) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/daily/skip', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ queue_id: queue.queue_id, slot_index: currentSlot.slot_index }),
-      });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(body?.message ?? 'Could not skip that question.');
-      }
-      const nextSlots = Array.isArray(body?.slots) ? (body.slots as QueueSlot[]) : null;
-      setQueue((existing) => {
-        if (!existing) return existing;
-        if (nextSlots) return { ...existing, slots: nextSlots };
-        return {
-          ...existing,
-          slots: existing.slots.map((slot) =>
-            slot.slot_index === currentSlot.slot_index ? { ...slot, skipped: true } : slot
-          ),
-        };
-      });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not skip that question.');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [currentSlot, queue, submitting]);
-
-  const excludeDomainAndSkip = useCallback(async (tick: ExclusionTick) => {
-    if (!currentSlot) return;
-    setExcludingDomain(true);
-    try {
-      await fetch('/api/users/domain-exclusions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ canonical_subcategory: tick.value, scope: tick.scope }),
-      });
-      // Subcategory exclusions also need to drop the domain from the user's
-      // selectedDomains list in Custom mode so today's queue rebuild can't
-      // re-pull it; broader scopes are filtered out by getKnowledgeBase via
-      // userDomainExclusions and don't touch selectedDomains.
-      if (tick.scope === 'subcategory') {
-        try {
-          const prefsResponse = await fetch('/api/daily/preferences', { credentials: 'include' });
-          if (prefsResponse.ok) {
-            const prefsBody = await prefsResponse.json().catch(() => null) as {
-              preferences: { domainMode: string; selectedDomains: string[] };
-              domains: Array<{ domain: string }>;
-            } | null;
-            if (prefsBody && prefsBody.preferences.domainMode === 'custom') {
-              const nextDomains = prefsBody.preferences.selectedDomains.filter((d) => d !== tick.value);
-              if (nextDomains.length > 0 && nextDomains.length !== prefsBody.preferences.selectedDomains.length) {
-                await fetch('/api/daily/preferences', {
-                  method: 'PATCH',
-                  headers: { 'content-type': 'application/json' },
-                  credentials: 'include',
-                  body: JSON.stringify({ domainMode: 'custom', selectedDomains: nextDomains }),
-                });
-              }
-            }
-          }
-        } catch {
-          // preferences sync is best-effort; the exclusion write above already
-          // ensures future queue builds skip this domain.
-        }
-      }
-    } catch {
-      // exclusion is best-effort; still skip the slot so the user can move on
-    } finally {
-      setExcludingDomain(false);
-    }
-    setShowUnfamiliarDialog(false);
-    void skipCurrent();
-  }, [currentSlot, skipCurrent]);
-
   const requestRecheck = useCallback(async (slotIndex: number): Promise<RecheckActionResult> => {
     if (!queue) throw new Error('No active queue');
 
@@ -556,9 +332,6 @@ export default function DailyPage() {
           creatorName: null,
           isNew: true,
           badges: questionBadges(slot),
-          onDismiss: () => setShowUnfamiliarDialog(true),
-          dismissLabel: 'Not familiar with this topic',
-          dismissImmediate: false,
         });
         if (submitting && answer.trim()) {
           rows.push({ id: 'u-pending', kind: 'user', text: answer.trim() });
@@ -745,7 +518,11 @@ export default function DailyPage() {
             {error}
           </div>
         ) : (
-          <GameplayChatThread messages={messages} />
+          <GameplayChatThread
+            messages={messages}
+            onGiveUp={() => void giveUpCurrent()}
+            giveUpDisabled={submitting}
+          />
         )}
       </section>
 
@@ -776,27 +553,7 @@ export default function DailyPage() {
               {submitting ? '...' : 'Answer'}
             </button>
           </div>
-          <div className="mt-2 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
-              disabled={submitting}
-              onClick={() => void giveUpCurrent()}
-            >
-              Show me the answer
-            </button>
-          </div>
         </form>
-      ) : null}
-
-      {showUnfamiliarDialog && currentSlot ? (
-        <UnfamiliarDialog
-          ticks={buildExclusionTicks(currentSlot)}
-          busy={excludingDomain || submitting}
-          onExclude={(tick) => void excludeDomainAndSkip(tick)}
-          onSkipOnly={() => { setShowUnfamiliarDialog(false); void skipCurrent(); }}
-          onCancel={() => setShowUnfamiliarDialog(false)}
-        />
       ) : null}
 
       {areaTopUp && areaTopUp.maxNew > 0 ? (

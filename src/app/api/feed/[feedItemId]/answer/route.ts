@@ -13,12 +13,27 @@ import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
 import { areFriends } from '@/server/db/queries/friends';
+import { getFeedItemAnswerForRecipient } from '@/server/db/queries/feed';
 
 export const dynamic = 'force-dynamic';
 
 type RouteContext = {
   params: Promise<{ feedItemId: string }>;
 };
+
+// Reveal a feed item's answer for the dismissed-card "back of the card" view.
+// The only input is the path param, so there is no body to validate (matching
+// the sibling recheck route). Recipient scoping lives in the query helper.
+export async function GET(_request: NextRequest, context: RouteContext) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const { feedItemId } = await context.params;
+  const reveal = await getFeedItemAnswerForRecipient(feedItemId, session.userId);
+  if (!reveal) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+  return NextResponse.json({ answer: reveal.answer, questionText: reveal.questionText });
+}
 
 type MasteryTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 
