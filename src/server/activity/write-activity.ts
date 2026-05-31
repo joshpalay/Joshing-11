@@ -8,6 +8,11 @@ export type ActivityItemType =
   | 'ceremony_ready'
   | 'friend_request'
   | 'friend_request_accepted'
+  // An invited friend both accepted the inviter's invitation and got far
+  // enough into the product to play their first five questions. Surfaced to
+  // the inviter as a "your invite stuck" milestone. Written from
+  // write-mastery-event.ts once the invitee crosses the fifth play.
+  | 'invited_friend_played_first_five'
   | 'received_direct_question'
   | 'reaction_received'
   | 'question_curated'
