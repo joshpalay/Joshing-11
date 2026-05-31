@@ -415,6 +415,14 @@ export function QuestionForm({
   const critique = state.critiqueResult;
   const counter = remainingCopy(state);
   const canShowAnswering = state.stage === 'ANSWERING' || state.stage === 'SUBMITTING' || mode === 'edit';
+  // The form lives inside a scrollable drawer/modal (questions + knowledge
+  // pages). Keep the action buttons pinned to the bottom on an opaque,
+  // composited footer: the backdrop-blur layer prevents the iOS Safari
+  // repaint artifact that left a ghost copy of these buttons painted over the
+  // scrolling content, and sticky keeps Save/Cancel reachable on long forms.
+  // `-mx-5 px-5 pb-5` full-bleeds the bar within the host's px-5 padding
+  // (which drops its own bottom padding so this footer sits flush).
+  const actionBarClass = 'sticky bottom-0 z-10 -mx-5 flex flex-wrap items-center gap-3 border-t bg-background/95 px-5 pb-5 pt-3 backdrop-blur';
 
   return (
     <div className="space-y-5">
@@ -480,7 +488,7 @@ export function QuestionForm({
       ) : null}
 
       {!canShowAnswering ? (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className={actionBarClass}>
           <button type="button" onClick={() => void runCritique()} disabled={!state.questionText.trim() || state.stage === 'CRITIQUING'} className="btn-primary">
             {state.stage === 'CRITIQUING' ? 'Reviewing...' : 'Continue'}
           </button>
@@ -663,7 +671,7 @@ export function QuestionForm({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          <div className={actionBarClass}>
             <button type="button" disabled={submitDisabled} onClick={() => void finalSave()} className="btn-primary">{submitDisabled ? loadingLabel : resolvedSubmitLabel}</button>
             {onCancel ? <button type="button" onClick={onCancel} className="btn-ghost" disabled={submitDisabled}>Cancel</button> : null}
           </div>

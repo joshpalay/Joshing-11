@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import {
   AnsweredByYouCard,
   DirectSentCard,
+  DismissedFeedBar,
   FeedCardShell,
   FeedOverflowMenu,
   FriendAddedCard,
@@ -155,6 +156,58 @@ describe('Feed unanswered card actions', () => {
     )
     expect(rendered).toContain('More Feed actions')
     expect(rendered).not.toContain('Send to friend')
+  })
+})
+
+describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
+  it('renders the quiet Dismiss control on the card face when onDismiss is provided', () => {
+    const rendered = html(
+      <DirectSentCard
+        item={feedCardPreviewFixtures.directSentUnanswered}
+        onAnswer={() => undefined}
+        onDismiss={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismiss')
+    expect(rendered).toContain('Answer →')
+    // The Dismiss button must never expose the mute affordance on the card face.
+    expect(rendered).not.toContain('Not into')
+  })
+
+  it('omits the Dismiss control when onDismiss is not provided', () => {
+    const rendered = html(
+      <DirectSentCard
+        item={feedCardPreviewFixtures.directSentUnanswered}
+        onAnswer={() => undefined}
+      />
+    )
+    expect(rendered).not.toContain('Dismiss')
+  })
+
+  it('shows Dismissed, Undo, and the category mute affordance in the inline bar', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category="Roman aqueducts"
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismissed')
+    expect(rendered).toContain('Undo')
+    expect(rendered).toContain('Not into Roman aqueducts?')
+  })
+
+  it('hides the mute affordance when there is no category', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category={null}
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismissed')
+    expect(rendered).toContain('Undo')
+    expect(rendered).not.toContain('Not into')
   })
 })
 

@@ -296,11 +296,26 @@
   40%           { opacity: 1;    transform: translateY(-2px); }
 }
 
+/* B-Feed-Swipe-1 — collapse a dismissed feed card before the inline bar shows. */
+@keyframes feed-card-collapse {
+  from { opacity: 1; max-height: 600px; }
+  to   { opacity: 0; max-height: 0; }
+}
+
+.feed-card-collapsing {
+  overflow: hidden;
+  animation: feed-card-collapse 200ms ease forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .triangle-loader-tri,
   .triangle-loader-float,
   .triangle-loader-sweep,
   .triangle-loader-dot {
+    animation: none !important;
+  }
+
+  .feed-card-collapsing {
     animation: none !important;
   }
 }

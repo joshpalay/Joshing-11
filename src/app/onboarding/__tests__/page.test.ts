@@ -28,6 +28,29 @@ vi.mock('@/server/db/queries/users', () => ({
   getPreSeededInterestsForUser: getPreSeededInterestsForUserMock,
 }))
 
+// The page runs a grandfather-guard query (select FriendInvitation … limit 1)
+// directly against db. Stub the chain so it resolves without a real connection;
+// the result is discarded by the page (void hasInvitation), so [] is fine.
+vi.mock('@/server/db', () => ({
+  db: {
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          // Non-empty: the grandfather guard treats a row as "has accepted
+          // invitation" so the not-yet-onboarded case renders instead of
+          // redirecting. The redirect cases bail before reaching this query.
+          limit: async () => [{ id: 'inv-1' }],
+        }),
+      }),
+    }),
+  },
+  friendInvitations: {
+    id: 'friendInvitations.id',
+    inviteeUserId: 'friendInvitations.inviteeUserId',
+    acceptedAt: 'friendInvitations.acceptedAt',
+  },
+}))
+
 // Stub the client component import so this test stays server-side.
 vi.mock('@/app/onboarding/OnboardingFlow', () => ({
   default: () => null,

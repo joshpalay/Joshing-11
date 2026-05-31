@@ -68,9 +68,6 @@ export default async function Home() {
       ) : null}
 
       <section id="feed">
-        <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
-          From your friends
-        </p>
         {session ? (
           <Suspense fallback={<FeedSkeleton />}>
             <FromYourFriendsSection userId={session.userId} />

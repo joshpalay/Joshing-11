@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createOrReusePendingFriendshipRequestMock,
+  getRelationshipMock,
   getSessionMock,
   getUserByIdMock,
 } = vi.hoisted(() => ({
   createOrReusePendingFriendshipRequestMock: vi.fn(),
+  getRelationshipMock: vi.fn(),
   getSessionMock: vi.fn(),
   getUserByIdMock: vi.fn(),
 }))
@@ -16,6 +18,13 @@ vi.mock('@/server/auth/session', () => ({
 
 vi.mock('@/server/friends/friendships', () => ({
   createOrReusePendingFriendshipRequest: createOrReusePendingFriendshipRequestMock,
+}))
+
+// The route pre-checks the existing relationship before creating a request.
+// Mock it directly so the real getRelationship (which hits db + friendshipPair)
+// doesn't run; default to "no relationship" so the happy path proceeds.
+vi.mock('@/server/db/queries/friend-requests', () => ({
+  getRelationship: getRelationshipMock,
 }))
 
 vi.mock('@/server/db/queries/users', () => ({
@@ -37,6 +46,7 @@ describe('POST /api/friend-requests', () => {
     vi.clearAllMocks()
     getSessionMock.mockResolvedValue({ userId: 'viewer-user' })
     getUserByIdMock.mockResolvedValue({ id: 'invitee-user' })
+    getRelationshipMock.mockResolvedValue({ state: 'none', isBlocked: false })
     createOrReusePendingFriendshipRequestMock.mockResolvedValue({
       friendship: { id: 'friendship-1', status: 'pending' },
       state: 'created',
@@ -50,10 +60,14 @@ describe('POST /api/friend-requests', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(createOrReusePendingFriendshipRequestMock).toHaveBeenCalledWith({
-      inviterUserId: 'viewer-user',
-      inviteeUserId: 'invitee-user',
-    })
+    expect(createOrReusePendingFriendshipRequestMock).toHaveBeenCalledWith(
+      // The route also threads personalNote and a `now` Date; assert the
+      // identifying fields rather than an exact object (now is non-deterministic).
+      expect.objectContaining({
+        inviterUserId: 'viewer-user',
+        inviteeUserId: 'invitee-user',
+      })
+    )
     expect(body).toMatchObject({
       ok: true,
       state: 'created',

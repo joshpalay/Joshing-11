@@ -785,7 +785,7 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'write-question' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] px-5 pt-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Write a question</h2>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">

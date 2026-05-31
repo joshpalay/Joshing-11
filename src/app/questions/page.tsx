@@ -412,7 +412,7 @@ function QuestionsPageContent() {
       {drawer.mode !== 'closed' ? (
         <div className="fixed inset-0 z-[60] flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
           <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={() => setDrawer({ mode: 'closed' })} />
-          <aside className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-background p-5 shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
+          <aside className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-background px-5 pt-5 shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{drawer.mode === 'edit' ? 'Edit' : 'Create'}</p>

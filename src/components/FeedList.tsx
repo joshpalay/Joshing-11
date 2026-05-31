@@ -8,10 +8,13 @@ import {
   AnswerFeedbackSheet,
   AnswerSheet,
   DirectSentCard,
+  DismissedFeedBar,
+  FeedCardSwipe,
   FeedOverflowMenu,
   FriendAddedCard,
   FriendAnsweredCard,
   FriendLikedCard,
+  visibleFeedCategory,
   type AnsweredByYouFeedItem,
   type DirectSentFeedItem,
   type FeedRecheckAction,
@@ -19,6 +22,7 @@ import {
   type FriendAnsweredFeedItem,
   type FriendLikedFeedItem,
 } from '@/components/feed'
+import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 
 type FriendResult = {
@@ -494,7 +498,7 @@ function FeedListContent({
   // initialPage is only valid for the 'all' filter (that's what the server
   // pre-fetches). If the URL pins a different filter, fall back to client fetch.
   const initialPageMatchesFilter = initialPage !== null && initialFilter === 'all'
-  const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
+  const [feedFilter] = useState<FeedFilter>(initialFilter)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const [items, setItems] = useState<FeedApiItem[]>(
     initialPageMatchesFilter ? initialPage!.items : []
@@ -522,6 +526,14 @@ function FeedListContent({
     Record<string, 'removed' | 'restored'>
   >({})
   const thumbsdownTimersRef = useRef<Record<string, number>>({})
+  // B-Feed-Swipe-1 — left-swipe / Dismiss collapse a card to an inline bar.
+  // View-state only and session-scoped: 'collapsing' plays the exit animation,
+  // 'dismissed' shows the bar. Never persisted; never mutes.
+  const [dismissPhase, setDismissPhase] = useState<
+    Record<string, 'collapsing' | 'dismissed'>
+  >({})
+  const dismissTimersRef = useRef<Record<string, number>>({})
+  const reducedMotion = usePrefersReducedMotion()
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
   const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -748,7 +760,40 @@ function FeedListContent({
     return () => {
       Object.values(thumbsdownTimersRef.current).forEach((t) => window.clearTimeout(t))
       thumbsdownTimersRef.current = {}
+      Object.values(dismissTimersRef.current).forEach((t) => window.clearTimeout(t))
+      dismissTimersRef.current = {}
     }
+  }, [])
+
+  // Shared by the left-swipe and the on-card Dismiss button — one handler, one
+  // animation. Plays the collapse, then swaps to the inline "Dismissed" bar.
+  const requestDismiss = useCallback(
+    (itemId: string) => {
+      if (reducedMotion) {
+        setDismissPhase((current) => ({ ...current, [itemId]: 'dismissed' }))
+        return
+      }
+      setDismissPhase((current) => ({ ...current, [itemId]: 'collapsing' }))
+      dismissTimersRef.current[itemId] = window.setTimeout(() => {
+        delete dismissTimersRef.current[itemId]
+        setDismissPhase((current) => ({ ...current, [itemId]: 'dismissed' }))
+      }, 200)
+    },
+    [reducedMotion],
+  )
+
+  // Undo fully restores the card — no side effects, nothing learned.
+  const undoDismiss = useCallback((itemId: string) => {
+    const timer = dismissTimersRef.current[itemId]
+    if (timer) {
+      window.clearTimeout(timer)
+      delete dismissTimersRef.current[itemId]
+    }
+    setDismissPhase((current) => {
+      const next = { ...current }
+      delete next[itemId]
+      return next
+    })
   }, [])
 
   const scheduleThumbsdownAutoDismiss = useCallback(
@@ -927,32 +972,8 @@ function FeedListContent({
     []
   )
 
-  const filterOptions: Array<{ value: FeedFilter; label: string }> = [
-    { value: 'all', label: 'All' },
-    { value: 'sent-to-me', label: 'Sent to me' },
-    { value: 'from-friends', label: 'From friends' },
-  ]
-
   return (
     <>
-      <nav className="mb-4 flex flex-wrap gap-2" aria-label="Feed filters">
-        {filterOptions.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setFeedFilter(option.value)}
-            aria-current={feedFilter === option.value ? 'page' : undefined}
-            className={
-              feedFilter === option.value
-                ? 'inline-flex min-h-11 items-center rounded-full bg-[var(--brand-navy)] px-4 text-sm font-medium text-[var(--primary-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-                : 'inline-flex min-h-11 items-center rounded-full border bg-[var(--brand-card)] px-4 text-sm font-medium text-[var(--brand-ink-700)] transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-            }
-          >
-            {option.label}
-          </button>
-        ))}
-      </nav>
-
       {hideToast ? (
         <div
           role="status"
@@ -998,7 +1019,7 @@ function FeedListContent({
         <section className="space-y-3 pb-8">
           {groupItemsByRecency(items).map((group) => (
             <Fragment key={group.key}>
-              <h2 className="text-muted-foreground pt-4 text-xs font-semibold tracking-[0.18em] uppercase first:pt-0">
+              <h2 className="text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0">
                 {group.label}
               </h2>
               {group.items.map((item) => {
@@ -1017,6 +1038,21 @@ function FeedListContent({
                       phase={confirmPhase}
                       onDismiss={() => dismissThumbsdownConfirm(item.id)}
                       onUndo={() => void undoThumbsdown(item.id)}
+                      disabled={isBusy}
+                    />
+                  )
+                }
+
+                // Left-swipe / Dismiss collapses the card to this inline bar.
+                // Undo restores it; "Not into {category}?" is the one mute path
+                // here, reusing the existing category-mute handler.
+                if (dismissPhase[item.id] === 'dismissed') {
+                  return (
+                    <DismissedFeedBar
+                      key={item.id}
+                      category={visibleFeedCategory(item.domain_pill)}
+                      onUndo={() => undoDismiss(item.id)}
+                      onMute={() => void hideCategory(item)}
                       disabled={isBusy}
                     />
                   )
@@ -1067,50 +1103,76 @@ function FeedListContent({
                   )
                 }
 
-                const onAnswer = item.viewer_is_author ? undefined : () => setAnswerSheetId(item.id)
                 const typedItem = toTypedFeedItem(item)
+                // A friend_answered card the viewer already answered shows a
+                // footer, not the Answer action — so it isn't dismissible.
+                const viewerAnsweredFriendCard =
+                  typedItem.type === 'friend_answered' &&
+                  (typedItem.viewerResult ?? null) !== null
+                const dismissible = !item.viewer_is_author && !viewerAnsweredFriendCard
+                const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
+                const onDismiss = dismissible ? () => requestDismiss(item.id) : undefined
 
+                let card: ReactNode
                 if (typedItem.type === 'direct_sent') {
-                  return (
+                  card = (
                     <DirectSentCard
-                      key={item.id}
                       item={typedItem}
                       overflow={overflow}
                       onAnswer={onAnswer}
+                      onDismiss={onDismiss}
                     />
                   )
-                }
-
-                if (typedItem.type === 'friend_added') {
-                  return (
+                } else if (typedItem.type === 'friend_added') {
+                  card = (
                     <FriendAddedCard
-                      key={item.id}
                       item={typedItem}
                       overflow={overflow}
                       onAnswer={onAnswer}
+                      onDismiss={onDismiss}
                       onHideCategory={() => void hideCategory(item)}
                     />
                   )
-                }
-
-                if (typedItem.type === 'friend_liked') {
-                  return (
+                } else if (typedItem.type === 'friend_liked') {
+                  card = (
                     <FriendLikedCard
-                      key={item.id}
                       item={typedItem}
                       overflow={overflow}
                       onAnswer={onAnswer}
+                      onDismiss={onDismiss}
+                    />
+                  )
+                } else {
+                  card = (
+                    <FriendAnsweredCard
+                      item={typedItem}
+                      overflow={overflow}
+                      onAnswer={onAnswer}
+                      onDismiss={onDismiss}
                     />
                   )
                 }
 
+                if (!dismissible) {
+                  return <Fragment key={item.id}>{card}</Fragment>
+                }
+
+                // Right-swipe answers, left-swipe dismisses (same handler as the
+                // Dismiss button). The collapse on commit animates here.
+                const collapsing = dismissPhase[item.id] === 'collapsing'
                 return (
-                  <FriendAnsweredCard
+                  <div
                     key={item.id}
-                    item={typedItem}
-                    overflow={overflow}
-                    onAnswer={onAnswer}
-                  />
+                    className={collapsing ? 'feed-card-collapsing' : undefined}
+                  >
+                    <FeedCardSwipe
+                      onSwipeLeft={() => requestDismiss(item.id)}
+                      onSwipeRight={onAnswer}
+                      disabled={isBusy || collapsing}
+                    >
+                      {card}
+                    </FeedCardSwipe>
+                  </div>
                 )
               })}
             </Fragment>
