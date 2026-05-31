@@ -550,6 +550,33 @@ export async function getViewerAnswerStatusForQuestions(
   return result;
 }
 
+// Reveal a single feed item's canonical answer to its recipient, for the
+// dismissed-card "back of the card" view. The inner join on `questions` means a
+// missing, foreign, or question-less feed item yields no row → null. Scoping to
+// the recipient is the only authorization needed: they already received this
+// question in their feed. Intentionally NOT gated on feedItem.state — a
+// dismissed item must still reveal its answer.
+export async function getFeedItemAnswerForRecipient(
+  feedItemId: string,
+  recipientUserId: string,
+): Promise<{ answer: string | null; questionText: string } | null> {
+  const [row] = await db
+    .select({
+      answer: questions.answerText,
+      questionText: questions.questionText,
+    })
+    .from(feedItems)
+    .innerJoin(questions, eq(feedItems.questionId, questions.id))
+    .where(and(
+      eq(feedItems.id, feedItemId),
+      eq(feedItems.recipientUserId, recipientUserId),
+    ))
+    .limit(1);
+
+  if (!row) return null;
+  return { answer: row.answer ?? null, questionText: row.questionText };
+}
+
 export async function userAnsweredQuestionCorrectly(userId: string, questionId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: masteryEvents.id })

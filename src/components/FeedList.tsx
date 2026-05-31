@@ -533,6 +533,18 @@ function FeedListContent({
     Record<string, 'collapsing' | 'dismissed'>
   >({})
   const dismissTimersRef = useRef<Record<string, number>>({})
+  // The question's answer, fetched on-demand when a card is dismissed, to show
+  // on the "back of the card". Keyed by feed-item id; cached across undo so a
+  // re-dismiss reuses it without a refetch.
+  const [dismissedAnswers, setDismissedAnswers] = useState<
+    Record<string, { status: 'loading' | 'loaded' | 'error'; answer?: string | null }>
+  >({})
+  // Mirrors dismissPhase so async answer fetches can drop stale writes after an
+  // undo / re-dismiss race.
+  const dismissPhaseRef = useRef(dismissPhase)
+  useEffect(() => {
+    dismissPhaseRef.current = dismissPhase
+  }, [dismissPhase])
   const reducedMotion = usePrefersReducedMotion()
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
   const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
@@ -765,21 +777,66 @@ function FeedListContent({
     }
   }, [])
 
+  // Fetch the question's answer to show on the dismissed card back. Already-
+  // answered cards carry it in the payload; answerless items short-circuit.
+  // Skips refetching anything already loading/loaded (only errors retry).
+  const loadDismissedAnswer = useCallback((item: FeedApiItem) => {
+    if (item.correct_answer) {
+      setDismissedAnswers((c) => ({
+        ...c,
+        [item.id]: { status: 'loaded', answer: item.correct_answer },
+      }))
+      return
+    }
+    if (!item.question_id) {
+      setDismissedAnswers((c) => ({ ...c, [item.id]: { status: 'loaded', answer: null } }))
+      return
+    }
+    let shouldFetch = true
+    setDismissedAnswers((c) => {
+      const existing = c[item.id]
+      if (existing && existing.status !== 'error') {
+        shouldFetch = false
+        return c
+      }
+      return { ...c, [item.id]: { status: 'loading' } }
+    })
+    if (!shouldFetch) return
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/feed/${item.id}/answer`, { method: 'GET' })
+        if (!res.ok) throw new Error(String(res.status))
+        const data = (await res.json()) as { answer: string | null }
+        setDismissedAnswers((c) => {
+          // Drop the write if the card is no longer dismissed (undo race).
+          if (dismissPhaseRef.current[item.id] !== 'dismissed') return c
+          return { ...c, [item.id]: { status: 'loaded', answer: data.answer } }
+        })
+      } catch {
+        setDismissedAnswers((c) => ({ ...c, [item.id]: { status: 'error' } }))
+      }
+    })()
+  }, [])
+
   // Shared by the left-swipe and the on-card Dismiss button — one handler, one
   // animation. Plays the collapse, then swaps to the inline "Dismissed" bar.
   const requestDismiss = useCallback(
-    (itemId: string) => {
+    (item: FeedApiItem) => {
+      const itemId = item.id
       if (reducedMotion) {
         setDismissPhase((current) => ({ ...current, [itemId]: 'dismissed' }))
+        loadDismissedAnswer(item)
         return
       }
       setDismissPhase((current) => ({ ...current, [itemId]: 'collapsing' }))
       dismissTimersRef.current[itemId] = window.setTimeout(() => {
         delete dismissTimersRef.current[itemId]
         setDismissPhase((current) => ({ ...current, [itemId]: 'dismissed' }))
+        loadDismissedAnswer(item)
       }, 200)
     },
-    [reducedMotion],
+    [reducedMotion, loadDismissedAnswer],
   )
 
   // Undo fully restores the card — no side effects, nothing learned.
@@ -1047,10 +1104,18 @@ function FeedListContent({
                 // Undo restores it; "Not into {category}?" is the one mute path
                 // here, reusing the existing category-mute handler.
                 if (dismissPhase[item.id] === 'dismissed') {
+                  const dismissedAnswer = dismissedAnswers[item.id]
                   return (
                     <DismissedFeedBar
                       key={item.id}
                       category={visibleFeedCategory(item.domain_pill)}
+                      answer={
+                        dismissedAnswer?.status === 'loaded'
+                          ? dismissedAnswer.answer
+                          : undefined
+                      }
+                      answerLoading={!dismissedAnswer || dismissedAnswer.status === 'loading'}
+                      answerError={dismissedAnswer?.status === 'error'}
                       onUndo={() => undoDismiss(item.id)}
                       onMute={() => void hideCategory(item)}
                       disabled={isBusy}
@@ -1111,7 +1176,7 @@ function FeedListContent({
                   (typedItem.viewerResult ?? null) !== null
                 const dismissible = !item.viewer_is_author && !viewerAnsweredFriendCard
                 const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
-                const onDismiss = dismissible ? () => requestDismiss(item.id) : undefined
+                const onDismiss = dismissible ? () => requestDismiss(item) : undefined
 
                 let card: ReactNode
                 if (typedItem.type === 'direct_sent') {
@@ -1166,7 +1231,7 @@ function FeedListContent({
                     className={collapsing ? 'feed-card-collapsing' : undefined}
                   >
                     <FeedCardSwipe
-                      onSwipeLeft={() => requestDismiss(item.id)}
+                      onSwipeLeft={() => requestDismiss(item)}
                       onSwipeRight={onAnswer}
                       disabled={isBusy || collapsing}
                     >
