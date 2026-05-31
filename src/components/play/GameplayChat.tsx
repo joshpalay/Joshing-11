@@ -38,10 +38,6 @@ export type ChatMessage =
       questionText: string;
       creatorName: string | null;
       isNew?: boolean;
-      onDismiss?: () => void;
-      dismissLabel?: string;
-      /** When false, the dismiss button calls onDismiss but does not flip into the "Skipped" inline state — used when the click opens a dialog instead of completing the action. Defaults to true to preserve legacy behavior. */
-      dismissImmediate?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
     }
@@ -170,20 +166,17 @@ function QuestionRow({
   questionText,
   creatorName,
   isNew = false,
-  onDismiss,
-  dismissLabel = "Skip - don't show again",
-  dismissImmediate = true,
+  onGiveUp,
+  giveUpDisabled = false,
 }: {
   subhead?: string | null;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
   creatorName: string | null;
   isNew?: boolean;
-  onDismiss?: () => void;
-  dismissLabel?: string;
-  dismissImmediate?: boolean;
+  onGiveUp?: () => void;
+  giveUpDisabled?: boolean;
 }) {
-  const [dismissed, setDismissed] = useState(false);
   const [visible, setVisible] = useState(!isNew);
 
   useEffect(() => {
@@ -192,11 +185,6 @@ function QuestionRow({
     return () => window.clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleDismiss = useCallback(() => {
-    if (dismissImmediate) setDismissed(true);
-    onDismiss?.();
-  }, [onDismiss, dismissImmediate]);
 
   return (
     <div
@@ -256,72 +244,58 @@ function QuestionRow({
         }}
       >
         <p style={{ margin: 0 }}>{questionText}</p>
+        {badges.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
+            {badges.map((badge) => (
+              <span
+                key={badge.label}
+                style={{
+                  // Figma display/pill/sans — Georgia, 12px, title-case (not the
+                  // mono uppercase used elsewhere).
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontSize: '0.75rem',
+                  lineHeight: 1.1,
+                  letterSpacing: '0.01em',
+                  borderRadius: '999px',
+                  border: '1px solid var(--border)',
+                  background: badge.tone === 'warning'
+                    ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
+                    : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                  color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
+                  padding: '3px 9px',
+                }}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
-      {badges.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5 pt-1 pl-0.5">
-          {badges.map((badge) => (
-            <span
-              key={badge.label}
-              style={{
-                // Figma display/pill/sans — Georgia, 12px, title-case (not the
-                // mono uppercase used elsewhere).
-                fontFamily: 'Georgia, "Times New Roman", serif',
-                fontSize: '0.75rem',
-                lineHeight: 1.1,
-                letterSpacing: '0.01em',
-                borderRadius: '999px',
-                border: '1px solid var(--border)',
-                background: badge.tone === 'warning'
-                  ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
-                  : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
-                color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
-                padding: '3px 9px',
-              }}
-            >
-              {badge.label}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {onDismiss ? (
-        dismissed ? (
-          <p
-            style={{
-              ...monoStyle,
-              fontSize: '0.58rem',
-              color: 'var(--text-muted)',
-              paddingLeft: '2px',
-              marginTop: '2px',
-            }}
-          >
-            Skipped
-          </p>
-        ) : (
-          <button
-            type="button"
-            aria-label={dismissLabel === 'X' ? 'Dismiss question' : dismissLabel}
-            onClick={handleDismiss}
-            style={{
-              alignSelf: 'flex-start',
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.58rem',
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: 'var(--text-muted)',
-              textDecoration: 'underline',
-              textUnderlineOffset: '2px',
-              opacity: 0.7,
-              marginTop: '4px',
-              paddingLeft: '2px',
-            }}
-          >
-            {dismissLabel}
-          </button>
-        )
+      {onGiveUp ? (
+        <button
+          type="button"
+          onClick={onGiveUp}
+          disabled={giveUpDisabled}
+          style={{
+            alignSelf: 'flex-start',
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.58rem',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--text-muted)',
+            textDecoration: 'underline',
+            textUnderlineOffset: '2px',
+            opacity: 0.7,
+            marginTop: '4px',
+            paddingLeft: '2px',
+          }}
+        >
+          Show me the answer
+        </button>
       ) : null}
     </div>
   );
@@ -1103,8 +1077,12 @@ function BonusOfferRow({
 
 export function GameplayChatThread({
   messages,
+  onGiveUp,
+  giveUpDisabled,
 }: {
   messages: ChatMessage[];
+  onGiveUp?: () => void;
+  giveUpDisabled?: boolean;
 }) {
   return (
     <div className="space-y-2.5">
@@ -1119,11 +1097,10 @@ export function GameplayChatThread({
                 questionText={m.questionText}
                 creatorName={m.creatorName}
                 isNew={m.isNew}
-                onDismiss={m.onDismiss}
-                dismissLabel={m.dismissLabel}
-                dismissImmediate={m.dismissImmediate}
                 subhead={m.subhead}
                 badges={m.badges}
+                onGiveUp={onGiveUp}
+                giveUpDisabled={giveUpDisabled}
               />
             );
           case 'user':
