@@ -1039,6 +1039,31 @@ export async function generateDailyQuestions(
 const DECLARED_DOMAIN_WEIGHT = 0.5;
 const DOMAIN_PER_WEEK_CAP = 5;
 
+/**
+ * Order a custom-mode domain list least-recently-generated first.
+ *
+ * Custom mode never drops a hand-picked domain (no weekly cap), but a narrow
+ * set often skews to a few deep domains the player loves (e.g. Shakespearean
+ * Tragedy, Wagner's Ring Cycle). The pool-mode generation prompt lets the model
+ * choose which listed domains to use, so it gravitates to those meaty domains
+ * and ignores the thinner picks — whose facts then get exhausted by the
+ * recent-history / fact-key dedup gates, landing the batch short while the fresh
+ * picks (which would survive the gates) never get drawn. Leading with the
+ * least-mined domains steers both generation and the in-order bank-pick pass
+ * toward the picks that still have unseen facts.
+ *
+ * Stable for equal counts (Array.prototype.sort is stable), so ties preserve the
+ * user's original selection order.
+ */
+export function orderCustomDomainsByLeastRecent(
+  domains: string[],
+  recentDomainCounts: ReadonlyMap<string, number>,
+): string[] {
+  return [...domains].sort(
+    (a, b) => (recentDomainCounts.get(a) ?? 0) - (recentDomainCounts.get(b) ?? 0),
+  );
+}
+
 function selectDiverseDomains(
   knowledgeBase: Awaited<ReturnType<typeof getKnowledgeBase>>,
   count: number,
@@ -1122,11 +1147,25 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   let domainsForRound: string[];
   if (preferences.domainMode === 'custom' && preferences.selectedDomains.length > 0) {
-    // Custom mode: user explicitly selected domains, use as-is. The
-    // per-domain cap is intentionally not enforced here — when a user
-    // explicitly hand-picks domains we respect that choice.
-    const filtered = preferences.selectedDomains.filter((domain) => allDomains.includes(domain));
-    domainsForRound = filtered.length > 0 ? filtered : allDomains;
+    // Custom mode: user explicitly selected domains. The per-domain weekly cap
+    // is intentionally not enforced here — when a user hand-picks domains we
+    // respect that choice and never drop one.
+    //
+    // BUT order them least-recently-generated first. A narrow custom set often
+    // skews to a few deep domains the player loves (e.g. Shakespearean Tragedy,
+    // Wagner's Ring Cycle), and the pool-mode generation prompt lets the model
+    // choose which listed domains to use — so it gravitates to those meaty
+    // domains and ignores the thinner picks. Their facts then get exhausted by
+    // the recent-history / fact-key dedup gates, the batch lands short, and the
+    // fresh selected domains (which would survive the gates) never get drawn.
+    // Leading with the least-mined domains steers generation (and the bank-pick
+    // pass, which walks this list in order) toward the picks that still have
+    // unseen facts, keeping the queue full and the rotation honest.
+    const ordered = orderCustomDomainsByLeastRecent(
+      preferences.selectedDomains.filter((domain) => allDomains.includes(domain)),
+      recentDomainCounts,
+    );
+    domainsForRound = ordered.length > 0 ? ordered : allDomains;
   } else {
     // Random mode: pick one domain per category for cross-category variety,
     // with a soft per-domain frequency cap applied via recentDomainCounts.
