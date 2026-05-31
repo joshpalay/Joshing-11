@@ -339,3 +339,51 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
     expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
   })
 })
+
+describe('POST /api/daily/answer grader outage (#6 — never score wrong on LLM failure)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    readPriorAnswersForQuestionMock.mockResolvedValue([])
+  })
+
+  it('holds the answer for retry (503) and persists nothing when the grader is unreachable', async () => {
+    setupDbChain()
+    // gradeAnswer signals an unreachable LLM grader via gradedVia: 'fallback'.
+    // Its result is a deterministic 'wrong' placeholder, NOT a real verdict —
+    // the route must refuse to score it rather than penalise an infra outage.
+    gradeAnswerMock.mockResolvedValueOnce({
+      result: 'wrong',
+      consolation: null,
+      confidence: 0,
+      gradedVia: 'fallback',
+    })
+
+    const res = await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.error).toBe('grader_unavailable')
+
+    // The slot must stay untouched (unanswered) so the player can resubmit, and
+    // no scoring side effects may fire.
+    expect(dbMock.update).not.toHaveBeenCalled()
+    expect(writeMasteryEventMock).not.toHaveBeenCalled()
+    expect(updateDomainDifficultyOnAnswerMock).not.toHaveBeenCalled()
+    expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
+  })
+
+  it('still scores give-ups as wrong (grader is skipped, so never held for retry)', async () => {
+    setupDbChain()
+    // gaveUp short-circuits gradeAnswer with gradedVia: 'exact', so this path
+    // must persist a real wrong answer — the outage hold must not swallow it.
+    const res = await POST(
+      jsonRequest({ ...VALID_BODY, gave_up: true, submitted_answer: '' }) as never,
+    )
+
+    expect(res.status).toBe(200)
+    expect(gradeAnswerMock).not.toHaveBeenCalled()
+    expect(writeMasteryEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ answerState: 'incorrect', pointsAwarded: 0 }),
+    )
+  })
+})

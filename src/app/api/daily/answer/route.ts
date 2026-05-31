@@ -36,6 +36,7 @@ type DailyAnswerErrorCode =
   | 'invalid_state'
   | 'question_not_found'
   | 'forbidden'
+  | 'grader_unavailable'
   | 'unexpected';
 
 function dailyAnswerErrorResponse(status: number, error: DailyAnswerErrorCode, message: string) {
@@ -204,16 +205,25 @@ export async function POST(request: NextRequest) {
           question.questionText,
           'factual',
         );
-    // TODO: when grade.gradedVia === 'fallback', the LLM grader was unreachable
-    // and the slot is being marked wrong as a deterministic safeguard. Wire this
-    // to /api/daily/recheck or surface an "answer pending review" UI so users
-    // aren't silently penalised for an Anthropic outage.
+    // The LLM grader was unreachable (timeout, parse error, no client), so its
+    // 'wrong' verdict is not a real judgement of the answer — it's a deterministic
+    // placeholder. Scoring the player wrong for an Anthropic outage is the most
+    // off-brand failure mode in a product whose thesis is "wrong answers are
+    // connection events, not penalties." Instead of persisting anything, hold the
+    // answer in a non-scored retry state: leave the slot untouched (unanswered) and
+    // return a transparent, retryable error so the player can simply resubmit.
+    // Give-ups skip the grader entirely (gradedVia: 'exact'), so they're never held.
     if (grade.gradedVia === 'fallback') {
-      console.warn('[daily/answer] grading fell back to deterministic wrong', {
+      console.warn('[daily/answer] grader unavailable; holding answer for retry', {
         queueId: parsed.queueId,
         slotIndex: parsed.slotIndex,
         userId: session.userId,
       });
+      return dailyAnswerErrorResponse(
+        503,
+        'grader_unavailable',
+        "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+      );
     }
     const isCorrect = grade.result === 'correct';
     const answerState = isCorrect ? 'correct' : 'incorrect';
