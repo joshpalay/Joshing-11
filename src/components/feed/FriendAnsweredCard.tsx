@@ -9,6 +9,7 @@ type FriendAnsweredCardProps = {
   item: FriendAnsweredFeedItem
   overflow?: ReactNode
   onAnswer?: () => void
+  onDismiss?: () => void
 }
 
 function viewerAnsweredFooterText(
@@ -43,6 +44,7 @@ export function FriendAnsweredCard({
   item,
   overflow,
   onAnswer,
+  onDismiss,
 }: FriendAnsweredCardProps) {
   const viewerResult = item.viewerResult ?? null
   const viewerAnswered = viewerResult !== null
@@ -94,6 +96,7 @@ export function FriendAnsweredCard({
       item={merged}
       overflow={overflow}
       onAnswer={viewerAnswered ? undefined : onAnswer}
+      onDismiss={viewerAnswered ? undefined : onDismiss}
       footer={footer}
       headerContent={headerContent}
       verb="knows"
