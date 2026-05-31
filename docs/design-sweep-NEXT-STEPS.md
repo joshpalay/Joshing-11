@@ -28,21 +28,39 @@ ramp (now `--warm-ink*` in globals.css), and the game summary pills.
 3. ✅ **C7 — card-shell consolidation** — new `src/components/feed/FeedCardShell.tsx`;
    FeedCard / SparkleEnvelope (triangle variant) / AnsweredByYouCard all render
    through it. 4 focused shell tests added.
-4. ✅ **C8 — circles** — `circle-sizing.ts` reworked to one continuous,
-   caller-bounded scale (contiguous tier bands; ProgressionLandscape passes tight
-   grid bounds, PortraitCircles roomier hero bounds → no more column overflow);
-   new `KnowledgeBubble` primitive + `domainBubbleGradient` helper that
-   KnowledgeCircle / DomainCircle / PortraitDomainCircle now share. Unit test
-   added for the sizing scale. `SharePortraitCard`'s Bubble stays literal (raster).
+4. ✅ **C8 — circles** — split into two scales: ProgressionLandscape's tight grid
+   uses the continuous, column-bounded `getDomainCircleSize` (fixes the real
+   overflow); the PortraitCircles hero keeps its original large, dramatic per-tier
+   diameters via `getPortraitCircleSize` (it free-wraps and never overflowed, so it
+   stays big — see "portrait restore" below). New `KnowledgeBubble` primitive +
+   `domainBubbleGradient` helper shared by KnowledgeCircle / DomainCircle /
+   PortraitDomainCircle. Unit tests cover both scales. `SharePortraitCard`'s Bubble
+   stays literal (raster).
 5. ✅ **Smaller a11y** — Nav inactive tabs → `--brand-ink-700`, labels 9px → 10px;
    GameplayChat reaction pills + "+" button 34px → 44px; both `window.confirm()`
    prompts (unfriend, invite rotation) → inline `.btn-danger`/`.btn-ghost` confirms.
 
+## Also done (follow-ups)
+
+- ✅ **Token-enforcement lint rule** (audit's top cross-cutting recommendation):
+  `no-restricted-syntax` in `eslint.config.mjs` flags Tailwind palette colors /
+  `bg-white`/`text-black` / arbitrary `[#hex]` in `className` under
+  `src/components/**`. It's a **ratchet** — 23 backlog files are grandfathered to
+  `warn` (build stays green) while new/cleaned files are held at `error`. The
+  grandfather list in `eslint.config.mjs` should shrink over time; don't add to it.
+- ✅ **Portrait circles restored** — the C8 rework had shrunk PortraitCircles'
+  mastery circles to 168px; reverted to the original 304–384px hero sizes (the
+  portrait free-wraps and never overflowed — only the grid did).
+
 ## Not done (deliberately out of scope / future)
 
-- **Cross-cutting enforcement** (audit's top recommendation): a lint rule against
-  raw hex / `bg-white` / Tailwind palette colors in `src/components`, so the token
-  discipline stays enforced rather than advisory. Highest-leverage next move.
+- **Work down the lint grandfather list** — 23 components still carry off-system
+  colors in className (now visible as warnings). Tokenizing them removes each from
+  the grandfather list and flips it to enforced.
+- **Pre-existing lint errors:** `npm run lint` shows 5 `react-hooks/react` errors
+  (e.g. `set-state-in-effect`) in untouched files (AddToBankAction,
+  SendQuestionDrawer, useCatchupFlow, DomainRow). They reproduce with all design
+  work stashed — separate from this effort.
 - **Dark mode** has zero brand tokens (audit MINOR) — still generic gray.
 - Misc MINORs: `--font-literata` misnaming, muted-text/orange-link AA contrast,
   ASCII glyphs, toast reimplementations.
