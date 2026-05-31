@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db, masteryEvents, playerMastery } from '@/server/db';
+import { maybeNotifyInviterOfFirstFive } from '@/server/activity/invite-onboarding';
 import { effectiveTier } from '@/server/mastery/tiers';
 import type { AnswerState, MasteryTier } from '@/types/db';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
@@ -183,6 +184,12 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
       previousTier,
       newTier: nextTier,
     });
+  }
+
+  // Only the surfaces a new user actually plays count toward the invited-friend
+  // first-five milestone; author/curator credit and feed writes don't.
+  if (params.sourceType === 'daily' || params.sourceType === 'joshing_game') {
+    await maybeNotifyInviterOfFirstFive(params.userId);
   }
 
   return {

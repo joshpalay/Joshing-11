@@ -97,6 +97,15 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     );
   }
 
+  if (item.type === 'invited_friend_played_first_five') {
+    return (
+      <>
+        <UnderlineName>{actorName(item)}</UnderlineName> accepted your
+        invitation and played their first 5 questions
+      </>
+    );
+  }
+
   if (item.type === 'reaction_received') {
     return (
       <>
