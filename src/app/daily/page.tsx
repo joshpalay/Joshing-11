@@ -65,6 +65,8 @@ const ANSWER_ERROR_MESSAGES: Record<string, string> = {
   not_found: 'We could not find that Daily Five queue.',
   invalid_state: 'That question is already closed.',
   question_not_found: 'We could not find that Daily Five question.',
+  grader_unavailable:
+    "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
   unexpected: 'Could not record that answer.',
 };
 
