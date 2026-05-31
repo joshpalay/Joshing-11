@@ -129,7 +129,7 @@ export function Nav({
             <Bell className="size-5" strokeWidth={1.9} />
             {showBadge ? (
               <span
-                className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-white"
+                className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
                 style={{ backgroundColor: 'var(--destructive)' }}
                 aria-hidden="true"
               >
