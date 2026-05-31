@@ -20,26 +20,44 @@ type Row = {
 // All state used by the (hoisted) vi.mock factories must itself be hoisted.
 const { getFriendsMock, masteryRowsState, dbMock } = vi.hoisted(() => {
   const masteryRowsState: { rows: unknown[] } = { rows: [] }
+
+  // Universal chainable db mock. The test drives the full computeBeats(), which
+  // runs all five beats + two friend fallbacks + countActiveAnsweringPlayers —
+  // each using different builder chains (.where().orderBy(), .innerJoin().where(),
+  // .leftJoin().where(), plain .where(inArray(...)), …). Rather than hand-roll
+  // every shape, db.select()/db.selectDistinct() each start a fresh chain whose
+  // builder methods all return the SAME proxy, and the proxy is awaitable. The
+  // terminal value is chosen by discriminator so only beat4 gets real rows:
+  //   - selectDistinct chain  → both friends active
+  //   - any chain using leftJoin (the alignment join) → masteryRowsState.rows
+  //   - everything else → [] (so beats 1/2/3/5 produce no output, no throws)
+  function makeChain(isSelectDistinct: boolean) {
+    const flags = { selectDistinct: isSelectDistinct, leftJoin: false }
+    const resolve = (): unknown[] => {
+      if (flags.selectDistinct) return [{ userId: 'friend-a' }, { userId: 'friend-b' }]
+      if (flags.leftJoin) return masteryRowsState.rows
+      return []
+    }
+    const proxy: Record<PropertyKey, unknown> = new Proxy(
+      {},
+      {
+        get(_target, prop) {
+          if (prop === 'then') {
+            return (onFulfilled: (value: unknown[]) => unknown) => Promise.resolve(resolve()).then(onFulfilled)
+          }
+          return (..._args: unknown[]) => {
+            if (prop === 'leftJoin') flags.leftJoin = true
+            return proxy
+          }
+        },
+      },
+    )
+    return proxy
+  }
+
   const dbMock = {
-    // computeBeat4 first narrows to friends active this cycle via
-    // selectDistinct(...).from(masteryEvents).where(...). Mark both test
-    // friends active so their portrait rows are eligible.
-    selectDistinct: () => ({
-      from: () => ({
-        where: async () => [{ userId: 'friend-a' }, { userId: 'friend-b' }],
-      }),
-    }),
-    // Then the alignment query:
-    // select(...).from(playerMastery).innerJoin(users).leftJoin(pdv).where(sql).
-    select: () => ({
-      from: () => ({
-        innerJoin: () => ({
-          leftJoin: () => ({
-            where: async () => masteryRowsState.rows,
-          }),
-        }),
-      }),
-    }),
+    select: () => makeChain(false),
+    selectDistinct: () => makeChain(true),
   }
   return { getFriendsMock: vi.fn(), masteryRowsState, dbMock }
 })

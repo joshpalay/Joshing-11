@@ -107,7 +107,15 @@ vi.mock('@/server/activity/write-activity', () => ({ writeActivity: vi.fn() }));
 
 function selectChain(result: unknown[]) {
   const terminalWhere = {
-    orderBy: vi.fn(() => ({ limit: vi.fn(async () => result) })),
+    // orderBy must be BOTH awaitable (readPriorAnswersForQuestion does
+    // .where().orderBy(asc, asc) and awaits it directly) AND chainable into
+    // .limit (findWrongAnswerContext does .where().orderBy(desc).limit(1)).
+    // Mirror the makeWhereBuilder pattern in db/queries/__tests__/friends.test.ts.
+    orderBy: vi.fn(() => {
+      const p = Promise.resolve(result) as Promise<unknown[]> & { limit: () => Promise<unknown[]> };
+      p.limit = vi.fn(async () => result);
+      return p;
+    }),
     limit: vi.fn(async () => result),
   };
   const joinNode: Record<string, unknown> = {
@@ -171,7 +179,14 @@ describe('Feed submitted answers for creator notes', () => {
           },
         },
       ]))
-      .mockReturnValueOnce(selectChain([]));
+      // The wrong-answer path makes four db.select calls in order:
+      //   1) feed+question row (above)
+      //   2) readPriorAnswersForQuestion (answer-state history)
+      //   3) existingMastery (player mastery lookup)
+      //   4) promptCreatorNoteAfterWrongAnswer (fire-and-forget, try/catch-wrapped)
+      .mockReturnValueOnce(selectChain([])) // readPriorAnswersForQuestion
+      .mockReturnValueOnce(selectChain([])) // existingMastery
+      .mockReturnValueOnce(selectChain([])); // promptCreatorNote
 
     dbMock.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<void>) => callback({
       update: vi.fn(() => updateChain()),
