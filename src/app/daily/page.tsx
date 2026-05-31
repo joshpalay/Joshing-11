@@ -7,6 +7,7 @@ import { X } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
+import { TopUpAreasModal, type TopUpInterest } from '@/components/daily/TopUpAreasModal';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
@@ -251,6 +252,7 @@ export default function DailyPage() {
   const [showUnfamiliarDialog, setShowUnfamiliarDialog] = useState(false);
   const [excludingDomain, setExcludingDomain] = useState(false);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
+  const [areaTopUp, setAreaTopUp] = useState<{ existing: TopUpInterest[]; maxNew: number } | null>(null);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -327,6 +329,36 @@ export default function DailyPage() {
 
     return () => window.clearTimeout(initialTimer);
   }, [loadQueue]);
+
+  // One-time nudge for invite-seeded users who only declared three interests:
+  // the next time they play, offer to top up to five. Eligibility (onboarded,
+  // exactly three active interests, not yet dismissed) and persistence both
+  // live server-side, so this just asks whether to show and renders the modal.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/declared-interests/top-up', {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        if (!response.ok) return;
+        const body = (await response.json().catch(() => null)) as
+          | { eligible?: boolean; existing?: TopUpInterest[]; remainingSlots?: number }
+          | null;
+        if (cancelled || !body?.eligible) return;
+        setAreaTopUp({
+          existing: Array.isArray(body.existing) ? body.existing : [],
+          maxNew: Math.max(0, body.remainingSlots ?? 0),
+        });
+      } catch {
+        // Non-fatal — the prompt simply won't show this session.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const actualCurrentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
   const currentSlot = pausedAfterSlotIndex === null ? actualCurrentSlot : null;
@@ -764,6 +796,15 @@ export default function DailyPage() {
           onExclude={(tick) => void excludeDomainAndSkip(tick)}
           onSkipOnly={() => { setShowUnfamiliarDialog(false); void skipCurrent(); }}
           onCancel={() => setShowUnfamiliarDialog(false)}
+        />
+      ) : null}
+
+      {areaTopUp && areaTopUp.maxNew > 0 ? (
+        <TopUpAreasModal
+          existing={areaTopUp.existing}
+          maxNew={areaTopUp.maxNew}
+          onDismiss={() => setAreaTopUp(null)}
+          onSaved={() => setAreaTopUp(null)}
         />
       ) : null}
     </main>

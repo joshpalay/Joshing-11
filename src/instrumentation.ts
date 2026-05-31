@@ -874,6 +874,23 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0056 adds the nullable User.area_top_up_prompt_dismissed_at
+    // timestamp. It records that a user dismissed (or completed) the one-time
+    // "add two more areas" prompt shown to invite-seeded users who only have
+    // three declared interests. Guard for preview/production databases that may
+    // have the migration recorded without the column actually present — the
+    // GET /api/declared-interests/top-up eligibility query selects it and would
+    // 42703 before app code can recover.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "area_top_up_prompt_dismissed_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
