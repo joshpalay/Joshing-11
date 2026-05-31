@@ -2,14 +2,12 @@ import { and, count, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import { activityItems, db, friendInvitations, masteryEvents } from '@/server/db';
 import { writeActivity } from '@/server/activity/write-activity';
-
-// A newly invited friend "playing their first five questions" is counted
-// across the two surfaces a new user actually plays through: the daily queue
-// and Joshing Games. MASTERY_EVENTS.session_context holds the originating
-// surface (source_type holds the live/catchup discriminator instead), so we
-// match on session_context.
-const FIRST_FIVE_PLAY_SURFACES = ['daily', 'joshing_game'] as const;
-const FIRST_FIVE_THRESHOLD = 5;
+import {
+  FIRST_FIVE_PLAY_SURFACES,
+  FIRST_FIVE_THRESHOLD,
+  INVITED_FRIEND_FIRST_FIVE_TYPE,
+  firstFiveActivityToWrite,
+} from '@/server/activity/invite-onboarding-policy';
 
 /**
  * After an invited friend answers a question, notify the friend who invited
@@ -18,7 +16,8 @@ const FIRST_FIVE_THRESHOLD = 5;
  *
  * Safe to call after every daily/Joshing answer: it self-gates on the exact
  * transition to the threshold and swallows its own errors so it never breaks
- * the answer path.
+ * the answer path. The notify/skip decision lives in the pure
+ * firstFiveActivityToWrite policy; this wrapper only does the DB reads.
  */
 export async function maybeNotifyInviterOfFirstFive(inviteeUserId: string): Promise<void> {
   try {
@@ -33,13 +32,13 @@ export async function maybeNotifyInviterOfFirstFive(inviteeUserId: string): Prom
           inArray(masteryEvents.sessionContext, [...FIRST_FIVE_PLAY_SURFACES]),
         ),
       );
+    const playedCount = Number(playedRow?.played ?? 0);
 
-    // Fire only on the exact crossing so the inviter is notified once, not on
-    // every subsequent answer.
-    if (Number(playedRow?.played ?? 0) !== FIRST_FIVE_THRESHOLD) return;
+    // Cheap gate before the extra lookups: only the exact crossing matters.
+    if (playedCount !== FIRST_FIVE_THRESHOLD) return;
 
     // Did this user join via a friend's invitation?
-    const [invitation] = await db
+    const [invitationRow] = await db
       .select({
         id: friendInvitations.id,
         inviterUserId: friendInvitations.inviterUserId,
@@ -53,7 +52,7 @@ export async function maybeNotifyInviterOfFirstFive(inviteeUserId: string): Prom
       )
       .limit(1);
 
-    if (!invitation?.inviterUserId) return;
+    if (!invitationRow) return;
 
     // Defensive idempotency: never write the same milestone twice for one
     // invitation (covers retries and two answers that both observe count == 5).
@@ -62,22 +61,22 @@ export async function maybeNotifyInviterOfFirstFive(inviteeUserId: string): Prom
       .from(activityItems)
       .where(
         and(
-          eq(activityItems.userId, invitation.inviterUserId),
-          eq(activityItems.type, 'invited_friend_played_first_five'),
-          eq(activityItems.referenceId, invitation.id),
+          eq(activityItems.userId, invitationRow.inviterUserId),
+          eq(activityItems.type, INVITED_FRIEND_FIRST_FIVE_TYPE),
+          eq(activityItems.referenceId, invitationRow.id),
         ),
       )
       .limit(1);
 
-    if (existing) return;
-
-    await writeActivity({
-      userId: invitation.inviterUserId,
-      type: 'invited_friend_played_first_five',
-      actorUserId: inviteeUserId,
-      referenceId: invitation.id,
-      referenceType: 'friend_invitation',
+    const activity = firstFiveActivityToWrite({
+      inviteeUserId,
+      playedCount,
+      invitation: invitationRow,
+      alreadyNotified: Boolean(existing),
     });
+    if (!activity) return;
+
+    await writeActivity(activity);
   } catch (error) {
     console.error('first-five inviter notification failed', error);
   }
