@@ -3,6 +3,7 @@ import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { cache } from 'react';
 
 import { db, declaredInterests, friendInvitations, playerMastery, users } from '@/server/db';
+import { categorizeInterestDomain, isCatchAllBroadCategory } from '@/server/llm/interests';
 
 type User = InferSelectModel<typeof users>;
 
@@ -120,13 +121,32 @@ export async function saveDeclaredInterests(userId: string, interests: DeclaredI
     throw new Error('A player can have at most 5 active declared interests.');
   }
 
+  // Backstop categorization. This is the single chokepoint for every declared-
+  // interest write (onboarding + manual edits). The upstream categorizer
+  // (canonicalizeInterest) falls back to the "General Knowledge" catch-all
+  // whenever the Haiku call is unavailable or returns malformed JSON, and that
+  // fabricated value used to be persisted verbatim — permanently stranding the
+  // domain in the "Other interests" circle, since only later gameplay
+  // re-categorizes. Re-run the domain categorizer for any interest that arrived
+  // uncategorized (null/empty or a catch-all) and persist null — honest and
+  // backfillable — only when categorization is genuinely unavailable.
+  // categorizeInterestDomain never throws, so a transient LLM blip degrades to
+  // null rather than failing the save.
+  const categorized = await Promise.all(
+    normalized.map(async (interest) => {
+      if (!isCatchAllBroadCategory(interest.broadCategory)) return interest;
+      const broadCategory = await categorizeInterestDomain(interest.label);
+      return { ...interest, broadCategory };
+    }),
+  );
+
   await db.transaction(async (tx) => {
     await tx
       .update(declaredInterests)
       .set({ isActive: false })
       .where(eq(declaredInterests.userId, userId));
 
-    for (const interest of normalized) {
+    for (const interest of categorized) {
       await tx
         .insert(declaredInterests)
         .values({
@@ -167,7 +187,7 @@ export async function saveDeclaredInterests(userId: string, interests: DeclaredI
     }
   });
 
-  return normalized;
+  return categorized;
 }
 
 export async function markOnboardingComplete(userId: string) {

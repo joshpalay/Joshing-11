@@ -30,7 +30,10 @@ export type ProposedInterest = {
 
 export type CanonicalizedInterest = {
   suggested: string;
-  broadCategory: string;
+  // null when categorization is unavailable or the model returns a catch-all.
+  // The save path (saveDeclaredInterests) re-categorizes null/catch-all values
+  // before persisting, so this helper never fabricates "General Knowledge".
+  broadCategory: string | null;
   explanation: string;
 };
 
@@ -277,7 +280,7 @@ export async function canonicalizeInterest(rawInput: string): Promise<Canonicali
   const cleanInput = rawInput.trim().replace(/\s+/g, ' ').slice(0, 100);
   const fallback: CanonicalizedInterest = {
     suggested: cleanInput,
-    broadCategory: 'General Knowledge',
+    broadCategory: null,
     explanation: 'Kept your original wording because a suggestion was not available.',
   };
 
@@ -311,9 +314,77 @@ Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation
     return fallback;
   }
 
+  const normalizedBroad = normalizeBroadCategory(broadCategory);
   return {
     suggested: suggested.slice(0, 100),
-    broadCategory: (normalizeBroadCategory(broadCategory) ?? 'General Knowledge').slice(0, 80),
+    // Don't surface the catch-all as a real suggestion; let the save path
+    // re-categorize. null normalizes and "General Knowledge" both collapse here.
+    broadCategory:
+      normalizedBroad && normalizedBroad !== 'General Knowledge'
+        ? normalizedBroad.slice(0, 80)
+        : null,
     explanation: explanation.slice(0, 180),
   };
+}
+
+/**
+ * True when a stored broad_category is the catch-all rather than a real
+ * top-level bucket. normalizeBroadCategory() folds "Other"/"General"/
+ * "Potpourri" into "General Knowledge", so a null/empty value or a value that
+ * normalizes to "General Knowledge" is exactly the set we treat as
+ * "uncategorized" — the value the portrait renders as the "Other interests"
+ * circle. Used both by the declared-interest write path (to decide whether to
+ * (re)categorize) and by the backfill script.
+ */
+export function isCatchAllBroadCategory(value: string | null | undefined): boolean {
+  if (typeof value !== 'string') return true;
+  const normalized = normalizeBroadCategory(value);
+  return normalized === null || normalized === 'General Knowledge';
+}
+
+/**
+ * Resolve a real top-level broad category for a single declared-interest
+ * domain. Unlike canonicalizeInterest (which fabricates the "General Knowledge"
+ * catch-all on failure), this returns null when the categorizer is unavailable
+ * or can't place the domain, so callers persist an honest, backfillable
+ * "uncategorized" value instead of permanently stranding the domain in the
+ * "Other interests" circle.
+ */
+export async function categorizeInterestDomain(domain: string): Promise<string | null> {
+  const cleanInput = domain.trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!cleanInput) return null;
+
+  const client = getAnthropicClient();
+  if (!client) return null;
+
+  const systemPrompt = `Assign one stable, top-level "broad category" to a user's declared trivia interest.
+Respond in JSON only: { "broadCategory": "..." }
+- broadCategory is a stable top-level bucket such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Technology, Food & Cuisine, Architecture & Design.
+- It must NOT be a person/work/movement/era-specific territory. Examples: "Romantic Era Classical symphony music" -> Music; "90's Bollywood" -> Film & Television; "Mortgage backed securities" -> Finance; "James Joyce" -> Literature.
+- If none of the listed buckets fit, name the closest real top-level field as a 1-2 word label.
+- NEVER return "General Knowledge", "Other", "General", or "Potpourri" — these are forbidden catch-alls. Always pick the closest real category.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  try {
+    // ~150 tokens — below Haiku's 2048 cache threshold; plain string.
+    const response = await loggedMessagesCreate(client, 'interests-categorize-domain', {
+      model: CANONICALIZE_MODEL,
+      max_tokens: 80,
+      temperature: 0.2,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: wrapUserInput('interest_domain', cleanInput) }],
+    });
+
+    const text = extractTextContent(response.content);
+    const parsed = parseJsonObject(text);
+    const raw = asTrimmedString(parsed?.broadCategory ?? parsed?.broad_category);
+    if (!raw) return null;
+
+    const normalized = normalizeBroadCategory(raw);
+    // The model occasionally ignores the prohibition; treat any catch-all
+    // result as a miss so we never persist it.
+    if (!normalized || normalized === 'General Knowledge') return null;
+    return normalized.slice(0, 80);
+  } catch {
+    return null;
+  }
 }
