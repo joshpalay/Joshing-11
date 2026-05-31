@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import {
-  AREA_TOP_UP_MAX_INTERESTS,
-  getAreaTopUpContext,
-} from '@/server/db/queries/area-top-up';
+import { getAreaTopUpContext } from '@/server/db/queries/area-top-up';
+import { remainingTopUpSlots } from '@/server/area-top-up/rules';
 
 // GET /api/declared-interests/top-up
 //
@@ -25,6 +23,6 @@ export async function GET() {
       label: interest.domain,
       broadCategory: interest.broadCategory,
     })),
-    remainingSlots: Math.max(0, AREA_TOP_UP_MAX_INTERESTS - context.existing.length),
+    remainingSlots: remainingTopUpSlots(context.existing.length),
   });
 }

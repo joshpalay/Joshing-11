@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { getAreaTopUpContext } from '@/server/db/queries/area-top-up';
+import { filterTopUpSuggestions } from '@/server/area-top-up/rules';
 import { proposeInterests, type CulturalAnchor, type WarmupAnswers } from '@/server/llm/interests';
 
 // GET /api/declared-interests/top-up/suggestions
@@ -44,10 +45,10 @@ export async function GET() {
     const proposed = await proposeInterests({ warmupAnswers, culturalAnchor });
 
     // Drop anything the user already has so we never suggest a duplicate.
-    const existingDomains = new Set(context.existing.map((interest) => interest.domain.toLowerCase()));
-    const suggestions = proposed
-      .filter((interest) => !existingDomains.has(interest.domain.toLowerCase()))
-      .slice(0, 8);
+    const suggestions = filterTopUpSuggestions(
+      proposed,
+      context.existing.map((interest) => interest.domain),
+    );
 
     return NextResponse.json({ suggestions });
   } catch {

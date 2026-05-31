@@ -2,15 +2,9 @@ import { eq } from 'drizzle-orm';
 
 import { db, users } from '@/server/db';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { isAreaTopUpEligible } from '@/server/area-top-up/rules';
 
-// Invite-seeded users start with exactly this many declared interests (the
-// inviter's pre-seeded suggestions, capped at 3). Only users sitting at this
-// exact count are offered the one-time top-up prompt — see the product
-// decision in the plan: "exactly 3 → top up to 5".
-export const AREA_TOP_UP_TRIGGER_COUNT = 3;
-// The DeclaredInterest cap enforced by saveDeclaredInterests. The top-up
-// prompt lets a user add up to (MAX - TRIGGER) = 2 more areas.
-export const AREA_TOP_UP_MAX_INTERESTS = 5;
+export { AREA_TOP_UP_MAX_INTERESTS, AREA_TOP_UP_TRIGGER_COUNT } from '@/server/area-top-up/rules';
 
 export type ExistingInterest = {
   domain: string;
@@ -56,10 +50,11 @@ export async function getAreaTopUpContext(userId: string): Promise<AreaTopUpCont
     broadCategory: interest.broadCategory,
   }));
 
-  const eligible =
-    user.onboardingComplete === true &&
-    user.dismissedAt === null &&
-    existing.length === AREA_TOP_UP_TRIGGER_COUNT;
+  const eligible = isAreaTopUpEligible({
+    onboardingComplete: user.onboardingComplete,
+    dismissedAt: user.dismissedAt,
+    activeInterestCount: existing.length,
+  });
 
   const anchor: CulturalAnchorContext | null =
     typeof user.birthYear === 'number' && user.grewUpCountry
