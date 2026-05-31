@@ -33,6 +33,7 @@ import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
+import { textContainsAnswer } from '@/server/questions/self-answering';
 import { resolveDailyBasePoints } from './types';
 import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
 
@@ -54,6 +55,8 @@ Questions must be:
 - Recall questions, not selection questions: the player must produce the answer from memory
 
 NEVER generate multiple-choice questions. Do not list candidate answers inside the question_text, and do not use phrasings like "Which of the following…", "is it X, Y, or Z?", or "— A, B, or C?". The question must stand alone as an open-ended prompt; the player writes a free-text answer.
+
+NEVER name the answer in the question_text. The answer (or a near-paraphrase of it) must not appear anywhere in the setup — if the very term you are asking the player to produce shows up in your own phrasing, the question gives itself away. Rephrase so it doesn't. E.g. do NOT ask "what term describes the mental model a user forms…" when the answer is "mental model".
 
 BAD (multiple-choice phrasing — never produce these):
 - "Which of the following best describes Sally — a romantic rival, a radical free spirit, or a steadying maternal figure?"
@@ -645,6 +648,30 @@ async function findFactualFailures(generated: LlmQuestion[]): Promise<{
   }
 }
 
+// Deterministic answer-leak gate. The Haiku quality gate above lists
+// ANSWER_LEAKED / SELF_ANSWERING among the defects it looks for, but it is an
+// LLM check that fails open on a Haiku outage and misses subtle lexical leaks
+// (e.g. "the mental model a user forms" with answer "Mental model"). User-
+// authored questions already get a fail-closed string check via
+// textContainsAnswer() at create time; this gives daily-generated questions the
+// same fallback. It is pure (no LLM, no DB) so it cannot fail open. Only
+// question_text is checked — the explainer is *supposed* to contain the answer.
+export function findAnswerLeaks(generated: LlmQuestion[]): {
+  toDrop: Set<number>;
+  reasons: Record<number, string>;
+} {
+  const toDrop = new Set<number>();
+  const reasons: Record<number, string> = {};
+  for (let i = 0; i < generated.length; i += 1) {
+    const q = generated[i];
+    if (textContainsAnswer(q.question_text, q.answer)) {
+      toDrop.add(i);
+      reasons[i] = `answer "${q.answer}" appears in question text`.slice(0, 200);
+    }
+  }
+  return { toDrop, reasons };
+}
+
 const RECENT_HISTORY_GATE_LIMIT = 30;
 
 const RECENT_HISTORY_GATE_SYSTEM_PROMPT = `You are reviewing newly-generated trivia questions against a list of questions this same user has already been asked. For each NEW question, decide whether it probes the same underlying fact as ANY of the RECENT questions.
@@ -864,9 +891,10 @@ export async function generateDailyQuestions(
 
   if (generated.length === 0) return [];
 
-  // Three independent gates run against the same input batch, then the drop
-  // sets are unioned. Sequential awaits would 3x the gate-phase latency for
-  // no benefit — none of the gates depend on each other's verdicts.
+  // Four LLM gates run against the same input batch, then the drop sets are
+  // unioned (the deterministic findAnswerLeaks gate runs synchronously after).
+  // Sequential awaits would multiply the gate-phase latency for no benefit —
+  // none of the gates depend on each other's verdicts.
   //
   // - findBatchDuplicates: catches intra-batch dupes (e.g. two Proprietor
   //   questions in one call on 2026-05-20). Persist-time fact_key guard only
@@ -879,6 +907,8 @@ export async function generateDailyQuestions(
   //   catches answer-leakage, opinion/vague, false-premise, self-answering.
   // - findFactualFailures: verifies the stated answer is actually correct for
   //   the question — the one defect class the other gates never inspect.
+  // - findAnswerLeaks (below, synchronous): deterministic fail-closed backstop
+  //   for answer leakage when the Haiku quality gate misses or fails open.
   const recentForGate = avoidList.slice(0, RECENT_HISTORY_GATE_LIMIT);
   const [batchDuplicates, recentDuplicates, qualityResult, factualResult] = await Promise.all([
     findBatchDuplicates(generated),
@@ -918,11 +948,25 @@ export async function generateDailyQuestions(
     });
   }
 
+  // Deterministic fallback for the answer-leak case the Haiku quality gate can
+  // miss or fail open on. Synchronous, so it runs after the Promise.all rather
+  // than inside it.
+  const answerLeaks = findAnswerLeaks(generated);
+  if (answerLeaks.toDrop.size > 0) {
+    console.warn('[daily/generate-questions] dropping answer-leaking questions', {
+      droppedCount: answerLeaks.toDrop.size,
+      droppedIndices: [...answerLeaks.toDrop].sort((a, b) => a - b),
+      reasons: answerLeaks.reasons,
+      originalCount: generated.length,
+    });
+  }
+
   const allDrops = new Set<number>([
     ...batchDuplicates,
     ...recentDuplicates,
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
+    ...answerLeaks.toDrop,
   ]);
   if (allDrops.size > 0) {
     generated = generated.filter((_, i) => !allDrops.has(i));
