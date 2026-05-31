@@ -9,6 +9,7 @@ import type { MasteryTier } from '@/types/db'
 
 import { visibleFeedCategory } from './category'
 import { FeedActionLink } from './FeedActionLink'
+import { FeedCardShell } from './FeedCardShell'
 import type { AnsweredByYouFeedItem, AnsweredByYouPairedFriend } from './types'
 import { colorForCategory, colorForUser, initialsFor, isDarkColor } from './visual'
 
@@ -234,12 +235,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
   const categoryColor = colorForCategory(item.category)
 
   return (
-    <article className="relative overflow-hidden rounded-2xl border border-[var(--border-warm)] bg-[var(--cream)]">
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-0 w-[2px]"
-        style={{ backgroundColor: categoryColor }}
-      />
+    <FeedCardShell accentColor={categoryColor} accentPlacement="left">
       <div
         className="px-[14px] pt-[14px] pb-[12px]"
         style={{
@@ -314,6 +310,6 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
       <div className="px-[14px] py-[12px]">
         <AnsweredResult item={item} recheckAction={recheckAction} onRetry={onRetry} />
       </div>
-    </article>
+    </FeedCardShell>
   )
 }

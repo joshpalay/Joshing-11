@@ -17,8 +17,8 @@ import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { computeOverlapCells, getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
 import { resolveTier } from '@/server/mastery/tiers';
 
-const CREATOR_COLOR = '#c0392b';
-const RECIPIENT_COLOR = '#1a6b8a';
+const CREATOR_COLOR = 'var(--brand-navy)';
+const RECIPIENT_COLOR = 'var(--brand-orange)';
 
 type PageProps = {
   params: Promise<{ id: string }>;

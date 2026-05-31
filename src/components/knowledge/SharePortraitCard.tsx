@@ -1,7 +1,17 @@
 import { forwardRef, type CSSProperties } from 'react';
 import type { PortraitEntry } from '@/components/knowledge/PortraitCircles';
 
-// ── Design tokens ──────────────────────────────────────────────────────────────
+// ── Palette (intentionally literal — do NOT tokenize) ───────────────────────────
+//
+// This card is never rendered as live, re-themeable DOM: SharePortraitModal
+// snapshots it with html2canvas (scale 3) into a PNG for native share / download.
+// The literal hex values and literal font names ('Courier New' / 'Playfair
+// Display') are load-bearing for that raster path — the modal hand-loads Playfair
+// via the FontFace API so the detached canvas render has a concrete font file, and
+// the app's hashed `--font-*` Next-font variables are not reliably available to
+// html2canvas. A snapshot also never re-themes, so var(--brand-*) tokens would buy
+// nothing here. This is the deliberate "receipt" share aesthetic; keep it literal.
+// (See the 2026-05-30 design audit — share-card bucket.)
 
 const INK = '#0e0e0e';
 const INK2 = '#3a3a3a';

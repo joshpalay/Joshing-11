@@ -52,7 +52,7 @@ export function DomainRow({
             <span style={metaLabelStyle}>Add questions here to reach mastery.</span>
           ) : (
             <>
-              <span style={metaLabelStyle}>Your q's</span>
+              <span style={metaLabelStyle}>Your q’s</span>
               <div style={dotsWrapStyle} aria-hidden>
                 {Array.from({ length: CONTRIBUTION_DOT_COUNT }).map((_, index) => (
                   <span

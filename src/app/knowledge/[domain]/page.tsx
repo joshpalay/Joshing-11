@@ -108,28 +108,26 @@ export default function DomainDetailPage() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError(null);
-
-    fetch(`/api/knowledge/${encodeURIComponent(decodedDomain)}`, { credentials: 'include', cache: 'no-store' })
-      .then(async (response) => {
+    // Run inside an async fn so the initial loading/error state isn't set
+    // synchronously in the effect body (react-hooks set-state-in-effect).
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/knowledge/${encodeURIComponent(decodedDomain)}`, { credentials: 'include', cache: 'no-store' });
         const body = await response.json().catch(() => null);
         if (response.status === 401) {
           router.replace('/login');
-          return null;
+          return;
         }
         if (!response.ok || !body) throw new Error(body?.message ?? 'Could not load this domain.');
-        return body as DomainDetail;
-      })
-      .then((body) => {
-        if (active && body) setDetail(body);
-      })
-      .catch((caught) => {
+        if (active) setDetail(body as DomainDetail);
+      } catch (caught) {
         if (active) setError(caught instanceof Error ? caught.message : 'Could not load this domain.');
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       active = false;

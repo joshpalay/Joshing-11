@@ -562,12 +562,14 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
             disabled={status === 'sending'}
             style={{
               flex: '0 0 auto',
-              minHeight: '34px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: '44px',
               borderRadius: '999px',
               border: '1px solid var(--border)',
               background: 'var(--surface)',
               color: 'var(--text)',
-              padding: '0 10px',
+              padding: '0 14px',
               fontSize: '0.78rem',
               cursor: status === 'sending' ? 'default' : 'pointer',
             }}
@@ -583,8 +585,11 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
           aria-label="Add a custom message"
           style={{
             flex: '0 0 auto',
-            width: '34px',
-            height: '34px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '44px',
+            height: '44px',
             borderRadius: '999px',
             border: '1px solid var(--border)',
             background: 'var(--surface)',

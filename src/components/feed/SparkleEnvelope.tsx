@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react'
 
-import { cn } from '@/lib/utils'
-
 import { FeedActionLink } from './FeedActionLink'
+import { FeedCardShell } from './FeedCardShell'
 
 type SparkleEnvelopeProps = {
   /** Attribution line — e.g. "<actor> thought you'd like this about <category>." */
@@ -30,13 +29,8 @@ export function SparkleEnvelope({
   className,
 }: SparkleEnvelopeProps) {
   return (
-    <article
-      className={cn(
-        "overflow-hidden rounded-[4px] bg-[url('/images/Variant4.png')] bg-[length:300px_auto] bg-center p-3 shadow-[0_4px_12px_rgba(40,32,30,0.04)]",
-        className,
-      )}
-    >
-      <div className="flex flex-col items-center gap-5 rounded-[4px] bg-[var(--brand-card)] p-[14px]">
+    <FeedCardShell variant="triangle" className={className}>
+      <div className="flex flex-col items-center gap-5 p-[14px]">
         <div className="flex w-full items-start justify-between gap-3">
           <p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-black">
             {signal}
@@ -62,6 +56,6 @@ export function SparkleEnvelope({
           ) : null}
         </div>
       </div>
-    </article>
+    </FeedCardShell>
   )
 }
