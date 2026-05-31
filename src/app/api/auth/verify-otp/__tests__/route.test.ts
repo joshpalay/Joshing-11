@@ -69,6 +69,10 @@ vi.mock('@/server/friends/invitations', () => ({
   getValidInvitationForPhone: getValidInvitationForPhoneMock,
   hasAcceptedInvitationForUser: hasAcceptedInvitationForUserMock,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE: 'This invitation could not be accepted.',
+  // The route also imports INVITE_REQUIRED_MESSAGE for its 403 (new-signup,
+  // no token) path; mock must expose it or that branch throws.
+  INVITE_REQUIRED_MESSAGE:
+    "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite.",
 }))
 
 import { POST } from '@/app/api/auth/verify-otp/route'
@@ -221,10 +225,14 @@ describe('/api/auth/verify-otp invitation gate', () => {
       )
       const body = await response.json()
 
-      expect(response.status).toBe(400)
+      // New signup with no token is gated by inviteRequiredRejection() →
+      // 403 invite_required (not the 400 invalid_invitation used for bad/empty
+      // tokens). This is the invite-only signup gate.
+      expect(response.status).toBe(403)
       expect(body).toEqual({
-        error: 'invalid_invitation',
-        message: 'This invitation could not be accepted.',
+        error: 'invite_required',
+        message:
+          "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite.",
       })
       expect(createSessionMock).not.toHaveBeenCalled()
       // No user should be created.

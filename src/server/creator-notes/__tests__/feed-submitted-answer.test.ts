@@ -22,13 +22,15 @@ const {
   userAnsweredQuestionCorrectlyMock: vi.fn(),
 }));
 
-vi.mock('drizzle-orm', () => ({
-  and: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
-  desc: vi.fn((value: unknown) => ({ op: 'desc', value })),
-  eq: vi.fn((left: unknown, right: unknown) => ({ op: 'eq', left, right })),
-  inArray: vi.fn((left: unknown, values: unknown[]) => ({ op: 'inArray', left, values })),
-  sql: vi.fn((parts: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', parts, values })),
-}));
+// Use the real drizzle-orm operators. They only build query-AST objects; the
+// dbMock below intercepts execution, and this test asserts on the captured
+// .set() values, never on operator shapes. Spreading the real module avoids
+// hand-maintaining every operator the route's import graph happens to touch
+// (eq/and/or/ne/gte/isNotNull/inArray/asc/desc/sql…).
+vi.mock('drizzle-orm', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('drizzle-orm')>();
+  return { ...actual };
+});
 
 vi.mock('@/server/db', () => ({
   db: dbMock,
@@ -95,7 +97,7 @@ vi.mock('@/server/db', () => ({
 }));
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
-vi.mock('@/server/grading', () => ({ gradeAnswer: gradeAnswerMock }));
+vi.mock('@/server/grading', () => ({ gradeAnswer: gradeAnswerMock, selectQuip: vi.fn(() => 'quip') }));
 vi.mock('@/server/daily/generate-breadcrumb', () => ({ generateBreadcrumb: generateBreadcrumbMock }));
 vi.mock('@/server/mastery/write-mastery-event', () => ({ writeMasteryEvent: writeMasteryEventMock }));
 vi.mock('@/server/mastery/scoring', () => ({ getBasePoints: vi.fn(() => 10) }));

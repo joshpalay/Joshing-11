@@ -13,10 +13,19 @@ const { dbMock, state } = vi.hoisted(() => {
 
   function makeWhereBuilder(rows: unknown[]) {
     return {
-      where: vi.fn(() => ({
-        orderBy: vi.fn(async () => rows),
-        limit: vi.fn(async () => rows),
-      })),
+      // where() must be BOTH awaitable (the friendships query awaits it
+      // directly) AND chainable into orderBy/limit (the users query does
+      // .where().orderBy(...)). Return a promise with the chain methods
+      // attached so both call shapes resolve to the same rows.
+      where: vi.fn(() => {
+        const p = Promise.resolve(rows) as Promise<unknown[]> & {
+          orderBy: () => Promise<unknown[]>
+          limit: () => Promise<unknown[]>
+        }
+        p.orderBy = vi.fn(async () => rows)
+        p.limit = vi.fn(async () => rows)
+        return p
+      }),
     }
   }
 

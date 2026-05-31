@@ -8,10 +8,6 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getFriendsMock } = vi.hoisted(() => ({
-  getFriendsMock: vi.fn(),
-}))
-
 // Shape of one row produced by the LEFT JOIN of playerMastery + users +
 // profileDomainVisibility.
 type Row = {
@@ -21,19 +17,32 @@ type Row = {
   visibility: 'public' | 'friends' | 'private' | null
 }
 
-const masteryRowsState: { rows: Row[] } = { rows: [] }
-
-const dbMock = {
-  select: vi.fn(() => ({
-    from: () => ({
-      innerJoin: () => ({
-        leftJoin: () => ({
-          where: vi.fn(async () => masteryRowsState.rows),
+// All state used by the (hoisted) vi.mock factories must itself be hoisted.
+const { getFriendsMock, masteryRowsState, dbMock } = vi.hoisted(() => {
+  const masteryRowsState: { rows: unknown[] } = { rows: [] }
+  const dbMock = {
+    // computeBeat4 first narrows to friends active this cycle via
+    // selectDistinct(...).from(masteryEvents).where(...). Mark both test
+    // friends active so their portrait rows are eligible.
+    selectDistinct: () => ({
+      from: () => ({
+        where: async () => [{ userId: 'friend-a' }, { userId: 'friend-b' }],
+      }),
+    }),
+    // Then the alignment query:
+    // select(...).from(playerMastery).innerJoin(users).leftJoin(pdv).where(sql).
+    select: () => ({
+      from: () => ({
+        innerJoin: () => ({
+          leftJoin: () => ({
+            where: async () => masteryRowsState.rows,
+          }),
         }),
       }),
     }),
-  })),
-}
+  }
+  return { getFriendsMock: vi.fn(), masteryRowsState, dbMock }
+})
 
 vi.mock('@/server/db/queries/friends', () => ({
   getFriends: getFriendsMock,

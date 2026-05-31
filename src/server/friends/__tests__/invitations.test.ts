@@ -147,6 +147,12 @@ vi.mock('@/server/db', () => ({
     personalMessage: 'friendInvitations.personalMessage',
     inviteeUserId: 'friendInvitations.inviteeUserId',
   },
+  // upsertInvitationFriendship imports `friendships` from @/server/db (not the
+  // schema barrel). Mirror the columns it touches so the conflict-upsert builds.
+  friendships: {
+    userAId: 'friendships.userAId',
+    userBId: 'friendships.userBId',
+  },
 }))
 
 vi.mock('@/server/db/schema', () => ({

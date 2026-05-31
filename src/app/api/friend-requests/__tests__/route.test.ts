@@ -60,10 +60,14 @@ describe('POST /api/friend-requests', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(createOrReusePendingFriendshipRequestMock).toHaveBeenCalledWith({
-      inviterUserId: 'viewer-user',
-      inviteeUserId: 'invitee-user',
-    })
+    expect(createOrReusePendingFriendshipRequestMock).toHaveBeenCalledWith(
+      // The route also threads personalNote and a `now` Date; assert the
+      // identifying fields rather than an exact object (now is non-deterministic).
+      expect.objectContaining({
+        inviterUserId: 'viewer-user',
+        inviteeUserId: 'invitee-user',
+      })
+    )
     expect(body).toMatchObject({
       ok: true,
       state: 'created',
