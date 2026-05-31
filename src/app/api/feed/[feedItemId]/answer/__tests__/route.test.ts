@@ -147,6 +147,19 @@ vi.mock('@/server/answer-state', async () => {
   return actual
 })
 
+// next/server's after() requires an active request scope at runtime and throws
+// otherwise. In tests, run the callback synchronously so its side effect (the
+// feed fan-out) still fires while keeping NextResponse intact.
+vi.mock('next/server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next/server')>()
+  return {
+    ...actual,
+    after: (fn: () => unknown) => {
+      void fn()
+    },
+  }
+})
+
 vi.mock('@/server/answer-history', () => ({
   readPriorAnswersForQuestion: readPriorAnswersForQuestionMock,
 }))
