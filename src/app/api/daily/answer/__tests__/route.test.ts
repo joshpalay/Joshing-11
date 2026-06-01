@@ -7,7 +7,6 @@ const {
   persistGeneratedQuestionMock,
   promoteDeclaredToDemonstratedMock,
   readPriorAnswersForQuestionMock,
-  selectQuipMock,
   suggestAnswerMock,
   updateDomainDifficultyOnAnswerMock,
   writeMasteryEventMock,
@@ -87,7 +86,6 @@ const {
     })),
     promoteDeclaredToDemonstratedMock: vi.fn(),
     readPriorAnswersForQuestionMock: vi.fn(async () => []),
-    selectQuipMock: vi.fn(() => 'quip'),
     suggestAnswerMock: vi.fn(),
     updateDomainDifficultyOnAnswerMock: vi.fn(async () => undefined),
     writeMasteryEventMock: vi.fn(async () => ({
@@ -106,7 +104,6 @@ const {
 
 vi.mock('@/server/grading', () => ({
   gradeAnswer: gradeAnswerMock,
-  selectQuip: selectQuipMock,
 }))
 
 vi.mock('@/server/adaptive-difficulty', () => ({

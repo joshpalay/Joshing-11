@@ -68,8 +68,8 @@ export type ChatMessage =
       canonicalSubcategory?: string | null;
       /** B-1 — domain newly opened in the KB by this correct answer; surfaces the "Added [Domain] — remove?" undo. */
       openedTerritoryDomain?: string | null;
-      /** Per-answer commentary quip shown below the result bubble */
-      quip?: string | null;
+      /** Author's why — commentary the question's author attached at creation, revealed on answer (correct or incorrect). */
+      authorNote?: string | null;
       /** Question's stored factual explainer. Rendered as a fallback below the verdict when no breadcrumb arrives (e.g. feed-sourced catch-up items, or when /api/breadcrumb times out). */
       explanation?: string | null;
       reactionPrompt?: ReactionPromptData | null;
@@ -586,26 +586,41 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   );
 }
 
-function QuipLine({ text }: { text: string }) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const t = window.setTimeout(() => setVisible(true), 150);
-    return () => window.clearTimeout(t);
-  }, []);
+function AuthorNoteCard({ text, creatorName }: { text: string; creatorName: string | null }) {
   return (
-    <p
+    <div
       style={{
-        fontSize: '0.875rem',
-        color: 'var(--text-muted)',
-        fontStyle: 'italic',
-        marginTop: '4px',
-        marginLeft: '8px',
-        opacity: visible ? 1 : 0,
-        transition: 'opacity 0.3s ease',
+        marginTop: '8px',
+        width: '100%',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface-2)',
+        padding: '10px 14px',
+        color: 'var(--text)',
       }}
     >
-      {text}
-    </p>
+      <p
+        style={{
+          ...monoStyle,
+          fontSize: '0.55rem',
+          color: 'var(--text-muted)',
+          letterSpacing: '0.18em',
+          textTransform: 'uppercase',
+        }}
+      >
+        {creatorName ? `Why ${creatorName} asked` : 'Why they asked'}
+      </p>
+      <p
+        style={{
+          marginTop: '4px',
+          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontSize: '0.92rem',
+          lineHeight: 1.45,
+        }}
+      >
+        {text}
+      </p>
+    </div>
   );
 }
 
@@ -642,7 +657,7 @@ function ResultRow({
   consolation,
   insideJoke,
   breadcrumb,
-  quip,
+  authorNote,
   explanation,
   copyVariant,
   creatorName,
@@ -661,7 +676,7 @@ function ResultRow({
   consolation: string | null;
   insideJoke?: string | null;
   breadcrumb: string | null;
-  quip?: string | null;
+  authorNote?: string | null;
   explanation?: string | null;
   copyVariant: number;
   creatorName: string | null;
@@ -871,7 +886,6 @@ function ResultRow({
         {breadcrumb
           ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} />
           : explanation ? <ExplanationLine text={explanation} /> : null}
-        {quip ? <QuipLine text={quip} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
@@ -914,6 +928,7 @@ function ResultRow({
           </p>
         </div>
       ) : null}
+      {authorNote ? <AuthorNoteCard text={authorNote} creatorName={creatorName} /> : null}
       {correct && openedTerritoryDomain ? (
         <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
@@ -1127,7 +1142,7 @@ export function GameplayChatThread({
                 consolation={m.consolation}
                 insideJoke={m.insideJoke}
                 breadcrumb={m.breadcrumb}
-                quip={m.quip}
+                authorNote={m.authorNote}
                 explanation={m.explanation}
                 copyVariant={m.copyVariant}
                 creatorName={m.creatorName}

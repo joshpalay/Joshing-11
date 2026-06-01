@@ -102,6 +102,8 @@ export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'expiry_reminder',
   'incognito_round_invitation',
   'anniversary_milestone',
+  // Retired with the post-wrong-answer CreatorNote nudge (B-3). Kept as
+  // tombstones because Postgres can't cleanly drop enum values; no code emits these.
   'creator_note_prompt',
   'creator_note_received',
   'ceremony_ready',
@@ -428,28 +430,6 @@ export const questionReactions = pgTable(
     index('QuestionReaction_senderUserId_idx').on(table.senderUserId),
     index('QuestionReaction_questionId_idx').on(table.questionId),
     index('QuestionReaction_context_idx').on(table.contextType, table.contextId),
-  ],
-);
-
-export const creatorNotes = pgTable(
-  'CreatorNote',
-  {
-    id: id(),
-    authorUserId: text('authorUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    recipientUserId: text('recipientUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
-    contextType: text('contextType').$type<'feed' | 'joshing_game' | 'daily'>().notNull(),
-    contextId: text('contextId'),
-    noteText: text('noteText').notNull(),
-    promptedAt: timestamp('promptedAt', { withTimezone: true }).notNull().defaultNow(),
-    writtenAt: timestamp('writtenAt', { withTimezone: true }),
-    deliveredAt: timestamp('deliveredAt', { withTimezone: true }),
-    createdAt: createdAt(),
-  },
-  (table) => [
-    index('CreatorNote_authorUserId_promptedAt_idx').on(table.authorUserId, table.promptedAt),
-    index('CreatorNote_recipientUserId_questionId_idx').on(table.recipientUserId, table.questionId),
-    index('CreatorNote_questionId_idx').on(table.questionId),
   ],
 );
 
@@ -785,7 +765,6 @@ export const feedItems = pgTable(
     sourceAnswerId: text('sourceAnswerId'),
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
-    quip: text('quip'),
     catchupResolvedAt: timestamp('catchupResolvedAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -837,7 +816,6 @@ export const joshingGameResponses = pgTable(
     isPartial: boolean('isPartial').notNull().default(false),
     answerState: text('answerState'),
     pointsAwarded: doublePrecision('pointsAwarded'),
-    quip: text('quip'),
     answeredAt: timestamp('answeredAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },

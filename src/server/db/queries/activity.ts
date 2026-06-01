@@ -2,7 +2,6 @@ import { and, count, desc, eq, gt, inArray, isNull, ne, notInArray, sql } from '
 
 import {
   activityItems,
-  creatorNotes,
   db,
   feedItems,
   friendships,
@@ -85,14 +84,6 @@ export type ActivityItemView = Pick<
       requestedByUserId: string;
       suggestedInterests: string[];
     };
-    creatorNote?: {
-      id: string;
-      questionText: string;
-      correctAnswer: string;
-      submittedAnswer: string | null;
-      noteText: string;
-      deliveredAt: Date | null;
-    };
     gradeDispute?: {
       id: string;
       questionText: string;
@@ -131,7 +122,6 @@ function isActivityType(value: string): value is ActivityItemType {
     'received_direct_question',
     'reaction_received',
     'question_curated',
-    'creator_note_received',
     'friend_answered_your_question',
     'authored_question_shared',
     'declared_promoted',
@@ -486,80 +476,6 @@ async function hydrateCuratedQuestions(items: ActivityItemRow[]) {
   return new Map(rows.map((row) => [row.id, { questionText: row.questionText }] as const));
 }
 
-async function hydrateCreatorNotes(items: ActivityItemRow[]) {
-  const noteIds = [
-    ...new Set(
-      items
-        .filter((item) => item.referenceType === 'creator_note')
-        .map((item) => item.referenceId)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
-  if (noteIds.length === 0) {
-    return new Map<string, NonNullable<ActivityItemView['reference']['creatorNote']>>();
-  }
-
-  const rows = await db
-    .select({
-      note: creatorNotes,
-      questionText: questions.questionText,
-      correctAnswer: questions.answerText,
-    })
-    .from(creatorNotes)
-    .innerJoin(questions, eq(creatorNotes.questionId, questions.id))
-    .where(inArray(creatorNotes.id, noteIds));
-
-  const questionIds = [...new Set(rows.map((row) => row.note.questionId))];
-  const feedItemIds = [
-    ...new Set(
-      rows
-        .filter((row) => row.note.contextType === 'feed')
-        .map((row) => row.note.contextId)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
-  const gameRows = questionIds.length > 0
-    ? await db
-        .select({
-          questionId: joshingGameResponses.questionId,
-          userId: joshingGameResponses.userId,
-          submittedAnswer: joshingGameResponses.submittedAnswer,
-        })
-        .from(joshingGameResponses)
-        .where(inArray(joshingGameResponses.questionId, questionIds))
-    : [];
-  const feedRows = feedItemIds.length > 0
-    ? await db
-        .select({
-          feedItemId: feedItems.id,
-          submittedAnswer: feedItems.submittedAnswer,
-        })
-        .from(feedItems)
-        .where(inArray(feedItems.id, feedItemIds))
-    : [];
-
-  const submittedByQuestionUser = new Map(
-    gameRows.map((row) => [`${row.questionId}:${row.userId}`, row.submittedAnswer] as const),
-  );
-  const submittedByFeedItem = new Map(
-    feedRows.map((row) => [row.feedItemId, row.submittedAnswer] as const),
-  );
-
-  return new Map(rows.map((row) => [
-    row.note.id,
-    {
-      id: row.note.id,
-      questionText: row.questionText,
-      correctAnswer: row.correctAnswer,
-      submittedAnswer: row.note.contextType === 'feed' && row.note.contextId
-        ? submittedByFeedItem.get(row.note.contextId) ?? null
-        : submittedByQuestionUser.get(`${row.note.questionId}:${row.note.recipientUserId}`) ?? null,
-      noteText: row.note.noteText,
-      deliveredAt: row.note.deliveredAt,
-    },
-  ] as const));
-}
-
 async function hydrateGradeDisputes(items: ActivityItemRow[]) {
   const disputeIds = [
     ...new Set(
@@ -726,7 +642,6 @@ async function hydrateActivityRows(
     reactionsById,
     directQuestionsById,
     curatedQuestionsById,
-    creatorNotesById,
     friendAnsweredQuestionsById,
     authoredSharedQuestionsById,
     declaredPromotedById,
@@ -739,7 +654,6 @@ async function hydrateActivityRows(
     hydrateReactions(rows),
     hydrateDirectQuestions(rows),
     hydrateCuratedQuestions(rows),
-    hydrateCreatorNotes(rows),
     hydrateFriendAnsweredQuestions(rows),
     hydrateAuthoredSharedQuestions(rows),
     hydrateDeclaredPromoted(rows),
@@ -785,9 +699,6 @@ async function hydrateActivityRows(
           : undefined,
         declaredPromoted: row.type === 'declared_promoted'
           ? declaredPromotedById.get(row.id)
-          : undefined,
-        creatorNote: row.referenceType === 'creator_note' && row.referenceId
-          ? creatorNotesById.get(row.referenceId)
           : undefined,
         gradeDispute: row.referenceType === 'grade_dispute' && row.referenceId
           ? gradeDisputesById.get(row.referenceId)

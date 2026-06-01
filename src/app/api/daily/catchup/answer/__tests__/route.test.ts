@@ -10,7 +10,6 @@ const {
   promoteDeclaredToDemonstratedMock,
   readPriorAnswersForQuestionMock,
   selectCallChain,
-  selectQuipMock,
   updateDomainDifficultyOnAnswerMock,
   writeMasteryEventMock,
 } = vi.hoisted(() => {
@@ -45,7 +44,6 @@ const {
     promoteDeclaredToDemonstratedMock: vi.fn(),
     readPriorAnswersForQuestionMock: vi.fn(async () => []),
     selectCallChain,
-    selectQuipMock: vi.fn(() => 'quip'),
     updateDomainDifficultyOnAnswerMock: vi.fn(async () => undefined),
     writeMasteryEventMock: vi.fn(async () => ({
       domain: 'history',
@@ -99,7 +97,6 @@ const PERSISTED_QUESTION = {
 
 vi.mock('@/server/grading', () => ({
   gradeAnswer: gradeAnswerMock,
-  selectQuip: selectQuipMock,
 }))
 
 vi.mock('@/server/adaptive-difficulty', () => ({

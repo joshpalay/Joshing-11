@@ -14,7 +14,6 @@ import {
   userQuestionBank,
   users,
 } from '@/server/db';
-import { getDeliveredCreatorNotesForQuestions, type DeliveredCreatorNote } from '@/server/creator-notes';
 import type { QueueSlot } from '@/server/daily/types';
 
 export type ArchiveSource = 'daily' | 'feed' | 'joshing_game' | 'sent_to_me' | 'written_by_me';
@@ -37,7 +36,6 @@ export type ArchiveItem = {
   isInBank: boolean;
   myRating: 'up' | 'down' | null;
   canUseQuestionActions: boolean;
-  creatorNote: DeliveredCreatorNote | null;
   verified: boolean;
   askerName: string;
 };
@@ -131,7 +129,7 @@ async function decorateItems(userId: string, items: ArchiveItem[]): Promise<Arch
   const actionableIds = [...new Set(items.filter((item) => item.canUseQuestionActions).map((item) => item.questionId))];
   if (actionableIds.length === 0) return items;
 
-  const [bankRows, ratingRows, creatorNotesByQuestionId] = await Promise.all([
+  const [bankRows, ratingRows] = await Promise.all([
     db
       .select({ questionId: userQuestionBank.questionId })
       .from(userQuestionBank)
@@ -140,7 +138,6 @@ async function decorateItems(userId: string, items: ArchiveItem[]): Promise<Arch
       .select({ questionId: questionRatings.questionId, rating: questionRatings.rating })
       .from(questionRatings)
       .where(and(eq(questionRatings.userId, userId), inArray(questionRatings.questionId, actionableIds))),
-    getDeliveredCreatorNotesForQuestions(userId, actionableIds),
   ]);
 
   const banked = new Set(bankRows.map((row) => row.questionId));
@@ -152,7 +149,6 @@ async function decorateItems(userId: string, items: ArchiveItem[]): Promise<Arch
     ...item,
     isInBank: item.canUseQuestionActions ? banked.has(item.questionId) : false,
     myRating: item.canUseQuestionActions ? ratingByQuestionId.get(item.questionId) ?? null : null,
-    creatorNote: creatorNotesByQuestionId.get(item.questionId) ?? item.creatorNote,
   }));
 }
 
@@ -217,7 +213,6 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
           isInBank: false,
           myRating: null,
           canUseQuestionActions: Boolean(slot.question_id),
-          creatorNote: null,
           verified: bankQuestion?.verified ?? true,
           askerName: askerDisplay ?? (generated ? 'Daily Five' : ''),
         } satisfies ArchiveItem;
@@ -292,7 +287,6 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       isInBank: false,
       myRating: null,
       canUseQuestionActions: true,
-      creatorNote: null,
       verified: question.verified,
       askerName: creatorUser?.displayName ?? '',
     } satisfies ArchiveItem;
@@ -334,7 +328,6 @@ async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
       isInBank: false,
       myRating: null,
       canUseQuestionActions: true,
-      creatorNote: null,
       verified: question.verified,
       askerName: creatorUser?.displayName ?? '',
     } satisfies ArchiveItem;
@@ -389,7 +382,6 @@ async function readWrittenByMeItems(userId: string): Promise<ArchiveItem[]> {
       isInBank: false,
       myRating: null,
       canUseQuestionActions: true,
-      creatorNote: null,
       verified: question.verified,
       askerName: '',
     } satisfies ArchiveItem;

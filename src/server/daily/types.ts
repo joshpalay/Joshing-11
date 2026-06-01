@@ -62,8 +62,6 @@ export const queueSlotSchema = z.object({
   reveal_quip: z.string().nullish(),
   /** LLM-generated friends-only aside; only populated when the viewer is the creator or an active friend. */
   reveal_inside_joke: z.string().nullish(),
-  /** Per-answer commentary quip from selectQuip() (PRD §8.1.14). */
-  quip: z.string().nullish(),
   /** Optional appeal state after a player asks the app to recheck a wrong grade. */
   recheck_status: z.enum(['accepted', 'rejected', 'needs_human']).optional(),
   /** Short player-facing explanation from the recheck reviewer. */
