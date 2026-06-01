@@ -234,7 +234,7 @@ export const questions = pgTable(
     id: id(),
     creatorId: text('creator_id').references(() => users.id),
     generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id, { onDelete: 'set null' }),
-    source: text('source').$type<'authored' | 'daily_generated'>().notNull().default('authored'),
+    source: text('source').$type<'authored' | 'daily_generated' | 'curated_sent'>().notNull().default('authored'),
     sourceQuestionId: text('source_question_id'),
     sourceCreatorId: text('source_creator_id'),
     questionText: text('question_text').notNull(),
