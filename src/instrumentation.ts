@@ -847,6 +847,23 @@ export async function register() {
       // creates them and applies 0058 in normal order.
     }
 
+    // Migration 0059 (D-2 WS1) adds User.discoverable_by_niche_match, the third
+    // discoverability flag. Additive boolean with a default — the safe case.
+    // TEST-PHASE default is ON (DEFAULT true): the whole cohort, including
+    // pre-existing users, is enrolled in the niche-match test. The production
+    // default is an OPEN DECISION to revisit after the test; default-ON here is
+    // deliberate for the test cohort only. Guard for preview/production
+    // databases that may have the migration recorded without the column present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "discoverable_by_niche_match" boolean NOT NULL DEFAULT true
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

@@ -90,12 +90,23 @@ filter. **Do not** add the new type to the dedup set in a future change.
 
 ## Privacy gating (detail)
 
-- New column **`discoverable_by_niche_match boolean NOT NULL DEFAULT false`** on `User`.
+> **OPEN DECISION (test-phase amendment).** This spec specifies `discoverable_by_niche_match`
+> **DEFAULT false**. For the **test phase only** this is changed to **DEFAULT true**, including a
+> backfill-by-default for existing users — the whole cohort is enrolled (migration `0059`). This flips
+> a privacy posture retroactively for people who joined under the old default-OFF assumption, so the
+> test cohort **must be told** they are niche-discoverable by default before the test begins (a
+> non-code pre-test communication step). **The production default for `discoverable_by_niche_match`
+> remains an OPEN DECISION to revisit after observing the test.** Default-ON here is deliberate for the
+> test cohort only; do not assume it as the shipping default.
+
+- New column **`discoverable_by_niche_match boolean NOT NULL DEFAULT false`** on `User`
+  (**test-phase override: `DEFAULT true`** per the amendment above).
 - Extend `DiscoverabilityState` / patch type / `getDiscoverability` / `updateDiscoverability`
   (`src/server/db/queries/account.ts`). **No purge side-effect needed** — niche-match stores no uploaded
   data to revoke (unlike the contacts flag, which purges `ContactHash`). Zod on the PATCH input.
 - Add a third toggle to `PrivacyForm.tsx`: *"Let people I've never met discover me through questions we
-  both answer."* Default off.
+  both answer."* Default off per the original spec; **default ON for the test phase** (see OPEN
+  DECISION note above).
 - The asymmetric two-flag check is stated explicitly in §"Gate direction" above so it isn't wired
   backwards: each notification is gated by the flag of the party whose identity it would expose.
 
