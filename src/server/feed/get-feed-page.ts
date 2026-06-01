@@ -14,6 +14,7 @@ import { checkBankedQuestions } from '@/server/db/queries/bank';
 import {
   getDismissedDomains,
   getFeedForUser,
+  questionVisibilityPredicate,
   type CollapsedFeedItem,
   type FeedCursor,
   type FeedFilter,
@@ -175,6 +176,7 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         eq(feedItems.recipientUserId, viewerUserId),
         visibleSourcePredicate,
         feedFilterSourcePredicate(filter),
+        questionVisibilityPredicate(viewerUserId),
         or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
       ))
       .then((rows) => rows[0]?.value ?? 0),
@@ -187,6 +189,7 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         visibleSourcePredicate,
         feedFilterSourcePredicate(filter),
         inArray(feedItems.state, ['active', 'skipped']),
+        questionVisibilityPredicate(viewerUserId),
         or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
         // Match the visibility rule applied in getFeedForUser so this
         // diagnostic count reflects what the user actually sees.
