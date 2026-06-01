@@ -32,6 +32,7 @@ import {
 } from '@/server/play/catch-up-turn-sequencing';
 import { getBasePoints } from '@/server/mastery/scoring';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
+import { SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 function asQueueSlotDifficulty(
   value: string | null | undefined,
@@ -901,6 +902,279 @@ export async function createDailyQueueItemFromAuthored(
     category: authored.category || null,
     question_text: authored.questionText,
     difficulty_estimate: authored.difficultyEstimate ?? undefined,
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(dailyQueues)
+      .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
+      .limit(1);
+
+    if (!existing) {
+      const [created] = await tx
+        .insert(dailyQueues)
+        .values({
+          userId,
+          queueDate: assignmentDateStr,
+          slots: [slot],
+        })
+        .returning();
+      return created;
+    }
+
+    const slots = asQueueSlots(existing.slots).filter((item) => item.slot_index !== position);
+    const nextSlots = [...slots, slot].sort((a, b) => a.slot_index - b.slot_index);
+    const [updated] = await tx
+      .update(dailyQueues)
+      .set({ slots: nextSlots })
+      .where(eq(dailyQueues.id, existing.id))
+      .returning();
+    return updated;
+  });
+}
+
+/**
+ * A friend-answered question selected for a Daily Five +2 bonus slot. Carries
+ * both the question's author (author_*) and the friend who answered it correctly
+ * (answerer_*), which the UI surfaces as "X answered this correctly".
+ */
+export type AnswererPick = AuthoredPick & {
+  answererId: string;
+  answererName: string | null;
+};
+
+/** A friend-answered feed item joined to its canonical question — the raw input to the bonus picker's ranking. */
+export type BonusAnswererRow = {
+  questionId: string | null;
+  answererId: string;
+  sourceEventAt: Date | null;
+  creatorId: string | null;
+  questionText: string;
+  answerText: string;
+  alternateAnswers: string[] | null;
+  factualExplanation: string | null;
+  canonicalSubcategory: string | null;
+  broadCategory: string | null;
+  category: string | null;
+  calibratedDifficulty: string | null;
+  llmDifficulty: string | null;
+  difficultyEstimate: string | null;
+  creatorNote: string | null;
+};
+
+/**
+ * Pure ranking/filter/dedup for the Daily Five +2 bonus picker, extracted so the
+ * accessibility filter, relevance tiering, and dedup can be unit-tested without a
+ * database. Returns picks with `authorName`/`answererName` left null — the DB
+ * wrapper hydrates display names. `rows` must be ordered newest-first so the
+ * one-slot-per-question dedup keeps the most recent answerer.
+ */
+export function selectBonusAnswererPicks(
+  rows: BonusAnswererRow[],
+  options: {
+    knowledgeBase: KnowledgeBaseDomain[];
+    excludeQuestionIds: ReadonlySet<string>;
+    answeredQuestionIds: ReadonlySet<string>;
+    limit: number;
+  },
+): AnswererPick[] {
+  const { knowledgeBase, excludeQuestionIds, answeredQuestionIds, limit } = options;
+  if (limit <= 0) return [];
+
+  // Relevance tiers: 0 = exact canonicalSubcategory match, 1 = broadCategory
+  // match, 2 = any remaining. Built lowercased from the merged declared +
+  // demonstrated knowledge base.
+  const subcatSet = new Set(knowledgeBase.map((d) => d.domain.toLowerCase()));
+  const broadCatSet = new Set(
+    knowledgeBase
+      .map((d) => d.broadCategory?.toLowerCase())
+      .filter((c): c is string => Boolean(c)),
+  );
+  const tierOf = (canonicalSubcategory: string | null, broadCategory: string | null): number => {
+    if (canonicalSubcategory && subcatSet.has(canonicalSubcategory.toLowerCase())) return 0;
+    if (broadCategory && broadCatSet.has(broadCategory.toLowerCase())) return 1;
+    return 2;
+  };
+
+  const seenQuestionIds = new Set<string>();
+  const candidates: Array<{ pick: AnswererPick; tier: number; sourceEventAt: number }> = [];
+  for (const row of rows) {
+    if (!row.questionId) continue;
+    if (excludeQuestionIds.has(row.questionId)) continue;
+    if (answeredQuestionIds.has(row.questionId)) continue;
+    if (seenQuestionIds.has(row.questionId)) continue; // one slot per question (rows ordered newest-first)
+    const subcategory = row.canonicalSubcategory;
+    if (!subcategory || isGenericSubcategory(subcategory)) continue;
+
+    const isAccessible =
+      row.calibratedDifficulty === 'accessible' ||
+      (row.calibratedDifficulty == null && row.llmDifficulty === 'accessible');
+    if (!isAccessible) continue;
+
+    seenQuestionIds.add(row.questionId);
+    candidates.push({
+      pick: {
+        id: row.questionId,
+        creatorId: row.creatorId,
+        questionText: row.questionText,
+        answerText: row.answerText,
+        alternateAnswers: row.alternateAnswers ?? [],
+        factualExplanation: row.factualExplanation,
+        canonicalSubcategory: subcategory,
+        broadCategory: row.broadCategory,
+        category: String(row.category ?? ''),
+        difficultyEstimate: 'accessible',
+        authorName: null, // hydrated by the DB wrapper alongside the answerer name
+        authorNote: row.creatorNote ?? null,
+        answererId: row.answererId,
+        answererName: null,
+      },
+      tier: tierOf(subcategory, row.broadCategory),
+      sourceEventAt: row.sourceEventAt?.getTime() ?? 0,
+    });
+  }
+
+  return candidates
+    .sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      return b.sourceEventAt - a.sourceEventAt;
+    })
+    .slice(0, limit)
+    .map((c) => c.pick);
+}
+
+/**
+ * Picks up to `limit` Daily Five +2 bonus slots: questions that someone the
+ * viewer follows answered correctly (surfaced via `friend_answered` feed items),
+ * restricted to "accessible" difficulty and ranked by relevance to the viewer's
+ * knowledge base.
+ *
+ * Accessibility (D-1 §D / Q5): a question qualifies iff
+ * `calibratedDifficulty === 'accessible'`, falling back to
+ * `llmDifficulty === 'accessible'` only when calibrated is null.
+ *
+ * Relevance ranking (Q6): exact `canonicalSubcategory` match to a knowledge-base
+ * domain → near `broadCategory` match → any remaining friend-answered question.
+ *
+ * This is a friend-slot picker, never backfilled with LLM/authored content. If
+ * fewer than `limit` qualify, the caller simply appends fewer slots (graceful
+ * shrink) — distinct from the orchestrator's N<5 generation backstop.
+ *
+ * `excludeQuestionIds` drops questions already present in today's core slots; we
+ * additionally drop questions the viewer has already answered correctly.
+ */
+export async function pickBonusAnswererSlots(
+  viewerUserId: string,
+  followingIds: ReadonlySet<string>,
+  knowledgeBase: KnowledgeBaseDomain[],
+  limit: number,
+  excludeQuestionIds: ReadonlySet<string>,
+): Promise<AnswererPick[]> {
+  if (limit <= 0) return [];
+  if (followingIds.size === 0) return [];
+
+  // Questions the viewer has already answered correctly on any surface — the
+  // same signal pickEligibleAuthoredQuestions uses so a bonus slot never
+  // re-serves something the viewer has already solved.
+  const answeredRows = await db
+    .select({ questionId: masteryEvents.questionId })
+    .from(masteryEvents)
+    .where(and(
+      eq(masteryEvents.userId, viewerUserId),
+      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+      isNotNull(masteryEvents.questionId),
+    ));
+  const answeredQuestionIds = new Set<string>();
+  for (const row of answeredRows) {
+    if (row.questionId) answeredQuestionIds.add(row.questionId);
+  }
+
+  const rows = await db
+    .select({
+      questionId: feedItems.questionId,
+      answererId: feedItems.sourceUserId,
+      sourceEventAt: feedItems.sourceEventAt,
+      creatorId: canonicalQuestions.creatorId,
+      questionText: canonicalQuestions.questionText,
+      answerText: canonicalQuestions.answerText,
+      alternateAnswers: canonicalQuestions.acceptedAlternatives,
+      factualExplanation: canonicalQuestions.factualExplanation,
+      canonicalSubcategory: canonicalQuestions.canonicalSubcategory,
+      broadCategory: canonicalQuestions.broadCategory,
+      category: canonicalQuestions.category,
+      calibratedDifficulty: canonicalQuestions.calibratedDifficulty,
+      llmDifficulty: canonicalQuestions.llmDifficulty,
+      difficultyEstimate: canonicalQuestions.difficultyEstimate,
+      creatorNote: canonicalQuestions.creatorNote,
+    })
+    .from(feedItems)
+    .innerJoin(canonicalQuestions, eq(feedItems.questionId, canonicalQuestions.id))
+    .where(and(
+      eq(feedItems.recipientUserId, viewerUserId),
+      eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
+      eq(feedItems.sourceResult, 'correct'),
+      inArray(feedItems.sourceUserId, [...followingIds]),
+      isNull(canonicalQuestions.deletedAt),
+      isNotNull(canonicalQuestions.canonicalSubcategory),
+    ))
+    .orderBy(desc(feedItems.sourceEventAt));
+
+  const top = selectBonusAnswererPicks(rows, {
+    knowledgeBase,
+    excludeQuestionIds,
+    answeredQuestionIds,
+    limit,
+  });
+
+  if (top.length === 0) return [];
+
+  // Hydrate display names for both the question author and the answerer in one shot.
+  const nameIds = new Set<string>();
+  for (const pick of top) {
+    if (pick.creatorId) nameIds.add(pick.creatorId);
+    nameIds.add(pick.answererId);
+  }
+  const nameRows = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(inArray(users.id, [...nameIds]));
+  const nameById = new Map(nameRows.map((u) => [u.id, u.displayName] as const));
+
+  return top.map((pick) => ({
+    ...pick,
+    authorName: pick.creatorId ? nameById.get(pick.creatorId) ?? null : null,
+    answererName: nameById.get(pick.answererId) ?? null,
+  }));
+}
+
+/**
+ * Persists a Daily Five +2 bonus slot. Mirrors createDailyQueueItemFromAuthored
+ * but additionally records answerer_id/answerer_name (the bonus-slot marker).
+ */
+export async function createDailyQueueItemFromAnswerer(
+  userId: string,
+  pick: AnswererPick,
+  position: number,
+): Promise<DailyQueueRow> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+
+  const slot: QueueSlot = {
+    slot_index: position,
+    source: 'friend',
+    question_id: pick.id,
+    author_id: pick.creatorId ?? undefined,
+    author_name: pick.authorName,
+    author_note: pick.authorNote,
+    answerer_id: pick.answererId,
+    answerer_name: pick.answererName,
+    domain: pick.canonicalSubcategory,
+    broad_category: pick.broadCategory,
+    category: pick.category || null,
+    question_text: pick.questionText,
+    difficulty_estimate: pick.difficultyEstimate ?? 'accessible',
     answered: false,
     difficulty_stepped_up: false,
   };

@@ -20,7 +20,14 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
     (slot.broad_category && slot.broad_category.trim()) ||
     (slot.category ? categoryLabel(slot.category) : '') ||
     slot.domain;
-  return category ? [{ label: category }] : [];
+  const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category ? [{ label: category }] : [];
+  // Daily Five +2 bonus slots (friend-answered) carry an answerer and are always
+  // "accessible" — surface the accessibility badge so the lighter pick reads as
+  // a deliberate, easier add rather than a generation miss.
+  if (slot.answerer_name && slot.difficulty_estimate === 'accessible') {
+    badges.push({ label: 'Accessible', tone: 'muted' });
+  }
+  return badges;
 }
 
 type QueueResponse = {
@@ -290,6 +297,7 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
+          answererName: slot.answerer_name ?? null,
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -335,6 +343,7 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
+          answererName: slot.answerer_name ?? null,
           isNew: true,
           badges: questionBadges(slot),
         });

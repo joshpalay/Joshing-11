@@ -81,6 +81,18 @@ export async function getFriends(userId: string): Promise<User[]> {
     .orderBy(asc(users.displayName), asc(users.phoneNumber));
 }
 
+/**
+ * Returns the set of users `userId` follows.
+ *
+ * Stage 1 stub (D-1 Daily Five +2): the directional follow model does not land
+ * until Stage 3, so this currently reads the symmetric active-friendship set as
+ * the follow set. Stage 3 repoints only this helper's internals to the `follows`
+ * table; callers must not depend on the relation being bidirectional.
+ */
+export async function getFollowing(userId: string): Promise<User[]> {
+  return getFriends(userId);
+}
+
 export async function getRecentDirectSendRecipients(userId: string, limit = 3): Promise<User[]> {
   if (limit <= 0) return [];
 

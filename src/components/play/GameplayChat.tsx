@@ -38,6 +38,11 @@ export type ChatMessage =
       assignmentId: string;
       questionText: string;
       creatorName: string | null;
+      /**
+       * Daily Five +2 bonus slot: the friend who answered this correctly. When
+       * set, the card shows "{name} answered this correctly" attribution.
+       */
+      answererName?: string | null;
       isNew?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
@@ -168,6 +173,7 @@ function QuestionRow({
   badges = [],
   questionText,
   creatorName,
+  answererName = null,
   isNew = false,
   onGiveUp,
   giveUpDisabled = false,
@@ -176,6 +182,7 @@ function QuestionRow({
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
   creatorName: string | null;
+  answererName?: string | null;
   isNew?: boolean;
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
@@ -226,6 +233,22 @@ function QuestionRow({
           {creatorName.trim().toLowerCase() === 'joshing' ? null : (
             <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>gave you this</span>
           )}
+        </p>
+      ) : null}
+      {answererName ? (
+        <p
+          style={{
+            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontSize: '0.86rem',
+            color: 'var(--text)',
+            paddingLeft: '2px',
+            paddingBottom: '2px',
+            opacity: 0.82,
+            lineHeight: 1.3,
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>{firstNameFrom(answererName)}</span>
+          <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>answered this correctly</span>
         </p>
       ) : null}
       <div
@@ -1120,6 +1143,7 @@ export function GameplayChatThread({
                 key={m.id}
                 questionText={m.questionText}
                 creatorName={m.creatorName}
+                answererName={m.answererName}
                 isNew={m.isNew}
                 subhead={m.subhead}
                 badges={m.badges}

@@ -64,3 +64,32 @@ describe('isRoundComplete / hasPendingSlot', () => {
     expect(isRoundComplete([])).toBe(false);
   });
 });
+
+// Daily Five +2: the queue is variable-length (core 5 + 0–2 bonus slots), so
+// completion must track the ACTUAL slot count at 5, 6, and 7 — not a fixed five.
+describe('isRoundComplete — variable 5–7 slot queues (Daily Five +2)', () => {
+  function bonusSlot(slot_index: number, answered: boolean): QueueSlot {
+    return {
+      ...slot(slot_index, { answered }),
+      answerer_id: `answerer-${slot_index}`,
+      answerer_name: 'Robyn',
+      difficulty_estimate: 'accessible',
+    } as QueueSlot;
+  }
+
+  for (const total of [5, 6, 7]) {
+    it(`a ${total}-slot queue is incomplete until the last slot is answered`, () => {
+      const indices = Array.from({ length: total }, (_, i) => i);
+      const partial = indices.map((i) =>
+        i < total - 1
+          ? (i < 5 ? slot(i, { answered: true }) : bonusSlot(i, true))
+          : (i < 5 ? slot(i) : bonusSlot(i, false)),
+      );
+      expect(isRoundComplete(partial)).toBe(false);
+
+      const full = indices.map((i) => (i < 5 ? slot(i, { answered: true }) : bonusSlot(i, true)));
+      expect(isRoundComplete(full)).toBe(true);
+      expect(hasPendingSlot(full)).toBe(false);
+    });
+  }
+});
