@@ -1,0 +1,8 @@
+# Revisions listed here are skipped by `git blame` so bulk, mechanical changes
+# (e.g. a one-time formatter pass) don't obscure the real authorship of lines.
+#
+# GitHub honors this file automatically. For local `git blame`, enable it once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# chore: normalize formatting with Prettier (one-time)
+22dd2b0ddb9dae84d9641b175f3d5902548fe400
