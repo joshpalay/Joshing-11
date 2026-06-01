@@ -8,7 +8,6 @@ import {
   dailyQueues,
   db,
   generatedQuestions,
-  playerMastery,
   questions,
 } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
@@ -317,38 +316,18 @@ export async function POST(request: NextRequest) {
       priorAnswers,
     );
     const basePoints = question.basePoints;
-    const uncheckedPointsAwarded =
+    // A correct answer in an unfamiliar domain default-adds it to the player's
+    // Knowledge base — including bot-generated Daily Five questions, which now
+    // match the authored path. The old PRD §8.4.3 gate (bot questions could only
+    // deepen existing domains) has been removed in favour of default-add with an
+    // easy undo; writeMasteryEvent's ON CONFLICT DO UPDATE opens the domain the
+    // same way the authored flow does (src/app/api/questions/[id]/answer).
+    const pointsAwarded =
       masteryAnswerState === 'first_correct'
         ? basePoints
         : masteryAnswerState === 'first_correct_after_wrong'
           ? Math.round(basePoints * RECOVERY_STATE_WEIGHT)
           : 0;
-
-    // PRD §8.4.3 — LLM-generated Daily Five questions can only deepen mastery
-    // in existing Knowledge base domains; they cannot open new ones. For a
-    // bot-source question whose domain isn't in the player's playerMastery,
-    // skip the mastery event and award 0 points rather than letting
-    // ON CONFLICT DO UPDATE silently insert a ghost domain row.
-    let skipMasteryForUnknownDomain = false;
-    if (slot.source === 'bot' && uncheckedPointsAwarded > 0) {
-      const [existingDomain] = await db
-        .select({ canonicalSubcategory: playerMastery.canonicalSubcategory })
-        .from(playerMastery)
-        .where(and(
-          eq(playerMastery.userId, session.userId),
-          eq(playerMastery.canonicalSubcategory, question.canonicalSubcategory),
-        ))
-        .limit(1);
-      if (!existingDomain) {
-        skipMasteryForUnknownDomain = true;
-        console.warn('[daily/answer] bot question domain not in player KB; skipping mastery write', {
-          userId: session.userId,
-          domain: question.canonicalSubcategory,
-          generatedQuestionId: question.generatedId,
-        });
-      }
-    }
-    const pointsAwarded = skipMasteryForUnknownDomain ? 0 : uncheckedPointsAwarded;
 
     const nextSlots = slots.map((item) => {
       if (item.slot_index !== parsed.slotIndex) return item;
@@ -372,24 +351,22 @@ export async function POST(request: NextRequest) {
       .where(eq(dailyQueues.id, queue.id));
 
     let masteryDelta = null;
-    if (!skipMasteryForUnknownDomain) {
-      try {
-        masteryDelta = await writeMasteryEvent({
-          userId: session.userId,
-          questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,
-          domain: question.canonicalSubcategory,
-          answerState: masteryAnswerState,
-          pointsAwarded,
-          sourceType: 'daily',
-          sourceId: `${queue.id}:${parsed.slotIndex}`,
-          broadCategory: question.broadCategory,
-          eventQuestionId: canonicalQuestionId,
-          basePoints,
-          weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
-        });
-      } catch (error) {
-        console.warn('[daily/answer] writeMasteryEvent failed', error);
-      }
+    try {
+      masteryDelta = await writeMasteryEvent({
+        userId: session.userId,
+        questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,
+        domain: question.canonicalSubcategory,
+        answerState: masteryAnswerState,
+        pointsAwarded,
+        sourceType: 'daily',
+        sourceId: `${queue.id}:${parsed.slotIndex}`,
+        broadCategory: question.broadCategory,
+        eventQuestionId: canonicalQuestionId,
+        basePoints,
+        weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
+      });
+    } catch (error) {
+      console.warn('[daily/answer] writeMasteryEvent failed', error);
     }
 
     // Adaptive-difficulty bookkeeping is not consumed by the response; let it

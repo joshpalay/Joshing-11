@@ -12,6 +12,7 @@ import {
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { getDailyPreferences, updateDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
@@ -840,6 +841,66 @@ export async function setDomainVisibility(
         updatedAt: new Date(),
       },
     });
+}
+
+/**
+ * Removes a freshly-opened Knowledge base domain — the "undo" for the
+ * default-add that fires when a player answers correctly in unfamiliar
+ * territory (B-1). This is a true delete, not a hide: it drops the
+ * PLAYER_MASTERY row and the player's MASTERY_EVENTS for that domain
+ * (since the domain was just opened, those are this answer's events), and
+ * pulls the domain out of any custom Daily-Five selection so the single
+ * "remove" fully reverses the open across the KB and the Daily Five.
+ *
+ * Scoped to the reveal-time undo affordance; not general KB editing. Match
+ * is case-insensitive so the client can pass the domain label as shown.
+ * Returns whether a PLAYER_MASTERY row was actually removed.
+ */
+export async function removeKnowledgeDomain(userId: string, domain: string): Promise<{ removed: boolean }> {
+  const normalizedDomain = domain.trim().replace(/\s+/g, ' ');
+  if (!normalizedDomain) throw new Error('domain is required');
+  const domainKey = normalizedDomain.toLowerCase();
+
+  const removed = await db.transaction(async (tx) => {
+    const deletedRows = await tx
+      .delete(playerMastery)
+      .where(and(
+        eq(playerMastery.userId, userId),
+        sql`lower(${playerMastery.canonicalSubcategory}) = ${domainKey}`,
+      ))
+      .returning({ id: playerMastery.id });
+
+    await tx
+      .delete(masteryEvents)
+      .where(and(
+        eq(masteryEvents.userId, userId),
+        sql`lower(${masteryEvents.canonicalSubcategory}) = ${domainKey}`,
+      ));
+
+    return deletedRows.length > 0;
+  });
+
+  // Custom-mode cleanup: if the player has hand-picked Daily Five domains,
+  // drop the removed one so it stops surfacing. Best-effort and outside the
+  // delete transaction — a stale selection is inert (random mode reads the
+  // live KB; custom mode just won't find questions for a domain that's gone).
+  try {
+    const preferences = await getDailyPreferences(userId);
+    if (preferences.domainMode === 'custom') {
+      const next = preferences.selectedDomains.filter((d) => d.toLowerCase() !== domainKey);
+      if (next.length !== preferences.selectedDomains.length) {
+        await updateDailyPreferences(userId, { selectedDomains: next });
+      }
+    }
+  } catch (error) {
+    console.warn('[removeKnowledgeDomain] failed to prune Daily Five selection', {
+      userId,
+      domain: normalizedDomain,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return { removed };
 }
 
 function calendarDay(value: Date): string {
