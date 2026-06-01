@@ -8,8 +8,6 @@
 import { gradeAnswerWithLLM } from '@/lib/llm';
 
 export type GradeResult = 'correct' | 'wrong';
-export type { Surface, FriendResult } from '@/server/grading/select-quip';
-export { selectQuip } from '@/server/grading/select-quip';
 
 export type GradeOutcome = {
   result: GradeResult;

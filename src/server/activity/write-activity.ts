@@ -16,7 +16,6 @@ export type ActivityItemType =
   | 'received_direct_question'
   | 'reaction_received'
   | 'question_curated'
-  | 'creator_note_received'
   | 'friend_answered_your_question'
   | 'authored_question_shared'
   | 'declared_promoted'
@@ -35,7 +34,6 @@ export const HOME_TOP3_ELIGIBLE_TYPES = [
   'friend_mastery',
   'declared_promoted',
   'reaction_received',
-  'creator_note_received',
   'question_curated',
   'authored_question_shared',
 ] as const satisfies readonly ActivityItemType[];

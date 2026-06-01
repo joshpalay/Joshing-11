@@ -106,16 +106,6 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
       }
     }
 
-    case 'creator_note_received':
-      return {
-        headline: (
-          <>
-            {actor} sent a note about a question you missed
-          </>
-        ),
-        secondLine: null,
-      }
-
     case 'question_curated':
       return {
         headline: (

@@ -456,9 +456,9 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
               : 'WRONG'}
         </span>
         <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          {question.creatorNote ? null : `JOSHING BOT · ${question.domainDisplayName.toUpperCase()}`}
+          {question.authorName ? null : `JOSHING BOT · ${question.domainDisplayName.toUpperCase()}`}
         </p>
-        {question.creatorNote ? (
+        {question.authorName ? (
           <p
             className="pt-1"
             style={{
@@ -479,7 +479,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
             >
               FROM
             </span>
-            <span style={{ fontWeight: 600 }}>{question.creatorNote.authorName}</span>
+            <span style={{ fontWeight: 600 }}>{question.authorName}</span>
             <span
               style={{
                 ...monoStyle,
@@ -523,12 +523,12 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
           {question.explanation}
         </p>
       ) : null}
-      {question.creatorNote ? (
+      {question.authorNote ? (
         <p className="bg-muted/40 text-foreground mt-4 rounded-xl border p-3 text-sm leading-6">
           <span className="font-medium">
-            A note from {question.creatorNote.authorName}:
+            {question.authorName ? `Why ${question.authorName} asked:` : 'Why they asked:'}
           </span>{' '}
-          {question.creatorNote.noteText}
+          {question.authorNote}
         </p>
       ) : null}
       {exclusionState.kind === 'confirmed' ? (

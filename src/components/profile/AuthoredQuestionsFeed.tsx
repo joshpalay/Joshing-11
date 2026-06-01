@@ -23,7 +23,7 @@ type AnswerResult = {
   correctAnswer: string
   explanation: string | null
   awardedPoints: number | null
-  quip: string | null
+  creatorNote: string | null
   submittedAnswer: string
 }
 
@@ -101,7 +101,7 @@ export function AuthoredQuestionsFeed({
               correctAnswer?: string
               explanation?: string | null
               pointsAwarded?: number | null
-              quip?: string | null
+              creatorNote?: string | null
               message?: string
             }
           | null
@@ -113,7 +113,7 @@ export function AuthoredQuestionsFeed({
           correctAnswer: body.correctAnswer ?? '',
           explanation: body.explanation ?? null,
           awardedPoints: body.pointsAwarded ?? null,
-          quip: body.quip ?? null,
+          creatorNote: body.creatorNote ?? null,
           submittedAnswer,
         }
         setResults((current) => ({ ...current, [item.id]: result }))
@@ -185,7 +185,7 @@ export function AuthoredQuestionsFeed({
                 isCorrect,
                 awardedPoints: localResult?.awardedPoints ?? null,
                 explanation: localResult?.explanation ?? null,
-                quip: localResult?.quip ?? null,
+                creatorNote: localResult?.creatorNote ?? null,
                 unverifiedAnswer: false,
               }
 

@@ -19,7 +19,7 @@ type AnswerFeedbackSheetProps = {
   correctAnswer: string
   submittedAnswer: string
   explanation: string | null
-  quip: string | null
+  creatorNote: string | null
   insideJoke?: string | null
   openedNewTerritory?: boolean
   openedTerritoryDomain?: string | null
@@ -38,7 +38,7 @@ export function AnswerFeedbackSheet({
   correctAnswer,
   submittedAnswer,
   explanation,
-  quip,
+  creatorNote,
   insideJoke = null,
   openedNewTerritory = false,
   openedTerritoryDomain = null,
@@ -211,14 +211,6 @@ export function AnswerFeedbackSheet({
                 Correct answer: {correctAnswer}
               </p>
             ) : null}
-            {!isCorrect && quip ? (
-              <p
-                className="text-[13px]"
-                style={{ color: 'var(--ink)', opacity: 0.6 }}
-              >
-                {quip}
-              </p>
-            ) : null}
           </div>
 
           {explanation ? (
@@ -245,6 +237,17 @@ export function AnswerFeedbackSheet({
               </p>
               <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
                 {insideJoke}
+              </p>
+            </div>
+          ) : null}
+
+          {creatorNote ? (
+            <div className="mt-3 rounded-2xl border bg-muted p-4">
+              <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
+                Why they asked
+              </p>
+              <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
+                {creatorNote}
               </p>
             </div>
           ) : null}

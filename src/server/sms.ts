@@ -4,12 +4,10 @@
  * All functions are server-side only.
  */
 
-import { and, eq, gte } from 'drizzle-orm';
-
 import type { SmsMessageType } from '@/types/db';
 import type { GameWinnerMember } from '@/lib/games/winner';
 import { db } from '@/server/db';
-import { smsLogs, users } from '@/server/db/schema';
+import { smsLogs } from '@/server/db/schema';
 
 type SmsLogMessageType = typeof smsLogs.$inferInsert.messageType;
 
@@ -178,46 +176,6 @@ export async function sendGameCompleteSms(
 
   // Suppress unused variable warning for gameNumber (kept for API compatibility)
   void gameNumber;
-}
-
-/**
- * Send a prompt SMS to a question creator when a player gets their question wrong
- * and the question has no creator_note explaining context.
- * Deduplicates: skips if a creator_note_prompt was already sent for this question within 24 hours.
- * Fire-and-forget: caller should NOT await this.
- */
-export async function sendCreatorNotePromptSms(
-  creatorId: string,
-  questionText: string,
-  baseUrl: string
-): Promise<void> {
-  const [creator] = await db
-    .select({ phoneNumber: users.phoneNumber, smsOptIn: users.smsOptIn })
-    .from(users)
-    .where(eq(users.id, creatorId))
-    .limit(1);
-
-  if (!creator?.phoneNumber || creator.smsOptIn !== 'opted_in') return;
-
-  // Deduplicate: skip if already sent within the last 24 hours
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [recentLog] = await db
-    .select({ id: smsLogs.id })
-    .from(smsLogs)
-    .where(
-      and(
-        eq(smsLogs.userId, creatorId),
-        eq(smsLogs.messageType, 'creator_note_prompt'),
-        gte(smsLogs.sentAt, since),
-      ),
-    )
-    .limit(1);
-  if (recentLog) return;
-
-  const preview = questionText.length > 60 ? questionText.slice(0, 57) + '…' : questionText;
-  const body = `Someone got your question wrong: "${preview}". Add a note to give context: ${baseUrl}/questions`;
-
-  await sendSms(creator.phoneNumber, body.length > 160 ? body.slice(0, 157) + '…' : body, 'creator_note_prompt', creatorId);
 }
 
 /**

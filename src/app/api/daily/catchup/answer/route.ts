@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { after, NextRequest } from 'next/server';
 
-import { gradeAnswer, selectQuip } from '@/server/grading';
+import { gradeAnswer } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
 import { dailyQueues, db, feedItems, questions } from '@/server/db';
@@ -137,7 +137,6 @@ async function handleDailyCatchupAnswer({
   );
   const isCorrect = grade.result === 'correct';
   const answerState = isCorrect ? 'correct' : 'incorrect';
-  const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
 
   // Promote the bot question to a canonical row BEFORE writing the mastery
   // event so cross-surface dedup can key on the canonical Question.id
@@ -232,7 +231,6 @@ async function handleDailyCatchupAnswer({
       // it would make /api/breadcrumb short-circuit on the stale value and
       // render a correction for an answer the user never gave this turn.
       reveal_breadcrumb: null,
-      quip,
     } satisfies QueueSlot;
   });
 
@@ -327,7 +325,6 @@ async function handleDailyCatchupAnswer({
     explanation: catchupItem.explanation,
     explainer: catchupItem.explanation,
     consolation: grade.consolation,
-    quip,
     nextItem: nextItemPayload(nextItem),
   });
 }
@@ -378,7 +375,6 @@ async function handleFeedCatchupAnswer({
   );
   const isCorrect = grade.result === 'correct';
   const answerState = isCorrect ? 'correct' : 'incorrect';
-  const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
 
   const priorAnswers = await readPriorAnswersForQuestion(userId, feedRow.question.id);
   const masteryAnswerState = computeAnswerState(
@@ -478,7 +474,6 @@ async function handleFeedCatchupAnswer({
     explanation: catchupItem.explanation,
     explainer: catchupItem.explanation,
     consolation: grade.consolation,
-    quip,
     nextItem: nextItemPayload(nextItem),
   });
 }

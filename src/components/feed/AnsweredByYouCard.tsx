@@ -174,13 +174,18 @@ function AnsweredResult({
           {item.correctAnswer}
         </p>
       ) : null}
-      {!item.isCorrect && item.quip ? (
-        <p
-          className="text-[13px]"
-          style={{ color: 'var(--ink)', opacity: 0.6 }}
-        >
-          {item.quip}
-        </p>
+      {item.creatorNote ? (
+        <div className="mt-1.5 rounded-md border bg-muted/40 px-3 py-2">
+          <p className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-muted-foreground">
+            Why they asked
+          </p>
+          <p
+            className="mt-1 text-[13px] leading-6"
+            style={{ fontFamily: 'var(--font-literata)', color: 'var(--ink)' }}
+          >
+            {item.creatorNote}
+          </p>
+        </div>
       ) : null}
       {(onRetry || (recheckAction && recheckState !== 'done')) ? (
         <div className="flex items-center justify-end gap-4 pt-2">

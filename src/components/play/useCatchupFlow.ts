@@ -38,7 +38,6 @@ type CatchupAnswerResponse = {
   explanation?: string | null;
   explainer?: string | null;
   consolation?: string | null;
-  quip?: string | null;
   breadcrumb?: string | null;
   nextItem?: CatchupQueueItem | null;
 };
@@ -280,7 +279,7 @@ export function useCatchupFlow() {
           result: isCorrect ? 'correct' : 'wrong',
           submitted: trimmedAnswer,
           correctAnswer: isCorrect ? null : data.correctAnswer ?? data.answer ?? item.correctAnswer,
-          consolation: data.consolation ?? data.quip ?? null,
+          consolation: data.consolation ?? null,
           breadcrumb: null,
           explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
           copyVariant: item.queueAge,

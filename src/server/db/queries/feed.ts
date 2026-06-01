@@ -50,7 +50,6 @@ const feedItemCompatibilityColumns = {
   sourceAnswerId: sql<string | null>`NULL`.as('sourceAnswerId'),
   state: feedItems.state,
   isPinned: feedItems.isPinned,
-  quip: feedItems.quip,
   createdAt: feedItems.createdAt,
 };
 

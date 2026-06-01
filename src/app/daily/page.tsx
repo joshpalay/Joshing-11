@@ -40,7 +40,6 @@ type AnswerResponse = {
   correctAnswer?: string;
   answer?: string;
   consolation?: string | null;
-  quip?: string | null;
   insideJoke?: string | null;
   breadcrumb?: string | null;
   masteryDelta?: unknown | null;
@@ -308,6 +307,7 @@ export default function DailyPage() {
           correctAnswer: slot.answer_state === 'correct' ? null : slot.reveal_canonical_answer ?? null,
           consolation: slot.reveal_quip ?? null,
           insideJoke: slot.reveal_inside_joke ?? null,
+          authorNote: slot.source === 'friend' ? (slot.author_note ?? null) : null,
           breadcrumb: slot.reveal_breadcrumb ?? null,
           explanation: slot.reveal_explainer ?? null,
           copyVariant: slot.slot_index,
@@ -453,7 +453,7 @@ export default function DailyPage() {
                     reveal_canonical_answer: body.correctAnswer ?? body.answer,
                     reveal_explainer: body.explanation ?? body.explainer,
                     reveal_breadcrumb: null,
-                    reveal_quip: opts.gaveUp ? null : body.consolation ?? body.quip ?? null,
+                    reveal_quip: opts.gaveUp ? null : body.consolation ?? null,
                     reveal_inside_joke: body.insideJoke ?? null,
                   }
                 : slot

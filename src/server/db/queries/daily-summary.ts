@@ -10,7 +10,6 @@ import {
   users,
 } from '@/server/db';
 import { resolveTier } from '@/server/mastery/tiers';
-import { getDeliveredCreatorNotesForQuestions, type DeliveredCreatorNote } from '@/server/creator-notes';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getFeedPagePayload } from '@/server/feed/get-feed-page';
@@ -53,7 +52,10 @@ export type QuestionRecap = {
   domain: string;
   domainDisplayName: string;
   isInBank: boolean;
-  creatorNote: DeliveredCreatorNote | null;
+  /** Author display name — set for friend-authored questions (B-3 author's why). */
+  authorName: string | null;
+  /** Author's why — commentary attached at creation, surfaced in the recap. */
+  authorNote: string | null;
 };
 
 export type DomainGain = {
@@ -205,7 +207,6 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     .map((slot) => slot.question_id)
     .filter((id): id is string => Boolean(id));
   const bankedById = await checkBankedQuestions(userId, recapQuestionIds);
-  const creatorNotesByQuestionId = await getDeliveredCreatorNotesForQuestions(userId, recapQuestionIds);
 
   const recaps = slots.map<QuestionRecap>((slot) => {
     const generated = slot.generated_question_id ? questionById.get(slot.generated_question_id) : null;
@@ -223,7 +224,8 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       domain,
       domainDisplayName: displayNameForDomain(domain),
       isInBank: slot.question_id ? Boolean(bankedById[slot.question_id]) : false,
-      creatorNote: slot.question_id ? creatorNotesByQuestionId.get(slot.question_id) ?? null : null,
+      authorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
+      authorNote: slot.source === 'friend' ? (slot.author_note ?? null) : null,
     };
   });
 

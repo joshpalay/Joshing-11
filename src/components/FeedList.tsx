@@ -101,7 +101,7 @@ type AnswerResponse = {
   isCorrect?: boolean
   correctAnswer?: string
   explanation?: string | null
-  quip?: string | null
+  creatorNote?: string | null
   insideJoke?: string | null
   pointsAwarded?: number | null
   masteryDelta?: unknown | null
@@ -112,7 +112,7 @@ type ResultState = {
   answer: string
   submittedAnswer: string
   explanation: string | null
-  quip: string | null
+  creatorNote: string | null
   insideJoke: string | null
   awardedPoints: number | null
   masteryDelta: unknown | null
@@ -434,7 +434,7 @@ function toAnsweredByYouItem(
     isCorrect: result?.correct ?? item.is_correct,
     awardedPoints: result?.awardedPoints ?? item.awarded_points,
     explanation: result?.explanation ?? item.explanation,
-    quip: result?.quip ?? null,
+    creatorNote: result?.creatorNote ?? null,
     broadCategory: pickBroadCategory(masteryDeltaRaw, item),
     masteryDelta: normalizeMasteryDelta(masteryDeltaRaw),
     pairedFriend: pickPairedFriend(item),
@@ -935,7 +935,7 @@ function FeedListContent({
             answer: body.correctAnswer ?? '',
             submittedAnswer,
             explanation: body.explanation ?? null,
-            quip: body.quip ?? null,
+            creatorNote: body.creatorNote ?? null,
             insideJoke: body.insideJoke ?? null,
             awardedPoints: body.pointsAwarded ?? null,
             masteryDelta: body.masteryDelta ?? null,
@@ -1270,7 +1270,7 @@ function FeedListContent({
             correctAnswer={result.answer}
             submittedAnswer={result.submittedAnswer}
             explanation={result.explanation}
-            quip={result.quip}
+            creatorNote={result.creatorNote}
             insideJoke={result.insideJoke}
             openedNewTerritory={pickOpenedNewTerritory(result.masteryDelta)}
             openedTerritoryDomain={pickOpenedTerritoryDomain(result.masteryDelta)}

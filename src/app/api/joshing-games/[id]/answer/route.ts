@@ -2,10 +2,8 @@ import { and, eq } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
 
 import { writeActivity } from '@/server/activity/write-activity';
-import { selectQuip, type FriendResult } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
-import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
-import { db, feedItems, joshingGameResponses, users } from '@/server/db';
+import { db, feedItems, users } from '@/server/db';
 import {
   checkJoshingGameCompletion,
   getJoshingGame,
@@ -115,15 +113,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       `joshing_game:${id}:${parsed.questionId}:${session.userId}`,
     ));
 
-    if (!grade.isCorrect) {
-      void promptCreatorNoteAfterWrongAnswer({
-        questionId: parsed.questionId,
-        recipientUserId: session.userId,
-        contextType: 'joshing_game',
-        contextId: id,
-      });
-    }
-
     const newlyComplete = completion.userComplete && !beforeCompletion.userComplete;
     const creator = await getSmsUser(existingView.game.creatorId);
     const actor = await getSmsUser(session.userId);
@@ -173,28 +162,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
-    // Most recent other player's response to this question for contextual quip
-    const priorResponse = existingView.responses
-      .filter((r) => r.questionId === parsed.questionId && r.userId !== session.userId)
-      .sort((a, b) => (b.answeredAt?.getTime() ?? 0) - (a.answeredAt?.getTime() ?? 0))[0] ?? null;
-    const friendResult: FriendResult = priorResponse?.isCorrect != null
-      ? (priorResponse.isCorrect ? 'correct' : 'incorrect')
-      : null;
-    const friendRecipient = priorResponse
-      ? existingView.recipients.find((r) => r.userId === priorResponse.userId) ?? null
-      : null;
-    const friendName = friendRecipient?.displayName ?? undefined;
-    const quip = selectQuip({ isCorrect: grade.isCorrect, surface: 'joshing_game', friendResult, friendName });
-
-    await db
-      .update(joshingGameResponses)
-      .set({ quip })
-      .where(and(
-        eq(joshingGameResponses.gameId, id),
-        eq(joshingGameResponses.questionId, parsed.questionId),
-        eq(joshingGameResponses.userId, session.userId),
-      ));
-
     const insideJoke = await selectInsideJokeForViewer(
       answeredQuestion?.question.insideJoke ?? null,
       answeredQuestion?.question.creatorId ?? null,
@@ -207,7 +174,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       answerState: grade.answerState,
       breadcrumb: null,
       viewerStatus: completion.userComplete ? 'complete' : 'in_progress',
-      quip,
       insideJoke,
     });
   } catch (error) {

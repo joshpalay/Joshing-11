@@ -72,7 +72,7 @@ export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   isCorrect?: boolean | null
   awardedPoints?: number | null
   explanation?: string | null
-  quip?: string | null
+  creatorNote?: string | null
   unverifiedAnswer?: boolean
   broadCategory?: string | null
   masteryDelta?: AnsweredByYouMasteryDelta | null

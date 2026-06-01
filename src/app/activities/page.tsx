@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
-import { CreatorNoteReadButton } from '@/app/activities/CreatorNoteReadButton';
 import { filterUtilityActivities } from '@/app/activities/filter-utility-activities';
 import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
@@ -19,7 +18,6 @@ import {
   UnderlineName,
   UtilityActionLink,
 } from '@/components/lately/UtilityCard';
-import { creatorNoteSubmittedAnswerText } from '@/lib/creator-note-submitted-answer';
 import { getSession } from '@/server/auth/session';
 import {
   getActivitiesForUser,
@@ -131,15 +129,6 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     );
   }
 
-  if (item.type === 'creator_note_received') {
-    return (
-      <>
-        <UnderlineName>{actorName(item)}</UnderlineName> sent you a note about
-        a question you missed
-      </>
-    );
-  }
-
   if (item.type === 'authored_question_shared') {
     const shared = item.reference.authoredSharedQuestion;
     const count = shared?.recipientCount ?? 0;
@@ -193,32 +182,6 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
 }
 
 export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
-  if (item.type === 'creator_note_received') {
-    const note = item.reference.creatorNote;
-    if (!note) return null;
-    return (
-      <CreatorNoteReadButton noteId={note.id}>
-        <div className="bg-background rounded-md border p-3 text-sm leading-6">
-          <p>
-            <span className="text-foreground font-medium">Question:</span>{' '}
-            {note.questionText}
-          </p>
-          <p className="text-muted-foreground mt-1">
-            <span className="text-foreground font-medium">Answer:</span>{' '}
-            {note.correctAnswer}
-          </p>
-          <p className="text-muted-foreground mt-1">
-            <span className="text-foreground font-medium">You said:</span>{' '}
-            {creatorNoteSubmittedAnswerText(note.submittedAnswer, 'Your')}
-          </p>
-          <blockquote className="border-primary/40 bg-muted/50 text-foreground mt-3 border-l-4 px-3 py-2">
-            {note.noteText}
-          </blockquote>
-        </div>
-      </CreatorNoteReadButton>
-    );
-  }
-
   if (item.type === 'received_direct_question') {
     const directQuestion = item.reference.directQuestion;
     if (!directQuestion) return null;
@@ -411,7 +374,6 @@ const INCOMING_TYPES = new Set([
   'received_direct_question',
   'received_joshing_game',
   'friend_request',
-  'creator_note_received',
 ]);
 
 function activityCaption(item: ActivityItemView): string {

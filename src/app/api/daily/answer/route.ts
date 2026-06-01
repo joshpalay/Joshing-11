@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
 
-import { gradeAnswer, selectQuip } from '@/server/grading';
+import { gradeAnswer } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
 import {
@@ -226,7 +226,6 @@ export async function POST(request: NextRequest) {
     }
     const isCorrect = grade.result === 'correct';
     const answerState = isCorrect ? 'correct' : 'incorrect';
-    const quip = parsed.gaveUp ? null : selectQuip({ isCorrect, surface: 'daily', friendResult: null });
 
     // For bot slots: promote the generated question to a canonical row
     // BEFORE writing the mastery event so cross-surface dedup can key on
@@ -341,7 +340,6 @@ export async function POST(request: NextRequest) {
         reveal_explainer: question.explainer ?? undefined,
         reveal_inside_joke: insideJokeForViewer,
         reveal_quip: grade.consolation,
-        quip,
       } satisfies QueueSlot;
     });
 
@@ -486,7 +484,6 @@ export async function POST(request: NextRequest) {
       explainer: question.explainer,
       awarded_points: pointsAwarded,
       mastery_delta: masteryDelta,
-      quip,
       insideJoke: insideJokeForViewer,
     });
   } catch (error) {
