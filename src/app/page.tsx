@@ -6,6 +6,7 @@ import TodaysFiveCard, {
   type DailyStatus,
   type SlotOutcome,
 } from '@/components/TodaysFiveCard'
+import { AuthoringPrompt } from '@/components/home/AuthoringPrompt'
 import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { RecentActivitySection } from '@/components/home/RecentActivitySection'
@@ -66,6 +67,8 @@ export default async function Home() {
           <RecentActivityServerSection userId={session.userId} />
         </Suspense>
       ) : null}
+
+      {session ? <AuthoringPrompt /> : null}
 
       <section id="feed">
         {session ? (
