@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
@@ -28,6 +29,26 @@ import { getUserById } from '@/server/db/queries/users';
 
 function actorName(item: ActivityItemView) {
   return item.actor?.displayName ?? 'Someone';
+}
+
+// D-2 niche-match: the discovery loop's whole point is "go connect with this
+// stranger," so the actor name must be a profile link (-> /users/{id} ->
+// ProfileFriendButton). Other activity types intentionally render the actor
+// as a plain UnderlineName; only the niche-match rows opt into the link, and
+// only when we actually have an actorUserId.
+function NicheMatchActor({ item }: { item: ActivityItemView }) {
+  const name = actorName(item);
+  if (!item.actorUserId) {
+    return <UnderlineName>{name}</UnderlineName>;
+  }
+  return (
+    <Link
+      href={`/users/${item.actorUserId}`}
+      style={{ color: 'inherit', textDecoration: 'none' }}
+    >
+      <UnderlineName>{name}</UnderlineName>
+    </Link>
+  );
 }
 
 function ActivityCopy({ item }: { item: ActivityItemView }) {
@@ -177,6 +198,34 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     );
   }
 
+  if (item.type === 'niche_match_answered_your_question') {
+    const nm = item.reference.nicheMatch;
+    const domain = nm?.domain;
+    const domainText = domain ? ` ${domain}` : '';
+    return (
+      <>
+        <NicheMatchActor item={item} /> answered your{domainText} question —
+        someone out there shares this corner
+      </>
+    );
+  }
+
+  if (item.type === 'niche_match_you_answered') {
+    const nm = item.reference.nicheMatch;
+    const domain = nm?.domain;
+    return domain ? (
+      <>
+        You answered <NicheMatchActor item={item} />&apos;s {domain} question —
+        you found someone in {domain}
+      </>
+    ) : (
+      <>
+        You answered <NicheMatchActor item={item} />&apos;s question — you found
+        someone who shares this corner
+      </>
+    );
+  }
+
   if (item.type === 'declared_promoted') {
     const dp = item.reference.declaredPromoted;
     const domain = dp?.domain;
@@ -273,6 +322,19 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
           {disputeStatusLabel(dispute.status, dispute.acceptedAlternative)}
         </p>
       </div>
+    );
+  }
+
+  if (
+    item.type === 'niche_match_answered_your_question' ||
+    item.type === 'niche_match_you_answered'
+  ) {
+    const nm = item.reference.nicheMatch;
+    if (!nm?.questionText) return null;
+    return (
+      <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+        {nm.questionText}
+      </p>
     );
   }
 
