@@ -16,6 +16,7 @@ import { InlineHandleField } from '@/components/profile/InlineHandleField'
 import { MutualFriendsSection } from '@/components/profile/MutualFriendsSection'
 import { PreviewBanner } from '@/components/profile/PreviewBanner'
 import { ProfileFriendButton } from '@/components/profile/ProfileFriendButton'
+import { RecentlyExploringSection } from '@/components/profile/RecentlyExploringSection'
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle'
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow'
 import { SharedInterestsOverlap } from '@/components/profile/SharedInterestsOverlap'
@@ -41,6 +42,7 @@ import {
   topPointPositiveDomains,
 } from '@/server/profile/knowledge-view'
 import { resolvePreviewAs } from '@/server/profile/preview'
+import { selectRecentlyExploring } from '@/server/profile/recently-exploring'
 import {
   buildInviteUrl,
   getBaseUrl,
@@ -167,6 +169,11 @@ export default async function UserProfilePage({
   const totalPointPositiveDomains = sortedDomains.filter(
     (domain) => domain.points > 0,
   ).length
+  // Activity-based presence: which domains the user has been answering in
+  // lately (recent masteryEvents), distinct from the points-sorted knowledge
+  // map above and from declared interests. Per-domain hidden domains are
+  // already filtered out by `isHidden`.
+  const recentlyExploring = selectRecentlyExploring(pageData.allDomains)
   const mindStatement = buildMindStatement(portrait.user.displayName, topDomains)
   const tierSignature = `${new Intl.NumberFormat().format(
     Math.round(mastery.totalPoints),
@@ -424,6 +431,14 @@ export default async function UserProfilePage({
               : `View ${friendFirstName}’s full knowledge base →`}
           </Link>
         </section>
+      ) : null}
+
+      {portrait.sectionVisibleTo.knowledge_base &&
+      recentlyExploring.length > 0 ? (
+        <RecentlyExploringSection
+          domains={recentlyExploring}
+          friendFirstName={friendFirstName}
+        />
       ) : null}
 
       {portrait.sectionVisibleTo.authored_questions ? (
