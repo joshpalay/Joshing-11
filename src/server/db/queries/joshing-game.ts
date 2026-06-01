@@ -63,7 +63,8 @@ const DIFFICULTY_WEIGHT: Record<string, number> = {
 };
 
 function difficultyWeight(question: QuestionRow): number {
-  const level = question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null;
+  const level =
+    question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null;
   if (!level) return 1;
   return DIFFICULTY_WEIGHT[level] ?? 1;
 }
@@ -81,7 +82,8 @@ export function computeOverlapCells(
   const cells = new Map<string, OverlapAggregateCell>();
   for (const gameQuestion of view.questions) {
     const question = gameQuestion.question;
-    const canonical = question.canonicalSubcategory || question.broadCategory || question.category || 'General';
+    const canonical =
+      question.canonicalSubcategory || question.broadCategory || question.category || 'General';
     const broad = question.broadCategory || question.category || canonical;
     const weight = difficultyWeight(question);
 
@@ -138,9 +140,7 @@ export async function getGameOverlapAggregates(gameId: string): Promise<{
 
   const recipientCount = view.recipients.length;
   const recipientId = recipientCount === 1 ? view.recipients[0].userId : null;
-  const cells = recipientId
-    ? computeOverlapCells(view, view.game.creatorId, recipientId)
-    : [];
+  const cells = recipientId ? computeOverlapCells(view, view.game.creatorId, recipientId) : [];
 
   return {
     creatorId: view.game.creatorId,
@@ -190,15 +190,20 @@ function questionDomain(question: QuestionRow): string {
 }
 
 function questionExplanation(question: QuestionRow): string {
-  return question.explainerFullCorrect
-    ?? question.explainerFull
-    ?? question.explainerBriefCorrect
-    ?? question.explainerBrief
-    ?? question.factualExplanation
-    ?? '';
+  return (
+    question.explainerFullCorrect ??
+    question.explainerFull ??
+    question.explainerBriefCorrect ??
+    question.explainerBrief ??
+    question.factualExplanation ??
+    ''
+  );
 }
 
-async function readPriorAnswers(userId: string, questionId: string): Promise<{ result: PriorAnswerResult }[]> {
+async function readPriorAnswers(
+  userId: string,
+  questionId: string,
+): Promise<{ result: PriorAnswerResult }[]> {
   const joshingRows = await db
     .select({
       isCorrect: joshingGameResponses.isCorrect,
@@ -206,7 +211,9 @@ async function readPriorAnswers(userId: string, questionId: string): Promise<{ r
       id: joshingGameResponses.id,
     })
     .from(joshingGameResponses)
-    .where(and(eq(joshingGameResponses.userId, userId), eq(joshingGameResponses.questionId, questionId)))
+    .where(
+      and(eq(joshingGameResponses.userId, userId), eq(joshingGameResponses.questionId, questionId)),
+    )
     .orderBy(asc(joshingGameResponses.answeredAt), asc(joshingGameResponses.id));
 
   const dailyRows = await db
@@ -219,18 +226,17 @@ async function readPriorAnswers(userId: string, questionId: string): Promise<{ r
     asQueueSlots(row.slots)
       .filter((slot) => slot.question_id === questionId && (slot.answered || slot.skipped))
       .map((slot) => ({
-        result: slot.answer_state === 'correct' ? 'correct' as const : 'wrong' as const,
+        result: slot.answer_state === 'correct' ? ('correct' as const) : ('wrong' as const),
       })),
   );
 
   return [
     ...dailyAnswers,
     ...joshingRows.map((row) => ({
-      result: row.isCorrect ? 'correct' as const : 'wrong' as const,
+      result: row.isCorrect ? ('correct' as const) : ('wrong' as const),
     })),
   ];
 }
-
 
 export async function createJoshingGame(params: {
   title: string;
@@ -286,13 +292,17 @@ export async function createJoshingGame(params: {
     return { id: game.id };
   });
 
-  await Promise.all(uniqueRecipientIds.map((userId) => writeActivity({
-    userId,
-    type: 'received_joshing_game',
-    actorUserId: params.creatorId,
-    referenceId: result.id,
-    referenceType: 'joshing_game',
-  })));
+  await Promise.all(
+    uniqueRecipientIds.map((userId) =>
+      writeActivity({
+        userId,
+        type: 'received_joshing_game',
+        actorUserId: params.creatorId,
+        referenceId: result.id,
+        referenceType: 'joshing_game',
+      }),
+    ),
+  );
 
   return result;
 }
@@ -352,11 +362,8 @@ export async function getJoshingGame(params: {
 
   const viewerResponses = responsesByUser.get(params.requestingUserId) ?? [];
   const viewerComplete = questionCount > 0 && viewerResponses.length >= questionCount;
-  const viewerStatus = viewerResponses.length === 0
-    ? 'not_started'
-    : viewerComplete
-      ? 'complete'
-      : 'in_progress';
+  const viewerStatus =
+    viewerResponses.length === 0 ? 'not_started' : viewerComplete ? 'complete' : 'in_progress';
 
   const canSeeAllResponses = viewerComplete || params.requestingUserId === gameRow.game.creatorId;
 
@@ -365,12 +372,13 @@ export async function getJoshingGame(params: {
   // submittedAnswer. Other rows are projected with submittedAnswer = null so
   // that no UI (or serialized payload shipped to a client component) can
   // surface another player's literal answer text.
-  const visibleResponses = (canSeeAllResponses
-    ? responseRows
-    : responseRows.filter((response) => response.userId === params.requestingUserId))
-    .map((response) => response.userId === params.requestingUserId
-      ? response
-      : { ...response, submittedAnswer: null });
+  const visibleResponses = (
+    canSeeAllResponses
+      ? responseRows
+      : responseRows.filter((response) => response.userId === params.requestingUserId)
+  ).map((response) =>
+    response.userId === params.requestingUserId ? response : { ...response, submittedAnswer: null },
+  );
 
   return {
     game: {
@@ -432,10 +440,12 @@ export async function submitJoshingGameResponse(params: {
   const [membership] = await db
     .select({ id: joshingGameRecipients.id })
     .from(joshingGameRecipients)
-    .where(and(
-      eq(joshingGameRecipients.gameId, params.gameId),
-      eq(joshingGameRecipients.userId, params.userId),
-    ))
+    .where(
+      and(
+        eq(joshingGameRecipients.gameId, params.gameId),
+        eq(joshingGameRecipients.userId, params.userId),
+      ),
+    )
     .limit(1);
   if (!membership && game.creatorId !== params.userId) {
     throw new JoshingGameValidationError('userId is not a recipient or creator of this game');
@@ -445,10 +455,12 @@ export async function submitJoshingGameResponse(params: {
     .select({ gameQuestion: joshingGameQuestions, question: questions })
     .from(joshingGameQuestions)
     .innerJoin(questions, eq(joshingGameQuestions.questionId, questions.id))
-    .where(and(
-      eq(joshingGameQuestions.gameId, params.gameId),
-      eq(joshingGameQuestions.questionId, params.questionId),
-    ))
+    .where(
+      and(
+        eq(joshingGameQuestions.gameId, params.gameId),
+        eq(joshingGameQuestions.questionId, params.questionId),
+      ),
+    )
     .limit(1);
   if (!gameQuestion) {
     throw new JoshingGameValidationError('questionId is not in this game');
@@ -457,11 +469,13 @@ export async function submitJoshingGameResponse(params: {
   const [existingResponse] = await db
     .select({ id: joshingGameResponses.id })
     .from(joshingGameResponses)
-    .where(and(
-      eq(joshingGameResponses.gameId, params.gameId),
-      eq(joshingGameResponses.questionId, params.questionId),
-      eq(joshingGameResponses.userId, params.userId),
-    ))
+    .where(
+      and(
+        eq(joshingGameResponses.gameId, params.gameId),
+        eq(joshingGameResponses.questionId, params.questionId),
+        eq(joshingGameResponses.userId, params.userId),
+      ),
+    )
     .limit(1);
   if (existingResponse) {
     throw new JoshingGameValidationError('response already exists for this user and question');
@@ -480,7 +494,13 @@ export async function submitJoshingGameResponse(params: {
   const priorAnswers = await readPriorAnswers(params.userId, params.questionId);
   const answerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
   const basePoints = isCorrect
-    ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null, answerState)
+    ? getBasePoints(
+        question.calibratedDifficulty ??
+          question.llmDifficulty ??
+          question.difficultyEstimate ??
+          null,
+        answerState,
+      )
     : 0;
   const pointsAwarded = isCorrect ? basePoints : 0;
   const answeredAt = new Date();
@@ -525,7 +545,10 @@ export async function submitJoshingGameResponse(params: {
   });
 
   if (isCorrect && question.creatorId && question.creatorId !== params.userId) {
-    const existingAuthorCredits = await countAuthorCreditEvents(params.questionId, question.creatorId);
+    const existingAuthorCredits = await countAuthorCreditEvents(
+      params.questionId,
+      question.creatorId,
+    );
     const authorAward = creatorMasteryAwardForNthCorrect(
       question.correctCount + 1,
       question.askedCount + 1,
@@ -600,11 +623,15 @@ export async function checkJoshingGameCompletion(params: {
   }
 
   const completedUserIds = recipients
-    .filter((recipient) => questionCount > 0 && (answeredByUser.get(recipient.userId)?.size ?? 0) >= questionCount)
+    .filter(
+      (recipient) =>
+        questionCount > 0 && (answeredByUser.get(recipient.userId)?.size ?? 0) >= questionCount,
+    )
     .map((recipient) => recipient.userId);
 
   return {
-    userComplete: questionCount > 0 && (answeredByUser.get(params.userId)?.size ?? 0) >= questionCount,
+    userComplete:
+      questionCount > 0 && (answeredByUser.get(params.userId)?.size ?? 0) >= questionCount,
     allComplete: recipients.length > 0 && completedUserIds.length === recipients.length,
     completedUserIds,
   };

@@ -1,15 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import {
-  BarChart3,
-  Code2,
-  FlaskConical,
-  Loader2,
-  LogOut,
-  RefreshCw,
-  Sun,
-} from 'lucide-react';
+import { BarChart3, Code2, FlaskConical, Loader2, LogOut, RefreshCw, Sun } from 'lucide-react';
 import { useState } from 'react';
 
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
@@ -125,11 +117,11 @@ export function AccountActions() {
           />
         </SettingsGroup>
         {confirmingLogout ? (
-          <div className="mt-3 rounded-xl border border-destructive/30 bg-card p-4 text-card-foreground">
+          <div className="border-destructive/30 bg-card text-card-foreground mt-3 rounded-xl border p-4">
             <p className="text-sm font-medium">Are you sure you want to log out?</p>
             <div className="mt-3 flex gap-2">
               <button
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-destructive px-3 text-sm font-medium text-destructive hover:bg-destructive/10"
+                className="border-destructive text-destructive hover:bg-destructive/10 inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium"
                 type="button"
                 onClick={() => void confirmLogout()}
                 disabled={loggingOut}
@@ -146,16 +138,19 @@ export function AccountActions() {
                 Cancel
               </button>
             </div>
-            {logoutError ? <p className="mt-2 text-sm text-destructive">{logoutError}</p> : null}
+            {logoutError ? <p className="text-destructive mt-2 text-sm">{logoutError}</p> : null}
           </div>
         ) : null}
 
         <div className="mt-6">
           {confirmingDelete ? (
-            <div className="rounded-xl border border-destructive bg-destructive/5 p-4">
-              <p className="text-sm font-semibold text-destructive">Delete your account permanently?</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                This removes your account, sessions, stats, authored questions, games, and friend connections. This cannot be undone.
+            <div className="border-destructive bg-destructive/5 rounded-xl border p-4">
+              <p className="text-destructive text-sm font-semibold">
+                Delete your account permanently?
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                This removes your account, sessions, stats, authored questions, games, and friend
+                connections. This cannot be undone.
               </p>
               <label className="mt-3 block text-xs font-medium" htmlFor="delete-confirmation">
                 Type DELETE to confirm.
@@ -167,13 +162,13 @@ export function AccountActions() {
                   setDeleteConfirmation(event.target.value);
                   setDeleteError(null);
                 }}
-                className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-destructive"
+                className="bg-background focus:border-destructive mt-1 h-10 w-full rounded-md border px-3 text-sm outline-none"
                 autoComplete="off"
                 disabled={deletingAccount}
               />
               <div className="mt-3 flex gap-2">
                 <button
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90 inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
                   type="button"
                   onClick={() => void confirmDeleteAccount()}
                   disabled={!canDeleteAccount || deletingAccount}
@@ -194,12 +189,12 @@ export function AccountActions() {
                   Cancel
                 </button>
               </div>
-              {deleteError ? <p className="mt-2 text-sm text-destructive">{deleteError}</p> : null}
+              {deleteError ? <p className="text-destructive mt-2 text-sm">{deleteError}</p> : null}
             </div>
           ) : (
             <button
               type="button"
-              className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+              className="text-muted-foreground hover:text-destructive text-xs font-medium underline-offset-2 hover:underline"
               onClick={() => {
                 setConfirmingDelete(true);
                 setConfirmingLogout(false);

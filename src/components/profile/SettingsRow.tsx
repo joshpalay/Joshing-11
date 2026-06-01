@@ -27,9 +27,7 @@ export function SettingsRow(props: LinkProps | ButtonProps): ReactNode {
   const tone = props.tone ?? 'default';
   const titleClass = tone === 'destructive' ? 'text-destructive' : '';
   const iconWrap =
-    tone === 'destructive'
-      ? 'bg-destructive/10 text-destructive'
-      : 'bg-muted text-foreground/70';
+    tone === 'destructive' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground/70';
 
   const body = (
     <>
@@ -40,12 +38,12 @@ export function SettingsRow(props: LinkProps | ButtonProps): ReactNode {
         {props.icon}
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className={`font-serif text-base font-semibold leading-tight ${titleClass}`}>
+        <span className={`font-serif text-base leading-tight font-semibold ${titleClass}`}>
           {props.title}
         </span>
-        <span className="mt-0.5 text-sm text-muted-foreground">{props.subtitle}</span>
+        <span className="text-muted-foreground mt-0.5 text-sm">{props.subtitle}</span>
       </span>
-      <ChevronRight className="size-5 flex-none text-muted-foreground" />
+      <ChevronRight className="text-muted-foreground size-5 flex-none" />
     </>
   );
 
@@ -69,7 +67,7 @@ export function SettingsRow(props: LinkProps | ButtonProps): ReactNode {
 
 export function SettingsGroup({ children }: { children: ReactNode }) {
   return (
-    <div className="divide-y rounded-xl border bg-card text-card-foreground shadow-sm">
+    <div className="bg-card text-card-foreground divide-y rounded-xl border shadow-sm">
       {children}
     </div>
   );

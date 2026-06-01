@@ -12,13 +12,17 @@ export async function GET(request: NextRequest) {
 
   const excludeParam = request.nextUrl.searchParams.get('exclude');
   const excludeIds = excludeParam
-    ? excludeParam.split(',').map((id) => id.trim()).filter(Boolean)
+    ? excludeParam
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean)
     : [];
 
   const items = await getReplayWrongQuestions(session.userId);
-  const remaining = excludeIds.length > 0
-    ? items.filter((item) => !excludeIds.includes(item.dailyQueueItemId))
-    : items;
+  const remaining =
+    excludeIds.length > 0
+      ? items.filter((item) => !excludeIds.includes(item.dailyQueueItemId))
+      : items;
   return NextResponse.json({
     items: remaining,
     session: selectReplaySession(items, 5, excludeIds),

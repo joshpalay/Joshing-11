@@ -2,10 +2,7 @@
 
 import { useState } from 'react';
 
-import type {
-  ProfileSection,
-  SectionVisibility,
-} from '@/server/profile/visibility';
+import type { ProfileSection, SectionVisibility } from '@/server/profile/visibility';
 
 const OPTIONS: SectionVisibility[] = ['private', 'friends', 'public'];
 
@@ -68,19 +65,14 @@ export function SectionVisibilityToggle({
     }
   };
 
-  const baseBtn =
-    size === 'compact'
-      ? 'min-h-9 px-3 py-1.5 text-xs'
-      : 'min-h-10 px-3 text-sm';
+  const baseBtn = size === 'compact' ? 'min-h-9 px-3 py-1.5 text-xs' : 'min-h-10 px-3 text-sm';
 
-  const wrapperLayout = fullWidth
-    ? 'grid w-full grid-cols-3'
-    : 'inline-grid grid-cols-3';
+  const wrapperLayout = fullWidth ? 'grid w-full grid-cols-3' : 'inline-grid grid-cols-3';
 
   return (
     <div>
       <div
-        className={`${wrapperLayout} rounded-full border bg-card p-1 font-medium`}
+        className={`${wrapperLayout} bg-card rounded-full border p-1 font-medium`}
         aria-label={`Visibility for ${label}`}
       >
         {OPTIONS.map((option) => (
@@ -100,7 +92,7 @@ export function SectionVisibilityToggle({
           </button>
         ))}
       </div>
-      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="text-destructive mt-1 text-xs">{error}</p> : null}
     </div>
   );
 }

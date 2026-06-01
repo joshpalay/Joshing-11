@@ -94,20 +94,39 @@ describe('B5 personal mastery copy contract', () => {
   });
 
   it('locks dynamic copy renderers and exact tier lines', () => {
-    expect(B5_PERSONAL_MASTERY_COPY.friendSubtitle.sharedGroundTerritories(3)).toBe('Shared ground in 3 territories.');
-    expect(B5_PERSONAL_MASTERY_COPY.emptyState.friend.message('Maya')).toBe("Maya's portrait is still early.");
-    expect(B5_PERSONAL_MASTERY_COPY.unexplored.subtitle('Maya')).toBe("Territories you've explored that Maya hasn't entered yet.");
-    expect(B5_PERSONAL_MASTERY_COPY.multitudesFallback.singleSparse('Late Tchaikovsky')).toBe('Early days — but already: Late Tchaikovsky.');
-    expect(B5_PERSONAL_MASTERY_COPY.multitudesFallback.dualSparse('Late Tchaikovsky', 'Counterpoint species writing')).toBe(
-      'Starting to take shape: Late Tchaikovsky and Counterpoint species writing.',
+    expect(B5_PERSONAL_MASTERY_COPY.friendSubtitle.sharedGroundTerritories(3)).toBe(
+      'Shared ground in 3 territories.',
     );
-    expect(B5_PERSONAL_MASTERY_COPY.card.tierLines.familiar('Late Bach')).toBe("Late Bach. You're finding your ground.");
-    expect(B5_PERSONAL_MASTERY_COPY.card.tierLines.solid('Late Bach')).toBe('Late Bach. You move through this naturally now.');
-    expect(B5_PERSONAL_MASTERY_COPY.card.tierLines.mastery('Late Bach')).toBe("Late Bach. This one's yours.");
+    expect(B5_PERSONAL_MASTERY_COPY.emptyState.friend.message('Maya')).toBe(
+      "Maya's portrait is still early.",
+    );
+    expect(B5_PERSONAL_MASTERY_COPY.unexplored.subtitle('Maya')).toBe(
+      "Territories you've explored that Maya hasn't entered yet.",
+    );
+    expect(B5_PERSONAL_MASTERY_COPY.multitudesFallback.singleSparse('Late Tchaikovsky')).toBe(
+      'Early days — but already: Late Tchaikovsky.',
+    );
+    expect(
+      B5_PERSONAL_MASTERY_COPY.multitudesFallback.dualSparse(
+        'Late Tchaikovsky',
+        'Counterpoint species writing',
+      ),
+    ).toBe('Starting to take shape: Late Tchaikovsky and Counterpoint species writing.');
+    expect(B5_PERSONAL_MASTERY_COPY.card.tierLines.familiar('Late Bach')).toBe(
+      "Late Bach. You're finding your ground.",
+    );
+    expect(B5_PERSONAL_MASTERY_COPY.card.tierLines.solid('Late Bach')).toBe(
+      'Late Bach. You move through this naturally now.',
+    );
+    expect(B5_PERSONAL_MASTERY_COPY.card.tierLines.mastery('Late Bach')).toBe(
+      "Late Bach. This one's yours.",
+    );
     expect(B5_PERSONAL_MASTERY_COPY.tierBar.toNext(4, 'Familiar')).toBe('4 pts to Familiar');
     expect(B5_PERSONAL_MASTERY_COPY.tierBar.masterPeak).toBe('Mastery');
     expect(B5_PERSONAL_MASTERY_COPY.portraitBars.createdPts('3')).toBe('3 pts created');
     expect(B5_PERSONAL_MASTERY_COPY.portraitBars.answeredPts('2.5')).toBe('2.5 pts answered');
-    expect(B5_PERSONAL_MASTERY_COPY.overlapLabels.overlapTopPeer('Sam')).toBe('You overlap most with Sam here');
+    expect(B5_PERSONAL_MASTERY_COPY.overlapLabels.overlapTopPeer('Sam')).toBe(
+      'You overlap most with Sam here',
+    );
   });
 });

@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from 'react';
 
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils';
 
 // One shell for the whole feed surface. Before this, the feed carried three
 // diverging card chromes (the 2026-05-30 design audit, C7):
@@ -13,23 +13,23 @@ import { cn } from '@/lib/utils'
 // with the accent bar configurable to the top (default) or left edge, and a
 // 'triangle' variant for the envelope motif.
 
-const FEED_CARD_RADIUS = 'rounded-[4px]'
-const FEED_CARD_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
+const FEED_CARD_RADIUS = 'rounded-[4px]';
+const FEED_CARD_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.04)]';
 
 export type FeedCardShellProps = {
-  children: ReactNode
-  className?: string
+  children: ReactNode;
+  className?: string;
   /** Category/domain accent color for the edge bar. Omit for no bar. */
-  accentColor?: string
+  accentColor?: string;
   /** Which edge the accent bar sits on. Defaults to the top. */
-  accentPlacement?: 'top' | 'left'
+  accentPlacement?: 'top' | 'left';
   /**
    * 'bordered' (default) — hairline border + soft shadow over --brand-card.
    * 'triangle' — the Variant4.png triangle mat with an inset --brand-card panel
    * (the "shared with you" envelope motif).
    */
-  variant?: 'bordered' | 'triangle'
-}
+  variant?: 'bordered' | 'triangle';
+};
 
 export function FeedCardShell({
   children,
@@ -47,7 +47,7 @@ export function FeedCardShell({
       )}
       style={{ backgroundColor: accentColor }}
     />
-  ) : null
+  ) : null;
 
   if (variant === 'triangle') {
     return (
@@ -64,7 +64,7 @@ export function FeedCardShell({
           {children}
         </div>
       </article>
-    )
+    );
   }
 
   return (
@@ -79,5 +79,5 @@ export function FeedCardShell({
       {accentBar}
       {children}
     </article>
-  )
+  );
 }

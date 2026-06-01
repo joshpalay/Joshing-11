@@ -66,7 +66,9 @@ function titleCase(value: string): string {
     .trim();
 }
 
-function cleanWarmupAnswers(warmupAnswers: WarmupAnswers): Array<{ field: keyof WarmupAnswers; answer: string }> {
+function cleanWarmupAnswers(
+  warmupAnswers: WarmupAnswers,
+): Array<{ field: keyof WarmupAnswers; answer: string }> {
   return (Object.keys(WARMUP_LABELS) as Array<keyof WarmupAnswers>).flatMap((field) => {
     const answer = asTrimmedString(warmupAnswers[field]);
     return answer ? [{ field, answer: answer.slice(0, 200) }] : [];
@@ -102,7 +104,9 @@ function parseJsonArray(rawText: string): unknown[] | null {
   return null;
 }
 
-function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; answer: string }>): ProposedInterest[] {
+function fallbackInterests(
+  cleanAnswers: Array<{ field: keyof WarmupAnswers; answer: string }>,
+): ProposedInterest[] {
   const candidates = cleanAnswers
     .map(({ field, answer }, index) => {
       const domain = titleCase(
@@ -119,7 +123,8 @@ function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; ans
 
       return {
         domain,
-        broadCategory: FALLBACK_CATEGORIES[index % FALLBACK_CATEGORIES.length] ?? 'General Knowledge',
+        broadCategory:
+          FALLBACK_CATEGORIES[index % FALLBACK_CATEGORIES.length] ?? 'General Knowledge',
         rationale: `Based on your answer for ${WARMUP_LABELS[field]}.`,
       };
     })
@@ -223,7 +228,9 @@ Rules:
 - Never return "Other" as a broadCategory. Use "General Knowledge" only when no more precise top-level bucket applies.
 - Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
-  const warmupBody = cleanAnswers.map(({ field, answer }) => `- ${WARMUP_LABELS[field]}: ${answer}`).join('\n');
+  const warmupBody = cleanAnswers
+    .map(({ field, answer }) => `- ${WARMUP_LABELS[field]}: ${answer}`)
+    .join('\n');
   const userMessage = `Warm-up answers:
 ${wrapUserInput('warmup_answers', warmupBody)}
 
@@ -245,10 +252,12 @@ Propose candidate interests. Return JSON array only.`;
 
   const text = extractTextContent(response.content);
   const parsed = parseJsonArray(text);
-  const interests = uniqueByDomain((parsed ?? []).flatMap((interest) => {
-    const normalized = normalizeInterest(interest);
-    return normalized ? [normalized] : [];
-  }));
+  const interests = uniqueByDomain(
+    (parsed ?? []).flatMap((interest) => {
+      const normalized = normalizeInterest(interest);
+      return normalized ? [normalized] : [];
+    }),
+  );
 
   if (interests.length < 10) {
     return uniqueByDomain([...interests, ...fallbackInterests(cleanAnswers)]).slice(0, 14);

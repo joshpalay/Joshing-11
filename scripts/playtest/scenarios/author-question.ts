@@ -58,8 +58,15 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
       });
       const bodyText = await response.text().catch(() => '');
       const body = (() => {
-        try { return JSON.parse(bodyText) as { question?: { id: string }; error?: string; message?: string }; }
-        catch { return null; }
+        try {
+          return JSON.parse(bodyText) as {
+            question?: { id: string };
+            error?: string;
+            message?: string;
+          };
+        } catch {
+          return null;
+        }
       })();
 
       const status = response.status();
@@ -81,7 +88,10 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
         });
       } else {
         asserts.pass(`POST /api/questions returns 2xx (got ${status})`);
-        asserts.expectTruthy('response contains question.id', typeof body?.question?.id === 'string');
+        asserts.expectTruthy(
+          'response contains question.id',
+          typeof body?.question?.id === 'string',
+        );
       }
 
       // DB-level: the row exists with the right creatorId.
@@ -119,6 +129,7 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
 export const authorQuestionScenario: Scenario = {
   id: 'author-question',
   displayName: 'Author a new question',
-  description: 'A test user POSTs to /api/questions and the question row appears with source=authored.',
+  description:
+    'A test user POSTs to /api/questions and the question row appears with source=authored.',
   run,
 };

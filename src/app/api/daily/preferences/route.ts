@@ -98,11 +98,17 @@ export async function PATCH(request: NextRequest) {
   const selectedDomainsValue = record.selectedDomains ?? record.selected_domains;
 
   if (difficultyValue !== undefined && !isValidDifficulty(difficultyValue)) {
-    return NextResponse.json({ error: 'validation', message: 'invalid_difficulty' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'invalid_difficulty' },
+      { status: 400 },
+    );
   }
 
   if (domainModeValue !== undefined && !isValidDomainMode(domainModeValue)) {
-    return NextResponse.json({ error: 'validation', message: 'invalid_domain_mode' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'invalid_domain_mode' },
+      { status: 400 },
+    );
   }
 
   const parsedSelectedDomains =

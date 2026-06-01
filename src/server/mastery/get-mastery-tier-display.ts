@@ -24,4 +24,3 @@ export function getMasteryTierDisplay(masteryPoints: number): MasteryTierDisplay
 
   return { tier, progressWithinTier };
 }
-

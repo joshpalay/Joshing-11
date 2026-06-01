@@ -1,4 +1,9 @@
-import { extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
+import {
+  extractTextContent,
+  getAnthropicClient,
+  loggedMessagesCreate,
+  parseJsonObject,
+} from '@/lib/llm';
 import { getKnowledgeBase } from '@/server/db/queries/daily';
 
 const RECONCILE_MODEL = 'claude-haiku-4-5';
@@ -66,8 +71,7 @@ ${existingDomains.map((d) => `- ${d}`).join('\n')}`;
     const matchesExisting = Boolean(parsed.matchesExisting);
     const matchedDomain =
       typeof parsed.matchedDomain === 'string' ? parsed.matchedDomain.trim() : null;
-    const rationale =
-      typeof parsed.rationale === 'string' ? parsed.rationale.trim() : '';
+    const rationale = typeof parsed.rationale === 'string' ? parsed.rationale.trim() : '';
 
     if (matchesExisting && matchedDomain) {
       console.log(

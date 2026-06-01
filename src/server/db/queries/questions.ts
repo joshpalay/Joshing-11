@@ -66,10 +66,14 @@ type QuestionRow = typeof questions.$inferSelect;
 let ensureQuestionSurfacePriorityColumnPromise: Promise<void> | null = null;
 
 function ensureQuestionSurfacePriorityColumn(): Promise<void> {
-  ensureQuestionSurfacePriorityColumnPromise ??= db.execute(sql`
+  ensureQuestionSurfacePriorityColumnPromise ??= db
+    .execute(
+      sql`
     ALTER TABLE "Question"
       ADD COLUMN IF NOT EXISTS "surface_priority_score" DOUBLE PRECISION NOT NULL DEFAULT 0
-  `).then(() => undefined);
+  `,
+    )
+    .then(() => undefined);
   return ensureQuestionSurfacePriorityColumnPromise;
 }
 
@@ -124,8 +128,16 @@ const questionViewColumns = {
 
 export const bankQuestionSelectColumns = questionViewColumns;
 
-type QuestionViewRow = Omit<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>
-  & Partial<Pick<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>>;
+type QuestionViewRow = Omit<
+  QuestionRow,
+  'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'
+> &
+  Partial<
+    Pick<
+      QuestionRow,
+      'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'
+    >
+  >;
 
 function difficultyToNumber(value: QuestionRow['difficultyEstimate']): number {
   if (value === 'accessible') return 1;
@@ -140,12 +152,14 @@ function numberToDifficulty(value: number): 'accessible' | 'moderate' | 'special
 }
 
 function explanationFor(row: QuestionViewRow): string | null {
-  return row.factualExplanation
-    ?? row.explainerFullWrong
-    ?? row.explainerFull
-    ?? row.explainerBriefWrong
-    ?? row.explainerBrief
-    ?? null;
+  return (
+    row.factualExplanation ??
+    row.explainerFullWrong ??
+    row.explainerFull ??
+    row.explainerBriefWrong ??
+    row.explainerBrief ??
+    null
+  );
 }
 
 function toIso(value: Date | string | null | undefined): string | null {
@@ -161,10 +175,12 @@ async function readQuestionStats(questionId: string) {
         timesCorrect: sql<number>`count(*) filter (where ${joshingGameResponses.isCorrect} = true)`,
       })
       .from(joshingGameResponses)
-      .where(and(
-        eq(joshingGameResponses.questionId, questionId),
-        sql`${joshingGameResponses.answeredAt} is not null`,
-      )),
+      .where(
+        and(
+          eq(joshingGameResponses.questionId, questionId),
+          sql`${joshingGameResponses.answeredAt} is not null`,
+        ),
+      ),
     // Answers submitted via "Send to friend" land in feedItems, not joshingGameResponses.
     // joshingGameId is null filters out feed items that mirror an already-counted game response.
     db
@@ -173,11 +189,13 @@ async function readQuestionStats(questionId: string) {
         timesCorrect: sql<number>`count(*) filter (where ${feedItems.answerResult} = 'correct')`,
       })
       .from(feedItems)
-      .where(and(
-        eq(feedItems.questionId, questionId),
-        sql`${feedItems.answerResult} is not null`,
-        isNull(feedItems.joshingGameId),
-      )),
+      .where(
+        and(
+          eq(feedItems.questionId, questionId),
+          sql`${feedItems.answerResult} is not null`,
+          isNull(feedItems.joshingGameId),
+        ),
+      ),
     db
       .select({
         lastUsedAt: sql<Date | null>`max(${joshingGames.createdAt})`,
@@ -220,7 +238,9 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
     broadCategory: row.broadCategory,
     canonicalSubcategory: row.canonicalSubcategory,
     subcategory: row.subcategory,
-    difficulty: difficultyToNumber(row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate),
+    difficulty: difficultyToNumber(
+      row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate,
+    ),
     timesAnswered: stats.timesAnswered,
     timesCorrect: stats.timesCorrect,
     correctRate: stats.correctRate,
@@ -291,9 +311,7 @@ export async function getAuthoredQuestionsForUser(params: {
   sectionVisible?: boolean;
 }): Promise<AuthoredQuestionPreview[]> {
   const limit = Math.max(1, Math.min(params.limit ?? 25, 100));
-  const viewer =
-    params.viewer ??
-    (params.viewerUserId === params.userId ? 'self' : 'stranger');
+  const viewer = params.viewer ?? (params.viewerUserId === params.userId ? 'self' : 'stranger');
 
   // Section-level gate: when the section is hidden to the effective
   // viewer, render nothing regardless of per-question visibility.
@@ -364,11 +382,20 @@ export async function getAuthoredQuestionsForUser(params: {
   }));
 }
 
-export async function getQuestion(questionId: string, userId: string): Promise<QuestionView | null> {
+export async function getQuestion(
+  questionId: string,
+  userId: string,
+): Promise<QuestionView | null> {
   const [row] = await db
     .select(questionViewColumns)
     .from(questions)
-    .where(and(eq(questions.id, questionId), eq(questions.creatorId, userId), isNull(questions.deletedAt)))
+    .where(
+      and(
+        eq(questions.id, questionId),
+        eq(questions.creatorId, userId),
+        isNull(questions.deletedAt),
+      ),
+    )
     .limit(1);
 
   return row ? toQuestionView(row) : null;
@@ -414,26 +441,33 @@ export async function createQuestion(params: {
     difficultyEstimate: difficulty,
     llmDifficulty: difficulty,
     calibratedDifficulty: difficulty,
-    answerSource: params.llmSuggestedAnswer ? (params.verified ? 'llm_suggested' : 'llm_edited') : 'creator_written',
+    answerSource: params.llmSuggestedAnswer
+      ? params.verified
+        ? 'llm_suggested'
+        : 'llm_edited'
+      : 'creator_written',
     questionType: 'factual',
     visibility: 'public',
     status: params.verified ? 'verified' : 'unverified',
     ...(params.publicStatus !== undefined ? { publicStatus: params.publicStatus } : {}),
-    ...(params.publicEligibilityScore !== undefined ? { publicEligibilityScore: params.publicEligibilityScore } : {}),
-    ...(params.publicEligibilityReason !== undefined ? { publicEligibilityReason: params.publicEligibilityReason } : {}),
+    ...(params.publicEligibilityScore !== undefined
+      ? { publicEligibilityScore: params.publicEligibilityScore }
+      : {}),
+    ...(params.publicEligibilityReason !== undefined
+      ? { publicEligibilityReason: params.publicEligibilityReason }
+      : {}),
   } satisfies Partial<typeof questions.$inferInsert>;
 
   const createWithValues = async (values: typeof questions.$inferInsert) => {
-    const [created] = await db
-      .insert(questions)
-      .values(values)
-      .returning({ id: questions.id });
+    const [created] = await db.insert(questions).values(values).returning({ id: questions.id });
     return created;
   };
 
   const createWithLegacyColumns = async () => {
     const answerSource = params.llmSuggestedAnswer
-      ? (params.verified ? 'llm_suggested' : 'llm_edited')
+      ? params.verified
+        ? 'llm_suggested'
+        : 'llm_edited'
       : 'creator_written';
     const status = params.verified ? 'verified' : 'unverified';
     const rows = await db.execute<{ id: string }>(sql`
@@ -494,20 +528,26 @@ export async function createQuestion(params: {
     } as typeof questions.$inferInsert);
   } catch (error) {
     if (pgErrorCode(error) !== '42703') throw error;
-    console.warn('[questions/create] current question columns unavailable; retrying legacy-compatible question insert', {
-      userId: params.authorId,
-      category: params.category,
-      canonicalSubcategory: params.canonicalSubcategory,
-    });
+    console.warn(
+      '[questions/create] current question columns unavailable; retrying legacy-compatible question insert',
+      {
+        userId: params.authorId,
+        category: params.category,
+        canonicalSubcategory: params.canonicalSubcategory,
+      },
+    );
     try {
       created = await createWithValues(baseValues as typeof questions.$inferInsert);
     } catch (fallbackError) {
       if (pgErrorCode(fallbackError) !== '42703') throw fallbackError;
-      console.warn('[questions/create] drizzle insert still references unavailable columns; saving with raw legacy-compatible insert', {
-        userId: params.authorId,
-        category: params.category,
-      canonicalSubcategory: params.canonicalSubcategory,
-      });
+      console.warn(
+        '[questions/create] drizzle insert still references unavailable columns; saving with raw legacy-compatible insert',
+        {
+          userId: params.authorId,
+          category: params.category,
+          canonicalSubcategory: params.canonicalSubcategory,
+        },
+      );
       created = await createWithLegacyColumns();
     }
   }
@@ -554,7 +594,8 @@ export async function updateQuestion(params: {
   }
   if (params.broadCategory !== undefined) values.broadCategory = params.broadCategory;
   if (params.subcategory !== undefined) values.subcategory = params.subcategory;
-  if (params.canonicalSubcategory !== undefined) values.canonicalSubcategory = params.canonicalSubcategory;
+  if (params.canonicalSubcategory !== undefined)
+    values.canonicalSubcategory = params.canonicalSubcategory;
   if (params.difficulty !== undefined) {
     const difficulty = numberToDifficulty(params.difficulty);
     values.difficultyEstimate = difficulty;

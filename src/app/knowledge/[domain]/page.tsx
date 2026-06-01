@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
-import { DomainVisibilityToggle, type DomainVisibility } from '@/components/knowledge/DomainVisibilityToggle';
+import {
+  DomainVisibilityToggle,
+  type DomainVisibility,
+} from '@/components/knowledge/DomainVisibilityToggle';
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
@@ -87,10 +90,10 @@ function relativeTime(value: string | null): string {
 function LoadingState() {
   return (
     <main className="mx-auto min-h-dvh max-w-4xl px-4 py-6 pb-24">
-      <div className="mb-6 h-36 animate-pulse rounded-lg border bg-muted" />
+      <div className="bg-muted mb-6 h-36 animate-pulse rounded-lg border" />
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="h-44 animate-pulse rounded-lg border bg-muted" />
-        <div className="h-44 animate-pulse rounded-lg border bg-muted" />
+        <div className="bg-muted h-44 animate-pulse rounded-lg border" />
+        <div className="bg-muted h-44 animate-pulse rounded-lg border" />
       </div>
     </main>
   );
@@ -114,7 +117,10 @@ export default function DomainDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/knowledge/${encodeURIComponent(decodedDomain)}`, { credentials: 'include', cache: 'no-store' });
+        const response = await fetch(`/api/knowledge/${encodeURIComponent(decodedDomain)}`, {
+          credentials: 'include',
+          cache: 'no-store',
+        });
         const body = await response.json().catch(() => null);
         if (response.status === 401) {
           router.replace('/login');
@@ -123,7 +129,8 @@ export default function DomainDetailPage() {
         if (!response.ok || !body) throw new Error(body?.message ?? 'Could not load this domain.');
         if (active) setDetail(body as DomainDetail);
       } catch (caught) {
-        if (active) setError(caught instanceof Error ? caught.message : 'Could not load this domain.');
+        if (active)
+          setError(caught instanceof Error ? caught.message : 'Could not load this domain.');
       } finally {
         if (active) setLoading(false);
       }
@@ -142,7 +149,7 @@ export default function DomainDetailPage() {
       body: JSON.stringify({ visibility }),
     });
     if (!response.ok) throw new Error('Could not update visibility');
-    setDetail((current) => current ? { ...current, visibility } : current);
+    setDetail((current) => (current ? { ...current, visibility } : current));
   };
 
   if (loading) return <LoadingState />;
@@ -150,10 +157,14 @@ export default function DomainDetailPage() {
   if (error || !detail) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center px-4 text-center">
-        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Knowledge</p>
+        <p className="text-muted-foreground text-xs tracking-[0.12em] uppercase">Knowledge</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold">Domain not found</h1>
-        <p className="mt-3 text-sm text-muted-foreground">{error ?? 'This domain is not in your knowledge map yet.'}</p>
-        <Link href="/knowledge" className="btn-primary mt-6">Back to Knowledge</Link>
+        <p className="text-muted-foreground mt-3 text-sm">
+          {error ?? 'This domain is not in your knowledge map yet.'}
+        </p>
+        <Link href="/knowledge" className="btn-primary mt-6">
+          Back to Knowledge
+        </Link>
       </main>
     );
   }
@@ -164,25 +175,29 @@ export default function DomainDetailPage() {
   return (
     <main className="mx-auto min-h-dvh max-w-4xl px-4 py-6 pb-24">
       <header className="mb-7">
-        <nav className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-          <Link href="/" className="hover:text-foreground">Home</Link>
+        <nav className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
+          <Link href="/" className="hover:text-foreground">
+            Home
+          </Link>
           <span className="px-2">/</span>
-          <Link href="/knowledge" className="hover:text-foreground">Knowledge</Link>
+          <Link href="/knowledge" className="hover:text-foreground">
+            Knowledge
+          </Link>
           <span className="px-2">/</span>
           <span>{detail.displayName}</span>
         </nav>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <h1 className="font-serif text-5xl font-semibold leading-tight">{detail.displayName}</h1>
+          <h1 className="font-serif text-5xl leading-tight font-semibold">{detail.displayName}</h1>
           {detail.isDeclaredInterest ? (
-            <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.1em]">
+            <span className="rounded-full border px-3 py-1 text-xs font-semibold tracking-[0.1em] uppercase">
               Declared Interest
             </span>
           ) : null}
         </div>
       </header>
 
-      <section className="mb-5 rounded-lg border bg-card p-5 text-card-foreground">
-        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Current tier</p>
+      <section className="bg-card text-card-foreground mb-5 rounded-lg border p-5">
+        <p className="text-muted-foreground text-xs tracking-[0.12em] uppercase">Current tier</p>
         <h2 className="mt-2 font-serif text-4xl font-semibold">{KNOWLEDGE_TIER_LABEL[tier]}</h2>
         <div className="mt-5">
           <TierProgressBar
@@ -191,7 +206,7 @@ export default function DomainDetailPage() {
             ariaLabelPrefix={`${detail.displayName} tier progression`}
           />
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-3 text-sm">
           {formatNumber(detail.points)} points
           {detail.nextTier && detail.pointsToNextTier !== null
             ? ` · ${formatNumber(detail.pointsToNextTier)} to ${KNOWLEDGE_TIER_LABEL[asTier(detail.nextTier)]}`
@@ -206,7 +221,7 @@ export default function DomainDetailPage() {
         <StatTile label="Last active" value={relativeTime(detail.lastAnsweredAt)} />
       </section>
 
-      <section className="mb-5 rounded-lg border bg-card p-5">
+      <section className="bg-card mb-5 rounded-lg border p-5">
         <h2 className="font-serif text-2xl font-semibold">Who can see this on your profile?</h2>
         <div className="mt-4">
           <DomainVisibilityToggle
@@ -215,13 +230,13 @@ export default function DomainDetailPage() {
             onChange={updateVisibility}
           />
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">{visibilityHelp}</p>
+        <p className="text-muted-foreground mt-3 text-sm">{visibilityHelp}</p>
       </section>
 
       <section className="mb-7 grid gap-3 sm:grid-cols-2">
         <Link
           href={`/daily/setup?domainMode=custom&domain=${encodeURIComponent(detail.domain)}`}
-          className="rounded-lg border bg-card p-4 font-medium transition hover:border-foreground/30"
+          className="bg-card hover:border-foreground/30 rounded-lg border p-4 font-medium transition"
         >
           Answer questions in {detail.displayName}
         </Link>
@@ -234,14 +249,20 @@ export default function DomainDetailPage() {
       <section className="mb-7">
         <h2 className="font-serif text-2xl font-semibold">Recent activity in this domain</h2>
         {detail.recentEvents.length === 0 ? (
-          <p className="mt-3 rounded-lg border bg-card p-4 text-sm text-muted-foreground">No activity here yet.</p>
+          <p className="bg-card text-muted-foreground mt-3 rounded-lg border p-4 text-sm">
+            No activity here yet.
+          </p>
         ) : (
-          <div className="mt-3 divide-y rounded-lg border bg-card">
+          <div className="bg-card mt-3 divide-y rounded-lg border">
             {detail.recentEvents.map((event) => (
               <div key={event.id} className="flex items-center gap-3 px-4 py-3 text-sm">
-                <span className="font-semibold text-foreground">+{formatNumber(event.points)} pts</span>
+                <span className="text-foreground font-semibold">
+                  +{formatNumber(event.points)} pts
+                </span>
                 <span className="min-w-0 flex-1 truncate">{truncate(event.questionText)}</span>
-                <span className="shrink-0 text-muted-foreground">{relativeTime(event.createdAt)}</span>
+                <span className="text-muted-foreground shrink-0">
+                  {relativeTime(event.createdAt)}
+                </span>
               </div>
             ))}
           </div>
@@ -251,16 +272,15 @@ export default function DomainDetailPage() {
       <section>
         <h2 className="font-serif text-2xl font-semibold">Your questions in this domain</h2>
         {detail.questionHistory.length === 0 ? (
-          <p className="mt-3 rounded-lg border bg-card p-4 text-sm text-muted-foreground">No answered questions here yet.</p>
+          <p className="bg-card text-muted-foreground mt-3 rounded-lg border p-4 text-sm">
+            No answered questions here yet.
+          </p>
         ) : (
-          <div className="mt-3 divide-y rounded-lg border bg-card">
+          <div className="bg-card mt-3 divide-y rounded-lg border">
             {detail.questionHistory.map((answer) => {
               const expanded = expandedAnswerId === answer.id;
               return (
-                <div
-                  key={answer.id}
-                  className="px-4 py-3 transition hover:bg-muted/50"
-                >
+                <div key={answer.id} className="hover:bg-muted/50 px-4 py-3 transition">
                   <button
                     type="button"
                     className="block w-full text-left"
@@ -268,24 +288,38 @@ export default function DomainDetailPage() {
                     aria-expanded={expanded}
                   >
                     <div className="flex items-start gap-3">
-                    <span className={`mt-0.5 font-semibold ${answer.isCorrect ? 'text-green-700' : 'text-destructive'}`}>
-                      {answer.isCorrect ? '✓' : '✗'}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{answer.questionText}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{relativeTime(answer.answeredAt)}</p>
-                    </div>
+                      <span
+                        className={`mt-0.5 font-semibold ${answer.isCorrect ? 'text-green-700' : 'text-destructive'}`}
+                      >
+                        {answer.isCorrect ? '✓' : '✗'}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{answer.questionText}</p>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {relativeTime(answer.answeredAt)}
+                        </p>
+                      </div>
                     </div>
                   </button>
                   {expanded ? (
-                    <div className="ml-7 mt-3 space-y-2 rounded-md border bg-background p-3 text-sm">
+                    <div className="bg-background mt-3 ml-7 space-y-2 rounded-md border p-3 text-sm">
                       <p>{answer.questionText}</p>
-                      <p><span className="font-medium">Correct answer:</span> {answer.correctAnswer ?? 'Not saved'}</p>
-                      <p><span className="font-medium">Your answer:</span> {answer.submittedAnswer ?? 'Not saved'}</p>
+                      <p>
+                        <span className="font-medium">Correct answer:</span>{' '}
+                        {answer.correctAnswer ?? 'Not saved'}
+                      </p>
+                      <p>
+                        <span className="font-medium">Your answer:</span>{' '}
+                        {answer.submittedAnswer ?? 'Not saved'}
+                      </p>
                       {answer.questionId ? (
                         <div className="flex flex-wrap gap-2">
                           <SendQuestionAction
-                            question={{ id: answer.questionId, text: answer.questionText, domain: detail.displayName }}
+                            question={{
+                              id: answer.questionId,
+                              text: answer.questionText,
+                              domain: detail.displayName,
+                            }}
                           />
                           {answer.source === 'joshing_game' ? (
                             <AddToBankAction
@@ -312,8 +346,8 @@ export default function DomainDetailPage() {
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{label}</p>
+    <div className="bg-card rounded-lg border p-4">
+      <p className="text-muted-foreground text-xs tracking-[0.1em] uppercase">{label}</p>
       <p className="mt-2 text-2xl font-semibold">{value}</p>
     </div>
   );

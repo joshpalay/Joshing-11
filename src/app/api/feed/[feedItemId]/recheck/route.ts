@@ -18,7 +18,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   try {
     const session = await getSession();
     if (!session) {
-      return NextResponse.json({ error: 'unauthorized', message: 'Please sign in to request a recheck.' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'unauthorized', message: 'Please sign in to request a recheck.' },
+        { status: 401 },
+      );
     }
 
     const { feedItemId } = await context.params;
@@ -31,16 +34,25 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       .limit(1);
 
     if (!row) {
-      return NextResponse.json({ error: 'not_found', message: 'We could not find that Feed item.' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'not_found', message: 'We could not find that Feed item.' },
+        { status: 404 },
+      );
     }
 
     const { feedItem, question } = row;
 
     if (feedItem.state !== 'answered' || !feedItem.submittedAnswer) {
-      return NextResponse.json({ error: 'invalid_state', message: 'Answer the question before requesting a recheck.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'invalid_state', message: 'Answer the question before requesting a recheck.' },
+        { status: 400 },
+      );
     }
     if (feedItem.answerResult === 'correct') {
-      return NextResponse.json({ error: 'invalid_state', message: 'That answer is already marked correct.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'invalid_state', message: 'That answer is already marked correct.' },
+        { status: 400 },
+      );
     }
 
     const answerId = `feed:${feedItemId}:${session.userId}`;
@@ -51,7 +63,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       .limit(1);
 
     if (existingDispute) {
-      return NextResponse.json({ error: 'invalid_state', message: 'That answer has already been rechecked.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'invalid_state', message: 'That answer has already been rechecked.' },
+        { status: 400 },
+      );
     }
 
     const canonicalAnswer = question.answerText;
@@ -65,7 +80,11 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
     const accepted = review.decision === 'accept';
     // A disputed answer key reads as "taking another look", not a rejection.
-    const recheckStatus = accepted ? 'accepted' : review.decision === 'reject' ? 'rejected' : 'needs_human';
+    const recheckStatus = accepted
+      ? 'accepted'
+      : review.decision === 'reject'
+        ? 'rejected'
+        : 'needs_human';
     // Only an accept auto-resolves; rejects and disputed keys stay 'pending'
     // for human review rather than auto-dismissed. reviewDecision preserves
     // the exact verdict for the review queue.
@@ -75,7 +94,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
     let pointsAwarded = 0;
     if (accepted) {
-      pointsAwarded = getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, 'first_correct');
+      pointsAwarded = getBasePoints(
+        question.calibratedDifficulty ?? question.llmDifficulty ?? null,
+        'first_correct',
+      );
     }
 
     const disputeId = await db.transaction(async (tx) => {
@@ -134,7 +156,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
         basePoints: pointsAwarded,
         weight: 1,
       }).catch((error: unknown) => {
-        console.warn('[feed/recheck] writeMasteryEvent failed', error instanceof Error ? error.message : error);
+        console.warn(
+          '[feed/recheck] writeMasteryEvent failed',
+          error instanceof Error ? error.message : error,
+        );
       });
     }
 
@@ -147,6 +172,9 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     });
   } catch (error) {
     console.error('[feed/recheck] unexpected', error);
-    return NextResponse.json({ error: 'unexpected', message: 'Could not recheck that answer.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'unexpected', message: 'Could not recheck that answer.' },
+      { status: 500 },
+    );
   }
 }

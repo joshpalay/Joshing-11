@@ -21,14 +21,16 @@ async function fetchJoshingGameBreadcrumb(
       body: JSON.stringify({ source: 'joshing_game', gameId, questionId }),
     });
     if (!response.ok) return;
-    const body = await response.json().catch(() => null) as { breadcrumb?: string | null } | null;
+    const body = (await response.json().catch(() => null)) as { breadcrumb?: string | null } | null;
     const breadcrumb = body?.breadcrumb ?? null;
     if (!breadcrumb) return;
-    setMessages((existing) => existing.map((message) =>
-      message.id === messageId && message.kind === 'result'
-        ? { ...message, breadcrumb }
-        : message,
-    ));
+    setMessages((existing) =>
+      existing.map((message) =>
+        message.id === messageId && message.kind === 'result'
+          ? { ...message, breadcrumb }
+          : message,
+      ),
+    );
   } catch {
     // Breadcrumb is purely additive context; failure is silently ignored.
   }
@@ -45,16 +47,18 @@ function questionBadges(q: QuestionRow): Array<{ label: string; tone?: 'warning'
 }
 
 function pickExplainer(question: QuestionRow, isCorrect: boolean): string | null {
-  const correctFirst = question.explainerFullCorrect
-    ?? question.explainerFull
-    ?? question.explainerBriefCorrect
-    ?? question.explainerBrief
-    ?? question.factualExplanation;
-  const wrongFirst = question.explainerFullWrong
-    ?? question.explainerFull
-    ?? question.explainerBriefWrong
-    ?? question.explainerBrief
-    ?? question.factualExplanation;
+  const correctFirst =
+    question.explainerFullCorrect ??
+    question.explainerFull ??
+    question.explainerBriefCorrect ??
+    question.explainerBrief ??
+    question.factualExplanation;
+  const wrongFirst =
+    question.explainerFullWrong ??
+    question.explainerFull ??
+    question.explainerBriefWrong ??
+    question.explainerBrief ??
+    question.factualExplanation;
   return (isCorrect ? correctFirst : wrongFirst) ?? null;
 }
 
@@ -84,13 +88,23 @@ const questionActionStyle = {
   textUnderlineOffset: '2px',
 };
 
-export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameView; viewerId: string }) {
+export function JoshingGamePlayClient({
+  game,
+  viewerId,
+}: {
+  game: JoshingGameView;
+  viewerId: string;
+}) {
   const router = useRouter();
   const orderedQuestions = useMemo(
     () => [...game.questions].sort((a, b) => a.position - b.position),
     [game.questions],
   );
-  const initialAnswered = new Set(game.responses.filter((response) => response.userId === viewerId).map((response) => response.questionId));
+  const initialAnswered = new Set(
+    game.responses
+      .filter((response) => response.userId === viewerId)
+      .map((response) => response.questionId),
+  );
   const [answeredIds, setAnsweredIds] = useState(initialAnswered);
   const [answer, setAnswer] = useState('');
   const [pending, setPending] = useState(false);
@@ -111,7 +125,8 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
         creatorName: game.creator.displayName,
         badges: questionBadges(item.question),
       });
-      if (response.submittedAnswer) rows.push({ id: `u-${response.id}`, kind: 'user', text: response.submittedAnswer });
+      if (response.submittedAnswer)
+        rows.push({ id: `u-${response.id}`, kind: 'user', text: response.submittedAnswer });
       rows.push({
         id: `r-${response.id}`,
         kind: 'result',
@@ -124,9 +139,10 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
         breadcrumb: null,
         explanation: pickExplainer(item.question, Boolean(response.isCorrect)),
         copyVariant: item.position,
-          creatorName: game.creator.displayName,
-          canonicalSubcategory: item.question.canonicalSubcategory,
-          reactionPrompt: game.game.creatorId !== viewerId
+        creatorName: game.creator.displayName,
+        canonicalSubcategory: item.question.canonicalSubcategory,
+        reactionPrompt:
+          game.game.creatorId !== viewerId
             ? {
                 senderName: game.creator.displayName,
                 questionId: item.questionId,
@@ -135,7 +151,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
                 result: response.isCorrect ? 'correct' : 'wrong',
               }
             : null,
-        });
+      });
     }
     const next = orderedQuestions.find((question) => !initialAnswered.has(question.questionId));
     if (next) {
@@ -157,7 +173,9 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
     };
   }, []);
 
-  const actualCurrentQuestion = orderedQuestions.find((question) => !answeredIds.has(question.questionId));
+  const actualCurrentQuestion = orderedQuestions.find(
+    (question) => !answeredIds.has(question.questionId),
+  );
   const currentQuestion = pausingAfterAnswer ? undefined : actualCurrentQuestion;
 
   // Return focus to the answer input whenever a fresh question becomes active
@@ -174,24 +192,37 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
     setPending(true);
     setError(null);
     setAnswer('');
-    setMessages((current) => [...current, { id: `user-${Date.now()}`, kind: 'user', text: submitted }]);
+    setMessages((current) => [
+      ...current,
+      { id: `user-${Date.now()}`, kind: 'user', text: submitted },
+    ]);
 
     try {
       const response = await fetch(`/api/joshing-games/${game.game.id}/answer`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ questionId: currentQuestion.questionId, submittedAnswer: submitted }),
+        body: JSON.stringify({
+          questionId: currentQuestion.questionId,
+          submittedAnswer: submitted,
+        }),
       });
-      const body = await response.json().catch(() => null) as GradeResponse | { message?: string } | null;
+      const body = (await response.json().catch(() => null)) as
+        | GradeResponse
+        | { message?: string }
+        | null;
       if (!response.ok || !body || !('isCorrect' in body)) {
-        throw new Error((body as { message?: string } | null)?.message ?? 'Could not record that answer.');
+        throw new Error(
+          (body as { message?: string } | null)?.message ?? 'Could not record that answer.',
+        );
       }
 
       const nextAnswered = new Set(answeredIds);
       nextAnswered.add(currentQuestion.questionId);
       setAnsweredIds(nextAnswered);
-      const nextQuestion = orderedQuestions.find((question) => !nextAnswered.has(question.questionId));
+      const nextQuestion = orderedQuestions.find(
+        (question) => !nextAnswered.has(question.questionId),
+      );
       setPausingAfterAnswer(true);
       const resultMessageId = `result-${currentQuestion.questionId}`;
       setMessages((current) => [
@@ -203,7 +234,9 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
           questionText: currentQuestion.question.questionText,
           result: body.isCorrect ? 'correct' : 'wrong',
           submitted,
-          correctAnswer: body.isCorrect ? null : body.correctAnswer ?? currentQuestion.question.answerText,
+          correctAnswer: body.isCorrect
+            ? null
+            : (body.correctAnswer ?? currentQuestion.question.answerText),
           consolation: null,
           insideJoke: body.insideJoke ?? null,
           breadcrumb: null,
@@ -211,19 +244,25 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
           copyVariant: currentQuestion.position,
           creatorName: game.creator.displayName,
           canonicalSubcategory: currentQuestion.question.canonicalSubcategory,
-          reactionPrompt: game.game.creatorId !== viewerId
-            ? {
-                senderName: game.creator.displayName,
-                questionId: currentQuestion.questionId,
-                contextType: 'joshing_game',
-                contextId: game.game.id,
-                result: body.isCorrect ? 'correct' : 'wrong',
-              }
-            : null,
+          reactionPrompt:
+            game.game.creatorId !== viewerId
+              ? {
+                  senderName: game.creator.displayName,
+                  questionId: currentQuestion.questionId,
+                  contextType: 'joshing_game',
+                  contextId: game.game.id,
+                  result: body.isCorrect ? 'correct' : 'wrong',
+                }
+              : null,
         },
       ]);
 
-      void fetchJoshingGameBreadcrumb(game.game.id, currentQuestion.questionId, resultMessageId, setMessages);
+      void fetchJoshingGameBreadcrumb(
+        game.game.id,
+        currentQuestion.questionId,
+        resultMessageId,
+        setMessages,
+      );
 
       nextQuestionTimerRef.current = window.setTimeout(() => {
         setPausingAfterAnswer(false);
@@ -243,7 +282,6 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
           router.push(`/games/${game.game.id}/summary`);
         }
       }, 850);
-
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not record that answer.');
       setPausingAfterAnswer(false);
@@ -256,12 +294,17 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
   // summary when none remain). Shared by "Show me the answer" and "Skip", which
   // — like the daily catch-up give-up — resolve client-side without recording a
   // server response; unanswered questions surface as "skipped" on the summary.
-  function consumeCurrentAndAdvance(consumed: JoshingGameView['questions'][number], appended: ChatMessage[]) {
+  function consumeCurrentAndAdvance(
+    consumed: JoshingGameView['questions'][number],
+    appended: ChatMessage[],
+  ) {
     if (nextQuestionTimerRef.current) window.clearTimeout(nextQuestionTimerRef.current);
     const nextAnswered = new Set(answeredIds);
     nextAnswered.add(consumed.questionId);
     setAnsweredIds(nextAnswered);
-    const nextQuestion = orderedQuestions.find((question) => !nextAnswered.has(question.questionId));
+    const nextQuestion = orderedQuestions.find(
+      (question) => !nextAnswered.has(question.questionId),
+    );
     setError(null);
     setAnswer('');
     setPausingAfterAnswer(true);
@@ -310,9 +353,9 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col px-0">
-      <header className="sticky top-0 z-20 flex items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
+      <header className="bg-background/95 sticky top-0 z-20 flex items-center gap-2 border-b px-4 py-3 backdrop-blur">
         <h1
-          className="min-w-0 truncate font-serif text-[1.75rem] font-semibold leading-none"
+          className="min-w-0 truncate font-serif text-[1.75rem] leading-none font-semibold"
           style={{ color: 'var(--brand-ink)', letterSpacing: 0 }}
         >
           {game.game.title}
@@ -359,7 +402,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
       </section>
       {actualCurrentQuestion ? (
         <form
-          className="sticky bottom-0 border-t bg-background/95 px-4 py-3 backdrop-blur"
+          className="bg-background/95 sticky bottom-0 border-t px-4 py-3 backdrop-blur"
           onSubmit={(event) => {
             event.preventDefault();
             void submitAnswer();
@@ -390,7 +433,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
               autoComplete="off"
               autoCapitalize="sentences"
               enterKeyHint="send"
-              className="min-h-11 flex-1 rounded-md border bg-background px-4 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1"
+              className="bg-background min-h-11 flex-1 rounded-md border px-4 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1"
             />
             <button
               type="submit"

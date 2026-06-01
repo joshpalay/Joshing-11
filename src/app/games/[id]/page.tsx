@@ -15,10 +15,15 @@ export default async function JoshingGamePage({ params }: PageProps) {
   const { id } = await params;
   const view = await getJoshingGame({ gameId: id, requestingUserId: session.userId });
   if (!view) notFound();
-  if (view.game.creatorId !== session.userId && !view.recipients.some((recipient) => recipient.userId === session.userId)) {
+  if (
+    view.game.creatorId !== session.userId &&
+    !view.recipients.some((recipient) => recipient.userId === session.userId)
+  ) {
     notFound();
   }
   if (view.viewerStatus === 'complete') redirect(`/games/${id}/summary`);
 
-  return <JoshingGamePlayClient game={JSON.parse(JSON.stringify(view))} viewerId={session.userId} />;
+  return (
+    <JoshingGamePlayClient game={JSON.parse(JSON.stringify(view))} viewerId={session.userId} />
+  );
 }

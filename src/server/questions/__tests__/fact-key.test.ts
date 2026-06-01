@@ -12,8 +12,9 @@ describe('normalizeFactKey', () => {
   });
 
   it('lowercases, slugifies, strips diacritics, and trims hyphens', () => {
-    expect(normalizeFactKey('Götterdämmerung — Hagen summons vassals (instrument)'))
-      .toBe('gotterdammerung-hagen-summons-vassals-instrument');
+    expect(normalizeFactKey('Götterdämmerung — Hagen summons vassals (instrument)')).toBe(
+      'gotterdammerung-hagen-summons-vassals-instrument',
+    );
   });
 
   it('collapses repeated non-alphanumerics into single hyphens', () => {
@@ -21,8 +22,9 @@ describe('normalizeFactKey', () => {
   });
 
   it('preserves an already-clean slug verbatim', () => {
-    expect(normalizeFactKey('mrs-dalloway-clarissa-party-guest-arrival-order'))
-      .toBe('mrs-dalloway-clarissa-party-guest-arrival-order');
+    expect(normalizeFactKey('mrs-dalloway-clarissa-party-guest-arrival-order')).toBe(
+      'mrs-dalloway-clarissa-party-guest-arrival-order',
+    );
   });
 
   it('caps length at FACT_KEY_MAX_CHARS without leaving a trailing hyphen', () => {

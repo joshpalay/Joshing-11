@@ -1,36 +1,29 @@
-'use client'
+'use client';
 
-import { Flag, MoreHorizontal, X } from 'lucide-react'
-import {
-  type KeyboardEvent,
-  type ReactNode,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from 'react'
+import { Flag, MoreHorizontal, X } from 'lucide-react';
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 
-import { AddToBankAction } from '@/components/AddToBankAction'
-import { SendQuestionAction } from '@/components/SendQuestionAction'
-import { visibleFeedCategory } from './category'
+import { AddToBankAction } from '@/components/AddToBankAction';
+import { SendQuestionAction } from '@/components/SendQuestionAction';
+import { visibleFeedCategory } from './category';
 
 export type FeedOverflowQuestion = {
-  id: string
-  text: string
-  domain?: string | null
-}
+  id: string;
+  text: string;
+  domain?: string | null;
+};
 
 export type FeedOverflowMenuProps = {
-  sourceName: string
-  category?: string | null
-  question?: FeedOverflowQuestion | null
-  isInBank?: boolean
-  disabled?: boolean
-  onHideCategory?: () => void
-  onHidePerson?: () => void
-  onReport?: () => void
-  children?: ReactNode
-}
+  sourceName: string;
+  category?: string | null;
+  question?: FeedOverflowQuestion | null;
+  isInBank?: boolean;
+  disabled?: boolean;
+  onHideCategory?: () => void;
+  onHidePerson?: () => void;
+  onReport?: () => void;
+  children?: ReactNode;
+};
 
 export function getFeedOverflowMenuLabels({
   sourceName,
@@ -38,19 +31,19 @@ export function getFeedOverflowMenuLabels({
   hasQuestion,
   isInBank = false,
 }: {
-  sourceName: string
-  category?: string | null
-  hasQuestion: boolean
-  isInBank?: boolean
+  sourceName: string;
+  category?: string | null;
+  hasQuestion: boolean;
+  isInBank?: boolean;
 }) {
-  const visibleCategory = visibleFeedCategory(category)
+  const visibleCategory = visibleFeedCategory(category);
   return [
     ...(visibleCategory ? [`Hide questions about ${visibleCategory}`] : []),
     `Hide questions from ${sourceName || 'this person'}`,
     ...(hasQuestion && !isInBank ? ['Add to bank'] : []),
     ...(hasQuestion ? ['Send to friend'] : []),
     'Report',
-  ]
+  ];
 }
 
 function MenuButton({
@@ -58,9 +51,9 @@ function MenuButton({
   disabled,
   onClick,
 }: {
-  children: ReactNode
-  disabled?: boolean
-  onClick?: () => void
+  children: ReactNode;
+  disabled?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
@@ -72,7 +65,7 @@ function MenuButton({
     >
       {children}
     </button>
-  )
+  );
 }
 
 export function FeedOverflowMenu({
@@ -86,37 +79,37 @@ export function FeedOverflowMenu({
   onReport,
   children,
 }: FeedOverflowMenuProps) {
-  const [open, setOpen] = useState(false)
-  const visibleCategory = visibleFeedCategory(category)
-  const menuId = useId()
-  const menuRef = useRef<HTMLDivElement | null>(null)
+  const [open, setOpen] = useState(false);
+  const visibleCategory = visibleFeedCategory(category);
+  const menuId = useId();
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     const firstMenuItem = menuRef.current?.querySelector<HTMLElement>(
-      'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
-    )
-    firstMenuItem?.focus()
-  }, [open])
+      'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    );
+    firstMenuItem?.focus();
+  }, [open]);
 
   const closeMenu = () => {
-    setOpen(false)
-  }
+    setOpen(false);
+  };
 
   const wrapAction = (action?: () => void) => {
-    if (!action) return undefined
+    if (!action) return undefined;
     return () => {
-      action()
-      closeMenu()
-    }
-  }
+      action();
+      closeMenu();
+    };
+  };
 
   const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
-      event.preventDefault()
-      closeMenu()
+      event.preventDefault();
+      closeMenu();
     }
-  }
+  };
 
   return (
     <div className="relative">
@@ -150,9 +143,7 @@ export function FeedOverflowMenu({
             className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl sm:shadow-xl"
           >
             <div className="flex items-center justify-between px-3 py-2 sm:hidden">
-              <p className="text-foreground text-sm font-medium">
-                More actions
-              </p>
+              <p className="text-foreground text-sm font-medium">More actions</p>
               <button
                 type="button"
                 aria-label="Close menu"
@@ -163,10 +154,7 @@ export function FeedOverflowMenu({
               </button>
             </div>
             {visibleCategory ? (
-              <MenuButton
-                disabled={disabled}
-                onClick={wrapAction(onHideCategory)}
-              >
+              <MenuButton disabled={disabled} onClick={wrapAction(onHideCategory)}>
                 Hide questions about {visibleCategory}
               </MenuButton>
             ) : null}
@@ -208,6 +196,5 @@ export function FeedOverflowMenu({
         </div>
       ) : null}
     </div>
-  )
+  );
 }
-

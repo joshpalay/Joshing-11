@@ -14,9 +14,7 @@ type PatchKey = 'contacts' | 'mutualFriends';
 
 type InviteTokenResponse = { token: string; url: string };
 
-async function patchDiscoverability(
-  body: Partial<Record<PatchKey, boolean>>,
-): Promise<{
+async function patchDiscoverability(body: Partial<Record<PatchKey, boolean>>): Promise<{
   ok: boolean;
   state: DiscoverabilityState | null;
   errorMessage: string | null;
@@ -53,11 +51,11 @@ function ToggleRow({
   onToggle?: () => void;
 }) {
   return (
-    <section className="rounded-xl border bg-card p-5 text-card-foreground">
+    <section className="bg-card text-card-foreground rounded-xl border p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-col">
           <h3 className="font-serif text-lg font-semibold">{title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="text-muted-foreground mt-1 text-sm">{description}</p>
         </div>
         <Switch
           checked={checked}
@@ -178,14 +176,12 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
         disabled
       />
 
-      {errorMessage ? (
-        <p className="text-sm text-destructive">{errorMessage}</p>
-      ) : null}
+      {errorMessage ? <p className="text-destructive text-sm">{errorMessage}</p> : null}
 
       {inviteUrl ? (
-        <section className="rounded-xl border bg-card p-5 text-card-foreground">
+        <section className="bg-card text-card-foreground rounded-xl border p-5">
           <h3 className="font-serif text-lg font-semibold">Your invite link</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             Anyone you share this with can join Joshing and land as your friend.
           </p>
           <input
@@ -232,12 +228,12 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
               </button>
             )}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="text-muted-foreground mt-2 text-xs">
             Rotating invalidates the old link. Use this if you accidentally shared it broadly.
           </p>
-          {inviteError ? <p className="mt-2 text-sm text-destructive">{inviteError}</p> : null}
+          {inviteError ? <p className="text-destructive mt-2 text-sm">{inviteError}</p> : null}
           {inviteToast ? (
-            <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+            <div className="bg-foreground text-background fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm shadow-lg">
               {inviteToast}
             </div>
           ) : null}

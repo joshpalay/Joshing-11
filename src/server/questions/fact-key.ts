@@ -17,13 +17,8 @@ const COMBINING_MARKS = /[̀-ͯ]/g;
 
 export function normalizeFactKey(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null;
-  const ascii = value
-    .normalize('NFKD')
-    .replace(COMBINING_MARKS, '')
-    .toLowerCase();
-  const slug = ascii
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const ascii = value.normalize('NFKD').replace(COMBINING_MARKS, '').toLowerCase();
+  const slug = ascii.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   if (!slug) return null;
   return slug.length > FACT_KEY_MAX_CHARS
     ? slug.slice(0, FACT_KEY_MAX_CHARS).replace(/-+$/g, '')

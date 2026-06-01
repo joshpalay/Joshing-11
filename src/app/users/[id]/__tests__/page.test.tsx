@@ -1,6 +1,6 @@
-import React from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   getFriendPortraitDataMock,
@@ -19,7 +19,7 @@ const {
   getFriendPortraitDataMock: vi.fn(),
   getSessionMock: vi.fn(),
   notFoundMock: vi.fn(() => {
-    throw new Error('NEXT_NOT_FOUND')
+    throw new Error('NEXT_NOT_FOUND');
   }),
   getUserMasteryOverviewMock: vi.fn(),
   getKnowledgePageDataMock: vi.fn(),
@@ -30,19 +30,15 @@ const {
   getOrCreateInviteTokenMock: vi.fn(),
   getFriendsMock: vi.fn(async () => []),
   resolvePreviewAsMock: vi.fn(async () => null),
-}))
+}));
 
 vi.mock('next/link', () => ({
-  default: ({
-    href,
-    children,
-    ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+  default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
     <a href={typeof href === 'string' ? href : String(href)} {...props}>
       {children}
     </a>
   ),
-}))
+}));
 
 vi.mock('next/navigation', () => ({
   notFound: notFoundMock,
@@ -54,50 +50,50 @@ vi.mock('next/navigation', () => ({
     forward: vi.fn(),
     prefetch: vi.fn(),
   }),
-}))
+}));
 
 vi.mock('@/server/auth/session', () => ({
   getSession: getSessionMock,
-}))
+}));
 
 vi.mock('@/server/profile/friend', () => ({
   getFriendPortraitData: getFriendPortraitDataMock,
-}))
+}));
 
 vi.mock('@/server/db/queries/knowledge', () => ({
   getUserMasteryOverview: getUserMasteryOverviewMock,
   getKnowledgePageData: getKnowledgePageDataMock,
-}))
+}));
 
 vi.mock('@/server/db/queries/questions', () => ({
   getAuthoredQuestionsForUser: getAuthoredQuestionsForUserMock,
-}))
+}));
 
 vi.mock('@/server/db/queries/account', () => ({
   getEditableProfile: getEditableProfileMock,
   getDiscoverability: getDiscoverabilityMock,
   getReminderState: getReminderStateMock,
   HANDLE_CHANGE_COOLDOWN_DAYS: 30,
-}))
+}));
 
 vi.mock('@/server/db/queries/friends', () => ({
   getFriends: getFriendsMock,
-}))
+}));
 
 vi.mock('@/server/profile/preview', () => ({
   resolvePreviewAs: resolvePreviewAsMock,
-}))
+}));
 
 vi.mock('@/server/friends/user-invite-token', () => ({
   getOrCreateInviteToken: getOrCreateInviteTokenMock,
   buildInviteUrl: (baseUrl: string, handle: string, token: string) =>
     `${baseUrl}/u/${handle}/${token}`,
   getBaseUrl: () => 'https://example.com',
-}))
+}));
 
 vi.mock('next/headers', () => ({
   headers: () => Promise.resolve(new Headers()),
-}))
+}));
 
 vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
   SharedInterestsOverlap: ({
@@ -106,10 +102,10 @@ vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
     viewerSoloInterests,
     friendFirstName,
   }: {
-    sharedInterests: string[]
-    friendSoloInterests: string[]
-    viewerSoloInterests: string[]
-    friendFirstName: string
+    sharedInterests: string[];
+    friendSoloInterests: string[];
+    viewerSoloInterests: string[];
+    friendFirstName: string;
   }) => (
     <div data-testid="shared-interests-overlap">
       <span data-testid="shared">{sharedInterests.join(',')}</span>
@@ -118,7 +114,7 @@ vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
       <span data-testid="friend-first-name">{friendFirstName}</span>
     </div>
   ),
-}))
+}));
 
 vi.mock('@/components/profile/AuthoredQuestionsFeed', () => ({
   AuthoredQuestionsFeed: ({
@@ -126,12 +122,12 @@ vi.mock('@/components/profile/AuthoredQuestionsFeed', () => ({
     friendDisplayName,
   }: {
     questions: Array<{
-      id: string
-      questionText: string
-      category: string | null
-      viewerAnswered: { result: 'correct' | 'incorrect' } | null
-    }>
-    friendDisplayName: string
+      id: string;
+      questionText: string;
+      category: string | null;
+      viewerAnswered: { result: 'correct' | 'incorrect' } | null;
+    }>;
+    friendDisplayName: string;
   }) => (
     <div data-testid="authored-feed">
       <span data-testid="friend-name">{friendDisplayName}</span>
@@ -150,18 +146,18 @@ vi.mock('@/components/profile/AuthoredQuestionsFeed', () => ({
       ))}
     </div>
   ),
-}))
+}));
 
-import UserProfilePage from '@/app/users/[id]/page'
+import UserProfilePage from '@/app/users/[id]/page';
 
 describe('/users/[id] friend profile page', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    getSessionMock.mockResolvedValue({ userId: 'viewer-1' })
-    getEditableProfileMock.mockResolvedValue(null)
-    getDiscoverabilityMock.mockResolvedValue(null)
-    getReminderStateMock.mockResolvedValue(null)
-    getOrCreateInviteTokenMock.mockResolvedValue(null)
+    vi.clearAllMocks();
+    getSessionMock.mockResolvedValue({ userId: 'viewer-1' });
+    getEditableProfileMock.mockResolvedValue(null);
+    getDiscoverabilityMock.mockResolvedValue(null);
+    getReminderStateMock.mockResolvedValue(null);
+    getOrCreateInviteTokenMock.mockResolvedValue(null);
     getFriendPortraitDataMock.mockResolvedValue({
       user: {
         id: 'friend-1',
@@ -191,7 +187,7 @@ describe('/users/[id] friend profile page', () => {
         authored_questions: true,
       },
       previewedAs: null,
-    })
+    });
     getUserMasteryOverviewMock.mockResolvedValue({
       totalPoints: 0,
       currentTier: 'establishing',
@@ -200,52 +196,48 @@ describe('/users/[id] friend profile page', () => {
       pointsToNextTier: null,
       domains: [],
       recentActivity: [],
-    })
+    });
     getKnowledgePageDataMock.mockResolvedValue({
       allDomains: [],
       declaredInterests: [],
       expandingDomains: [],
-    })
-    getAuthoredQuestionsForUserMock.mockResolvedValue([])
-  })
+    });
+    getAuthoredQuestionsForUserMock.mockResolvedValue([]);
+  });
 
   it('renders the friend profile shell and shared-interests overlap', async () => {
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
       searchParams: Promise.resolve({}),
-    })
-    const html = renderToStaticMarkup(element)
+    });
+    const html = renderToStaticMarkup(element);
 
-    expect(getFriendPortraitDataMock).toHaveBeenCalledWith(
-      'friend-1',
-      'viewer-1',
-      null,
-    )
+    expect(getFriendPortraitDataMock).toHaveBeenCalledWith('friend-1', 'viewer-1', null);
     expect(getAuthoredQuestionsForUserMock).toHaveBeenCalledWith({
       userId: 'friend-1',
       limit: 25,
       viewerUserId: 'viewer-1',
       viewer: 'friend',
       sectionVisible: true,
-    })
-    expect(html).toContain('Frances Friend')
-    expect(html).toContain('shared-interests-overlap')
-    expect(html).toContain('Jazz piano')
-    expect(html).toContain('Bauhaus design')
-    expect(html).toContain('href="/friends"')
-  })
+    });
+    expect(html).toContain('Frances Friend');
+    expect(html).toContain('shared-interests-overlap');
+    expect(html).toContain('Jazz piano');
+    expect(html).toContain('Bauhaus design');
+    expect(html).toContain('href="/friends"');
+  });
 
   it('renders the knowledge base section with a link to the full overview', async () => {
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
       searchParams: Promise.resolve({}),
-    })
-    const html = renderToStaticMarkup(element)
+    });
+    const html = renderToStaticMarkup(element);
 
-    expect(html).toContain('Knowledge base')
-    expect(html).toContain('href="/users/friend-1/knowledge"')
-    expect(html).toContain('full knowledge base')
-  })
+    expect(html).toContain('Knowledge base');
+    expect(html).toContain('href="/users/friend-1/knowledge"');
+    expect(html).toContain('full knowledge base');
+  });
 
   it('passes authored questions with viewer-answer status to the feed component', async () => {
     getAuthoredQuestionsForUserMock.mockResolvedValueOnce([
@@ -265,41 +257,41 @@ describe('/users/[id] friend profile page', () => {
         createdAt: '2026-05-09T00:00:00.000Z',
         viewerAnswered: { result: 'correct' },
       },
-    ])
+    ]);
 
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
       searchParams: Promise.resolve({}),
-    })
-    const html = renderToStaticMarkup(element)
+    });
+    const html = renderToStaticMarkup(element);
 
-    expect(html).toContain('What year did the Hungarian uprising begin?')
-    expect(html).toContain('Who painted Composition VIII?')
-    expect(html).toContain('unanswered')
-    expect(html).toContain('answered:correct')
-  })
+    expect(html).toContain('What year did the Hungarian uprising begin?');
+    expect(html).toContain('Who painted Composition VIII?');
+    expect(html).toContain('unanswered');
+    expect(html).toContain('answered:correct');
+  });
 
   it('handles unauthenticated and unavailable profiles with notFound', async () => {
-    getSessionMock.mockResolvedValueOnce(null)
+    getSessionMock.mockResolvedValueOnce(null);
     await expect(
       UserProfilePage({
         params: Promise.resolve({ id: 'friend-1' }),
         searchParams: Promise.resolve({}),
       }),
-    ).rejects.toThrow('NEXT_NOT_FOUND')
+    ).rejects.toThrow('NEXT_NOT_FOUND');
 
-    getSessionMock.mockResolvedValueOnce({ userId: 'viewer-1' })
-    getFriendPortraitDataMock.mockResolvedValueOnce(null)
+    getSessionMock.mockResolvedValueOnce({ userId: 'viewer-1' });
+    getFriendPortraitDataMock.mockResolvedValueOnce(null);
     await expect(
       UserProfilePage({
         params: Promise.resolve({ id: 'stranger-1' }),
         searchParams: Promise.resolve({}),
       }),
-    ).rejects.toThrow('NEXT_NOT_FOUND')
-  })
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+  });
 
   it('forwards previewAs through resolvePreviewAs into the portrait fetch', async () => {
-    resolvePreviewAsMock.mockResolvedValueOnce('stranger')
+    resolvePreviewAsMock.mockResolvedValueOnce('stranger');
     // Once preview is on, the portrait re-renders as that simulated viewer.
     getFriendPortraitDataMock.mockResolvedValueOnce({
       user: {
@@ -328,50 +320,42 @@ describe('/users/[id] friend profile page', () => {
         authored_questions: true,
       },
       previewedAs: 'stranger',
-    })
-    getSessionMock.mockResolvedValueOnce({ userId: 'self-1' })
+    });
+    getSessionMock.mockResolvedValueOnce({ userId: 'self-1' });
 
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'self-1' }),
       searchParams: Promise.resolve({ previewAs: 'stranger' }),
-    })
-    const html = renderToStaticMarkup(element)
+    });
+    const html = renderToStaticMarkup(element);
 
-    expect(resolvePreviewAsMock).toHaveBeenCalledWith(
-      'stranger',
-      'self-1',
-      'self-1',
-    )
-    expect(getFriendPortraitDataMock).toHaveBeenCalledWith(
-      'self-1',
-      'self-1',
-      'stranger',
-    )
+    expect(resolvePreviewAsMock).toHaveBeenCalledWith('stranger', 'self-1', 'self-1');
+    expect(getFriendPortraitDataMock).toHaveBeenCalledWith('self-1', 'self-1', 'stranger');
     // Banner + exit link appear at the top. The 'stranger' preview value
     // surfaces in the UI as 'public'.
-    expect(html).toContain('Previewing your profile as public.')
-    expect(html).toContain('href="/users/self-1"')
+    expect(html).toContain('Previewing your profile as public.');
+    expect(html).toContain('href="/users/self-1"');
     // Stranger short-circuit fires because visibility is 'stranger' — the
     // page renders the stranger card, gated on the simulated viewer.
-    expect(html).toContain('Become friends to see')
+    expect(html).toContain('Become friends to see');
     // Owner is previewing as a stranger of themselves — the friend
     // button must NOT render (you can't befriend yourself).
-    expect(html).not.toContain('Add friend')
-  })
+    expect(html).not.toContain('Add friend');
+  });
 
   it('renders the owner self-view with consolidated settings sections', async () => {
-    getSessionMock.mockResolvedValueOnce({ userId: 'self-1' })
+    getSessionMock.mockResolvedValueOnce({ userId: 'self-1' });
     getEditableProfileMock.mockResolvedValueOnce({
       id: 'self-1',
       displayName: 'Owner',
       handle: 'owner',
       handleLastChangedAt: null,
       phoneNumber: '+15555550100',
-    })
+    });
     getDiscoverabilityMock.mockResolvedValueOnce({
       discoverableByContacts: false,
       discoverableByMutualFriends: true,
-    })
+    });
     getReminderStateMock.mockResolvedValueOnce({
       phoneNumber: '+15555550100',
       smsOptIn: 'not_asked',
@@ -379,11 +363,11 @@ describe('/users/[id] friend profile page', () => {
       email: null,
       pendingEmail: null,
       emailVerified: false,
-    })
+    });
     getOrCreateInviteTokenMock.mockResolvedValueOnce({
       handle: 'owner',
       token: 'invite-token-abc',
-    })
+    });
     getFriendPortraitDataMock.mockResolvedValueOnce({
       user: {
         id: 'self-1',
@@ -411,40 +395,36 @@ describe('/users/[id] friend profile page', () => {
         authored_questions: true,
       },
       previewedAs: null,
-    })
+    });
 
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'self-1' }),
       searchParams: Promise.resolve({}),
-    })
-    const html = renderToStaticMarkup(element)
+    });
+    const html = renderToStaticMarkup(element);
 
-    expect(html).toContain('Privacy &amp; discovery')
-    expect(html).toContain('Notifications')
-    expect(html).toContain('Developer tools')
-    expect(html).toContain('Log out')
-    expect(html).toContain('Delete account')
-    expect(html).toContain('id="privacy-discovery"')
-    expect(html).toContain('id="notifications"')
-    expect(html).toContain('Your invite link')
-    expect(html).not.toContain('href="/account"')
-    expect(html).not.toContain('href="/account/')
-  })
+    expect(html).toContain('Privacy &amp; discovery');
+    expect(html).toContain('Notifications');
+    expect(html).toContain('Developer tools');
+    expect(html).toContain('Log out');
+    expect(html).toContain('Delete account');
+    expect(html).toContain('id="privacy-discovery"');
+    expect(html).toContain('id="notifications"');
+    expect(html).toContain('Your invite link');
+    expect(html).not.toContain('href="/account"');
+    expect(html).not.toContain('href="/account/');
+  });
 
   it('ignores invalid previewAs (resolved to null) and renders normally', async () => {
-    resolvePreviewAsMock.mockResolvedValueOnce(null)
+    resolvePreviewAsMock.mockResolvedValueOnce(null);
 
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
       searchParams: Promise.resolve({ previewAs: 'nope' }),
-    })
-    const html = renderToStaticMarkup(element)
+    });
+    const html = renderToStaticMarkup(element);
 
-    expect(getFriendPortraitDataMock).toHaveBeenCalledWith(
-      'friend-1',
-      'viewer-1',
-      null,
-    )
-    expect(html).not.toContain('Previewing your profile')
-  })
-})
+    expect(getFriendPortraitDataMock).toHaveBeenCalledWith('friend-1', 'viewer-1', null);
+    expect(html).not.toContain('Previewing your profile');
+  });
+});

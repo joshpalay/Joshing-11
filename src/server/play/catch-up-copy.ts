@@ -7,8 +7,7 @@ export const CATCH_UP_HEADER_LABEL = 'Catch up';
 
 export const CATCH_UP_HEADER_DETAIL = 'Untimed - 0.25x points';
 
-export const CATCH_UP_INTRO_COPY =
-  'Take your time - untimed; for your record, not standings.';
+export const CATCH_UP_INTRO_COPY = 'Take your time - untimed; for your record, not standings.';
 
 export const CATCH_UP_POINTS_CAPTION =
   'These count for 0.25x points - the moment has passed, but the territory is still worth claiming.';
@@ -29,13 +28,16 @@ function formatOneQueueDate(queueDate: string): string | null {
 
 function sameLocalDay(a: Date, b: Date): boolean {
   return (
-    a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth()
-    && a.getDate() === b.getDate()
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
   );
 }
 
-export function formatCatchUpAssignmentDatePhrase(firstQueueDate: string, lastQueueDate?: string): string {
+export function formatCatchUpAssignmentDatePhrase(
+  firstQueueDate: string,
+  lastQueueDate?: string,
+): string {
   const first = formatOneQueueDate(firstQueueDate);
   if (!first) return 'earlier rounds';
   if (!lastQueueDate || lastQueueDate === firstQueueDate) return first;

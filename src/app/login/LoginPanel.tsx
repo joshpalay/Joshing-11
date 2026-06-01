@@ -39,7 +39,9 @@ function normalizePhone(phone: string): string {
 }
 
 export function readInvitationToken(searchParams: URLSearchParams) {
-  return searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token');
+  return (
+    searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token')
+  );
 }
 
 export function readUserInvite(searchParams: URLSearchParams) {
@@ -51,7 +53,7 @@ export function readUserInvite(searchParams: URLSearchParams) {
 export function buildVerifyOtpRequestBody(
   phone: string,
   code: string,
-  searchParams: URLSearchParams
+  searchParams: URLSearchParams,
 ) {
   return {
     phone,
@@ -165,15 +167,11 @@ export default function LoginPanel() {
               (and the filled treatment of the OTP step's bubble icon).
               Hand-drawn as a fill-only glyph rather than a force-filled
               lucide outline, which rendered with a muddy stroked edge. */}
-          <svg
-            className="mx-auto h-12 w-12 fill-black"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
+          <svg className="mx-auto h-12 w-12 fill-black" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
           </svg>
           <label
-            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
+            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
             htmlFor="phone"
           >
             What is your phone number?
@@ -209,7 +207,7 @@ export default function LoginPanel() {
             />
           </div>
           <label
-            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
+            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
             htmlFor="code"
           >
             Enter your code for{' '}
@@ -242,7 +240,7 @@ export default function LoginPanel() {
 
             <button
               type="button"
-              className="mx-auto block text-[14px] font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              className="mx-auto block text-[14px] leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
               onClick={() => {
                 setCode('');
                 swapStep('phone');
@@ -256,7 +254,7 @@ export default function LoginPanel() {
       )}
 
       {error ? (
-        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
+        <p className="border-destructive/30 bg-destructive/10 text-destructive mt-4 rounded-md border px-3 py-2 text-center text-sm">
           {error}
         </p>
       ) : null}

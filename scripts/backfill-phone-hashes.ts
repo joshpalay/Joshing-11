@@ -46,7 +46,9 @@ async function main() {
   for (const user of candidates) {
     const e164 = normalizeToE164(user.phoneNumber);
     if (!e164) {
-      console.warn(`[backfill-phone-hashes] skip ${user.id} — phone ${user.phoneNumber} did not normalize to E.164`);
+      console.warn(
+        `[backfill-phone-hashes] skip ${user.id} — phone ${user.phoneNumber} did not normalize to E.164`,
+      );
       skipped++;
       continue;
     }

@@ -1,79 +1,73 @@
-'use client'
+'use client';
 
-import { useMemo, useState, type CSSProperties } from 'react'
-import { Share2 } from 'lucide-react'
-import type { MasteryTier } from '@/types/db'
-import { DomainCircle } from '@/components/knowledge/DomainCircle'
-import { buildKnowledgeCardPublicUrl } from '@/lib/knowledge-card'
+import { useMemo, useState, type CSSProperties } from 'react';
+import { Share2 } from 'lucide-react';
+import type { MasteryTier } from '@/types/db';
+import { DomainCircle } from '@/components/knowledge/DomainCircle';
+import { buildKnowledgeCardPublicUrl } from '@/lib/knowledge-card';
 
 export interface KnowledgeDomainCircle {
-  canonicalSubcategory: string
-  canonicalSubcategorySlug: string
-  currentTier: MasteryTier
-  lifetimePoints: number
-  iconKey: string
-  broadCategory?: string | null
+  canonicalSubcategory: string;
+  canonicalSubcategorySlug: string;
+  currentTier: MasteryTier;
+  lifetimePoints: number;
+  iconKey: string;
+  broadCategory?: string | null;
 }
 
 export interface KnowledgeCardProps {
-  playerDisplayName: string
-  portraitStatement: string
-  domains: KnowledgeDomainCircle[]
-  overflowCount: number
-  tierSignature: string
-  rarestTerritory: string | null
-  rarestTerritorySolo: boolean
-  shareText: string
-  shareCardToken: string
-  shareCardExpiresAt: string
-  readOnly?: boolean
-  highlightedSlug?: string | null
-  onShareClick?: () => void
+  playerDisplayName: string;
+  portraitStatement: string;
+  domains: KnowledgeDomainCircle[];
+  overflowCount: number;
+  tierSignature: string;
+  rarestTerritory: string | null;
+  rarestTerritorySolo: boolean;
+  shareText: string;
+  shareCardToken: string;
+  shareCardExpiresAt: string;
+  readOnly?: boolean;
+  highlightedSlug?: string | null;
+  onShareClick?: () => void;
 }
 
-function getCircleDiameter(
-  points: number,
-  maxPoints: number,
-  isMobile: boolean
-): number {
-  const max = isMobile ? 64 : 80
-  const min = isMobile ? 24 : 28
-  const ratio = maxPoints > 0 ? points / maxPoints : 0
-  return Math.round(min + ratio * (max - min))
+function getCircleDiameter(points: number, maxPoints: number, isMobile: boolean): number {
+  const max = isMobile ? 64 : 80;
+  const min = isMobile ? 24 : 28;
+  const ratio = maxPoints > 0 ? points / maxPoints : 0;
+  return Math.round(min + ratio * (max - min));
 }
 
 export function KnowledgeCard(props: KnowledgeCardProps) {
-  const [shareLabel, setShareLabel] = useState('Share')
+  const [shareLabel, setShareLabel] = useState('Share');
   const sorted = useMemo(
-    () =>
-      [...props.domains].sort((a, b) => b.lifetimePoints - a.lifetimePoints),
-    [props.domains]
-  )
-  const visibleDomains = sorted.slice(0, 5)
+    () => [...props.domains].sort((a, b) => b.lifetimePoints - a.lifetimePoints),
+    [props.domains],
+  );
+  const visibleDomains = sorted.slice(0, 5);
   const totalOverflowCount =
-    props.overflowCount + Math.max(0, sorted.length - visibleDomains.length)
-  const maxPoints = sorted[0]?.lifetimePoints ?? 1
-  const isMobileViewport =
-    typeof window !== 'undefined' ? window.innerWidth < 400 : false
+    props.overflowCount + Math.max(0, sorted.length - visibleDomains.length);
+  const maxPoints = sorted[0]?.lifetimePoints ?? 1;
+  const isMobileViewport = typeof window !== 'undefined' ? window.innerWidth < 400 : false;
   const visibleDomainDiameters = visibleDomains.map((domain) =>
-    getCircleDiameter(domain.lifetimePoints, maxPoints, isMobileViewport)
-  )
-  const circleSlotSize = Math.max(...visibleDomainDiameters, 0)
+    getCircleDiameter(domain.lifetimePoints, maxPoints, isMobileViewport),
+  );
+  const circleSlotSize = Math.max(...visibleDomainDiameters, 0);
 
   const onShare = async () => {
     if (props.onShareClick) {
-      props.onShareClick()
-      return
+      props.onShareClick();
+      return;
     }
-    const url = buildKnowledgeCardPublicUrl(props.shareCardToken)
+    const url = buildKnowledgeCardPublicUrl(props.shareCardToken);
     if (navigator.share) {
-      await navigator.share({ text: props.shareText, url })
-      return
+      await navigator.share({ text: props.shareText, url });
+      return;
     }
-    await navigator.clipboard.writeText(url)
-    setShareLabel('Link copied')
-    window.setTimeout(() => setShareLabel('Share'), 2000)
-  }
+    await navigator.clipboard.writeText(url);
+    setShareLabel('Link copied');
+    window.setTimeout(() => setShareLabel('Share'), 2000);
+  };
 
   return (
     <section style={boxStyle} aria-label="Your Knowledge Portrait">
@@ -100,11 +94,7 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
         {visibleDomains.map((domain, index) => {
           const diameter =
             visibleDomainDiameters[index] ??
-            getCircleDiameter(
-              domain.lifetimePoints,
-              maxPoints,
-              isMobileViewport
-            )
+            getCircleDiameter(domain.lifetimePoints, maxPoints, isMobileViewport);
           return (
             <DomainCircle
               key={domain.canonicalSubcategorySlug}
@@ -114,12 +104,10 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
               canonicalSubcategory={domain.canonicalSubcategory}
               broadCategory={domain.broadCategory}
               currentTier={domain.currentTier}
-              highlighted={
-                props.highlightedSlug === domain.canonicalSubcategorySlug
-              }
+              highlighted={props.highlightedSlug === domain.canonicalSubcategorySlug}
               circleSlotSize={circleSlotSize}
             />
-          )
+          );
         })}
       </div>
       {totalOverflowCount > 0 && (
@@ -135,7 +123,7 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
       )}
       <p style={attributionStyle}>{props.playerDisplayName} on Joshing</p>
     </section>
-  )
+  );
 }
 
 const boxStyle: CSSProperties = {
@@ -146,14 +134,14 @@ const boxStyle: CSSProperties = {
   padding: '1.05rem 0.95rem 0.95rem',
   display: 'grid',
   gap: '0.85rem',
-}
+};
 
 const headerStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: '0.75rem',
-}
+};
 
 const titleStyle: CSSProperties = {
   margin: 0,
@@ -163,7 +151,7 @@ const titleStyle: CSSProperties = {
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
-}
+};
 
 const wordmarkStyle: CSSProperties = {
   margin: 0,
@@ -173,7 +161,7 @@ const wordmarkStyle: CSSProperties = {
   color: 'var(--brand-ink)',
   letterSpacing: '0.01em',
   lineHeight: 1,
-}
+};
 
 const shareButtonStyle: CSSProperties = {
   minHeight: 38,
@@ -190,7 +178,7 @@ const shareButtonStyle: CSSProperties = {
   fontWeight: 600,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
-}
+};
 
 const statementStyle: CSSProperties = {
   margin: 0,
@@ -199,7 +187,7 @@ const statementStyle: CSSProperties = {
   color: 'var(--brand-ink)',
   lineHeight: 1.35,
   letterSpacing: '0.01em',
-}
+};
 
 const circlesWrapStyle: CSSProperties = {
   display: 'flex',
@@ -208,29 +196,29 @@ const circlesWrapStyle: CSSProperties = {
   alignItems: 'flex-start',
   columnGap: 16,
   rowGap: 20,
-}
+};
 
 const overflowStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
   color: 'var(--brand-ink-400)',
   textAlign: 'center',
-}
+};
 
 const tierStyle: CSSProperties = {
   margin: 0,
   fontSize: 13,
   color: 'var(--brand-ink)',
-}
+};
 
 const rarestStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
   color: 'var(--brand-ink-400)',
-}
+};
 
 const attributionStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
   color: 'var(--brand-ink-400)',
-}
+};

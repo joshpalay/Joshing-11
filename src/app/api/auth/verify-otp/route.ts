@@ -1,96 +1,92 @@
-import { randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto';
 
-import { eq } from 'drizzle-orm'
-import { NextResponse } from 'next/server'
+import { eq } from 'drizzle-orm';
+import { NextResponse } from 'next/server';
 
-import { colorForUser } from '@/components/feed/visual'
-import { normalizeToE164 } from '@/lib/phone-e164'
-import { verifyOtp } from '@/server/auth'
-import { createSession } from '@/server/auth/session'
-import { db, users } from '@/server/db'
-import { hashPhoneNumber } from '@/server/lib/phone-hashing'
+import { colorForUser } from '@/components/feed/visual';
+import { normalizeToE164 } from '@/lib/phone-e164';
+import { verifyOtp } from '@/server/auth';
+import { createSession } from '@/server/auth/session';
+import { db, users } from '@/server/db';
+import { hashPhoneNumber } from '@/server/lib/phone-hashing';
 import {
   acceptFriendInvitation,
   getValidInvitationForPhone,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE,
   INVITE_REQUIRED_MESSAGE,
-} from '@/server/friends/invitations'
-import { acceptUserInviteLink } from '@/server/friends/user-invite-token'
+} from '@/server/friends/invitations';
+import { acceptUserInviteLink } from '@/server/friends/user-invite-token';
 
 type VerifyOtpBody = {
-  phone?: unknown
-  code?: unknown
-  invitationToken?: unknown
-  userInvite?: unknown
-}
+  phone?: unknown;
+  code?: unknown;
+  invitationToken?: unknown;
+  userInvite?: unknown;
+};
 
 function parseUserInvite(value: unknown): { handle: string; token: string } | null {
-  if (!value || typeof value !== 'object') return null
-  const candidate = value as { handle?: unknown; token?: unknown }
-  const handle = typeof candidate.handle === 'string' ? candidate.handle.trim() : ''
-  const token = typeof candidate.token === 'string' ? candidate.token.trim() : ''
-  if (!handle || !token) return null
-  return { handle, token }
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as { handle?: unknown; token?: unknown };
+  const handle = typeof candidate.handle === 'string' ? candidate.handle.trim() : '';
+  const token = typeof candidate.token === 'string' ? candidate.token.trim() : '';
+  if (!handle || !token) return null;
+  return { handle, token };
 }
 
 type AuthUser = {
-  id: string
-  phoneNumber: string
-  displayName: string | null
-  timezone: string
-}
+  id: string;
+  phoneNumber: string;
+  displayName: string | null;
+  timezone: string;
+};
 
 const USER_SELECTION = {
   id: users.id,
   phoneNumber: users.phoneNumber,
   displayName: users.displayName,
   timezone: users.timezone,
-}
+};
 
-async function findUserByPhone(
-  phoneNumber: string
-): Promise<AuthUser | null> {
+async function findUserByPhone(phoneNumber: string): Promise<AuthUser | null> {
   const [existing] = await db
     .select(USER_SELECTION)
     .from(users)
     .where(eq(users.phoneNumber, phoneNumber))
-    .limit(1)
+    .limit(1);
 
-  return existing ?? null
+  return existing ?? null;
 }
 
 function computePhoneHash(phoneNumber: string): string | null {
   // Skip when the salt is unset (dev environments without
   // PHONE_HASH_SALT — production sets it). The hash can be filled in
   // later via scripts/backfill-phone-hashes.ts once the salt is set.
-  if (!process.env.PHONE_HASH_SALT) return null
-  const e164 = normalizeToE164(phoneNumber)
-  if (!e164) return null
-  return hashPhoneNumber(e164)
+  if (!process.env.PHONE_HASH_SALT) return null;
+  const e164 = normalizeToE164(phoneNumber);
+  if (!e164) return null;
+  return hashPhoneNumber(e164);
 }
 
-async function provisionUserForPhone(
-  phoneNumber: string
-): Promise<AuthUser> {
+async function provisionUserForPhone(phoneNumber: string): Promise<AuthUser> {
   // Pre-generate the id so we can persist a deterministic avatar_color in the
   // same insert (colorForUser hashes the id). Without this, avatar_color
   // would be NULL until the next signup backfill.
-  const id = randomUUID()
-  const phoneHash = computePhoneHash(phoneNumber)
+  const id = randomUUID();
+  const phoneHash = computePhoneHash(phoneNumber);
   const [created] = await db
     .insert(users)
     .values({ id, phoneNumber, avatarColor: colorForUser(id), phoneHash })
     .onConflictDoNothing({ target: users.phoneNumber })
-    .returning(USER_SELECTION)
+    .returning(USER_SELECTION);
 
-  if (created) return created
+  if (created) return created;
 
   // Conflict: another request created the user between findUserByPhone and now.
-  const existing = await findUserByPhone(phoneNumber)
+  const existing = await findUserByPhone(phoneNumber);
   if (!existing) {
-    throw new Error('Unable to find or create user for verified phone number.')
+    throw new Error('Unable to find or create user for verified phone number.');
   }
-  return existing
+  return existing;
 }
 
 function invitationRejection() {
@@ -99,8 +95,8 @@ function invitationRejection() {
       error: 'invalid_invitation',
       message: INVITATION_ACCEPTANCE_ERROR_MESSAGE,
     },
-    { status: 400 }
-  )
+    { status: 400 },
+  );
 }
 
 function inviteRequiredRejection() {
@@ -109,49 +105,44 @@ function inviteRequiredRejection() {
       error: 'invite_required',
       message: INVITE_REQUIRED_MESSAGE,
     },
-    { status: 403 }
-  )
+    { status: 403 },
+  );
 }
 
 export async function POST(request: Request) {
   try {
-    const body = (await request
-      .json()
-      .catch(() => null)) as VerifyOtpBody | null
-    const phone = typeof body?.phone === 'string' ? body.phone.trim() : ''
-    const code = typeof body?.code === 'string' ? body.code.trim() : ''
-    const tokenProvided =
-      body?.invitationToken !== undefined && body?.invitationToken !== null
+    const body = (await request.json().catch(() => null)) as VerifyOtpBody | null;
+    const phone = typeof body?.phone === 'string' ? body.phone.trim() : '';
+    const code = typeof body?.code === 'string' ? body.code.trim() : '';
+    const tokenProvided = body?.invitationToken !== undefined && body?.invitationToken !== null;
     const invitationToken =
-      typeof body?.invitationToken === 'string'
-        ? body.invitationToken.trim()
-        : ''
-    const hasUsableToken = tokenProvided && invitationToken.length > 0
-    const userInvite = parseUserInvite(body?.userInvite)
+      typeof body?.invitationToken === 'string' ? body.invitationToken.trim() : '';
+    const hasUsableToken = tokenProvided && invitationToken.length > 0;
+    const userInvite = parseUserInvite(body?.userInvite);
 
     if (!phone || !code) {
       return NextResponse.json(
         { error: 'invalid_request', message: 'phone and code are required' },
-        { status: 400 }
-      )
+        { status: 400 },
+      );
     }
 
     // A token field was supplied but it's empty/whitespace — reject before
     // anything else. This closes the `{"invitationToken": ""}` bypass.
     if (tokenProvided && !hasUsableToken) {
-      return invitationRejection()
+      return invitationRejection();
     }
 
-    const normalizedPhone = await verifyOtp(phone, code)
+    const normalizedPhone = await verifyOtp(phone, code);
 
     if (!normalizedPhone) {
       return NextResponse.json(
         { error: 'invalid_code', message: 'Code invalid or expired' },
-        { status: 401 }
-      )
+        { status: 401 },
+      );
     }
 
-    const existingUser = await findUserByPhone(normalizedPhone)
+    const existingUser = await findUserByPhone(normalizedPhone);
 
     // Re-login path: any existing user can re-authenticate after OTP. The
     // invitation gate only applies to new-account creation below. This is
@@ -159,14 +150,14 @@ export async function POST(request: Request) {
     // gate was added are grandfathered — they re-authenticate freely. Only
     // brand-new accounts must arrive via an accepted friend invitation.
     if (existingUser) {
-      let invitationResult: { accepted: boolean } = { accepted: false }
+      let invitationResult: { accepted: boolean } = { accepted: false };
 
       if (hasUsableToken) {
         invitationResult = await acceptFriendInvitation({
           token: invitationToken,
           inviteeUserId: existingUser.id,
           verifiedPhone: normalizedPhone,
-        })
+        });
       }
 
       // Per-user invite-link flow (B-Friends-3): when the visitor arrived
@@ -178,13 +169,13 @@ export async function POST(request: Request) {
           handle: userInvite.handle,
           token: userInvite.token,
           inviteeUserId: existingUser.id,
-        })
+        });
       }
 
       await createSession(existingUser.id, {
         invitationAccepted: true,
         onboardingComplete: false,
-      })
+      });
 
       return NextResponse.json({
         user: {
@@ -195,14 +186,14 @@ export async function POST(request: Request) {
           onboardingComplete: false,
         },
         invitation: invitationResult,
-      })
+      });
     }
 
     // New-user path: an invitation is a hard precondition. Either a
     // FriendInvitation token (SMS-style) or a per-user invite link
     // (B-Friends-3) satisfies the gate.
     if (!hasUsableToken && !userInvite) {
-      return inviteRequiredRejection()
+      return inviteRequiredRejection();
     }
 
     // Pre-validate the FriendInvitation read-only so we don't provision a
@@ -212,30 +203,30 @@ export async function POST(request: Request) {
       const candidateInvitation = await getValidInvitationForPhone({
         token: invitationToken,
         verifiedPhone: normalizedPhone,
-      })
+      });
 
       if (!candidateInvitation) {
-        return invitationRejection()
+        return invitationRejection();
       }
     }
 
-    const user = await provisionUserForPhone(normalizedPhone)
+    const user = await provisionUserForPhone(normalizedPhone);
 
-    let invitation: { accepted: boolean } = { accepted: false }
+    let invitation: { accepted: boolean } = { accepted: false };
 
     if (hasUsableToken) {
       invitation = await acceptFriendInvitation({
         token: invitationToken,
         inviteeUserId: user.id,
         verifiedPhone: normalizedPhone,
-      })
+      });
 
       if (!invitation.accepted) {
         // Race condition: the invitation was claimed between our pre-validate
         // and accept. The user row already exists but has no accepted
         // invitation — future logins will hit the orphan-rejection branch
         // above, so the access surface is closed.
-        return invitationRejection()
+        return invitationRejection();
       }
     } else if (userInvite) {
       // Per-user invite link path: create the active friendship now. If
@@ -245,13 +236,13 @@ export async function POST(request: Request) {
         handle: userInvite.handle,
         token: userInvite.token,
         inviteeUserId: user.id,
-      })
+      });
     }
 
     await createSession(user.id, {
       invitationAccepted: true,
       onboardingComplete: false,
-    })
+    });
 
     return NextResponse.json({
       user: {
@@ -262,12 +253,12 @@ export async function POST(request: Request) {
         onboardingComplete: false,
       },
       invitation,
-    })
+    });
   } catch (error) {
-    console.error('[auth/verify-otp] failed', error)
+    console.error('[auth/verify-otp] failed', error);
     return NextResponse.json(
       { error: 'server_error', message: 'Unable to verify code.' },
-      { status: 500 }
-    )
+      { status: 500 },
+    );
   }
 }

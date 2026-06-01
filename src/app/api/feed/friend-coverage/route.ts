@@ -119,10 +119,7 @@ export async function loadFriendCoverage(
       userBId: friendships.userBId,
     })
     .from(friendships)
-    .where(or(
-      eq(friendships.userAId, viewerUserId),
-      eq(friendships.userBId, viewerUserId),
-    ));
+    .where(or(eq(friendships.userAId, viewerUserId), eq(friendships.userBId, viewerUserId)));
 
   const friendshipByOtherUserId = new Map<string, { friendshipId: string; status: string }>();
   for (const row of allFriendships) {
@@ -135,11 +132,13 @@ export async function loadFriendCoverage(
   const viewerActiveFeedItemCount = await db
     .select({ value: sql<number>`COUNT(*)::int`.as('value') })
     .from(feedItems)
-    .where(and(
-      eq(feedItems.recipientUserId, viewerUserId),
-      eq(feedItems.isPinned, false),
-      inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES),
-    ))
+    .where(
+      and(
+        eq(feedItems.recipientUserId, viewerUserId),
+        eq(feedItems.isPinned, false),
+        inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES),
+      ),
+    )
     .then((rows) => rows[0]?.value ?? 0);
 
   const summary = {
@@ -156,11 +155,13 @@ export async function loadFriendCoverage(
 
   const friendFilters = [inArray(users.id, otherIds)];
   if (friendQuery) {
-    friendFilters.push(or(
-      eq(users.id, friendQuery),
-      eq(users.phoneNumber, friendQuery),
-      ilike(users.displayName, `%${friendQuery}%`),
-    )!);
+    friendFilters.push(
+      or(
+        eq(users.id, friendQuery),
+        eq(users.phoneNumber, friendQuery),
+        ilike(users.displayName, `%${friendQuery}%`),
+      )!,
+    );
   }
 
   const friendRows = await db
@@ -173,14 +174,17 @@ export async function loadFriendCoverage(
   }
 
   const viewerDismissedDomains = new Set(
-    (await db
-      .select({ canonicalSubcategory: feedDismissedDomains.canonicalSubcategory })
-      .from(feedDismissedDomains)
-      .where(and(
-        eq(feedDismissedDomains.userId, viewerUserId),
-        isNull(feedDismissedDomains.reinstatedAt),
-      )))
-      .map((row) => row.canonicalSubcategory),
+    (
+      await db
+        .select({ canonicalSubcategory: feedDismissedDomains.canonicalSubcategory })
+        .from(feedDismissedDomains)
+        .where(
+          and(
+            eq(feedDismissedDomains.userId, viewerUserId),
+            isNull(feedDismissedDomains.reinstatedAt),
+          ),
+        )
+    ).map((row) => row.canonicalSubcategory),
   );
 
   const friends: FriendCoverageFriendBlock[] = [];
@@ -206,70 +210,92 @@ export async function loadFriendCoverage(
       })
       .from(masteryEvents)
       .leftJoin(questions, eq(masteryEvents.questionId, questions.id))
-      .where(and(
-        eq(masteryEvents.answeredByUserId, friend.id),
-        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-        inArray(masteryEvents.answerState, ['first_correct', 'first_correct_after_wrong', 'repeat_correct']),
-      ))
+      .where(
+        and(
+          eq(masteryEvents.answeredByUserId, friend.id),
+          inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+          inArray(masteryEvents.answerState, [
+            'first_correct',
+            'first_correct_after_wrong',
+            'repeat_correct',
+          ]),
+        ),
+      )
       .orderBy(desc(masteryEvents.createdAt))
       .limit(limit);
 
     const rows: FriendCoverageEventRow[] = [];
 
     for (const event of events) {
-      const questionPayload = event.questionId ? {
-        creatorId: event.questionCreatorId,
-        source: event.questionSource as 'authored' | 'daily_generated' | 'curated_sent',
-        visibility: event.questionVisibility as 'public' | 'private',
-        deletedAt: event.questionDeletedAt,
-      } : null;
+      const questionPayload = event.questionId
+        ? {
+            creatorId: event.questionCreatorId,
+            source: event.questionSource as 'authored' | 'daily_generated' | 'curated_sent',
+            visibility: event.questionVisibility as 'public' | 'private',
+            deletedAt: event.questionDeletedAt,
+          }
+        : null;
 
       const eligibilityWouldPass = questionPayload
         ? isCorrectAnswerFeedEligible({
-          answerIsCorrect: true,
-          answererUserId: friend.id,
-          question: questionPayload,
-          hasVisibleSocialContext: true,
-        })
+            answerIsCorrect: true,
+            answererUserId: friend.id,
+            question: questionPayload,
+            hasVisibleSocialContext: true,
+          })
         : false;
 
-      const [thumbsDownFeedback] = event.questionId ? await db
-        .select({ id: questionFeedback.id })
-        .from(questionFeedback)
-        .where(and(
-          eq(questionFeedback.userId, friend.id),
-          eq(questionFeedback.questionId, event.questionId),
-          eq(questionFeedback.signal, 'thumbs_down'),
-        ))
-        .limit(1) : [];
+      const [thumbsDownFeedback] = event.questionId
+        ? await db
+            .select({ id: questionFeedback.id })
+            .from(questionFeedback)
+            .where(
+              and(
+                eq(questionFeedback.userId, friend.id),
+                eq(questionFeedback.questionId, event.questionId),
+                eq(questionFeedback.signal, 'thumbs_down'),
+              ),
+            )
+            .limit(1)
+        : [];
 
-      const [thumbsDownRating] = event.questionId && !thumbsDownFeedback ? await db
-        .select({ id: questionRatings.id })
-        .from(questionRatings)
-        .where(and(
-          eq(questionRatings.userId, friend.id),
-          eq(questionRatings.questionId, event.questionId),
-          eq(questionRatings.rating, 'down'),
-        ))
-        .limit(1) : [];
+      const [thumbsDownRating] =
+        event.questionId && !thumbsDownFeedback
+          ? await db
+              .select({ id: questionRatings.id })
+              .from(questionRatings)
+              .where(
+                and(
+                  eq(questionRatings.userId, friend.id),
+                  eq(questionRatings.questionId, event.questionId),
+                  eq(questionRatings.rating, 'down'),
+                ),
+              )
+              .limit(1)
+          : [];
 
       const friendThumbsDown = Boolean(thumbsDownFeedback || thumbsDownRating);
 
       const viewerDomainDismissed = Boolean(
-        event.questionCanonicalSubcategory && viewerDismissedDomains.has(event.questionCanonicalSubcategory),
+        event.questionCanonicalSubcategory &&
+        viewerDismissedDomains.has(event.questionCanonicalSubcategory),
       );
 
-      const feedItemRow = event.questionId ? await db
-        .select()
-        .from(feedItems)
-        .where(and(
-          eq(feedItems.recipientUserId, viewerUserId),
-          eq(feedItems.questionId, event.questionId),
-          eq(feedItems.sourceUserId, friend.id),
-        ))
-        .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
-        .limit(1)
-        .then((rs) => rs[0] ?? null) : null;
+      const feedItemRow = event.questionId
+        ? await db
+            .select()
+            .from(feedItems)
+            .where(
+              and(
+                eq(feedItems.recipientUserId, viewerUserId),
+                eq(feedItems.questionId, event.questionId),
+                eq(feedItems.sourceUserId, friend.id),
+              ),
+            )
+            .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
+            .limit(1)
+            .then((rs) => rs[0] ?? null)
+        : null;
 
       let diagnosis: FriendCoverageDiagnosis;
       if (!friendship || friendship.status !== 'active') {
@@ -286,7 +312,10 @@ export async function loadFriendCoverage(
         diagnosis = 'rolled_off';
       } else if (!VISIBLE_FEED_STATES.has(feedItemRow.state)) {
         diagnosis = 'feed_item_state_hidden';
-      } else if (questionPayload && ((questionPayload.visibility as string) !== 'public' || questionPayload.deletedAt)) {
+      } else if (
+        questionPayload &&
+        ((questionPayload.visibility as string) !== 'public' || questionPayload.deletedAt)
+      ) {
         diagnosis = 'question_now_private_or_deleted';
       } else if (viewerDomainDismissed) {
         // Read-side filter excludes dismissed-domain rows even if the row exists.
@@ -312,16 +341,18 @@ export async function loadFriendCoverage(
         eligibilityWouldPass,
         friendThumbsDown,
         viewerDomainDismissed,
-        feedItem: feedItemRow ? {
-          id: feedItemRow.id,
-          state: feedItemRow.state,
-          sourceType: feedItemRow.sourceType,
-          sourceResult: feedItemRow.sourceResult,
-          sourceEventAt: isoOrNull(feedItemRow.sourceEventAt) ?? '',
-          sourceAnswerId: feedItemRow.sourceAnswerId,
-          isPinned: feedItemRow.isPinned,
-          createdAt: isoOrNull(feedItemRow.createdAt) ?? '',
-        } : null,
+        feedItem: feedItemRow
+          ? {
+              id: feedItemRow.id,
+              state: feedItemRow.state,
+              sourceType: feedItemRow.sourceType,
+              sourceResult: feedItemRow.sourceResult,
+              sourceEventAt: isoOrNull(feedItemRow.sourceEventAt) ?? '',
+              sourceAnswerId: feedItemRow.sourceAnswerId,
+              isPinned: feedItemRow.isPinned,
+              createdAt: isoOrNull(feedItemRow.createdAt) ?? '',
+            }
+          : null,
         diagnosis,
       });
     }
@@ -333,7 +364,10 @@ export async function loadFriendCoverage(
       friendshipId: friendship?.friendshipId ?? null,
       friendshipStatus: friendship?.status ?? null,
       recentCorrectAnswers: rows,
-      note: rows.length === 0 ? 'No recent correct daily/catchup answers found in masteryEvents.' : null,
+      note:
+        rows.length === 0
+          ? 'No recent correct daily/catchup answers found in masteryEvents.'
+          : null,
     });
   }
 

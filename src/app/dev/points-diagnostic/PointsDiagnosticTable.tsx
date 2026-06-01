@@ -144,7 +144,8 @@ export function PointsDiagnosticTable({ rows }: { rows: PointsDiagnosticRow[] })
                       color: active ? '#000' : '#444',
                     }}
                   >
-                    {col.label}{arrow}
+                    {col.label}
+                    {arrow}
                   </button>
                 </th>
               );
@@ -153,8 +154,18 @@ export function PointsDiagnosticTable({ rows }: { rows: PointsDiagnosticRow[] })
         </thead>
         <tbody>
           {sorted.map((row) => (
-            <tr key={row.masteryEventId} style={{ verticalAlign: 'top', borderBottom: '1px solid #f0f0f0' }}>
-              <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+            <tr
+              key={row.masteryEventId}
+              style={{ verticalAlign: 'top', borderBottom: '1px solid #f0f0f0' }}
+            >
+              <td
+                style={{
+                  padding: '4px 8px',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {fmtTimestamp(row.createdAt)}
               </td>
               <td
@@ -169,14 +180,30 @@ export function PointsDiagnosticTable({ rows }: { rows: PointsDiagnosticRow[] })
               >
                 {row.sourceType}
               </td>
-              <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+              <td
+                style={{
+                  padding: '4px 8px',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {row.answerState ?? '—'}
               </td>
-              <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+              <td
+                style={{
+                  padding: '4px 8px',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {row.sessionContext ?? '—'}
               </td>
               <td style={{ padding: '4px 8px', fontSize: '12px', maxWidth: '420px' }}>
-                <div>{row.questionTextSnippet ?? <em style={{ color: '#999' }}>(no question)</em>}</div>
+                <div>
+                  {row.questionTextSnippet ?? <em style={{ color: '#999' }}>(no question)</em>}
+                </div>
                 {row.questionId && (
                   <div style={{ fontFamily: 'monospace', fontSize: '10px', color: '#888' }}>
                     q={row.questionId.slice(0, 8)}…
@@ -192,13 +219,34 @@ export function PointsDiagnosticTable({ rows }: { rows: PointsDiagnosticRow[] })
               <td style={{ padding: '4px 8px', fontSize: '11px', whiteSpace: 'nowrap' }}>
                 {row.difficulty ?? '—'}
               </td>
-              <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px', textAlign: 'right' }}>
+              <td
+                style={{
+                  padding: '4px 8px',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  textAlign: 'right',
+                }}
+              >
                 {fmtRate(row.correctRate)}
               </td>
-              <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px', textAlign: 'right' }}>
+              <td
+                style={{
+                  padding: '4px 8px',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  textAlign: 'right',
+                }}
+              >
                 {row.basePoints}
               </td>
-              <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px', textAlign: 'right' }}>
+              <td
+                style={{
+                  padding: '4px 8px',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  textAlign: 'right',
+                }}
+              >
                 {fmtNumber(row.weight)}
               </td>
               <td
@@ -208,13 +256,21 @@ export function PointsDiagnosticTable({ rows }: { rows: PointsDiagnosticRow[] })
                   fontSize: '12px',
                   textAlign: 'right',
                   fontWeight: 'bold',
-                  color: row.awardedPoints > 0 ? '#0a7d2a' : row.awardedPoints < 0 ? '#a02500' : '#444',
+                  color:
+                    row.awardedPoints > 0 ? '#0a7d2a' : row.awardedPoints < 0 ? '#a02500' : '#444',
                 }}
               >
                 {fmtNumber(row.awardedPoints)}
               </td>
               <td style={{ padding: '4px 8px', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                {row.answeredByDisplayName ?? (row.answeredByUserId ? <span style={{ fontFamily: 'monospace', color: '#888' }}>{row.answeredByUserId.slice(0, 8)}…</span> : '—')}
+                {row.answeredByDisplayName ??
+                  (row.answeredByUserId ? (
+                    <span style={{ fontFamily: 'monospace', color: '#888' }}>
+                      {row.answeredByUserId.slice(0, 8)}…
+                    </span>
+                  ) : (
+                    '—'
+                  ))}
               </td>
             </tr>
           ))}

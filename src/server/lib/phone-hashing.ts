@@ -11,5 +11,7 @@ import { createHash } from 'crypto';
 export function hashPhoneNumber(e164Phone: string): string {
   const salt = process.env.PHONE_HASH_SALT;
   if (!salt) throw new Error('PHONE_HASH_SALT not set');
-  return createHash('sha256').update(salt + e164Phone).digest('hex');
+  return createHash('sha256')
+    .update(salt + e164Phone)
+    .digest('hex');
 }

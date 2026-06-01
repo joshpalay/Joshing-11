@@ -8,7 +8,12 @@ import { AssertionRecorder } from '../lib/asserts';
 import { contextForPlayer } from '../lib/browser';
 import type { PlayerEvent } from '../lib/player';
 import type { Scenario, ScenarioContext, ScenarioLog } from '../lib/scenario-context';
-import { authenticateAndCookie, insertTestQuestions, phoneFor, provisionTestUser } from '../lib/seed';
+import {
+  authenticateAndCookie,
+  insertTestQuestions,
+  phoneFor,
+  provisionTestUser,
+} from '../lib/seed';
 
 function now(): string {
   return new Date().toISOString();
@@ -64,7 +69,11 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
         .where(eq(dailyQueues.userId, alice.id))
         .limit(1);
       if (queueRow) {
-        ctx.manifest.trackDailyQueue({ id: queueRow.id, userId: alice.id, scenarioId: ctx.scenarioId });
+        ctx.manifest.trackDailyQueue({
+          id: queueRow.id,
+          userId: alice.id,
+          scenarioId: ctx.scenarioId,
+        });
         asserts.pass('dailyQueues row created for test user');
       } else {
         // Not strictly a failure — the test user has no generated questions,
@@ -95,6 +104,7 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
 export const dailyQueueScenario: Scenario = {
   id: 'daily-queue',
   displayName: 'Daily queue loads',
-  description: 'A test user navigates to /daily; the queue endpoint responds 200 and (if questions are available) a dailyQueues row is created.',
+  description:
+    'A test user navigates to /daily; the queue endpoint responds 200 and (if questions are available) a dailyQueues row is created.',
   run,
 };

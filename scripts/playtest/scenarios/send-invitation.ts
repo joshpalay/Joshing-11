@@ -49,9 +49,13 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
           suggestedInterests: ['1980s Animation', 'Classical Music'],
         },
       });
-      const body = (await response.json().catch(() => null)) as
-        | { ok: boolean; type?: string; inviteUrl?: string; id?: string; expiresAt?: string }
-        | null;
+      const body = (await response.json().catch(() => null)) as {
+        ok: boolean;
+        type?: string;
+        inviteUrl?: string;
+        id?: string;
+        expiresAt?: string;
+      } | null;
 
       asserts.expectEqual('POST /api/friend-invitations returns 200', response.status(), 200);
       asserts.expectTruthy('response body present', body);
@@ -78,7 +82,13 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
       const [row] = await db
         .select({ id: friendInvitations.id, acceptedAt: friendInvitations.acceptedAt })
         .from(friendInvitations)
-        .where(and(eq(friendInvitations.inviterUserId, alice.id), eq(friendInvitations.inviteePhone, INVITEE_PHONE), isNull(friendInvitations.acceptedAt)))
+        .where(
+          and(
+            eq(friendInvitations.inviterUserId, alice.id),
+            eq(friendInvitations.inviteePhone, INVITEE_PHONE),
+            isNull(friendInvitations.acceptedAt),
+          ),
+        )
         .limit(1);
       asserts.expectTruthy('friendInvitations row exists in DB', !!row);
       if (row) asserts.expectEqual('acceptedAt is null pre-acceptance', row.acceptedAt, null);
@@ -110,6 +120,7 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
 export const sendInvitationScenario: Scenario = {
   id: 'send-invitation',
   displayName: 'Send a friend invitation',
-  description: 'Alice (test inviter) hits POST /api/friend-invitations and the friendInvitations row appears.',
+  description:
+    'Alice (test inviter) hits POST /api/friend-invitations and the friendInvitations row appears.',
   run,
 };

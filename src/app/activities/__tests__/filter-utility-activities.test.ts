@@ -54,10 +54,7 @@ function theyGotYouMoment(questionId: string): LatelyMoment {
   };
 }
 
-function friendAnsweredActivity(
-  id: string,
-  result: 'correct' | 'incorrect',
-): ActivityItemView {
+function friendAnsweredActivity(id: string, result: 'correct' | 'incorrect'): ActivityItemView {
   return {
     id,
     userId: 'viewer-1',

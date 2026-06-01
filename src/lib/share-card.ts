@@ -10,7 +10,11 @@ function createToken(): string {
 }
 
 export function buildShareCardUrl(token: string): string {
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+  const baseUrl = (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    'http://localhost:3000'
+  ).replace(/\/$/, '');
   return `${baseUrl}/share/ceremony/${token}`;
 }
 
@@ -29,7 +33,9 @@ export async function generateShareCardToken(ceremonyId: string): Promise<string
       const [updated] = await db
         .update(biweeklyCeremonies)
         .set({ shareCardToken: token })
-        .where(and(eq(biweeklyCeremonies.id, ceremonyId), isNull(biweeklyCeremonies.shareCardToken)))
+        .where(
+          and(eq(biweeklyCeremonies.id, ceremonyId), isNull(biweeklyCeremonies.shareCardToken)),
+        )
         .returning({ shareCardToken: biweeklyCeremonies.shareCardToken });
 
       if (updated?.shareCardToken) return updated.shareCardToken;
@@ -42,7 +48,8 @@ export async function generateShareCardToken(ceremonyId: string): Promise<string
 
       if (raced?.shareCardToken) return raced.shareCardToken;
     } catch (error) {
-      const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : null;
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error ? error.code : null;
       if (code !== '23505') throw error;
     }
   }

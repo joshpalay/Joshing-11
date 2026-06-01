@@ -1,6 +1,14 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 
-import { db, feedDismissedDomains, feedItems, masteryEvents, questionFeedback, questionRatings, questions } from '@/server/db';
+import {
+  db,
+  feedDismissedDomains,
+  feedItems,
+  masteryEvents,
+  questionFeedback,
+  questionRatings,
+  questions,
+} from '@/server/db';
 import { writeActivity } from '@/server/activity/write-activity';
 import { getFriends } from '@/server/db/queries/friends';
 import { rollOffOldItems } from '@/server/db/queries/feed';
@@ -35,22 +43,28 @@ async function _createFeedItemsForFriendsFromAnswer(
   const [thumbsDown] = await db
     .select({ id: questionFeedback.id })
     .from(questionFeedback)
-    .where(and(
-      eq(questionFeedback.userId, userId),
-      eq(questionFeedback.questionId, questionId),
-      eq(questionFeedback.signal, 'thumbs_down'),
-    ))
+    .where(
+      and(
+        eq(questionFeedback.userId, userId),
+        eq(questionFeedback.questionId, questionId),
+        eq(questionFeedback.signal, 'thumbs_down'),
+      ),
+    )
     .limit(1);
 
-  const [ratingDown] = thumbsDown ? [] : await db
-    .select({ id: questionRatings.id })
-    .from(questionRatings)
-    .where(and(
-      eq(questionRatings.userId, userId),
-      eq(questionRatings.questionId, questionId),
-      eq(questionRatings.rating, 'down'),
-    ))
-    .limit(1);
+  const [ratingDown] = thumbsDown
+    ? []
+    : await db
+        .select({ id: questionRatings.id })
+        .from(questionRatings)
+        .where(
+          and(
+            eq(questionRatings.userId, userId),
+            eq(questionRatings.questionId, questionId),
+            eq(questionRatings.rating, 'down'),
+          ),
+        )
+        .limit(1);
 
   if (thumbsDown || ratingDown) return;
 
@@ -67,12 +81,15 @@ async function _createFeedItemsForFriendsFromAnswer(
     .where(eq(questions.id, questionId))
     .limit(1);
 
-  if (!isCorrectAnswerFeedEligible({
-    answerIsCorrect: result === 'correct',
-    answererUserId: userId,
-    question,
-    hasVisibleSocialContext: true,
-  })) return;
+  if (
+    !isCorrectAnswerFeedEligible({
+      answerIsCorrect: result === 'correct',
+      answererUserId: userId,
+      question,
+      hasVisibleSocialContext: true,
+    })
+  )
+    return;
 
   const domain = question.canonicalSubcategory ?? question.broadCategory;
   if (!domain) return;
@@ -91,27 +108,33 @@ async function _createFeedItemsForFriendsFromAnswer(
     db
       .select({ userId: feedDismissedDomains.userId })
       .from(feedDismissedDomains)
-      .where(and(
-        inArray(feedDismissedDomains.userId, friendIds),
-        eq(feedDismissedDomains.canonicalSubcategory, domain),
-        isNull(feedDismissedDomains.reinstatedAt),
-      )),
+      .where(
+        and(
+          inArray(feedDismissedDomains.userId, friendIds),
+          eq(feedDismissedDomains.canonicalSubcategory, domain),
+          isNull(feedDismissedDomains.reinstatedAt),
+        ),
+      ),
     db
       .select({ recipientUserId: feedItems.recipientUserId })
       .from(feedItems)
-      .where(and(
-        inArray(feedItems.recipientUserId, friendIds),
-        eq(feedItems.questionId, questionId),
-        eq(feedItems.sourceUserId, userId),
-      )),
+      .where(
+        and(
+          inArray(feedItems.recipientUserId, friendIds),
+          eq(feedItems.questionId, questionId),
+          eq(feedItems.sourceUserId, userId),
+        ),
+      ),
     sourceAnswerId
       ? db
           .select({ recipientUserId: feedItems.recipientUserId })
           .from(feedItems)
-          .where(and(
-            inArray(feedItems.recipientUserId, friendIds),
-            eq(feedItems.sourceAnswerId, sourceAnswerId),
-          ))
+          .where(
+            and(
+              inArray(feedItems.recipientUserId, friendIds),
+              eq(feedItems.sourceAnswerId, sourceAnswerId),
+            ),
+          )
       : Promise.resolve([] as Array<{ recipientUserId: string }>),
     // Skip recipients who already answered this question on any surface
     // (their own daily, catchup, or an earlier feed item). Without this,
@@ -121,11 +144,13 @@ async function _createFeedItemsForFriendsFromAnswer(
     db
       .select({ userId: masteryEvents.userId })
       .from(masteryEvents)
-      .where(and(
-        inArray(masteryEvents.userId, friendIds),
-        eq(masteryEvents.questionId, questionId),
-        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-      )),
+      .where(
+        and(
+          inArray(masteryEvents.userId, friendIds),
+          eq(masteryEvents.questionId, questionId),
+          inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        ),
+      ),
   ]);
 
   const dismissedSet = new Set(dismissedRows.map((r) => r.userId));
@@ -135,10 +160,10 @@ async function _createFeedItemsForFriendsFromAnswer(
 
   const eligibleRecipientIds = friendIds.filter(
     (id) =>
-      !dismissedSet.has(id)
-      && !existingSet.has(id)
-      && !answerEventSet.has(id)
-      && !alreadyAnsweredSet.has(id),
+      !dismissedSet.has(id) &&
+      !existingSet.has(id) &&
+      !answerEventSet.has(id) &&
+      !alreadyAnsweredSet.has(id),
   );
 
   if (eligibleRecipientIds.length > 0) {
@@ -169,23 +194,27 @@ async function notifyPreviousAnswerers(userId: string, questionId: string): Prom
   const previousAnswerers = await db
     .select({ userId: masteryEvents.userId })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.questionId, questionId),
-      eq(masteryEvents.answeredByUserId, masteryEvents.userId),
-      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-    ));
+    .where(
+      and(
+        eq(masteryEvents.questionId, questionId),
+        eq(masteryEvents.answeredByUserId, masteryEvents.userId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+      ),
+    );
 
-  const notifyIds = [...new Set(
-    previousAnswerers.map((e) => e.userId).filter((id) => id !== userId),
-  )];
+  const notifyIds = [
+    ...new Set(previousAnswerers.map((e) => e.userId).filter((id) => id !== userId)),
+  ];
 
-  await Promise.all(notifyIds.map((prevUserId) =>
-    writeActivity({
-      userId: prevUserId,
-      type: 'friend_answered_your_question',
-      actorUserId: userId,
-      referenceId: questionId,
-      referenceType: 'question',
-    }),
-  ));
+  await Promise.all(
+    notifyIds.map((prevUserId) =>
+      writeActivity({
+        userId: prevUserId,
+        type: 'friend_answered_your_question',
+        actorUserId: userId,
+        referenceId: questionId,
+        referenceType: 'question',
+      }),
+    ),
+  );
 }

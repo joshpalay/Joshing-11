@@ -6,14 +6,14 @@
 // these guards, so the runtime shape stays in one place.
 
 export function pickOpenedNewTerritory(raw: unknown): boolean {
-  if (!raw || typeof raw !== 'object') return false
-  const r = raw as Record<string, unknown>
-  return r.openedNewTerritory === true
+  if (!raw || typeof raw !== 'object') return false;
+  const r = raw as Record<string, unknown>;
+  return r.openedNewTerritory === true;
 }
 
 export function pickOpenedTerritoryDomain(raw: unknown): string | null {
-  if (!raw || typeof raw !== 'object') return null
-  const r = raw as Record<string, unknown>
-  if (r.openedNewTerritory !== true) return null
-  return typeof r.domain === 'string' && r.domain.trim() ? r.domain : null
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (r.openedNewTerritory !== true) return null;
+  return typeof r.domain === 'string' && r.domain.trim() ? r.domain : null;
 }

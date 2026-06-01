@@ -42,7 +42,9 @@ export function broadCategoryDisplayName(category: string): string {
   return isBroadQuestionCategory(category) ? categoryLabel(category) : category;
 }
 
-export function normalizeBroadQuestionCategoryOrDefault(value: string | null | undefined): BroadQuestionCategory {
+export function normalizeBroadQuestionCategoryOrDefault(
+  value: string | null | undefined,
+): BroadQuestionCategory {
   if (typeof value !== 'string') return DEFAULT_BROAD_QUESTION_CATEGORY;
   return normalizeBroadQuestionCategory(value) ?? DEFAULT_BROAD_QUESTION_CATEGORY;
 }

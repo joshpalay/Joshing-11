@@ -24,7 +24,8 @@ export async function POST() {
   await db.insert(activityItems).values({
     userId: session.userId,
     type: TIDY_ACTIVITY_TYPE,
-    referenceId: result.mergesApplied > 0 ? result.details.map((detail) => detail.target).join(', ') : null,
+    referenceId:
+      result.mergesApplied > 0 ? result.details.map((detail) => detail.target).join(', ') : null,
     referenceType: 'knowledge_tidy',
   });
 

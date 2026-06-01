@@ -1,44 +1,40 @@
-import React from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({
-  default: ({
-    href,
-    children,
-    ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+  default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
     <a href={typeof href === 'string' ? href : String(href)} {...props}>
       {children}
     </a>
   ),
-}))
+}));
 
-import FriendsHubPage from '@/components/FriendsHubPage'
-import FriendsList from '@/components/FriendsList'
+import FriendsHubPage from '@/components/FriendsHubPage';
+import FriendsList from '@/components/FriendsList';
 
 const forbiddenGamificationCopy =
-  /leaderboard|ranking|ranked|score|points?|percent|%|timer|streak|hurry|urgent/i
+  /leaderboard|ranking|ranked|score|points?|percent|%|timer|streak|hurry|urgent/i;
 
 describe('Friends page QA surface', () => {
   it('keeps the Add Friend CTA visible and avoids leaderboard/ranking mechanics', () => {
-    const html = renderToStaticMarkup(<FriendsHubPage />)
+    const html = renderToStaticMarkup(<FriendsHubPage />);
 
-    expect(html).toContain('Friends')
-    expect(html).toContain('Add friend')
-    expect(html).not.toContain('Joshing</p>')
-    expect(html).not.toContain('Invite your people')
-    expect(html).not.toContain('Send a warm note')
-    expect(html).not.toMatch(forbiddenGamificationCopy)
-  })
+    expect(html).toContain('Friends');
+    expect(html).toContain('Add friend');
+    expect(html).not.toContain('Joshing</p>');
+    expect(html).not.toContain('Invite your people');
+    expect(html).not.toContain('Send a warm note');
+    expect(html).not.toMatch(forbiddenGamificationCopy);
+  });
 
   it('renders the Friends / Invitations / Sent tab bar with the friends tab active by default', () => {
-    const html = renderToStaticMarkup(<FriendsList />)
+    const html = renderToStaticMarkup(<FriendsList />);
 
-    expect(html).toContain('Friends')
-    expect(html).toContain('Invitations')
-    expect(html).toContain('Sent')
-    expect(html).toContain('Loading friends')
-    expect(html).not.toMatch(forbiddenGamificationCopy)
-  })
-})
+    expect(html).toContain('Friends');
+    expect(html).toContain('Invitations');
+    expect(html).toContain('Sent');
+    expect(html).toContain('Loading friends');
+    expect(html).not.toMatch(forbiddenGamificationCopy);
+  });
+});

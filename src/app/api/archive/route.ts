@@ -10,15 +10,23 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-const SOURCES = new Set<ArchiveSource>(['daily', 'feed', 'joshing_game', 'sent_to_me', 'written_by_me']);
+const SOURCES = new Set<ArchiveSource>([
+  'daily',
+  'feed',
+  'joshing_game',
+  'sent_to_me',
+  'written_by_me',
+]);
 const RESULTS = new Set<ArchiveResultFilter>(['correct', 'incorrect', 'skipped']);
 
 function parseSource(value: string | null): ArchiveSource | undefined {
-  return value && SOURCES.has(value as ArchiveSource) ? value as ArchiveSource : undefined;
+  return value && SOURCES.has(value as ArchiveSource) ? (value as ArchiveSource) : undefined;
 }
 
 function parseResult(value: string | null): ArchiveResultFilter | undefined {
-  return value && RESULTS.has(value as ArchiveResultFilter) ? value as ArchiveResultFilter : undefined;
+  return value && RESULTS.has(value as ArchiveResultFilter)
+    ? (value as ArchiveResultFilter)
+    : undefined;
 }
 
 function parseLimit(value: string | null): number | undefined {

@@ -1,22 +1,22 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from 'react';
 
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils';
 
-import { FeedActionLink } from './FeedActionLink'
-import { FeedCardShell } from './FeedCardShell'
-import { FeedDismissButton } from './FeedDismissButton'
+import { FeedActionLink } from './FeedActionLink';
+import { FeedCardShell } from './FeedCardShell';
+import { FeedDismissButton } from './FeedDismissButton';
 
 type SparkleEnvelopeProps = {
   /** Attribution line — e.g. "<actor> thought you'd like this about <category>." */
-  signal: ReactNode
-  question: string
-  overflow?: ReactNode
-  onAnswer?: () => void
+  signal: ReactNode;
+  question: string;
+  overflow?: ReactNode;
+  onAnswer?: () => void;
   /** Quiet, secondary dismiss control (bottom-left, opposite Answer). View-state only. */
-  onDismiss?: () => void
-  answerLabel?: string
-  className?: string
-}
+  onDismiss?: () => void;
+  answerLabel?: string;
+  className?: string;
+};
 
 /**
  * The "shared with you" feed card (DirectSentCard, FriendAddedCard), built to
@@ -47,7 +47,7 @@ export function SparkleEnvelope({
         <div aria-hidden className="h-px w-[70px] bg-[var(--brand-rule)]" />
 
         <div className="flex w-full flex-col items-end gap-5">
-          <p className="w-full font-serif text-[24px] font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]">
+          <p className="w-full font-serif text-[24px] leading-[32px] font-semibold tracking-[0.05em] text-[var(--brand-ink)]">
             <span aria-hidden className="opacity-60">
               &ldquo;
             </span>
@@ -65,13 +65,11 @@ export function SparkleEnvelope({
               )}
             >
               {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
-              {onAnswer ? (
-                <FeedActionLink onClick={onAnswer}>{answerLabel}</FeedActionLink>
-              ) : null}
+              {onAnswer ? <FeedActionLink onClick={onAnswer}>{answerLabel}</FeedActionLink> : null}
             </div>
           ) : null}
         </div>
       </div>
     </FeedCardShell>
-  )
+  );
 }

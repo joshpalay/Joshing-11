@@ -1,4 +1,4 @@
-import type { TypedFeedItem } from './types'
+import type { TypedFeedItem } from './types';
 
 export const mockTypedFeedItems: TypedFeedItem[] = [
   {
@@ -24,8 +24,7 @@ export const mockTypedFeedItems: TypedFeedItem[] = [
     metadata: 'Noah got this right · Yesterday',
     category: 'Science',
     question: 'What kind of celestial object is a magnetar?',
-    answerSummary:
-      'Noah recognized this one. See if you share the same common ground.',
+    answerSummary: 'Noah recognized this one. See if you share the same common ground.',
     avatarName: 'Noah',
     avatarUserId: 'user-noah',
     authorHref: '/users/noah',
@@ -176,7 +175,7 @@ export const mockTypedFeedItems: TypedFeedItem[] = [
     timestamp: '1h ago',
     viewerIsAuthor: true,
   },
-]
+];
 
 export const feedCardPreviewFixtures = {
   directSentUnanswered: mockTypedFeedItems[0],
@@ -190,4 +189,4 @@ export const feedCardPreviewFixtures = {
   alreadyBankedItem: mockTypedFeedItems[8],
   unverifiedAnsweredExplanationNote: mockTypedFeedItems[9],
   authoredByViewerUnanswered: mockTypedFeedItems[10],
-} satisfies Record<string, TypedFeedItem>
+} satisfies Record<string, TypedFeedItem>;

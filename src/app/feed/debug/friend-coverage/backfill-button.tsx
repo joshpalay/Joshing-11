@@ -45,16 +45,35 @@ export function BackfillButton({ answererUserId }: { answererUserId: string | nu
   }
 
   return (
-    <div style={{ marginTop: '12px', padding: '8px 12px', border: '1px solid #c8b900', background: '#fffbe6', fontFamily: 'monospace', fontSize: '12px' }}>
+    <div
+      style={{
+        marginTop: '12px',
+        padding: '8px 12px',
+        border: '1px solid #c8b900',
+        background: '#fffbe6',
+        fontFamily: 'monospace',
+        fontSize: '12px',
+      }}
+    >
       <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
         Backfill missing canonical question ids / feed items
         {answererUserId ? ` for answerer=${answererUserId}` : ' (all users)'}
       </div>
       <div>
-        <button type="button" onClick={() => run(true)} disabled={running} style={{ padding: '4px 10px', marginRight: '8px' }}>
+        <button
+          type="button"
+          onClick={() => run(true)}
+          disabled={running}
+          style={{ padding: '4px 10px', marginRight: '8px' }}
+        >
           {running ? 'running…' : 'Dry run'}
         </button>
-        <button type="button" onClick={() => run(false)} disabled={running} style={{ padding: '4px 10px' }}>
+        <button
+          type="button"
+          onClick={() => run(false)}
+          disabled={running}
+          style={{ padding: '4px 10px' }}
+        >
           {running ? 'running…' : 'Run backfill'}
         </button>
       </div>
@@ -68,14 +87,16 @@ export function BackfillButton({ answererUserId }: { answererUserId: string | nu
             {' · '}parseFailures={lastRun.parseFailures}
             {' · '}persistFailures={lastRun.persistFailures}
             {' · '}alreadyHadConflict={lastRun.alreadyHadConflict}
-            {lastRun.dryRun && <strong>{' '}(dry run — no rows were written)</strong>}
+            {lastRun.dryRun && <strong> (dry run — no rows were written)</strong>}
           </div>
           {lastRun.errors.length > 0 && (
             <details style={{ marginTop: '6px' }}>
               <summary style={{ cursor: 'pointer' }}>errors ({lastRun.errors.length})</summary>
               <ul style={{ marginTop: '4px' }}>
                 {lastRun.errors.slice(0, 50).map((e, i) => (
-                  <li key={i}>{e.masteryEventId.slice(0, 8)}… — {e.error}</li>
+                  <li key={i}>
+                    {e.masteryEventId.slice(0, 8)}… — {e.error}
+                  </li>
                 ))}
               </ul>
             </details>

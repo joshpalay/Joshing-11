@@ -12,7 +12,7 @@ function isCorrectResult(result: AnswerResult): boolean {
  */
 export function computeAnswerState(
   currentResult: AnswerResult,
-  priorAnswers: readonly { result: AnswerResult }[]
+  priorAnswers: readonly { result: AnswerResult }[],
 ): AnswerState {
   if (!isCorrectResult(currentResult)) {
     return 'incorrect';
@@ -32,7 +32,9 @@ export function computeAnswerState(
 
 export type LiveAnswerMasteryCredit = 'first_correct' | 'first_correct_after_wrong';
 
-export function liveMasteryCreditFromAnswerState(state: AnswerState): LiveAnswerMasteryCredit | null {
+export function liveMasteryCreditFromAnswerState(
+  state: AnswerState,
+): LiveAnswerMasteryCredit | null {
   if (state === 'first_correct') return 'first_correct';
   if (state === 'first_correct_after_wrong') return 'first_correct_after_wrong';
   return null;

@@ -34,7 +34,9 @@ type PageProps = {
 };
 
 function asCategory(value: string | undefined): Category | undefined {
-  return value && (CATEGORY_VALUES as readonly string[]).includes(value) ? (value as Category) : undefined;
+  return value && (CATEGORY_VALUES as readonly string[]).includes(value)
+    ? (value as Category)
+    : undefined;
 }
 
 function asDifficulty(value: string | undefined): DifficultyEstimate | undefined {
@@ -102,7 +104,9 @@ export default async function PointsDiagnosticPage({ searchParams }: PageProps) 
   const to = parseDate(params.to);
   const limit = parseLimit(params.limit);
 
-  const resolution = userQuery ? await resolveUserByQuery(userQuery) : { match: null, nearMatches: [] };
+  const resolution = userQuery
+    ? await resolveUserByQuery(userQuery)
+    : { match: null, nearMatches: [] };
   const target = resolution.match;
 
   const rows = target
@@ -125,21 +129,32 @@ export default async function PointsDiagnosticPage({ searchParams }: PageProps) 
   })();
 
   const correctDenominator = summary.correctCount + summary.incorrectCount;
-  const pctCorrect = correctDenominator > 0
-    ? `${Math.round((summary.correctCount / correctDenominator) * 100)}%`
-    : '—';
+  const pctCorrect =
+    correctDenominator > 0
+      ? `${Math.round((summary.correctCount / correctDenominator) * 100)}%`
+      : '—';
 
   return (
-    <main style={{ padding: '16px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>
+    <main
+      style={{
+        padding: '16px',
+        maxWidth: '1600px',
+        margin: '0 auto',
+        fontFamily: 'system-ui, sans-serif',
+      }}
+    >
       <h1 style={{ fontFamily: 'monospace', fontSize: '18px', marginBottom: '4px' }}>
         Points diagnostic
       </h1>
       <p style={{ color: '#666', fontSize: '12px', marginTop: '0' }}>
-        Every <code>MASTERY_EVENTS</code> row for a given user — live answers, catchup, author credit, and meta
-        events. Click column headers to sort. This is a diagnostic, not product UI.
+        Every <code>MASTERY_EVENTS</code> row for a given user — live answers, catchup, author
+        credit, and meta events. Click column headers to sort. This is a diagnostic, not product UI.
       </p>
 
-      <form method="get" style={{ marginTop: '12px', padding: '12px', border: '1px solid #ddd', background: '#fff' }}>
+      <form
+        method="get"
+        style={{ marginTop: '12px', padding: '12px', border: '1px solid #ddd', background: '#fff' }}
+      >
         <div style={{ marginBottom: '10px' }}>
           <label style={LABEL_STYLE}>
             <span>user (id / display name / phone / email)</span>
@@ -150,7 +165,9 @@ export default async function PointsDiagnosticPage({ searchParams }: PageProps) 
               placeholder="Jane Smith"
             />
           </label>
-          <button type="submit" style={{ padding: '4px 12px', fontSize: '12px' }}>Look up</button>
+          <button type="submit" style={{ padding: '4px 12px', fontSize: '12px' }}>
+            Look up
+          </button>
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap' }}>
@@ -159,7 +176,9 @@ export default async function PointsDiagnosticPage({ searchParams }: PageProps) 
             <select name="category" defaultValue={category ?? ''} style={INPUT_STYLE}>
               <option value="">(any)</option>
               {CATEGORY_VALUES.map((v) => (
-                <option key={v} value={v}>{v}</option>
+                <option key={v} value={v}>
+                  {v}
+                </option>
               ))}
             </select>
           </label>
@@ -169,7 +188,9 @@ export default async function PointsDiagnosticPage({ searchParams }: PageProps) 
             <select name="difficulty" defaultValue={difficulty ?? ''} style={INPUT_STYLE}>
               <option value="">(any)</option>
               {DIFFICULTY_VALUES.map((v) => (
-                <option key={v} value={v}>{v}</option>
+                <option key={v} value={v}>
+                  {v}
+                </option>
               ))}
             </select>
           </label>
@@ -179,7 +200,9 @@ export default async function PointsDiagnosticPage({ searchParams }: PageProps) 
             <select name="sourceType" defaultValue={sourceType ?? ''} style={INPUT_STYLE}>
               <option value="">(any)</option>
               {SOURCE_TYPE_VALUES.map((v) => (
-                <option key={v} value={v}>{v}</option>
+                <option key={v} value={v}>
+                  {v}
+                </option>
               ))}
             </select>
           </label>
@@ -217,7 +240,14 @@ export default async function PointsDiagnosticPage({ searchParams }: PageProps) 
       </form>
 
       {!target && resolution.nearMatches.length > 0 && (
-        <section style={{ marginTop: '16px', ...SUMMARY_BOX, background: '#fffbe6', borderColor: '#c8b900' }}>
+        <section
+          style={{
+            marginTop: '16px',
+            ...SUMMARY_BOX,
+            background: '#fffbe6',
+            borderColor: '#c8b900',
+          }}
+        >
           <strong>Multiple matches — pick one:</strong>
           <ul style={{ marginTop: '6px', listStyle: 'none', padding: 0 }}>
             {resolution.nearMatches.map((match) => (
@@ -237,8 +267,17 @@ export default async function PointsDiagnosticPage({ searchParams }: PageProps) 
       )}
 
       {!target && userQuery && resolution.nearMatches.length === 0 && (
-        <section style={{ marginTop: '16px', ...SUMMARY_BOX, background: '#ffefef', borderColor: '#a02500', color: '#a02500' }}>
-          No user matched <code>{userQuery}</code>. Try an exact id, partial display name, phone, or email.
+        <section
+          style={{
+            marginTop: '16px',
+            ...SUMMARY_BOX,
+            background: '#ffefef',
+            borderColor: '#a02500',
+            color: '#a02500',
+          }}
+        >
+          No user matched <code>{userQuery}</code>. Try an exact id, partial display name, phone, or
+          email.
         </section>
       )}
 

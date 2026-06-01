@@ -43,12 +43,7 @@ export type DomainMastery = {
 export type ExpandingDomain = {
   domain: string;
   momentumScore: number;
-  reason:
-    | 'new-discovery'
-    | 'mastery-shift'
-    | 'social-overlap'
-    | 'saved-questions'
-    | 'active-play';
+  reason: 'new-discovery' | 'mastery-shift' | 'social-overlap' | 'saved-questions' | 'active-play';
   supportingText?: string;
 };
 
@@ -143,7 +138,10 @@ type AnswerStats = {
 
 type PlayerMasteryRow = typeof playerMastery.$inferSelect;
 
-async function getPlayerMasteryRows(userId: string, orderByPoints = false): Promise<PlayerMasteryRow[]> {
+async function getPlayerMasteryRows(
+  userId: string,
+  orderByPoints = false,
+): Promise<PlayerMasteryRow[]> {
   try {
     if (orderByPoints) {
       return await db
@@ -153,10 +151,7 @@ async function getPlayerMasteryRows(userId: string, orderByPoints = false): Prom
         .orderBy(desc(playerMastery.totalPoints));
     }
 
-    return await db
-      .select()
-      .from(playerMastery)
-      .where(eq(playerMastery.userId, userId));
+    return await db.select().from(playerMastery).where(eq(playerMastery.userId, userId));
   } catch (error) {
     if (pgErrorCode(error) !== '42703') throw error;
 
@@ -174,14 +169,14 @@ async function getPlayerMasteryRows(userId: string, orderByPoints = false): Prom
 
     const rows = orderByPoints
       ? await db
-        .select(selectWithoutTerritoryType)
-        .from(playerMastery)
-        .where(eq(playerMastery.userId, userId))
-        .orderBy(desc(playerMastery.totalPoints))
+          .select(selectWithoutTerritoryType)
+          .from(playerMastery)
+          .where(eq(playerMastery.userId, userId))
+          .orderBy(desc(playerMastery.totalPoints))
       : await db
-        .select(selectWithoutTerritoryType)
-        .from(playerMastery)
-        .where(eq(playerMastery.userId, userId));
+          .select(selectWithoutTerritoryType)
+          .from(playerMastery)
+          .where(eq(playerMastery.userId, userId));
 
     return rows.map((row) => ({ ...row, territoryType: 'demonstrated' as const }));
   }
@@ -223,8 +218,6 @@ function sourceLabel(row: SourceLabelRow): string {
   return row.sourceType === 'live_correct' ? 'daily' : row.sourceType;
 }
 
-
-
 type ExpansionEvent = {
   canonicalSubcategory: string;
   sourceType?: string | null;
@@ -253,17 +246,20 @@ function supportingTextFor(reason: ExpandingDomain['reason']): string {
 function deriveExpandingDomains(events: ExpansionEvent[]): ExpandingDomain[] {
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
-  const byDomain = new Map<string, {
-    domain: string;
-    firstAt: Date;
-    latestAt: Date;
-    answered: number;
-    recentAnswered: number;
-    recentPoints: number;
-    wrongAnswers: number;
-    socialEvents: number;
-    savedEvents: number;
-  }>();
+  const byDomain = new Map<
+    string,
+    {
+      domain: string;
+      firstAt: Date;
+      latestAt: Date;
+      answered: number;
+      recentAnswered: number;
+      recentPoints: number;
+      wrongAnswers: number;
+      socialEvents: number;
+      savedEvents: number;
+    }
+  >();
 
   for (const event of events) {
     const domain = event.canonicalSubcategory.trim().replace(/\s+/g, ' ');
@@ -288,10 +284,17 @@ function deriveExpandingDomains(events: ExpansionEvent[]): ExpandingDomain[] {
     if (event.answerState && ageDays <= 21) existing.recentAnswered += 1;
     if (ageDays <= 21) existing.recentPoints += Number(event.awardedPoints ?? 0);
     if (event.answerState === 'incorrect' && ageDays <= 21) existing.wrongAnswers += 1;
-    if (event.sessionContext && FRIEND_MEDIATED_CONTEXTS.includes(event.sessionContext) && ageDays <= 21) {
+    if (
+      event.sessionContext &&
+      FRIEND_MEDIATED_CONTEXTS.includes(event.sessionContext) &&
+      ageDays <= 21
+    ) {
       existing.socialEvents += 1;
     }
-    if ((event.sourceType === 'authored' || event.sourceType === 'author_credit') && ageDays <= 21) {
+    if (
+      (event.sourceType === 'authored' || event.sourceType === 'author_credit') &&
+      ageDays <= 21
+    ) {
       existing.savedEvents += 1;
     }
     byDomain.set(key, existing);
@@ -313,13 +316,13 @@ function deriveExpandingDomains(events: ExpansionEvent[]): ExpandingDomain[] {
               ? 'mastery-shift'
               : 'active-play';
       const momentumScore = Math.round(
-        (recency * 60)
-        + (novelty * 35)
-        + (Math.min(domain.recentAnswered, 6) * 10)
-        + (Math.min(domain.wrongAnswers, 4) * 8)
-        + (Math.min(domain.recentPoints, 120) * 0.18)
-        + (Math.min(domain.socialEvents, 3) * 14)
-        + (Math.min(domain.savedEvents, 3) * 10),
+        recency * 60 +
+          novelty * 35 +
+          Math.min(domain.recentAnswered, 6) * 10 +
+          Math.min(domain.wrongAnswers, 4) * 8 +
+          Math.min(domain.recentPoints, 120) * 0.18 +
+          Math.min(domain.socialEvents, 3) * 14 +
+          Math.min(domain.savedEvents, 3) * 10,
       );
 
       return {
@@ -435,9 +438,9 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
   for (const event of eventRows) {
     if (!event.answerState) continue;
     if (
-      event.answerState !== 'incorrect'
-      && event.questionId
-      && FRIEND_MEDIATED_CONTEXTS.includes(event.sessionContext ?? '')
+      event.answerState !== 'incorrect' &&
+      event.questionId &&
+      FRIEND_MEDIATED_CONTEXTS.includes(event.sessionContext ?? '')
     ) {
       const key = domainKey(event.canonicalSubcategory);
       demonstratedDomains.add(key);
@@ -457,14 +460,19 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
     statsByDomain.set(key, existing);
   }
 
-  const masteryByDomain = new Map(masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]));
-  const knowledgeDomainNames = new Map<string, {
-    domain: string;
-    broadCategory: string | null;
-    isDeclared: boolean;
-    isDemonstrated: boolean;
-    territoryType?: 'declared' | 'demonstrated';
-  }>();
+  const masteryByDomain = new Map(
+    masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]),
+  );
+  const knowledgeDomainNames = new Map<
+    string,
+    {
+      domain: string;
+      broadCategory: string | null;
+      isDeclared: boolean;
+      isDemonstrated: boolean;
+      territoryType?: 'declared' | 'demonstrated';
+    }
+  >();
 
   for (const row of declaredRows) {
     const domain = row.domain.trim().replace(/\s+/g, ' ');
@@ -482,7 +490,11 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
     const existing = knowledgeDomainNames.get(key);
     const mastery = masteryByDomain.get(key);
     knowledgeDomainNames.set(key, {
-      domain: existing?.domain ?? demonstratedDomainLabels.get(key) ?? mastery?.canonicalSubcategory ?? key,
+      domain:
+        existing?.domain ??
+        demonstratedDomainLabels.get(key) ??
+        mastery?.canonicalSubcategory ??
+        key,
       broadCategory: existing?.broadCategory ?? mastery?.broadCategory ?? null,
       isDeclared: existing?.isDeclared ?? false,
       isDemonstrated: true,
@@ -490,7 +502,9 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
   }
 
   const domains = [...knowledgeDomainNames.values()]
-    .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain, hiddenDomainKeys))
+    .map((knowledgeDomain) =>
+      toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain, hiddenDomainKeys),
+    )
     .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
 
   return {
@@ -498,7 +512,8 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
     currentTier: overall.tier,
     tierProgress: percent(overall.progressWithinTier * 100),
     nextTier: nextOverallTier,
-    pointsToNextTier: nextThreshold === null ? null : Math.max(0, Math.ceil(nextThreshold - totalPoints)),
+    pointsToNextTier:
+      nextThreshold === null ? null : Math.max(0, Math.ceil(nextThreshold - totalPoints)),
     domains,
     recentActivity: recentRows.map((row) => ({
       domain: row.canonicalSubcategory,
@@ -545,14 +560,19 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
     statsByDomain.set(key, existing);
   }
 
-  const masteryByDomain = new Map(masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]));
-  const knowledgeDomainNames = new Map<string, {
-    domain: string;
-    broadCategory: string | null;
-    isDeclared: boolean;
-    isDemonstrated: boolean;
-    territoryType?: 'declared' | 'demonstrated';
-  }>();
+  const masteryByDomain = new Map(
+    masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]),
+  );
+  const knowledgeDomainNames = new Map<
+    string,
+    {
+      domain: string;
+      broadCategory: string | null;
+      isDeclared: boolean;
+      isDemonstrated: boolean;
+      territoryType?: 'declared' | 'demonstrated';
+    }
+  >();
 
   for (const row of masteryRows) {
     const domain = row.canonicalSubcategory.trim().replace(/\s+/g, ' ');
@@ -594,7 +614,9 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
   }
 
   const allDomains = [...knowledgeDomainNames.values()]
-    .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain, hiddenDomainKeys))
+    .map((knowledgeDomain) =>
+      toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain, hiddenDomainKeys),
+    )
     .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
 
   return {
@@ -621,81 +643,103 @@ export async function getProgressionLandscape(userId: string): Promise<Progressi
       territoryType: domain.territoryType,
     }))
     .sort((a, b) => {
-      const tierDiff = TIER_ORDER.indexOf(b.currentTier ?? 'establishing') - TIER_ORDER.indexOf(a.currentTier ?? 'establishing');
+      const tierDiff =
+        TIER_ORDER.indexOf(b.currentTier ?? 'establishing') -
+        TIER_ORDER.indexOf(a.currentTier ?? 'establishing');
       if (tierDiff !== 0) return tierDiff;
-      return b.correctAnswerCount - a.correctAnswerCount || a.canonicalSubcategory.localeCompare(b.canonicalSubcategory);
+      return (
+        b.correctAnswerCount - a.correctAnswerCount ||
+        a.canonicalSubcategory.localeCompare(b.canonicalSubcategory)
+      );
     });
 }
 
-export async function getDomainDetail(userId: string, domain: string): Promise<DomainDetail | null> {
+export async function getDomainDetail(
+  userId: string,
+  domain: string,
+): Promise<DomainDetail | null> {
   const normalizedDomain = domain.trim().replace(/\s+/g, ' ');
   if (!normalizedDomain) return null;
   const normalizedKey = domainKey(normalizedDomain);
 
-  const [declaredRows, masteryRows, eventRows, visibilityRows, responseRows, queueRows] = await Promise.all([
-    getActiveDeclaredInterests(userId),
-    getPlayerMasteryRows(userId),
-    db
-      .select({
-        event: {
-          id: masteryEvents.id,
-          awardedPoints: masteryEvents.awardedPoints,
-          answerState: masteryEvents.answerState,
-          createdAt: masteryEvents.createdAt,
-          sessionContext: masteryEvents.sessionContext,
-          sourceType: masteryEvents.sourceType,
-        },
-        questionText: questions.questionText,
-      })
-      .from(masteryEvents)
-      .leftJoin(questions, eq(masteryEvents.questionId, questions.id))
-      .where(and(
-        eq(masteryEvents.userId, userId),
-        sql`lower(${masteryEvents.canonicalSubcategory}) = ${normalizedKey}`,
-      ))
-      .orderBy(desc(masteryEvents.createdAt)),
-    db
-      .select()
-      .from(profileDomainVisibility)
-      .where(and(
-        eq(profileDomainVisibility.userId, userId),
-        sql`lower(${profileDomainVisibility.domain}) = ${normalizedKey}`,
-      ))
-      .limit(1),
-    db
-      .select({
-        response: joshingGameResponses,
-        question: questions,
-      })
-      .from(joshingGameResponses)
-      .innerJoin(questions, eq(joshingGameResponses.questionId, questions.id))
-      .where(and(
-        eq(joshingGameResponses.userId, userId),
-        isNotNull(joshingGameResponses.answeredAt),
-        sql`lower(coalesce(${questions.canonicalSubcategory}, ${questions.subcategory}, ${questions.broadCategory}, ${questions.category}::text)) = ${normalizedKey}`,
-      ))
-      .orderBy(desc(joshingGameResponses.answeredAt))
-      .limit(50),
-    db
-      .select({ id: dailyQueues.id, slots: dailyQueues.slots, createdAt: dailyQueues.createdAt })
-      .from(dailyQueues)
-      .where(eq(dailyQueues.userId, userId))
-      .orderBy(desc(dailyQueues.createdAt))
-      .limit(100),
-  ]);
+  const [declaredRows, masteryRows, eventRows, visibilityRows, responseRows, queueRows] =
+    await Promise.all([
+      getActiveDeclaredInterests(userId),
+      getPlayerMasteryRows(userId),
+      db
+        .select({
+          event: {
+            id: masteryEvents.id,
+            awardedPoints: masteryEvents.awardedPoints,
+            answerState: masteryEvents.answerState,
+            createdAt: masteryEvents.createdAt,
+            sessionContext: masteryEvents.sessionContext,
+            sourceType: masteryEvents.sourceType,
+          },
+          questionText: questions.questionText,
+        })
+        .from(masteryEvents)
+        .leftJoin(questions, eq(masteryEvents.questionId, questions.id))
+        .where(
+          and(
+            eq(masteryEvents.userId, userId),
+            sql`lower(${masteryEvents.canonicalSubcategory}) = ${normalizedKey}`,
+          ),
+        )
+        .orderBy(desc(masteryEvents.createdAt)),
+      db
+        .select()
+        .from(profileDomainVisibility)
+        .where(
+          and(
+            eq(profileDomainVisibility.userId, userId),
+            sql`lower(${profileDomainVisibility.domain}) = ${normalizedKey}`,
+          ),
+        )
+        .limit(1),
+      db
+        .select({
+          response: joshingGameResponses,
+          question: questions,
+        })
+        .from(joshingGameResponses)
+        .innerJoin(questions, eq(joshingGameResponses.questionId, questions.id))
+        .where(
+          and(
+            eq(joshingGameResponses.userId, userId),
+            isNotNull(joshingGameResponses.answeredAt),
+            sql`lower(coalesce(${questions.canonicalSubcategory}, ${questions.subcategory}, ${questions.broadCategory}, ${questions.category}::text)) = ${normalizedKey}`,
+          ),
+        )
+        .orderBy(desc(joshingGameResponses.answeredAt))
+        .limit(50),
+      db
+        .select({ id: dailyQueues.id, slots: dailyQueues.slots, createdAt: dailyQueues.createdAt })
+        .from(dailyQueues)
+        .where(eq(dailyQueues.userId, userId))
+        .orderBy(desc(dailyQueues.createdAt))
+        .limit(100),
+    ]);
 
   const declared = declaredRows.find((row) => domainKey(row.domain) === normalizedKey);
   const mastery = masteryRows.find((row) => domainKey(row.canonicalSubcategory) === normalizedKey);
 
   if (!declared && !mastery && eventRows.length === 0 && responseRows.length === 0) return null;
 
-  const stats: AnswerStats = { answered: 0, correct: 0, firstActivityAt: null, lastActivityAt: null };
+  const stats: AnswerStats = {
+    answered: 0,
+    correct: 0,
+    firstActivityAt: null,
+    lastActivityAt: null,
+  };
   for (const { event } of eventRows) {
     if (!event.answerState) continue;
     stats.answered += 1;
     if (event.answerState !== 'incorrect') stats.correct += 1;
-    if (!stats.firstActivityAt || event.createdAt < stats.firstActivityAt) stats.firstActivityAt = event.createdAt;
-    if (!stats.lastActivityAt || event.createdAt > stats.lastActivityAt) stats.lastActivityAt = event.createdAt;
+    if (!stats.firstActivityAt || event.createdAt < stats.firstActivityAt)
+      stats.firstActivityAt = event.createdAt;
+    if (!stats.lastActivityAt || event.createdAt > stats.lastActivityAt)
+      stats.lastActivityAt = event.createdAt;
   }
 
   const generatedQuestionIds = new Set<string>();
@@ -744,7 +788,10 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
     source: 'joshing_game',
   }));
 
-  const points = Number(mastery?.totalPoints ?? eventRows.reduce((sum, row) => sum + Number(row.event.awardedPoints ?? 0), 0));
+  const points = Number(
+    mastery?.totalPoints ??
+      eventRows.reduce((sum, row) => sum + Number(row.event.awardedPoints ?? 0), 0),
+  );
   const tierDisplay = getMasteryTierDisplay(points);
   const nextTier = nextTierFor(tierDisplay.tier);
   const nextThreshold = nextTier ? TIER_THRESHOLD_POINTS[nextTier] : null;
@@ -756,7 +803,7 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
       : 'public';
 
   const questionHistoryIds = [...gameAnswers, ...dailyAnswers]
-    .map((answer) => answer.source === 'joshing_game' ? answer.questionId : null)
+    .map((answer) => (answer.source === 'joshing_game' ? answer.questionId : null))
     .filter((id): id is string => Boolean(id));
   const bankedById = await checkBankedQuestions(userId, questionHistoryIds);
 
@@ -770,13 +817,16 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
 
   return {
     domain: mastery?.canonicalSubcategory ?? declared?.domain ?? normalizedDomain,
-    displayName: displayNameForDomain(mastery?.canonicalSubcategory ?? declared?.domain ?? normalizedDomain),
+    displayName: displayNameForDomain(
+      mastery?.canonicalSubcategory ?? declared?.domain ?? normalizedDomain,
+    ),
     isDeclaredInterest: Boolean(declared),
     points,
     tier: tierDisplay.tier,
     tierProgress: percent(tierDisplay.progressWithinTier * 100),
     nextTier,
-    pointsToNextTier: nextThreshold === null ? null : Math.max(0, Math.ceil(nextThreshold - points)),
+    pointsToNextTier:
+      nextThreshold === null ? null : Math.max(0, Math.ceil(nextThreshold - points)),
     questionsAnswered: stats.answered,
     questionsCorrect: stats.correct,
     correctRate: stats.answered > 0 ? percent((stats.correct / stats.answered) * 100) : 0,
@@ -856,7 +906,10 @@ export async function setDomainVisibility(
  * is case-insensitive so the client can pass the domain label as shown.
  * Returns whether a PLAYER_MASTERY row was actually removed.
  */
-export async function removeKnowledgeDomain(userId: string, domain: string): Promise<{ removed: boolean }> {
+export async function removeKnowledgeDomain(
+  userId: string,
+  domain: string,
+): Promise<{ removed: boolean }> {
   const normalizedDomain = domain.trim().replace(/\s+/g, ' ');
   if (!normalizedDomain) throw new Error('domain is required');
   const domainKey = normalizedDomain.toLowerCase();
@@ -864,18 +917,22 @@ export async function removeKnowledgeDomain(userId: string, domain: string): Pro
   const removed = await db.transaction(async (tx) => {
     const deletedRows = await tx
       .delete(playerMastery)
-      .where(and(
-        eq(playerMastery.userId, userId),
-        sql`lower(${playerMastery.canonicalSubcategory}) = ${domainKey}`,
-      ))
+      .where(
+        and(
+          eq(playerMastery.userId, userId),
+          sql`lower(${playerMastery.canonicalSubcategory}) = ${domainKey}`,
+        ),
+      )
       .returning({ id: playerMastery.id });
 
     await tx
       .delete(masteryEvents)
-      .where(and(
-        eq(masteryEvents.userId, userId),
-        sql`lower(${masteryEvents.canonicalSubcategory}) = ${domainKey}`,
-      ));
+      .where(
+        and(
+          eq(masteryEvents.userId, userId),
+          sql`lower(${masteryEvents.canonicalSubcategory}) = ${domainKey}`,
+        ),
+      );
 
     return deletedRows.length > 0;
   });
@@ -924,18 +981,19 @@ export async function getUserAnswerStreak(userId: string): Promise<StreakData> {
     db
       .select({ answeredAt: masteryEvents.createdAt })
       .from(masteryEvents)
-      .where(and(
-        eq(masteryEvents.userId, userId),
-        eq(masteryEvents.sessionContext, 'daily'),
-        isNotNull(masteryEvents.answerState),
-      )),
+      .where(
+        and(
+          eq(masteryEvents.userId, userId),
+          eq(masteryEvents.sessionContext, 'daily'),
+          isNotNull(masteryEvents.answerState),
+        ),
+      ),
     db
       .select({ answeredAt: joshingGameResponses.answeredAt })
       .from(joshingGameResponses)
-      .where(and(
-        eq(joshingGameResponses.userId, userId),
-        isNotNull(joshingGameResponses.answeredAt),
-      )),
+      .where(
+        and(eq(joshingGameResponses.userId, userId), isNotNull(joshingGameResponses.answeredAt)),
+      ),
   ]);
 
   const days = new Set<string>();

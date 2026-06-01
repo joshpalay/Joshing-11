@@ -1,34 +1,34 @@
-'use client'
+'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Check, Sparkles, X } from 'lucide-react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Check, Sparkles, X } from 'lucide-react';
 
-import { NewTerritoryUndo } from './NewTerritoryUndo'
-import { visibleFeedCategory } from './category'
+import { NewTerritoryUndo } from './NewTerritoryUndo';
+import { visibleFeedCategory } from './category';
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
 // card (raw --tri-amber #d9a82e is too light for small text). Used by the
 // "New territory" celebration and the "Between us friends" inside-joke card.
-const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))'
+const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))';
 
 type AnswerFeedbackSheetProps = {
-  question: string
-  category?: string | null
-  isCorrect: boolean
-  pointsAwarded: number | null
-  correctAnswer: string
-  submittedAnswer: string
-  explanation: string | null
-  creatorNote: string | null
-  insideJoke?: string | null
-  openedNewTerritory?: boolean
-  openedTerritoryDomain?: string | null
-  questionId: string
-  feedItemId: string
-  onClose: () => void
-}
+  question: string;
+  category?: string | null;
+  isCorrect: boolean;
+  pointsAwarded: number | null;
+  correctAnswer: string;
+  submittedAnswer: string;
+  explanation: string | null;
+  creatorNote: string | null;
+  insideJoke?: string | null;
+  openedNewTerritory?: boolean;
+  openedTerritoryDomain?: string | null;
+  questionId: string;
+  feedItemId: string;
+  onClose: () => void;
+};
 
-type BankState = 'idle' | 'saving' | 'saved' | 'undoing' | 'undone' | 'error'
+type BankState = 'idle' | 'saving' | 'saved' | 'undoing' | 'undone' | 'error';
 
 export function AnswerFeedbackSheet({
   question,
@@ -46,24 +46,24 @@ export function AnswerFeedbackSheet({
   feedItemId,
   onClose,
 }: AnswerFeedbackSheetProps) {
-  const visibleCategory = visibleFeedCategory(category)
-  const showNewTerritory = openedNewTerritory && isCorrect
-  const showTerritoryUndo = Boolean(openedTerritoryDomain) && isCorrect
-  const [bankState, setBankState] = useState<BankState>('idle')
-  const hasAutoSavedRef = useRef(false)
+  const visibleCategory = visibleFeedCategory(category);
+  const showNewTerritory = openedNewTerritory && isCorrect;
+  const showTerritoryUndo = Boolean(openedTerritoryDomain) && isCorrect;
+  const [bankState, setBankState] = useState<BankState>('idle');
+  const hasAutoSavedRef = useRef(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   useEffect(() => {
-    if (isCorrect || hasAutoSavedRef.current) return
-    hasAutoSavedRef.current = true
-    setBankState('saving')
+    if (isCorrect || hasAutoSavedRef.current) return;
+    hasAutoSavedRef.current = true;
+    setBankState('saving');
     void (async () => {
       try {
         const response = await fetch('/api/bank', {
@@ -75,33 +75,33 @@ export function AnswerFeedbackSheet({
             contextType: 'feed',
             contextId: feedItemId,
           }),
-        })
-        if (!response.ok) throw new Error('save failed')
-        setBankState('saved')
+        });
+        if (!response.ok) throw new Error('save failed');
+        setBankState('saved');
       } catch {
-        setBankState('error')
+        setBankState('error');
       }
-    })()
-  }, [isCorrect, questionId, feedItemId])
+    })();
+  }, [isCorrect, questionId, feedItemId]);
 
   const handleUndo = async () => {
-    if (bankState !== 'saved') return
-    setBankState('undoing')
+    if (bankState !== 'saved') return;
+    setBankState('undoing');
     try {
       const response = await fetch('/api/bank', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ questionId }),
-      })
-      if (!response.ok) throw new Error('undo failed')
-      setBankState('undone')
+      });
+      if (!response.ok) throw new Error('undo failed');
+      setBankState('undone');
     } catch {
-      setBankState('error')
+      setBankState('error');
     }
-  }
+  };
 
-  const points = typeof pointsAwarded === 'number' ? pointsAwarded : 0
+  const points = typeof pointsAwarded === 'number' ? pointsAwarded : 0;
 
   return (
     <div className="fixed inset-0 z-[55] flex items-end justify-center">
@@ -117,7 +117,13 @@ export function AnswerFeedbackSheet({
             ? 'relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-2xl ring-2'
             : 'relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl'
         }
-        style={showNewTerritory ? { '--tw-ring-color': 'color-mix(in srgb, var(--tri-amber) 55%, transparent)' } as CSSProperties : undefined}
+        style={
+          showNewTerritory
+            ? ({
+                '--tw-ring-color': 'color-mix(in srgb, var(--tri-amber) 55%, transparent)',
+              } as CSSProperties)
+            : undefined
+        }
       >
         <div className="flex items-center justify-between px-5 pt-5 pb-2">
           {showNewTerritory ? (
@@ -127,11 +133,14 @@ export function AnswerFeedbackSheet({
             >
               <Sparkles className="size-3.5" aria-hidden />
               <span>
-                New territory{visibleCategory ? <span style={{ opacity: 0.7 }}> · {visibleCategory.toUpperCase()}</span> : null}
+                New territory
+                {visibleCategory ? (
+                  <span style={{ opacity: 0.7 }}> · {visibleCategory.toUpperCase()}</span>
+                ) : null}
               </span>
             </p>
           ) : visibleCategory ? (
-            <p className="text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-[var(--brand-ink-400)]">
+            <p className="text-[0.68rem] font-semibold tracking-[0.18em] text-[var(--brand-ink-400)] uppercase">
               {visibleCategory.toUpperCase()}
             </p>
           ) : (
@@ -141,7 +150,7 @@ export function AnswerFeedbackSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             <X className="size-4" />
           </button>
@@ -178,15 +187,10 @@ export function AnswerFeedbackSheet({
           </div>
 
           {showTerritoryUndo && openedTerritoryDomain ? (
-            <NewTerritoryUndo
-              domain={openedTerritoryDomain}
-              category={visibleCategory}
-            />
+            <NewTerritoryUndo domain={openedTerritoryDomain} category={visibleCategory} />
           ) : null}
 
-          <p className="pb-3 font-serif text-lg leading-7 text-[var(--brand-ink)]">
-            {question}
-          </p>
+          <p className="pb-3 font-serif text-lg leading-7 text-[var(--brand-ink)]">{question}</p>
 
           <div className="space-y-1.5 pb-3">
             <p
@@ -214,7 +218,7 @@ export function AnswerFeedbackSheet({
           </div>
 
           {explanation ? (
-            <div className="rounded-2xl bg-muted p-4">
+            <div className="bg-muted rounded-2xl p-4">
               <p className="font-serif text-[15px] leading-7 text-[var(--brand-ink-700)]">
                 {explanation}
               </p>
@@ -242,8 +246,8 @@ export function AnswerFeedbackSheet({
           ) : null}
 
           {creatorNote ? (
-            <div className="mt-3 rounded-2xl border bg-muted p-4">
-              <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
+            <div className="bg-muted mt-3 rounded-2xl border p-4">
+              <p className="text-muted-foreground text-[0.62rem] font-semibold tracking-[0.18em] uppercase">
                 Why they asked
               </p>
               <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
@@ -253,17 +257,15 @@ export function AnswerFeedbackSheet({
           ) : null}
 
           {!isCorrect ? (
-            <div className="pt-3 text-[12px] text-muted-foreground">
-              {bankState === 'saving' ? (
-                <span>Saving to your practice bank…</span>
-              ) : null}
+            <div className="text-muted-foreground pt-3 text-[12px]">
+              {bankState === 'saving' ? <span>Saving to your practice bank…</span> : null}
               {bankState === 'saved' ? (
                 <span>
                   Saved to your practice bank ·{' '}
                   <button
                     type="button"
                     onClick={() => void handleUndo()}
-                    className="font-semibold text-foreground underline underline-offset-2 hover:opacity-70"
+                    className="text-foreground font-semibold underline underline-offset-2 hover:opacity-70"
                   >
                     Undo
                   </button>
@@ -274,7 +276,9 @@ export function AnswerFeedbackSheet({
                 <span className="text-muted-foreground">Removed from your practice bank.</span>
               ) : null}
               {bankState === 'error' ? (
-                <span style={{ color: 'var(--game-wrong-strong)' }}>Could not update your practice bank.</span>
+                <span style={{ color: 'var(--game-wrong-strong)' }}>
+                  Could not update your practice bank.
+                </span>
               ) : null}
             </div>
           ) : null}
@@ -287,5 +291,5 @@ export function AnswerFeedbackSheet({
         </div>
       </div>
     </div>
-  )
+  );
 }

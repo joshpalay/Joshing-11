@@ -17,7 +17,10 @@ export async function POST(request: NextRequest) {
 
   const domain = parseDomain(await request.json().catch(() => null));
   if (!domain) {
-    return NextResponse.json({ error: 'validation', message: 'domain is required' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'domain is required' },
+      { status: 400 },
+    );
   }
 
   await dismissDomain(session.userId, domain);
@@ -30,7 +33,10 @@ export async function DELETE(request: NextRequest) {
 
   const domain = parseDomain(await request.json().catch(() => null));
   if (!domain) {
-    return NextResponse.json({ error: 'validation', message: 'domain is required' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'domain is required' },
+      { status: 400 },
+    );
   }
 
   await reinstateDomain(session.userId, domain);

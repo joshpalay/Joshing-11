@@ -25,9 +25,16 @@ export async function GET(_request: Request, context: RouteContext) {
   const beatsPayload = ceremony.beatsPayload as ShareCardBeatsPayload;
   const safeBeatsPayload: ShareCardBeatsPayload = {
     ...beatsPayload,
-    beat3: beatsPayload.beat3?.map(({ displayName, contributionCount }) => ({ displayName, contributionCount })) ?? null,
+    beat3:
+      beatsPayload.beat3?.map(({ displayName, contributionCount }) => ({
+        displayName,
+        contributionCount,
+      })) ?? null,
     beat4: beatsPayload.beat4
-      ? { displayName: beatsPayload.beat4.displayName, sharedDomains: beatsPayload.beat4.sharedDomains }
+      ? {
+          displayName: beatsPayload.beat4.displayName,
+          sharedDomains: beatsPayload.beat4.sharedDomains,
+        }
       : null,
   };
 

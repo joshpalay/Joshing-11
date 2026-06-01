@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 
-export function ReactionGotItButton({ reactionId, replied }: { reactionId: string; replied: boolean }) {
+export function ReactionGotItButton({
+  reactionId,
+  replied,
+}: {
+  reactionId: string;
+  replied: boolean;
+}) {
   const [acknowledged, setAcknowledged] = useState(replied);
   const [pending, setPending] = useState(false);
 
@@ -21,7 +27,7 @@ export function ReactionGotItButton({ reactionId, replied }: { reactionId: strin
   }
 
   if (acknowledged) {
-    return <span className="text-xs text-muted-foreground">Acknowledged</span>;
+    return <span className="text-muted-foreground text-xs">Acknowledged</span>;
   }
 
   return (

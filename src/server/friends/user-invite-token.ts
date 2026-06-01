@@ -1,43 +1,45 @@
-import { randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto';
 
-import { eq, sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm';
 
-import { db, users } from '@/server/db'
-import { upsertInvitationFriendship } from '@/server/friends/friendships'
+import { db, users } from '@/server/db';
+import { upsertInvitationFriendship } from '@/server/friends/friendships';
 
 // Match the prior-art token primitive used for FriendInvitation tokens at
 // src/server/friends/invitations.ts:166 — randomBytes(32).toString('base64url')
 // yields a 43-char URL-safe string.
 export function generateUserInviteToken(): string {
-  return randomBytes(32).toString('base64url')
+  return randomBytes(32).toString('base64url');
 }
 
 export type UserInviteTokenResult = {
-  token: string
-  handle: string | null
-}
+  token: string;
+  handle: string | null;
+};
 
 // Returns the user's invite token, generating + persisting one if NULL.
 // Handle may be null for pre-handle accounts (shouldn't happen post-P0-A
 // rollout, but be defensive — callers that need to build a URL should
 // surface a "set a handle first" error in that case).
-export async function getOrCreateInviteToken(userId: string): Promise<UserInviteTokenResult | null> {
+export async function getOrCreateInviteToken(
+  userId: string,
+): Promise<UserInviteTokenResult | null> {
   const [row] = await db
     .select({ inviteToken: users.inviteToken, handle: users.handle })
     .from(users)
     .where(eq(users.id, userId))
-    .limit(1)
+    .limit(1);
 
-  if (!row) return null
-  if (row.inviteToken) return { token: row.inviteToken, handle: row.handle }
+  if (!row) return null;
+  if (row.inviteToken) return { token: row.inviteToken, handle: row.handle };
 
-  const token = generateUserInviteToken()
+  const token = generateUserInviteToken();
   await db
     .update(users)
     .set({ inviteToken: token, updatedAt: new Date() })
-    .where(eq(users.id, userId))
+    .where(eq(users.id, userId));
 
-  return { token, handle: row.handle }
+  return { token, handle: row.handle };
 }
 
 // Always regenerates + persists. The old token, if any, stops resolving
@@ -47,17 +49,17 @@ export async function rotateInviteToken(userId: string): Promise<UserInviteToken
     .select({ handle: users.handle })
     .from(users)
     .where(eq(users.id, userId))
-    .limit(1)
+    .limit(1);
 
-  if (!row) return null
+  if (!row) return null;
 
-  const token = generateUserInviteToken()
+  const token = generateUserInviteToken();
   await db
     .update(users)
     .set({ inviteToken: token, updatedAt: new Date() })
-    .where(eq(users.id, userId))
+    .where(eq(users.id, userId));
 
-  return { token, handle: row.handle }
+  return { token, handle: row.handle };
 }
 
 // Lifted from src/app/api/friend-invitations/route.ts:158-173 so invite-link
@@ -65,40 +67,43 @@ export async function rotateInviteToken(userId: string): Promise<UserInviteToken
 // a Request (route handlers) or a Headers map (server components reading
 // via next/headers).
 export function getBaseUrl(source?: Request | Headers): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL
-  if (configured) return configured.replace(/\/$/, '')
+  const configured = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL;
+  if (configured) return configured.replace(/\/$/, '');
 
-  const vercelProd = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  if (vercelProd) return `https://${vercelProd.replace(/\/$/, '')}`
+  const vercelProd = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (vercelProd) return `https://${vercelProd.replace(/\/$/, '')}`;
 
   if (source) {
-    const headers = source instanceof Request ? source.headers : source
-    const host = headers.get('x-forwarded-host') ?? headers.get('host')
-    const protocol = headers.get('x-forwarded-proto') ?? 'https'
-    if (host) return `${protocol}://${host}`
-    if (source instanceof Request) return new URL(source.url).origin
+    const headers = source instanceof Request ? source.headers : source;
+    const host = headers.get('x-forwarded-host') ?? headers.get('host');
+    const protocol = headers.get('x-forwarded-proto') ?? 'https';
+    if (host) return `${protocol}://${host}`;
+    if (source instanceof Request) return new URL(source.url).origin;
   }
 
-  return 'http://localhost:3000'
+  return 'http://localhost:3000';
 }
 
 export function buildInviteUrl(baseUrl: string, handle: string, token: string): string {
   // Per-user invite URL — see src/app/u/[handle]/[token]/page.tsx for the
   // route handler and why this isn't under /invite/.
-  return `${baseUrl}/u/${encodeURIComponent(handle)}/${encodeURIComponent(token)}`
+  return `${baseUrl}/u/${encodeURIComponent(handle)}/${encodeURIComponent(token)}`;
 }
 
 // Resolves /u/<handle>/<token> by looking up the inviter case-insensitively
 // on handle and verifying the token matches exactly.
 // Returns null when not found OR mismatched (don't reveal which).
 export type InviteLinkResolution = {
-  inviterUserId: string
-  inviterHandle: string
-  inviterDisplayName: string | null
-  inviterAvatarColor: string | null
-}
+  inviterUserId: string;
+  inviterHandle: string;
+  inviterDisplayName: string | null;
+  inviterAvatarColor: string | null;
+};
 
-export async function resolveInviteLink(handle: string, token: string): Promise<InviteLinkResolution | null> {
+export async function resolveInviteLink(
+  handle: string,
+  token: string,
+): Promise<InviteLinkResolution | null> {
   const [row] = await db
     .select({
       id: users.id,
@@ -109,17 +114,17 @@ export async function resolveInviteLink(handle: string, token: string): Promise<
     })
     .from(users)
     .where(sql`LOWER(${users.handle}) = LOWER(${handle})`)
-    .limit(1)
+    .limit(1);
 
-  if (!row || !row.handle || !row.inviteToken) return null
-  if (row.inviteToken !== token) return null
+  if (!row || !row.handle || !row.inviteToken) return null;
+  if (row.inviteToken !== token) return null;
 
   return {
     inviterUserId: row.id,
     inviterHandle: row.handle,
     inviterDisplayName: row.displayName,
     inviterAvatarColor: row.avatarColor,
-  }
+  };
 }
 
 // Called from verify-otp when the user arrives via /u/<handle>/<token>.
@@ -134,23 +139,23 @@ export async function acceptUserInviteLink({
   inviteeUserId,
   now = new Date(),
 }: {
-  handle: string
-  token: string
-  inviteeUserId: string
-  now?: Date
+  handle: string;
+  token: string;
+  inviteeUserId: string;
+  now?: Date;
 }): Promise<{ accepted: boolean }> {
-  const inviter = await resolveInviteLink(handle, token)
-  if (!inviter) return { accepted: false }
-  if (inviter.inviterUserId === inviteeUserId) return { accepted: false }
+  const inviter = await resolveInviteLink(handle, token);
+  if (!inviter) return { accepted: false };
+  if (inviter.inviterUserId === inviteeUserId) return { accepted: false };
 
   try {
     await upsertInvitationFriendship(db, {
       inviterUserId: inviter.inviterUserId,
       inviteeUserId,
       formedAt: now,
-    })
-    return { accepted: true }
+    });
+    return { accepted: true };
   } catch {
-    return { accepted: false }
+    return { accepted: false };
   }
 }

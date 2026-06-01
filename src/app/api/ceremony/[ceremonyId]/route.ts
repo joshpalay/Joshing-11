@@ -17,7 +17,8 @@ export async function GET(_request: Request, context: RouteContext) {
   const { ceremonyId } = await context.params;
   const ceremony = await getCeremonyById(ceremonyId);
   if (!ceremony) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  if (ceremony.userId !== session.userId) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (ceremony.userId !== session.userId)
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   // F3.5: validate payload shape on read so a malformed JSONB doesn't
   // silently render as a blank page. We use safeParse (lenient) so we can

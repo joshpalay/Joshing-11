@@ -4,7 +4,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { DomainCard } from '@/components/knowledge/DomainCard';
 
 vi.mock('next/link', () => ({
-  default: ({ href, children, style, ...props }: { href: string; children: React.ReactNode; style?: React.CSSProperties }) => (
+  default: ({
+    href,
+    children,
+    style,
+    ...props
+  }: {
+    href: string;
+    children: React.ReactNode;
+    style?: React.CSSProperties;
+  }) => (
     <a href={href} style={style} {...props}>
       {children}
     </a>

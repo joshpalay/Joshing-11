@@ -19,7 +19,7 @@ export async function sendSms(
   to: string,
   body: string,
   messageType: SmsMessageType,
-  userId?: string
+  userId?: string,
 ): Promise<void> {
   async function logAttempt() {
     try {
@@ -58,7 +58,7 @@ export async function sendSms(
           MessagingServiceSid: messagingServiceSid,
           Body: body,
         }).toString(),
-      }
+      },
     );
 
     if (!response.ok) {
@@ -84,7 +84,7 @@ export function buildGameCompleteSmsBody(
   winner: { display_name: string; user_id: string } | null,
   isTie: boolean,
   allMembers: GameWinnerMember[],
-  opts?: { ceremony_mode?: 'solo' | 'duo' | 'group'; host_display_name?: string | null }
+  opts?: { ceremony_mode?: 'solo' | 'duo' | 'group'; host_display_name?: string | null },
 ): string {
   const mode = opts?.ceremony_mode ?? 'group';
   const hostName = opts?.host_display_name?.trim();
@@ -145,7 +145,7 @@ export async function sendGameCompleteSms(
   winner: { display_name: string; user_id: string } | null = null,
   isTie: boolean = false,
   allMembers: GameWinnerMember[] = [],
-  ceremonyOpts?: { ceremony_mode?: 'solo' | 'duo' | 'group'; host_display_name?: string | null }
+  ceremonyOpts?: { ceremony_mode?: 'solo' | 'duo' | 'group'; host_display_name?: string | null },
 ): Promise<void> {
   // If allMembers not provided (legacy call), fetch them
   let members = allMembers;
@@ -165,11 +165,11 @@ export async function sendGameCompleteSms(
         winner,
         isTie,
         members,
-        ceremonyOpts
+        ceremonyOpts,
       );
       const truncated = body.length > 160 ? body.slice(0, 157) + '…' : body;
       sendSms(member.phone_number, truncated, 'joshing_game_complete', member.user_id).catch(
-        (err) => console.error('[SMS] joshing_game_complete send failed:', err)
+        (err) => console.error('[SMS] joshing_game_complete send failed:', err),
       );
     }
   }
@@ -186,7 +186,7 @@ export async function sendDailyReminder(
   userId: string,
   phoneNumber: string,
   groupNames: string[],
-  baseUrl: string
+  baseUrl: string,
 ): Promise<void> {
   if (groupNames.length === 0) return;
 
@@ -196,7 +196,7 @@ export async function sendDailyReminder(
     phoneNumber,
     message,
     (groupNames.length > 1 ? 'daily_questions_batched' : 'daily_questions') as SmsMessageType,
-    userId
+    userId,
   );
 }
 

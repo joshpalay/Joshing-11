@@ -151,8 +151,16 @@ describe('selectBonusAnswererPicks — caps and dedup', () => {
 
   it('yields one slot per question, keeping the first (most recent) answerer', () => {
     // Same questionId from two friends; rows are newest-first per the DB ordering.
-    const recent = row({ questionId: 'shared', answererId: 'robyn', sourceEventAt: new Date(2026, 6, 1) });
-    const older = row({ questionId: 'shared', answererId: 'sam', sourceEventAt: new Date(2026, 0, 1) });
+    const recent = row({
+      questionId: 'shared',
+      answererId: 'robyn',
+      sourceEventAt: new Date(2026, 6, 1),
+    });
+    const older = row({
+      questionId: 'shared',
+      answererId: 'sam',
+      sourceEventAt: new Date(2026, 0, 1),
+    });
     const picks = selectBonusAnswererPicks([recent, older], opts());
     expect(picks).toHaveLength(1);
     expect(picks[0].answererId).toBe('robyn');
@@ -160,7 +168,10 @@ describe('selectBonusAnswererPicks — caps and dedup', () => {
 
   it('drops generic subcategories', () => {
     const picks = selectBonusAnswererPicks(
-      [row({ questionId: 'generic', canonicalSubcategory: 'general' }), row({ questionId: 'real' })],
+      [
+        row({ questionId: 'generic', canonicalSubcategory: 'general' }),
+        row({ questionId: 'real' }),
+      ],
       opts(),
     );
     expect(picks.map((p) => p.id)).toEqual(['real']);

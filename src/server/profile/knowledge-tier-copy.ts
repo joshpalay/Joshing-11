@@ -10,7 +10,7 @@ export const KNOWLEDGE_TIER_LABEL: Record<MasteryTier, string> = {
 export const KNOWLEDGE_TIER_INTERPRETATION: Record<MasteryTier, string> = {
   establishing: 'New territory',
   familiar: "You're finding your ground here",
-  solid: "You move through this naturally",
+  solid: 'You move through this naturally',
   mastery: 'You carry this',
 };
 

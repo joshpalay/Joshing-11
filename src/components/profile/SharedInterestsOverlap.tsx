@@ -1,16 +1,16 @@
-'use client'
+'use client';
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react';
 
 type SharedInterestsOverlapProps = {
-  viewerSoloInterests: string[]
-  friendSoloInterests: string[]
-  sharedInterests: string[]
-  friendFirstName: string
-}
+  viewerSoloInterests: string[];
+  friendSoloInterests: string[];
+  sharedInterests: string[];
+  friendFirstName: string;
+};
 
-const MAX_CHIPS_PER_SIDE = 8
-const MAX_SHARED_CHIPS = 10
+const MAX_CHIPS_PER_SIDE = 8;
+const MAX_SHARED_CHIPS = 10;
 
 export function SharedInterestsOverlap({
   viewerSoloInterests,
@@ -18,48 +18,42 @@ export function SharedInterestsOverlap({
   sharedInterests,
   friendFirstName,
 }: SharedInterestsOverlapProps) {
-  const [showAll, setShowAll] = useState(false)
-  const sharedCount = sharedInterests.length
+  const [showAll, setShowAll] = useState(false);
+  const sharedCount = sharedInterests.length;
 
   const headline = useMemo(() => {
     if (sharedCount === 0) {
-      return `No interest overlap with ${friendFirstName} yet.`
+      return `No interest overlap with ${friendFirstName} yet.`;
     }
     if (sharedCount === 1) {
-      return `You and ${friendFirstName} share 1 interest.`
+      return `You and ${friendFirstName} share 1 interest.`;
     }
-    return `You and ${friendFirstName} share ${sharedCount} interests.`
-  }, [sharedCount, friendFirstName])
+    return `You and ${friendFirstName} share ${sharedCount} interests.`;
+  }, [sharedCount, friendFirstName]);
 
-  const visibleShared = showAll
-    ? sharedInterests
-    : sharedInterests.slice(0, MAX_SHARED_CHIPS)
-  const sharedOverflow = sharedInterests.length - visibleShared.length
+  const visibleShared = showAll ? sharedInterests : sharedInterests.slice(0, MAX_SHARED_CHIPS);
+  const sharedOverflow = sharedInterests.length - visibleShared.length;
 
   const visibleViewer = showAll
     ? viewerSoloInterests
-    : viewerSoloInterests.slice(0, MAX_CHIPS_PER_SIDE)
-  const viewerOverflow = viewerSoloInterests.length - visibleViewer.length
+    : viewerSoloInterests.slice(0, MAX_CHIPS_PER_SIDE);
+  const viewerOverflow = viewerSoloInterests.length - visibleViewer.length;
 
   const visibleFriend = showAll
     ? friendSoloInterests
-    : friendSoloInterests.slice(0, MAX_CHIPS_PER_SIDE)
-  const friendOverflow = friendSoloInterests.length - visibleFriend.length
+    : friendSoloInterests.slice(0, MAX_CHIPS_PER_SIDE);
+  const friendOverflow = friendSoloInterests.length - visibleFriend.length;
 
-  const hasOverlap = sharedCount > 0
-  const hasAnyExpandable =
-    sharedOverflow > 0 || viewerOverflow > 0 || friendOverflow > 0
+  const hasOverlap = sharedCount > 0;
+  const hasAnyExpandable = sharedOverflow > 0 || viewerOverflow > 0 || friendOverflow > 0;
 
   const ariaLabel =
     sharedCount > 0
       ? `You and ${friendFirstName} share ${sharedInterests.join(', ')}. You also have ${viewerSoloInterests.length} other interests, they have ${friendSoloInterests.length}.`
-      : `You and ${friendFirstName} have no shared interests yet.`
+      : `You and ${friendFirstName} have no shared interests yet.`;
 
   return (
-    <section
-      className="mt-5"
-      aria-label="Shared interests"
-    >
+    <section className="mt-5" aria-label="Shared interests">
       <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
         Common ground
       </p>
@@ -129,7 +123,7 @@ export function SharedInterestsOverlap({
         </div>
       ) : null}
     </section>
-  )
+  );
 }
 
 function InterestColumn({
@@ -139,11 +133,11 @@ function InterestColumn({
   emptyCopy,
   toneClass,
 }: {
-  align: 'start' | 'end'
-  interests: string[]
-  overflowCount: number
-  emptyCopy: string
-  toneClass: string
+  align: 'start' | 'end';
+  interests: string[];
+  overflowCount: number;
+  emptyCopy: string;
+  toneClass: string;
 }) {
   if (interests.length === 0) {
     return (
@@ -154,7 +148,7 @@ function InterestColumn({
       >
         <span>{emptyCopy}</span>
       </div>
-    )
+    );
   }
 
   return (
@@ -172,12 +166,10 @@ function InterestColumn({
         </span>
       ))}
       {overflowCount > 0 ? (
-        <span className="text-[11px] font-medium opacity-70">
-          +{overflowCount} more
-        </span>
+        <span className="text-[11px] font-medium opacity-70">+{overflowCount} more</span>
       ) : null}
     </div>
-  )
+  );
 }
 
 function SharedColumn({
@@ -185,18 +177,16 @@ function SharedColumn({
   overflowCount,
   hasOverlap,
 }: {
-  interests: string[]
-  overflowCount: number
-  hasOverlap: boolean
+  interests: string[];
+  overflowCount: number;
+  hasOverlap: boolean;
 }) {
   if (!hasOverlap) {
     return (
       <div className="flex flex-col items-center justify-center px-1 text-center">
-        <span className="text-xs font-medium text-stone-500">
-          No overlap yet
-        </span>
+        <span className="text-xs font-medium text-stone-500">No overlap yet</span>
       </div>
-    )
+    );
   }
   return (
     <div className="flex flex-col items-center justify-center gap-1.5 px-1">
@@ -214,5 +204,5 @@ function SharedColumn({
         </span>
       ) : null}
     </div>
-  )
+  );
 }

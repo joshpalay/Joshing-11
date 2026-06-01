@@ -19,7 +19,9 @@ function generateCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
-export async function requestOtp(phone: string): Promise<{ code: string; normalizedPhone: string }> {
+export async function requestOtp(
+  phone: string,
+): Promise<{ code: string; normalizedPhone: string }> {
   const normalized = normalizePhone(phone);
   const code = generateCode();
   const expiresAt = new Date(Date.now() + OTP_TTL_MS);
@@ -41,7 +43,13 @@ export async function verifyOtp(phone: string, code: string): Promise<string | n
   const [entry] = await db
     .select()
     .from(otpCodes)
-    .where(and(eq(otpCodes.phoneNumber, normalized), eq(otpCodes.code, code), gt(otpCodes.expiresAt, new Date())))
+    .where(
+      and(
+        eq(otpCodes.phoneNumber, normalized),
+        eq(otpCodes.code, code),
+        gt(otpCodes.expiresAt, new Date()),
+      ),
+    )
     .orderBy(desc(otpCodes.createdAt))
     .limit(1);
 

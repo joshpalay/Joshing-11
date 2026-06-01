@@ -26,7 +26,10 @@ function asDifficulty(value: string): 'accessible' | 'moderate' | 'specialist' |
   return null;
 }
 
-export async function persistGeneratedQuestion(generatedQuestionId: string, slotDomain?: string): Promise<PersistGeneratedQuestionResult> {
+export async function persistGeneratedQuestion(
+  generatedQuestionId: string,
+  slotDomain?: string,
+): Promise<PersistGeneratedQuestionResult> {
   try {
     const [existing] = await db
       .select({ id: questions.id })
@@ -61,15 +64,14 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
       const [factMatch] = await db
         .select({ id: questions.id })
         .from(questions)
-        .innerJoin(
-          generatedQuestions,
-          eq(questions.generatedQuestionId, generatedQuestions.id),
+        .innerJoin(generatedQuestions, eq(questions.generatedQuestionId, generatedQuestions.id))
+        .where(
+          and(
+            isNull(questions.deletedAt),
+            eq(questions.source, 'daily_generated'),
+            eq(generatedQuestions.factKey, factKey),
+          ),
         )
-        .where(and(
-          isNull(questions.deletedAt),
-          eq(questions.source, 'daily_generated'),
-          eq(generatedQuestions.factKey, factKey),
-        ))
         .limit(1);
 
       if (factMatch) {
@@ -84,17 +86,24 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
     // dedup in createFeedItemsForFriendsFromAnswer because the recipient's
     // prior answer is keyed to question A.
     const dedupText = normalizeQuestionTextForDedup(generated.questionText);
-    const dedupDomain = (generated.canonicalSubcategory ?? generated.broadCategory ?? slotDomain ?? '').trim();
+    const dedupDomain = (
+      generated.canonicalSubcategory ??
+      generated.broadCategory ??
+      slotDomain ??
+      ''
+    ).trim();
     if (dedupText && dedupDomain) {
       const [textMatch] = await db
         .select({ id: questions.id })
         .from(questions)
-        .where(and(
-          isNull(questions.deletedAt),
-          eq(questions.source, 'daily_generated'),
-          sql`lower(regexp_replace(${questions.questionText}, '\s+', ' ', 'g')) = ${dedupText}`,
-          sql`lower(${questions.canonicalSubcategory}) = ${dedupDomain.toLowerCase()}`,
-        ))
+        .where(
+          and(
+            isNull(questions.deletedAt),
+            eq(questions.source, 'daily_generated'),
+            sql`lower(regexp_replace(${questions.questionText}, '\s+', ' ', 'g')) = ${dedupText}`,
+            sql`lower(${questions.canonicalSubcategory}) = ${dedupDomain.toLowerCase()}`,
+          ),
+        )
         .limit(1);
 
       if (textMatch) {
@@ -118,7 +127,7 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
         ? generated.broadCategory!
         : !isGenericSubcategory(slotDomain)
           ? slotDomain!
-          : slotDomain ?? generated.canonicalSubcategory ?? generated.broadCategory;
+          : (slotDomain ?? generated.canonicalSubcategory ?? generated.broadCategory);
 
     if (!desiredCanonical) {
       throw new GenericCanonicalSubcategoryError(desiredCanonical);

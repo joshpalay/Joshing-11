@@ -17,9 +17,11 @@ const RECENT_FIRE_LOOKBACK_DAYS = 6; // dedupe: a user can't fire twice within 6
 function isAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET;
   if (!secret) return true;
-  return request.headers.get('cron_secret') === secret
-    || request.headers.get('x-cron-secret') === secret
-    || request.headers.get('authorization') === `Bearer ${secret}`;
+  return (
+    request.headers.get('cron_secret') === secret ||
+    request.headers.get('x-cron-secret') === secret ||
+    request.headers.get('authorization') === `Bearer ${secret}`
+  );
 }
 
 function daysSinceUtc(start: Date, end: Date): number {
@@ -35,7 +37,12 @@ export async function GET(request: NextRequest) {
 
   const today = new Date();
   if (today.getUTCDay() !== CEREMONY_WEEKDAY_UTC) {
-    return NextResponse.json({ fired: 0, skipped: 0, skippedNoActivity: 0, skippedNotCeremonyDay: true });
+    return NextResponse.json({
+      fired: 0,
+      skipped: 0,
+      skippedNoActivity: 0,
+      skippedNotCeremonyDay: true,
+    });
   }
 
   const recentCutoff = new Date(today);
@@ -60,7 +67,9 @@ export async function GET(request: NextRequest) {
     const [recentCeremony] = await db
       .select({ id: biweeklyCeremonies.id })
       .from(biweeklyCeremonies)
-      .where(and(eq(biweeklyCeremonies.userId, user.id), gte(biweeklyCeremonies.firedAt, recentCutoff)))
+      .where(
+        and(eq(biweeklyCeremonies.userId, user.id), gte(biweeklyCeremonies.firedAt, recentCutoff)),
+      )
       .orderBy(desc(biweeklyCeremonies.firedAt))
       .limit(1);
 

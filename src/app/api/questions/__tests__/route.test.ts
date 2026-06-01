@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   assessQuestionDifficultyMock,
@@ -19,7 +19,7 @@ const {
     dismissedRows: [] as Array<{ userId: string }>,
     feedInsertValues: [] as Array<Record<string, unknown>>,
     questionUpdateValues: [] as Array<Record<string, unknown>>,
-  }
+  };
 
   const dbMock = {
     select: vi.fn(() => ({
@@ -29,17 +29,17 @@ const {
     })),
     insert: vi.fn(() => ({
       values: vi.fn(async (values: Record<string, unknown>) => {
-        state.feedInsertValues.push(values)
-        return undefined
+        state.feedInsertValues.push(values);
+        return undefined;
       }),
     })),
     update: vi.fn(() => ({
       set: vi.fn((values: Record<string, unknown>) => {
-        state.questionUpdateValues.push(values)
-        return { where: vi.fn(async () => undefined) }
+        state.questionUpdateValues.push(values);
+        return { where: vi.fn(async () => undefined) };
       }),
     })),
-  }
+  };
 
   return {
     assessQuestionDifficultyMock: vi.fn(),
@@ -55,20 +55,20 @@ const {
     state,
     userHasQuestionInBlockingFeedMock: vi.fn(),
     vetQuestionMock: vi.fn(),
-  }
-})
+  };
+});
 
 vi.mock('drizzle-orm', () => ({
   and: vi.fn(() => ({ op: 'and' })),
   eq: vi.fn(() => ({ op: 'eq' })),
   inArray: vi.fn(() => ({ op: 'inArray' })),
   isNull: vi.fn(() => ({ op: 'isNull' })),
-}))
+}));
 
 vi.mock('@/lib/llm', () => ({
   categorizeQuestion: categorizeQuestionMock,
   generateInsideJoke: generateInsideJokeMock,
-}))
+}));
 
 vi.mock('@/server/llm/vet-question', () => ({
   vetQuestion: vetQuestionMock,
@@ -82,11 +82,11 @@ vi.mock('@/server/llm/vet-question', () => ({
     publicEligibilityScore: verdict.score,
     publicEligibilityReason: verdict.reason,
   }),
-}))
+}));
 
 vi.mock('@/server/auth/session', () => ({
   getSession: getSessionMock,
-}))
+}));
 
 vi.mock('@/server/db', () => ({
   db: dbMock,
@@ -103,37 +103,37 @@ vi.mock('@/server/db', () => ({
     phoneNumber: 'users.phoneNumber',
     smsOptIn: 'users.smsOptIn',
   },
-}))
+}));
 
 vi.mock('@/server/db/queries/questions', () => ({
   createQuestion: createQuestionMock,
   getQuestion: getQuestionMock,
   getQuestionsForUser: vi.fn(async () => []),
-}))
+}));
 
 vi.mock('@/server/db/queries/friends', () => ({
   getFriends: getFriendsMock,
-}))
+}));
 
 vi.mock('@/server/db/queries/feed', () => ({
   rollOffOldItems: rollOffOldItemsMock,
   userAnsweredQuestionCorrectly: vi.fn(async () => false),
   userHasQuestionInBlockingFeed: userHasQuestionInBlockingFeedMock,
-}))
+}));
 
 vi.mock('@/server/knowledge/open-domain', () => ({
   openKBDomain: openKBDomainMock,
-}))
+}));
 
 vi.mock('@/server/questions/llm-difficulty', () => ({
   assessQuestionDifficulty: assessQuestionDifficultyMock,
-}))
+}));
 
 vi.mock('@/server/sms', () => ({
   sendSms: vi.fn(),
-}))
+}));
 
-import { POST } from '@/app/api/questions/route'
+import { POST } from '@/app/api/questions/route';
 
 function questionRequest(body: Record<string, unknown>) {
   return new Request('https://joshing.example/api/questions', {
@@ -148,47 +148,50 @@ function questionRequest(body: Record<string, unknown>) {
       critiqueIterations: 0,
       ...body,
     }),
-  })
+  });
 }
 
 describe('POST /api/questions shareToFeed', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    state.dismissedRows = []
-    state.feedInsertValues = []
-    state.questionUpdateValues = []
+    vi.clearAllMocks();
+    state.dismissedRows = [];
+    state.feedInsertValues = [];
+    state.questionUpdateValues = [];
 
-    getSessionMock.mockResolvedValue({ userId: 'creator-1' })
+    getSessionMock.mockResolvedValue({ userId: 'creator-1' });
     categorizeQuestionMock.mockResolvedValue({
       broad_category: 'Arts & Literature',
       subcategory: 'Victorian Literature',
-    })
-    assessQuestionDifficultyMock.mockResolvedValue({ difficulty: 3, tier: 'moderate' })
-    createQuestionMock.mockResolvedValue({ id: 'question-1' })
-    generateInsideJokeMock.mockResolvedValue(null)
-    getQuestionMock.mockResolvedValue({ id: 'question-1', question_text: 'Who wrote Middlemarch?' })
-    openKBDomainMock.mockResolvedValue({ opened: true })
-    rollOffOldItemsMock.mockResolvedValue(0)
-    userHasQuestionInBlockingFeedMock.mockResolvedValue(false)
-    vetQuestionMock.mockResolvedValue({ status: 'approved', score: 0.8, reason: 'looks good' })
-  })
+    });
+    assessQuestionDifficultyMock.mockResolvedValue({ difficulty: 3, tier: 'moderate' });
+    createQuestionMock.mockResolvedValue({ id: 'question-1' });
+    generateInsideJokeMock.mockResolvedValue(null);
+    getQuestionMock.mockResolvedValue({
+      id: 'question-1',
+      question_text: 'Who wrote Middlemarch?',
+    });
+    openKBDomainMock.mockResolvedValue({ opened: true });
+    rollOffOldItemsMock.mockResolvedValue(0);
+    userHasQuestionInBlockingFeedMock.mockResolvedValue(false);
+    vetQuestionMock.mockResolvedValue({ status: 'approved', score: 0.8, reason: 'looks good' });
+  });
 
   afterEach(() => {
-    vi.unstubAllEnvs()
-    vi.restoreAllMocks()
-  })
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
 
   it('creates authored_shared feed rows for active friends when shareToFeed is true', async () => {
     getFriendsMock.mockResolvedValue([
       { id: 'friend-1', displayName: 'Friend One' },
       { id: 'friend-2', displayName: 'Friend Two' },
-    ])
+    ]);
 
-    const response = await POST(questionRequest({ shareToFeed: true }))
-    const body = await response.json()
+    const response = await POST(questionRequest({ shareToFeed: true }));
+    const body = await response.json();
 
-    expect(response.status).toBe(201)
-    expect(body.id).toBe('question-1')
+    expect(response.status).toBe(201);
+    expect(body.id).toBe('question-1');
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 2,
@@ -196,8 +199,8 @@ describe('POST /api/questions shareToFeed', () => {
       sharedRecipientIds: ['friend-1', 'friend-2'],
       skippedDismissedDomainRecipientIds: [],
       skippedExistingFeedRecipientIds: [],
-    })
-    expect(getFriendsMock).toHaveBeenCalledWith('creator-1')
+    });
+    expect(getFriendsMock).toHaveBeenCalledWith('creator-1');
     expect(state.feedInsertValues).toEqual([
       expect.objectContaining({
         recipientUserId: 'friend-1',
@@ -213,39 +216,43 @@ describe('POST /api/questions shareToFeed', () => {
         sourceUserId: 'creator-1',
         state: 'active',
       }),
-    ])
-    expect(state.feedInsertValues[0]?.sourceEventAt).toBeInstanceOf(Date)
-    expect(rollOffOldItemsMock).toHaveBeenCalledWith('friend-1')
-    expect(rollOffOldItemsMock).toHaveBeenCalledWith('friend-2')
-    expect(state.questionUpdateValues).toContainEqual({ sharedToFriendsFeed: true })
-  })
+    ]);
+    expect(state.feedInsertValues[0]?.sourceEventAt).toBeInstanceOf(Date);
+    expect(rollOffOldItemsMock).toHaveBeenCalledWith('friend-1');
+    expect(rollOffOldItemsMock).toHaveBeenCalledWith('friend-2');
+    expect(state.questionUpdateValues).toContainEqual({ sharedToFriendsFeed: true });
+  });
 
   it('logs parsed shareToFeed intent and creates feed rows for legacy share-with-friends payload flags', async () => {
-    const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined)
-    getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }])
+    const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }]);
 
-    const response = await POST(questionRequest({ share_with_friends: 'true' }))
-    const body = await response.json()
-    const createPayloadLogCall = consoleInfoMock.mock.calls.find(([label]) => label === '[questions/createPayload]')
-    const createPayloadLog = createPayloadLogCall?.[1]
+    const response = await POST(questionRequest({ share_with_friends: 'true' }));
+    const body = await response.json();
+    const createPayloadLogCall = consoleInfoMock.mock.calls.find(
+      ([label]) => label === '[questions/createPayload]',
+    );
+    const createPayloadLog = createPayloadLogCall?.[1];
 
-    expect(response.status).toBe(201)
-    expect(createPayloadLog).toEqual(expect.objectContaining({
-      userId: 'creator-1',
-      hasErrors: false,
-      shareToFeed: true,
-      sendToFriendCount: 0,
-      payloadShareKeysPresent: {
-        shareToFeed: false,
-        shareWithFriends: false,
-        share_with_friends: true,
-        share_to_feed: false,
-        sharedToFriendsFeed: false,
-      },
-    }))
-    expect(createPayloadLog).not.toHaveProperty('text')
-    expect(createPayloadLog).not.toHaveProperty('correctAnswer')
-    expect(createPayloadLog).not.toHaveProperty('sendToFriendIds')
+    expect(response.status).toBe(201);
+    expect(createPayloadLog).toEqual(
+      expect.objectContaining({
+        userId: 'creator-1',
+        hasErrors: false,
+        shareToFeed: true,
+        sendToFriendCount: 0,
+        payloadShareKeysPresent: {
+          shareToFeed: false,
+          shareWithFriends: false,
+          share_with_friends: true,
+          share_to_feed: false,
+          sharedToFriendsFeed: false,
+        },
+      }),
+    );
+    expect(createPayloadLog).not.toHaveProperty('text');
+    expect(createPayloadLog).not.toHaveProperty('correctAnswer');
+    expect(createPayloadLog).not.toHaveProperty('sendToFriendIds');
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 1,
@@ -253,7 +260,7 @@ describe('POST /api/questions shareToFeed', () => {
       sharedRecipientIds: ['friend-1'],
       skippedDismissedDomainRecipientIds: [],
       skippedExistingFeedRecipientIds: [],
-    })
+    });
     expect(state.feedInsertValues).toEqual([
       expect.objectContaining({
         recipientUserId: 'friend-1',
@@ -262,19 +269,19 @@ describe('POST /api/questions shareToFeed', () => {
         sourceUserId: 'creator-1',
         state: 'active',
       }),
-    ])
-    expect(state.questionUpdateValues).toContainEqual({ sharedToFriendsFeed: true })
-  })
+    ]);
+    expect(state.questionUpdateValues).toContainEqual({ sharedToFriendsFeed: true });
+  });
 
   it('shares to friends before non-critical knowledge-domain opening can fail', async () => {
-    const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }])
-    openKBDomainMock.mockRejectedValue(new Error('knowledge write failed'))
+    const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }]);
+    openKBDomainMock.mockRejectedValue(new Error('knowledge write failed'));
 
-    const response = await POST(questionRequest({ shareToFeed: true }))
-    const body = await response.json()
+    const response = await POST(questionRequest({ shareToFeed: true }));
+    const body = await response.json();
 
-    expect(response.status).toBe(201)
+    expect(response.status).toBe(201);
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 1,
@@ -282,8 +289,8 @@ describe('POST /api/questions shareToFeed', () => {
       sharedRecipientIds: ['friend-1'],
       skippedDismissedDomainRecipientIds: [],
       skippedExistingFeedRecipientIds: [],
-    })
-    expect(body.openedDomain).toBeNull()
+    });
+    expect(body.openedDomain).toBeNull();
     expect(state.feedInsertValues).toEqual([
       expect.objectContaining({
         recipientUserId: 'friend-1',
@@ -292,22 +299,26 @@ describe('POST /api/questions shareToFeed', () => {
         sourceUserId: 'creator-1',
         state: 'active',
       }),
-    ])
-    expect(state.questionUpdateValues).toContainEqual({ sharedToFriendsFeed: true })
+    ]);
+    expect(state.questionUpdateValues).toContainEqual({ sharedToFriendsFeed: true });
     expect(consoleErrorMock).toHaveBeenCalledWith(
       '[questions/create] openKBDomain failed after question save/share; continuing response',
-      expect.objectContaining({ questionId: 'question-1', userId: 'creator-1', error: 'knowledge write failed' }),
-    )
-  })
+      expect.objectContaining({
+        questionId: 'question-1',
+        userId: 'creator-1',
+        error: 'knowledge write failed',
+      }),
+    );
+  });
 
   it('does not require explicit recipient ids for all-friends sharing', async () => {
-    getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }])
+    getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }]);
 
-    const response = await POST(questionRequest({ shareToFeed: true }))
+    const response = await POST(questionRequest({ shareToFeed: true }));
 
-    expect(response.status).toBe(201)
-    expect(createQuestionMock).toHaveBeenCalled()
-    const body = await response.json()
+    expect(response.status).toBe(201);
+    expect(createQuestionMock).toHaveBeenCalled();
+    const body = await response.json();
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 1,
@@ -315,24 +326,28 @@ describe('POST /api/questions shareToFeed', () => {
       sharedRecipientIds: ['friend-1'],
       skippedDismissedDomainRecipientIds: [],
       skippedExistingFeedRecipientIds: [],
-    })
-    expect(state.feedInsertValues).toHaveLength(1)
-    expect(state.feedInsertValues[0]).toEqual(expect.objectContaining({ recipientUserId: 'friend-1' }))
-  })
+    });
+    expect(state.feedInsertValues).toHaveLength(1);
+    expect(state.feedInsertValues[0]).toEqual(
+      expect.objectContaining({ recipientUserId: 'friend-1' }),
+    );
+  });
 
   it('skips dismissed domains and duplicate blocking feed rows', async () => {
     getFriendsMock.mockResolvedValue([
       { id: 'friend-1', displayName: 'Friend One' },
       { id: 'friend-2', displayName: 'Friend Two' },
       { id: 'friend-3', displayName: 'Friend Three' },
-    ])
-    state.dismissedRows = [{ userId: 'friend-3' }]
-    userHasQuestionInBlockingFeedMock.mockImplementation(async (userId: string) => userId === 'friend-2')
+    ]);
+    state.dismissedRows = [{ userId: 'friend-3' }];
+    userHasQuestionInBlockingFeedMock.mockImplementation(
+      async (userId: string) => userId === 'friend-2',
+    );
 
-    const response = await POST(questionRequest({ shareToFeed: true }))
+    const response = await POST(questionRequest({ shareToFeed: true }));
 
-    expect(response.status).toBe(201)
-    const body = await response.json()
+    expect(response.status).toBe(201);
+    const body = await response.json();
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 1,
@@ -340,24 +355,24 @@ describe('POST /api/questions shareToFeed', () => {
       sharedRecipientIds: ['friend-1'],
       skippedDismissedDomainRecipientIds: ['friend-3'],
       skippedExistingFeedRecipientIds: ['friend-2'],
-    })
-    expect(userHasQuestionInBlockingFeedMock).toHaveBeenCalledWith('friend-1', 'question-1')
-    expect(userHasQuestionInBlockingFeedMock).toHaveBeenCalledWith('friend-2', 'question-1')
-    expect(userHasQuestionInBlockingFeedMock).not.toHaveBeenCalledWith('friend-3', 'question-1')
+    });
+    expect(userHasQuestionInBlockingFeedMock).toHaveBeenCalledWith('friend-1', 'question-1');
+    expect(userHasQuestionInBlockingFeedMock).toHaveBeenCalledWith('friend-2', 'question-1');
+    expect(userHasQuestionInBlockingFeedMock).not.toHaveBeenCalledWith('friend-3', 'question-1');
     expect(state.feedInsertValues).toEqual([
       expect.objectContaining({ recipientUserId: 'friend-1', questionId: 'question-1' }),
-    ])
-    expect(rollOffOldItemsMock).toHaveBeenCalledTimes(1)
-    expect(rollOffOldItemsMock).toHaveBeenCalledWith('friend-1')
-  })
+    ]);
+    expect(rollOffOldItemsMock).toHaveBeenCalledTimes(1);
+    expect(rollOffOldItemsMock).toHaveBeenCalledWith('friend-1');
+  });
 
   it('reports zero created rows when all-friends sharing has no eligible recipients', async () => {
-    getFriendsMock.mockResolvedValue([])
+    getFriendsMock.mockResolvedValue([]);
 
-    const response = await POST(questionRequest({ shareToFeed: true }))
-    const body = await response.json()
+    const response = await POST(questionRequest({ shareToFeed: true }));
+    const body = await response.json();
 
-    expect(response.status).toBe(201)
+    expect(response.status).toBe(201);
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 0,
@@ -365,23 +380,25 @@ describe('POST /api/questions shareToFeed', () => {
       sharedRecipientIds: [],
       skippedDismissedDomainRecipientIds: [],
       skippedExistingFeedRecipientIds: [],
-    })
-    expect(state.feedInsertValues).toEqual([])
-    expect(state.questionUpdateValues).toEqual([])
-  })
+    });
+    expect(state.feedInsertValues).toEqual([]);
+    expect(state.questionUpdateValues).toEqual([]);
+  });
 
   it('reports visible skip reasons when zero rows are created for non-empty all-friends sharing', async () => {
     getFriendsMock.mockResolvedValue([
       { id: 'friend-1', displayName: 'Friend One' },
       { id: 'friend-2', displayName: 'Friend Two' },
-    ])
-    state.dismissedRows = [{ userId: 'friend-2' }]
-    userHasQuestionInBlockingFeedMock.mockImplementation(async (userId: string) => userId === 'friend-1')
+    ]);
+    state.dismissedRows = [{ userId: 'friend-2' }];
+    userHasQuestionInBlockingFeedMock.mockImplementation(
+      async (userId: string) => userId === 'friend-1',
+    );
 
-    const response = await POST(questionRequest({ shareToFeed: true }))
-    const body = await response.json()
+    const response = await POST(questionRequest({ shareToFeed: true }));
+    const body = await response.json();
 
-    expect(response.status).toBe(201)
+    expect(response.status).toBe(201);
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 0,
@@ -389,27 +406,31 @@ describe('POST /api/questions shareToFeed', () => {
       sharedRecipientIds: [],
       skippedDismissedDomainRecipientIds: ['friend-2'],
       skippedExistingFeedRecipientIds: ['friend-1'],
-    })
-    expect(state.feedInsertValues).toEqual([])
-    expect(state.questionUpdateValues).toEqual([])
-  })
+    });
+    expect(state.feedInsertValues).toEqual([]);
+    expect(state.questionUpdateValues).toEqual([]);
+  });
 
   it('exposes production response diagnostics while redacting recipient ids from logs by default', async () => {
-    vi.stubEnv('NODE_ENV', 'production')
-    const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    vi.stubEnv('NODE_ENV', 'production');
+    const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     getFriendsMock.mockResolvedValue([
       { id: 'friend-1', displayName: 'Friend One' },
       { id: 'friend-2', displayName: 'Friend Two' },
       { id: 'friend-3', displayName: 'Friend Three' },
-    ])
-    state.dismissedRows = [{ userId: 'friend-3' }]
-    userHasQuestionInBlockingFeedMock.mockImplementation(async (userId: string) => userId === 'friend-2')
+    ]);
+    state.dismissedRows = [{ userId: 'friend-3' }];
+    userHasQuestionInBlockingFeedMock.mockImplementation(
+      async (userId: string) => userId === 'friend-2',
+    );
 
-    const response = await POST(questionRequest({ shareToFeed: true }))
-    const body = await response.json()
-    const shareLogCall = consoleInfoMock.mock.calls.find(([label]) => label === '[questions/shareToFeed]')
+    const response = await POST(questionRequest({ shareToFeed: true }));
+    const body = await response.json();
+    const shareLogCall = consoleInfoMock.mock.calls.find(
+      ([label]) => label === '[questions/shareToFeed]',
+    );
 
-    expect(response.status).toBe(201)
+    expect(response.status).toBe(201);
     expect(body.feedShare).toEqual({
       requested: true,
       createdCount: 1,
@@ -417,8 +438,8 @@ describe('POST /api/questions shareToFeed', () => {
       sharedRecipientIds: ['friend-1'],
       skippedDismissedDomainRecipientIds: ['friend-3'],
       skippedExistingFeedRecipientIds: ['friend-2'],
-    })
-    expect(shareLogCall).toBeDefined()
+    });
+    expect(shareLogCall).toBeDefined();
     expect(shareLogCall?.[1]).toEqual({
       questionId: 'question-1',
       userId: 'creator-1',
@@ -427,108 +448,118 @@ describe('POST /api/questions shareToFeed', () => {
       sharedCount: 1,
       skippedDismissedDomainCount: 1,
       skippedExistingFeedCount: 1,
-    })
-    expect(JSON.stringify(shareLogCall)).not.toContain('friend-1')
-    expect(JSON.stringify(shareLogCall)).not.toContain('friend-2')
-    expect(JSON.stringify(shareLogCall)).not.toContain('friend-3')
-  })
+    });
+    expect(JSON.stringify(shareLogCall)).not.toContain('friend-1');
+    expect(JSON.stringify(shareLogCall)).not.toContain('friend-2');
+    expect(JSON.stringify(shareLogCall)).not.toContain('friend-3');
+  });
 
   it('includes share-to-feed recipient ids when production diagnostics debug mode is enabled', async () => {
-    vi.stubEnv('NODE_ENV', 'production')
-    vi.stubEnv('SHARE_TO_FEED_DEBUG_RECIPIENT_IDS', 'true')
-    const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SHARE_TO_FEED_DEBUG_RECIPIENT_IDS', 'true');
+    const consoleInfoMock = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     getFriendsMock.mockResolvedValue([
       { id: 'friend-1', displayName: 'Friend One' },
       { id: 'friend-2', displayName: 'Friend Two' },
       { id: 'friend-3', displayName: 'Friend Three' },
-    ])
-    state.dismissedRows = [{ userId: 'friend-3' }]
-    userHasQuestionInBlockingFeedMock.mockImplementation(async (userId: string) => userId === 'friend-2')
+    ]);
+    state.dismissedRows = [{ userId: 'friend-3' }];
+    userHasQuestionInBlockingFeedMock.mockImplementation(
+      async (userId: string) => userId === 'friend-2',
+    );
 
-    const response = await POST(questionRequest({ shareToFeed: true }))
-    const shareLogCall = consoleInfoMock.mock.calls.find(([label]) => label === '[questions/shareToFeed]')
+    const response = await POST(questionRequest({ shareToFeed: true }));
+    const shareLogCall = consoleInfoMock.mock.calls.find(
+      ([label]) => label === '[questions/shareToFeed]',
+    );
 
-    expect(response.status).toBe(201)
-    expect(shareLogCall?.[1]).toEqual(expect.objectContaining({
-      requested: true,
-      sharedRecipientIds: ['friend-1'],
-      skippedDismissedDomainRecipientIds: ['friend-3'],
-      skippedExistingFeedRecipientIds: ['friend-2'],
-    }))
-  })
-})
+    expect(response.status).toBe(201);
+    expect(shareLogCall?.[1]).toEqual(
+      expect.objectContaining({
+        requested: true,
+        sharedRecipientIds: ['friend-1'],
+        skippedDismissedDomainRecipientIds: ['friend-3'],
+        skippedExistingFeedRecipientIds: ['friend-2'],
+      }),
+    );
+  });
+});
 
 describe('POST /api/questions category leak handling', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    state.dismissedRows = []
-    state.feedInsertValues = []
-    state.questionUpdateValues = []
+    vi.clearAllMocks();
+    state.dismissedRows = [];
+    state.feedInsertValues = [];
+    state.questionUpdateValues = [];
 
-    getSessionMock.mockResolvedValue({ userId: 'creator-1' })
-    assessQuestionDifficultyMock.mockResolvedValue({ difficulty: 3, tier: 'moderate' })
-    createQuestionMock.mockResolvedValue({ id: 'question-1' })
-    generateInsideJokeMock.mockResolvedValue(null)
-    getQuestionMock.mockResolvedValue({ id: 'question-1' })
-    openKBDomainMock.mockResolvedValue({ opened: true })
-    rollOffOldItemsMock.mockResolvedValue(0)
-    userHasQuestionInBlockingFeedMock.mockResolvedValue(false)
-    vetQuestionMock.mockResolvedValue({ status: 'approved', score: 0.8, reason: 'looks good' })
-  })
+    getSessionMock.mockResolvedValue({ userId: 'creator-1' });
+    assessQuestionDifficultyMock.mockResolvedValue({ difficulty: 3, tier: 'moderate' });
+    createQuestionMock.mockResolvedValue({ id: 'question-1' });
+    generateInsideJokeMock.mockResolvedValue(null);
+    getQuestionMock.mockResolvedValue({ id: 'question-1' });
+    openKBDomainMock.mockResolvedValue({ opened: true });
+    rollOffOldItemsMock.mockResolvedValue(0);
+    userHasQuestionInBlockingFeedMock.mockResolvedValue(false);
+    vetQuestionMock.mockResolvedValue({ status: 'approved', score: 0.8, reason: 'looks good' });
+  });
 
   it('saves a question with a leaky category instead of 422-rejecting, and marks publicStatus rejected', async () => {
     categorizeQuestionMock.mockResolvedValue({
       broad_category: 'Civics',
       subcategory: "Robert's Rules of Order",
-    })
+    });
 
-    const response = await POST(questionRequest({
-      text: 'What is the name of the standard parliamentary authority used by most organizations in the United States?',
-      correctAnswer: "Robert's Rules of Order",
-      alternateAnswers: ['RONR', "Robert's Rules", 'Rules of Order'],
-    }))
+    const response = await POST(
+      questionRequest({
+        text: 'What is the name of the standard parliamentary authority used by most organizations in the United States?',
+        correctAnswer: "Robert's Rules of Order",
+        alternateAnswers: ['RONR', "Robert's Rules", 'Rules of Order'],
+      }),
+    );
 
-    expect(response.status).toBe(201)
-    expect(createQuestionMock).toHaveBeenCalledTimes(1)
+    expect(response.status).toBe(201);
+    expect(createQuestionMock).toHaveBeenCalledTimes(1);
     const createArgs = createQuestionMock.mock.calls[0]?.[0] as {
-      publicStatus: string
-      publicEligibilityReason: string
-    }
-    expect(createArgs.publicStatus).toBe('rejected')
-    expect(createArgs.publicEligibilityReason).toBe('category_leaks_answer')
-  })
+      publicStatus: string;
+      publicEligibilityReason: string;
+    };
+    expect(createArgs.publicStatus).toBe('rejected');
+    expect(createArgs.publicEligibilityReason).toBe('category_leaks_answer');
+  });
 
   it('saves with publicStatus eligible_pending when the category does not leak the answer', async () => {
     categorizeQuestionMock.mockResolvedValue({
       broad_category: 'Civics',
       subcategory: 'Parliamentary Procedure',
-    })
+    });
 
-    const response = await POST(questionRequest({
-      text: 'What is the name of the standard parliamentary authority used by most organizations in the United States?',
-      correctAnswer: "Robert's Rules of Order",
-      alternateAnswers: ['RONR', "Robert's Rules", 'Rules of Order'],
-    }))
+    const response = await POST(
+      questionRequest({
+        text: 'What is the name of the standard parliamentary authority used by most organizations in the United States?',
+        correctAnswer: "Robert's Rules of Order",
+        alternateAnswers: ['RONR', "Robert's Rules", 'Rules of Order'],
+      }),
+    );
 
-    expect(response.status).toBe(201)
-    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { publicStatus: string }
-    expect(createArgs.publicStatus).toBe('eligible_pending')
-  })
+    expect(response.status).toBe(201);
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { publicStatus: string };
+    expect(createArgs.publicStatus).toBe('eligible_pending');
+  });
 
   it('returns 500 with a friendly message when an enrichment step throws', async () => {
     categorizeQuestionMock.mockResolvedValue({
       broad_category: 'Arts & Literature',
       subcategory: 'Victorian Literature',
-    })
-    assessQuestionDifficultyMock.mockRejectedValue(new Error('boom'))
-    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    });
+    assessQuestionDifficultyMock.mockRejectedValue(new Error('boom'));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const response = await POST(questionRequest({}))
-    const body = await response.json()
+    const response = await POST(questionRequest({}));
+    const body = await response.json();
 
-    expect(response.status).toBe(500)
-    expect(body.error).toBe('server_error')
-    expect(body.message).toMatch(/something went wrong/i)
-    expect(createQuestionMock).not.toHaveBeenCalled()
-  })
-})
+    expect(response.status).toBe(500);
+    expect(body.error).toBe('server_error');
+    expect(body.message).toMatch(/something went wrong/i);
+    expect(createQuestionMock).not.toHaveBeenCalled();
+  });
+});

@@ -1,13 +1,9 @@
-import Link from 'next/link'
+import Link from 'next/link';
 
-import { NewsRow } from '@/components/home/NewsRow'
-import type { ActivityItemView } from '@/server/db/queries/activity'
+import { NewsRow } from '@/components/home/NewsRow';
+import type { ActivityItemView } from '@/server/db/queries/activity';
 
-export function RecentActivitySection({
-  items,
-}: {
-  items: ActivityItemView[]
-}) {
+export function RecentActivitySection({ items }: { items: ActivityItemView[] }) {
   return (
     <section className="px-3">
       <p className="text-muted-foreground mb-2 text-xs font-medium tracking-[0.1em] uppercase">
@@ -38,5 +34,5 @@ export function RecentActivitySection({
         </>
       )}
     </section>
-  )
+  );
 }

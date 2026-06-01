@@ -49,7 +49,10 @@ export function KnowledgeOverviewClient({
   const cardRef = useRef<HTMLDivElement | null>(null);
 
   const domainNameBySlug = useMemo(
-    () => new Map(overview.allDomains.map((domain) => [toCanonicalDomainSlug(domain.name), domain.name])),
+    () =>
+      new Map(
+        overview.allDomains.map((domain) => [toCanonicalDomainSlug(domain.name), domain.name]),
+      ),
     [overview.allDomains],
   );
 
@@ -63,11 +66,13 @@ export function KnowledgeOverviewClient({
 
   // Fetch Knowledge Card data
   useEffect(() => {
-    fetch(`/api/users/${overview.userId}/knowledge-card`).then(async (res) => {
-      if (!res.ok) return;
-      const json = await res.json() as KnowledgeCardApi;
-      setKnowledgeCard(json);
-    }).catch(() => undefined);
+    fetch(`/api/users/${overview.userId}/knowledge-card`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const json = (await res.json()) as KnowledgeCardApi;
+        setKnowledgeCard(json);
+      })
+      .catch(() => undefined);
   }, [overview.userId]);
 
   // Fetch portrait + mastery data
@@ -75,33 +80,49 @@ export function KnowledgeOverviewClient({
     if (portraitFetchedRef.current) return;
     portraitFetchedRef.current = true;
     Promise.all([
-      fetch(`/api/users/${overview.userId}/portrait`).then((r) => r.ok ? r.json() : null),
-      fetch(`/api/users/${overview.userId}/mastery`).then((r) => r.ok ? r.json() : null),
-    ]).then(([portraitData, masteryData]: [unknown, unknown]) => {
-      if (!portraitData || typeof portraitData !== 'object' || !('categories' in portraitData)) {
+      fetch(`/api/users/${overview.userId}/portrait`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/api/users/${overview.userId}/mastery`).then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([portraitData, masteryData]: [unknown, unknown]) => {
+        if (!portraitData || typeof portraitData !== 'object' || !('categories' in portraitData)) {
+          setPortraitError(true);
+          setPortraitLoaded(true);
+          return;
+        }
+        const masteryMap = new Map<string, string>(
+          (
+            (
+              masteryData as {
+                mastery?: Array<{ canonical_subcategory: string; current_tier: string }>;
+              }
+            )?.mastery ?? []
+          ).map((m) => [m.canonical_subcategory, m.current_tier]),
+        );
+        const entries: PortraitEntry[] = (
+          portraitData as {
+            categories: Array<{
+              canonical_subcategory: string;
+              broad_category: string;
+              declared_score: number;
+              proven_score: number;
+              authored_answered_count: number;
+            }>;
+          }
+        ).categories.map((cat) => ({
+          canonicalSubcategory: cat.canonical_subcategory,
+          broadCategory: normalizeBroadCategory(cat.broad_category) ?? 'General Knowledge',
+          totalMasteryPoints: (cat.declared_score ?? 0) + (cat.proven_score ?? 0),
+          tier: (masteryMap.get(cat.canonical_subcategory) ??
+            'establishing') as PortraitEntry['tier'],
+          authoredAnsweredCount: cat.authored_answered_count ?? 0,
+        }));
+        setPortraitEntries(entries);
+        setPortraitLoaded(true);
+      })
+      .catch(() => {
         setPortraitError(true);
         setPortraitLoaded(true);
-        return;
-      }
-      const masteryMap = new Map<string, string>(
-        ((masteryData as { mastery?: Array<{ canonical_subcategory: string; current_tier: string }> })?.mastery ?? [])
-          .map((m) => [m.canonical_subcategory, m.current_tier]),
-      );
-      const entries: PortraitEntry[] = (
-        (portraitData as { categories: Array<{ canonical_subcategory: string; broad_category: string; declared_score: number; proven_score: number; authored_answered_count: number }> }).categories
-      ).map((cat) => ({
-        canonicalSubcategory: cat.canonical_subcategory,
-        broadCategory: normalizeBroadCategory(cat.broad_category) ?? 'General Knowledge',
-        totalMasteryPoints: (cat.declared_score ?? 0) + (cat.proven_score ?? 0),
-        tier: (masteryMap.get(cat.canonical_subcategory) ?? 'establishing') as PortraitEntry['tier'],
-        authoredAnsweredCount: cat.authored_answered_count ?? 0,
-      }));
-      setPortraitEntries(entries);
-      setPortraitLoaded(true);
-    }).catch(() => {
-      setPortraitError(true);
-      setPortraitLoaded(true);
-    });
+      });
   }, [overview.userId]);
 
   // Deep-link highlight handler
@@ -121,14 +142,18 @@ export function KnowledgeOverviewClient({
     return () => window.clearTimeout(timer);
   }, [highlightedDomainSlug]);
 
-  const hasAnything = overview.allDomains.length > 0 || overview.excludedDomains.length > 0 || portraitEntries.length > 0;
+  const hasAnything =
+    overview.allDomains.length > 0 ||
+    overview.excludedDomains.length > 0 ||
+    portraitEntries.length > 0;
 
   return (
     <main style={mainStyle}>
       {/* Tier-crossed banner */}
       {tierCrossed && highlightedDomainSlug && (
         <section style={tierCrossedBannerStyle}>
-          You reached {capitalize(tierCrossed)} in {domainNameBySlug.get(highlightedDomainSlug) ?? 'this domain'} this session.
+          You reached {capitalize(tierCrossed)} in{' '}
+          {domainNameBySlug.get(highlightedDomainSlug) ?? 'this domain'} this session.
         </section>
       )}
 
@@ -137,7 +162,10 @@ export function KnowledgeOverviewClient({
         <p style={eyebrowStyle}>Your Mind</p>
         <h1 style={sentenceStyle}>{overview.yourMind}</h1>
         <p style={{ margin: '10px 0 0', fontSize: '0.82rem' }}>
-          <Link href="/daily/setup" className="text-[var(--text-muted)] underline underline-offset-2">
+          <Link
+            href="/daily/setup"
+            className="text-[var(--text-muted)] underline underline-offset-2"
+          >
             Personal Daily
           </Link>
         </p>

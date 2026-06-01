@@ -1,4 +1,10 @@
-import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
+import {
+  ANTHROPIC_MODEL,
+  extractTextContent,
+  getAnthropicClient,
+  loggedMessagesCreate,
+  parseJsonObject,
+} from '@/lib/llm';
 import { DIFFICULTY_COPY, type QuestionDifficultyTier } from '@/lib/questions/difficulty-copy';
 
 export { DIFFICULTY_COPY };
@@ -8,7 +14,10 @@ export type QuestionDifficultyAssessment = {
   difficulty: 1 | 3 | 4 | 5;
 };
 
-const TIER_TO_DIFFICULTY: Record<QuestionDifficultyTier, QuestionDifficultyAssessment['difficulty']> = {
+const TIER_TO_DIFFICULTY: Record<
+  QuestionDifficultyTier,
+  QuestionDifficultyAssessment['difficulty']
+> = {
   establishing: 1,
   solid: 3,
   skilled: 4,
@@ -25,7 +34,9 @@ function asDifficultyTier(value: unknown): QuestionDifficultyTier | null {
   return null;
 }
 
-export function parseQuestionDifficultyAssessment(rawText: string): QuestionDifficultyAssessment | null {
+export function parseQuestionDifficultyAssessment(
+  rawText: string,
+): QuestionDifficultyAssessment | null {
   const parsed = parseJsonObject(rawText);
   const tier = asDifficultyTier(parsed?.tier ?? parsed?.difficultyTier ?? parsed?.difficulty);
   if (!tier) return null;
@@ -76,7 +87,10 @@ Respond in JSON only: { "tier": "establishing" | "solid" | "skilled" | "master" 
       messages: [{ role: 'user', content: prompt }],
     });
 
-    return parseQuestionDifficultyAssessment(extractTextContent(response.content)) ?? fallbackQuestionDifficulty();
+    return (
+      parseQuestionDifficultyAssessment(extractTextContent(response.content)) ??
+      fallbackQuestionDifficulty()
+    );
   } catch (error) {
     console.warn('[questions/difficulty] LLM assessment unavailable; using fallback', {
       domain: canonicalSubcategory,

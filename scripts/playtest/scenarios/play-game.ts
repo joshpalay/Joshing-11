@@ -1,5 +1,11 @@
 import { contextForPlayer } from '../lib/browser';
-import { authenticateAndCookie, createTestGame, insertTestQuestions, phoneFor, provisionTestUser } from '../lib/seed';
+import {
+  authenticateAndCookie,
+  createTestGame,
+  insertTestQuestions,
+  phoneFor,
+  provisionTestUser,
+} from '../lib/seed';
 import { playGame, type PlayerEvent } from '../lib/player';
 import type { Scenario, ScenarioContext, ScenarioLog } from '../lib/scenario-context';
 import { AssertionRecorder } from '../lib/asserts';
@@ -18,11 +24,21 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
       manifest: ctx.manifest,
     });
 
-    const players: Array<{ id: string; phone: string; displayName: string; sessionCookie: string }> = [];
+    const players: Array<{
+      id: string;
+      phone: string;
+      displayName: string;
+      sessionCookie: string;
+    }> = [];
     for (let i = 1; i <= ctx.args.players; i += 1) {
       const phone = phoneFor(i);
       const displayName = `[TEST] Player ${i}`;
-      const user = await provisionTestUser({ phone, displayName, scenarioId: ctx.scenarioId, manifest: ctx.manifest });
+      const user = await provisionTestUser({
+        phone,
+        displayName,
+        scenarioId: ctx.scenarioId,
+        manifest: ctx.manifest,
+      });
       const cookie = await authenticateAndCookie(ctx.baseUrl, phone);
       players.push({ id: user.id, phone, displayName, sessionCookie: cookie.value });
     }

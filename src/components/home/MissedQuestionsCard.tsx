@@ -1,14 +1,14 @@
-import Link from 'next/link'
+import Link from 'next/link';
 
 export function MissedQuestionsCard({
   count,
   expiringCount,
 }: {
-  count: number
-  expiringCount: number
+  count: number;
+  expiringCount: number;
 }) {
-  if (count === 0) return null
-  const missedLabel = count === 1 ? '1 missed question' : `${count} missed questions`
+  if (count === 0) return null;
+  const missedLabel = count === 1 ? '1 missed question' : `${count} missed questions`;
   return (
     <div
       className="bg-card text-card-foreground flex items-center justify-between gap-3 rounded-[4px] border border-[var(--brand-border)] px-3 py-4"
@@ -35,5 +35,5 @@ export function MissedQuestionsCard({
         Play →
       </Link>
     </div>
-  )
+  );
 }

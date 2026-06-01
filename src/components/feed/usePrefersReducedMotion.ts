@@ -1,26 +1,26 @@
-'use client'
+'use client';
 
-import { useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react';
 
-const QUERY = '(prefers-reduced-motion: reduce)'
+const QUERY = '(prefers-reduced-motion: reduce)';
 
 function hasMatchMedia(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function';
 }
 
 function subscribe(onChange: () => void): () => void {
-  if (!hasMatchMedia()) return () => {}
-  const query = window.matchMedia(QUERY)
-  query.addEventListener('change', onChange)
-  return () => query.removeEventListener('change', onChange)
+  if (!hasMatchMedia()) return () => {};
+  const query = window.matchMedia(QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
 }
 
 function getSnapshot(): boolean {
-  return hasMatchMedia() ? window.matchMedia(QUERY).matches : false
+  return hasMatchMedia() ? window.matchMedia(QUERY).matches : false;
 }
 
 function getServerSnapshot(): boolean {
-  return false
+  return false;
 }
 
 /**
@@ -29,5 +29,5 @@ function getServerSnapshot(): boolean {
  * changes. Used to skip the swipe snap-back and collapse animations.
  */
 export function usePrefersReducedMotion(): boolean {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

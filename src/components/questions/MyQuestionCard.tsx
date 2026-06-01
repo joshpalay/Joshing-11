@@ -34,9 +34,8 @@ export function MyQuestionCard({
   const inUse = question.usedInGamesCount > 0;
   const difficultyLabel = difficultyCopyFromValue(question.difficulty) ?? 'Unrated';
   const visibleCategory = visibleFeedCategory(question.domainDisplayName);
-  const answerersLine = question.isOwnAuthored && question.answerers
-    ? formatAnswerersLine(question.answerers)
-    : null;
+  const answerersLine =
+    question.isOwnAuthored && question.answerers ? formatAnswerersLine(question.answerers) : null;
 
   const item: FeedCardBaseItem = {
     id: question.id,
@@ -50,18 +49,12 @@ export function MyQuestionCard({
     <FeedCard
       item={item}
       className={`transition duration-200 ${deleting ? 'scale-[0.98] opacity-0' : 'opacity-100'}`}
-      overflow={
-        <CardOverflowMenu
-          inUse={inUse}
-          onEdit={onEdit}
-          onDelete={onDeleteRequest}
-        />
-      }
+      overflow={<CardOverflowMenu inUse={inUse} onEdit={onEdit} onDelete={onDeleteRequest} />}
       headerContent={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {visibleCategory ? (
             <span
-              className="truncate text-[12px] italic leading-tight"
+              className="truncate text-[12px] leading-tight italic"
               style={{
                 fontFamily: 'var(--font-literata)',
                 color: 'var(--ink)',
@@ -72,7 +65,7 @@ export function MyQuestionCard({
             </span>
           ) : null}
           <span
-            className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+            className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase"
             style={{ color: 'var(--ink)', opacity: 0.7 }}
             aria-label={`LLM-rated difficulty: ${difficultyLabel}`}
           >
@@ -82,11 +75,9 @@ export function MyQuestionCard({
       }
       footer={
         <>
-          <p
-            className="text-[13px] leading-snug"
-            style={{ color: 'var(--ink)', opacity: 0.65 }}
-          >
-            {question.timesAnswered} answers · {question.correctRate}% correct · {question.usedInGamesCount} games
+          <p className="text-[13px] leading-snug" style={{ color: 'var(--ink)', opacity: 0.65 }}>
+            {question.timesAnswered} answers · {question.correctRate}% correct ·{' '}
+            {question.usedInGamesCount} games
           </p>
           {answerersLine ? (
             <p
@@ -96,20 +87,15 @@ export function MyQuestionCard({
               {answerersLine}
             </p>
           ) : null}
-          {cardError ? (
-            <p className="mt-2 text-[13px] text-destructive">{cardError}</p>
-          ) : null}
+          {cardError ? <p className="text-destructive mt-2 text-[13px]">{cardError}</p> : null}
           <div className="mt-3 flex items-center gap-2">
             {confirming ? (
               <>
-                <span
-                  className="mr-auto text-[13px] font-medium"
-                  style={{ color: 'var(--ink)' }}
-                >
+                <span className="mr-auto text-[13px] font-medium" style={{ color: 'var(--ink)' }}>
                   Delete this question?
                 </span>
                 <button
-                  className="rounded-md border border-destructive px-3 py-2 text-sm text-destructive"
+                  className="border-destructive text-destructive rounded-md border px-3 py-2 text-sm"
                   type="button"
                   onClick={onConfirmDelete}
                 >
@@ -181,7 +167,7 @@ function CardOverflowMenu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((current) => !current)}
-        className="-mr-1 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground -mr-1 inline-flex size-8 items-center justify-center rounded-md transition"
       >
         <MoreHorizontal className="size-4" />
       </button>
@@ -189,7 +175,7 @@ function CardOverflowMenu({
         <div
           id={menuId}
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-44 rounded-md border bg-background p-1 shadow-md"
+          className="bg-background absolute top-full right-0 z-30 mt-1 w-44 rounded-md border p-1 shadow-md"
         >
           <button
             type="button"
@@ -200,7 +186,7 @@ function CardOverflowMenu({
               setOpen(false);
               onEdit();
             }}
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             {inUse ? <Lock className="size-4" /> : <Pencil className="size-4" />}
             Edit
@@ -214,7 +200,7 @@ function CardOverflowMenu({
               setOpen(false);
               onDelete();
             }}
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-destructive hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             {inUse ? <Lock className="size-4" /> : <Trash2 className="size-4" />}
             Delete

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   getSessionMock,
@@ -12,108 +12,106 @@ const {
   markOnboardingCompleteMock: vi.fn(),
   refreshSessionOnboardingClaimMock: vi.fn(),
   saveDeclaredInterestsMock: vi.fn(),
-}))
+}));
 
 vi.mock('@/server/auth/session', () => ({
   getSession: getSessionMock,
   refreshSessionOnboardingClaim: refreshSessionOnboardingClaimMock,
-}))
+}));
 
 vi.mock('@/server/db/queries/users', () => ({
   getUserOnboardingProfile: getUserOnboardingProfileMock,
   markOnboardingComplete: markOnboardingCompleteMock,
   saveDeclaredInterests: saveDeclaredInterestsMock,
-}))
+}));
 
-import { POST } from '@/app/api/onboarding/save-interests/route'
+import { POST } from '@/app/api/onboarding/save-interests/route';
 
 function jsonRequest(interests: unknown, telemetry?: unknown) {
   return new Request('https://joshing.example/api/onboarding/save-interests', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ interests, telemetry }),
-  })
+  });
 }
 
 describe('POST /api/onboarding/save-interests', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    getSessionMock.mockResolvedValue({ userId: 'user-invitee' })
+    vi.clearAllMocks();
+    getSessionMock.mockResolvedValue({ userId: 'user-invitee' });
     getUserOnboardingProfileMock.mockResolvedValue({
       id: 'user-invitee',
       displayName: 'Morgan Lee',
       onboardingComplete: false,
-    })
-    saveDeclaredInterestsMock.mockResolvedValue(undefined)
-    markOnboardingCompleteMock.mockResolvedValue(undefined)
-    refreshSessionOnboardingClaimMock.mockResolvedValue(true)
-  })
+    });
+    saveDeclaredInterestsMock.mockResolvedValue(undefined);
+    markOnboardingCompleteMock.mockResolvedValue(undefined);
+    refreshSessionOnboardingClaimMock.mockResolvedValue(true);
+  });
 
   it('accept all saves selected invited interests', async () => {
     const response = await POST(
       jsonRequest([
         { domain: 'Sondheim', broadCategory: 'Theater' },
         { domain: 'Jazz', broadCategory: 'Music' },
-      ])
-    )
+      ]),
+    );
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(200);
     expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [
       { label: 'Sondheim', broadCategory: 'Theater' },
       { label: 'Jazz', broadCategory: 'Music' },
-    ])
-    expect(markOnboardingCompleteMock).toHaveBeenCalledWith('user-invitee')
-  })
+    ]);
+    expect(markOnboardingCompleteMock).toHaveBeenCalledWith('user-invitee');
+  });
 
   it('partial selection saves only selected interests', async () => {
-    const response = await POST(
-      jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }])
-    )
+    const response = await POST(jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }]));
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(200);
     expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [
       { label: 'Sondheim', broadCategory: 'Theater' },
-    ])
-  })
+    ]);
+  });
 
   it('normalizes legacy Other broad categories to General Knowledge', async () => {
     const response = await POST(
-      jsonRequest([{ domain: 'Puzzle Potpourri', broadCategory: 'Other' }])
-    )
+      jsonRequest([{ domain: 'Puzzle Potpourri', broadCategory: 'Other' }]),
+    );
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(200);
     expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [
       { label: 'Puzzle Potpourri', broadCategory: 'General Knowledge' },
-    ])
-  })
+    ]);
+  });
 
   it('skip saves none of the invited interests and completes onboarding only after explicit skip telemetry', async () => {
     const response = await POST(
-      jsonRequest([], { inviteInterestCount: 3, inviteSelectedCount: 0 })
-    )
+      jsonRequest([], { inviteInterestCount: 3, inviteSelectedCount: 0 }),
+    );
 
-    expect(response.status).toBe(200)
-    expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [])
-    expect(markOnboardingCompleteMock).toHaveBeenCalledWith('user-invitee')
-  })
+    expect(response.status).toBe(200);
+    expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', []);
+    expect(markOnboardingCompleteMock).toHaveBeenCalledWith('user-invitee');
+  });
 
   it('edited interests save correctly without retaining the original invite labels', async () => {
     const response = await POST(
-      jsonRequest(
-        [{ domain: 'Stephen Sondheim musicals', broadCategory: 'Theater' }],
-        { inviteInterestCount: 1, inviteSelectedCount: 1 }
-      )
-    )
+      jsonRequest([{ domain: 'Stephen Sondheim musicals', broadCategory: 'Theater' }], {
+        inviteInterestCount: 1,
+        inviteSelectedCount: 1,
+      }),
+    );
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(200);
     expect(saveDeclaredInterestsMock).toHaveBeenCalledWith('user-invitee', [
       { label: 'Stephen Sondheim musicals', broadCategory: 'Theater' },
-    ])
+    ]);
     expect(saveDeclaredInterestsMock).not.toHaveBeenCalledWith(
       'user-invitee',
-      expect.arrayContaining([{ label: 'Sondheim', broadCategory: 'Theater' }])
-    )
-  })
+      expect.arrayContaining([{ label: 'Sondheim', broadCategory: 'Theater' }]),
+    );
+  });
 
   it('saves only Jaime-confirmed invite interests across accept, remove, edit, and skip choices', async () => {
     const choices = [
@@ -147,37 +145,35 @@ describe('POST /api/onboarding/save-interests', () => {
         expected: [{ label: 'Stephen Sondheim', broadCategory: 'Theater' }],
       },
       { label: 'skipping all', interests: [], expected: [] },
-    ]
+    ];
 
     for (const choice of choices) {
-      vi.clearAllMocks()
-      getSessionMock.mockResolvedValue({ userId: 'user-jaime' })
+      vi.clearAllMocks();
+      getSessionMock.mockResolvedValue({ userId: 'user-jaime' });
       getUserOnboardingProfileMock.mockResolvedValue({
         id: 'user-jaime',
         displayName: 'Jaime',
         onboardingComplete: false,
-      })
-      saveDeclaredInterestsMock.mockResolvedValue(undefined)
-      markOnboardingCompleteMock.mockResolvedValue(undefined)
-      refreshSessionOnboardingClaimMock.mockResolvedValue(true)
+      });
+      saveDeclaredInterestsMock.mockResolvedValue(undefined);
+      markOnboardingCompleteMock.mockResolvedValue(undefined);
+      refreshSessionOnboardingClaimMock.mockResolvedValue(true);
 
       const response = await POST(
         jsonRequest(choice.interests, {
           inviteInterestCount: 3,
           inviteSelectedCount: choice.interests.length,
-        })
-      )
+        }),
+      );
 
-      expect(response.status, choice.label).toBe(200)
+      expect(response.status, choice.label).toBe(200);
       expect(saveDeclaredInterestsMock, choice.label).toHaveBeenCalledWith(
         'user-jaime',
-        choice.expected
-      )
-      expect(markOnboardingCompleteMock, choice.label).toHaveBeenCalledWith(
-        'user-jaime'
-      )
+        choice.expected,
+      );
+      expect(markOnboardingCompleteMock, choice.label).toHaveBeenCalledWith('user-jaime');
     }
-  })
+  });
 
   it('enforces the max interest cap', async () => {
     const response = await POST(
@@ -188,68 +184,62 @@ describe('POST /api/onboarding/save-interests', () => {
         { domain: 'Four', broadCategory: 'Other' },
         { domain: 'Five', broadCategory: 'Other' },
         { domain: 'Six', broadCategory: 'Other' },
-      ])
-    )
+      ]),
+    );
 
-    expect(response.status).toBe(400)
-    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
-    expect(markOnboardingCompleteMock).not.toHaveBeenCalled()
-  })
+    expect(response.status).toBe(400);
+    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled();
+    expect(markOnboardingCompleteMock).not.toHaveBeenCalled();
+  });
 
   it('re-mints the session cookie so the next request sees onboardingComplete=true', async () => {
-    const response = await POST(
-      jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }])
-    )
+    const response = await POST(jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }]));
 
-    expect(response.status).toBe(200)
-    expect(markOnboardingCompleteMock).toHaveBeenCalledWith('user-invitee')
-    expect(refreshSessionOnboardingClaimMock).toHaveBeenCalledTimes(1)
-    const markOrder = markOnboardingCompleteMock.mock.invocationCallOrder[0]
-    const refreshOrder = refreshSessionOnboardingClaimMock.mock.invocationCallOrder[0]
-    expect(refreshOrder).toBeGreaterThan(markOrder)
-  })
+    expect(response.status).toBe(200);
+    expect(markOnboardingCompleteMock).toHaveBeenCalledWith('user-invitee');
+    expect(refreshSessionOnboardingClaimMock).toHaveBeenCalledTimes(1);
+    const markOrder = markOnboardingCompleteMock.mock.invocationCallOrder[0];
+    const refreshOrder = refreshSessionOnboardingClaimMock.mock.invocationCallOrder[0];
+    expect(refreshOrder).toBeGreaterThan(markOrder);
+  });
 
   it('does not silently save rejected interests from an empty non-invite selection', async () => {
-    const response = await POST(jsonRequest([]))
-    const body = await response.json()
+    const response = await POST(jsonRequest([]));
+    const body = await response.json();
 
-    expect(response.status).toBe(400)
-    expect(body.error).toBe('invalid_request')
-    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
-    expect(markOnboardingCompleteMock).not.toHaveBeenCalled()
-  })
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('invalid_request');
+    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled();
+    expect(markOnboardingCompleteMock).not.toHaveBeenCalled();
+  });
 
   it('refuses to complete onboarding when displayName is still null', async () => {
     getUserOnboardingProfileMock.mockResolvedValue({
       id: 'user-invitee',
       displayName: null,
       onboardingComplete: false,
-    })
+    });
 
-    const response = await POST(
-      jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }])
-    )
-    const body = await response.json()
+    const response = await POST(jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }]));
+    const body = await response.json();
 
-    expect(response.status).toBe(409)
-    expect(body.error).toBe('display_name_required')
-    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
-    expect(markOnboardingCompleteMock).not.toHaveBeenCalled()
-  })
+    expect(response.status).toBe(409);
+    expect(body.error).toBe('display_name_required');
+    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled();
+    expect(markOnboardingCompleteMock).not.toHaveBeenCalled();
+  });
 
   it('refuses to complete onboarding when displayName is whitespace only', async () => {
     getUserOnboardingProfileMock.mockResolvedValue({
       id: 'user-invitee',
       displayName: '   ',
       onboardingComplete: false,
-    })
+    });
 
-    const response = await POST(
-      jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }])
-    )
+    const response = await POST(jsonRequest([{ domain: 'Sondheim', broadCategory: 'Theater' }]));
 
-    expect(response.status).toBe(409)
-    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
-    expect(markOnboardingCompleteMock).not.toHaveBeenCalled()
-  })
-})
+    expect(response.status).toBe(409);
+    expect(saveDeclaredInterestsMock).not.toHaveBeenCalled();
+    expect(markOnboardingCompleteMock).not.toHaveBeenCalled();
+  });
+});

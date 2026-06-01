@@ -34,7 +34,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as { visibility?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { visibility?: unknown } | null;
   const visibility = parseVisibility(body?.visibility);
   if (!visibility) {
     return NextResponse.json(
@@ -60,7 +60,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { domain } = await context.params;
   const decodedDomain = decodeURIComponent(domain).trim();
   if (!decodedDomain) {
-    return NextResponse.json({ error: 'validation', message: 'domain is required' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'domain is required' },
+      { status: 400 },
+    );
   }
 
   const { removed } = await removeKnowledgeDomain(session.userId, decodedDomain);

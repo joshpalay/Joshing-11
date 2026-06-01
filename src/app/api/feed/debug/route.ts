@@ -35,12 +35,14 @@ function diagnose(input: {
   if (!feedItem) return 'no_feed_item_for_viewer';
 
   const questionCreatorId = question?.creatorId ?? null;
-  if (questionCreatorId && questionCreatorId !== viewerUserId && friendshipStatus !== 'active') return 'not_friends';
+  if (questionCreatorId && questionCreatorId !== viewerUserId && friendshipStatus !== 'active')
+    return 'not_friends';
   if (domainDismissed) return 'domain_dismissed';
   if (question?.deletedAt) return 'question_deleted';
   if (question && question.visibility !== 'public') return 'question_not_public';
   if (!VISIBLE_FEED_STATES.has(feedItem.state)) return 'feed_item_state_hidden';
-  if (!isMainFeedSourceVisible(feedItem.sourceType, feedItem.sourceResult)) return 'source_type_filtered';
+  if (!isMainFeedSourceVisible(feedItem.sourceType, feedItem.sourceResult))
+    return 'source_type_filtered';
 
   return 'should_be_visible';
 }
@@ -57,14 +59,18 @@ export async function GET(request: NextRequest) {
   if (!questionId) return NextResponse.json({ error: 'question_id_required' }, { status: 400 });
 
   const [question, feedItem] = await Promise.all([
-    db.select().from(questions).where(eq(questions.id, questionId)).limit(1).then((rows) => rows[0] ?? null),
+    db
+      .select()
+      .from(questions)
+      .where(eq(questions.id, questionId))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
     db
       .select()
       .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, session.userId),
-        eq(feedItems.questionId, questionId),
-      ))
+      .where(
+        and(eq(feedItems.recipientUserId, session.userId), eq(feedItems.questionId, questionId)),
+      )
       .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
       .limit(1)
       .then((rows) => rows[0] ?? null),
@@ -74,26 +80,36 @@ export async function GET(request: NextRequest) {
   const [friendship, dismissedDomain] = await Promise.all([
     questionCreatorId && questionCreatorId !== session.userId
       ? db
-        .select({ status: friendships.status })
-        .from(friendships)
-        .where(or(
-          and(eq(friendships.userAId, session.userId), eq(friendships.userBId, questionCreatorId)),
-          and(eq(friendships.userAId, questionCreatorId), eq(friendships.userBId, session.userId)),
-        ))
-        .limit(1)
-        .then((rows) => rows[0] ?? null)
+          .select({ status: friendships.status })
+          .from(friendships)
+          .where(
+            or(
+              and(
+                eq(friendships.userAId, session.userId),
+                eq(friendships.userBId, questionCreatorId),
+              ),
+              and(
+                eq(friendships.userAId, questionCreatorId),
+                eq(friendships.userBId, session.userId),
+              ),
+            ),
+          )
+          .limit(1)
+          .then((rows) => rows[0] ?? null)
       : Promise.resolve(null),
     question?.canonicalSubcategory
       ? db
-        .select({ id: feedDismissedDomains.id })
-        .from(feedDismissedDomains)
-        .where(and(
-          eq(feedDismissedDomains.userId, session.userId),
-          eq(feedDismissedDomains.canonicalSubcategory, question.canonicalSubcategory),
-          isNull(feedDismissedDomains.reinstatedAt),
-        ))
-        .limit(1)
-        .then((rows) => rows[0] ?? null)
+          .select({ id: feedDismissedDomains.id })
+          .from(feedDismissedDomains)
+          .where(
+            and(
+              eq(feedDismissedDomains.userId, session.userId),
+              eq(feedDismissedDomains.canonicalSubcategory, question.canonicalSubcategory),
+              isNull(feedDismissedDomains.reinstatedAt),
+            ),
+          )
+          .limit(1)
+          .then((rows) => rows[0] ?? null)
       : Promise.resolve(null),
   ]);
 

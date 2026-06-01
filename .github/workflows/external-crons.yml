@@ -27,10 +27,10 @@ name: External crons (Hobby workaround)
 
 on:
   schedule:
-    - cron: '5 17 * * *'   # /api/cron/daily-assignments  (after 17:00 UTC reset)
-    - cron: '0 8 * * *'    # /api/cron/weekly-ceremony
-    - cron: '0 7 * * *'    # /api/cron/vet-questions
-    - cron: '30 6 * * *'   # /api/cron/expire-friend-requests
+    - cron: '5 17 * * *' # /api/cron/daily-assignments  (after 17:00 UTC reset)
+    - cron: '0 8 * * *' # /api/cron/weekly-ceremony
+    - cron: '0 7 * * *' # /api/cron/vet-questions
+    - cron: '30 6 * * *' # /api/cron/expire-friend-requests
   workflow_dispatch:
     inputs:
       route:

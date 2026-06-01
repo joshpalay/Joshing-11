@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   try {
-    const body = await request.json().catch(() => null) as { questionText?: unknown } | null;
+    const body = (await request.json().catch(() => null)) as { questionText?: unknown } | null;
     const questionText = typeof body?.questionText === 'string' ? body.questionText.trim() : '';
     if (!questionText) return NextResponse.json(passResponse({ remaining: null }));
 
@@ -38,7 +38,12 @@ export async function POST(request: NextRequest) {
     const [usage] = await db
       .select({ critiqueCount: critiqueUsageDaily.critiqueCount })
       .from(critiqueUsageDaily)
-      .where(and(eq(critiqueUsageDaily.userId, session.userId), eq(critiqueUsageDaily.usageDate, usageDate)))
+      .where(
+        and(
+          eq(critiqueUsageDaily.userId, session.userId),
+          eq(critiqueUsageDaily.usageDate, usageDate),
+        ),
+      )
       .limit(1);
 
     if ((usage?.critiqueCount ?? 0) >= DAILY_LIMIT) {

@@ -6,4 +6,3 @@ export function toCanonicalDomainSlug(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
-

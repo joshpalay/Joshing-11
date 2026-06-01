@@ -6,7 +6,9 @@ import {
   type SessionSlotSummary,
 } from '@/server/mastery/session-close-copy';
 
-function slot(partial: Partial<SessionSlotSummary> & { answer_state: SessionSlotSummary['answer_state'] }): SessionSlotSummary {
+function slot(
+  partial: Partial<SessionSlotSummary> & { answer_state: SessionSlotSummary['answer_state'] },
+): SessionSlotSummary {
   return { domain: 'History', ...partial };
 }
 
@@ -42,12 +44,16 @@ describe('buildInterpretiveLine', () => {
   });
 
   it('returns Clean sweep for 5/5', () => {
-    const slots = Array.from({ length: 5 }, (_, i) => slot({ answer_state: 'correct', domain: `D${i}` }));
+    const slots = Array.from({ length: 5 }, (_, i) =>
+      slot({ answer_state: 'correct', domain: `D${i}` }),
+    );
     expect(buildInterpretiveLine(slots)).toBe('Clean sweep.');
   });
 
   it('returns wipeout for 0/5', () => {
-    const slots = Array.from({ length: 5 }, (_, i) => slot({ answer_state: 'incorrect', domain: `D${i}` }));
+    const slots = Array.from({ length: 5 }, (_, i) =>
+      slot({ answer_state: 'incorrect', domain: `D${i}` }),
+    );
     expect(buildInterpretiveLine(slots)).toBe('Every one of them. Tomorrow.');
   });
 
@@ -74,19 +80,28 @@ describe('buildInterpretiveLine', () => {
   });
 
   it('prioritizes tier crossing over slot-derived signals', () => {
-    const slots: SessionSlotSummary[] = Array.from({ length: 5 }, (_, i) => slot({
-      answer_state: 'correct',
-      domain: `D${i}`,
-    }));
-    slots[0] = { ...slots[0], tier_crossed: true, new_tier: 'familiar', domain: 'Late Tchaikovsky' };
+    const slots: SessionSlotSummary[] = Array.from({ length: 5 }, (_, i) =>
+      slot({
+        answer_state: 'correct',
+        domain: `D${i}`,
+      }),
+    );
+    slots[0] = {
+      ...slots[0],
+      tier_crossed: true,
+      new_tier: 'familiar',
+      domain: 'Late Tchaikovsky',
+    };
     expect(buildInterpretiveLine(slots)).toBe('You moved to Familiar in Late Tchaikovsky.');
   });
 
   it('prioritizes new demonstrated domain over slot-derived signals', () => {
-    const slots: SessionSlotSummary[] = Array.from({ length: 5 }, (_, i) => slot({
-      answer_state: 'correct',
-      domain: `D${i}`,
-    }));
+    const slots: SessionSlotSummary[] = Array.from({ length: 5 }, (_, i) =>
+      slot({
+        answer_state: 'correct',
+        domain: `D${i}`,
+      }),
+    );
     slots[2] = { ...slots[2], is_first_in_new_demonstrated_domain: true, domain: 'Geology' };
     expect(buildInterpretiveLine(slots)).toBe('New ground: Geology is yours now.');
   });
@@ -94,7 +109,9 @@ describe('buildInterpretiveLine', () => {
 
 describe('buildSessionCloseLines', () => {
   it('produces both layers', () => {
-    const slots: SessionSlotSummary[] = Array.from({ length: 5 }, (_, i) => slot({ answer_state: 'correct', domain: `D${i}` }));
+    const slots: SessionSlotSummary[] = Array.from({ length: 5 }, (_, i) =>
+      slot({ answer_state: 'correct', domain: `D${i}` }),
+    );
     expect(buildSessionCloseLines(slots)).toEqual({
       scoreLine: 'Untouched.',
       interpretiveLine: 'Clean sweep.',

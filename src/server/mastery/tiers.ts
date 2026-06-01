@@ -29,7 +29,7 @@ export function getTierForPoints(points: number): MasteryTier {
 export function effectiveTier(
   totalPoints: number,
   authorCreditPointsInDomain: number,
-  authorCreditDistinctQuestionCount = Number.POSITIVE_INFINITY
+  authorCreditDistinctQuestionCount = Number.POSITIVE_INFINITY,
 ): MasteryTier {
   if (totalPoints < TIER_THRESHOLD_POINTS.familiar) return 'establishing';
   if (totalPoints < TIER_THRESHOLD_POINTS.solid) return 'familiar';

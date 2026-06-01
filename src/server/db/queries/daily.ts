@@ -17,7 +17,13 @@ import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
-import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
+import {
+  CATCHUP_LOOKBACK_DAYS,
+  asQueueSlots,
+  dailyQueueItemId,
+  feedCatchupItemId,
+  minusUtcDays,
+} from '@/server/daily/catchup';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import {
   catchUpExpiresAt,
@@ -26,10 +32,7 @@ import {
   isCatchUpSlotEligible,
   queueAgeInDays,
 } from '@/server/play/catch-up-eligibility';
-import {
-  dedupeCatchUpItems,
-  orderCatchUpItems,
-} from '@/server/play/catch-up-turn-sequencing';
+import { dedupeCatchUpItems, orderCatchUpItems } from '@/server/play/catch-up-turn-sequencing';
 import { getBasePoints } from '@/server/mastery/scoring';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
@@ -110,7 +113,8 @@ async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclus
       .from(userDomainExclusions)
       .where(eq(userDomainExclusions.userId, userId));
   } catch (error) {
-    if (pgErrorCode(error) === '42P01') return { subcategories: new Set(), broadCategories: new Set() };
+    if (pgErrorCode(error) === '42P01')
+      return { subcategories: new Set(), broadCategories: new Set() };
     // 42703 = scope column missing on a database where the additive migration
     // hasn't landed yet. Fall back to a scope='subcategory' read so the feature
     // degrades to its pre-migration behavior instead of failing.
@@ -144,7 +148,7 @@ async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclus
   // broadCategories filter.
   if (categoryEnums.length > 0) {
     try {
-      const knownCategories = categoryEnums.filter((value): value is typeof CATEGORIES[number] =>
+      const knownCategories = categoryEnums.filter((value): value is (typeof CATEGORIES)[number] =>
         (CATEGORIES as readonly string[]).includes(value),
       );
       if (knownCategories.length > 0) {
@@ -204,7 +208,8 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
 
   const isExcluded = (domain: string, broadCategory: string | null): boolean => {
     if (excludedDomains.subcategories.has(domain.toLowerCase())) return true;
-    if (broadCategory && excludedDomains.broadCategories.has(broadCategory.toLowerCase())) return true;
+    if (broadCategory && excludedDomains.broadCategories.has(broadCategory.toLowerCase()))
+      return true;
     return false;
   };
 
@@ -277,11 +282,13 @@ export async function invalidateUntouchedDailyQueues(userId: string): Promise<nu
   const queues = await db
     .select()
     .from(dailyQueues)
-    .where(and(
-      eq(dailyQueues.userId, userId),
-      lte(dailyQueues.queueDate, assignmentDateStr),
-      gte(dailyQueues.queueDate, oldestEligible),
-    ));
+    .where(
+      and(
+        eq(dailyQueues.userId, userId),
+        lte(dailyQueues.queueDate, assignmentDateStr),
+        gte(dailyQueues.queueDate, oldestEligible),
+      ),
+    );
 
   const untouchedIds = queues
     .filter((queue) => !asQueueSlots(queue.slots).some((slot) => slot.answered || slot.skipped))
@@ -324,11 +331,13 @@ export async function carryForwardUntouchedDailyQueue(userId: string): Promise<b
   const [prior] = await db
     .select()
     .from(dailyQueues)
-    .where(and(
-      eq(dailyQueues.userId, userId),
-      lt(dailyQueues.queueDate, assignmentDateStr),
-      gte(dailyQueues.queueDate, oldestEligible),
-    ))
+    .where(
+      and(
+        eq(dailyQueues.userId, userId),
+        lt(dailyQueues.queueDate, assignmentDateStr),
+        gte(dailyQueues.queueDate, oldestEligible),
+      ),
+    )
     .orderBy(desc(dailyQueues.queueDate))
     .limit(1);
 
@@ -405,10 +414,7 @@ export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
 
   if (generatedIds.length === 0) return [];
 
-  return db
-    .select()
-    .from(generatedQuestions)
-    .where(inArray(generatedQuestions.id, generatedIds));
+  return db.select().from(generatedQuestions).where(inArray(generatedQuestions.id, generatedIds));
 }
 
 export async function getCatchupQuestions(userId: string): Promise<CatchupQuestion[]> {
@@ -429,16 +435,17 @@ async function getDailyCatchupItems(
   const queues = await db
     .select()
     .from(dailyQueues)
-    .where(and(
-      eq(dailyQueues.userId, userId),
-      lte(dailyQueues.queueDate, assignmentDateStr),
-    ))
+    .where(and(eq(dailyQueues.userId, userId), lte(dailyQueues.queueDate, assignmentDateStr)))
     .orderBy(asc(dailyQueues.queueDate));
 
   const candidateSlots = queues.flatMap((queue) =>
     asQueueSlots(queue.slots)
-      .filter((slot) => isCatchUpQueueDateEligible(String(queue.queueDate), assignmentDateStr) && isCatchUpSlotEligible(slot))
-      .map((slot) => ({ queue, slot }))
+      .filter(
+        (slot) =>
+          isCatchUpQueueDateEligible(String(queue.queueDate), assignmentDateStr) &&
+          isCatchUpSlotEligible(slot),
+      )
+      .map((slot) => ({ queue, slot })),
   );
 
   const generatedIds = candidateSlots
@@ -456,17 +463,16 @@ async function getDailyCatchupItems(
       ? db
           .select()
           .from(generatedQuestions)
-          .where(and(
-            eq(generatedQuestions.userId, userId),
-            inArray(generatedQuestions.id, generatedIds),
-          ))
-      : Promise.resolve<typeof generatedQuestions.$inferSelect[]>([]),
+          .where(
+            and(
+              eq(generatedQuestions.userId, userId),
+              inArray(generatedQuestions.id, generatedIds),
+            ),
+          )
+      : Promise.resolve<(typeof generatedQuestions.$inferSelect)[]>([]),
     canonicalIds.length > 0
-      ? db
-          .select()
-          .from(canonicalQuestions)
-          .where(inArray(canonicalQuestions.id, canonicalIds))
-      : Promise.resolve<typeof canonicalQuestions.$inferSelect[]>([]),
+      ? db.select().from(canonicalQuestions).where(inArray(canonicalQuestions.id, canonicalIds))
+      : Promise.resolve<(typeof canonicalQuestions.$inferSelect)[]>([]),
   ]);
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
   const canonicalById = new Map(canonicalRows.map((question) => [question.id, question]));
@@ -513,16 +519,22 @@ async function getDailyCatchupItems(
       if (!slot.question_id) return null;
       const question = canonicalById.get(slot.question_id);
       if (!question || question.deletedAt) return null;
-      const domain = slot.domain || question.canonicalSubcategory || question.broadCategory || question.category;
+      const domain =
+        slot.domain || question.canonicalSubcategory || question.broadCategory || question.category;
       if (!domain || isGenericSubcategory(domain)) return null;
-      const difficulty = asQueueSlotDifficulty(
-        question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null,
-      ) ?? null;
-      const explanation = question.explainerFullWrong
-        ?? question.explainerFull
-        ?? question.explainerBrief
-        ?? question.factualExplanation
-        ?? null;
+      const difficulty =
+        asQueueSlotDifficulty(
+          question.calibratedDifficulty ??
+            question.llmDifficulty ??
+            question.difficultyEstimate ??
+            null,
+        ) ?? null;
+      const explanation =
+        question.explainerFullWrong ??
+        question.explainerFull ??
+        question.explainerBrief ??
+        question.factualExplanation ??
+        null;
       return {
         dailyQueueItemId: dailyQueueItemId(queue.id, slot.slot_index),
         surface: 'daily',
@@ -560,19 +572,24 @@ async function getFeedCatchupItems(
   const oldestDate = new Date(`${assignmentDateStr}T00:00:00.000Z`);
   oldestDate.setUTCDate(oldestDate.getUTCDate() - CATCHUP_LOOKBACK_DAYS);
 
-  let rows: Array<{ feedItem: typeof feedItems.$inferSelect; question: typeof canonicalQuestions.$inferSelect }>;
+  let rows: Array<{
+    feedItem: typeof feedItems.$inferSelect;
+    question: typeof canonicalQuestions.$inferSelect;
+  }>;
   try {
     rows = await db
       .select({ feedItem: feedItems, question: canonicalQuestions })
       .from(feedItems)
       .innerJoin(canonicalQuestions, eq(feedItems.questionId, canonicalQuestions.id))
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        eq(feedItems.state, 'answered'),
-        eq(feedItems.answerResult, 'incorrect'),
-        isNull(feedItems.catchupResolvedAt),
-        gte(feedItems.sourceEventAt, oldestDate),
-      ))
+      .where(
+        and(
+          eq(feedItems.recipientUserId, userId),
+          eq(feedItems.state, 'answered'),
+          eq(feedItems.answerResult, 'incorrect'),
+          isNull(feedItems.catchupResolvedAt),
+          gte(feedItems.sourceEventAt, oldestDate),
+        ),
+      )
       .orderBy(desc(feedItems.sourceEventAt));
   } catch (error) {
     // catchupResolvedAt is added by migration 0038; tolerate a brief window
@@ -587,15 +604,20 @@ async function getFeedCatchupItems(
       if (!domain || isGenericSubcategory(domain)) return null;
       const queueDate = feedItem.sourceEventAt.toISOString().slice(0, 10);
       const expiresAt = catchUpExpiresAt(queueDate);
-      const difficulty = asQueueSlotDifficulty(
-        question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null,
-      ) ?? null;
+      const difficulty =
+        asQueueSlotDifficulty(
+          question.calibratedDifficulty ??
+            question.llmDifficulty ??
+            question.difficultyEstimate ??
+            null,
+        ) ?? null;
       const basePoints = getBasePoints(difficulty, 'first_correct');
-      const explanation = question.explainerFullWrong
-        ?? question.explainerFull
-        ?? question.explainerBrief
-        ?? question.factualExplanation
-        ?? null;
+      const explanation =
+        question.explainerFullWrong ??
+        question.explainerFull ??
+        question.explainerBrief ??
+        question.factualExplanation ??
+        null;
       return {
         dailyQueueItemId: feedCatchupItemId(feedItem.id),
         surface: 'feed',
@@ -632,11 +654,13 @@ export async function createDailyQueueItem(
   const [question] = await db
     .select()
     .from(generatedQuestions)
-    .where(and(
-      eq(generatedQuestions.id, generatedQuestionId),
-      eq(generatedQuestions.userId, userId),
-      isNotNull(generatedQuestions.id),
-    ))
+    .where(
+      and(
+        eq(generatedQuestions.id, generatedQuestionId),
+        eq(generatedQuestions.userId, userId),
+        isNotNull(generatedQuestions.id),
+      ),
+    )
     .limit(1);
 
   if (!question) {
@@ -766,18 +790,17 @@ export async function pickEligibleAuthoredQuestions(
     db
       .select({ questionId: masteryEvents.questionId })
       .from(masteryEvents)
-      .where(and(
-        eq(masteryEvents.userId, viewerUserId),
-        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-        isNotNull(masteryEvents.questionId),
-      )),
+      .where(
+        and(
+          eq(masteryEvents.userId, viewerUserId),
+          inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+          isNotNull(masteryEvents.questionId),
+        ),
+      ),
     db
       .select({ questionId: feedItems.questionId })
       .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, viewerUserId),
-        isNotNull(feedItems.questionId),
-      )),
+      .where(and(eq(feedItems.recipientUserId, viewerUserId), isNotNull(feedItems.questionId))),
   ]);
   const seenQuestionIds = new Set<string>();
   for (const row of pastQueues) {
@@ -813,18 +836,17 @@ export async function pickEligibleAuthoredQuestions(
       createdAt: canonicalQuestions.createdAt,
     })
     .from(canonicalQuestions)
-    .where(and(
-      eq(canonicalQuestions.publicStatus, 'eligible_pending'),
-      eq(canonicalQuestions.visibility, 'public'),
-      isNotNull(canonicalQuestions.creatorId),
-      isNotNull(canonicalQuestions.canonicalSubcategory),
-      inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
-      isNull(canonicalQuestions.deletedAt),
-    ))
-    .orderBy(
-      desc(canonicalQuestions.publicEligibilityScore),
-      desc(canonicalQuestions.createdAt),
+    .where(
+      and(
+        eq(canonicalQuestions.publicStatus, 'eligible_pending'),
+        eq(canonicalQuestions.visibility, 'public'),
+        isNotNull(canonicalQuestions.creatorId),
+        isNotNull(canonicalQuestions.canonicalSubcategory),
+        inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
+        isNull(canonicalQuestions.deletedAt),
+      ),
     )
+    .orderBy(desc(canonicalQuestions.publicEligibilityScore), desc(canonicalQuestions.createdAt))
     .limit(overFetch);
 
   const tierOf = (creatorId: string | null): number => {
@@ -854,27 +876,32 @@ export async function pickEligibleAuthoredQuestions(
   if (filtered.length === 0) return [];
 
   // Hydrate author display names in one shot.
-  const authorIds = [...new Set(filtered.map((c) => c.row.creatorId).filter((id): id is string => Boolean(id)))];
+  const authorIds = [
+    ...new Set(filtered.map((c) => c.row.creatorId).filter((id): id is string => Boolean(id))),
+  ];
   const authorRows = await db
     .select({ id: users.id, displayName: users.displayName })
     .from(users)
     .where(inArray(users.id, authorIds));
   const nameById = new Map(authorRows.map((u) => [u.id, u.displayName] as const));
 
-  return filtered.map(({ row }) => ({
-    id: row.id,
-    creatorId: row.creatorId,
-    questionText: row.questionText,
-    answerText: row.answerText,
-    alternateAnswers: row.alternateAnswers ?? [],
-    factualExplanation: row.factualExplanation,
-    canonicalSubcategory: row.canonicalSubcategory ?? '',
-    broadCategory: row.broadCategory,
-    category: String(row.category ?? ''),
-    difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
-    authorName: row.creatorId ? nameById.get(row.creatorId) ?? null : null,
-    authorNote: row.creatorNote ?? null,
-  } satisfies AuthoredPick));
+  return filtered.map(
+    ({ row }) =>
+      ({
+        id: row.id,
+        creatorId: row.creatorId,
+        questionText: row.questionText,
+        answerText: row.answerText,
+        alternateAnswers: row.alternateAnswers ?? [],
+        factualExplanation: row.factualExplanation,
+        canonicalSubcategory: row.canonicalSubcategory ?? '',
+        broadCategory: row.broadCategory,
+        category: String(row.category ?? ''),
+        difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
+        authorName: row.creatorId ? (nameById.get(row.creatorId) ?? null) : null,
+        authorNote: row.creatorNote ?? null,
+      }) satisfies AuthoredPick,
+  );
 }
 
 /**
@@ -989,9 +1016,7 @@ export function selectBonusAnswererPicks(
   // demonstrated knowledge base.
   const subcatSet = new Set(knowledgeBase.map((d) => d.domain.toLowerCase()));
   const broadCatSet = new Set(
-    knowledgeBase
-      .map((d) => d.broadCategory?.toLowerCase())
-      .filter((c): c is string => Boolean(c)),
+    knowledgeBase.map((d) => d.broadCategory?.toLowerCase()).filter((c): c is string => Boolean(c)),
   );
   const tierOf = (canonicalSubcategory: string | null, broadCategory: string | null): number => {
     if (canonicalSubcategory && subcatSet.has(canonicalSubcategory.toLowerCase())) return 0;
@@ -1082,11 +1107,13 @@ export async function pickBonusAnswererSlots(
   const answeredRows = await db
     .select({ questionId: masteryEvents.questionId })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, viewerUserId),
-      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-      isNotNull(masteryEvents.questionId),
-    ));
+    .where(
+      and(
+        eq(masteryEvents.userId, viewerUserId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        isNotNull(masteryEvents.questionId),
+      ),
+    );
   const answeredQuestionIds = new Set<string>();
   for (const row of answeredRows) {
     if (row.questionId) answeredQuestionIds.add(row.questionId);
@@ -1112,14 +1139,16 @@ export async function pickBonusAnswererSlots(
     })
     .from(feedItems)
     .innerJoin(canonicalQuestions, eq(feedItems.questionId, canonicalQuestions.id))
-    .where(and(
-      eq(feedItems.recipientUserId, viewerUserId),
-      eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
-      eq(feedItems.sourceResult, 'correct'),
-      inArray(feedItems.sourceUserId, [...followingIds]),
-      isNull(canonicalQuestions.deletedAt),
-      isNotNull(canonicalQuestions.canonicalSubcategory),
-    ))
+    .where(
+      and(
+        eq(feedItems.recipientUserId, viewerUserId),
+        eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
+        eq(feedItems.sourceResult, 'correct'),
+        inArray(feedItems.sourceUserId, [...followingIds]),
+        isNull(canonicalQuestions.deletedAt),
+        isNotNull(canonicalQuestions.canonicalSubcategory),
+      ),
+    )
     .orderBy(desc(feedItems.sourceEventAt));
 
   const top = selectBonusAnswererPicks(rows, {
@@ -1145,7 +1174,7 @@ export async function pickBonusAnswererSlots(
 
   return top.map((pick) => ({
     ...pick,
-    authorName: pick.creatorId ? nameById.get(pick.creatorId) ?? null : null,
+    authorName: pick.creatorId ? (nameById.get(pick.creatorId) ?? null) : null,
     answererName: nameById.get(pick.answererId) ?? null,
   }));
 }
@@ -1296,13 +1325,15 @@ export async function pickBankSource(
     candidates = await db
       .select()
       .from(generatedQuestions)
-      .where(and(
-        eq(generatedQuestions.canonicalSubcategory, domain),
-        eq(generatedQuestions.difficultyEstimate, difficulty),
-        isNotNull(generatedQuestions.factKey),
-        sql`${generatedQuestions.userId} <> ${userId}`,
-        gte(generatedQuestions.createdAt, since),
-      ))
+      .where(
+        and(
+          eq(generatedQuestions.canonicalSubcategory, domain),
+          eq(generatedQuestions.difficultyEstimate, difficulty),
+          isNotNull(generatedQuestions.factKey),
+          sql`${generatedQuestions.userId} <> ${userId}`,
+          gte(generatedQuestions.createdAt, since),
+        ),
+      )
       .orderBy(sql`random()`)
       .limit(8);
   } catch (error) {
@@ -1346,10 +1377,7 @@ export async function getRecentDomainCounts(
       count: sql<number>`count(*)::int`,
     })
     .from(generatedQuestions)
-    .where(and(
-      eq(generatedQuestions.userId, userId),
-      gte(generatedQuestions.createdAt, since),
-    ))
+    .where(and(eq(generatedQuestions.userId, userId), gte(generatedQuestions.createdAt, since)))
     .groupBy(generatedQuestions.canonicalSubcategory);
 
   const result = new Map<string, number>();
@@ -1382,10 +1410,12 @@ export async function getRecentSubAnglesByDomain(
         subAngles: generatedQuestions.subAngles,
       })
       .from(generatedQuestions)
-      .where(and(
-        eq(generatedQuestions.userId, userId),
-        inArray(generatedQuestions.canonicalSubcategory, domains),
-      ))
+      .where(
+        and(
+          eq(generatedQuestions.userId, userId),
+          inArray(generatedQuestions.canonicalSubcategory, domains),
+        ),
+      )
       .orderBy(sql`${generatedQuestions.createdAt} desc`)
       .limit(rowLimit);
   } catch (error) {
@@ -1437,10 +1467,7 @@ export async function getRecentFactKeys(
       domain: generatedQuestions.canonicalSubcategory,
     })
     .from(generatedQuestions)
-    .where(and(
-      eq(generatedQuestions.userId, userId),
-      isNotNull(generatedQuestions.factKey),
-    ))
+    .where(and(eq(generatedQuestions.userId, userId), isNotNull(generatedQuestions.factKey)))
     .orderBy(sql`${generatedQuestions.createdAt} desc`)
     .limit(limit);
 
@@ -1457,16 +1484,21 @@ export async function getAnsweredDailyCount(queue: DailyQueueRow): Promise<numbe
   return asQueueSlots(queue.slots).filter((slot) => slot.answered).length;
 }
 
-export async function userHasFriendMediatedDomain(userId: string, domain: string): Promise<boolean> {
+export async function userHasFriendMediatedDomain(
+  userId: string,
+  domain: string,
+): Promise<boolean> {
   const [row] = await db
     .select({ id: masteryEvents.id })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.canonicalSubcategory, domain),
-      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-      isNotNull(masteryEvents.questionId),
-    ))
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        eq(masteryEvents.canonicalSubcategory, domain),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        isNotNull(masteryEvents.questionId),
+      ),
+    )
     .limit(1);
 
   return Boolean(row);
@@ -1476,11 +1508,13 @@ export async function getKBDomainEntry(userId: string, domain: string) {
   const [row] = await db
     .select()
     .from(declaredInterests)
-    .where(and(
-      eq(declaredInterests.userId, userId),
-      eq(declaredInterests.domain, domain),
-      eq(declaredInterests.isActive, true),
-    ))
+    .where(
+      and(
+        eq(declaredInterests.userId, userId),
+        eq(declaredInterests.domain, domain),
+        eq(declaredInterests.isActive, true),
+      ),
+    )
     .limit(1);
 
   return row ?? null;

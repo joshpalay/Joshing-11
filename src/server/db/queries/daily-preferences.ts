@@ -2,11 +2,17 @@ import { eq } from 'drizzle-orm';
 
 import { dailyPreferences, db } from '@/server/db';
 
-export const DAILY_DIFFICULTIES = ['normal', 'moderate', 'challenging', 'ridiculous', 'adaptive'] as const;
+export const DAILY_DIFFICULTIES = [
+  'normal',
+  'moderate',
+  'challenging',
+  'ridiculous',
+  'adaptive',
+] as const;
 export const DAILY_DOMAIN_MODES = ['random', 'custom'] as const;
 
-export type DailyDifficulty = typeof DAILY_DIFFICULTIES[number];
-export type DailyDomainMode = typeof DAILY_DOMAIN_MODES[number];
+export type DailyDifficulty = (typeof DAILY_DIFFICULTIES)[number];
+export type DailyDomainMode = (typeof DAILY_DOMAIN_MODES)[number];
 
 export type DailyPreferences = {
   userId: string;
@@ -16,7 +22,9 @@ export type DailyPreferences = {
   updatedAt: Date | null;
 };
 
-export type DailyPreferencesUpdate = Partial<Pick<DailyPreferences, 'difficulty' | 'domainMode' | 'selectedDomains'>>;
+export type DailyPreferencesUpdate = Partial<
+  Pick<DailyPreferences, 'difficulty' | 'domainMode' | 'selectedDomains'>
+>;
 
 export function defaultDailyPreferences(userId: string): DailyPreferences {
   return {
@@ -72,8 +80,10 @@ export async function updateDailyPreferences(
   const now = new Date();
   const selectedDomains =
     data.selectedDomains === undefined ? undefined : normalizeSelectedDomains(data.selectedDomains);
-  const difficulty = data.difficulty && isDailyDifficulty(data.difficulty) ? data.difficulty : undefined;
-  const domainMode = data.domainMode && isDailyDomainMode(data.domainMode) ? data.domainMode : undefined;
+  const difficulty =
+    data.difficulty && isDailyDifficulty(data.difficulty) ? data.difficulty : undefined;
+  const domainMode =
+    data.domainMode && isDailyDomainMode(data.domainMode) ? data.domainMode : undefined;
 
   const [preference] = await db
     .insert(dailyPreferences)

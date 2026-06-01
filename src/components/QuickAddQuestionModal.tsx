@@ -132,10 +132,22 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
           padding: '24px 24px 20px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            marginBottom: '20px',
+          }}
+        >
           <h2
             id="quick-add-title"
-            style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', fontSize: '1.35rem', fontWeight: 600, color: 'var(--text)' }}
+            style={{
+              fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+              fontSize: '1.35rem',
+              fontWeight: 600,
+              color: 'var(--text)',
+            }}
           >
             Quick add question
           </h2>
@@ -143,7 +155,15 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.25rem', lineHeight: 1, padding: '0 2px' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              fontSize: '1.25rem',
+              lineHeight: 1,
+              padding: '0 2px',
+            }}
           >
             ×
           </button>
@@ -165,10 +185,32 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <form
+          onSubmit={handleSubmit}
+          style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+        >
           <div>
-            <label htmlFor="qqm-short-label" style={{ ...monoStyle, display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>
-              Short label <span style={{ textTransform: 'none', fontFamily: 'var(--font-sans)', letterSpacing: 'normal', color: 'var(--text-muted)', opacity: 0.7 }}>(optional)</span>
+            <label
+              htmlFor="qqm-short-label"
+              style={{
+                ...monoStyle,
+                display: 'block',
+                color: 'var(--text-muted)',
+                marginBottom: '5px',
+              }}
+            >
+              Short label{' '}
+              <span
+                style={{
+                  textTransform: 'none',
+                  fontFamily: 'var(--font-sans)',
+                  letterSpacing: 'normal',
+                  color: 'var(--text-muted)',
+                  opacity: 0.7,
+                }}
+              >
+                (optional)
+              </span>
             </label>
             <input
               id="qqm-short-label"
@@ -183,7 +225,15 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
           </div>
 
           <div>
-            <label htmlFor="qqm-question" style={{ ...monoStyle, display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>
+            <label
+              htmlFor="qqm-question"
+              style={{
+                ...monoStyle,
+                display: 'block',
+                color: 'var(--text-muted)',
+                marginBottom: '5px',
+              }}
+            >
               Question
             </label>
             <textarea
@@ -198,7 +248,15 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
           </div>
 
           <div>
-            <label htmlFor="qqm-answer" style={{ ...monoStyle, display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>
+            <label
+              htmlFor="qqm-answer"
+              style={{
+                ...monoStyle,
+                display: 'block',
+                color: 'var(--text-muted)',
+                marginBottom: '5px',
+              }}
+            >
               Answer
             </label>
             <input
@@ -212,15 +270,40 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
             />
           </div>
 
-          <div style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'color-mix(in srgb, var(--muted, #f5f5f5) 55%, var(--bg))' }}>
-            <p style={{ ...monoStyle, color: 'var(--text-muted)', marginBottom: '4px' }}>AI classification</p>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-              Joshing will read the question and answer when you save, then choose the category, specific area, and difficulty automatically.
+          <div
+            style={{
+              padding: '10px 12px',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              background: 'color-mix(in srgb, var(--muted, #f5f5f5) 55%, var(--bg))',
+            }}
+          >
+            <p style={{ ...monoStyle, color: 'var(--text-muted)', marginBottom: '4px' }}>
+              AI classification
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: '0.85rem',
+                color: 'var(--text-muted)',
+                lineHeight: 1.45,
+              }}
+            >
+              Joshing will read the question and answer when you save, then choose the category,
+              specific area, and difficulty automatically.
             </p>
           </div>
 
           <div>
-            <label htmlFor="qqm-context" style={{ ...monoStyle, display: 'block', color: 'var(--text-muted)', marginBottom: '5px' }}>
+            <label
+              htmlFor="qqm-context"
+              style={{
+                ...monoStyle,
+                display: 'block',
+                color: 'var(--text-muted)',
+                marginBottom: '5px',
+              }}
+            >
               Why this is special to you
             </label>
             <input
@@ -242,7 +325,14 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
             <button
               type="button"
               onClick={onClose}
-              style={{ ...monoStyle, color: 'var(--text-muted)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{
+                ...monoStyle,
+                color: 'var(--text-muted)',
+                textDecoration: 'underline',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+              }}
             >
               Cancel
             </button>

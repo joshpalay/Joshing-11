@@ -16,7 +16,10 @@ type ParsedPagination =
 function parsePagination(request: NextRequest): ParsedPagination {
   const limitParam = request.nextUrl.searchParams.get('limit');
   const cursorParam = request.nextUrl.searchParams.get('cursor');
-  const filterParam = request.nextUrl.searchParams.get('filter') ?? request.nextUrl.searchParams.get('feed_filter') ?? 'all';
+  const filterParam =
+    request.nextUrl.searchParams.get('filter') ??
+    request.nextUrl.searchParams.get('feed_filter') ??
+    'all';
   const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : DEFAULT_PAGE_LIMIT;
 
   const limit = Number.isFinite(parsedLimit)

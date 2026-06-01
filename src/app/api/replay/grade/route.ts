@@ -15,12 +15,14 @@ export const dynamic = 'force-dynamic';
 function parseBody(value: unknown): { dailyQueueItemId: string; submittedAnswer: string } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const dailyQueueItemId = typeof record.dailyQueueItemId === 'string'
-    ? record.dailyQueueItemId
-    : typeof record.assignmentId === 'string'
-      ? record.assignmentId
-      : null;
-  const submittedAnswer = typeof record.submittedAnswer === 'string' ? record.submittedAnswer.trim() : null;
+  const dailyQueueItemId =
+    typeof record.dailyQueueItemId === 'string'
+      ? record.dailyQueueItemId
+      : typeof record.assignmentId === 'string'
+        ? record.assignmentId
+        : null;
+  const submittedAnswer =
+    typeof record.submittedAnswer === 'string' ? record.submittedAnswer.trim() : null;
   if (!dailyQueueItemId || !submittedAnswer) return null;
   return { dailyQueueItemId, submittedAnswer };
 }
@@ -37,25 +39,32 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const replayItem = (await getReplayWrongQuestions(session.userId))
-    .find((item) => item.dailyQueueItemId === parsed.dailyQueueItemId);
-  if (!replayItem) return NextResponse.json({ error: 'not_found', message: 'Replay question not found' }, { status: 404 });
+  const replayItem = (await getReplayWrongQuestions(session.userId)).find(
+    (item) => item.dailyQueueItemId === parsed.dailyQueueItemId,
+  );
+  if (!replayItem)
+    return NextResponse.json(
+      { error: 'not_found', message: 'Replay question not found' },
+      { status: 404 },
+    );
 
   const [queueId, slotIndexValue] = replayItem.dailyQueueItemId.split(':');
   const slotIndex = Number(slotIndexValue);
-  const [queue] = await db
-    .select()
-    .from(dailyQueues)
-    .where(eq(dailyQueues.id, queueId))
-    .limit(1);
+  const [queue] = await db.select().from(dailyQueues).where(eq(dailyQueues.id, queueId)).limit(1);
   if (!queue || queue.userId !== session.userId || !Number.isInteger(slotIndex)) {
-    return NextResponse.json({ error: 'not_found', message: 'Replay question not found' }, { status: 404 });
+    return NextResponse.json(
+      { error: 'not_found', message: 'Replay question not found' },
+      { status: 404 },
+    );
   }
 
   const slots = asQueueSlots(queue.slots);
   const slot = findQueueSlotBySlotIndex(slots, slotIndex);
   if (!slot || !slot.answered || slot.answer_state !== 'incorrect') {
-    return NextResponse.json({ error: 'invalid_state', message: 'Replay item is no longer available' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'invalid_state', message: 'Replay item is no longer available' },
+      { status: 400 },
+    );
   }
 
   const grade = await gradeAnswer(
@@ -75,15 +84,20 @@ export async function POST(request: NextRequest) {
     domain: replayItem.domain,
   }).catch(() => null);
 
-  const nextSlots = replaceQueueSlot(slots, slotIndex, (item) => ({
-    ...item,
-    answer_state: isCorrect ? 'correct' : 'incorrect',
-    submitted_answer: parsed.submittedAnswer,
-    reveal_canonical_answer: replayItem.correctAnswer,
-    reveal_explainer: replayItem.explanation ?? '',
-    reveal_breadcrumb: breadcrumb,
-    reveal_quip: grade.consolation,
-  }) satisfies QueueSlot);
+  const nextSlots = replaceQueueSlot(
+    slots,
+    slotIndex,
+    (item) =>
+      ({
+        ...item,
+        answer_state: isCorrect ? 'correct' : 'incorrect',
+        submitted_answer: parsed.submittedAnswer,
+        reveal_canonical_answer: replayItem.correctAnswer,
+        reveal_explainer: replayItem.explanation ?? '',
+        reveal_breadcrumb: breadcrumb,
+        reveal_quip: grade.consolation,
+      }) satisfies QueueSlot,
+  );
 
   if (isCorrect) {
     await writeMasteryEvent({
@@ -101,10 +115,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  await db
-    .update(dailyQueues)
-    .set({ slots: nextSlots })
-    .where(eq(dailyQueues.id, queue.id));
+  await db.update(dailyQueues).set({ slots: nextSlots }).where(eq(dailyQueues.id, queue.id));
 
   return NextResponse.json({
     dailyQueueItemId: replayItem.dailyQueueItemId,

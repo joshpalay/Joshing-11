@@ -1,21 +1,21 @@
-import type { ReactNode } from 'react'
-import Link from 'next/link'
+import type { ReactNode } from 'react';
+import Link from 'next/link';
 
-import { visibleFeedCategory } from './category'
-import { SparkleEnvelope } from './SparkleEnvelope'
-import type { DirectSentFeedItem } from './types'
+import { visibleFeedCategory } from './category';
+import { SparkleEnvelope } from './SparkleEnvelope';
+import type { DirectSentFeedItem } from './types';
 
 type DirectSentCardProps = {
-  item: DirectSentFeedItem
-  overflow?: ReactNode
-  onAnswer?: () => void
-  onDismiss?: () => void
-}
+  item: DirectSentFeedItem;
+  overflow?: ReactNode;
+  onAnswer?: () => void;
+  onDismiss?: () => void;
+};
 
 export function DirectSentCard({ item, overflow, onAnswer, onDismiss }: DirectSentCardProps) {
-  const visibleCategory = visibleFeedCategory(item.category)
-  const senderName = item.senderName || item.avatarName || 'A friend'
-  const senderHref = item.senderHref ?? item.authorHref ?? null
+  const visibleCategory = visibleFeedCategory(item.category);
+  const senderName = item.senderName || item.avatarName || 'A friend';
+  const senderHref = item.senderHref ?? item.authorHref ?? null;
 
   // Figma header line: actor in the link slate, the rest in black, with the
   // optional personal note in italic serif beneath.
@@ -31,12 +31,12 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss }: DirectSe
       thought you&rsquo;d like this
       {visibleCategory ? <> about {visibleCategory}</> : null}.
       {item.personalMessage ? (
-        <span className="mt-1 block font-serif text-[14px] italic leading-snug text-[var(--brand-ink-700)]">
+        <span className="mt-1 block font-serif text-[14px] leading-snug text-[var(--brand-ink-700)] italic">
           &ldquo;{item.personalMessage}&rdquo;
         </span>
       ) : null}
     </>
-  )
+  );
 
   return (
     <SparkleEnvelope
@@ -46,5 +46,5 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss }: DirectSe
       onAnswer={item.viewerIsAuthor ? undefined : onAnswer}
       onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
     />
-  )
+  );
 }

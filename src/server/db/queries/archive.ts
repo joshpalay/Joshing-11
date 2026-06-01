@@ -66,22 +66,27 @@ function asQueueSlots(value: unknown): QueueSlot[] {
 }
 
 function displayNameForDomain(domain: string): string {
-  return domain
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase()) || 'General';
+  return (
+    domain
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || 'General'
+  );
 }
 
 function questionDomain(question: typeof questions.$inferSelect | null | undefined): string {
-  return question?.canonicalSubcategory || question?.broadCategory || question?.category || 'General';
+  return (
+    question?.canonicalSubcategory || question?.broadCategory || question?.category || 'General'
+  );
 }
 
-function questionExplanation(question: typeof questions.$inferSelect | null | undefined): string | null {
-  return question?.explainerFull
-    ?? question?.explainerBrief
-    ?? question?.factualExplanation
-    ?? null;
+function questionExplanation(
+  question: typeof questions.$inferSelect | null | undefined,
+): string | null {
+  return (
+    question?.explainerFull ?? question?.explainerBrief ?? question?.factualExplanation ?? null
+  );
 }
 
 function dateLabel(value: Date | string | null | undefined): string {
@@ -97,7 +102,9 @@ function personName(value: string | null | undefined): string {
 
 function encodeCursor(item: ArchiveItem): string {
   const time = item.answeredAt ? new Date(item.answeredAt).getTime() : 0;
-  return Buffer.from(JSON.stringify({ answeredAt: time, id: item.id }), 'utf8').toString('base64url');
+  return Buffer.from(JSON.stringify({ answeredAt: time, id: item.id }), 'utf8').toString(
+    'base64url',
+  );
 }
 
 function decodeCursor(cursor: string | undefined): { answeredAt: number; id: string } | null {
@@ -126,29 +133,41 @@ function afterCursor(item: ArchiveItem, cursor: { answeredAt: number; id: string
 }
 
 async function decorateItems(userId: string, items: ArchiveItem[]): Promise<ArchiveItem[]> {
-  const actionableIds = [...new Set(items.filter((item) => item.canUseQuestionActions).map((item) => item.questionId))];
+  const actionableIds = [
+    ...new Set(items.filter((item) => item.canUseQuestionActions).map((item) => item.questionId)),
+  ];
   if (actionableIds.length === 0) return items;
 
   const [bankRows, ratingRows] = await Promise.all([
     db
       .select({ questionId: userQuestionBank.questionId })
       .from(userQuestionBank)
-      .where(and(eq(userQuestionBank.userId, userId), inArray(userQuestionBank.questionId, actionableIds))),
+      .where(
+        and(
+          eq(userQuestionBank.userId, userId),
+          inArray(userQuestionBank.questionId, actionableIds),
+        ),
+      ),
     db
       .select({ questionId: questionRatings.questionId, rating: questionRatings.rating })
       .from(questionRatings)
-      .where(and(eq(questionRatings.userId, userId), inArray(questionRatings.questionId, actionableIds))),
+      .where(
+        and(eq(questionRatings.userId, userId), inArray(questionRatings.questionId, actionableIds)),
+      ),
   ]);
 
   const banked = new Set(bankRows.map((row) => row.questionId));
   const ratingByQuestionId = new Map<string, 'up' | 'down' | null>(
-    ratingRows.map((row) => [row.questionId, row.rating === 'up' || row.rating === 'down' ? row.rating : null]),
+    ratingRows.map((row) => [
+      row.questionId,
+      row.rating === 'up' || row.rating === 'down' ? row.rating : null,
+    ]),
   );
 
   return items.map((item) => ({
     ...item,
     isInBank: item.canUseQuestionActions ? banked.has(item.questionId) : false,
-    myRating: item.canUseQuestionActions ? ratingByQuestionId.get(item.questionId) ?? null : null,
+    myRating: item.canUseQuestionActions ? (ratingByQuestionId.get(item.questionId) ?? null) : null,
   }));
 }
 
@@ -160,25 +179,37 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
     .orderBy(desc(dailyQueues.queueDate));
 
   const generatedIds = queues.flatMap((queue) =>
-    asQueueSlots(queue.slots).map((slot) => slot.generated_question_id).filter((id): id is string => Boolean(id)),
+    asQueueSlots(queue.slots)
+      .map((slot) => slot.generated_question_id)
+      .filter((id): id is string => Boolean(id)),
   );
   const bankQuestionIds = queues.flatMap((queue) =>
-    asQueueSlots(queue.slots).map((slot) => slot.question_id).filter((id): id is string => Boolean(id)),
+    asQueueSlots(queue.slots)
+      .map((slot) => slot.question_id)
+      .filter((id): id is string => Boolean(id)),
   );
 
   const [generatedRows, questionRows] = await Promise.all([
     generatedIds.length
-      ? db.select().from(generatedQuestions).where(inArray(generatedQuestions.id, [...new Set(generatedIds)]))
+      ? db
+          .select()
+          .from(generatedQuestions)
+          .where(inArray(generatedQuestions.id, [...new Set(generatedIds)]))
       : Promise.resolve([]),
     bankQuestionIds.length
-      ? db.select().from(questions).where(inArray(questions.id, [...new Set(bankQuestionIds)]))
+      ? db
+          .select()
+          .from(questions)
+          .where(inArray(questions.id, [...new Set(bankQuestionIds)]))
       : Promise.resolve([]),
   ]);
 
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
   const questionById = new Map(questionRows.map((question) => [question.id, question]));
 
-  const creatorIds = [...new Set(questionRows.map((q) => q.creatorId).filter((id): id is string => Boolean(id)))];
+  const creatorIds = [
+    ...new Set(questionRows.map((q) => q.creatorId).filter((id): id is string => Boolean(id))),
+  ];
   const creatorRows = creatorIds.length
     ? await db
         .select({ id: users.id, displayName: users.displayName })
@@ -191,23 +222,36 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
     asQueueSlots(queue.slots)
       .filter((slot) => slot.answered || slot.skipped)
       .map((slot) => {
-        const generated = slot.generated_question_id ? generatedById.get(slot.generated_question_id) : null;
+        const generated = slot.generated_question_id
+          ? generatedById.get(slot.generated_question_id)
+          : null;
         const bankQuestion = slot.question_id ? questionById.get(slot.question_id) : null;
-        const domain = slot.domain || generated?.canonicalSubcategory || questionDomain(bankQuestion);
-        const questionId = slot.question_id ?? slot.generated_question_id ?? `${queue.id}:${slot.slot_index}`;
-        const askerDisplay = bankQuestion?.creatorId ? creatorById.get(bankQuestion.creatorId) ?? null : null;
+        const domain =
+          slot.domain || generated?.canonicalSubcategory || questionDomain(bankQuestion);
+        const questionId =
+          slot.question_id ?? slot.generated_question_id ?? `${queue.id}:${slot.slot_index}`;
+        const askerDisplay = bankQuestion?.creatorId
+          ? (creatorById.get(bankQuestion.creatorId) ?? null)
+          : null;
         return {
           id: `daily:${queue.id}:${slot.slot_index}`,
           questionId,
-          questionText: slot.question_text || generated?.questionText || bankQuestion?.questionText || '',
+          questionText:
+            slot.question_text || generated?.questionText || bankQuestion?.questionText || '',
           domain,
           domainDisplayName: displayNameForDomain(domain),
           source: 'daily',
           sourceLabel: `Daily Five · ${dateLabel(String(queue.queueDate))}`,
-          result: slot.skipped ? 'skipped' : slot.answer_state === 'correct' ? 'correct' : 'incorrect',
+          result: slot.skipped
+            ? 'skipped'
+            : slot.answer_state === 'correct'
+              ? 'correct'
+              : 'incorrect',
           submittedAnswer: slot.submitted_answer ?? null,
-          correctAnswer: slot.reveal_canonical_answer ?? generated?.answer ?? bankQuestion?.answerText ?? '',
-          explanation: slot.reveal_explainer ?? generated?.explainer ?? questionExplanation(bankQuestion),
+          correctAnswer:
+            slot.reveal_canonical_answer ?? generated?.answer ?? bankQuestion?.answerText ?? '',
+          explanation:
+            slot.reveal_explainer ?? generated?.explainer ?? questionExplanation(bankQuestion),
           pointsAwarded: slot.awarded_points ?? null,
           answeredAt: queue.createdAt.toISOString(),
           isInBank: false,
@@ -252,12 +296,14 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
           createdAt: masteryEvents.createdAt,
         })
         .from(masteryEvents)
-        .where(and(
-          eq(masteryEvents.userId, userId),
-          eq(masteryEvents.answeredByUserId, userId),
-          eq(masteryEvents.sessionContext, 'feed'),
-          inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-        ))
+        .where(
+          and(
+            eq(masteryEvents.userId, userId),
+            eq(masteryEvents.answeredByUserId, userId),
+            eq(masteryEvents.sessionContext, 'feed'),
+            inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+          ),
+        )
     : [];
   const eventByFeedId = new Map<string, (typeof eventRows)[number]>();
   for (const event of eventRows) {
@@ -269,7 +315,8 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
     const sourceName = personName(sourceUser.displayName);
     const domain = questionDomain(question);
     const correctEvent = eventByFeedId.get(feedItem.id);
-    const archiveSource: ArchiveSource = feedItem.sourceType === 'direct_sent' ? 'sent_to_me' : 'feed';
+    const archiveSource: ArchiveSource =
+      feedItem.sourceType === 'direct_sent' ? 'sent_to_me' : 'feed';
     return {
       id: `${archiveSource}:${feedItem.id}`,
       questionId: question.id,
@@ -277,7 +324,8 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       domain,
       domainDisplayName: displayNameForDomain(domain),
       source: archiveSource,
-      sourceLabel: feedItem.sourceType === 'direct_sent' ? `From ${sourceName}` : `Feed · ${sourceName}`,
+      sourceLabel:
+        feedItem.sourceType === 'direct_sent' ? `From ${sourceName}` : `Feed · ${sourceName}`,
       result: correctEvent ? 'correct' : 'incorrect',
       submittedAnswer: feedItem.submittedAnswer ?? null,
       correctAnswer: question.answerText,
@@ -319,7 +367,8 @@ async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
       domainDisplayName: displayNameForDomain(domain),
       source: 'joshing_game',
       sourceLabel: game.title || 'Joshing Game',
-      result: response.isCorrect === null ? 'skipped' : response.isCorrect ? 'correct' : 'incorrect',
+      result:
+        response.isCorrect === null ? 'skipped' : response.isCorrect ? 'correct' : 'incorrect',
       submittedAnswer: response.submittedAnswer,
       correctAnswer: question.answerText,
       explanation: questionExplanation(question),
@@ -350,12 +399,14 @@ async function readWrittenByMeItems(userId: string): Promise<ArchiveItem[]> {
           answeredBy: sql<number>`count(distinct ${masteryEvents.answeredByUserId})`,
         })
         .from(masteryEvents)
-        .where(and(
-          eq(masteryEvents.userId, userId),
-          eq(masteryEvents.sourceType, 'author_credit'),
-          inArray(masteryEvents.questionId, questionIds),
-          ne(masteryEvents.answeredByUserId, userId),
-        ))
+        .where(
+          and(
+            eq(masteryEvents.userId, userId),
+            eq(masteryEvents.sourceType, 'author_credit'),
+            inArray(masteryEvents.questionId, questionIds),
+            ne(masteryEvents.answeredByUserId, userId),
+          ),
+        )
         .groupBy(masteryEvents.questionId)
     : [];
 
@@ -372,7 +423,8 @@ async function readWrittenByMeItems(userId: string): Promise<ArchiveItem[]> {
       domain,
       domainDisplayName: displayNameForDomain(domain),
       source: 'written_by_me',
-      sourceLabel: answeredCount === 1 ? 'Answered by 1 person' : `Answered by ${answeredCount} people`,
+      sourceLabel:
+        answeredCount === 1 ? 'Answered by 1 person' : `Answered by ${answeredCount} people`,
       result: null,
       submittedAnswer: null,
       correctAnswer: question.answerText,
@@ -395,9 +447,11 @@ async function readAllArchiveItems(
 ): Promise<ArchiveItem[]> {
   const readers: Promise<ArchiveItem[]>[] = [];
   if (!source || source === 'daily') readers.push(readDailyItems(userId));
-  if (!source || source === 'feed' || source === 'sent_to_me') readers.push(readFeedItems(userId, source));
+  if (!source || source === 'feed' || source === 'sent_to_me')
+    readers.push(readFeedItems(userId, source));
   if (!source || source === 'joshing_game') readers.push(readJoshingGameItems(userId));
-  if (kind !== 'answered' && (!source || source === 'written_by_me')) readers.push(readWrittenByMeItems(userId));
+  if (kind !== 'answered' && (!source || source === 'written_by_me'))
+    readers.push(readWrittenByMeItems(userId));
 
   const items = (await Promise.all(readers)).flat();
   return decorateItems(userId, items);
@@ -455,6 +509,8 @@ export async function getArchiveFacetsForUser(params: {
   return {
     totalCount: filtered.length,
     correctCount: filtered.filter((item) => item.result === 'correct').length,
-    domains: [...domains.values()].sort((a, b) => a.domainDisplayName.localeCompare(b.domainDisplayName)),
+    domains: [...domains.values()].sort((a, b) =>
+      a.domainDisplayName.localeCompare(b.domainDisplayName),
+    ),
   };
 }

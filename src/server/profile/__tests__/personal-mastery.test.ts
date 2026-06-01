@@ -8,7 +8,9 @@ import {
   type CategoryRow,
 } from '@/server/profile/personal-mastery';
 
-function category(input: Partial<CategoryRow> & Pick<CategoryRow, 'canonical_subcategory'>): CategoryRow {
+function category(
+  input: Partial<CategoryRow> & Pick<CategoryRow, 'canonical_subcategory'>,
+): CategoryRow {
   return {
     canonical_subcategory: input.canonical_subcategory,
     broad_category: input.broad_category ?? 'Music',
@@ -46,8 +48,18 @@ describe('personal mastery helpers', () => {
 
   it('groups by broad category and sorts sections by top activity', () => {
     const grouped = groupCategoriesByBroadCategory([
-      category({ canonical_subcategory: 'A', broad_category: 'History', declared_score: 1, proven_score: 1 }),
-      category({ canonical_subcategory: 'B', broad_category: 'Music', declared_score: 10, proven_score: 2 }),
+      category({
+        canonical_subcategory: 'A',
+        broad_category: 'History',
+        declared_score: 1,
+        proven_score: 1,
+      }),
+      category({
+        canonical_subcategory: 'B',
+        broad_category: 'Music',
+        declared_score: 10,
+        proven_score: 2,
+      }),
     ]);
 
     expect(grouped.map(([name]) => name)).toEqual(['Music', 'History']);

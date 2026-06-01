@@ -91,10 +91,15 @@ function domainKey(value: string): string {
 }
 
 function displayMind(domains: DomainMastery[], declaredInterests: string[]): string {
-  const top = domains.filter((domain) => domain.points > 0).slice(0, 3).map((domain) => domain.displayName);
-  if (top.length >= 2) return `A mind that is building around ${top.slice(0, -1).join(', ')} and ${top.at(-1)}.`;
+  const top = domains
+    .filter((domain) => domain.points > 0)
+    .slice(0, 3)
+    .map((domain) => domain.displayName);
+  if (top.length >= 2)
+    return `A mind that is building around ${top.slice(0, -1).join(', ')} and ${top.at(-1)}.`;
   if (top.length === 1) return `A mind that is building around ${top[0]}.`;
-  if (declaredInterests.length > 0) return `Your mind is ready to explore ${declaredInterests.slice(0, 3).join(', ')}.`;
+  if (declaredInterests.length > 0)
+    return `Your mind is ready to explore ${declaredInterests.slice(0, 3).join(', ')}.`;
   return 'Your mind will take shape as you play and write questions.';
 }
 
@@ -130,8 +135,8 @@ function emptyDomain(domain: string): DomainMastery {
 
 function LoadingSkeleton() {
   return (
-    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
-      <section className="bg-white border border-[var(--border-warm)] p-4">
+    <main className="mx-auto grid w-[min(760px,94vw)] gap-[0.9rem] pt-5 pb-10">
+      <section className="border border-[var(--border-warm)] bg-white p-4">
         <p className="m-0 text-[var(--text-muted-warm)]">Loading...</p>
       </section>
     </main>
@@ -151,7 +156,8 @@ function KnowledgePageContent() {
   const highlightedDomainSlug = searchParams.get('domain');
   const tierCrossed = searchParams.get('tier_crossed');
   const manageInterestsParam = searchParams.get('interests');
-  const emptyDomainParam = searchParams.get('emptyDomain')?.trim() || searchParams.get('askDomain')?.trim() || '';
+  const emptyDomainParam =
+    searchParams.get('emptyDomain')?.trim() || searchParams.get('askDomain')?.trim() || '';
   const emptyQuestionDomain = emptyDomainParam || null;
 
   const [data, setData] = useState<KnowledgeResponse | null>(null);
@@ -178,9 +184,14 @@ function KnowledgePageContent() {
 
   const loadKnowledge = async () => {
     const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
-    const body = await response.json().catch(() => null) as KnowledgeResponse | { message?: string } | null;
+    const body = (await response.json().catch(() => null)) as
+      | KnowledgeResponse
+      | { message?: string }
+      | null;
     if (!response.ok || !body || !('pageData' in body)) {
-      throw new Error((body as { message?: string } | null)?.message ?? 'Could not load your Knowledge Map.');
+      throw new Error(
+        (body as { message?: string } | null)?.message ?? 'Could not load your Knowledge Map.',
+      );
     }
     setData(body);
   };
@@ -189,8 +200,11 @@ function KnowledgePageContent() {
     let active = true;
     const loadDismissedDomains = async () => {
       try {
-        const response = await fetch('/api/feed/dismissed-domains', { cache: 'no-store', credentials: 'include' });
-        const body = await response.json().catch(() => null) as { domains?: string[] } | null;
+        const response = await fetch('/api/feed/dismissed-domains', {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        const body = (await response.json().catch(() => null)) as { domains?: string[] } | null;
         if (active && response.ok && body?.domains) setDismissedDomains(body.domains);
       } catch {
         if (active) setDismissedDomains([]);
@@ -200,7 +214,8 @@ function KnowledgePageContent() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial page hydration is fetched client-side for this route.
     Promise.all([loadKnowledge(), loadDismissedDomains()])
       .catch((caught) => {
-        if (active) setError(caught instanceof Error ? caught.message : 'Could not load your Knowledge Map.');
+        if (active)
+          setError(caught instanceof Error ? caught.message : 'Could not load your Knowledge Map.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -241,7 +256,10 @@ function KnowledgePageContent() {
   }, [highlightedDomainSlug]);
 
   const sortedDomains = useMemo(
-    () => [...(data?.pageData.allDomains ?? [])].sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName)),
+    () =>
+      [...(data?.pageData.allDomains ?? [])].sort(
+        (a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName),
+      ),
     [data],
   );
 
@@ -270,19 +288,33 @@ function KnowledgePageContent() {
   const sharePortraitEntries = useMemo(() => visibleDomains.map(toPortraitEntry), [visibleDomains]);
   const declaredSlots = useMemo(() => {
     if (!data) return [];
-    const byKey = new Map(data.pageData.allDomains.map((domain) => [domainKey(domain.domain), domain]));
-    const filled = data.pageData.declaredInterests.slice(0, 5).map((domain) => byKey.get(domainKey(domain)) ?? emptyDomain(domain));
+    const byKey = new Map(
+      data.pageData.allDomains.map((domain) => [domainKey(domain.domain), domain]),
+    );
+    const filled = data.pageData.declaredInterests
+      .slice(0, 5)
+      .map((domain) => byKey.get(domainKey(domain)) ?? emptyDomain(domain));
     return Array.from({ length: 5 }, (_, index) => filled[index] ?? null);
   }, [data]);
-  const declaredKeys = useMemo(() => new Set((data?.pageData.declaredInterests ?? []).map(domainKey)), [data]);
+  const declaredKeys = useMemo(
+    () => new Set((data?.pageData.declaredInterests ?? []).map(domainKey)),
+    [data],
+  );
   const demonstratedChoices = useMemo(() => {
     if (!data) return [];
     return data.pageData.allDomains
-      .filter((domain) => (domain.isDemonstrated || domain.points > 0) && !declaredKeys.has(domainKey(domain.domain)))
+      .filter(
+        (domain) =>
+          (domain.isDemonstrated || domain.points > 0) &&
+          !declaredKeys.has(domainKey(domain.domain)),
+      )
       .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
   }, [data, declaredKeys]);
 
-  const topCardDomains = useMemo(() => visibleDomains.filter((domain) => domain.points > 0).slice(0, 5), [visibleDomains]);
+  const topCardDomains = useMemo(
+    () => visibleDomains.filter((domain) => domain.points > 0).slice(0, 5),
+    [visibleDomains],
+  );
   const expandingDomains = data?.pageData.expandingDomains ?? [];
   const showShareNotice = (message: string) => {
     setQuestionToast(message);
@@ -304,7 +336,7 @@ function KnowledgePageContent() {
         body: JSON.stringify({ visibility: nextHidden ? 'private' : 'public' }),
       });
       if (!response.ok) {
-        const body = await response.json().catch(() => null) as { message?: string } | null;
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
         throw new Error(body?.message ?? 'Could not save that change.');
       }
     } catch (caught) {
@@ -348,12 +380,17 @@ function KnowledgePageContent() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ warmupAnswers: [raw] }),
       });
-      const body = await response.json().catch(() => null) as { interests?: ProposedInterest[]; message?: string } | null;
+      const body = (await response.json().catch(() => null)) as {
+        interests?: ProposedInterest[];
+        message?: string;
+      } | null;
       if (!response.ok) throw new Error(body?.message ?? 'Could not refine that interest.');
       const proposal = body?.interests?.[0];
       setSelectedInterest(proposal?.label ? proposal : { label: raw });
     } catch (caught) {
-      setInterestError(caught instanceof Error ? caught.message : 'Could not refine that interest.');
+      setInterestError(
+        caught instanceof Error ? caught.message : 'Could not refine that interest.',
+      );
       setSelectedInterest({ label: raw });
     } finally {
       setCanonicalizing(false);
@@ -365,8 +402,8 @@ function KnowledgePageContent() {
     const modal = activeModal;
     setSavingInterests(true);
     setInterestError(null);
-    const nextInterests = (declaredSlots
-      .map((slot, index) => {
+    const nextInterests = (
+      declaredSlots.map((slot, index) => {
         if (index === modal.slotIndex) {
           return {
             label: selectedInterest.label.trim(),
@@ -375,7 +412,8 @@ function KnowledgePageContent() {
           };
         }
         return slot ? { label: slot.domain, broadCategory: slot.broadCategory } : null;
-      }) as Array<ProposedInterest | null>)
+      }) as Array<ProposedInterest | null>
+    )
       .filter((interest): interest is ProposedInterest => Boolean(interest?.label.trim()))
       .slice(0, 5);
 
@@ -386,7 +424,7 @@ function KnowledgePageContent() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ interests: nextInterests }),
       });
-      const body = await response.json().catch(() => null) as { message?: string } | null;
+      const body = (await response.json().catch(() => null)) as { message?: string } | null;
       if (!response.ok) throw new Error(body?.message ?? 'Could not save your interests.');
       await loadKnowledge();
       closeInterestModal();
@@ -404,7 +442,7 @@ function KnowledgePageContent() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(values),
     });
-    const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
+    const body = (await response.json().catch(() => null)) as CreateQuestionResponse | null;
     if (!response.ok) throw new Error(body?.message ?? 'Could not save that question.');
     setActiveModal(null);
     if (values.sendToFriendIds.length > 0) {
@@ -414,7 +452,9 @@ function KnowledgePageContent() {
       const n = body.feedShare.createdCount;
       setQuestionToast(`Saved and shared with ${n} ${n === 1 ? 'friend' : 'friends'}.`);
     } else if (body?.feedShare?.requested && body.feedShare.createdCount === 0) {
-      setQuestionToast('No friends received this because they already had it or filtered that domain.');
+      setQuestionToast(
+        'No friends received this because they already had it or filtered that domain.',
+      );
     } else {
       setQuestionToast('Saved to your bank.');
     }
@@ -441,14 +481,24 @@ function KnowledgePageContent() {
   const confirmTidy = async () => {
     setTidying(true);
     try {
-      const response = await fetch('/api/knowledge/tidy', { method: 'POST', credentials: 'include' });
-      const body = await response.json().catch(() => null) as TidyResult | { message?: string } | null;
+      const response = await fetch('/api/knowledge/tidy', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const body = (await response.json().catch(() => null)) as
+        | TidyResult
+        | { message?: string }
+        | null;
       if (!response.ok || !body || !('mergesApplied' in body)) {
-        throw new Error((body as { message?: string } | null)?.message ?? 'Could not tidy your map.');
+        throw new Error(
+          (body as { message?: string } | null)?.message ?? 'Could not tidy your map.',
+        );
       }
       await loadKnowledge();
       setActiveModal(null);
-      setTidyNotice(body.mergesApplied > 0 ? `${body.mergesApplied} domains combined` : 'Nothing to combine');
+      setTidyNotice(
+        body.mergesApplied > 0 ? `${body.mergesApplied} domains combined` : 'Nothing to combine',
+      );
       window.setTimeout(() => setTidyNotice(null), 3600);
     } catch (caught) {
       setTidyNotice(caught instanceof Error ? caught.message : 'Could not tidy your map.');
@@ -462,10 +512,14 @@ function KnowledgePageContent() {
 
   if (error || !data) {
     return (
-      <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
-        <section className="bg-white border border-[var(--border-warm)] p-4">
-          <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Knowledge</p>
-          <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[#111111] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
+      <main className="mx-auto grid w-[min(760px,94vw)] gap-[0.9rem] pt-5 pb-10">
+        <section className="border border-[var(--border-warm)] bg-white p-4">
+          <p className="m-0 text-[0.72rem] tracking-[0.08em] text-[var(--text-muted)] uppercase">
+            Knowledge
+          </p>
+          <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] font-[var(--font-neutral)] font-semibold text-[#111111]">
+            Could not load your map
+          </h1>
           <p className="m-0 text-[var(--text-muted-warm)]">{error ?? 'Something went sideways.'}</p>
         </section>
       </main>
@@ -473,13 +527,13 @@ function KnowledgePageContent() {
   }
 
   return (
-    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
-      <h1 className="m-0 px-[0.2rem] font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
+    <main className="mx-auto grid w-[min(760px,94vw)] gap-[0.9rem] pt-5 pb-10">
+      <h1 className="m-0 px-[0.2rem] font-serif text-[2rem] leading-tight font-medium text-[var(--brand-ink)]">
         Knowledge
       </h1>
 
       {tierCrossed && highlightedDomainSlug && (
-        <section className="bg-[var(--cream-accent)] text-[var(--ink)] px-[0.95rem] py-3 text-base">
+        <section className="bg-[var(--cream-accent)] px-[0.95rem] py-3 text-base text-[var(--ink)]">
           You reached {tierCrossed} in this domain this session.
         </section>
       )}
@@ -496,7 +550,10 @@ function KnowledgePageContent() {
             iconKey: domain.iconKey,
             broadCategory: domain.broadCategory,
           }))}
-          overflowCount={Math.max(0, visibleDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
+          overflowCount={Math.max(
+            0,
+            visibleDomains.filter((domain) => domain.points > 0).length - topCardDomains.length,
+          )}
           tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${visibleDomains.length} territories`}
           rarestTerritory={null}
           rarestTerritorySolo={false}
@@ -509,21 +566,32 @@ function KnowledgePageContent() {
         />
       )}
 
-      <RecentlyExpanding domains={expandingDomains} playerDisplayName={displayName} onNotice={showShareNotice} />
+      <RecentlyExpanding
+        domains={expandingDomains}
+        playerDisplayName={displayName}
+        onNotice={showShareNotice}
+      />
 
       {hasAnything && (
-        <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
+        <section
+          className="border border-[var(--border-warm)] bg-white p-4"
+          aria-label="Knowledge progression"
+        >
           <div className="mb-2 flex items-start justify-between gap-3">
             <div>
-              <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
-              <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
-                {editMode ? 'TAP A CIRCLE TO HIDE OR SHOW IT' : 'SEE HOW YOUR KNOWLEDGE IS BUILDING ->'}
+              <p className="m-0 text-[13px] font-[var(--font-neutral)] tracking-[0.06em] text-[var(--ink)] [font-variant:small-caps]">
+                YOUR KNOWLEDGE
+              </p>
+              <p className="mt-[0.15rem] text-[10px] font-[var(--font-neutral)] tracking-[0.06em] text-[var(--text-muted-warm)] [font-variant:small-caps]">
+                {editMode
+                  ? 'TAP A CIRCLE TO HIDE OR SHOW IT'
+                  : 'SEE HOW YOUR KNOWLEDGE IS BUILDING ->'}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setEditMode((current) => !current)}
-              className="shrink-0 min-h-8 border border-[var(--border-warm)] bg-white text-[var(--ink)] px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer"
+              className="min-h-8 shrink-0 cursor-pointer border border-[var(--border-warm)] bg-white px-3 text-[0.7rem] tracking-[0.08em] text-[var(--ink)] uppercase"
               aria-pressed={editMode}
             >
               {editMode ? 'Done' : 'Edit'}
@@ -531,15 +599,16 @@ function KnowledgePageContent() {
           </div>
 
           {editMode ? (
-            <p className="m-0 mb-2 text-[0.78rem] text-[var(--text-muted-warm)] leading-[1.5]">
-              Tap a circle to hide it from friends. Hidden circles stay visible to you here while editing.
+            <p className="m-0 mb-2 text-[0.78rem] leading-[1.5] text-[var(--text-muted-warm)]">
+              Tap a circle to hide it from friends. Hidden circles stay visible to you here while
+              editing.
             </p>
           ) : hiddenCount > 0 ? (
             <p className="m-0 mb-2 text-[0.78rem] text-[var(--text-muted-warm)]">
               {hiddenCount} hidden from friends —{' '}
               <button
                 type="button"
-                className="underline bg-transparent border-none p-0 text-[var(--text-muted-warm)] cursor-pointer"
+                className="cursor-pointer border-none bg-transparent p-0 text-[var(--text-muted-warm)] underline"
                 onClick={() => setEditMode(true)}
               >
                 Edit to show
@@ -551,15 +620,23 @@ function KnowledgePageContent() {
             <PortraitCircles
               entries={portraitEntries}
               editMode={editMode}
-              onToggleHidden={(canonical, nextHidden) => void toggleDomainHidden(canonical, nextHidden)}
+              onToggleHidden={(canonical, nextHidden) =>
+                void toggleDomainHidden(canonical, nextHidden)
+              }
               pendingDomain={hidePending}
             />
             {hideError ? (
-              <p className="mt-3 text-[0.78rem] text-[#8b1a0e] border border-[#c0392b]/40 p-2">{hideError}</p>
+              <p className="mt-3 border border-[#c0392b]/40 p-2 text-[0.78rem] text-[#8b1a0e]">
+                {hideError}
+              </p>
             ) : null}
             {!editMode ? (
               <div className="mt-5 flex justify-center">
-                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] text-[#faf8f2] font-['Courier_New',monospace] text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
+                <button
+                  type="button"
+                  className="cursor-pointer border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] px-8 py-[11px] font-['Courier_New',monospace] text-xs tracking-[0.12em] text-[#faf8f2] uppercase shadow-[2px_2px_0_#3a3a3a]"
+                  onClick={() => setShareModalOpen(true)}
+                >
                   Share portrait
                 </button>
               </div>
@@ -569,44 +646,77 @@ function KnowledgePageContent() {
       )}
 
       {emptyQuestionDomain ? (
-        <section className="bg-[#fff7e8] border border-[#d9b56c] px-[0.95rem] py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
-          <h2 className="mt-[0.4rem] text-[1.25rem] leading-[1.35] text-[var(--ink)] font-[var(--font-literata)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
-          <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
-          <div className="flex flex-wrap gap-[10px] mt-5">
-            <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
+        <section
+          className="border border-[#d9b56c] bg-[#fff7e8] px-[0.95rem] py-5"
+          aria-label={`No ${emptyQuestionDomain} questions yet`}
+        >
+          <p className="m-0 text-[13px] font-[var(--font-neutral)] tracking-[0.06em] text-[var(--ink)] [font-variant:small-caps]">
+            No matching public questions
+          </p>
+          <h2 className="mt-[0.4rem] text-[1.25rem] leading-[1.35] font-[var(--font-literata)] font-semibold text-[var(--ink)]">
+            We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?
+          </h2>
+          <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
+            Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be
+            the one to stump them.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-[10px]">
+            <button
+              type="button"
+              className="min-h-10 cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 font-[inherit] text-[0.82rem] text-[var(--cream-warm)]"
+              onClick={() => setAskFriendDomain(emptyQuestionDomain)}
+            >
               Ask a friend
             </button>
-            <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
+            <button
+              type="button"
+              className="min-h-10 cursor-pointer border border-[var(--border-warm)] bg-white px-4 font-[inherit] text-[0.82rem] text-[var(--ink)]"
+              onClick={() => setActiveModal({ type: 'write-question' })}
+            >
               Write one myself
             </button>
           </div>
         </section>
       ) : null}
 
-      <section className="bg-[var(--cream)] border border-[var(--border-warm)] px-[0.95rem] py-5">
-        <h2 className="m-0 text-[1.1rem] font-[var(--font-literata)] text-[var(--ink)]">Grow your map</h2>
+      <section className="border border-[var(--border-warm)] bg-[var(--cream)] px-[0.95rem] py-5">
+        <h2 className="m-0 text-[1.1rem] font-[var(--font-literata)] text-[var(--ink)]">
+          Grow your map
+        </h2>
         <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
-          Answer a friend&apos;s question correctly, or write your own — writing opens new territory; a friend&apos;s correct answer proves it.
+          Answer a friend&apos;s question correctly, or write your own — writing opens new
+          territory; a friend&apos;s correct answer proves it.
         </p>
-        <div className="flex flex-wrap gap-[10px] mt-5">
-          <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
+        <div className="mt-5 flex flex-wrap gap-[10px]">
+          <button
+            type="button"
+            className="min-h-10 cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 font-[inherit] text-[0.82rem] text-[var(--cream-warm)]"
+            onClick={() => setActiveModal({ type: 'write-question' })}
+          >
             Ask a question
           </button>
         </div>
       </section>
 
       {dismissedDomains.length > 0 && (
-        <section id="focused-feed" className="bg-white border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Hidden areas">
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">HIDDEN AREAS</p>
-          <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — UN-HIDE ANY TIME</p>
+        <section
+          id="focused-feed"
+          className="scroll-mt-4 border border-[var(--border-warm)] bg-white p-4"
+          aria-label="Hidden areas"
+        >
+          <p className="m-0 text-[13px] font-[var(--font-neutral)] tracking-[0.06em] text-[var(--ink)] [font-variant:small-caps]">
+            HIDDEN AREAS
+          </p>
+          <p className="mt-[0.15rem] text-[10px] font-[var(--font-neutral)] tracking-[0.06em] text-[var(--text-muted-warm)] [font-variant:small-caps]">
+            DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — UN-HIDE ANY TIME
+          </p>
           <div className="mt-3 flex flex-col gap-2">
             {dismissedDomains.map((domain) => (
               <div key={domain} className="flex items-center justify-between gap-2">
                 <span className="text-sm">{domain}</span>
                 <button
                   type="button"
-                  className="border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]"
+                  className="cursor-pointer border-none bg-transparent p-0 text-[0.76rem] tracking-[0.08em] text-[var(--text-muted-warm)] uppercase underline"
                   onClick={() => void reinstateDomain(domain)}
                   disabled={reinstating === domain}
                   aria-label={`Un-hide ${domain} in your feed`}
@@ -619,50 +729,84 @@ function KnowledgePageContent() {
         </section>
       )}
 
-      <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] pt-[0.85rem] px-[0.2rem]">
+      <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] px-[0.2rem] pt-[0.85rem]">
         <p className="m-0 text-[var(--text-muted-warm)]">Map maintenance</p>
-        <button type="button" className="min-h-9 border border-[var(--border-warm)] bg-white text-[var(--ink)] inline-flex items-center justify-center gap-2 px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => setActiveModal({ type: 'tidy' })} disabled={tidying}>
+        <button
+          type="button"
+          className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 border border-[var(--border-warm)] bg-white px-3 text-[0.7rem] tracking-[0.08em] text-[var(--ink)] uppercase"
+          onClick={() => setActiveModal({ type: 'tidy' })}
+          disabled={tidying}
+        >
           <Combine className="size-3.5" />
           Tidy up my map
         </button>
       </section>
 
       {shareModalOpen && (
-        <SharePortraitModal entries={sharePortraitEntries} playerDisplayName={displayName} onClose={() => setShareModalOpen(false)} />
+        <SharePortraitModal
+          entries={sharePortraitEntries}
+          playerDisplayName={displayName}
+          onClose={() => setShareModalOpen(false)}
+        />
       )}
 
       {askFriendDomain ? (
-        <AskFriendForDomain key={askFriendDomain} domain={askFriendDomain} onClose={() => setAskFriendDomain(null)} />
+        <AskFriendForDomain
+          key={askFriendDomain}
+          domain={askFriendDomain}
+          onClose={() => setAskFriendDomain(null)}
+        />
       ) : null}
 
       {activeModal?.type === 'interests' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="max-h-[90vh] w-[min(540px,100%)] overflow-y-auto border border-[var(--border-warm)] bg-white p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
+                <h2 className="m-0 text-[1.45rem] font-[var(--font-literata)] text-[var(--ink)]">
+                  {activeModal.currentDomain
+                    ? `Swap ${activeModal.currentDomain}`
+                    : 'Add to your declared interests'}
+                </h2>
                 {activeModal.currentDomain ? (
-                  <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your progress in {activeModal.currentDomain} is preserved. It moves to your demonstrated knowledge.</p>
+                  <p className="mt-[0.45rem] text-[0.88rem] leading-[1.5] text-[var(--text-muted-warm)]">
+                    Your progress in {activeModal.currentDomain} is preserved. It moves to your
+                    demonstrated knowledge.
+                  </p>
                 ) : null}
               </div>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={closeInterestModal} aria-label="Close">
+              <button
+                type="button"
+                className="grid h-[34px] w-[34px] cursor-pointer place-items-center border-none bg-transparent text-[var(--text-muted-warm)]"
+                onClick={closeInterestModal}
+                aria-label="Close"
+              >
                 <X className="size-4" />
               </button>
             </div>
 
-            <div className="grid gap-5 mt-5">
+            <div className="mt-5 grid gap-5">
               <div>
-                <h3 className="m-0 text-[var(--ink)] text-[0.9rem]">Pick from your knowledge base</h3>
+                <h3 className="m-0 text-[0.9rem] text-[var(--ink)]">
+                  Pick from your knowledge base
+                </h3>
                 {demonstratedChoices.length === 0 ? (
-                  <p className="mt-2 border border-[var(--border-light)] p-3 text-[var(--text-muted-warm)] text-[0.88rem]">No demonstrated domains are available to add right now.</p>
+                  <p className="mt-2 border border-[var(--border-light)] p-3 text-[0.88rem] text-[var(--text-muted-warm)]">
+                    No demonstrated domains are available to add right now.
+                  </p>
                 ) : (
                   <div className="mt-2 max-h-[176px] overflow-y-auto border border-[var(--border-light)]">
                     {demonstratedChoices.map((domain) => (
                       <button
                         key={domain.domain}
                         type="button"
-                        className={`w-full min-h-[38px] border-0 border-b border-b-[var(--border-light)] flex justify-between gap-3 px-3 cursor-pointer ${selectedInterest?.label === domain.domain ? 'bg-[var(--cream-warm)] text-[var(--ink)]' : 'bg-white text-[var(--text-muted-warm)]'}`}
-                        onClick={() => setSelectedInterest({ label: domain.domain, broadCategory: domain.broadCategory ?? undefined })}
+                        className={`flex min-h-[38px] w-full cursor-pointer justify-between gap-3 border-0 border-b border-b-[var(--border-light)] px-3 ${selectedInterest?.label === domain.domain ? 'bg-[var(--cream-warm)] text-[var(--ink)]' : 'bg-white text-[var(--text-muted-warm)]'}`}
+                        onClick={() =>
+                          setSelectedInterest({
+                            label: domain.domain,
+                            broadCategory: domain.broadCategory ?? undefined,
+                          })
+                        }
                       >
                         <span>{domain.displayName}</span>
                         <span>{asTier(domain.tier)}</span>
@@ -673,23 +817,40 @@ function KnowledgePageContent() {
               </div>
 
               <div>
-                <h3 className="m-0 text-[var(--ink)] text-[0.9rem]">Write a new interest</h3>
-                <div className="flex gap-2 mt-2">
+                <h3 className="m-0 text-[0.9rem] text-[var(--ink)]">Write a new interest</h3>
+                <div className="mt-2 flex gap-2">
                   <input
                     value={customInterest}
                     onChange={(event) => setCustomInterest(event.target.value)}
                     placeholder="Late-period Bowie, Weimar cinema..."
-                    className="min-h-10 flex-1 border border-[var(--border-warm)] px-[10px] bg-white text-[var(--ink)]"
+                    className="min-h-10 flex-1 border border-[var(--border-warm)] bg-white px-[10px] text-[var(--ink)]"
                   />
-                  <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" disabled={!customInterest.trim() || canonicalizing} onClick={() => void proposeCustomInterest()}>
+                  <button
+                    type="button"
+                    className="min-h-10 cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 text-[var(--cream-warm)]"
+                    disabled={!customInterest.trim() || canonicalizing}
+                    onClick={() => void proposeCustomInterest()}
+                  >
                     {canonicalizing ? 'Refining...' : 'Refine'}
                   </button>
                 </div>
                 {selectedInterest ? (
                   <div className="mt-3 border border-[var(--border-light)] bg-[var(--cream)] p-3">
                     <p className="m-0 font-semibold">{selectedInterest.label}</p>
-                    {selectedInterest.description ? <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">{selectedInterest.description}</p> : null}
-                    <button type="button" className="mt-2 border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]" onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}>
+                    {selectedInterest.description ? (
+                      <p className="mt-[0.45rem] text-[0.88rem] leading-[1.5] text-[var(--text-muted-warm)]">
+                        {selectedInterest.description}
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="mt-2 cursor-pointer border-none bg-transparent p-0 text-[0.76rem] tracking-[0.08em] text-[var(--text-muted-warm)] uppercase underline"
+                      onClick={() =>
+                        setSelectedInterest({
+                          label: customInterest.trim() || selectedInterest.label,
+                        })
+                      }
+                    >
                       Use my wording
                     </button>
                   </div>
@@ -697,12 +858,32 @@ function KnowledgePageContent() {
               </div>
             </div>
 
-            {interestError ? <p className="mt-4 border border-[#c0392b]/40 text-[#8b1a0e] p-3 text-[0.88rem]">{interestError}</p> : null}
+            {interestError ? (
+              <p className="mt-4 border border-[#c0392b]/40 p-3 text-[0.88rem] text-[#8b1a0e]">
+                {interestError}
+              </p>
+            ) : null}
 
-            <div className="flex justify-end gap-2 mt-5">
-              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
-              <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" onClick={() => void confirmInterestChange()} disabled={!selectedInterest?.label || savingInterests}>
-                {savingInterests ? 'Saving...' : activeModal.currentDomain ? 'Confirm swap' : 'Confirm add'}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="min-h-10 cursor-pointer border border-[var(--border-warm)] bg-white px-4 text-[var(--text-muted-warm)]"
+                onClick={closeInterestModal}
+                disabled={savingInterests}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="min-h-10 cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 text-[var(--cream-warm)]"
+                onClick={() => void confirmInterestChange()}
+                disabled={!selectedInterest?.label || savingInterests}
+              >
+                {savingInterests
+                  ? 'Saving...'
+                  : activeModal.currentDomain
+                    ? 'Confirm swap'
+                    : 'Confirm add'}
               </button>
             </div>
           </div>
@@ -711,19 +892,42 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'tidy' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="max-h-[90vh] w-[min(430px,100%)] overflow-y-auto border border-[var(--border-warm)] bg-white p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Tidy up your map?</h2>
-                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
+                <h2 className="m-0 text-[1.45rem] font-[var(--font-literata)] text-[var(--ink)]">
+                  Tidy up your map?
+                </h2>
+                <p className="mt-[0.45rem] text-[0.88rem] leading-[1.5] text-[var(--text-muted-warm)]">
+                  We&apos;ll look for domains in your map that could be combined. This is automatic
+                  and based on what you&apos;ve answered.
+                </p>
               </div>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close" disabled={tidying}>
+              <button
+                type="button"
+                className="grid h-[34px] w-[34px] cursor-pointer place-items-center border-none bg-transparent text-[var(--text-muted-warm)]"
+                onClick={() => setActiveModal(null)}
+                aria-label="Close"
+                disabled={tidying}
+              >
                 <X className="size-4" />
               </button>
             </div>
-            <div className="flex justify-end gap-2 mt-5">
-              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)} disabled={tidying}>Cancel</button>
-              <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" onClick={() => void confirmTidy()} disabled={tidying}>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="min-h-10 cursor-pointer border border-[var(--border-warm)] bg-white px-4 text-[var(--text-muted-warm)]"
+                onClick={() => setActiveModal(null)}
+                disabled={tidying}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="min-h-10 cursor-pointer border border-[var(--ink)] bg-[var(--ink)] px-4 text-[var(--cream-warm)]"
+                onClick={() => void confirmTidy()}
+                disabled={tidying}
+              >
                 {tidying ? 'Tidying...' : 'Confirm tidy'}
               </button>
             </div>
@@ -731,11 +935,15 @@ function KnowledgePageContent() {
         </div>
       ) : null}
 
-      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">{tidyNotice}</div> : null}
+      {tidyNotice ? (
+        <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 border border-[var(--border-warm)] bg-white px-4 py-[9px] text-[0.88rem] text-[var(--ink)] shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
+          {tidyNotice}
+        </div>
+      ) : null}
       {questionToast ? (
         <div
           style={{ bottom: tidyNotice ? 64 : 20 }}
-          className="fixed left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]"
+          className="fixed left-1/2 z-[60] -translate-x-1/2 border border-[var(--border-warm)] bg-white px-4 py-[9px] text-[0.88rem] text-[var(--ink)] shadow-[0_8px_24px_rgba(0,0,0,0.16)]"
         >
           {questionToast}
         </div>
@@ -743,32 +951,56 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'manage-interests' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="max-h-[90vh] w-[min(540px,100%)] overflow-y-auto border border-[var(--border-warm)] bg-white p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Manage interests</h2>
-                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your five declared interests seed your Daily Five questions.</p>
+                <h2 className="m-0 text-[1.45rem] font-[var(--font-literata)] text-[var(--ink)]">
+                  Manage interests
+                </h2>
+                <p className="mt-[0.45rem] text-[0.88rem] leading-[1.5] text-[var(--text-muted-warm)]">
+                  Your five declared interests seed your Daily Five questions.
+                </p>
               </div>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
+              <button
+                type="button"
+                className="grid h-[34px] w-[34px] cursor-pointer place-items-center border-none bg-transparent text-[var(--text-muted-warm)]"
+                onClick={() => setActiveModal(null)}
+                aria-label="Close"
+              >
                 <X className="size-4" />
               </button>
             </div>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-[0.6rem] mt-5">
+            <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-[0.6rem]">
               {declaredSlots.map((slot, index) => (
-                <div key={slot?.domain ?? `empty-${index}`} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
+                <div
+                  key={slot?.domain ?? `empty-${index}`}
+                  className="flex min-h-[132px] flex-col justify-between rounded-lg border border-[var(--border-light)] bg-[var(--cream)] p-3"
+                >
                   {slot ? (
                     <>
                       <div className="min-w-0">
-                        <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
-                        <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
+                        <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">
+                          {slot.displayName}
+                        </h3>
+                        <p className="mt-1 text-[0.72rem] text-[var(--text-muted-warm)]">
+                          {slot.broadCategory ?? asTier(slot.tier)}
+                        </p>
                       </div>
-                      <button type="button" className="min-h-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
+                      <button
+                        type="button"
+                        className="inline-flex min-h-[34px] cursor-pointer items-center justify-center gap-[6px] border border-[var(--border-warm)] bg-white text-[0.68rem] tracking-[0.08em] text-[var(--text-muted-warm)] uppercase"
+                        onClick={() => openInterestModal(index, slot.domain)}
+                      >
                         <Repeat2 className="size-3.5" />
                         Swap
                       </button>
                     </>
                   ) : (
-                    <button type="button" className="min-h-[104px] border border-dashed border-[#c8c0b0] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full" onClick={() => openInterestModal(index, null)}>
+                    <button
+                      type="button"
+                      className="flex min-h-[104px] w-full cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-[#c8c0b0] bg-transparent text-[0.82rem] text-[var(--text-muted-warm)]"
+                      onClick={() => openInterestModal(index, null)}
+                    >
                       <Plus className="size-4" />
                       Add interest
                     </button>
@@ -776,8 +1008,14 @@ function KnowledgePageContent() {
                 </div>
               ))}
             </div>
-            <div className="flex justify-start gap-2 mt-4">
-              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)}>Done</button>
+            <div className="mt-4 flex justify-start gap-2">
+              <button
+                type="button"
+                className="min-h-10 cursor-pointer border border-[var(--border-warm)] bg-white px-4 text-[var(--text-muted-warm)]"
+                onClick={() => setActiveModal(null)}
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>
@@ -785,10 +1023,17 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'write-question' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] px-5 pt-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="max-h-[92vh] w-[min(540px,100%)] overflow-y-auto border border-[var(--border-warm)] bg-white px-5 pt-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
-              <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Write a question</h2>
-              <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
+              <h2 className="m-0 text-[1.45rem] font-[var(--font-literata)] text-[var(--ink)]">
+                Write a question
+              </h2>
+              <button
+                type="button"
+                className="grid h-[34px] w-[34px] cursor-pointer place-items-center border-none bg-transparent text-[var(--text-muted-warm)]"
+                onClick={() => setActiveModal(null)}
+                aria-label="Close"
+              >
                 <X className="size-4" />
               </button>
             </div>

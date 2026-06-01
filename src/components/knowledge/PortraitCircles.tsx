@@ -1,46 +1,38 @@
-'use client'
+'use client';
 
-import { useState, useMemo, type CSSProperties } from 'react'
-import {
-  getPortraitCircleSize,
-  type CircleSizingTier,
-} from '@/lib/knowledge/circle-sizing'
-import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
-import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble'
-import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
-import type { MasteryTier } from '@/types/db'
+import { useState, useMemo, type CSSProperties } from 'react';
+import { getPortraitCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
+import type { MasteryTier } from '@/types/db';
 
-type PortraitTier = MasteryTier
-type SortMode = 'domain' | 'mastery'
+type PortraitTier = MasteryTier;
+type SortMode = 'domain' | 'mastery';
 
 export type PortraitEntry = {
-  canonicalSubcategory: string
-  broadCategory: string
-  totalMasteryPoints: number
-  tier: PortraitTier
-  authoredAnsweredCount: number
-  isHidden?: boolean
-}
+  canonicalSubcategory: string;
+  broadCategory: string;
+  totalMasteryPoints: number;
+  tier: PortraitTier;
+  authoredAnsweredCount: number;
+  isHidden?: boolean;
+};
 
 type PortraitCirclesProps = {
-  entries: PortraitEntry[]
-  editMode?: boolean
-  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
-  pendingDomain?: string | null
-}
+  entries: PortraitEntry[];
+  editMode?: boolean;
+  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void;
+  pendingDomain?: string | null;
+};
 
-const TIER_ORDER: PortraitTier[] = [
-  'mastery',
-  'solid',
-  'familiar',
-  'establishing',
-]
+const TIER_ORDER: PortraitTier[] = ['mastery', 'solid', 'familiar', 'establishing'];
 
 type DomainColor = {
-  primary: string
-  light: string
-  text: string
-}
+  primary: string;
+  light: string;
+  text: string;
+};
 
 // Section header relabel — "General Knowledge" is the catch-all bucket the
 // categorizer falls back to, but it shouldn't be shown to users as a category
@@ -49,10 +41,10 @@ type DomainColor = {
 const SECTION_LABEL_OVERRIDES: Record<string, string> = {
   'General Knowledge': 'Other interests',
   Other: 'Other interests',
-}
+};
 
 function displaySectionLabel(broadCategory: string): string {
-  return SECTION_LABEL_OVERRIDES[broadCategory] ?? broadCategory
+  return SECTION_LABEL_OVERRIDES[broadCategory] ?? broadCategory;
 }
 
 const DOMAIN_COLORS: Record<string, DomainColor> = {
@@ -116,61 +108,56 @@ const DOMAIN_COLORS: Record<string, DomainColor> = {
     light: 'rgba(74,122,90,0.12)',
     text: '#1e4e30',
   },
-}
+};
 
 function hashColor(str: string): DomainColor {
-  let h = 0
+  let h = 0;
   for (let i = 0; i < str.length; i++) {
-    h = ((h << 5) - h + str.charCodeAt(i)) | 0
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
   }
-  const hue = Math.abs(h) % 360
+  const hue = Math.abs(h) % 360;
   return {
     primary: `hsl(${hue},45%,35%)`,
     light: `hsla(${hue},45%,35%,0.12)`,
     text: `hsl(${hue},45%,25%)`,
-  }
+  };
 }
 
 export function getPortraitDomainColor(domain: string): DomainColor {
-  return DOMAIN_COLORS[domain] ?? hashColor(domain)
+  return DOMAIN_COLORS[domain] ?? hashColor(domain);
 }
 
-const SPARSE_THRESHOLD = 5
-const MIN_OPACITY = 0.22
+const SPARSE_THRESHOLD = 5;
+const MIN_OPACITY = 0.22;
 
 export function getPortraitCircleOpacity(pts: number, maxPts: number): number {
-  const n = pts / Math.max(maxPts, 1)
-  return MIN_OPACITY + n * (1 - MIN_OPACITY)
+  const n = pts / Math.max(maxPts, 1);
+  return MIN_OPACITY + n * (1 - MIN_OPACITY);
 }
 
-type Section = { label: string; color: string; entries: PortraitEntry[] }
+type Section = { label: string; color: string; entries: PortraitEntry[] };
 
-function buildSections(
-  entries: PortraitEntry[],
-  sortMode: SortMode
-): Section[] {
+function buildSections(entries: PortraitEntry[], sortMode: SortMode): Section[] {
   if (sortMode === 'domain') {
-    const domainMap = new Map<string, PortraitEntry[]>()
+    const domainMap = new Map<string, PortraitEntry[]>();
     for (const e of entries) {
-      const broadCategory = normalizeBroadCategory(e.broadCategory) ?? 'General Knowledge'
-      const normalizedEntry = { ...e, broadCategory }
-      const list = domainMap.get(broadCategory) ?? []
-      list.push(normalizedEntry)
-      domainMap.set(broadCategory, list)
+      const broadCategory = normalizeBroadCategory(e.broadCategory) ?? 'General Knowledge';
+      const normalizedEntry = { ...e, broadCategory };
+      const list = domainMap.get(broadCategory) ?? [];
+      list.push(normalizedEntry);
+      domainMap.set(broadCategory, list);
     }
     return Array.from(domainMap.entries())
       .map(([domain, cats]) => ({
         label: displaySectionLabel(domain),
         color: getPortraitDomainColor(domain).primary,
-        entries: [...cats].sort(
-          (a, b) => b.totalMasteryPoints - a.totalMasteryPoints
-        ),
+        entries: [...cats].sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints),
       }))
       .sort((a, b) => {
-        const sumA = a.entries.reduce((s, e) => s + e.totalMasteryPoints, 0)
-        const sumB = b.entries.reduce((s, e) => s + e.totalMasteryPoints, 0)
-        return sumB - sumA
-      })
+        const sumA = a.entries.reduce((s, e) => s + e.totalMasteryPoints, 0);
+        const sumB = b.entries.reduce((s, e) => s + e.totalMasteryPoints, 0);
+        return sumB - sumA;
+      });
   }
   return TIER_ORDER.map((tier) => ({
     label: KNOWLEDGE_TIER_LABEL[tier],
@@ -178,7 +165,7 @@ function buildSections(
     entries: entries
       .filter((e) => e.tier === tier)
       .sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints),
-  })).filter((s) => s.entries.length > 0)
+  })).filter((s) => s.entries.length > 0);
 }
 
 export function PortraitDomainCircle({
@@ -193,48 +180,46 @@ export function PortraitDomainCircle({
   onToggleHidden,
   pending = false,
 }: {
-  entry: PortraitEntry
-  maxPointsForTier: number
-  forceFullOpacity?: boolean
-  showCount?: boolean
-  circleScale?: number
-  selected?: boolean
-  circleSlotSize?: number
-  editMode?: boolean
-  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
-  pending?: boolean
+  entry: PortraitEntry;
+  maxPointsForTier: number;
+  forceFullOpacity?: boolean;
+  showCount?: boolean;
+  circleScale?: number;
+  selected?: boolean;
+  circleSlotSize?: number;
+  editMode?: boolean;
+  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void;
+  pending?: boolean;
 }) {
-  const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge'
-  const dc = getPortraitDomainColor(broadCategory)
+  const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge';
+  const dc = getPortraitDomainColor(broadCategory);
   const size = Math.round(
     getPortraitCircleSize(
       entry.tier as CircleSizingTier,
       entry.totalMasteryPoints,
-      maxPointsForTier
-    ) * circleScale
-  )
+      maxPointsForTier,
+    ) * circleScale,
+  );
   const baseOpacity = forceFullOpacity
     ? 1
-    : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier)
-  const isHidden = Boolean(entry.isHidden)
-  const dimForHidden = editMode && isHidden
-  const opacity = dimForHidden ? baseOpacity * 0.35 : baseOpacity
+    : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier);
+  const isHidden = Boolean(entry.isHidden);
+  const dimForHidden = editMode && isHidden;
+  const opacity = dimForHidden ? baseOpacity * 0.35 : baseOpacity;
   const labelOpacity =
     (0.5 + (entry.totalMasteryPoints / Math.max(maxPointsForTier, 1)) * 0.5) *
-    (dimForHidden ? 0.5 : 1)
+    (dimForHidden ? 0.5 : 1);
   const showMasteryCount =
-    showCount &&
-    entry.tier !== 'establishing' &&
-    entry.authoredAnsweredCount > 0
-  const resolvedCircleSlotSize = Math.max(circleSlotSize ?? size, size)
-  const countFontSize = Math.min(48, Math.max(10, Math.round(size * 0.13)))
+    showCount && entry.tier !== 'establishing' && entry.authoredAnsweredCount > 0;
+  const resolvedCircleSlotSize = Math.max(circleSlotSize ?? size, size);
+  const countFontSize = Math.min(48, Math.max(10, Math.round(size * 0.13)));
 
   const handleClick = () => {
-    if (!editMode || !onToggleHidden || pending) return
-    onToggleHidden(entry.canonicalSubcategory, !isHidden)
-  }
+    if (!editMode || !onToggleHidden || pending) return;
+    onToggleHidden(entry.canonicalSubcategory, !isHidden);
+  };
 
-  const interactive = editMode && Boolean(onToggleHidden)
+  const interactive = editMode && Boolean(onToggleHidden);
 
   return (
     <div
@@ -251,8 +236,8 @@ export function PortraitDomainCircle({
         interactive
           ? (event) => {
               if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                handleClick()
+                event.preventDefault();
+                handleClick();
               }
             }
           : undefined
@@ -363,24 +348,26 @@ export function PortraitDomainCircle({
         {entry.canonicalSubcategory}
       </span>
     </div>
-  )
+  );
 }
 
-function getPortraitEntryCircleSize(
-  entry: PortraitEntry,
-  maxPointsForTier: number
-): number {
+function getPortraitEntryCircleSize(entry: PortraitEntry, maxPointsForTier: number): number {
   return Math.round(
     getPortraitCircleSize(
       entry.tier as CircleSizingTier,
       entry.totalMasteryPoints,
-      maxPointsForTier
-    )
-  )
+      maxPointsForTier,
+    ),
+  );
 }
 
-export function PortraitCircles({ entries, editMode = false, onToggleHidden, pendingDomain = null }: PortraitCirclesProps) {
-  const [sortMode, setSortMode] = useState<SortMode>('domain')
+export function PortraitCircles({
+  entries,
+  editMode = false,
+  onToggleHidden,
+  pendingDomain = null,
+}: PortraitCirclesProps) {
+  const [sortMode, setSortMode] = useState<SortMode>('domain');
 
   const validEntries = useMemo(
     () =>
@@ -388,13 +375,10 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
         ...entry,
         broadCategory: normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge',
       })),
-    [entries]
-  )
-  const isSparse = validEntries.length < SPARSE_THRESHOLD
-  const sections = useMemo(
-    () => buildSections(validEntries, sortMode),
-    [validEntries, sortMode]
-  )
+    [entries],
+  );
+  const isSparse = validEntries.length < SPARSE_THRESHOLD;
+  const sections = useMemo(() => buildSections(validEntries, sortMode), [validEntries, sortMode]);
 
   const maxPointsByTier = useMemo(() => {
     const result: Record<string, number> = {
@@ -402,14 +386,13 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
       familiar: 1,
       solid: 1,
       mastery: 1,
-    }
+    };
     for (const e of validEntries) {
-      if (e.totalMasteryPoints > (result[e.tier] ?? 1))
-        result[e.tier] = e.totalMasteryPoints
+      if (e.totalMasteryPoints > (result[e.tier] ?? 1)) result[e.tier] = e.totalMasteryPoints;
     }
-    return result
-  }, [validEntries])
-  const allDomains = [...new Set(validEntries.map((e) => e.broadCategory))]
+    return result;
+  }, [validEntries]);
+  const allDomains = [...new Set(validEntries.map((e) => e.broadCategory))];
 
   return (
     <div>
@@ -430,7 +413,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
       {sortMode === 'domain' ? (
         <div style={legendStyle}>
           {allDomains.map((domain) => {
-            const dc = getPortraitDomainColor(domain)
+            const dc = getPortraitDomainColor(domain);
             return (
               <div key={domain} style={legendItemStyle}>
                 <div
@@ -447,7 +430,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
                   {displaySectionLabel(domain)}
                 </span>
               </div>
-            )
+            );
           })}
         </div>
       ) : (
@@ -464,9 +447,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontSize: 9.5, color: '#8b7355' }}>
-                {KNOWLEDGE_TIER_LABEL[tier]}
-              </span>
+              <span style={{ fontSize: 9.5, color: '#8b7355' }}>{KNOWLEDGE_TIER_LABEL[tier]}</span>
             </div>
           ))}
           <span
@@ -484,21 +465,17 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
       )}
 
       <p style={explainerStyle}>
-        Numbers inside circles = questions you&apos;ve written that others have
-        answered
+        Numbers inside circles = questions you&apos;ve written that others have answered
       </p>
 
       <div>
         {sections.map(({ label, color, entries: sectionEntries }) => {
           const circleSlotSize = Math.max(
             ...sectionEntries.map((entry) =>
-              getPortraitEntryCircleSize(
-                entry,
-                maxPointsByTier[entry.tier] ?? 1
-              )
+              getPortraitEntryCircleSize(entry, maxPointsByTier[entry.tier] ?? 1),
             ),
-            0
-          )
+            0,
+          );
 
           return (
             <div key={label} style={{ marginTop: 24 }}>
@@ -530,7 +507,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
                 ))}
               </div>
             </div>
-          )
+          );
         })}
       </div>
 
@@ -540,7 +517,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
         </p>
       )}
     </div>
-  )
+  );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -551,27 +528,27 @@ const circleItemStyle: CSSProperties = {
   alignItems: 'center',
   gap: 7,
   padding: '4px 2px',
-}
+};
 
 const portraitCircleSlotStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-}
+};
 
 const circlesRowStyle: CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
   gap: 14,
   alignItems: 'flex-start',
-}
+};
 
 const toggleWrapStyle: CSSProperties = {
   display: 'flex',
   justifyContent: 'center',
   gap: 8,
   marginBottom: '0.65rem',
-}
+};
 
 const activeToggleStyle: CSSProperties = {
   minHeight: 34,
@@ -583,7 +560,7 @@ const activeToggleStyle: CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
   fontSize: 14,
-}
+};
 
 const inactiveToggleStyle: CSSProperties = {
   minHeight: 34,
@@ -595,7 +572,7 @@ const inactiveToggleStyle: CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
   fontSize: 14,
-}
+};
 
 const legendStyle: CSSProperties = {
   display: 'flex',
@@ -603,13 +580,13 @@ const legendStyle: CSSProperties = {
   gap: '6px 10px',
   alignItems: 'center',
   marginBottom: '0.5rem',
-}
+};
 
 const legendItemStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 5,
-}
+};
 
 const sparsePromptStyle: CSSProperties = {
   marginTop: 24,
@@ -618,7 +595,7 @@ const sparsePromptStyle: CSSProperties = {
   fontStyle: 'italic',
   fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
   textAlign: 'center',
-}
+};
 
 const explainerStyle: CSSProperties = {
   margin: '6px 0 0',
@@ -626,4 +603,4 @@ const explainerStyle: CSSProperties = {
   color: '#b0a090',
   fontStyle: 'italic',
   fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
-}
+};

@@ -26,19 +26,22 @@ export const B5_PERSONAL_MASTERY_COPY = {
     },
   },
   friendSubtitle: {
-    sharedGroundTerritories: (count: number) => `Shared ground in ${count} ${count === 1 ? 'territory' : 'territories'}.`,
+    sharedGroundTerritories: (count: number) =>
+      `Shared ground in ${count} ${count === 1 ? 'territory' : 'territories'}.`,
     noSharedGround: 'Their world, not yet yours.',
   },
   emptyState: {
     own: {
-      message: 'Your portrait is empty. It builds from what you write and what you prove — every question you ask, every answer you get right.',
+      message:
+        'Your portrait is empty. It builds from what you write and what you prove — every question you ask, every answer you get right.',
       cta: 'Go to your active games',
     },
     friend: {
       message: (firstName: string) => `${firstName}'s portrait is still early.`,
     },
   },
-  sparseNudge: 'Your portrait is early. It grows with every question you write and every answer you get right.',
+  sparseNudge:
+    'Your portrait is early. It grows with every question you write and every answer you get right.',
   /** Own view only (D3 / B6). */
   ownPortraitFootnote: 'Proven territory includes any catch-up answers at half weight.',
   masteryHowItWorks: {
@@ -46,12 +49,14 @@ export const B5_PERSONAL_MASTERY_COPY = {
     intro:
       'Mastery moves when you prove knowledge in live play, when you catch up on missed questions, and when you author questions others answer. Weights differ:',
     live: 'Live session — full weight toward mastery and portrait.',
-    catchup: 'Catch-up — lighter weight toward mastery and half weight on your answered portrait bar.',
+    catchup:
+      'Catch-up — lighter weight toward mastery and half weight on your answered portrait bar.',
     authored: 'Questions you write — credit when others answer them correctly.',
   },
   multitudesFallback: {
     singleSparse: (category: string) => `Early days — but already: ${category}.`,
-    dualSparse: (firstCategory: string, secondCategory: string) => `Starting to take shape: ${firstCategory} and ${secondCategory}.`,
+    dualSparse: (firstCategory: string, secondCategory: string) =>
+      `Starting to take shape: ${firstCategory} and ${secondCategory}.`,
     listJoiner: ' · ',
   },
   card: {
@@ -64,7 +69,8 @@ export const B5_PERSONAL_MASTERY_COPY = {
     links: {
       ownQuestionsInCategory: 'See your questions in this category →',
       showFewerInBroadCategory: (broadCategory: string) => `Show fewer in ${broadCategory} ←`,
-      moreInBroadCategory: (remainingCount: number, broadCategory: string) => `${remainingCount} more in ${broadCategory} →`,
+      moreInBroadCategory: (remainingCount: number, broadCategory: string) =>
+        `${remainingCount} more in ${broadCategory} →`,
     },
     sourceBreakdownEmpty: 'Nothing logged in your latest round for this territory yet.',
   },
@@ -83,10 +89,12 @@ export const B5_PERSONAL_MASTERY_COPY = {
   },
   unexplored: {
     heading: 'YOUR WORLD, NOT THEIRS YET',
-    subtitle: (firstName: string) => `Territories you've explored that ${firstName} hasn't entered yet.`,
+    subtitle: (firstName: string) =>
+      `Territories you've explored that ${firstName} hasn't entered yet.`,
     links: {
       showFewer: 'Show fewer unexplored territories ←',
-      showMore: (remainingCount: number) => `And ${remainingCount} more you've explored that they haven't →`,
+      showMore: (remainingCount: number) =>
+        `And ${remainingCount} more you've explored that they haven't →`,
     },
   },
 } as const;

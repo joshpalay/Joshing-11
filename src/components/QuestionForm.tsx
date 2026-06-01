@@ -16,9 +16,7 @@ export type QuestionFormValues = {
   shareToFeed?: boolean;
 };
 
-type CritiqueResult =
-  | { ok: true }
-  | { ok: false; issues: string[]; reformulations: string[] };
+type CritiqueResult = { ok: true } | { ok: false; issues: string[]; reformulations: string[] };
 
 type CritiqueResponse = CritiqueResult & {
   limitReached: boolean;
@@ -72,7 +70,11 @@ type State = {
 
 type Action =
   | { type: 'RESET'; state: State }
-  | { type: 'FIELD'; field: 'questionText' | 'userAnswer' | 'alternateText' | 'explanation' | 'creatorNote'; value: string }
+  | {
+      type: 'FIELD';
+      field: 'questionText' | 'userAnswer' | 'alternateText' | 'explanation' | 'creatorNote';
+      value: string;
+    }
   | { type: 'ERROR'; value: string | null }
   | { type: 'START_CRITIQUE'; text: string }
   | { type: 'CRITIQUE_RESULT'; response: CritiqueResponse }
@@ -93,7 +95,10 @@ type Action =
   | { type: 'FRIEND_SEARCH'; value: string }
   | { type: 'TOGGLE_FRIEND'; id: string };
 
-function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecificMode = false): State {
+function initialState(
+  initialValues?: Partial<QuestionFormValues>,
+  initialSpecificMode = false,
+): State {
   return {
     stage: 'WRITING',
     questionText: initialValues?.text ?? '',
@@ -122,25 +127,60 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case 'RESET': return action.state;
-    case 'FIELD': return { ...state, [action.field]: action.value, error: null };
-    case 'ERROR': return { ...state, error: action.value };
-    case 'START_CRITIQUE': return { ...state, stage: 'CRITIQUING', lastCritiquedText: action.text, error: null };
+    case 'RESET':
+      return action.state;
+    case 'FIELD':
+      return { ...state, [action.field]: action.value, error: null };
+    case 'ERROR':
+      return { ...state, error: action.value };
+    case 'START_CRITIQUE':
+      return { ...state, stage: 'CRITIQUING', lastCritiquedText: action.text, error: null };
     case 'CRITIQUE_RESULT': {
       if (action.response.limitReached) {
-        return { ...state, stage: 'ANSWERING', limitReachedThisSession: true, remainingCritiquesToday: 0, critiqueResult: { ok: true } };
+        return {
+          ...state,
+          stage: 'ANSWERING',
+          limitReachedThisSession: true,
+          remainingCritiquesToday: 0,
+          critiqueResult: { ok: true },
+        };
       }
-      const nextIterations = action.response.remaining === null ? state.critiqueIterations : state.critiqueIterations + 1;
+      const nextIterations =
+        action.response.remaining === null
+          ? state.critiqueIterations
+          : state.critiqueIterations + 1;
       if (action.response.ok) {
-        return { ...state, stage: 'ANSWERING', remainingCritiquesToday: action.response.remaining, critiqueIterations: nextIterations, critiqueResult: { ok: true } };
+        return {
+          ...state,
+          stage: 'ANSWERING',
+          remainingCritiquesToday: action.response.remaining,
+          critiqueIterations: nextIterations,
+          critiqueResult: { ok: true },
+        };
       }
-      return { ...state, stage: 'CRITIQUED', remainingCritiquesToday: action.response.remaining, critiqueIterations: nextIterations, critiqueResult: action.response };
+      return {
+        ...state,
+        stage: 'CRITIQUED',
+        remainingCritiquesToday: action.response.remaining,
+        critiqueIterations: nextIterations,
+        critiqueResult: action.response,
+      };
     }
-    case 'USE_REFORMULATION': return { ...state, questionText: action.text, lastCritiquedText: action.text, stage: 'ANSWERING' };
-    case 'KEEP_VERSION': return { ...state, stage: 'ANSWERING' };
-    case 'EDIT_RECHECK': return { ...state, stage: 'WRITING', critiqueResult: null };
-    case 'ANSWERING': return { ...state, stage: 'ANSWERING' };
-    case 'START_SUGGESTION': return { ...state, suggesting: true, suggestionError: null };
+    case 'USE_REFORMULATION':
+      return {
+        ...state,
+        questionText: action.text,
+        lastCritiquedText: action.text,
+        stage: 'ANSWERING',
+      };
+    case 'KEEP_VERSION':
+      return { ...state, stage: 'ANSWERING' };
+    case 'EDIT_RECHECK':
+      return { ...state, stage: 'WRITING', critiqueResult: null };
+    case 'ANSWERING':
+      return { ...state, stage: 'ANSWERING' };
+    case 'START_SUGGESTION':
+      return { ...state, suggesting: true, suggestionError: null };
     case 'SUGGESTION_RESULT': {
       if (state.questionText.trim() !== action.questionText) {
         return { ...state, suggesting: false };
@@ -152,7 +192,10 @@ function reducer(state: State, action: Action): State {
         userAnswer: action.suggestion.correctAnswer,
         llmSuggestedAnswer: action.suggestion.correctAnswer,
         explanation: state.explanation.trim() ? state.explanation : action.suggestion.explanation,
-        alternateText: state.alternateText.trim() || action.suggestion.alternateAnswers.length === 0 ? state.alternateText : action.suggestion.alternateAnswers.join(', '),
+        alternateText:
+          state.alternateText.trim() || action.suggestion.alternateAnswers.length === 0
+            ? state.alternateText
+            : action.suggestion.alternateAnswers.join(', '),
       };
     }
     case 'SUGGESTION_ERROR': {
@@ -161,24 +204,53 @@ function reducer(state: State, action: Action): State {
       }
       return { ...state, suggesting: false, suggestionError: action.value };
     }
-    case 'SUBMITTING': return { ...state, stage: 'SUBMITTING', error: null };
-    case 'DONE': return { ...state, stage: 'DONE' };
-    case 'SPECIFIC_MODE': return { ...state, specificMode: action.value, shareToFeed: action.value ? false : state.shareToFeed, sendToFriendIds: [], friendSearch: '' };
-    case 'SHARE_TO_FEED': return { ...state, shareToFeed: action.value, specificMode: action.value ? false : state.specificMode, sendToFriendIds: action.value ? [] : state.sendToFriendIds };
-    case 'FRIENDS_LOADING': return { ...state, friendsLoading: action.value };
-    case 'FRIENDS_LOADED': return { ...state, friends: action.friends, friendsLoading: false };
-    case 'RECENTS_LOADED': return { ...state, recentFriendIds: action.ids };
-    case 'FRIEND_SEARCH': return { ...state, friendSearch: action.value };
+    case 'SUBMITTING':
+      return { ...state, stage: 'SUBMITTING', error: null };
+    case 'DONE':
+      return { ...state, stage: 'DONE' };
+    case 'SPECIFIC_MODE':
+      return {
+        ...state,
+        specificMode: action.value,
+        shareToFeed: action.value ? false : state.shareToFeed,
+        sendToFriendIds: [],
+        friendSearch: '',
+      };
+    case 'SHARE_TO_FEED':
+      return {
+        ...state,
+        shareToFeed: action.value,
+        specificMode: action.value ? false : state.specificMode,
+        sendToFriendIds: action.value ? [] : state.sendToFriendIds,
+      };
+    case 'FRIENDS_LOADING':
+      return { ...state, friendsLoading: action.value };
+    case 'FRIENDS_LOADED':
+      return { ...state, friends: action.friends, friendsLoading: false };
+    case 'RECENTS_LOADED':
+      return { ...state, recentFriendIds: action.ids };
+    case 'FRIEND_SEARCH':
+      return { ...state, friendSearch: action.value };
     case 'TOGGLE_FRIEND': {
       const selected = state.sendToFriendIds.includes(action.id);
-      return { ...state, sendToFriendIds: selected ? state.sendToFriendIds.filter((id) => id !== action.id) : [...state.sendToFriendIds, action.id] };
+      return {
+        ...state,
+        sendToFriendIds: selected
+          ? state.sendToFriendIds.filter((id) => id !== action.id)
+          : [...state.sendToFriendIds, action.id],
+      };
     }
-    default: return state;
+    default:
+      return state;
   }
 }
 
 function alternateAnswersFrom(text: string): string[] {
-  return text.split(',').map((answer) => answer.trim()).filter(Boolean).slice(0, 5);
+  return text
+    .split(',')
+    .map((answer) => answer.trim())
+    .filter(Boolean)
+    .slice(0, 5);
 }
 
 function answersMatch(a: string, b: string | null): boolean {
@@ -193,11 +265,14 @@ function computedVerified(state: State): boolean {
 function validate(state: State): string | null {
   const alternateAnswers = alternateAnswersFrom(state.alternateText);
   if (!state.questionText.trim()) return 'Question text is required.';
-  if (state.questionText.trim().length > 300) return 'Question text must be 300 characters or fewer.';
+  if (state.questionText.trim().length > 300)
+    return 'Question text must be 300 characters or fewer.';
   if (!state.userAnswer.trim()) return 'Correct answer is required.';
-  if (state.userAnswer.trim().length > 200) return 'Correct answer must be 200 characters or fewer.';
+  if (state.userAnswer.trim().length > 200)
+    return 'Correct answer must be 200 characters or fewer.';
   if (alternateAnswers.length > 5) return 'Use at most 5 alternate answers.';
-  if (alternateAnswers.some((answer) => answer.length > 200)) return 'Alternate answers must be 200 characters or fewer.';
+  if (alternateAnswers.some((answer) => answer.length > 200))
+    return 'Alternate answers must be 200 characters or fewer.';
   if (state.explanation.length > 500) return 'Explanation must be 500 characters or fewer.';
   if (state.creatorNote.length > 200) return 'Creator note must be 200 characters or fewer.';
   if (state.sendToFriendIds.length > 20) return 'You can send to at most 20 friends at once.';
@@ -221,9 +296,13 @@ export function QuestionForm({
   loadingLabel = 'Saving...',
   onCancel,
 }: Props) {
-  const [state, dispatch] = useReducer(reducer, undefined, () => initialState(initialValues, initialSpecificMode));
+  const [state, dispatch] = useReducer(reducer, undefined, () =>
+    initialState(initialValues, initialSpecificMode),
+  );
   const questionRef = useRef<HTMLTextAreaElement | null>(null);
-  const lastSuggestionQuestionTextRef = useRef<string | null>(initialValues?.llmSuggestedAnswer ? (initialValues.text ?? '').trim() : null);
+  const lastSuggestionQuestionTextRef = useRef<string | null>(
+    initialValues?.llmSuggestedAnswer ? (initialValues.text ?? '').trim() : null,
+  );
 
   // PRD §16.12: first-time-author orientation panel. Shown on the first
   // create-mode mount for an account that has never authored a non-deleted
@@ -234,17 +313,23 @@ export function QuestionForm({
     if (mode !== 'create') return;
     let cancelled = false;
     void fetch('/api/me/has-authored-question', { cache: 'no-store', credentials: 'include' })
-      .then((response) => response.ok ? response.json() : null)
+      .then((response) => (response.ok ? response.json() : null))
       .then((body: { hasAuthored?: boolean } | null) => {
         if (cancelled) return;
         if (body && body.hasAuthored === false) setOrientationVisible(true);
       })
-      .catch(() => { /* swallow — orientation is optional */ });
-    return () => { cancelled = true };
+      .catch(() => {
+        /* swallow — orientation is optional */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [mode]);
 
   useEffect(() => {
-    lastSuggestionQuestionTextRef.current = initialValues?.llmSuggestedAnswer ? (initialValues.text ?? '').trim() : null;
+    lastSuggestionQuestionTextRef.current = initialValues?.llmSuggestedAnswer
+      ? (initialValues.text ?? '').trim()
+      : null;
     dispatch({ type: 'RESET', state: initialState(initialValues, initialSpecificMode) });
   }, [initialValues, initialSpecificMode]);
 
@@ -257,7 +342,10 @@ export function QuestionForm({
     if (state.stage === 'WRITING') questionRef.current?.focus();
   }, [state.stage]);
 
-  const alternateAnswers = useMemo(() => alternateAnswersFrom(state.alternateText), [state.alternateText]);
+  const alternateAnswers = useMemo(
+    () => alternateAnswersFrom(state.alternateText),
+    [state.alternateText],
+  );
   const friendsById = useMemo(() => {
     const map = new Map<string, FriendOption>();
     for (const friend of state.friends) map.set(friend.id, friend);
@@ -280,7 +368,8 @@ export function QuestionForm({
   const showDestinations = mode === 'create';
   const verified = computedVerified(state);
   const submitDisabled = state.stage === 'SUBMITTING';
-  const resolvedSubmitLabel = submitLabel ?? (mode === 'edit' ? 'Update question' : 'Save question');
+  const resolvedSubmitLabel =
+    submitLabel ?? (mode === 'edit' ? 'Update question' : 'Save question');
 
   async function loadFriends() {
     if (state.friends.length > 0 || state.friendsLoading) return;
@@ -290,10 +379,16 @@ export function QuestionForm({
         fetch('/api/users', { cache: 'no-store', credentials: 'include' }),
         fetch('/api/users/recent', { cache: 'no-store', credentials: 'include' }),
       ]);
-      const friendsBody = await friendsResponse.json().catch(() => null) as FriendOption[] | null;
-      dispatch({ type: 'FRIENDS_LOADED', friends: friendsResponse.ok && Array.isArray(friendsBody) ? friendsBody : [] });
-      const recentsBody = await recentsResponse.json().catch(() => null) as FriendOption[] | null;
-      const recentIds = recentsResponse.ok && Array.isArray(recentsBody) ? recentsBody.map((friend) => friend.id) : [];
+      const friendsBody = (await friendsResponse.json().catch(() => null)) as FriendOption[] | null;
+      dispatch({
+        type: 'FRIENDS_LOADED',
+        friends: friendsResponse.ok && Array.isArray(friendsBody) ? friendsBody : [],
+      });
+      const recentsBody = (await recentsResponse.json().catch(() => null)) as FriendOption[] | null;
+      const recentIds =
+        recentsResponse.ok && Array.isArray(recentsBody)
+          ? recentsBody.map((friend) => friend.id)
+          : [];
       dispatch({ type: 'RECENTS_LOADED', ids: recentIds });
     } catch {
       dispatch({ type: 'FRIENDS_LOADED', friends: [] });
@@ -334,10 +429,16 @@ export function QuestionForm({
         credentials: 'include',
         body: JSON.stringify({ questionText }),
       });
-      const body = await response.json().catch(() => null) as CritiqueResponse | null;
-      dispatch({ type: 'CRITIQUE_RESULT', response: body ?? { ok: true, limitReached: false, remaining: null } });
+      const body = (await response.json().catch(() => null)) as CritiqueResponse | null;
+      dispatch({
+        type: 'CRITIQUE_RESULT',
+        response: body ?? { ok: true, limitReached: false, remaining: null },
+      });
     } catch {
-      dispatch({ type: 'CRITIQUE_RESULT', response: { ok: true, limitReached: false, remaining: null } });
+      dispatch({
+        type: 'CRITIQUE_RESULT',
+        response: { ok: true, limitReached: false, remaining: null },
+      });
     }
   }
 
@@ -360,7 +461,7 @@ export function QuestionForm({
         credentials: 'include',
         body: JSON.stringify({ questionText }),
       });
-      const body = await response.json().catch(() => null) as SuggestionResponse | null;
+      const body = (await response.json().catch(() => null)) as SuggestionResponse | null;
       if (!response.ok || !body?.correctAnswer) throw new Error('Suggestion unavailable');
       dispatch({ type: 'SUGGESTION_RESULT', questionText, suggestion: body });
     } catch {
@@ -371,11 +472,11 @@ export function QuestionForm({
   useEffect(() => {
     const questionText = state.questionText.trim();
     if (
-      mode !== 'create'
-      || state.stage !== 'ANSWERING'
-      || !questionText
-      || state.suggesting
-      || lastSuggestionQuestionTextRef.current === questionText
+      mode !== 'create' ||
+      state.stage !== 'ANSWERING' ||
+      !questionText ||
+      state.suggesting ||
+      lastSuggestionQuestionTextRef.current === questionText
     ) {
       return;
     }
@@ -407,14 +508,18 @@ export function QuestionForm({
       });
       dispatch({ type: 'DONE' });
     } catch (caught) {
-      dispatch({ type: 'ERROR', value: caught instanceof Error ? caught.message : 'Could not save that question.' });
+      dispatch({
+        type: 'ERROR',
+        value: caught instanceof Error ? caught.message : 'Could not save that question.',
+      });
       dispatch({ type: 'ANSWERING' });
     }
   }
 
   const critique = state.critiqueResult;
   const counter = remainingCopy(state);
-  const canShowAnswering = state.stage === 'ANSWERING' || state.stage === 'SUBMITTING' || mode === 'edit';
+  const canShowAnswering =
+    state.stage === 'ANSWERING' || state.stage === 'SUBMITTING' || mode === 'edit';
   // The form lives inside a scrollable drawer/modal (questions + knowledge
   // pages). Keep the action buttons pinned to the bottom on an opaque,
   // composited footer: the backdrop-blur layer prevents the iOS Safari
@@ -422,45 +527,68 @@ export function QuestionForm({
   // scrolling content, and sticky keeps Save/Cancel reachable on long forms.
   // `-mx-5 px-5 pb-5` full-bleeds the bar within the host's px-5 padding
   // (which drops its own bottom padding so this footer sits flush).
-  const actionBarClass = 'sticky bottom-0 z-10 -mx-5 flex flex-wrap items-center gap-3 border-t bg-background/95 px-5 pb-5 pt-3 backdrop-blur';
+  const actionBarClass =
+    'sticky bottom-0 z-10 -mx-5 flex flex-wrap items-center gap-3 border-t bg-background/95 px-5 pb-5 pt-3 backdrop-blur';
 
   return (
     <div className="space-y-5">
       {orientationVisible ? (
         <div className="rounded-md border border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 text-[0.88rem] leading-[1.55] text-[var(--ink)]">
           <p className="m-0">
-            Heads up: writing a question opens it as a new domain in your Knowledge base. When a friend answers it correctly, it counts toward your mastery there too. You can also send it directly to specific friends — toggle that on the destinations panel below.
+            Heads up: writing a question opens it as a new domain in your Knowledge base. When a
+            friend answers it correctly, it counts toward your mastery there too. You can also send
+            it directly to specific friends — toggle that on the destinations panel below.
           </p>
           <button
             type="button"
             onClick={() => setOrientationVisible(false)}
-            className="mt-2 text-[0.78rem] uppercase tracking-[0.08em] text-[var(--text-muted-warm)] underline-offset-2 hover:underline cursor-pointer bg-transparent border-0 p-0"
+            className="mt-2 cursor-pointer border-0 bg-transparent p-0 text-[0.78rem] tracking-[0.08em] text-[var(--text-muted-warm)] uppercase underline-offset-2 hover:underline"
           >
             Got it
           </button>
         </div>
       ) : null}
-      {state.error ? <p className="rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p> : null}
+      {state.error ? (
+        <p className="border-destructive bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">
+          {state.error}
+        </p>
+      ) : null}
       {state.limitReachedThisSession ? (
-        <p className="text-xs italic text-muted-foreground">5/5 question reviews used today. You can still save your question; AI review returns tomorrow.</p>
+        <p className="text-muted-foreground text-xs italic">
+          5/5 question reviews used today. You can still save your question; AI review returns
+          tomorrow.
+        </p>
       ) : null}
 
       <div>
-        <label htmlFor="question-text" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Question</label>
+        <label
+          htmlFor="question-text"
+          className="text-muted-foreground mb-1 block text-xs tracking-[0.1em] uppercase"
+        >
+          Question
+        </label>
         <textarea
           ref={questionRef}
           id="question-text"
           value={state.questionText}
-          onChange={(event) => dispatch({ type: 'FIELD', field: 'questionText', value: event.target.value.slice(0, 300) })}
-          onBlur={() => { if (state.stage === 'WRITING') void runCritique(); }}
+          onChange={(event) =>
+            dispatch({
+              type: 'FIELD',
+              field: 'questionText',
+              value: event.target.value.slice(0, 300),
+            })
+          }
+          onBlur={() => {
+            if (state.stage === 'WRITING') void runCritique();
+          }}
           rows={4}
           maxLength={300}
           required
-          className="w-full rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-primary"
+          className="bg-background focus:border-primary w-full rounded-md border px-3 py-2 text-base outline-none"
           placeholder="What is the name of Alexander the Great's horse?"
           readOnly={state.stage === 'SUBMITTING'}
         />
-        <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div className="text-muted-foreground mt-1 flex items-center justify-between gap-3 text-xs">
           <span>{state.stage === 'CRITIQUING' ? 'Reviewing your question...' : null}</span>
           <span>{state.questionText.length}/300</span>
         </div>
@@ -470,83 +598,194 @@ export function QuestionForm({
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           <p className="font-medium">⚠ This question might be unclear:</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            {critique.issues.map((issue) => <li key={issue}>{issue}</li>)}
+            {critique.issues.map((issue) => (
+              <li key={issue}>{issue}</li>
+            ))}
           </ul>
           <p className="mt-3 font-medium">Try one of these instead:</p>
           <div className="mt-2 space-y-2">
             {critique.reformulations.map((text) => (
-              <button key={text} type="button" onClick={() => dispatch({ type: 'USE_REFORMULATION', text })} className="block w-full rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted">
+              <button
+                key={text}
+                type="button"
+                onClick={() => dispatch({ type: 'USE_REFORMULATION', text })}
+                className="bg-background hover:bg-muted block w-full rounded-md border px-3 py-2 text-left text-sm"
+              >
                 <span className="font-medium">Use this</span> {text}
               </button>
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className="rounded-md border px-3 py-2 text-sm" onClick={() => dispatch({ type: 'KEEP_VERSION' })}>Keep my version anyway</button>
-            <button type="button" className="rounded-md border px-3 py-2 text-sm" onClick={() => dispatch({ type: 'EDIT_RECHECK' })}>Edit and recheck</button>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-2 text-sm"
+              onClick={() => dispatch({ type: 'KEEP_VERSION' })}
+            >
+              Keep my version anyway
+            </button>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-2 text-sm"
+              onClick={() => dispatch({ type: 'EDIT_RECHECK' })}
+            >
+              Edit and recheck
+            </button>
           </div>
         </div>
       ) : null}
 
       {!canShowAnswering ? (
         <div className={actionBarClass}>
-          <button type="button" onClick={() => void runCritique()} disabled={!state.questionText.trim() || state.stage === 'CRITIQUING'} className="btn-primary">
+          <button
+            type="button"
+            onClick={() => void runCritique()}
+            disabled={!state.questionText.trim() || state.stage === 'CRITIQUING'}
+            className="btn-primary"
+          >
             {state.stage === 'CRITIQUING' ? 'Reviewing...' : 'Continue'}
           </button>
-          {counter ? <span className="text-xs text-muted-foreground">{counter}</span> : null}
-          {onCancel ? <button type="button" onClick={onCancel} className="btn-ghost">Cancel</button> : null}
+          {counter ? <span className="text-muted-foreground text-xs">{counter}</span> : null}
+          {onCancel ? (
+            <button type="button" onClick={onCancel} className="btn-ghost">
+              Cancel
+            </button>
+          ) : null}
         </div>
       ) : null}
 
       {canShowAnswering ? (
         <>
-          {state.stage !== 'SUBMITTING' && (counter || state.suggesting || state.suggestionError) ? (
+          {state.stage !== 'SUBMITTING' &&
+          (counter || state.suggesting || state.suggestionError) ? (
             <div className="flex flex-wrap items-center gap-3">
-              {state.suggesting ? <span className="text-sm text-muted-foreground">Suggesting answer...</span> : null}
-              {counter ? <span className="text-xs text-muted-foreground">{counter}</span> : null}
-              {state.suggestionError ? <span className="text-sm text-destructive">{state.suggestionError}</span> : null}
+              {state.suggesting ? (
+                <span className="text-muted-foreground text-sm">Suggesting answer...</span>
+              ) : null}
+              {counter ? <span className="text-muted-foreground text-xs">{counter}</span> : null}
+              {state.suggestionError ? (
+                <span className="text-destructive text-sm">{state.suggestionError}</span>
+              ) : null}
             </div>
           ) : null}
 
           <div>
-            <label htmlFor="correct-answer" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Correct answer</label>
+            <label
+              htmlFor="correct-answer"
+              className="text-muted-foreground mb-1 block text-xs tracking-[0.1em] uppercase"
+            >
+              Correct answer
+            </label>
             <input
               id="correct-answer"
               value={state.userAnswer}
-              onChange={(event) => dispatch({ type: 'FIELD', field: 'userAnswer', value: event.target.value.slice(0, 200) })}
+              onChange={(event) =>
+                dispatch({
+                  type: 'FIELD',
+                  field: 'userAnswer',
+                  value: event.target.value.slice(0, 200),
+                })
+              }
               maxLength={200}
               required
               readOnly={state.stage === 'SUBMITTING'}
-              className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary"
+              className="bg-background focus:border-primary w-full rounded-md border px-3 py-2 outline-none"
               placeholder="Bucephalus"
             />
           </div>
 
           <div>
-            <label htmlFor="alternate-answers" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Alternate answers</label>
-            <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="Accepted variations, separated by commas" />
-            <p className="mt-1 text-xs text-muted-foreground">{alternateAnswers.length}/5 alternates</p>
+            <label
+              htmlFor="alternate-answers"
+              className="text-muted-foreground mb-1 block text-xs tracking-[0.1em] uppercase"
+            >
+              Alternate answers
+            </label>
+            <input
+              id="alternate-answers"
+              value={state.alternateText}
+              onChange={(event) =>
+                dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })
+              }
+              readOnly={state.stage === 'SUBMITTING'}
+              className="bg-background focus:border-primary w-full rounded-md border px-3 py-2 outline-none"
+              placeholder="Accepted variations, separated by commas"
+            />
+            <p className="text-muted-foreground mt-1 text-xs">
+              {alternateAnswers.length}/5 alternates
+            </p>
           </div>
 
           <div>
-            <label htmlFor="explanation" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Explanation</label>
-            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={4} maxLength={500} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="A short note that helps someone learn if they miss it." />
-            <p className="mt-1 text-right text-xs text-muted-foreground">{state.explanation.length}/500</p>
+            <label
+              htmlFor="explanation"
+              className="text-muted-foreground mb-1 block text-xs tracking-[0.1em] uppercase"
+            >
+              Explanation
+            </label>
+            <textarea
+              id="explanation"
+              value={state.explanation}
+              onChange={(event) =>
+                dispatch({
+                  type: 'FIELD',
+                  field: 'explanation',
+                  value: event.target.value.slice(0, 500),
+                })
+              }
+              rows={4}
+              maxLength={500}
+              readOnly={state.stage === 'SUBMITTING'}
+              className="bg-background focus:border-primary w-full rounded-md border px-3 py-2 outline-none"
+              placeholder="A short note that helps someone learn if they miss it."
+            />
+            <p className="text-muted-foreground mt-1 text-right text-xs">
+              {state.explanation.length}/500
+            </p>
           </div>
 
           <div>
-            <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Creator note</label>
-            <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="Optional context for recipients" />
-            <p className="mt-1 text-right text-xs text-muted-foreground">{state.creatorNote.length}/200</p>
+            <label
+              htmlFor="creator-note"
+              className="text-muted-foreground mb-1 block text-xs tracking-[0.1em] uppercase"
+            >
+              Creator note
+            </label>
+            <textarea
+              id="creator-note"
+              value={state.creatorNote}
+              onChange={(event) =>
+                dispatch({
+                  type: 'FIELD',
+                  field: 'creatorNote',
+                  value: event.target.value.slice(0, 200),
+                })
+              }
+              rows={3}
+              maxLength={200}
+              readOnly={state.stage === 'SUBMITTING'}
+              className="bg-background focus:border-primary w-full rounded-md border px-3 py-2 outline-none"
+              placeholder="Optional context for recipients"
+            />
+            <p className="text-muted-foreground mt-1 text-right text-xs">
+              {state.creatorNote.length}/200
+            </p>
           </div>
 
-          <div className="rounded-md border bg-muted/30 p-3">
-            <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">AI classification</p>
-            <p className="mt-1 text-sm text-muted-foreground">Joshing will read the question and answer when you save, then use the LLM to choose the broad category, precise domain, and difficulty.</p>
+          <div className="bg-muted/30 rounded-md border p-3">
+            <p className="text-muted-foreground text-xs tracking-[0.1em] uppercase">
+              AI classification
+            </p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Joshing will read the question and answer when you save, then use the LLM to choose
+              the broad category, precise domain, and difficulty.
+            </p>
           </div>
 
           {state.llmSuggestedAnswer && !answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (
-            <div className="rounded-md border bg-muted/40 p-3 text-sm">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">LLM suggestion</p>
+            <div className="bg-muted/40 rounded-md border p-3 text-sm">
+              <p className="text-muted-foreground text-xs tracking-[0.1em] uppercase">
+                LLM suggestion
+              </p>
               <p className="mt-1 line-through decoration-amber-500">{state.llmSuggestedAnswer}</p>
             </div>
           ) : null}
@@ -556,10 +795,19 @@ export function QuestionForm({
               <p className="text-sm text-emerald-700">✓ Verified — matches LLM suggestion</p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
-                <p className="text-sm text-amber-700">⚠ Unverified — your answer differs from the LLM&apos;s suggestion. Recipients will see this.</p>
+                <p className="text-sm text-amber-700">
+                  ⚠ Unverified — your answer differs from the LLM&apos;s suggestion. Recipients will
+                  see this.
+                </p>
                 <button
                   type="button"
-                  onClick={() => dispatch({ type: 'FIELD', field: 'userAnswer', value: state.llmSuggestedAnswer ?? '' })}
+                  onClick={() =>
+                    dispatch({
+                      type: 'FIELD',
+                      field: 'userAnswer',
+                      value: state.llmSuggestedAnswer ?? '',
+                    })
+                  }
                   disabled={state.stage === 'SUBMITTING'}
                   className="rounded-md border border-amber-700 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -570,11 +818,34 @@ export function QuestionForm({
           ) : null}
 
           {showDestinations ? (
-            <div className="rounded-md border bg-muted/40 p-4">
-              <p className="mb-3 text-xs uppercase tracking-[0.1em] text-muted-foreground">Destinations</p>
-              <label className="mb-2 flex cursor-default items-center gap-2 text-sm"><input type="checkbox" checked readOnly disabled className="rounded" /><span className="text-foreground">Save to bank</span></label>
-              <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Share with all friends</span></label>
-              <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.specificMode} onChange={(event) => toggleSpecificMode(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Send to specific friends only</span></label>
+            <div className="bg-muted/40 rounded-md border p-4">
+              <p className="text-muted-foreground mb-3 text-xs tracking-[0.1em] uppercase">
+                Destinations
+              </p>
+              <label className="mb-2 flex cursor-default items-center gap-2 text-sm">
+                <input type="checkbox" checked readOnly disabled className="rounded" />
+                <span className="text-foreground">Save to bank</span>
+              </label>
+              <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={state.shareToFeed}
+                  onChange={(event) => toggleShareToFeed(event.target.checked)}
+                  className="rounded"
+                  disabled={state.stage === 'SUBMITTING'}
+                />
+                <span className="text-foreground">Share with all friends</span>
+              </label>
+              <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={state.specificMode}
+                  onChange={(event) => toggleSpecificMode(event.target.checked)}
+                  className="rounded"
+                  disabled={state.stage === 'SUBMITTING'}
+                />
+                <span className="text-foreground">Send to specific friends only</span>
+              </label>
               {state.specificMode ? (
                 <div className="mt-1 space-y-3">
                   {state.sendToFriendIds.length > 0 ? (
@@ -583,13 +854,16 @@ export function QuestionForm({
                         const friend = friendsById.get(id);
                         if (!friend) return null;
                         return (
-                          <span key={id} className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary py-1 pl-3 pr-1 text-sm text-primary-foreground">
+                          <span
+                            key={id}
+                            className="border-primary bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-full border py-1 pr-1 pl-3 text-sm"
+                          >
                             {friend.displayName}
                             <button
                               type="button"
                               onClick={() => dispatch({ type: 'TOGGLE_FRIEND', id })}
                               aria-label={`Remove ${friend.displayName}`}
-                              className="inline-flex size-5 items-center justify-center rounded-full hover:bg-primary-foreground/20"
+                              className="hover:bg-primary-foreground/20 inline-flex size-5 items-center justify-center rounded-full"
                             >
                               <X className="size-3" />
                             </button>
@@ -600,14 +874,16 @@ export function QuestionForm({
                   ) : null}
 
                   {state.friendsLoading ? (
-                    <p className="text-xs text-muted-foreground">Loading friends...</p>
+                    <p className="text-muted-foreground text-xs">Loading friends...</p>
                   ) : state.friends.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No friends found.</p>
+                    <p className="text-muted-foreground text-xs">No friends found.</p>
                   ) : (
                     <>
                       {state.friendSearch.trim() === '' && recents.length > 0 ? (
                         <div>
-                          <p className="mb-2 text-xs uppercase tracking-[0.1em] text-muted-foreground">Recents</p>
+                          <p className="text-muted-foreground mb-2 text-xs tracking-[0.1em] uppercase">
+                            Recents
+                          </p>
                           <div className="flex flex-wrap gap-2">
                             {recents.map((friend) => {
                               const selected = state.sendToFriendIds.includes(friend.id);
@@ -617,7 +893,12 @@ export function QuestionForm({
                                   type="button"
                                   onClick={() => dispatch({ type: 'TOGGLE_FRIEND', id: friend.id })}
                                   aria-pressed={selected}
-                                  className={['rounded-full border px-3 py-1 text-sm transition', selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background hover:bg-muted'].join(' ')}
+                                  className={[
+                                    'rounded-full border px-3 py-1 text-sm transition',
+                                    selected
+                                      ? 'border-primary bg-primary text-primary-foreground'
+                                      : 'border-border bg-background hover:bg-muted',
+                                  ].join(' ')}
                                 >
                                   {friend.displayName}
                                 </button>
@@ -628,21 +909,25 @@ export function QuestionForm({
                       ) : null}
 
                       <label className="relative block">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                         <input
                           type="text"
                           aria-label="Search friends"
                           value={state.friendSearch}
-                          onChange={(event) => dispatch({ type: 'FRIEND_SEARCH', value: event.target.value })}
+                          onChange={(event) =>
+                            dispatch({ type: 'FRIEND_SEARCH', value: event.target.value })
+                          }
                           placeholder="Search friends..."
-                          className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm outline-none focus:border-primary"
+                          className="bg-background focus:border-primary h-10 w-full rounded-md border pr-3 pl-9 text-sm outline-none"
                           disabled={state.stage === 'SUBMITTING'}
                         />
                       </label>
 
                       <div className="max-h-64 overflow-y-auto rounded-md border">
                         {filteredFriends.length === 0 ? (
-                          <p className="p-3 text-xs text-muted-foreground">No friends match &ldquo;{state.friendSearch.trim()}&rdquo;.</p>
+                          <p className="text-muted-foreground p-3 text-xs">
+                            No friends match &ldquo;{state.friendSearch.trim()}&rdquo;.
+                          </p>
                         ) : (
                           filteredFriends.map((friend) => {
                             const selected = state.sendToFriendIds.includes(friend.id);
@@ -652,10 +937,21 @@ export function QuestionForm({
                                 type="button"
                                 onClick={() => dispatch({ type: 'TOGGLE_FRIEND', id: friend.id })}
                                 aria-pressed={selected}
-                                className="flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/60"
+                                className="hover:bg-muted/60 flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0"
                               >
-                                <span className={['inline-flex size-4 items-center justify-center rounded-sm border', selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'].join(' ')}>
-                                  {selected ? <span aria-hidden className="text-[10px] leading-none">✓</span> : null}
+                                <span
+                                  className={[
+                                    'inline-flex size-4 items-center justify-center rounded-sm border',
+                                    selected
+                                      ? 'border-primary bg-primary text-primary-foreground'
+                                      : 'border-border bg-background',
+                                  ].join(' ')}
+                                >
+                                  {selected ? (
+                                    <span aria-hidden className="text-[10px] leading-none">
+                                      ✓
+                                    </span>
+                                  ) : null}
                                 </span>
                                 <span>{friend.displayName}</span>
                               </button>
@@ -667,13 +963,35 @@ export function QuestionForm({
                   )}
                 </div>
               ) : null}
-              <p className="mt-3 text-xs text-muted-foreground">{state.specificMode ? 'Sent directly to the friends you pick.' : state.shareToFeed ? "Your friends will see this in their feed (except friends who've marked this domain as Not my focus)." : 'Saved to your bank only.'}</p>
+              <p className="text-muted-foreground mt-3 text-xs">
+                {state.specificMode
+                  ? 'Sent directly to the friends you pick.'
+                  : state.shareToFeed
+                    ? "Your friends will see this in their feed (except friends who've marked this domain as Not my focus)."
+                    : 'Saved to your bank only.'}
+              </p>
             </div>
           ) : null}
 
           <div className={actionBarClass}>
-            <button type="button" disabled={submitDisabled} onClick={() => void finalSave()} className="btn-primary">{submitDisabled ? loadingLabel : resolvedSubmitLabel}</button>
-            {onCancel ? <button type="button" onClick={onCancel} className="btn-ghost" disabled={submitDisabled}>Cancel</button> : null}
+            <button
+              type="button"
+              disabled={submitDisabled}
+              onClick={() => void finalSave()}
+              className="btn-primary"
+            >
+              {submitDisabled ? loadingLabel : resolvedSubmitLabel}
+            </button>
+            {onCancel ? (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="btn-ghost"
+                disabled={submitDisabled}
+              >
+                Cancel
+              </button>
+            ) : null}
           </div>
         </>
       ) : null}

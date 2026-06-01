@@ -1,18 +1,18 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
-import { getSession } from '@/server/auth/session'
-import { clearContactHashes, replaceContactHashes } from '@/server/db/queries/contact-hashes'
+import { getSession } from '@/server/auth/session';
+import { clearContactHashes, replaceContactHashes } from '@/server/db/queries/contact-hashes';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
-const MAX_HASHES = 5000
+const MAX_HASHES = 5000;
 
 const bodySchema = z.object({
   hashes: z
     .array(z.string().regex(/^[a-f0-9]{64}$/, 'must be 64-char lowercase hex'))
     .max(MAX_HASHES),
-})
+});
 
 // Atomic replace of the caller's ContactHash rows. Per the privacy invariant
 // in B-Friends-1's updateDiscoverability: when the user toggles
@@ -21,13 +21,13 @@ const bodySchema = z.object({
 // leave the rows in place until the next toggle. That's fine; matching only
 // returns rows for users with the flag TRUE, so dormant hashes don't leak.
 export async function POST(request: Request) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const json = await request.json().catch(() => null)
-  const parsed = bodySchema.safeParse(json)
+  const json = await request.json().catch(() => null);
+  const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    const tooMany = parsed.error.issues.some((issue) => issue.code === 'too_big')
+    const tooMany = parsed.error.issues.some((issue) => issue.code === 'too_big');
     if (tooMany) {
       return NextResponse.json(
         {
@@ -35,22 +35,22 @@ export async function POST(request: Request) {
           message: `At most ${MAX_HASHES} contacts per upload.`,
         },
         { status: 413 },
-      )
+      );
     }
     return NextResponse.json(
       { error: 'invalid_body', message: 'Hash list malformed.' },
       { status: 400 },
-    )
+    );
   }
 
-  const result = await replaceContactHashes(session.userId, parsed.data.hashes)
-  return NextResponse.json(result)
+  const result = await replaceContactHashes(session.userId, parsed.data.hashes);
+  return NextResponse.json(result);
 }
 
 export async function DELETE() {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  await clearContactHashes(session.userId)
-  return NextResponse.json({ ok: true })
+  await clearContactHashes(session.userId);
+  return NextResponse.json({ ok: true });
 }

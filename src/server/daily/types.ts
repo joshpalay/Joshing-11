@@ -132,7 +132,7 @@ export const FRIEND_WEIGHT = 1.0;
 export const BOT_WEIGHT = 1.0;
 
 export function resolveDailyBasePoints(
-  difficulty: DailyDifficultyEstimate | string | null | undefined
+  difficulty: DailyDifficultyEstimate | string | null | undefined,
 ): number {
   if (!difficulty) return DAILY_BASE_POINTS.moderate;
   if (difficulty === 'specialist' || difficulty === 'moderate' || difficulty === 'accessible') {

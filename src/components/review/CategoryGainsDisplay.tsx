@@ -51,7 +51,9 @@ export function CategoryGainsDisplay({
   const hasItems = Boolean(gameItems?.length || resolvedRoundItems?.length);
 
   if (!hasItems) {
-    return emptyMessage ? <p className="mt-3 text-sm text-muted-foreground">{emptyMessage}</p> : null;
+    return emptyMessage ? (
+      <p className="text-muted-foreground mt-3 text-sm">{emptyMessage}</p>
+    ) : null;
   }
 
   return (

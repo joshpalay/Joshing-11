@@ -40,7 +40,9 @@ export function difficultyCopyFromEstimate(difficulty: string | null | undefined
   return ESTIMATE_COPY[normalized as DifficultyEstimateValue] ?? difficultyCopyFromTier(normalized);
 }
 
-export function difficultyCopyFromAssessment(value: string | number | null | undefined): string | null {
+export function difficultyCopyFromAssessment(
+  value: string | number | null | undefined,
+): string | null {
   if (typeof value === 'number') return difficultyCopyFromValue(value);
   return difficultyCopyFromEstimate(value);
 }

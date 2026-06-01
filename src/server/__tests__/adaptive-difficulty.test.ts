@@ -21,7 +21,7 @@ describe('applyAdaptiveLevelAdjustment — global adaptive level', () => {
 
   it('leaves level unchanged when correct rate is in the 45–75% sweet spot', () => {
     expect(applyAdaptiveLevelAdjustment(2.0, 0.45)).toBe(2.0);
-    expect(applyAdaptiveLevelAdjustment(2.0, 0.60)).toBe(2.0);
+    expect(applyAdaptiveLevelAdjustment(2.0, 0.6)).toBe(2.0);
     expect(applyAdaptiveLevelAdjustment(2.0, 0.75)).toBe(2.0);
   });
 

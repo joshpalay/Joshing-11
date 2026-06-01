@@ -74,7 +74,8 @@ export function shouldIntroduceCatchUpQuestion(params: {
 }): boolean {
   if (!params.currentCatchUpItemId || params.loading) return false;
   if (params.isResolvingTurn) return false;
-  if (hasUnresolvedCatchUpPrompt(params.introducedItemIds, params.resultPostedItemIds)) return false;
+  if (hasUnresolvedCatchUpPrompt(params.introducedItemIds, params.resultPostedItemIds))
+    return false;
   return !params.introducedItemIds.has(params.currentCatchUpItemId);
 }
 

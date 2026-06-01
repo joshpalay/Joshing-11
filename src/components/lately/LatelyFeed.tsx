@@ -1,11 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 
-import {
-  assignCaption,
-  bucketByDay,
-  formatMomentTime,
-  type LatelyBucketLabel,
-} from '@/lib/lately';
+import { assignCaption, bucketByDay, formatMomentTime, type LatelyBucketLabel } from '@/lib/lately';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 
 import { DayDivider } from './DayDivider';
@@ -46,15 +41,13 @@ export function LatelyFeed({ items, tz }: Props) {
           lineHeight: 1.5,
         }}
       >
-        No moments yet. They&rsquo;ll appear here once you and your friends start
-        answering each other&rsquo;s questions.
+        No moments yet. They&rsquo;ll appear here once you and your friends start answering each
+        other&rsquo;s questions.
       </div>
     );
   }
 
-  const sorted = [...items].sort(
-    (a, b) => b.sortAt.getTime() - a.sortAt.getTime(),
-  );
+  const sorted = [...items].sort((a, b) => b.sortAt.getTime() - a.sortAt.getTime());
   const buckets = bucketByDay(sorted, (i) => i.sortAt, tz);
   const visibleItems = buckets.flatMap((b) => b.items);
 
@@ -71,23 +64,20 @@ export function LatelyFeed({ items, tz }: Props) {
           lineHeight: 1.5,
         }}
       >
-        No moments yet. They&rsquo;ll appear here once you and your friends start
-        answering each other&rsquo;s questions.
+        No moments yet. They&rsquo;ll appear here once you and your friends start answering each
+        other&rsquo;s questions.
       </div>
     );
   }
 
-  const featuredMomentId =
-    visibleItems.find((i) => i.kind === 'moment')?.id ?? null;
+  const featuredMomentId = visibleItems.find((i) => i.kind === 'moment')?.id ?? null;
 
   return (
     <>
       {buckets.map((bucket) => (
         <Fragment key={bucket.label}>
           <DayDivider label={bucket.label} />
-          {bucket.items.map((item) =>
-            renderFeedItem(item, bucket.label, tz, featuredMomentId),
-          )}
+          {bucket.items.map((item) => renderFeedItem(item, bucket.label, tz, featuredMomentId))}
         </Fragment>
       ))}
 
@@ -129,11 +119,7 @@ function renderFeedItem(
       <MomentRow
         key={item.id}
         moment={moment}
-        caption={assignCaption(
-          moment.momentId,
-          moment.dir,
-          moment.friendFirstName,
-        )}
+        caption={assignCaption(moment.momentId, moment.dir, moment.friendFirstName)}
         footnoteTime={formatMomentTime(moment.answeredAt, bucket, tz)}
         featured={item.id === featuredMomentId}
         defaultOpen={item.id === featuredMomentId}

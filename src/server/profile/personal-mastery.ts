@@ -28,11 +28,13 @@ export function sortCategoriesByTierThenActivity(
     const rankA = tierRank(resolveTier(masteryPointsByCategory.get(a.canonical_subcategory) ?? 0));
     const rankB = tierRank(resolveTier(masteryPointsByCategory.get(b.canonical_subcategory) ?? 0));
     if (rankA !== rankB) return rankA - rankB;
-    return (b.declared_score + b.proven_score) - (a.declared_score + a.proven_score);
+    return b.declared_score + b.proven_score - (a.declared_score + a.proven_score);
   });
 }
 
-export function groupCategoriesByBroadCategory(sortedCategories: CategoryRow[]): Array<[string, CategoryRow[]]> {
+export function groupCategoriesByBroadCategory(
+  sortedCategories: CategoryRow[],
+): Array<[string, CategoryRow[]]> {
   const groups = new Map<string, CategoryRow[]>();
   for (const item of sortedCategories) {
     const key = item.broad_category || 'General Knowledge';

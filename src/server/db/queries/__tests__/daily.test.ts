@@ -97,7 +97,10 @@ describe('clearStaleShortTodayQueue', () => {
   });
 
   it('keeps a started (answered) short queue', async () => {
-    selectResults = [[{ id: 'started', slots: slots(3, { answered: true }), createdAt: BEFORE_WINDOW }], []];
+    selectResults = [
+      [{ id: 'started', slots: slots(3, { answered: true }), createdAt: BEFORE_WINDOW }],
+      [],
+    ];
     expect(await clearStaleShortTodayQueue('u1')).toBe(false);
     expect(deleteWheres).toHaveLength(0);
   });
@@ -128,7 +131,10 @@ describe('carryForwardUntouchedDailyQueue', () => {
   });
 
   it('does NOT carry a started prior queue forward', async () => {
-    selectResults = [[], [{ id: 'p1', slots: slots(5, { answered: true }), createdAt: BEFORE_WINDOW }]];
+    selectResults = [
+      [],
+      [{ id: 'p1', slots: slots(5, { answered: true }), createdAt: BEFORE_WINDOW }],
+    ];
     expect(await carryForwardUntouchedDailyQueue('u1')).toBe(false);
     expect(updateSets).toHaveLength(0);
   });

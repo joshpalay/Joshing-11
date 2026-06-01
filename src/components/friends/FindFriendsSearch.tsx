@@ -1,74 +1,73 @@
-'use client'
+'use client';
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react';
 
-import { AddFriendButton } from '@/components/friends/AddFriendButton'
-import { colorForUser, formatRelativeTime } from '@/components/feed/visual'
-import type { RelationshipResult } from '@/server/db/queries/friend-requests'
+import { AddFriendButton } from '@/components/friends/AddFriendButton';
+import { colorForUser, formatRelativeTime } from '@/components/feed/visual';
+import type { RelationshipResult } from '@/server/db/queries/friend-requests';
 
 type Match = {
-  id: string
-  handle: string | null
-  displayName: string | null
-  avatarColor: string | null
-  createdAt: string
-  relationship: RelationshipResult
-}
+  id: string;
+  handle: string | null;
+  displayName: string | null;
+  avatarColor: string | null;
+  createdAt: string;
+  relationship: RelationshipResult;
+};
 
-type SearchResponse = { match: Match | null }
+type SearchResponse = { match: Match | null };
 
-const DEBOUNCE_MS = 400
+const DEBOUNCE_MS = 400;
 
 function initialsFor(name: string | null, fallback: string): string {
-  const source = (name?.trim() || fallback).replace(/[^a-zA-Z]+/g, ' ').trim()
-  if (!source) return '??'
-  const parts = source.split(/\s+/)
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+  const source = (name?.trim() || fallback).replace(/[^a-zA-Z]+/g, ' ').trim();
+  if (!source) return '??';
+  const parts = source.split(/\s+/);
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
 
 export function FindFriendsSearch() {
-  const [query, setQuery] = useState('')
-  const [searching, setSearching] = useState(false)
-  const [match, setMatch] = useState<Match | null>(null)
-  const [searched, setSearched] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const requestSeq = useRef(0)
-  const debounceRef = useRef<number | null>(null)
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [match, setMatch] = useState<Match | null>(null);
+  const [searched, setSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const requestSeq = useRef(0);
+  const debounceRef = useRef<number | null>(null);
 
   async function runSearch(value: string) {
-    const trimmed = value.trim()
+    const trimmed = value.trim();
     if (!trimmed) {
-      setMatch(null)
-      setSearched(false)
-      setError(null)
-      return
+      setMatch(null);
+      setSearched(false);
+      setError(null);
+      return;
     }
-    const seq = ++requestSeq.current
-    setSearching(true)
-    setError(null)
+    const seq = ++requestSeq.current;
+    setSearching(true);
+    setError(null);
     try {
-      const response = await fetch(
-        `/api/friends/search?q=${encodeURIComponent(trimmed)}`,
-        { credentials: 'include' },
-      )
-      if (seq !== requestSeq.current) return
+      const response = await fetch(`/api/friends/search?q=${encodeURIComponent(trimmed)}`, {
+        credentials: 'include',
+      });
+      if (seq !== requestSeq.current) return;
       if (!response.ok) {
-        setError('Search failed. Try again.')
-        setMatch(null)
-        setSearched(true)
-        return
+        setError('Search failed. Try again.');
+        setMatch(null);
+        setSearched(true);
+        return;
       }
-      const body = (await response.json().catch(() => null)) as SearchResponse | null
-      setMatch(body?.match ?? null)
-      setSearched(true)
+      const body = (await response.json().catch(() => null)) as SearchResponse | null;
+      setMatch(body?.match ?? null);
+      setSearched(true);
     } catch {
-      if (seq !== requestSeq.current) return
-      setError('Network error. Try again.')
-      setMatch(null)
-      setSearched(true)
+      if (seq !== requestSeq.current) return;
+      setError('Network error. Try again.');
+      setMatch(null);
+      setSearched(true);
     } finally {
-      if (seq === requestSeq.current) setSearching(false)
+      if (seq === requestSeq.current) setSearching(false);
     }
   }
 
@@ -76,32 +75,32 @@ export function FindFriendsSearch() {
   // body (linter rule react-hooks/set-state-in-effect). The "clear on
   // empty query" path is handled in handleQueryChange below.
   useEffect(() => {
-    if (!query.trim()) return
-    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    if (!query.trim()) return;
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
-      void runSearch(query)
-    }, DEBOUNCE_MS)
+      void runSearch(query);
+    }, DEBOUNCE_MS);
     return () => {
-      if (debounceRef.current) window.clearTimeout(debounceRef.current)
-    }
-  }, [query])
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    };
+  }, [query]);
 
   function handleQueryChange(value: string) {
-    setQuery(value)
+    setQuery(value);
     if (!value.trim()) {
-      setMatch(null)
-      setSearched(false)
-      setError(null)
+      setMatch(null);
+      setSearched(false);
+      setError(null);
     }
   }
 
   function refreshAfterAction() {
-    void runSearch(query)
+    void runSearch(query);
   }
 
-  const matchDisplayName = match ? match.displayName?.trim() || `@${match.handle ?? ''}` : ''
-  const initials = match ? initialsFor(match.displayName, match.handle ?? '?') : ''
-  const swatch = match ? match.avatarColor || colorForUser(match.id) : null
+  const matchDisplayName = match ? match.displayName?.trim() || `@${match.handle ?? ''}` : '';
+  const initials = match ? initialsFor(match.displayName, match.handle ?? '?') : '';
+  const swatch = match ? match.avatarColor || colorForUser(match.id) : null;
 
   return (
     <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
@@ -115,12 +114,12 @@ export function FindFriendsSearch() {
         onChange={(event) => handleQueryChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
-            event.preventDefault()
-            void runSearch(query)
+            event.preventDefault();
+            void runSearch(query);
           }
         }}
         placeholder="@handle or (415) 555-1234"
-        className="border-border bg-background text-foreground placeholder:text-muted-foreground mt-3 h-11 w-full rounded-md border px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+        className="border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-primary/40 mt-3 h-11 w-full rounded-md border px-3 text-sm outline-none focus:ring-2"
       />
 
       <div className="mt-3 min-h-[44px]">
@@ -160,5 +159,5 @@ export function FindFriendsSearch() {
         ) : null}
       </div>
     </section>
-  )
+  );
 }

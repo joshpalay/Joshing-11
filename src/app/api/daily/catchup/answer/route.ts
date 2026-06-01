@@ -21,18 +21,17 @@ import { persistGeneratedQuestion } from '@/server/questions/persist-generated-q
 import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
-import {
-  CATCHUP_SURFACE_WEIGHT,
-  RECOVERY_STATE_WEIGHT,
-} from '@/server/mastery/constants';
+import { CATCHUP_SURFACE_WEIGHT, RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
 
 export const dynamic = 'force-dynamic';
 
 function parseBody(value: unknown): { dailyQueueItemId: string; submittedAnswer: string } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const dailyQueueItemId = typeof record.dailyQueueItemId === 'string' ? record.dailyQueueItemId : null;
-  const submittedAnswer = typeof record.submittedAnswer === 'string' ? record.submittedAnswer.trim() : null;
+  const dailyQueueItemId =
+    typeof record.dailyQueueItemId === 'string' ? record.dailyQueueItemId : null;
+  const submittedAnswer =
+    typeof record.submittedAnswer === 'string' ? record.submittedAnswer.trim() : null;
   if (!dailyQueueItemId || !submittedAnswer) return null;
   return { dailyQueueItemId, submittedAnswer };
 }
@@ -63,11 +62,16 @@ export async function POST(request: NextRequest) {
 
   const parsed = parseBody(await request.json().catch(() => null));
   if (!parsed) {
-    return catchUpErrorResponse(400, 'validation', 'dailyQueueItemId and submittedAnswer are required');
+    return catchUpErrorResponse(
+      400,
+      'validation',
+      'dailyQueueItemId and submittedAnswer are required',
+    );
   }
 
-  const catchupItem = (await getCatchupQuestions(session.userId))
-    .find((item) => item.dailyQueueItemId === parsed.dailyQueueItemId);
+  const catchupItem = (await getCatchupQuestions(session.userId)).find(
+    (item) => item.dailyQueueItemId === parsed.dailyQueueItemId,
+  );
   if (!catchupItem) {
     return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found', {
       refresh_required: true,
@@ -99,7 +103,11 @@ async function handleDailyCatchupAnswer({
   catchupItem: CatchupQuestion;
 }) {
   if (catchupItem.queueId === null || catchupItem.slotIndex === null) {
-    return catchUpErrorResponse(500, 'invalid_state', 'Daily catch-up item missing queue reference');
+    return catchUpErrorResponse(
+      500,
+      'invalid_state',
+      'Daily catch-up item missing queue reference',
+    );
   }
 
   const [queue] = await db
@@ -149,7 +157,11 @@ async function handleDailyCatchupAnswer({
 
   if (slot.source === 'friend') {
     if (!slot.question_id) {
-      return catchUpErrorResponse(500, 'invalid_state', 'Friend catch-up slot missing canonical question id');
+      return catchUpErrorResponse(
+        500,
+        'invalid_state',
+        'Friend catch-up slot missing canonical question id',
+      );
     }
     canonicalQuestionId = slot.question_id;
     const [canonicalRow] = await db
@@ -170,16 +182,27 @@ async function handleDailyCatchupAnswer({
     while (persistAttempt < 2 && canonicalQuestionId === null) {
       persistAttempt += 1;
       try {
-        const persisted = await persistGeneratedQuestion(catchupItem.questionId, catchupItem.domain);
+        const persisted = await persistGeneratedQuestion(
+          catchupItem.questionId,
+          catchupItem.domain,
+        );
         canonicalQuestionId = persisted.questionId;
         const [persistedQuestion] = await db
-          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+          .select({
+            creatorId: questions.creatorId,
+            domain: questions.canonicalSubcategory,
+            broadCategory: questions.broadCategory,
+            category: questions.category,
+          })
           .from(questions)
           .where(eq(questions.id, persisted.questionId))
           .limit(1);
         persistedCreatorId = persistedQuestion?.creatorId ?? null;
         persistedDomainForCreator =
-          persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+          persistedQuestion?.domain ||
+          persistedQuestion?.broadCategory ||
+          persistedQuestion?.category ||
+          null;
       } catch (error) {
         const finalAttempt = persistAttempt >= 2;
         console.warn(
@@ -199,20 +222,17 @@ async function handleDailyCatchupAnswer({
   const priorAnswers = canonicalQuestionId
     ? await readPriorAnswersForQuestion(userId, canonicalQuestionId)
     : [];
-  const masteryAnswerState = computeAnswerState(
-    isCorrect ? 'correct' : 'wrong',
-    priorAnswers,
-  );
+  const masteryAnswerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
 
   const baseCatchupPoints = Math.round(catchupItem.basePoints * CATCHUP_SURFACE_WEIGHT);
   const pointsAwarded =
     masteryAnswerState === 'first_correct'
       ? baseCatchupPoints
       : masteryAnswerState === 'first_correct_after_wrong'
-        // Recovery on a catch-up answer = 25% of the original live base (not 6.25%).
-        // RECOVERY_STATE_WEIGHT applies to the full base, not the already-reduced
-        // catch-up base, so wrong-then-right on catch-up still earns meaningful credit.
-        ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
+        ? // Recovery on a catch-up answer = 25% of the original live base (not 6.25%).
+          // RECOVERY_STATE_WEIGHT applies to the full base, not the already-reduced
+          // catch-up base, so wrong-then-right on catch-up still earns meaningful credit.
+          Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
         : 0;
 
   const nextSlots = replaceQueueSlot(slots, catchupItem.slotIndex, (item) => {
@@ -257,22 +277,20 @@ async function handleDailyCatchupAnswer({
     console.warn('[daily/catchup/answer] writeMasteryEvent failed', error);
   }
 
-  await db
-    .update(dailyQueues)
-    .set({ slots: nextSlots })
-    .where(eq(dailyQueues.id, queue.id));
+  await db.update(dailyQueues).set({ slots: nextSlots }).where(eq(dailyQueues.id, queue.id));
 
-  await updateDomainDifficultyOnAnswer(
-    userId,
-    catchupItem.domain,
-    isCorrect,
-  ).catch((err) => {
+  await updateDomainDifficultyOnAnswer(userId, catchupItem.domain, isCorrect).catch((err) => {
     console.warn('[daily/catchup/answer] updateDomainDifficultyOnAnswer failed', err);
   });
 
   if (canonicalQuestionId) {
     try {
-      if (isCorrect && persistedCreatorId && persistedCreatorId !== userId && persistedDomainForCreator) {
+      if (
+        isCorrect &&
+        persistedCreatorId &&
+        persistedCreatorId !== userId &&
+        persistedDomainForCreator
+      ) {
         void promoteDeclaredToDemonstrated({
           userId: persistedCreatorId,
           domain: persistedDomainForCreator,
@@ -291,12 +309,14 @@ async function handleDailyCatchupAnswer({
         });
       }
 
-      after(() => createFeedItemsForFriendsFromAnswer(
-        userId,
-        canonicalQuestionId,
-        isCorrect ? 'correct' : 'incorrect',
-        `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
-      ));
+      after(() =>
+        createFeedItemsForFriendsFromAnswer(
+          userId,
+          canonicalQuestionId,
+          isCorrect ? 'correct' : 'incorrect',
+          `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
+        ),
+      );
     } catch (error) {
       console.warn('[daily/catchup/answer] feed propagation failed', {
         generatedQuestionId: catchupItem.questionId,
@@ -377,10 +397,7 @@ async function handleFeedCatchupAnswer({
   const answerState = isCorrect ? 'correct' : 'incorrect';
 
   const priorAnswers = await readPriorAnswersForQuestion(userId, feedRow.question.id);
-  const masteryAnswerState = computeAnswerState(
-    isCorrect ? 'correct' : 'wrong',
-    priorAnswers,
-  );
+  const masteryAnswerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
 
   const baseCatchupPoints = Math.round(catchupItem.basePoints * CATCHUP_SURFACE_WEIGHT);
   const pointsAwarded =
@@ -447,12 +464,14 @@ async function handleFeedCatchupAnswer({
   }
 
   if (isCorrect) {
-    after(() => createFeedItemsForFriendsFromAnswer(
-      userId,
-      feedRow.question.id,
-      'correct',
-      `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
-    ));
+    after(() =>
+      createFeedItemsForFriendsFromAnswer(
+        userId,
+        feedRow.question.id,
+        'correct',
+        `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
+      ),
+    );
   }
 
   const nextItem = (await getCatchupQuestions(userId))[0] ?? null;

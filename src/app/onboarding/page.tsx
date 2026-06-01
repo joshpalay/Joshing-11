@@ -30,10 +30,12 @@ export default async function OnboardingPage() {
   const hasInvitation = await db
     .select({ id: friendInvitations.id })
     .from(friendInvitations)
-    .where(and(
-      eq(friendInvitations.inviteeUserId, session.userId),
-      isNotNull(friendInvitations.acceptedAt),
-    ))
+    .where(
+      and(
+        eq(friendInvitations.inviteeUserId, session.userId),
+        isNotNull(friendInvitations.acceptedAt),
+      ),
+    )
     .limit(1);
 
   if (hasInvitation.length === 0) {

@@ -32,7 +32,9 @@ function normalizeDeclaredInterest(interest: DeclaredInterestInput): DeclaredInt
   return {
     label: label.slice(0, 80),
     description: interest.description?.trim() ? interest.description.trim().slice(0, 180) : null,
-    broadCategory: interest.broadCategory?.trim() ? interest.broadCategory.trim().slice(0, 80) : null,
+    broadCategory: interest.broadCategory?.trim()
+      ? interest.broadCategory.trim().slice(0, 80)
+      : null,
   };
 }
 
@@ -56,28 +58,32 @@ function normalizeDeclaredInterests(interests: DeclaredInterestInput[]): Declare
 export function parsePreSeededInterests(value: unknown): PreSeededInterest[] {
   if (!Array.isArray(value)) return [];
 
-  return value.flatMap((item) => {
-    if (typeof item === 'string') {
-      const label = item.trim();
-      return label ? [{ label }] : [];
-    }
+  return value
+    .flatMap((item) => {
+      if (typeof item === 'string') {
+        const label = item.trim();
+        return label ? [{ label }] : [];
+      }
 
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
-    const record = item as Record<string, unknown>;
-    const label = typeof record.label === 'string' ? record.label.trim() : '';
-    if (!label) return [];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+      const record = item as Record<string, unknown>;
+      const label = typeof record.label === 'string' ? record.label.trim() : '';
+      if (!label) return [];
 
-    return [{
-      label,
-      description: typeof record.description === 'string' ? record.description.trim() : null,
-      broadCategory:
-        typeof record.broadCategory === 'string'
-          ? record.broadCategory.trim()
-          : typeof record.broad_category === 'string'
-            ? record.broad_category.trim()
-            : null,
-    }];
-  }).slice(0, 3);
+      return [
+        {
+          label,
+          description: typeof record.description === 'string' ? record.description.trim() : null,
+          broadCategory:
+            typeof record.broadCategory === 'string'
+              ? record.broadCategory.trim()
+              : typeof record.broad_category === 'string'
+                ? record.broad_category.trim()
+                : null,
+        },
+      ];
+    })
+    .slice(0, 3);
 }
 
 export async function getUserByPhone(phone: string) {
@@ -223,7 +229,9 @@ function normalizePersonName(value: string | null | undefined) {
   return normalized ? normalized.slice(0, 80) : null;
 }
 
-export async function getPreSeededInterestsForUser(userId: string): Promise<PreSeededInterestsForUser> {
+export async function getPreSeededInterestsForUser(
+  userId: string,
+): Promise<PreSeededInterestsForUser> {
   const [invitation] = await db
     .select({
       preSeededInterests: friendInvitations.preSeededInterests,
@@ -232,7 +240,9 @@ export async function getPreSeededInterestsForUser(userId: string): Promise<PreS
     })
     .from(friendInvitations)
     .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
-    .where(and(eq(friendInvitations.inviteeUserId, userId), isNotNull(friendInvitations.acceptedAt)))
+    .where(
+      and(eq(friendInvitations.inviteeUserId, userId), isNotNull(friendInvitations.acceptedAt)),
+    )
     .orderBy(desc(friendInvitations.acceptedAt))
     .limit(1);
 

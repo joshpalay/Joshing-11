@@ -1,16 +1,16 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
+import {
+  broadCategoryDisplayName,
+  normalizeBroadQuestionCategoryOrDefault,
+  normalizeCanonicalSubcategory,
+} from '@/lib/question-categorization';
 import { categorizeQuestion, generateInsideJoke } from '@/lib/llm';
 import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
 import { getSession } from '@/server/auth/session';
 import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
-import {
-  createQuestion,
-  getQuestion,
-  getQuestionsForUser,
-} from '@/server/db/queries/questions';
+import { createQuestion, getQuestion, getQuestionsForUser } from '@/server/db/queries/questions';
 import { getFriends } from '@/server/db/queries/friends';
 import {
   rollOffOldItems,
@@ -28,7 +28,10 @@ import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 export const dynamic = 'force-dynamic';
 
 function shouldIncludeShareRecipientDiagnostics() {
-  return process.env.NODE_ENV !== 'production' || process.env.SHARE_TO_FEED_DEBUG_RECIPIENT_IDS === 'true';
+  return (
+    process.env.NODE_ENV !== 'production' ||
+    process.env.SHARE_TO_FEED_DEBUG_RECIPIENT_IDS === 'true'
+  );
 }
 
 function hasPayloadKey(body: Record<string, unknown> | null, key: string) {
@@ -46,7 +49,7 @@ export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const { value, errors } = readCreateQuestionPayload(body);
   console.info('[questions/createPayload]', {
     userId: session.userId,
@@ -67,7 +70,8 @@ export async function POST(request: NextRequest) {
         {
           error: 'answer_in_question',
           fields: errors,
-          message: 'Your question appears to contain its own answer. Rephrase the question so it does not reveal the answer.',
+          message:
+            'Your question appears to contain its own answer. Rephrase the question so it does not reveal the answer.',
         },
         { status: 400 },
       );
@@ -229,7 +233,14 @@ export async function POST(request: NextRequest) {
     publicEligibilityScore: publicScoring.publicEligibilityScore,
     publicEligibilityReason: publicScoring.publicEligibilityReason,
   });
-  console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: categorizedQuestionFields.verified, category: categorizedQuestionFields.category, canonicalSubcategory: categorizedQuestionFields.canonicalSubcategory, difficultyTier: difficultyAssessment.tier });
+  console.info('[questions/create]', {
+    questionId: created.id,
+    userId: session.userId,
+    verified: categorizedQuestionFields.verified,
+    category: categorizedQuestionFields.category,
+    canonicalSubcategory: categorizedQuestionFields.canonicalSubcategory,
+    difficultyTier: difficultyAssessment.tier,
+  });
   const feedShare = {
     requested: shareToFeed,
     createdCount: 0,
@@ -248,11 +259,16 @@ export async function POST(request: NextRequest) {
       const dismissedRows = await db
         .select({ userId: feedDismissedDomains.userId })
         .from(feedDismissedDomains)
-        .where(and(
-          inArray(feedDismissedDomains.userId, friendIds),
-          eq(feedDismissedDomains.canonicalSubcategory, categorizedQuestionFields.canonicalSubcategory),
-          isNull(feedDismissedDomains.reinstatedAt),
-        ));
+        .where(
+          and(
+            inArray(feedDismissedDomains.userId, friendIds),
+            eq(
+              feedDismissedDomains.canonicalSubcategory,
+              categorizedQuestionFields.canonicalSubcategory,
+            ),
+            isNull(feedDismissedDomains.reinstatedAt),
+          ),
+        );
 
       for (const row of dismissedRows) {
         dismissedRecipientIds.add(row.userId);
@@ -298,7 +314,10 @@ export async function POST(request: NextRequest) {
     feedShare.skippedExistingFeedRecipientIds = skippedExistingFeedRecipientIds;
 
     if (sharedCount > 0) {
-      await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
+      await db
+        .update(questions)
+        .set({ sharedToFriendsFeed: true })
+        .where(eq(questions.id, created.id));
     }
 
     const includeRecipientDiagnostics = shouldIncludeShareRecipientDiagnostics();
@@ -358,7 +377,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await db.update(questions).set({ sharedToFriendsFeed: true }).where(eq(questions.id, created.id));
+    await db
+      .update(questions)
+      .set({ sharedToFriendsFeed: true })
+      .where(eq(questions.id, created.id));
   }
 
   let openedDomain: string | null = null;
@@ -372,11 +394,14 @@ export async function POST(request: NextRequest) {
     });
     openedDomain = kbResult.opened ? categorizedQuestionFields.canonicalSubcategory : null;
   } catch (error) {
-    console.error('[questions/create] openKBDomain failed after question save/share; continuing response', {
-      questionId: created.id,
-      userId: session.userId,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    console.error(
+      '[questions/create] openKBDomain failed after question save/share; continuing response',
+      {
+        questionId: created.id,
+        userId: session.userId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    );
   }
 
   const question = await getQuestion(created.id, session.userId);

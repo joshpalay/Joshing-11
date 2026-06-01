@@ -65,10 +65,10 @@ export function asSuggestion(value: Record<string, unknown> | null): QuestionSug
   const correctAnswer = typeof value?.correctAnswer === 'string' ? value.correctAnswer.trim() : '';
   const alternateAnswers = Array.isArray(value?.alternateAnswers)
     ? value.alternateAnswers
-      .filter((item): item is string => typeof item === 'string')
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, 3)
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 3)
     : [];
   const explanation = typeof value?.explanation === 'string' ? value.explanation.trim() : '';
 
@@ -88,7 +88,8 @@ export function parseVerifierResponse(rawText: string): VerifierVerdict {
   if (verdict !== 'WRONG' && verdict !== 'UNVERIFIABLE' && verdict !== 'OK') {
     return { verdict: 'UNVERIFIABLE', correctedAnswer: null };
   }
-  const corrected = typeof parsed?.corrected_answer === 'string' ? parsed.corrected_answer.trim() : '';
+  const corrected =
+    typeof parsed?.corrected_answer === 'string' ? parsed.corrected_answer.trim() : '';
   return { verdict, correctedAnswer: corrected ? corrected.slice(0, 240) : null };
 }
 

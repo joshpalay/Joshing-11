@@ -74,7 +74,11 @@ function formatDate(value: string | null) {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
 }
 
 function resultLabel(item: ArchiveItem) {
@@ -126,34 +130,43 @@ export default function ArchivePage() {
   const [error, setError] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const loadArchive = useCallback(async (cursor?: string | null) => {
-    const isNextPage = Boolean(cursor);
-    if (isNextPage) setLoadingMore(true);
-    else setLoading(true);
-    setError(null);
+  const loadArchive = useCallback(
+    async (cursor?: string | null) => {
+      const isNextPage = Boolean(cursor);
+      if (isNextPage) setLoadingMore(true);
+      else setLoading(true);
+      setError(null);
 
-    try {
-      const response = await fetch(buildArchiveUrl({ source, domain, result, cursor }), {
-        cache: 'no-store',
-        credentials: 'include',
-      });
-      const body = await response.json().catch(() => null) as ArchiveResponse | { message?: string; error?: string } | null;
-      if (!response.ok || !body || !('items' in body)) {
-        throw new Error((body as { message?: string; error?: string } | null)?.message ?? 'Could not load your archive.');
+      try {
+        const response = await fetch(buildArchiveUrl({ source, domain, result, cursor }), {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        const body = (await response.json().catch(() => null)) as
+          | ArchiveResponse
+          | { message?: string; error?: string }
+          | null;
+        if (!response.ok || !body || !('items' in body)) {
+          throw new Error(
+            (body as { message?: string; error?: string } | null)?.message ??
+              'Could not load your archive.',
+          );
+        }
+
+        setItems((current) => (isNextPage ? [...current, ...body.items] : body.items));
+        setNextCursor(body.nextCursor);
+        setDomains(body.domains);
+        setTotalCount(body.totalCount);
+        setCorrectCount(body.correctCount);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Could not load your archive.');
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
       }
-
-      setItems((current) => (isNextPage ? [...current, ...body.items] : body.items));
-      setNextCursor(body.nextCursor);
-      setDomains(body.domains);
-      setTotalCount(body.totalCount);
-      setCorrectCount(body.correctCount);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not load your archive.');
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [domain, result, source]);
+    },
+    [domain, result, source],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadArchive(null), 0);
@@ -164,9 +177,12 @@ export default function ArchivePage() {
     const target = sentinelRef.current;
     if (!target || !nextCursor || loading || loadingMore) return;
 
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) void loadArchive(nextCursor);
-    }, { rootMargin: '320px' });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadArchive(nextCursor);
+      },
+      { rootMargin: '320px' },
+    );
 
     observer.observe(target);
     return () => observer.disconnect();
@@ -176,16 +192,19 @@ export default function ArchivePage() {
     const query = search.trim().toLowerCase();
     return items
       .filter((item) => !showOnlyVerified || item.verified)
-      .filter((item) => !query || (
-        item.questionText.toLowerCase().includes(query)
-        || item.correctAnswer.toLowerCase().includes(query)
-        || item.domainDisplayName.toLowerCase().includes(query)
-      ));
+      .filter(
+        (item) =>
+          !query ||
+          item.questionText.toLowerCase().includes(query) ||
+          item.correctAnswer.toLowerCase().includes(query) ||
+          item.domainDisplayName.toLowerCase().includes(query),
+      );
   }, [items, search, showOnlyVerified]);
 
   const activeFilters = useMemo(() => {
     const chips: Array<{ key: string; label: string; clear: () => void }> = [];
-    if (source) chips.push({ key: 'source', label: sourceLabel(source), clear: () => setSource('') });
+    if (source)
+      chips.push({ key: 'source', label: sourceLabel(source), clear: () => setSource('') });
     if (domain) {
       chips.push({
         key: 'domain',
@@ -193,8 +212,18 @@ export default function ArchivePage() {
         clear: () => setDomain(''),
       });
     }
-    if (result) chips.push({ key: 'result', label: resultOptions.find((option) => option.value === result)?.label ?? result, clear: () => setResult('') });
-    if (showOnlyVerified) chips.push({ key: 'verified', label: 'Only verified', clear: () => setShowOnlyVerified(false) });
+    if (result)
+      chips.push({
+        key: 'result',
+        label: resultOptions.find((option) => option.value === result)?.label ?? result,
+        clear: () => setResult(''),
+      });
+    if (showOnlyVerified)
+      chips.push({
+        key: 'verified',
+        label: 'Only verified',
+        clear: () => setShowOnlyVerified(false),
+      });
     return chips;
   }, [domain, domains, result, source, showOnlyVerified]);
 
@@ -205,60 +234,72 @@ export default function ArchivePage() {
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6 pb-20">
       <header>
-        <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
-          <Link href="/" className="underline underline-offset-2">HOME</Link>
+        <p className="text-muted-foreground font-mono text-[0.62rem] tracking-[0.06em] uppercase">
+          <Link href="/" className="underline underline-offset-2">
+            HOME
+          </Link>
           {' / '}
-          <Link href="/users/me" className="underline underline-offset-2">PROFILE</Link>
+          <Link href="/users/me" className="underline underline-offset-2">
+            PROFILE
+          </Link>
           {' / ARCHIVE'}
         </p>
-        <h1 className="mt-3 font-serif text-4xl font-semibold leading-tight text-foreground">Your Archive</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <h1 className="text-foreground mt-3 font-serif text-4xl leading-tight font-semibold">
+          Your Archive
+        </h1>
+        <p className="text-muted-foreground mt-2 text-sm">
           {formatCount(totalCount)} questions · {formatCount(correctCount)} correct
         </p>
       </header>
 
-      <section className="sticky top-0 z-20 mt-5 border-b bg-background/95 py-3 backdrop-blur">
+      <section className="bg-background/95 sticky top-0 z-20 mt-5 border-b py-3 backdrop-blur">
         <div className="grid gap-2 sm:grid-cols-3">
-          <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="text-muted-foreground text-xs font-medium tracking-[0.06em] uppercase">
             Source
             <select
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm normal-case tracking-normal text-foreground"
+              className="bg-background text-foreground mt-1 h-10 w-full rounded-md border px-3 text-sm tracking-normal normal-case"
               value={source}
               onChange={(event) => setSource(event.target.value as ArchiveSource | '')}
             >
               {sourceOptions.map((option) => (
-                <option key={option.value || 'all'} value={option.value}>{option.label}</option>
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
               ))}
             </select>
           </label>
-          <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="text-muted-foreground text-xs font-medium tracking-[0.06em] uppercase">
             Domain
             <select
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm normal-case tracking-normal text-foreground"
+              className="bg-background text-foreground mt-1 h-10 w-full rounded-md border px-3 text-sm tracking-normal normal-case"
               value={domain}
               onChange={(event) => setDomain(event.target.value)}
             >
               <option value="">All domains</option>
               {domains.map((item) => (
-                <option key={item.domain} value={item.domain}>{item.domainDisplayName}</option>
+                <option key={item.domain} value={item.domain}>
+                  {item.domainDisplayName}
+                </option>
               ))}
             </select>
           </label>
-          <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="text-muted-foreground text-xs font-medium tracking-[0.06em] uppercase">
             Result
             <select
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm normal-case tracking-normal text-foreground"
+              className="bg-background text-foreground mt-1 h-10 w-full rounded-md border px-3 text-sm tracking-normal normal-case"
               value={result}
               onChange={(event) => setResult(event.target.value as ArchiveResult | '')}
             >
               {resultOptions.map((option) => (
-                <option key={option.value || 'all'} value={option.value}>{option.label}</option>
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
               ))}
             </select>
           </label>
         </div>
 
-        <label className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+        <label className="text-muted-foreground mt-3 flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={showOnlyVerified}
@@ -269,9 +310,9 @@ export default function ArchivePage() {
         </label>
 
         <label className="relative mt-3 block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
           <input
-            className="h-11 w-full rounded-md border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary"
+            className="bg-background focus:border-primary h-11 w-full rounded-md border pr-3 pl-10 text-sm outline-none"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search questions..."
@@ -284,7 +325,7 @@ export default function ArchivePage() {
               <button
                 key={chip.key}
                 type="button"
-                className="inline-flex min-h-8 items-center gap-2 rounded-full border bg-card px-3 text-xs text-card-foreground"
+                className="bg-card text-card-foreground inline-flex min-h-8 items-center gap-2 rounded-full border px-3 text-xs"
                 onClick={chip.clear}
               >
                 {chip.label}
@@ -293,7 +334,7 @@ export default function ArchivePage() {
             ))}
             <button
               type="button"
-              className="text-xs font-medium text-muted-foreground underline underline-offset-2"
+              className="text-muted-foreground text-xs font-medium underline underline-offset-2"
               onClick={() => {
                 setSource('');
                 setDomain('');
@@ -308,19 +349,21 @@ export default function ArchivePage() {
       </section>
 
       {error ? (
-        <section className="mt-8 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+        <section className="border-destructive/30 bg-destructive/10 text-destructive mt-8 rounded-lg border p-4 text-sm">
           {error}
         </section>
       ) : null}
 
       {loading ? (
-        <section className="flex min-h-64 items-center justify-center text-sm text-muted-foreground">
+        <section className="text-muted-foreground flex min-h-64 items-center justify-center text-sm">
           <Loader2 className="mr-2 size-4 animate-spin" />
           Loading your archive...
         </section>
       ) : visibleItems.length === 0 ? (
-        <section className="flex min-h-64 items-center justify-center text-center text-sm text-muted-foreground">
-          {isFilteredEmpty || isSearchEmpty ? 'No questions match your filter.' : "Nothing here yet. Play some questions and they'll show up."}
+        <section className="text-muted-foreground flex min-h-64 items-center justify-center text-center text-sm">
+          {isFilteredEmpty || isSearchEmpty
+            ? 'No questions match your filter.'
+            : "Nothing here yet. Play some questions and they'll show up."}
         </section>
       ) : (
         <section className="mt-5 space-y-3">
@@ -332,13 +375,15 @@ export default function ArchivePage() {
 
       <div ref={sentinelRef} className="h-8" />
       {!loading && visibleItems.length > 0 ? (
-        <div className="py-5 text-center text-sm text-muted-foreground">
+        <div className="text-muted-foreground py-5 text-center text-sm">
           {loadingMore ? (
             <span className="inline-flex items-center gap-2">
               <Loader2 className="size-4 animate-spin" />
               Loading more...
             </span>
-          ) : nextCursor ? null : 'End of archive'}
+          ) : nextCursor ? null : (
+            'End of archive'
+          )}
         </div>
       ) : null}
     </main>
@@ -352,19 +397,24 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
   return (
     <article className="card p-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
+        <p className="text-muted-foreground font-mono text-[0.62rem] tracking-[0.06em] uppercase">
           {item.sourceLabel}
         </p>
-        <span className={cn('rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]', resultClass(item))}>
+        <span
+          className={cn(
+            'rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase',
+            resultClass(item),
+          )}
+        >
           {resultLabel(item)}
         </span>
       </div>
 
-      <p className="mt-3 font-medium leading-snug text-foreground">{item.questionText}</p>
+      <p className="text-foreground mt-3 leading-snug font-medium">{item.questionText}</p>
 
       <div className="mt-3 space-y-1 text-sm">
         <p className="text-muted-foreground">
-          <span className="font-medium text-foreground">You:</span>{' '}
+          <span className="text-foreground font-medium">You:</span>{' '}
           {item.source === 'written_by_me'
             ? item.sourceLabel
             : item.result === 'skipped'
@@ -372,29 +422,37 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
               : item.submittedAnswer?.trim() || 'Not saved'}
         </p>
         <p className="text-muted-foreground">
-          <span className="font-medium text-foreground">Answer:</span> {item.correctAnswer || 'No answer available'}
+          <span className="text-foreground font-medium">Answer:</span>{' '}
+          {item.correctAnswer || 'No answer available'}
         </p>
       </div>
 
       {item.explanation ? (
-        <details className="mt-3 text-sm leading-6 text-muted-foreground">
-          <summary className="cursor-pointer font-medium text-foreground">Explanation</summary>
+        <details className="text-muted-foreground mt-3 text-sm leading-6">
+          <summary className="text-foreground cursor-pointer font-medium">Explanation</summary>
           <p className="mt-2">{item.explanation}</p>
         </details>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-2 text-xs">
         <Link
           href={`/knowledge/${encodeURIComponent(item.domain)}`}
-          className="rounded-full bg-secondary px-2.5 py-1 font-medium text-secondary-foreground"
+          className="bg-secondary text-secondary-foreground rounded-full px-2.5 py-1 font-medium"
         >
           {item.domainDisplayName}
         </Link>
         {!item.verified ? (
-          <span className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground" title="The author wrote their own answer instead of using the LLM's suggestion. The answer may not be standard.">⚠ unverified</span>
+          <span
+            className="text-muted-foreground rounded-full border px-2.5 py-1 text-xs"
+            title="The author wrote their own answer instead of using the LLM's suggestion. The answer may not be standard."
+          >
+            ⚠ unverified
+          </span>
         ) : null}
         {item.pointsAwarded !== null ? (
-          <span className="font-mono font-semibold text-foreground">+{Math.round(item.pointsAwarded)} pts</span>
+          <span className="text-foreground font-mono font-semibold">
+            +{Math.round(item.pointsAwarded)} pts
+          </span>
         ) : null}
         {item.answeredAt ? <span>· {formatDate(item.answeredAt)}</span> : null}
       </div>
@@ -404,14 +462,24 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
           <>
             <QuestionRatingButtons questionId={item.questionId} />
             <SendQuestionAction
-              question={{ id: item.questionId, text: item.questionText, domain: item.domainDisplayName }}
+              question={{
+                id: item.questionId,
+                text: item.questionText,
+                domain: item.domainDisplayName,
+              }}
               label=""
-              className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-9 items-center justify-center rounded-md border transition"
             />
             <AddToBankAction
               questionId={item.questionId}
               initialInBank={inBank}
-              contextType={item.source === 'joshing_game' ? 'joshing_game' : item.source === 'feed' || item.source === 'sent_to_me' ? 'feed' : 'manual'}
+              contextType={
+                item.source === 'joshing_game'
+                  ? 'joshing_game'
+                  : item.source === 'feed' || item.source === 'sent_to_me'
+                    ? 'feed'
+                    : 'manual'
+              }
               contextId={item.id}
               label=""
               className="inline-flex size-9 items-center justify-center rounded-md border px-0"
@@ -419,11 +487,21 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
             />
           </>
         ) : (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <button className="inline-flex size-9 items-center justify-center rounded-md border opacity-50" type="button" disabled title="Send to friend">
+          <div className="text-muted-foreground flex items-center gap-2">
+            <button
+              className="inline-flex size-9 items-center justify-center rounded-md border opacity-50"
+              type="button"
+              disabled
+              title="Send to friend"
+            >
               <Send className="size-4" />
             </button>
-            <button className="inline-flex size-9 items-center justify-center rounded-md border opacity-50" type="button" disabled title="Add to bank">
+            <button
+              className="inline-flex size-9 items-center justify-center rounded-md border opacity-50"
+              type="button"
+              disabled
+              title="Add to bank"
+            >
               <Bookmark className="size-4" />
             </button>
           </div>

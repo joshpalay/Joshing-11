@@ -82,8 +82,12 @@ describe('isRoundComplete — variable 5–7 slot queues (Daily Five +2)', () =>
       const indices = Array.from({ length: total }, (_, i) => i);
       const partial = indices.map((i) =>
         i < total - 1
-          ? (i < 5 ? slot(i, { answered: true }) : bonusSlot(i, true))
-          : (i < 5 ? slot(i) : bonusSlot(i, false)),
+          ? i < 5
+            ? slot(i, { answered: true })
+            : bonusSlot(i, true)
+          : i < 5
+            ? slot(i)
+            : bonusSlot(i, false),
       );
       expect(isRoundComplete(partial)).toBe(false);
 

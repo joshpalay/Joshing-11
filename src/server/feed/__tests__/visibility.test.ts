@@ -24,55 +24,63 @@ describe('correct-answer social feed eligibility', () => {
   });
 
   it('allows a correct answer by someone other than the author in a visible social context', () => {
-    expect(isCorrectAnswerFeedEligible({
-      answerIsCorrect: true,
-      answererUserId: 'answerer-1',
-      question: publicQuestion,
-      hasVisibleSocialContext: true,
-    })).toBe(true);
+    expect(
+      isCorrectAnswerFeedEligible({
+        answerIsCorrect: true,
+        answererUserId: 'answerer-1',
+        question: publicQuestion,
+        hasVisibleSocialContext: true,
+      }),
+    ).toBe(true);
     expect(isMainFeedSourceVisible('friend_answered', 'correct')).toBe(true);
   });
 
   it('allows public daily-generated questions without an author to propagate correct friend answers', () => {
-    expect(isCorrectAnswerFeedEligible({
-      answerIsCorrect: true,
-      answererUserId: 'answerer-1',
-      question: {
-        creatorId: null,
-        source: 'daily_generated' as const,
-        visibility: 'public' as const,
-        deletedAt: null,
-      },
-      hasVisibleSocialContext: true,
-    })).toBe(true);
+    expect(
+      isCorrectAnswerFeedEligible({
+        answerIsCorrect: true,
+        answererUserId: 'answerer-1',
+        question: {
+          creatorId: null,
+          source: 'daily_generated' as const,
+          visibility: 'public' as const,
+          deletedAt: null,
+        },
+        hasVisibleSocialContext: true,
+      }),
+    ).toBe(true);
   });
 
   it('allows public curated-sent (forwarded LLM) questions without an author to propagate correct friend answers', () => {
-    expect(isCorrectAnswerFeedEligible({
-      answerIsCorrect: true,
-      answererUserId: 'answerer-1',
-      question: {
-        creatorId: null,
-        source: 'curated_sent' as const,
-        visibility: 'public' as const,
-        deletedAt: null,
-      },
-      hasVisibleSocialContext: true,
-    })).toBe(true);
+    expect(
+      isCorrectAnswerFeedEligible({
+        answerIsCorrect: true,
+        answererUserId: 'answerer-1',
+        question: {
+          creatorId: null,
+          source: 'curated_sent' as const,
+          visibility: 'public' as const,
+          deletedAt: null,
+        },
+        hasVisibleSocialContext: true,
+      }),
+    ).toBe(true);
   });
 
   it('rejects wrong answers to curated-sent questions', () => {
-    expect(isCorrectAnswerFeedEligible({
-      answerIsCorrect: false,
-      answererUserId: 'answerer-1',
-      question: {
-        creatorId: null,
-        source: 'curated_sent' as const,
-        visibility: 'public' as const,
-        deletedAt: null,
-      },
-      hasVisibleSocialContext: true,
-    })).toBe(false);
+    expect(
+      isCorrectAnswerFeedEligible({
+        answerIsCorrect: false,
+        answererUserId: 'answerer-1',
+        question: {
+          creatorId: null,
+          source: 'curated_sent' as const,
+          visibility: 'public' as const,
+          deletedAt: null,
+        },
+        hasVisibleSocialContext: true,
+      }),
+    ).toBe(false);
   });
 
   it('classifies LLM-origin sources', () => {
@@ -82,47 +90,62 @@ describe('correct-answer social feed eligibility', () => {
   });
 
   it('rejects a correct answer by the author', () => {
-    expect(isCorrectAnswerFeedEligible({
-      answerIsCorrect: true,
-      answererUserId: 'author-1',
-      question: publicQuestion,
-      hasVisibleSocialContext: true,
-    })).toBe(false);
+    expect(
+      isCorrectAnswerFeedEligible({
+        answerIsCorrect: true,
+        answererUserId: 'author-1',
+        question: publicQuestion,
+        hasVisibleSocialContext: true,
+      }),
+    ).toBe(false);
   });
 
   it('rejects wrong answers', () => {
-    expect(isCorrectAnswerFeedEligible({
-      answerIsCorrect: false,
-      answererUserId: 'answerer-1',
-      question: publicQuestion,
-      hasVisibleSocialContext: true,
-    })).toBe(false);
+    expect(
+      isCorrectAnswerFeedEligible({
+        answerIsCorrect: false,
+        answererUserId: 'answerer-1',
+        question: publicQuestion,
+        hasVisibleSocialContext: true,
+      }),
+    ).toBe(false);
     expect(isMainFeedSourceVisible('friend_answered', 'incorrect')).toBe(false);
   });
 
   it('rejects private or non-visible questions for unauthorized viewers', () => {
-    expect(isCorrectAnswerFeedEligible({
-      answerIsCorrect: true,
-      answererUserId: 'answerer-1',
-      question: { ...publicQuestion, visibility: 'private' as const },
-      hasVisibleSocialContext: true,
-    })).toBe(false);
-    expect(isCorrectAnswerFeedEligible({
-      answerIsCorrect: true,
-      answererUserId: 'answerer-1',
-      question: publicQuestion,
-      hasVisibleSocialContext: false,
-    })).toBe(false);
+    expect(
+      isCorrectAnswerFeedEligible({
+        answerIsCorrect: true,
+        answererUserId: 'answerer-1',
+        question: { ...publicQuestion, visibility: 'private' as const },
+        hasVisibleSocialContext: true,
+      }),
+    ).toBe(false);
+    expect(
+      isCorrectAnswerFeedEligible({
+        answerIsCorrect: true,
+        answererUserId: 'answerer-1',
+        question: publicQuestion,
+        hasVisibleSocialContext: false,
+      }),
+    ).toBe(false);
   });
 
   it('documents visibility for every source type created by question-sharing routes', () => {
-    expect(QUESTION_SHARING_FEED_SOURCE_VISIBILITY).toEqual(expect.arrayContaining([
-      expect.objectContaining({ sourceType: 'authored_shared' }),
-      expect.objectContaining({ sourceType: 'direct_sent' }),
-      expect.objectContaining({ sourceType: 'friend_answered' }),
-    ]));
+    expect(QUESTION_SHARING_FEED_SOURCE_VISIBILITY).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceType: 'authored_shared' }),
+        expect.objectContaining({ sourceType: 'direct_sent' }),
+        expect.objectContaining({ sourceType: 'friend_answered' }),
+      ]),
+    );
 
-    for (const { sourceType, sourceResult, visible, reason } of QUESTION_SHARING_FEED_SOURCE_VISIBILITY) {
+    for (const {
+      sourceType,
+      sourceResult,
+      visible,
+      reason,
+    } of QUESTION_SHARING_FEED_SOURCE_VISIBILITY) {
       expect(isMainFeedSourceVisible(sourceType, sourceResult)).toBe(visible);
       if (visible) {
         expect(reason).toBeNull();
@@ -134,7 +157,19 @@ describe('correct-answer social feed eligibility', () => {
   });
 
   it('suppresses forbidden fallback categories on feed cards', () => {
-    expect(socialFeedDomainLabel({ canonicalSubcategory: 'Other', broadCategory: 'Uncategorized', category: 'Unknown' })).toBeNull();
-    expect(socialFeedDomainLabel({ canonicalSubcategory: ' ', broadCategory: 'Bowie-era Glam Rock', category: 'Unknown' })).toBe('Bowie-era Glam Rock');
+    expect(
+      socialFeedDomainLabel({
+        canonicalSubcategory: 'Other',
+        broadCategory: 'Uncategorized',
+        category: 'Unknown',
+      }),
+    ).toBeNull();
+    expect(
+      socialFeedDomainLabel({
+        canonicalSubcategory: ' ',
+        broadCategory: 'Bowie-era Glam Rock',
+        category: 'Unknown',
+      }),
+    ).toBe('Bowie-era Glam Rock');
   });
 });

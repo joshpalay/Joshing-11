@@ -63,10 +63,7 @@ async function authorAnswerResult(
 }
 
 async function main() {
-  const rows = await db
-    .select()
-    .from(feedItems)
-    .where(eq(feedItems.sourceType, 'authored_shared'));
+  const rows = await db.select().from(feedItems).where(eq(feedItems.sourceType, 'authored_shared'));
 
   console.log(`Found ${rows.length} authored_shared FeedItem(s).`);
   if (rows.length === 0) {
@@ -82,10 +79,7 @@ async function main() {
       // No question — soft-delete
       console.log(`  [${row.id}] No questionId — will roll off`);
       if (!DRY_RUN) {
-        await db
-          .update(feedItems)
-          .set({ state: 'rolled_off' })
-          .where(eq(feedItems.id, row.id));
+        await db.update(feedItems).set({ state: 'rolled_off' }).where(eq(feedItems.id, row.id));
       }
       deleted++;
       continue;
@@ -94,9 +88,7 @@ async function main() {
     const result = await authorAnswerResult(row.sourceUserId, row.questionId);
 
     if (result !== null) {
-      console.log(
-        `  [${row.id}] Author answered (${result}) — will convert to friend_answered`,
-      );
+      console.log(`  [${row.id}] Author answered (${result}) — will convert to friend_answered`);
       if (!DRY_RUN) {
         await db
           .update(feedItems)
@@ -107,10 +99,7 @@ async function main() {
     } else {
       console.log(`  [${row.id}] Author has not answered — will roll off`);
       if (!DRY_RUN) {
-        await db
-          .update(feedItems)
-          .set({ state: 'rolled_off' })
-          .where(eq(feedItems.id, row.id));
+        await db.update(feedItems).set({ state: 'rolled_off' }).where(eq(feedItems.id, row.id));
       }
       deleted++;
     }

@@ -1,13 +1,13 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { useState } from 'react';
+import { Sparkles } from 'lucide-react';
 
 // Darkened triangle-gold so the "New territory" copy clears AA on the cream
 // card (raw --tri-amber #d9a82e is too light for small text).
-const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))'
+const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))';
 
-type RemoveState = 'idle' | 'removing' | 'removed' | 'error'
+type RemoveState = 'idle' | 'removing' | 'removed' | 'error';
 
 // Default-add with undo (B-1): a correct answer in an unfamiliar domain opens
 // it in the player's Knowledge base automatically (server-side, via
@@ -19,26 +19,26 @@ export function NewTerritoryUndo({
   domain,
   category,
 }: {
-  domain: string
-  category?: string | null
+  domain: string;
+  category?: string | null;
 }) {
-  const [state, setState] = useState<RemoveState>('idle')
-  const label = category || domain
+  const [state, setState] = useState<RemoveState>('idle');
+  const label = category || domain;
 
   const handleRemove = async () => {
-    if (state === 'removing' || state === 'removed') return
-    setState('removing')
+    if (state === 'removing' || state === 'removed') return;
+    setState('removing');
     try {
       const response = await fetch(`/api/knowledge/${encodeURIComponent(domain)}`, {
         method: 'DELETE',
         credentials: 'include',
-      })
-      if (!response.ok) throw new Error('remove failed')
-      setState('removed')
+      });
+      if (!response.ok) throw new Error('remove failed');
+      setState('removed');
     } catch {
-      setState('error')
+      setState('error');
     }
-  }
+  };
 
   return (
     <div
@@ -61,12 +61,18 @@ export function NewTerritoryUndo({
         </span>
         <div className="min-w-0 flex-1">
           {state === 'removed' ? (
-            <p className="font-serif text-[14px] leading-snug" style={{ color: 'var(--brand-ink)' }}>
+            <p
+              className="font-serif text-[14px] leading-snug"
+              style={{ color: 'var(--brand-ink)' }}
+            >
               Removed {label} from your knowledge base.
             </p>
           ) : (
             <>
-              <p className="font-serif text-[14px] leading-snug font-semibold" style={{ color: GOLD_INK }}>
+              <p
+                className="font-serif text-[14px] leading-snug font-semibold"
+                style={{ color: GOLD_INK }}
+              >
                 Added {label} to your knowledge base.
               </p>
               <p className="mt-1.5 text-[13px] text-[var(--brand-ink)]">
@@ -93,5 +99,5 @@ export function NewTerritoryUndo({
         </div>
       </div>
     </div>
-  )
+  );
 }

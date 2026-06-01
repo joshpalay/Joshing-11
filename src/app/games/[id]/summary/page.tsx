@@ -13,7 +13,11 @@ import MasteryMoment from '@/components/review/MasteryMoment';
 import { getSession } from '@/server/auth/session';
 import { db, masteryEvents, playerMastery } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
-import { computeOverlapCells, getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
+import {
+  computeOverlapCells,
+  getJoshingGame,
+  type JoshingGameView,
+} from '@/server/db/queries/joshing-game';
 import { resolveTier } from '@/server/mastery/tiers';
 
 const CREATOR_COLOR = 'var(--brand-navy)';
@@ -43,8 +47,12 @@ function domainFor(question: JoshingGameView['questions'][number]['question']) {
   return question.canonicalSubcategory || question.broadCategory || question.category || 'General';
 }
 
-function resolvedDifficulty(question: JoshingGameView['questions'][number]['question']): string | null {
-  return question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null;
+function resolvedDifficulty(
+  question: JoshingGameView['questions'][number]['question'],
+): string | null {
+  return (
+    question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null
+  );
 }
 
 // Difficulty pills use the triangle palette (amber/dark-yellow/dark-teal) so the
@@ -108,7 +116,11 @@ function resultLabel(isCorrect: boolean | null | undefined) {
 }
 
 function formatGameDate(value: Date) {
-  return new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' }).format(value);
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(value);
 }
 
 export default async function JoshingGameSummaryPage({ params }: PageProps) {
@@ -124,8 +136,13 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
   if (view.viewerStatus === 'not_started') redirect(`/games/${id}`);
 
   const questionCount = view.questions.length;
-  const bankedById = await checkBankedQuestions(session.userId, view.questions.map((question) => question.questionId));
-  const responseByUserQuestion = new Map(view.responses.map((response) => [responseKey(response.userId, response.questionId), response]));
+  const bankedById = await checkBankedQuestions(
+    session.userId,
+    view.questions.map((question) => question.questionId),
+  );
+  const responseByUserQuestion = new Map(
+    view.responses.map((response) => [responseKey(response.userId, response.questionId), response]),
+  );
   const viewerResponses = view.responses.filter((response) => response.userId === session.userId);
   const viewerHasPlayed = viewerResponses.length >= questionCount;
   const viewerCorrect = viewerResponses.filter((response) => response.isCorrect).length;
@@ -138,32 +155,40 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
       awardedPoints: masteryEvents.awardedPoints,
     })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, session.userId),
-      eq(masteryEvents.sessionContext, 'joshing_game'),
-      sql`${masteryEvents.answerId} like ${gameAnswerIdPrefix}`,
-    ));
+    .where(
+      and(
+        eq(masteryEvents.userId, session.userId),
+        eq(masteryEvents.sessionContext, 'joshing_game'),
+        sql`${masteryEvents.answerId} like ${gameAnswerIdPrefix}`,
+      ),
+    );
 
   const growthByDomain = new Map<string, number>();
   for (const row of masteryRows) {
-    growthByDomain.set(row.domain, (growthByDomain.get(row.domain) ?? 0) + Number(row.awardedPoints ?? 0));
+    growthByDomain.set(
+      row.domain,
+      (growthByDomain.get(row.domain) ?? 0) + Number(row.awardedPoints ?? 0),
+    );
   }
 
   const touchedDomains = [...growthByDomain.keys()];
-  const masteryAfterRows = touchedDomains.length > 0
-    ? await db
-        .select({
-          domain: playerMastery.canonicalSubcategory,
-          broadCategory: playerMastery.broadCategory,
-          totalPoints: playerMastery.totalPoints,
-          tier: playerMastery.tier,
-        })
-        .from(playerMastery)
-        .where(and(
-          eq(playerMastery.userId, session.userId),
-          inArray(playerMastery.canonicalSubcategory, touchedDomains),
-        ))
-    : [];
+  const masteryAfterRows =
+    touchedDomains.length > 0
+      ? await db
+          .select({
+            domain: playerMastery.canonicalSubcategory,
+            broadCategory: playerMastery.broadCategory,
+            totalPoints: playerMastery.totalPoints,
+            tier: playerMastery.tier,
+          })
+          .from(playerMastery)
+          .where(
+            and(
+              eq(playerMastery.userId, session.userId),
+              inArray(playerMastery.canonicalSubcategory, touchedDomains),
+            ),
+          )
+      : [];
   const masteryAfterByDomain = new Map(masteryAfterRows.map((row) => [row.domain, row]));
   const broadCategoryByDomain = new Map<string, string>();
   for (const gameQuestion of view.questions) {
@@ -172,10 +197,14 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
     broadCategoryByDomain.set(domain, question.broadCategory || question.category || domain);
   }
 
-  const fallbackPoints = viewerResponses.reduce((sum, response) => sum + Number(response.pointsAwarded ?? 0), 0);
-  const totalPoints = masteryRows.length > 0
-    ? masteryRows.reduce((sum, row) => sum + Number(row.awardedPoints ?? 0), 0)
-    : fallbackPoints;
+  const fallbackPoints = viewerResponses.reduce(
+    (sum, response) => sum + Number(response.pointsAwarded ?? 0),
+    0,
+  );
+  const totalPoints =
+    masteryRows.length > 0
+      ? masteryRows.reduce((sum, row) => sum + Number(row.awardedPoints ?? 0), 0)
+      : fallbackPoints;
 
   const growthRows = [...growthByDomain]
     .map(([domain, points]) => ({ domain, points }))
@@ -186,7 +215,8 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
     const pointsBefore = Math.max(0, pointsAfter - row.points);
     return {
       canonical_subcategory: row.domain,
-      broad_category: masteryAfter?.broadCategory || broadCategoryByDomain.get(row.domain) || row.domain,
+      broad_category:
+        masteryAfter?.broadCategory || broadCategoryByDomain.get(row.domain) || row.domain,
       points_before: pointsBefore,
       points_after: pointsAfter,
       tier_before: resolveTier(pointsBefore),
@@ -203,11 +233,12 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
   );
   const authoredQuestionsAnsweredCorrectly = new Set(
     view.responses
-      .filter((response) => (
-        response.userId !== session.userId
-        && response.isCorrect
-        && authoredQuestionIds.has(response.questionId)
-      ))
+      .filter(
+        (response) =>
+          response.userId !== session.userId &&
+          response.isCorrect &&
+          authoredQuestionIds.has(response.questionId),
+      )
       .map((response) => response.questionId),
   );
   const impactCount = authoredQuestionsAnsweredCorrectly.size;
@@ -228,12 +259,16 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
       {view.viewerStatus === 'in_progress' ? (
-        <div className="mb-4 rounded-md border bg-muted p-3 text-sm">Finish playing to see full results</div>
+        <div className="bg-muted mb-4 rounded-md border p-3 text-sm">
+          Finish playing to see full results
+        </div>
       ) : null}
 
       <header>
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          <Link href="/" className="underline underline-offset-2">HOME</Link>
+          <Link href="/" className="underline underline-offset-2">
+            HOME
+          </Link>
           {' / '}
           {view.game.title}
           {' / SUMMARY'}
@@ -241,7 +276,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         <h1 className="mt-2 font-serif text-[2rem] leading-tight text-[var(--brand-ink)]">
           How you did
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{formatGameDate(view.game.createdAt)}</p>
+        <p className="text-muted-foreground mt-1 text-sm">{formatGameDate(view.game.createdAt)}</p>
       </header>
 
       <section
@@ -252,9 +287,12 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         }}
       >
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>Total</p>
-        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[var(--brand-ink)]">+{Math.round(totalPoints)}</p>
+        <p className="mt-2 font-mono text-5xl leading-none font-bold text-[var(--brand-ink)]">
+          +{Math.round(totalPoints)}
+        </p>
         <p style={{ ...monoStyle, marginTop: '12px', color: 'var(--text-muted)' }}>
-          {viewerCorrect}/{questionCount} correct{viewerSkipped > 0 ? ` · ${viewerSkipped} skipped` : ''}
+          {viewerCorrect}/{questionCount} correct
+          {viewerSkipped > 0 ? ` · ${viewerSkipped} skipped` : ''}
         </p>
       </section>
 
@@ -278,16 +316,23 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
           <h2 style={titleStyle}>Round Recap</h2>
           <div className="mt-3 space-y-3">
             {view.questions.map((gameQuestion) => {
-              const response = responseByUserQuestion.get(responseKey(session.userId, gameQuestion.questionId));
+              const response = responseByUserQuestion.get(
+                responseKey(session.userId, gameQuestion.questionId),
+              );
               const correct = Boolean(response?.isCorrect);
-              const outcome: ExplainerOutcome = !response ? 'expired' : correct ? 'correct' : 'wrong';
+              const outcome: ExplainerOutcome = !response
+                ? 'expired'
+                : correct
+                  ? 'correct'
+                  : 'wrong';
               const { brief, full } = explainerVariantsFor(gameQuestion.question, outcome);
               const hasDistinctFull = Boolean(full && full !== brief);
               const briefForDisplay = brief ?? full ?? null;
               const authorNote = gameQuestion.question.creatorNote ?? null;
-              const authorName = gameQuestion.question.creatorId === view.game.creatorId
-                ? view.creator.displayName
-                : null;
+              const authorName =
+                gameQuestion.question.creatorId === view.game.creatorId
+                  ? view.creator.displayName
+                  : null;
 
               return (
                 <article key={gameQuestion.questionId} className="card p-4">
@@ -302,7 +347,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                         const level = resolvedDifficulty(gameQuestion.question);
                         return level ? (
                           <span
-                            className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                            className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase"
                             style={difficultyPillStyle(level)}
                           >
                             {difficultyCopyFromEstimate(level) ?? 'Unrated'}
@@ -310,17 +355,21 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                         ) : null;
                       })()}
                       <span
-                        className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                        className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase"
                         style={
                           correct
                             ? {
-                                borderColor: 'color-mix(in srgb, var(--game-correct) 30%, var(--border))',
-                                backgroundColor: 'color-mix(in srgb, var(--game-correct) 10%, var(--surface))',
+                                borderColor:
+                                  'color-mix(in srgb, var(--game-correct) 30%, var(--border))',
+                                backgroundColor:
+                                  'color-mix(in srgb, var(--game-correct) 10%, var(--surface))',
                                 color: 'var(--game-correct)',
                               }
                             : {
-                                borderColor: 'color-mix(in srgb, var(--game-wrong-strong) 30%, var(--border))',
-                                backgroundColor: 'color-mix(in srgb, var(--game-wrong-strong) 10%, var(--surface))',
+                                borderColor:
+                                  'color-mix(in srgb, var(--game-wrong-strong) 30%, var(--border))',
+                                backgroundColor:
+                                  'color-mix(in srgb, var(--game-wrong-strong) 10%, var(--surface))',
                                 color: 'var(--game-wrong-strong)',
                               }
                         }
@@ -329,34 +378,41 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       </span>
                     </div>
                   </div>
-                  <p className="mt-3 font-medium leading-snug text-foreground">{gameQuestion.question.questionText}</p>
+                  <p className="text-foreground mt-3 leading-snug font-medium">
+                    {gameQuestion.question.questionText}
+                  </p>
                   <div className="mt-3 space-y-1 text-sm">
                     <p className="text-muted-foreground">
-                      <span className="font-medium text-foreground">You:</span>{' '}
+                      <span className="text-foreground font-medium">You:</span>{' '}
                       {response?.submittedAnswer?.trim() || 'No answer submitted'}
                     </p>
                     <p className="text-muted-foreground">
-                      <span className="font-medium text-foreground">Answer:</span> {gameQuestion.question.answerText}
+                      <span className="text-foreground font-medium">Answer:</span>{' '}
+                      {gameQuestion.question.answerText}
                     </p>
                   </div>
                   {briefForDisplay ? (
-                    <div className="mt-4 text-sm leading-6 text-foreground">
+                    <div className="text-foreground mt-4 text-sm leading-6">
                       <p style={kickerStyle}>Why.</p>
                       {hasDistinctFull ? (
                         <details className="mt-1" open={outcome !== 'correct'}>
-                          <summary className="cursor-pointer list-none font-medium leading-6 text-foreground [&::-webkit-details-marker]:hidden">
+                          <summary className="text-foreground cursor-pointer list-none leading-6 font-medium [&::-webkit-details-marker]:hidden">
                             {briefForDisplay}
                           </summary>
-                          <p className="mt-2 leading-6 text-foreground">{full}</p>
+                          <p className="text-foreground mt-2 leading-6">{full}</p>
                         </details>
                       ) : (
-                        <p className="mt-1 font-medium leading-6 text-foreground">{briefForDisplay}</p>
+                        <p className="text-foreground mt-1 leading-6 font-medium">
+                          {briefForDisplay}
+                        </p>
                       )}
                     </div>
                   ) : null}
                   {authorNote ? (
-                    <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
-                      <span className="font-medium">{authorName ? `Why ${authorName} asked:` : 'Why they asked:'}</span>{' '}
+                    <p className="bg-muted/50 text-foreground mt-3 rounded-md border p-3 text-sm leading-6">
+                      <span className="font-medium">
+                        {authorName ? `Why ${authorName} asked:` : 'Why they asked:'}
+                      </span>{' '}
                       {authorNote}
                     </p>
                   ) : null}
@@ -369,7 +425,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                         domain: domainFor(gameQuestion.question),
                       }}
                       label=""
-                      className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-9 items-center justify-center rounded-md border transition"
                     />
                     <AddToBankAction
                       questionId={gameQuestion.questionId}
@@ -398,14 +454,13 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
 
       {overlapPlayers ? (
         <div className="mt-6">
-          <OverlapMap
-            players={[overlapPlayers[0], overlapPlayers[1]]}
-            cells={overlapCells}
-          />
+          <OverlapMap players={[overlapPlayers[0], overlapPlayers[1]]} cells={overlapCells} />
         </div>
       ) : null}
 
-      <Link className="btn-ghost mt-4" href="/">Back to Home</Link>
+      <Link className="btn-ghost mt-4" href="/">
+        Back to Home
+      </Link>
     </main>
   );
 }

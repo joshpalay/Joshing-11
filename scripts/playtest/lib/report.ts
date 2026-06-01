@@ -24,7 +24,9 @@ export function writeReport(params: {
   lines.push('');
   lines.push('## Cleanup');
   lines.push('');
-  lines.push(`Run \`npm run smoke:gameplay -- --clean --run-id=${manifest.runId}\` to remove the test rows for this run.`);
+  lines.push(
+    `Run \`npm run smoke:gameplay -- --clean --run-id=${manifest.runId}\` to remove the test rows for this run.`,
+  );
   lines.push('');
   lines.push(`Manifest: \`${path.relative(process.cwd(), path.join(rd, 'manifest.json'))}\``);
   lines.push('');
@@ -36,8 +38,11 @@ export function writeReport(params: {
   for (const log of logs) {
     const passes = log.assertions.filter((a) => a.kind === 'assert_pass').length;
     const fails = log.assertions.filter((a) => a.kind === 'assert_fail').length;
-    const statusIcon = log.status === 'pass' ? '✓ pass' : log.status === 'fail' ? '✗ fail' : '— skip';
-    lines.push(`| \`${log.scenarioId}\` | ${statusIcon} | ${log.durationMs} ms | ${passes}/${fails} | ${log.events.length} |`);
+    const statusIcon =
+      log.status === 'pass' ? '✓ pass' : log.status === 'fail' ? '✗ fail' : '— skip';
+    lines.push(
+      `| \`${log.scenarioId}\` | ${statusIcon} | ${log.durationMs} ms | ${passes}/${fails} | ${log.events.length} |`,
+    );
   }
   lines.push('');
 
@@ -110,7 +115,9 @@ export function writeReport(params: {
           lines.push(`- \`${event.at}\` NETWORK ${event.status ?? 'failed'} ${event.url}`);
           break;
         case 'screenshot':
-          lines.push(`- \`${event.at}\` screenshot (${event.note}): \`${path.relative(process.cwd(), event.file)}\``);
+          lines.push(
+            `- \`${event.at}\` screenshot (${event.note}): \`${path.relative(process.cwd(), event.file)}\``,
+          );
           break;
         case 'finished':
           lines.push(`- \`${event.at}\` finished`);
@@ -121,7 +128,9 @@ export function writeReport(params: {
       }
     }
 
-    const shots = log.events.filter((e): e is Extract<typeof e, { kind: 'screenshot' }> => e.kind === 'screenshot');
+    const shots = log.events.filter(
+      (e): e is Extract<typeof e, { kind: 'screenshot' }> => e.kind === 'screenshot',
+    );
     if (shots.length > 0) {
       lines.push('');
       lines.push('### Screenshots');

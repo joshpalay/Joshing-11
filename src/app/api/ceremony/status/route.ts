@@ -25,8 +25,6 @@ export async function GET() {
 
   return NextResponse.json({
     nextFireAt: nextFireAt.toISOString(),
-    latestUnviewed: latest
-      ? { id: latest.id, firedAt: latest.firedAt.toISOString() }
-      : null,
+    latestUnviewed: latest ? { id: latest.id, firedAt: latest.firedAt.toISOString() } : null,
   });
 }

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  getDomainCircleSize,
-  getPortraitCircleSize,
-  type CircleSizingTier,
-} from './circle-sizing';
+import { getDomainCircleSize, getPortraitCircleSize, type CircleSizingTier } from './circle-sizing';
 
 const BOUNDS = { minDiameter: 18, maxDiameter: 120 } as const;
 

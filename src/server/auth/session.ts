@@ -180,10 +180,7 @@ export async function refreshSessionInvitationClaim(): Promise<boolean> {
   let sessionId: string;
   let onb: boolean;
   try {
-    const verified = await jwtVerify<SessionJwtPayload>(
-      existingToken,
-      getJwtSecret(),
-    );
+    const verified = await jwtVerify<SessionJwtPayload>(existingToken, getJwtSecret());
     if (!verified.payload.sub || typeof verified.payload.sid !== 'string') {
       return false;
     }
@@ -210,10 +207,7 @@ export async function refreshSessionInvitationClaim(): Promise<boolean> {
     .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(getJwtSecret());
 
-  await db
-    .update(userSessions)
-    .set({ token: newToken })
-    .where(eq(userSessions.id, existingRow.id));
+  await db.update(userSessions).set({ token: newToken }).where(eq(userSessions.id, existingRow.id));
 
   cookieStore.set(SESSION_COOKIE_NAME, newToken, {
     httpOnly: true,
@@ -245,10 +239,7 @@ export async function refreshSessionOnboardingClaim(): Promise<boolean> {
   let sessionId: string;
   let inv: boolean;
   try {
-    const verified = await jwtVerify<SessionJwtPayload>(
-      existingToken,
-      getJwtSecret(),
-    );
+    const verified = await jwtVerify<SessionJwtPayload>(existingToken, getJwtSecret());
     if (!verified.payload.sub || typeof verified.payload.sid !== 'string') {
       return false;
     }
@@ -275,10 +266,7 @@ export async function refreshSessionOnboardingClaim(): Promise<boolean> {
     .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(getJwtSecret());
 
-  await db
-    .update(userSessions)
-    .set({ token: newToken })
-    .where(eq(userSessions.id, existingRow.id));
+  await db.update(userSessions).set({ token: newToken }).where(eq(userSessions.id, existingRow.id));
 
   cookieStore.set(SESSION_COOKIE_NAME, newToken, {
     httpOnly: true,
@@ -303,7 +291,7 @@ export async function getSessionToken(): Promise<string | null> {
  * Validate JWT and UserSession: returns session if valid and not expired.
  */
 export async function validateSessionToken(
-  token: string
+  token: string,
 ): Promise<{ user_id: string; session_id: string } | null> {
   let jwtUserId: string | undefined;
   let jwtSessionId: unknown;

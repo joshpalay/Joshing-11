@@ -2,10 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
-import {
-  getEditableProfile,
-  updateProfileFields,
-} from '@/server/db/queries/account';
+import { getEditableProfile, updateProfileFields } from '@/server/db/queries/account';
 
 export const dynamic = 'force-dynamic';
 

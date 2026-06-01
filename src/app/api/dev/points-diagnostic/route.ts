@@ -71,7 +71,10 @@ export async function GET(request: NextRequest) {
   const params = Object.fromEntries(request.nextUrl.searchParams.entries());
   const parsed = querySchema.safeParse(params);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'invalid_params', issues: parsed.error.issues }, { status: 400 });
+    return NextResponse.json(
+      { error: 'invalid_params', issues: parsed.error.issues },
+      { status: 400 },
+    );
   }
   const q = parsed.data;
 

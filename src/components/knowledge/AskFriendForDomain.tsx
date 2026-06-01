@@ -1,155 +1,141 @@
-'use client'
+'use client';
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { X } from 'lucide-react';
 
 type FriendOption = {
-  id: string
-  displayName: string
-  declaredInterests?: string[]
-}
+  id: string;
+  displayName: string;
+  declaredInterests?: string[];
+};
 
 type InviteResult = {
-  ok: true
-  type?: 'friend_invitation' | 'friendship_request'
-  state?: string
-  inviteUrl?: string | null
-  message?: string | null
-  inviteeDisplayName: string
-  inviteePhone: string
-  suggestedInterests: string[]
-}
+  ok: true;
+  type?: 'friend_invitation' | 'friendship_request';
+  state?: string;
+  inviteUrl?: string | null;
+  message?: string | null;
+  inviteeDisplayName: string;
+  inviteePhone: string;
+  suggestedInterests: string[];
+};
 
-type ErrorResponse = { error?: string; message?: string }
+type ErrorResponse = { error?: string; message?: string };
 
 type Props = {
-  domain: string
-  onClose: () => void
-}
+  domain: string;
+  onClose: () => void;
+};
 
 export function normalizeInterestList(values: string[]) {
-  const seen = new Set<string>()
-  const result: string[] = []
+  const seen = new Set<string>();
+  const result: string[] = [];
 
   for (const value of values) {
-    const normalized = value.trim().replace(/\s+/g, ' ')
-    if (!normalized) continue
-    const key = normalized.toLocaleLowerCase('en-US')
-    if (seen.has(key)) continue
-    seen.add(key)
-    result.push(normalized)
-    if (result.length === 3) break
+    const normalized = value.trim().replace(/\s+/g, ' ');
+    if (!normalized) continue;
+    const key = normalized.toLocaleLowerCase('en-US');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+    if (result.length === 3) break;
   }
 
-  return result
+  return result;
 }
 
 function looksLikeUsPhone(phone: string) {
-  const digits = phone.replace(/\D/g, '')
-  return (
-    digits.length === 10 || (digits.length === 11 && digits.startsWith('1'))
-  )
+  const digits = phone.replace(/\D/g, '');
+  return digits.length === 10 || (digits.length === 11 && digits.startsWith('1'));
 }
 
-export function buildDomainAskMessage(
-  domain: string,
-  inviteUrl?: string | null
-) {
-  const base = `I thought of you for this corner of Joshing: ${domain}.`
-  const ask = `If a good question comes to mind, send it their way. No pressure.`
-  return inviteUrl ? `${base} ${ask} ${inviteUrl}` : `${base} ${ask}`
+export function buildDomainAskMessage(domain: string, inviteUrl?: string | null) {
+  const base = `I thought of you for this corner of Joshing: ${domain}.`;
+  const ask = `If a good question comes to mind, send it their way. No pressure.`;
+  return inviteUrl ? `${base} ${ask} ${inviteUrl}` : `${base} ${ask}`;
 }
 
 function buildSmsHref(phone: string, message: string) {
-  return `sms:${encodeURIComponent(phone)}?body=${encodeURIComponent(message)}`
+  return `sms:${encodeURIComponent(phone)}?body=${encodeURIComponent(message)}`;
 }
 
 export function AskFriendForDomain({ domain, onClose }: Props) {
-  const [friends, setFriends] = useState<FriendOption[]>([])
-  const [loadingFriends, setLoadingFriends] = useState(true)
-  const [mode, setMode] = useState<'friend' | 'new'>('friend')
-  const [selectedFriend, setSelectedFriend] = useState<FriendOption | null>(
-    null
-  )
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [interests, setInterests] = useState([domain, '', ''])
-  const [result, setResult] = useState<InviteResult | null>(null)
-  const [handoffMessage, setHandoffMessage] = useState('')
-  const [copyLabel, setCopyLabel] = useState('Copy message')
-  const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const messageRef = useRef<HTMLTextAreaElement | null>(null)
+  const [friends, setFriends] = useState<FriendOption[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(true);
+  const [mode, setMode] = useState<'friend' | 'new'>('friend');
+  const [selectedFriend, setSelectedFriend] = useState<FriendOption | null>(null);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [interests, setInterests] = useState([domain, '', '']);
+  const [result, setResult] = useState<InviteResult | null>(null);
+  const [handoffMessage, setHandoffMessage] = useState('');
+  const [copyLabel, setCopyLabel] = useState('Copy message');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const messageRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
-    let active = true
+    let active = true;
     fetch('/api/friends', { cache: 'no-store', credentials: 'include' })
       .then(async (response) => {
         const body = (await response.json().catch(() => null)) as {
-          friends?: FriendOption[]
-          message?: string
-        } | null
+          friends?: FriendOption[];
+          message?: string;
+        } | null;
         if (!response.ok || !body?.friends)
-          throw new Error(body?.message ?? 'Could not load friends.')
+          throw new Error(body?.message ?? 'Could not load friends.');
         if (active) {
-          setFriends(body.friends)
-          if (body.friends.length === 0) setMode('new')
+          setFriends(body.friends);
+          if (body.friends.length === 0) setMode('new');
         }
       })
       .catch((caught) => {
         if (active) {
-          setError(
-            caught instanceof Error ? caught.message : 'Could not load friends.'
-          )
-          setMode('new')
+          setError(caught instanceof Error ? caught.message : 'Could not load friends.');
+          setMode('new');
         }
       })
       .finally(() => {
-        if (active) setLoadingFriends(false)
-      })
+        if (active) setLoadingFriends(false);
+      });
 
     return () => {
-      active = false
-    }
-  }, [])
+      active = false;
+    };
+  }, []);
 
-  const normalizedInterests = useMemo(
-    () => normalizeInterestList(interests),
-    [interests]
-  )
+  const normalizedInterests = useMemo(() => normalizeInterestList(interests), [interests]);
   const smsHref =
     result?.inviteePhone && handoffMessage
       ? buildSmsHref(result.inviteePhone, handoffMessage)
-      : null
+      : null;
 
   function chooseFriend(friend: FriendOption) {
-    setSelectedFriend(friend)
-    setHandoffMessage(buildDomainAskMessage(domain))
-    setResult(null)
-    setError(null)
+    setSelectedFriend(friend);
+    setHandoffMessage(buildDomainAskMessage(domain));
+    setResult(null);
+    setError(null);
   }
 
   function updateInterest(index: number, value: string) {
-    if (index === 0) return
-    setInterests((current) =>
-      current.map((interest, i) => (i === index ? value : interest))
-    )
+    if (index === 0) return;
+    setInterests((current) => current.map((interest, i) => (i === index ? value : interest)));
   }
 
   async function createInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const trimmedName = name.trim()
+    event.preventDefault();
+    const trimmedName = name.trim();
     if (!trimmedName) {
-      setError('Name is required.')
-      return
+      setError('Name is required.');
+      return;
     }
     if (!looksLikeUsPhone(phone)) {
-      setError('US phone number required.')
-      return
+      setError('US phone number required.');
+      return;
     }
 
-    setSubmitting(true)
-    setError(null)
+    setSubmitting(true);
+    setError(null);
 
     try {
       const response = await fetch('/api/friend-invitations', {
@@ -161,42 +147,36 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
           phone,
           suggestedInterests: normalizedInterests,
         }),
-      })
-      const body = (await response.json().catch(() => null)) as
-        | InviteResult
-        | ErrorResponse
-        | null
+      });
+      const body = (await response.json().catch(() => null)) as InviteResult | ErrorResponse | null;
       if (!response.ok || !body || !('ok' in body)) {
-        throw new Error(body?.message ?? 'Could not create that ask.')
+        throw new Error(body?.message ?? 'Could not create that ask.');
       }
 
-      setResult(body)
-      setHandoffMessage(buildDomainAskMessage(domain, body.inviteUrl))
+      setResult(body);
+      setHandoffMessage(buildDomainAskMessage(domain, body.inviteUrl));
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : 'Could not create that ask.'
-      )
+      setError(caught instanceof Error ? caught.message : 'Could not create that ask.');
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
   async function copyMessage() {
-    if (!handoffMessage) return
+    if (!handoffMessage) return;
     try {
-      await navigator.clipboard.writeText(handoffMessage)
-      setCopyLabel('Copied ✓')
-      window.setTimeout(() => setCopyLabel('Copy message'), 1800)
+      await navigator.clipboard.writeText(handoffMessage);
+      setCopyLabel('Copied ✓');
+      window.setTimeout(() => setCopyLabel('Copy message'), 1800);
     } catch {
-      messageRef.current?.focus()
-      messageRef.current?.select()
-      setCopyLabel('Select text')
+      messageRef.current?.focus();
+      messageRef.current?.select();
+      setCopyLabel('Select text');
     }
   }
 
-  const showingHandoff = Boolean(selectedFriend || result)
-  const handoffName =
-    selectedFriend?.displayName ?? result?.inviteeDisplayName ?? 'your friend'
+  const showingHandoff = Boolean(selectedFriend || result);
+  const handoffName = selectedFriend?.displayName ?? result?.inviteeDisplayName ?? 'your friend';
 
   return (
     <div
@@ -216,12 +196,10 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
             <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
               Ask someone
             </p>
-            <h2 className="mt-2 font-serif text-3xl font-semibold">
-              Ask a friend about {domain}
-            </h2>
+            <h2 className="mt-2 font-serif text-3xl font-semibold">Ask a friend about {domain}</h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              Start with {domain}, then add up to two more ideas if they feel
-              right. They can keep, edit, or ignore them.
+              Start with {domain}, then add up to two more ideas if they feel right. They can keep,
+              edit, or ignore them.
             </p>
           </div>
           <button
@@ -241,8 +219,8 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                 For {handoffName}
               </p>
               <p className="text-muted-foreground mt-2 text-sm leading-6">
-                You send this yourself — Joshing won’t text them for you. Keep
-                it light and personal.
+                You send this yourself — Joshing won’t text them for you. Keep it light and
+                personal.
               </p>
               <label className="mt-4 block text-sm font-medium">
                 Message you can send
@@ -263,10 +241,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                 {copyLabel}
               </button>
               {smsHref ? (
-                <a
-                  className="btn-ghost min-h-12 flex-1 rounded-full"
-                  href={smsHref}
-                >
+                <a className="btn-ghost min-h-12 flex-1 rounded-full" href={smsHref}>
                   Open Messages
                 </a>
               ) : null}
@@ -304,9 +279,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
             {mode === 'friend' ? (
               <div className="mt-5 rounded-xl border">
                 {loadingFriends ? (
-                  <p className="text-muted-foreground p-4 text-sm">
-                    Loading friends…
-                  </p>
+                  <p className="text-muted-foreground p-4 text-sm">Loading friends…</p>
                 ) : friends.length === 0 ? (
                   <p className="text-muted-foreground p-4 text-sm">
                     No friends here yet. Enter a name and phone instead.
@@ -322,8 +295,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                       <span className="font-medium">{friend.displayName}</span>
                       {friend.declaredInterests?.length ? (
                         <span className="text-muted-foreground mt-1 block text-xs">
-                          Has shared{' '}
-                          {friend.declaredInterests.slice(0, 3).join(', ')}
+                          Has shared {friend.declaredInterests.slice(0, 3).join(', ')}
                         </span>
                       ) : null}
                     </button>
@@ -363,31 +335,21 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                       key={index}
                       className="text-muted-foreground block text-xs font-medium tracking-[0.08em] uppercase"
                     >
-                      {index === 0
-                        ? 'First idea'
-                        : `Optional idea ${index + 1}`}
+                      {index === 0 ? 'First idea' : `Optional idea ${index + 1}`}
                       <input
                         className="bg-background text-foreground focus:border-foreground disabled:bg-muted mt-2 h-11 w-full rounded-lg border px-3 text-sm tracking-normal normal-case outline-none"
                         value={interest}
                         disabled={index === 0}
-                        onChange={(event) =>
-                          updateInterest(index, event.target.value)
-                        }
+                        onChange={(event) => updateInterest(index, event.target.value)}
                         placeholder={
-                          index === 1
-                            ? 'Another idea, if useful'
-                            : 'One more, if useful'
+                          index === 1 ? 'Another idea, if useful' : 'One more, if useful'
                         }
                       />
                     </label>
                   ))}
                 </div>
 
-                {error ? (
-                  <p className="text-destructive text-sm font-medium">
-                    {error}
-                  </p>
-                ) : null}
+                {error ? <p className="text-destructive text-sm font-medium">{error}</p> : null}
 
                 <div className="flex items-center gap-3">
                   <button
@@ -411,5 +373,5 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
         )}
       </section>
     </div>
-  )
+  );
 }

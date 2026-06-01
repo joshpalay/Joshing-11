@@ -45,7 +45,9 @@ export function buildScoreLine(correctCount: number): string {
 }
 
 export function buildInterpretiveLine(slots: SessionSlotSummary[]): string | null {
-  const answered = slots.filter((s) => s.answer_state === 'correct' || s.answer_state === 'incorrect');
+  const answered = slots.filter(
+    (s) => s.answer_state === 'correct' || s.answer_state === 'incorrect',
+  );
   if (answered.length === 0) return null;
 
   // 1. Tier crossing

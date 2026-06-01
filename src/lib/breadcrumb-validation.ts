@@ -18,7 +18,7 @@ const GENERIC_BLOCKLIST = new Set(
     'trivia',
     'question',
     'answer',
-  ].map((s) => s.toLowerCase())
+  ].map((s) => s.toLowerCase()),
 );
 
 /**

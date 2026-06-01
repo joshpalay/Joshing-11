@@ -1,17 +1,17 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
+import {
+  broadCategoryDisplayName,
+  normalizeBroadQuestionCategoryOrDefault,
+  normalizeCanonicalSubcategory,
+} from '@/lib/question-categorization';
 import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
 import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { textContainsAnswer } from '@/server/questions/self-answering';
 import { db, questions } from '@/server/db';
-import {
-  deleteQuestion,
-  getQuestion,
-  updateQuestion,
-} from '@/server/db/queries/questions';
+import { deleteQuestion, getQuestion, updateQuestion } from '@/server/db/queries/questions';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -52,7 +52,10 @@ function validatePatchPayload(body: Record<string, unknown> | null) {
   }
   if (body?.alternateAnswers !== undefined) {
     values.alternateAnswers = splitAlternates(body.alternateAnswers) ?? [];
-    if (values.alternateAnswers.length > 5 || values.alternateAnswers.some((answer) => answer.length > 200)) {
+    if (
+      values.alternateAnswers.length > 5 ||
+      values.alternateAnswers.some((answer) => answer.length > 200)
+    ) {
       errors.push('alternateAnswers');
     }
   }
@@ -98,27 +101,34 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const { values, errors } = validatePatchPayload(body);
-  if (errors.length > 0) return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
+  if (errors.length > 0)
+    return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
 
   const existing = await getQuestion(id, session.userId);
   if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   if (existing.usedInGamesCount > 0) {
-    return NextResponse.json({ error: 'Question has been used in a game and cannot be edited.' }, { status: 409 });
+    return NextResponse.json(
+      { error: 'Question has been used in a game and cannot be edited.' },
+      { status: 409 },
+    );
   }
 
   const effectiveText = values.text ?? existing.text;
   const effectiveAnswer = values.correctAnswer ?? existing.correctAnswer;
   const effectiveAlternates = values.alternateAnswers ?? existing.alternateAnswers ?? [];
   if (
-    (values.text !== undefined || values.correctAnswer !== undefined || values.alternateAnswers !== undefined)
-    && textContainsAnswer(effectiveText, effectiveAnswer, effectiveAlternates)
+    (values.text !== undefined ||
+      values.correctAnswer !== undefined ||
+      values.alternateAnswers !== undefined) &&
+    textContainsAnswer(effectiveText, effectiveAnswer, effectiveAlternates)
   ) {
     return NextResponse.json(
       {
         error: 'answer_in_question',
-        message: 'Your question appears to contain its own answer. Rephrase the question so it does not reveal the answer.',
+        message:
+          'Your question appears to contain its own answer. Rephrase the question so it does not reveal the answer.',
       },
       { status: 400 },
     );
@@ -126,9 +136,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const shouldRecategorize = values.text !== undefined || values.correctAnswer !== undefined;
   if (shouldRecategorize) {
-    const categorization = await categorizeQuestion(effectiveText, effectiveAnswer, effectiveAlternates);
+    const categorization = await categorizeQuestion(
+      effectiveText,
+      effectiveAnswer,
+      effectiveAlternates,
+    );
     const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
-    const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
+    const canonicalSubcategory =
+      normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
     if (textContainsAnswer(canonicalSubcategory, effectiveAnswer, effectiveAlternates)) {
       console.warn('[questions/patch] category leaks answer (saving anyway)', {
         subcategory: canonicalSubcategory,
@@ -141,18 +156,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     values.subcategory = canonicalSubcategory;
   }
 
-  const shouldReassessDifficulty = values.text !== undefined
-    || values.correctAnswer !== undefined
-    || values.explanation !== undefined
-    || values.category !== undefined
-    || values.canonicalSubcategory !== undefined;
+  const shouldReassessDifficulty =
+    values.text !== undefined ||
+    values.correctAnswer !== undefined ||
+    values.explanation !== undefined ||
+    values.category !== undefined ||
+    values.canonicalSubcategory !== undefined;
 
   if (shouldReassessDifficulty) {
     const difficultyAssessment = await assessQuestionDifficulty({
       questionText: values.text ?? existing.text,
       correctAnswer: values.correctAnswer ?? existing.correctAnswer,
       broadCategory: values.broadCategory ?? existing.broadCategory,
-      canonicalSubcategory: values.canonicalSubcategory ?? existing.canonicalSubcategory ?? existing.domain,
+      canonicalSubcategory:
+        values.canonicalSubcategory ?? existing.canonicalSubcategory ?? existing.domain,
       explanation: values.explanation ?? existing.explanation,
     });
     values.difficulty = difficultyAssessment.difficulty;
@@ -160,7 +177,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const result = await updateQuestion({ questionId: id, userId: session.userId, ...values });
   if (!result.ok && result.reason === 'in_use') {
-    return NextResponse.json({ error: 'Question has been used in a game and cannot be edited.' }, { status: 409 });
+    return NextResponse.json(
+      { error: 'Question has been used in a game and cannot be edited.' },
+      { status: 409 },
+    );
   }
   if (!result.ok) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
@@ -178,7 +198,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
   const result = await deleteQuestion({ questionId: id, userId: session.userId });
   if (!result.ok && result.reason === 'in_use') {
-    return NextResponse.json({ error: 'Question has been used in a game and cannot be deleted.' }, { status: 409 });
+    return NextResponse.json(
+      { error: 'Question has been used in a game and cannot be deleted.' },
+      { status: 409 },
+    );
   }
   if (!result.ok) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 

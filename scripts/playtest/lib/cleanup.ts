@@ -51,7 +51,9 @@ async function assertTestUsersOnly(userIds: string[]): Promise<void> {
   if (bad.length > 0) {
     throw new Error(
       `[playtest/cleanup] refusing to delete users without [TEST] displayName or +15557 phone: ` +
-        bad.map((b) => `${b.id}=${JSON.stringify({ name: b.displayName, phone: b.phoneNumber })}`).join(', '),
+        bad
+          .map((b) => `${b.id}=${JSON.stringify({ name: b.displayName, phone: b.phoneNumber })}`)
+          .join(', '),
     );
   }
 }
@@ -75,14 +77,16 @@ export async function wipeTestData(manifest: PlaytestManifest): Promise<void> {
   }
 
   if (userIds.length > 0) {
-    await db.delete(feedItems).where(or(
-      inArray(feedItems.recipientUserId, userIds),
-      inArray(feedItems.sourceUserId, userIds),
-    ));
-    await db.delete(activityItems).where(or(
-      inArray(activityItems.userId, userIds),
-      inArray(activityItems.actorUserId, userIds),
-    ));
+    await db
+      .delete(feedItems)
+      .where(
+        or(inArray(feedItems.recipientUserId, userIds), inArray(feedItems.sourceUserId, userIds)),
+      );
+    await db
+      .delete(activityItems)
+      .where(
+        or(inArray(activityItems.userId, userIds), inArray(activityItems.actorUserId, userIds)),
+      );
     await db.delete(masteryEvents).where(inArray(masteryEvents.userId, userIds));
     await db.delete(playerMastery).where(inArray(playerMastery.userId, userIds));
     await db.delete(userQuestionBank).where(inArray(userQuestionBank.userId, userIds));
@@ -104,20 +108,23 @@ export async function wipeTestData(manifest: PlaytestManifest): Promise<void> {
   if (userIds.length > 0) {
     // Catch any friendship rows the scenario forgot to track explicitly
     // (e.g. created via acceptFriendInvitation's transaction).
-    await db.delete(friendships).where(or(
-      inArray(friendships.userAId, userIds),
-      inArray(friendships.userBId, userIds),
-    ));
+    await db
+      .delete(friendships)
+      .where(or(inArray(friendships.userAId, userIds), inArray(friendships.userBId, userIds)));
   }
 
   if (invitationIds.length > 0) {
     await db.delete(friendInvitations).where(inArray(friendInvitations.id, invitationIds));
   }
   if (userIds.length > 0) {
-    await db.delete(friendInvitations).where(or(
-      inArray(friendInvitations.inviterUserId, userIds),
-      inArray(friendInvitations.inviteeUserId, userIds),
-    ));
+    await db
+      .delete(friendInvitations)
+      .where(
+        or(
+          inArray(friendInvitations.inviterUserId, userIds),
+          inArray(friendInvitations.inviteeUserId, userIds),
+        ),
+      );
   }
 
   if (questionIds.length > 0) {

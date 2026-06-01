@@ -32,19 +32,38 @@ export const QUESTION_SHARING_FEED_SOURCE_VISIBILITY = [
     sourceType: SOCIAL_FEED_SOURCE_TYPE,
     sourceResult: 'incorrect',
     visible: false,
-    reason: 'Incorrect answer shares are intentionally excluded so the main feed only amplifies successful friend activity.',
+    reason:
+      'Incorrect answer shares are intentionally excluded so the main feed only amplifies successful friend activity.',
   },
 ] as const;
 
-const SUPPRESSED_CATEGORY_LABELS = new Set(['other', 'uncategorized', 'unknown', 'general', 'general knowledge']);
+const SUPPRESSED_CATEGORY_LABELS = new Set([
+  'other',
+  'uncategorized',
+  'unknown',
+  'general',
+  'general knowledge',
+]);
 
-type QuestionLike = Pick<typeof questions.$inferSelect, 'creatorId' | 'source' | 'visibility' | 'canonicalSubcategory' | 'broadCategory' | 'category' | 'deletedAt'>;
+type QuestionLike = Pick<
+  typeof questions.$inferSelect,
+  | 'creatorId'
+  | 'source'
+  | 'visibility'
+  | 'canonicalSubcategory'
+  | 'broadCategory'
+  | 'category'
+  | 'deletedAt'
+>;
 type FeedItemsVisibilityColumns = Pick<typeof feedItems, 'sourceType' | 'sourceResult'>;
 
 export type FeedEventEligibilityInput = {
   answerIsCorrect: boolean;
   answererUserId: string;
-  question: Pick<QuestionLike, 'creatorId' | 'source' | 'visibility' | 'deletedAt'> | null | undefined;
+  question:
+    | Pick<QuestionLike, 'creatorId' | 'source' | 'visibility' | 'deletedAt'>
+    | null
+    | undefined;
   hasVisibleSocialContext: boolean;
 };
 
@@ -67,13 +86,21 @@ export function isCorrectAnswerFeedEligible(input: FeedEventEligibilityInput): b
   return input.answererUserId !== input.question.creatorId;
 }
 
-export function isVisibleFriendAnsweredSource(sourceType: string, sourceResult: string | null): boolean {
-  return sourceType === SOCIAL_FEED_SOURCE_TYPE
-    && (RESULT_GATED_MAIN_FEED_SOURCE_TYPES[SOCIAL_FEED_SOURCE_TYPE] as readonly string[]).includes(sourceResult ?? '');
+export function isVisibleFriendAnsweredSource(
+  sourceType: string,
+  sourceResult: string | null,
+): boolean {
+  return (
+    sourceType === SOCIAL_FEED_SOURCE_TYPE &&
+    (RESULT_GATED_MAIN_FEED_SOURCE_TYPES[SOCIAL_FEED_SOURCE_TYPE] as readonly string[]).includes(
+      sourceResult ?? '',
+    )
+  );
 }
 
 export function isMainFeedSourceVisible(sourceType: string, sourceResult: string | null): boolean {
-  if ((ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES as readonly string[]).includes(sourceType)) return true;
+  if ((ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES as readonly string[]).includes(sourceType))
+    return true;
   return isVisibleFriendAnsweredSource(sourceType, sourceResult);
 }
 
@@ -89,7 +116,12 @@ export function visibleFeedSourcePredicate(feedItemColumns: FeedItemsVisibilityC
   );
 }
 
-export function socialFeedDomainLabel(question: Pick<QuestionLike, 'canonicalSubcategory' | 'broadCategory' | 'category'> | null | undefined): string | null {
+export function socialFeedDomainLabel(
+  question:
+    | Pick<QuestionLike, 'canonicalSubcategory' | 'broadCategory' | 'category'>
+    | null
+    | undefined,
+): string | null {
   const candidates = [question?.canonicalSubcategory, question?.broadCategory, question?.category];
   for (const candidate of candidates) {
     const label = typeof candidate === 'string' ? candidate.trim() : '';

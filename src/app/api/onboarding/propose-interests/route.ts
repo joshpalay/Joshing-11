@@ -83,7 +83,10 @@ export async function POST(request: Request) {
 
   if (!warmupAnswers) {
     return NextResponse.json(
-      { error: 'invalid_request', message: 'Answer at least 2 warm-up questions, 200 characters max each.' },
+      {
+        error: 'invalid_request',
+        message: 'Answer at least 2 warm-up questions, 200 characters max each.',
+      },
       { status: 400 },
     );
   }
@@ -94,7 +97,11 @@ export async function POST(request: Request) {
   const culturalAnchorResult = parseCulturalAnchor(body?.culturalAnchor);
   if (culturalAnchorResult === 'invalid') {
     return NextResponse.json(
-      { error: 'invalid_request', message: 'Invalid cultural anchor: birthYear must be between 1920 and current year minus 13, grewUpCountry must be a valid ISO 3166-1 alpha-2 code, grewUpRegion max 100 chars.' },
+      {
+        error: 'invalid_request',
+        message:
+          'Invalid cultural anchor: birthYear must be between 1920 and current year minus 13, grewUpCountry must be a valid ISO 3166-1 alpha-2 code, grewUpRegion max 100 chars.',
+      },
       { status: 400 },
     );
   }

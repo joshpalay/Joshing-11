@@ -30,7 +30,7 @@ export type GradeOutcome = {
 function exactMatch(
   submitted: string,
   canonicalAnswer: string,
-  acceptedAlternatives: string[]
+  acceptedAlternatives: string[],
 ): boolean {
   const normalized = submitted.trim().toLowerCase();
   if (!normalized) return false;
@@ -48,7 +48,7 @@ export async function gradeAnswer(
   canonicalAnswer: string,
   acceptedAlternatives: string[],
   questionText: string,
-  questionType: string = 'factual'
+  questionType: string = 'factual',
 ): Promise<GradeOutcome> {
   if (!submitted.trim()) {
     return { result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact' };
@@ -63,7 +63,7 @@ export async function gradeAnswer(
     questionText,
     canonicalAnswer,
     submitted,
-    questionType
+    questionType,
   ).catch((error) => {
     console.warn('[grading] LLM grading call failed; using deterministic fallback', {
       name: error instanceof Error ? error.name : undefined,

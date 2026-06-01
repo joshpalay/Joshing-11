@@ -1,23 +1,23 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
 
-import { AddFriendRequestModal } from '@/components/friends/AddFriendRequestModal'
-import type { RelationshipResult } from '@/server/db/queries/friend-requests'
+import { AddFriendRequestModal } from '@/components/friends/AddFriendRequestModal';
+import type { RelationshipResult } from '@/server/db/queries/friend-requests';
 
 type Props = {
-  targetUserId: string
-  targetDisplayName: string
-  relationship: RelationshipResult
+  targetUserId: string;
+  targetDisplayName: string;
+  relationship: RelationshipResult;
   // Called after a successful add / cancel / accept / ignore / remove so
   // the parent can refresh its data (router.refresh() or refetch).
-  onChange?: () => void
+  onChange?: () => void;
   // If true, Unfriend asks for inline confirmation (a Remove/Keep step in the
   // app's own button language) before removing. Defaults to true.
-  confirmUnfriend?: boolean
-}
+  confirmUnfriend?: boolean;
+};
 
-type Action = 'cancel' | 'accept' | 'ignore' | 'remove'
+type Action = 'cancel' | 'accept' | 'ignore' | 'remove';
 
 export function AddFriendButton({
   targetUserId,
@@ -26,81 +26,81 @@ export function AddFriendButton({
   onChange,
   confirmUnfriend = true,
 }: Props) {
-  const [pendingAction, setPendingAction] = useState<Action | 'open' | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [pendingAction, setPendingAction] = useState<Action | 'open' | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   useEffect(() => {
-    if (!toast) return
-    const timer = window.setTimeout(() => setToast(null), 1800)
-    return () => window.clearTimeout(timer)
-  }, [toast])
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   async function runAction(action: Action, friendshipId: string, successToast: string) {
-    if (pendingAction) return
-    setPendingAction(action)
-    setError(null)
+    if (pendingAction) return;
+    setPendingAction(action);
+    setError(null);
     try {
       const response = await fetch(`/api/friend-requests/${friendshipId}/${action}`, {
         method: 'POST',
         credentials: 'include',
-      })
+      });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { message?: string } | null
-        setError(body?.message ?? 'Could not update this request.')
-        return
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+        setError(body?.message ?? 'Could not update this request.');
+        return;
       }
-      setToast(successToast)
-      onChange?.()
+      setToast(successToast);
+      onChange?.();
     } catch {
-      setError('Network error. Please try again.')
+      setError('Network error. Please try again.');
     } finally {
-      setPendingAction(null)
+      setPendingAction(null);
     }
   }
 
   function handleAddClick() {
-    setError(null)
-    setModalOpen(true)
+    setError(null);
+    setModalOpen(true);
   }
 
   function handleSent() {
-    setToast('Sent.')
-    onChange?.()
+    setToast('Sent.');
+    onChange?.();
   }
 
   function handleCancel() {
-    if (!relationship.friendshipId) return
-    void runAction('cancel', relationship.friendshipId, 'Cancelled.')
+    if (!relationship.friendshipId) return;
+    void runAction('cancel', relationship.friendshipId, 'Cancelled.');
   }
 
   function handleAccept() {
-    if (!relationship.friendshipId) return
-    void runAction('accept', relationship.friendshipId, 'Friends.')
+    if (!relationship.friendshipId) return;
+    void runAction('accept', relationship.friendshipId, 'Friends.');
   }
 
   function handleIgnore() {
-    if (!relationship.friendshipId) return
-    void runAction('ignore', relationship.friendshipId, 'Set aside.')
+    if (!relationship.friendshipId) return;
+    void runAction('ignore', relationship.friendshipId, 'Set aside.');
   }
 
   function handleRemove() {
-    if (!relationship.friendshipId) return
+    if (!relationship.friendshipId) return;
     if (confirmUnfriend) {
       // Swap the Unfriend button for an inline Remove/Keep confirmation rather
       // than punching out to native window.confirm chrome.
-      setConfirmingRemove(true)
-      return
+      setConfirmingRemove(true);
+      return;
     }
-    void runAction('remove', relationship.friendshipId, 'Removed.')
+    void runAction('remove', relationship.friendshipId, 'Removed.');
   }
 
   function confirmRemove() {
-    if (!relationship.friendshipId) return
-    setConfirmingRemove(false)
-    void runAction('remove', relationship.friendshipId, 'Removed.')
+    if (!relationship.friendshipId) return;
+    setConfirmingRemove(false);
+    void runAction('remove', relationship.friendshipId, 'Removed.');
   }
 
   return (
@@ -161,9 +161,7 @@ export function AddFriendButton({
               role="group"
               aria-label={`Remove ${targetDisplayName} from your friends?`}
             >
-              <span className="text-sm text-foreground">
-                Remove {targetDisplayName}?
-              </span>
+              <span className="text-foreground text-sm">Remove {targetDisplayName}?</span>
               <button
                 type="button"
                 className="btn-danger"
@@ -213,7 +211,7 @@ export function AddFriendButton({
       {error ? <p className="text-destructive text-xs">{error}</p> : null}
 
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+        <div className="bg-foreground text-background fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm shadow-lg">
           {toast}
         </div>
       ) : null}
@@ -227,5 +225,5 @@ export function AddFriendButton({
         />
       ) : null}
     </div>
-  )
+  );
 }

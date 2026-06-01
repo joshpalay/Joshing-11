@@ -30,11 +30,11 @@ function parseBody(value: unknown): CreateJoshingGameBody | null {
   const record = value as Record<string, unknown>;
 
   if (
-    typeof record.title !== 'string'
-    || !Array.isArray(record.recipientIds)
-    || !Array.isArray(record.questionIds)
-    || !record.recipientIds.every((id) => typeof id === 'string')
-    || !record.questionIds.every((id) => typeof id === 'string')
+    typeof record.title !== 'string' ||
+    !Array.isArray(record.recipientIds) ||
+    !Array.isArray(record.questionIds) ||
+    !record.recipientIds.every((id) => typeof id === 'string') ||
+    !record.questionIds.every((id) => typeof id === 'string')
   ) {
     return null;
   }
@@ -78,7 +78,10 @@ export async function POST(request: NextRequest) {
 
   const parsed = parseBody(await request.json().catch(() => null));
   if (!parsed) {
-    return NextResponse.json({ error: 'validation', message: 'Invalid request body' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'Invalid request body' },
+      { status: 400 },
+    );
   }
 
   const validationError = validateBody(parsed, session.userId);
@@ -109,15 +112,20 @@ export async function POST(request: NextRequest) {
           eq(userQuestionBank.userId, session.userId),
         ),
       )
-      .where(and(
-        inArray(questions.id, uniqueQuestionIds),
-        isNull(questions.deletedAt),
-        or(eq(questions.creatorId, session.userId), isNotNull(userQuestionBank.id)),
-      )),
+      .where(
+        and(
+          inArray(questions.id, uniqueQuestionIds),
+          isNull(questions.deletedAt),
+          or(eq(questions.creatorId, session.userId), isNotNull(userQuestionBank.id)),
+        ),
+      ),
   ]);
 
   if (recipientRows.length !== uniqueRecipientIds.length) {
-    return NextResponse.json({ error: 'validation', message: 'All recipientIds must be valid users' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'All recipientIds must be valid users' },
+      { status: 400 },
+    );
   }
 
   const friends = await getFriends(session.userId);
@@ -132,7 +140,10 @@ export async function POST(request: NextRequest) {
   const allowedQuestionIds = new Set(allowedQuestionRows.map((row) => row.id));
   if (allowedQuestionIds.size !== uniqueQuestionIds.length) {
     return NextResponse.json(
-      { error: 'validation', message: 'All questionIds must be valid questions in your bank or authored by you' },
+      {
+        error: 'validation',
+        message: 'All questionIds must be valid questions in your bank or authored by you',
+      },
       { status: 400 },
     );
   }
@@ -162,7 +173,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ id: created.id }, { status: 201 });
   } catch (error) {
     if (error instanceof JoshingGameValidationError) {
-      return NextResponse.json({ error: 'validation', message: error.message }, { status: error.status });
+      return NextResponse.json(
+        { error: 'validation', message: error.message },
+        { status: error.status },
+      );
     }
     throw error;
   }

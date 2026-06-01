@@ -2,15 +2,15 @@ const BROAD_CATEGORY_ALIASES: Record<string, string> = {
   'film & tv': 'Film & Television',
   'film and tv': 'Film & Television',
   'film and television': 'Film & Television',
-  'television': 'Film & Television',
-  'tv': 'Film & Television',
+  television: 'Film & Television',
+  tv: 'Film & Television',
   'classical music': 'Music',
   'world history': 'History',
   'pop culture & television': 'Film & Television',
   'pop culture and television': 'Film & Television',
-  'other': 'General Knowledge',
-  'general': 'General Knowledge',
-  'potpourri': 'General Knowledge',
+  other: 'General Knowledge',
+  general: 'General Knowledge',
+  potpourri: 'General Knowledge',
 };
 
 const STABLE_BROAD_CATEGORIES = new Set([

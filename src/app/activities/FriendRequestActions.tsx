@@ -1,41 +1,34 @@
-'use client'
+'use client';
 
-import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
-type Action = 'accept' | 'ignore'
+type Action = 'accept' | 'ignore';
 
-export function FriendRequestActions({
-  friendshipId,
-}: {
-  friendshipId: string
-}) {
-  const router = useRouter()
-  const [pendingAction, setPendingAction] = useState<Action | null>(null)
-  const [error, setError] = useState<string | null>(null)
+export function FriendRequestActions({ friendshipId }: { friendshipId: string }) {
+  const router = useRouter();
+  const [pendingAction, setPendingAction] = useState<Action | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(action: Action) {
-    if (pendingAction) return
+    if (pendingAction) return;
 
-    setPendingAction(action)
-    setError(null)
+    setPendingAction(action);
+    setError(null);
 
     try {
-      const response = await fetch(
-        `/api/friend-requests/${friendshipId}/${action}`,
-        {
-          method: 'POST',
-        }
-      )
+      const response = await fetch(`/api/friend-requests/${friendshipId}/${action}`, {
+        method: 'POST',
+      });
 
       if (!response.ok) {
-        setError('Could not update this note.')
-        return
+        setError('Could not update this note.');
+        return;
       }
 
-      router.refresh()
+      router.refresh();
     } finally {
-      setPendingAction(null)
+      setPendingAction(null);
     }
   }
 
@@ -59,9 +52,7 @@ export function FriendRequestActions({
           {pendingAction === 'ignore' ? 'Setting aside…' : 'Not now'}
         </button>
       </div>
-      {error ? (
-        <p className="text-destructive max-w-40 text-right text-xs">{error}</p>
-      ) : null}
+      {error ? <p className="text-destructive max-w-40 text-right text-xs">{error}</p> : null}
     </div>
-  )
+  );
 }

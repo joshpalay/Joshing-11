@@ -12,15 +12,18 @@ export async function openKBDomain(params: {
   broadCategory?: string | null;
   questionId?: string;
 }): Promise<{ opened: boolean; alreadyExisted: boolean; territoryType: TerritoryType }> {
-  const desiredTerritoryType: TerritoryType = params.via === 'authorship' ? 'declared' : 'demonstrated';
+  const desiredTerritoryType: TerritoryType =
+    params.via === 'authorship' ? 'declared' : 'demonstrated';
 
   const [existing] = await db
     .select({ id: playerMastery.id, territoryType: playerMastery.territoryType })
     .from(playerMastery)
-    .where(and(
-      eq(playerMastery.userId, params.userId),
-      eq(playerMastery.canonicalSubcategory, params.domain),
-    ))
+    .where(
+      and(
+        eq(playerMastery.userId, params.userId),
+        eq(playerMastery.canonicalSubcategory, params.domain),
+      ),
+    )
     .limit(1);
 
   if (existing) {
@@ -105,17 +108,18 @@ export async function promoteDeclaredToDemonstrated(params: {
   triggeringFriendId: string;
   questionId: string;
 }): Promise<
-  | { promoted: true }
-  | { promoted: false; reason: 'no_row' | 'already_demonstrated' | 'error' }
+  { promoted: true } | { promoted: false; reason: 'no_row' | 'already_demonstrated' | 'error' }
 > {
   try {
     const [row] = await db
       .select({ id: playerMastery.id, territoryType: playerMastery.territoryType })
       .from(playerMastery)
-      .where(and(
-        eq(playerMastery.userId, params.userId),
-        eq(playerMastery.canonicalSubcategory, params.domain),
-      ))
+      .where(
+        and(
+          eq(playerMastery.userId, params.userId),
+          eq(playerMastery.canonicalSubcategory, params.domain),
+        ),
+      )
       .limit(1);
 
     if (!row) {
@@ -135,10 +139,12 @@ export async function promoteDeclaredToDemonstrated(params: {
     await db
       .update(playerMastery)
       .set({ territoryType: 'demonstrated', updatedAt: new Date() })
-      .where(and(
-        eq(playerMastery.userId, params.userId),
-        eq(playerMastery.canonicalSubcategory, params.domain),
-      ));
+      .where(
+        and(
+          eq(playerMastery.userId, params.userId),
+          eq(playerMastery.canonicalSubcategory, params.domain),
+        ),
+      );
 
     const answerId = `declared_promoted:${params.domain}:${params.questionId}:${params.triggeringFriendId}`;
 

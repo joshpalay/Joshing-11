@@ -46,10 +46,12 @@ async function selectFeedQuestions(questionIds: string[]) {
 
 export function encodeFeedCursor(cursor: FeedCursor | null): string | null {
   if (!cursor) return null;
-  return Buffer.from(JSON.stringify({
-    source_event_at: cursor.sourceEventAt.toISOString(),
-    id: cursor.id,
-  })).toString('base64url');
+  return Buffer.from(
+    JSON.stringify({
+      source_event_at: cursor.sourceEventAt.toISOString(),
+      id: cursor.id,
+    }),
+  ).toString('base64url');
 }
 
 export function decodeFeedCursor(value: string): FeedCursor | null {
@@ -92,7 +94,9 @@ function authoredSharedAttribution(sourceName: string, domain: string | null): s
 }
 
 function directSentAttribution(sourceName: string, domain: string | null): string {
-  return domain ? `${sourceName} sent you a question — ${domain}` : `${sourceName} sent you a question`;
+  return domain
+    ? `${sourceName} sent you a question — ${domain}`
+    : `${sourceName} sent you a question`;
 }
 
 function feedFilterSourcePredicate(filter: FeedFilter) {
@@ -103,7 +107,9 @@ function feedFilterSourcePredicate(filter: FeedFilter) {
   return undefined;
 }
 
-function feedCardType(item: CollapsedFeedItem): 'direct_sent' | 'friend_answered' | 'friend_added' | 'friend_liked' | 'answered_by_you' {
+function feedCardType(
+  item: CollapsedFeedItem,
+): 'direct_sent' | 'friend_answered' | 'friend_added' | 'friend_liked' | 'answered_by_you' {
   if (item.state === 'answered') return 'answered_by_you';
   if (item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE) return 'direct_sent';
   if (item.sourceType === 'authored_shared') return 'friend_added';
@@ -120,7 +126,9 @@ function friendAnsweredAttribution(
   const results = item.friendResults;
   if (!results || results.length === 0) {
     const name = displayName(userById.get(item.sourceUserId));
-    return domain ? `${name} knew ${authorName}’s question — ${domain}` : `${name} knew ${authorName}’s question`;
+    return domain
+      ? `${name} knew ${authorName}’s question — ${domain}`
+      : `${name} knew ${authorName}’s question`;
   }
 
   if (results.length === 1) {
@@ -130,7 +138,10 @@ function friendAnsweredAttribution(
       : `${answererName} and ${authorName} share this one`;
   }
 
-  const names = results.slice(0, 3).map(({ displayName: answererName }) => answererName).join(' · ');
+  const names = results
+    .slice(0, 3)
+    .map(({ displayName: answererName }) => answererName)
+    .join(' · ');
   return domain ? `Common ground in ${domain}: ${names}` : `${names} share this one`;
 }
 
@@ -153,56 +164,65 @@ export type FeedPagePayload = Awaited<ReturnType<typeof getFeedPagePayload>>;
 export async function getFeedPagePayload(viewerUserId: string, options: FeedPageOptions) {
   const { limit, cursor, filter } = options;
 
-  const [feedPage, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
-    getFeedForUser(viewerUserId, { limit, cursor, filter }),
-    db
-      .select({ value: count() })
-      .from(friendships)
-      .where(and(
-        eq(friendships.status, 'active'),
-        or(eq(friendships.userAId, viewerUserId), eq(friendships.userBId, viewerUserId)),
-      ))
-      .then((rows) => rows[0]?.value ?? 0),
-    getDismissedDomains(viewerUserId),
-    db
-      .select({ value: count() })
-      .from(feedItems)
-      .innerJoin(questions, eq(feedItems.questionId, questions.id))
-      .where(and(
-        eq(feedItems.recipientUserId, viewerUserId),
-        visibleSourcePredicate,
-        feedFilterSourcePredicate(filter),
-        or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
-      ))
-      .then((rows) => rows[0]?.value ?? 0),
-    db
-      .select({ value: count() })
-      .from(feedItems)
-      .innerJoin(questions, eq(feedItems.questionId, questions.id))
-      .where(and(
-        eq(feedItems.recipientUserId, viewerUserId),
-        visibleSourcePredicate,
-        feedFilterSourcePredicate(filter),
-        inArray(feedItems.state, ['active', 'skipped']),
-        or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
-        // Match the visibility rule applied in getFeedForUser so this
-        // diagnostic count reflects what the user actually sees.
-        or(
-          eq(feedItems.sourceType, 'direct_sent'),
-          notExists(
-            db
-              .select({ id: masteryEvents.id })
-              .from(masteryEvents)
-              .where(and(
-                eq(masteryEvents.userId, viewerUserId),
-                eq(masteryEvents.answeredByUserId, viewerUserId),
-                eq(masteryEvents.questionId, feedItems.questionId),
-              )),
+  const [feedPage, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] =
+    await Promise.all([
+      getFeedForUser(viewerUserId, { limit, cursor, filter }),
+      db
+        .select({ value: count() })
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.status, 'active'),
+            or(eq(friendships.userAId, viewerUserId), eq(friendships.userBId, viewerUserId)),
           ),
-        ),
-      ))
-      .then((rows) => rows[0]?.value ?? 0),
-  ]);
+        )
+        .then((rows) => rows[0]?.value ?? 0),
+      getDismissedDomains(viewerUserId),
+      db
+        .select({ value: count() })
+        .from(feedItems)
+        .innerJoin(questions, eq(feedItems.questionId, questions.id))
+        .where(
+          and(
+            eq(feedItems.recipientUserId, viewerUserId),
+            visibleSourcePredicate,
+            feedFilterSourcePredicate(filter),
+            or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
+          ),
+        )
+        .then((rows) => rows[0]?.value ?? 0),
+      db
+        .select({ value: count() })
+        .from(feedItems)
+        .innerJoin(questions, eq(feedItems.questionId, questions.id))
+        .where(
+          and(
+            eq(feedItems.recipientUserId, viewerUserId),
+            visibleSourcePredicate,
+            feedFilterSourcePredicate(filter),
+            inArray(feedItems.state, ['active', 'skipped']),
+            or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
+            // Match the visibility rule applied in getFeedForUser so this
+            // diagnostic count reflects what the user actually sees.
+            or(
+              eq(feedItems.sourceType, 'direct_sent'),
+              notExists(
+                db
+                  .select({ id: masteryEvents.id })
+                  .from(masteryEvents)
+                  .where(
+                    and(
+                      eq(masteryEvents.userId, viewerUserId),
+                      eq(masteryEvents.answeredByUserId, viewerUserId),
+                      eq(masteryEvents.questionId, feedItems.questionId),
+                    ),
+                  ),
+              ),
+            ),
+          ),
+        )
+        .then((rows) => rows[0]?.value ?? 0),
+    ]);
 
   const activeItemCount = feedPage.totalCount;
   const feed = feedPage.items;
@@ -216,12 +236,19 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
   ]);
 
   const questionById = new Map(questionRows.map((q) => [q.id, q]));
-  const userIds = [...new Set([
-    ...feed.map((item) => item.sourceUserId),
-    ...questionRows.map((question) => question.creatorId).filter((id): id is string => Boolean(id)),
-  ])];
+  const userIds = [
+    ...new Set([
+      ...feed.map((item) => item.sourceUserId),
+      ...questionRows
+        .map((question) => question.creatorId)
+        .filter((id): id is string => Boolean(id)),
+    ]),
+  ];
   const userRows = userIds.length
-    ? await db.select({ id: users.id, displayName: users.displayName, slug: users.slug }).from(users).where(inArray(users.id, userIds))
+    ? await db
+        .select({ id: users.id, displayName: users.displayName, slug: users.slug })
+        .from(users)
+        .where(inArray(users.id, userIds))
     : [];
   const userById = new Map(userRows.map((u) => [u.id, u]));
 
@@ -246,7 +273,10 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
       const question = item.questionId ? questionById.get(item.questionId) : undefined;
       const sourceUser = userById.get(item.sourceUserId);
       const sourceName = displayName(sourceUser);
-      const authorName = displayName(question?.creatorId ? userById.get(question.creatorId) : null, 'the author');
+      const authorName = displayName(
+        question?.creatorId ? userById.get(question.creatorId) : null,
+        'the author',
+      );
       const domain = socialFeedDomainLabel(question);
       const cardType = feedCardType(item);
       // Fall back to viewer's mastery-event answer status when answerResult is null
@@ -271,18 +301,20 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         source_result: item.sourceResult ?? null,
         source_friend_display_name: sourceName,
         source_profile_href: `/users/${encodeURIComponent(item.sourceUserId)}`,
-        source_attribution: item.sourceType === 'authored_shared'
-          ? authoredSharedAttribution(sourceName, domain)
-          : item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE
-            ? directSentAttribution(sourceName, domain)
-            : friendAnsweredAttribution(item, userById, domain, authorName),
+        source_attribution:
+          item.sourceType === 'authored_shared'
+            ? authoredSharedAttribution(sourceName, domain)
+            : item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE
+              ? directSentAttribution(sourceName, domain)
+              : friendAnsweredAttribution(item, userById, domain, authorName),
         friend_results: item.friendResults ?? null,
         viewer_answer_status: item.viewerAnswerStatus ?? null,
         endorsement_count: item.thumbsUpCount ?? null,
         additional_endorsers: item.additionalEndorsers ?? null,
-        source_event_at: item.sourceEventAt instanceof Date
-          ? item.sourceEventAt.toISOString()
-          : item.sourceEventAt,
+        source_event_at:
+          item.sourceEventAt instanceof Date
+            ? item.sourceEventAt.toISOString()
+            : item.sourceEventAt,
         personal_message: item.personalMessage,
         state: item.state,
         is_pinned: item.isPinned,
@@ -293,10 +325,10 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         broad_category: question?.broadCategory ?? null,
         answer_result: answerResult,
         is_correct: answerResult === null ? null : answerResult === 'correct',
-        correct_answer: cardType === 'answered_by_you' ? question?.answerText ?? null : null,
-        submitted_answer: cardType === 'answered_by_you' ? item.submittedAnswer ?? null : null,
+        correct_answer: cardType === 'answered_by_you' ? (question?.answerText ?? null) : null,
+        submitted_answer: cardType === 'answered_by_you' ? (item.submittedAnswer ?? null) : null,
         awarded_points: cardType === 'answered_by_you' ? awardedPoints : null,
-        mastery_delta: cardType === 'answered_by_you' ? item.masteryDelta ?? null : null,
+        mastery_delta: cardType === 'answered_by_you' ? (item.masteryDelta ?? null) : null,
         viewer_is_author: question?.creatorId ? question.creatorId === viewerUserId : false,
       });
     }),

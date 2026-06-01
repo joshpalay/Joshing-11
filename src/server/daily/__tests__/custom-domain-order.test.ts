@@ -36,10 +36,7 @@ describe('orderCustomDomainsByLeastRecent', () => {
       'Animated Television Series (1970s-1980s)',
     ]);
     expect(ordered[2]).toBe('T.S. Eliot');
-    expect(ordered.slice(-2)).toEqual([
-      "Wagner's Ring Cycle",
-      'Shakespearean Tragedy',
-    ]);
+    expect(ordered.slice(-2)).toEqual(["Wagner's Ring Cycle", 'Shakespearean Tragedy']);
   });
 
   it('treats a domain absent from the counts map as count 0 (fresh)', () => {

@@ -45,12 +45,17 @@ export function getDailyAssignmentBounds(): {
   const now = new Date();
 
   // The most recent reset: today at DAILY_RESET_HOUR_UTC UTC
-  const todayReset = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-    DAILY_RESET_HOUR_UTC, 0, 0, 0
-  ));
+  const todayReset = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      DAILY_RESET_HOUR_UTC,
+      0,
+      0,
+      0,
+    ),
+  );
 
   let windowStart: Date;
   let expiresAt: Date;
@@ -70,11 +75,9 @@ export function getDailyAssignmentBounds(): {
   const m = String(windowStart.getUTCMonth() + 1).padStart(2, '0');
   const d = String(windowStart.getUTCDate()).padStart(2, '0');
   const assignmentDateStr = `${y}-${m}-${d}`;
-  const assignmentDate = new Date(Date.UTC(
-    windowStart.getUTCFullYear(),
-    windowStart.getUTCMonth(),
-    windowStart.getUTCDate()
-  ));
+  const assignmentDate = new Date(
+    Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), windowStart.getUTCDate()),
+  );
 
   return { assignmentDateStr, assignmentDate, expiresAt };
 }
@@ -84,12 +87,17 @@ export function getDailyAssignmentBounds(): {
  * If now is exactly on the boundary, "next" means 24h later.
  */
 export function getNextDailyResetBoundary(from: Date = new Date()): Date {
-  const todayReset = new Date(Date.UTC(
-    from.getUTCFullYear(),
-    from.getUTCMonth(),
-    from.getUTCDate(),
-    DAILY_RESET_HOUR_UTC, 0, 0, 0
-  ));
+  const todayReset = new Date(
+    Date.UTC(
+      from.getUTCFullYear(),
+      from.getUTCMonth(),
+      from.getUTCDate(),
+      DAILY_RESET_HOUR_UTC,
+      0,
+      0,
+      0,
+    ),
+  );
 
   if (from < todayReset) return todayReset;
   return new Date(todayReset.getTime() + ONE_DAY_MS);
@@ -108,10 +116,7 @@ export function getMsUntilNextDailyResetBoundary(from: Date = new Date()): numbe
  * is passed. Examples: "1 PM" (Eastern DST), "10 AM" (Pacific DST),
  * "10:30 PM" (India). On-the-hour minutes are dropped for readability.
  */
-export function formatNextResetTimeLocal(
-  timezone?: string,
-  from: Date = new Date(),
-): string {
+export function formatNextResetTimeLocal(timezone?: string, from: Date = new Date()): string {
   const next = getNextDailyResetBoundary(from);
   const tz = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const parts = new Intl.DateTimeFormat('en-US', {

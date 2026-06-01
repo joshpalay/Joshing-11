@@ -6,7 +6,10 @@ import { getSession } from '@/server/auth/session';
 import { dailyQueues, db, generatedQuestions, gradeDisputes, questions } from '@/server/db';
 import { resolveDailyBasePoints, type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
+import {
+  isGenericCanonicalAnswer,
+  normalizeCanonicalAnswerLabel,
+} from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { recheckAnswerWithLLM } from '@/server/llm/recheck';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
@@ -14,7 +17,13 @@ import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-i
 
 export const dynamic = 'force-dynamic';
 
-type RecheckErrorCode = 'unauthorized' | 'validation' | 'not_found' | 'invalid_state' | 'question_not_found' | 'unexpected';
+type RecheckErrorCode =
+  | 'unauthorized'
+  | 'validation'
+  | 'not_found'
+  | 'invalid_state'
+  | 'question_not_found'
+  | 'unexpected';
 
 function errorResponse(status: number, error: RecheckErrorCode, message: string) {
   return NextResponse.json({ error, message }, { status });
@@ -28,14 +37,17 @@ function parseBody(value: unknown): { queueId: string; slotIndex: number } | nul
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const queueId = typeof record.queue_id === 'string' ? record.queue_id : null;
-  const slotIndex = typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
-    ? record.slot_index
-    : null;
+  const slotIndex =
+    typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
+      ? record.slot_index
+      : null;
   if (!queueId || slotIndex === null) return null;
   return { queueId, slotIndex };
 }
 
-async function resolveCanonicalAnswer(question: typeof generatedQuestions.$inferSelect): Promise<string> {
+async function resolveCanonicalAnswer(
+  question: typeof generatedQuestions.$inferSelect,
+): Promise<string> {
   const currentAnswer = normalizeCanonicalAnswerLabel(question.answer);
   if (!isGenericCanonicalAnswer(currentAnswer)) return currentAnswer;
 
@@ -80,7 +92,11 @@ export async function POST(request: NextRequest) {
     const slot = slots.find((item) => item.slot_index === parsed.slotIndex);
     if (!slot) return errorResponse(400, 'validation', 'slot_index out of range');
     if (!slot.answered || !slot.submitted_answer) {
-      return errorResponse(400, 'invalid_state', 'Answer the question before requesting a recheck.');
+      return errorResponse(
+        400,
+        'invalid_state',
+        'Answer the question before requesting a recheck.',
+      );
     }
     if (slot.answer_state === 'correct') {
       return errorResponse(400, 'invalid_state', 'That answer is already marked correct.');
@@ -89,7 +105,11 @@ export async function POST(request: NextRequest) {
       return errorResponse(400, 'invalid_state', 'That answer has already been rechecked.');
     }
     if (!slot.generated_question_id && !slot.question_id) {
-      return errorResponse(400, 'invalid_state', 'That Daily Five slot has no question to recheck.');
+      return errorResponse(
+        400,
+        'invalid_state',
+        'That Daily Five slot has no question to recheck.',
+      );
     }
 
     // Daily 5 slots come in two shapes — bot (generatedQuestions) and
@@ -111,12 +131,19 @@ export async function POST(request: NextRequest) {
       const [row] = await db
         .select()
         .from(generatedQuestions)
-        .where(and(
-          eq(generatedQuestions.id, slot.generated_question_id),
-          eq(generatedQuestions.userId, session.userId),
-        ))
+        .where(
+          and(
+            eq(generatedQuestions.id, slot.generated_question_id),
+            eq(generatedQuestions.userId, session.userId),
+          ),
+        )
         .limit(1);
-      if (!row) return errorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+      if (!row)
+        return errorResponse(
+          404,
+          'question_not_found',
+          'We could not find that Daily Five question.',
+        );
       const repairedAnswer = await resolveCanonicalAnswer(row);
       question = {
         generatedId: row.id,
@@ -135,9 +162,14 @@ export async function POST(request: NextRequest) {
         .where(eq(questions.id, slot.question_id!))
         .limit(1);
       if (!row || row.deletedAt) {
-        return errorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+        return errorResponse(
+          404,
+          'question_not_found',
+          'We could not find that Daily Five question.',
+        );
       }
-      const difficulty = row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate ?? null;
+      const difficulty =
+        row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate ?? null;
       question = {
         generatedId: null,
         canonicalId: row.id,
@@ -164,7 +196,11 @@ export async function POST(request: NextRequest) {
     // User-facing outcome. A disputed answer key reads as "we're taking
     // another look" rather than a confident rejection — we will not tell the
     // player they were wrong against an answer the reviewer flagged as wrong.
-    const recheckStatus = accepted ? 'accepted' : review.decision === 'reject' ? 'rejected' : 'needs_human';
+    const recheckStatus = accepted
+      ? 'accepted'
+      : review.decision === 'reject'
+        ? 'rejected'
+        : 'needs_human';
     // Backend dispute lifecycle. Only an accept auto-resolves (the alternative
     // is added). Everything else — including plain rejects — now stays 'pending'
     // so a human can review it, instead of being auto-dismissed. The precise
@@ -178,7 +214,7 @@ export async function POST(request: NextRequest) {
       return {
         ...item,
         answer_state: accepted ? 'correct' : 'incorrect',
-        awarded_points: accepted ? pointsAwarded : item.awarded_points ?? 0,
+        awarded_points: accepted ? pointsAwarded : (item.awarded_points ?? 0),
         reveal_canonical_answer: canonicalAnswer,
         recheck_status: recheckStatus,
         recheck_reason: review.reason,
@@ -213,15 +249,13 @@ export async function POST(request: NextRequest) {
     }
 
     await db.transaction(async (tx) => {
-      await tx
-        .update(dailyQueues)
-        .set({ slots: nextSlots })
-        .where(eq(dailyQueues.id, queue.id));
+      await tx.update(dailyQueues).set({ slots: nextSlots }).where(eq(dailyQueues.id, queue.id));
 
       // If persist failed for a bot slot, fall back to the generated id so the
       // dispute row still records *something* the reviewer can trace. Friend
       // slots always have a canonical id by this point.
-      const disputeQuestionId = canonicalQuestionId ?? question.generatedId ?? question.canonicalId!;
+      const disputeQuestionId =
+        canonicalQuestionId ?? question.generatedId ?? question.canonicalId!;
       await tx
         .insert(gradeDisputes)
         .values({
@@ -257,7 +291,11 @@ export async function POST(request: NextRequest) {
     if (accepted) {
       masteryDelta = await writeMasteryEvent({
         userId: session.userId,
-        questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,
+        questionId:
+          question.generatedId ??
+          question.canonicalId ??
+          canonicalQuestionId ??
+          `${queue.id}:${parsed.slotIndex}`,
         domain: question.domain,
         answerState: 'first_correct',
         pointsAwarded,
@@ -278,13 +316,16 @@ export async function POST(request: NextRequest) {
 
       if (canonicalQuestionId) {
         try {
-          const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
-          after(() => createFeedItemsForFriendsFromAnswer(
-            session.userId,
-            canonicalQuestionId,
-            'correct',
-            `daily:${propagationKey}:${session.userId}`,
-          ));
+          const propagationKey =
+            question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
+          after(() =>
+            createFeedItemsForFriendsFromAnswer(
+              session.userId,
+              canonicalQuestionId,
+              'correct',
+              `daily:${propagationKey}:${session.userId}`,
+            ),
+          );
         } catch (error) {
           console.warn('[daily/recheck] feed propagation failed', {
             generatedQuestionId: question.generatedId,

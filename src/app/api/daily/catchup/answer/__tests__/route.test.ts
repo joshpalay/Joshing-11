@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   createFeedItemsForFriendsFromAnswerMock,
@@ -13,24 +13,24 @@ const {
   updateDomainDifficultyOnAnswerMock,
   writeMasteryEventMock,
 } = vi.hoisted(() => {
-  const selectCallChain: Array<() => Promise<unknown[]>> = []
+  const selectCallChain: Array<() => Promise<unknown[]>> = [];
   const dbMock = {
     select: vi.fn(() => {
-      const handler = selectCallChain.shift() ?? (async () => [])
+      const handler = selectCallChain.shift() ?? (async () => []);
       return {
         from: () => ({
           where: () => ({
             limit: handler,
           }),
         }),
-      }
+      };
     }),
     update: vi.fn(() => ({
       set: () => ({
         where: vi.fn(async () => undefined),
       }),
     })),
-  }
+  };
   return {
     createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
     dbMock,
@@ -53,8 +53,8 @@ const {
       tierChanged: false,
       openedNewTerritory: false,
     })),
-  }
-})
+  };
+});
 
 const CATCHUP_ITEM = {
   dailyQueueItemId: 'queue-1:0',
@@ -71,7 +71,7 @@ const CATCHUP_ITEM = {
   broadCategory: 'humanities',
   basePoints: 100,
   difficultyEstimate: 'specialist' as const,
-}
+};
 
 const QUEUE = {
   id: 'queue-1',
@@ -86,26 +86,26 @@ const QUEUE = {
       answered: false,
     },
   ],
-}
+};
 
 const PERSISTED_QUESTION = {
   creatorId: 'author-1',
   domain: 'history',
   broadCategory: 'humanities',
   category: 'humanities',
-}
+};
 
 vi.mock('@/server/grading', () => ({
   gradeAnswer: gradeAnswerMock,
-}))
+}));
 
 vi.mock('@/server/adaptive-difficulty', () => ({
   updateDomainDifficultyOnAnswer: updateDomainDifficultyOnAnswerMock,
-}))
+}));
 
 vi.mock('@/server/auth/session', () => ({
   getSession: getSessionMock,
-}))
+}));
 
 vi.mock('@/server/db', () => ({
   db: dbMock,
@@ -127,11 +127,11 @@ vi.mock('@/server/db', () => ({
     broadCategory: 'q.bc',
     category: 'q.c',
   },
-}))
+}));
 
 vi.mock('@/server/db/queries/daily', () => ({
   getCatchupQuestions: getCatchupQuestionsMock,
-}))
+}));
 
 vi.mock('@/server/daily/catchup', () => ({
   asQueueSlots: (v: unknown) => (Array.isArray(v) ? v : []),
@@ -140,74 +140,73 @@ vi.mock('@/server/daily/catchup', () => ({
   replaceQueueSlot: (slots: { slot_index: number }[], idx: number, fn: (s: unknown) => unknown) =>
     slots.map((s) => (s.slot_index === idx ? fn(s) : s)),
   parseCatchupItemId: (id: string) => {
-    if (id.startsWith('feed:')) return { surface: 'feed', feedItemId: id.slice(5) }
-    const [queueId, slotIndexValue] = id.split(':')
-    return { surface: 'daily', queueId, slotIndex: Number(slotIndexValue) }
+    if (id.startsWith('feed:')) return { surface: 'feed', feedItemId: id.slice(5) };
+    const [queueId, slotIndexValue] = id.split(':');
+    return { surface: 'daily', queueId, slotIndex: Number(slotIndexValue) };
   },
-}))
+}));
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({
   writeMasteryEvent: writeMasteryEventMock,
-}))
+}));
 
 vi.mock('@/server/feed/create-feed-items-for-answer', () => ({
   createFeedItemsForFriendsFromAnswer: createFeedItemsForFriendsFromAnswerMock,
-}))
+}));
 
 vi.mock('@/server/knowledge/open-domain', () => ({
   promoteDeclaredToDemonstrated: promoteDeclaredToDemonstratedMock,
-}))
+}));
 
 vi.mock('@/server/questions/persist-generated-question', () => ({
   persistGeneratedQuestion: persistGeneratedQuestionMock,
-}))
+}));
 
 vi.mock('@/server/play/catch-up-submit-error', () => ({
   catchUpErrorResponse: (status: number, code: string, message?: string) =>
     Response.json({ error: code, message }, { status }),
-}))
+}));
 
 vi.mock('@/server/answer-state', async () => {
-  const actual = await vi.importActual<typeof import('@/server/answer-state')>(
-    '@/server/answer-state',
-  )
-  return actual
-})
+  const actual =
+    await vi.importActual<typeof import('@/server/answer-state')>('@/server/answer-state');
+  return actual;
+});
 
 vi.mock('@/server/answer-history', () => ({
   readPriorAnswersForQuestion: readPriorAnswersForQuestionMock,
-}))
+}));
 
-import { POST } from '@/app/api/daily/catchup/answer/route'
+import { POST } from '@/app/api/daily/catchup/answer/route';
 
 function setupDbChain() {
-  selectCallChain.length = 0
+  selectCallChain.length = 0;
   // 1: queue lookup; 2: persistedQuestion lookup
-  selectCallChain.push(async () => [QUEUE])
-  selectCallChain.push(async () => [PERSISTED_QUESTION])
+  selectCallChain.push(async () => [QUEUE]);
+  selectCallChain.push(async () => [PERSISTED_QUESTION]);
 }
 
 function jsonRequest(body: unknown) {
   return new Request('http://localhost/api/daily/catchup/answer', {
     method: 'POST',
     body: JSON.stringify(body),
-  })
+  });
 }
 
 const VALID_BODY = {
   dailyQueueItemId: 'queue-1:0',
   submittedAnswer: 'A',
-}
+};
 
 describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    getCatchupQuestionsMock.mockResolvedValue([CATCHUP_ITEM])
-    readPriorAnswersForQuestionMock.mockResolvedValue([])
+    vi.clearAllMocks();
+    getCatchupQuestionsMock.mockResolvedValue([CATCHUP_ITEM]);
+    readPriorAnswersForQuestionMock.mockResolvedValue([]);
     persistGeneratedQuestionMock.mockResolvedValue({
       questionId: 'canonical-q-1',
       alreadyExisted: false,
-    })
+    });
     writeMasteryEventMock.mockResolvedValue({
       domain: 'history',
       points: 0,
@@ -215,17 +214,17 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
       newTier: 'establishing',
       tierChanged: false,
       openedNewTerritory: false,
-    })
-  })
+    });
+  });
 
   it('first-time correct catch-up: writes first_correct with 25% of base points', async () => {
-    setupDbChain()
-    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+    setupDbChain();
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null });
 
-    await POST(jsonRequest(VALID_BODY) as never)
+    await POST(jsonRequest(VALID_BODY) as never);
 
-    expect(persistGeneratedQuestionMock).toHaveBeenCalledWith('gen-q-1', 'history')
-    expect(readPriorAnswersForQuestionMock).toHaveBeenCalledWith('user-1', 'canonical-q-1')
+    expect(persistGeneratedQuestionMock).toHaveBeenCalledWith('gen-q-1', 'history');
+    expect(readPriorAnswersForQuestionMock).toHaveBeenCalledWith('user-1', 'canonical-q-1');
     expect(writeMasteryEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         answerState: 'first_correct',
@@ -233,29 +232,29 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
         eventQuestionId: 'canonical-q-1',
         sourceType: 'catchup',
       }),
-    )
-  })
+    );
+  });
 
   it('first-time wrong catch-up: writes incorrect with zero points', async () => {
-    setupDbChain()
-    gradeAnswerMock.mockResolvedValueOnce({ result: 'wrong', consolation: null })
+    setupDbChain();
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'wrong', consolation: null });
 
-    await POST(jsonRequest(VALID_BODY) as never)
+    await POST(jsonRequest(VALID_BODY) as never);
 
     expect(writeMasteryEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         answerState: 'incorrect',
         pointsAwarded: 0,
       }),
-    )
-  })
+    );
+  });
 
   it('prior wrong then correct catch-up: writes first_correct_after_wrong with RECOVERY_STATE_WEIGHT × full base', async () => {
-    setupDbChain()
-    readPriorAnswersForQuestionMock.mockResolvedValueOnce([{ result: 'wrong' }])
-    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+    setupDbChain();
+    readPriorAnswersForQuestionMock.mockResolvedValueOnce([{ result: 'wrong' }]);
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null });
 
-    await POST(jsonRequest(VALID_BODY) as never)
+    await POST(jsonRequest(VALID_BODY) as never);
 
     expect(writeMasteryEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -265,58 +264,58 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
         // at handleDailyCatchupAnswer: round(100 * 0.25) = 25.
         pointsAwarded: 25,
       }),
-    )
-  })
+    );
+  });
 
   it('prior correct then correct catch-up: writes repeat_correct with zero points', async () => {
-    setupDbChain()
-    readPriorAnswersForQuestionMock.mockResolvedValueOnce([{ result: 'correct' }])
-    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+    setupDbChain();
+    readPriorAnswersForQuestionMock.mockResolvedValueOnce([{ result: 'correct' }]);
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null });
 
-    await POST(jsonRequest(VALID_BODY) as never)
+    await POST(jsonRequest(VALID_BODY) as never);
 
     expect(writeMasteryEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         answerState: 'repeat_correct',
         pointsAwarded: 0,
       }),
-    )
-  })
+    );
+  });
 
   it('persists generated question BEFORE writing mastery event', async () => {
-    setupDbChain()
-    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+    setupDbChain();
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null });
 
-    const order: string[] = []
+    const order: string[] = [];
     persistGeneratedQuestionMock.mockImplementationOnce(async () => {
-      order.push('persist')
-      return { questionId: 'canonical-q-1', alreadyExisted: false }
-    })
+      order.push('persist');
+      return { questionId: 'canonical-q-1', alreadyExisted: false };
+    });
     writeMasteryEventMock.mockImplementationOnce(async () => {
-      order.push('writeMastery')
+      order.push('writeMastery');
       return {
         domain: 'history',
         points: 25,
         previousTier: 'establishing',
         newTier: 'establishing',
         tierChanged: false,
-      }
-    })
+      };
+    });
 
-    await POST(jsonRequest(VALID_BODY) as never)
+    await POST(jsonRequest(VALID_BODY) as never);
 
-    expect(order).toEqual(['persist', 'writeMastery'])
-  })
+    expect(order).toEqual(['persist', 'writeMastery']);
+  });
 
   it('graceful fallback when persist fails on every retry: mastery event still written with null eventQuestionId', async () => {
-    setupDbChain()
-    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+    setupDbChain();
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null });
     // Route retries persistGeneratedQuestion once on failure; reject both
     // attempts to exercise the graceful-fallback branch.
-    persistGeneratedQuestionMock.mockRejectedValueOnce(new Error('persist boom'))
-    persistGeneratedQuestionMock.mockRejectedValueOnce(new Error('persist boom retry'))
+    persistGeneratedQuestionMock.mockRejectedValueOnce(new Error('persist boom'));
+    persistGeneratedQuestionMock.mockRejectedValueOnce(new Error('persist boom retry'));
 
-    await POST(jsonRequest(VALID_BODY) as never)
+    await POST(jsonRequest(VALID_BODY) as never);
 
     expect(writeMasteryEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -324,7 +323,7 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
         answerState: 'first_correct',
         pointsAwarded: 25,
       }),
-    )
-    expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
-  })
-})
+    );
+    expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled();
+  });
+});

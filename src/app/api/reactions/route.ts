@@ -3,7 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { isReactionKey, isWrongAnswerReactionKey, type ReactionKey } from '@/lib/reactions';
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, joshingGameQuestions, joshingGameRecipients, joshingGames } from '@/server/db';
+import {
+  db,
+  feedItems,
+  joshingGameQuestions,
+  joshingGameRecipients,
+  joshingGames,
+} from '@/server/db';
 import {
   createReaction,
   getReactionsForUser,
@@ -26,22 +32,33 @@ function parseBody(value: unknown): ReactionBody | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const questionId = typeof record.questionId === 'string' ? record.questionId.trim() : '';
-  const contextType = record.contextType === 'feed' || record.contextType === 'joshing_game'
-    ? record.contextType
-    : null;
-  const contextId = typeof record.contextId === 'string' && record.contextId.trim()
-    ? record.contextId.trim()
-    : null;
+  const contextType =
+    record.contextType === 'feed' || record.contextType === 'joshing_game'
+      ? record.contextType
+      : null;
+  const contextId =
+    typeof record.contextId === 'string' && record.contextId.trim()
+      ? record.contextId.trim()
+      : null;
   const reactionType = typeof record.reactionType === 'string' ? record.reactionType.trim() : '';
-  const customMessage = typeof record.customMessage === 'string' ? record.customMessage.trim().slice(0, 160) : null;
+  const customMessage =
+    typeof record.customMessage === 'string' ? record.customMessage.trim().slice(0, 160) : null;
   // §8.22: only wrong-answer reactions are eligible to attach submitted text.
   // For any other reactionType we coerce to false even if the client asks.
   const includeSubmittedAnswerRequested = record.includeSubmittedAnswer === true;
-  const includeSubmittedAnswer = includeSubmittedAnswerRequested && isWrongAnswerReactionKey(reactionType);
+  const includeSubmittedAnswer =
+    includeSubmittedAnswerRequested && isWrongAnswerReactionKey(reactionType);
 
   if (!questionId || !contextType || !isReactionKey(reactionType)) return null;
 
-  return { questionId, contextType, contextId, reactionType, customMessage, includeSubmittedAnswer };
+  return {
+    questionId,
+    contextType,
+    contextId,
+    reactionType,
+    customMessage,
+    includeSubmittedAnswer,
+  };
 }
 
 async function resolveRecipient(body: ReactionBody, senderUserId: string): Promise<string | null> {
@@ -72,7 +89,12 @@ async function resolveRecipient(body: ReactionBody, senderUserId: string): Promi
   const [recipient] = await db
     .select({ id: joshingGameRecipients.id })
     .from(joshingGameRecipients)
-    .where(and(eq(joshingGameRecipients.gameId, body.contextId), eq(joshingGameRecipients.userId, senderUserId)))
+    .where(
+      and(
+        eq(joshingGameRecipients.gameId, body.contextId),
+        eq(joshingGameRecipients.userId, senderUserId),
+      ),
+    )
     .limit(1);
 
   if (!recipient && game.creatorId !== senderUserId) return null;
@@ -80,7 +102,12 @@ async function resolveRecipient(body: ReactionBody, senderUserId: string): Promi
   const [gameQuestion] = await db
     .select({ id: joshingGameQuestions.id })
     .from(joshingGameQuestions)
-    .where(and(eq(joshingGameQuestions.gameId, body.contextId), eq(joshingGameQuestions.questionId, body.questionId)))
+    .where(
+      and(
+        eq(joshingGameQuestions.gameId, body.contextId),
+        eq(joshingGameQuestions.questionId, body.questionId),
+      ),
+    )
     .limit(1);
   if (!gameQuestion) return null;
 
@@ -93,13 +120,19 @@ export async function POST(request: NextRequest) {
 
   const body = parseBody(await request.json().catch(() => null));
   if (!body) {
-    return NextResponse.json({ error: 'validation', message: 'Invalid reaction payload.' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'Invalid reaction payload.' },
+      { status: 400 },
+    );
   }
 
   const recipientUserId = await resolveRecipient(body, session.userId);
   if (!recipientUserId) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   if (recipientUserId === session.userId) {
-    return NextResponse.json({ error: 'self_reaction', message: 'You cannot react to your own question.' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'self_reaction', message: 'You cannot react to your own question.' },
+      { status: 400 },
+    );
   }
 
   const created = await createReaction({

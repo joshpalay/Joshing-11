@@ -58,9 +58,7 @@ const beat4Schema = z.object({
 
 const beat5Schema = z.object({
   totalCreatorPoints: z.number(),
-  topQuestion: z
-    .object({ text: z.string(), answeredCount: z.number() })
-    .nullable(),
+  topQuestion: z.object({ text: z.string(), answeredCount: z.number() }).nullable(),
 });
 
 // Friend-fallback shapes: when a user has zero activity for Beat1/Beat5 in the
@@ -157,7 +155,12 @@ function endExclusive(cycleEnd: Date): Date {
   return end;
 }
 
-function domainFor(question: Pick<typeof questions.$inferSelect, 'canonicalSubcategory' | 'broadCategory' | 'category'>): string | null {
+function domainFor(
+  question: Pick<
+    typeof questions.$inferSelect,
+    'canonicalSubcategory' | 'broadCategory' | 'category'
+  >,
+): string | null {
   return question.canonicalSubcategory || question.broadCategory || question.category || null;
 }
 
@@ -166,19 +169,25 @@ function previousTier(tier: MasteryTier): MasteryTier {
   return TIER_ORDER[Math.max(0, index - 1)] ?? 'establishing';
 }
 
-async function computeBeat1(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Beat1Mastered | null> {
+async function computeBeat1(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+): Promise<Beat1Mastered | null> {
   const rows = await db
     .select({
       domain: playerMastery.canonicalSubcategory,
       toTier: playerMastery.tier,
     })
     .from(playerMastery)
-    .where(and(
-      eq(playerMastery.userId, userId),
-      isNotNull(playerMastery.tierReachedAt),
-      gte(playerMastery.tierReachedAt, cycleStart),
-      lt(playerMastery.tierReachedAt, cycleEndExclusive),
-    ))
+    .where(
+      and(
+        eq(playerMastery.userId, userId),
+        isNotNull(playerMastery.tierReachedAt),
+        gte(playerMastery.tierReachedAt, cycleStart),
+        lt(playerMastery.tierReachedAt, cycleEndExclusive),
+      ),
+    )
     .orderBy(desc(playerMastery.tierReachedAt));
 
   if (rows.length === 0) return null;
@@ -189,71 +198,93 @@ async function computeBeat1(userId: string, cycleStart: Date, cycleEndExclusive:
   }));
 }
 
-async function readCorrectQuestionIds(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Set<string>> {
+async function readCorrectQuestionIds(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+): Promise<Set<string>> {
   const rows = await db
     .select({ questionId: masteryEvents.questionId })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.answeredByUserId, userId),
-      eq(masteryEvents.sourceType, 'live_correct'),
-      isNotNull(masteryEvents.questionId),
-      gte(masteryEvents.createdAt, cycleStart),
-      lt(masteryEvents.createdAt, cycleEndExclusive),
-      sql`${masteryEvents.awardedPoints} > 0`,
-    ));
+    .where(
+      and(
+        eq(masteryEvents.answeredByUserId, userId),
+        eq(masteryEvents.sourceType, 'live_correct'),
+        isNotNull(masteryEvents.questionId),
+        gte(masteryEvents.createdAt, cycleStart),
+        lt(masteryEvents.createdAt, cycleEndExclusive),
+        sql`${masteryEvents.awardedPoints} > 0`,
+      ),
+    );
 
   return new Set(rows.map((row) => row.questionId).filter((id): id is string => Boolean(id)));
 }
 
-async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Beat2Discovered | null> {
+async function computeBeat2(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+): Promise<Beat2Discovered | null> {
   const interests = await db
     .select({ domain: declaredInterests.domain })
     .from(declaredInterests)
     .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
   const declaredDomains = new Set(interests.map((interest) => interest.domain));
 
-  const [gameAnswers, feedAnswers, correctQuestionIds, authoredDeclared, promotedRows] = await Promise.all([
-    db
-      .select({ question: questions, isCorrect: joshingGameResponses.isCorrect })
-      .from(joshingGameResponses)
-      .innerJoin(questions, eq(joshingGameResponses.questionId, questions.id))
-      .where(and(
-        eq(joshingGameResponses.userId, userId),
-        gte(joshingGameResponses.answeredAt, cycleStart),
-        lt(joshingGameResponses.answeredAt, cycleEndExclusive),
-      )),
-    db
-      .select({ question: questions })
-      .from(feedItems)
-      .innerJoin(questions, eq(feedItems.questionId, questions.id))
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        eq(feedItems.state, 'answered'),
-        gte(feedItems.sourceEventAt, cycleStart),
-        lt(feedItems.sourceEventAt, cycleEndExclusive),
-      )),
-    readCorrectQuestionIds(userId, cycleStart, cycleEndExclusive),
-    db
-      .select({ domain: playerMastery.canonicalSubcategory })
-      .from(playerMastery)
-      .where(and(
-        eq(playerMastery.userId, userId),
-        eq(playerMastery.territoryType, 'declared'),
-        gte(playerMastery.updatedAt, cycleStart),
-        lt(playerMastery.updatedAt, cycleEndExclusive),
-      )),
-    db
-      .select({ domain: masteryEvents.canonicalSubcategory })
-      .from(masteryEvents)
-      .where(and(
-        eq(masteryEvents.userId, userId),
-        eq(masteryEvents.sourceType, 'declared_promoted'),
-        gte(masteryEvents.createdAt, cycleStart),
-        lt(masteryEvents.createdAt, cycleEndExclusive),
-      )),
-  ]);
+  const [gameAnswers, feedAnswers, correctQuestionIds, authoredDeclared, promotedRows] =
+    await Promise.all([
+      db
+        .select({ question: questions, isCorrect: joshingGameResponses.isCorrect })
+        .from(joshingGameResponses)
+        .innerJoin(questions, eq(joshingGameResponses.questionId, questions.id))
+        .where(
+          and(
+            eq(joshingGameResponses.userId, userId),
+            gte(joshingGameResponses.answeredAt, cycleStart),
+            lt(joshingGameResponses.answeredAt, cycleEndExclusive),
+          ),
+        ),
+      db
+        .select({ question: questions })
+        .from(feedItems)
+        .innerJoin(questions, eq(feedItems.questionId, questions.id))
+        .where(
+          and(
+            eq(feedItems.recipientUserId, userId),
+            eq(feedItems.state, 'answered'),
+            gte(feedItems.sourceEventAt, cycleStart),
+            lt(feedItems.sourceEventAt, cycleEndExclusive),
+          ),
+        ),
+      readCorrectQuestionIds(userId, cycleStart, cycleEndExclusive),
+      db
+        .select({ domain: playerMastery.canonicalSubcategory })
+        .from(playerMastery)
+        .where(
+          and(
+            eq(playerMastery.userId, userId),
+            eq(playerMastery.territoryType, 'declared'),
+            gte(playerMastery.updatedAt, cycleStart),
+            lt(playerMastery.updatedAt, cycleEndExclusive),
+          ),
+        ),
+      db
+        .select({ domain: masteryEvents.canonicalSubcategory })
+        .from(masteryEvents)
+        .where(
+          and(
+            eq(masteryEvents.userId, userId),
+            eq(masteryEvents.sourceType, 'declared_promoted'),
+            gte(masteryEvents.createdAt, cycleStart),
+            lt(masteryEvents.createdAt, cycleEndExclusive),
+          ),
+        ),
+    ]);
 
-  const byDomain = new Map<string, { domain: string; questionCount: number; correctCount: number }>();
+  const byDomain = new Map<
+    string,
+    { domain: string; questionCount: number; correctCount: number }
+  >();
   const add = (domain: string, correct: boolean) => {
     if (declaredDomains.has(domain)) return;
     const current = byDomain.get(domain) ?? { domain, questionCount: 0, correctCount: 0 };
@@ -271,45 +302,63 @@ async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive:
     if (domain) add(domain, correctQuestionIds.has(row.question.id));
   });
 
-  const friendMediated = [...byDomain.values()].sort((a, b) => b.questionCount - a.questionCount || a.domain.localeCompare(b.domain));
+  const friendMediated = [...byDomain.values()].sort(
+    (a, b) => b.questionCount - a.questionCount || a.domain.localeCompare(b.domain),
+  );
 
   const seenAuthored = new Set<string>();
   const authored = authoredDeclared
     .map((row) => ({ domain: row.domain }))
-    .filter((row) => { if (seenAuthored.has(row.domain)) return false; seenAuthored.add(row.domain); return true; });
+    .filter((row) => {
+      if (seenAuthored.has(row.domain)) return false;
+      seenAuthored.add(row.domain);
+      return true;
+    });
 
   const seenPromoted = new Set<string>();
   const promoted = promotedRows
     .map((row) => ({ domain: row.domain }))
-    .filter((row) => { if (seenPromoted.has(row.domain)) return false; seenPromoted.add(row.domain); return true; });
+    .filter((row) => {
+      if (seenPromoted.has(row.domain)) return false;
+      seenPromoted.add(row.domain);
+      return true;
+    });
 
   if (friendMediated.length === 0 && authored.length === 0 && promoted.length === 0) return null;
   return { friendMediated, authored, promoted };
 }
 
-async function computeBeat3(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Beat3Shaped | null> {
+async function computeBeat3(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+): Promise<Beat3Shaped | null> {
   const [gameRows, feedRows, correctQuestionIds] = await Promise.all([
     db
       .select({ contributorId: questions.creatorId, questionId: questions.id })
       .from(joshingGameResponses)
       .innerJoin(questions, eq(joshingGameResponses.questionId, questions.id))
-      .where(and(
-        eq(joshingGameResponses.userId, userId),
-        eq(joshingGameResponses.isCorrect, true),
-        gte(joshingGameResponses.answeredAt, cycleStart),
-        lt(joshingGameResponses.answeredAt, cycleEndExclusive),
-        ne(questions.creatorId, userId),
-      )),
+      .where(
+        and(
+          eq(joshingGameResponses.userId, userId),
+          eq(joshingGameResponses.isCorrect, true),
+          gte(joshingGameResponses.answeredAt, cycleStart),
+          lt(joshingGameResponses.answeredAt, cycleEndExclusive),
+          ne(questions.creatorId, userId),
+        ),
+      ),
     db
       .select({ contributorId: feedItems.sourceUserId, questionId: feedItems.questionId })
       .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        eq(feedItems.state, 'answered'),
-        ne(feedItems.sourceUserId, userId),
-        gte(feedItems.sourceEventAt, cycleStart),
-        lt(feedItems.sourceEventAt, cycleEndExclusive),
-      )),
+      .where(
+        and(
+          eq(feedItems.recipientUserId, userId),
+          eq(feedItems.state, 'answered'),
+          ne(feedItems.sourceUserId, userId),
+          gte(feedItems.sourceEventAt, cycleStart),
+          lt(feedItems.sourceEventAt, cycleEndExclusive),
+        ),
+      ),
     readCorrectQuestionIds(userId, cycleStart, cycleEndExclusive),
   ]);
 
@@ -333,7 +382,9 @@ async function computeBeat3(userId: string, cycleStart: Date, cycleEndExclusive:
     .select({ id: users.id, displayName: users.displayName })
     .from(users)
     .where(inArray(users.id, topIds));
-  const nameById = new Map(userRows.map((user) => [user.id, user.displayName?.trim() || 'Someone']));
+  const nameById = new Map(
+    userRows.map((user) => [user.id, user.displayName?.trim() || 'Someone']),
+  );
 
   return topIds.map((id) => ({
     userId: id,
@@ -342,7 +393,11 @@ async function computeBeat3(userId: string, cycleStart: Date, cycleEndExclusive:
   }));
 }
 
-async function computeBeat4(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Beat4Alignment | null> {
+async function computeBeat4(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+): Promise<Beat4Alignment | null> {
   const friends = await getFriends(userId);
   const friendIds = new Set(friends.map((friend) => friend.id));
   if (friendIds.size === 0) return null;
@@ -352,12 +407,14 @@ async function computeBeat4(userId: string, cycleStart: Date, cycleEndExclusive:
   const activeFriendRows = await db
     .selectDistinct({ userId: masteryEvents.userId })
     .from(masteryEvents)
-    .where(and(
-      inArray(masteryEvents.userId, [...friendIds]),
-      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-      gte(masteryEvents.createdAt, cycleStart),
-      lt(masteryEvents.createdAt, cycleEndExclusive),
-    ));
+    .where(
+      and(
+        inArray(masteryEvents.userId, [...friendIds]),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        gte(masteryEvents.createdAt, cycleStart),
+        lt(masteryEvents.createdAt, cycleEndExclusive),
+      ),
+    );
   const activeFriendIds = new Set(activeFriendRows.map((r) => r.userId));
   if (activeFriendIds.size === 0) return null;
 
@@ -384,26 +441,42 @@ async function computeBeat4(userId: string, cycleStart: Date, cycleEndExclusive:
     )
     .where(sql`${playerMastery.totalPoints} > 0`);
 
-  const viewerDomains = new Set(rows.filter((row) => row.userId === userId).map((row) => row.domain));
+  const viewerDomains = new Set(
+    rows.filter((row) => row.userId === userId).map((row) => row.domain),
+  );
   if (viewerDomains.size === 0) return null;
 
   const candidates = new Map<string, { displayName: string; sharedDomains: string[] }>();
   rows.forEach((row) => {
-    if (row.userId === userId || !activeFriendIds.has(row.userId) || !viewerDomains.has(row.domain)) return;
+    if (row.userId === userId || !activeFriendIds.has(row.userId) || !viewerDomains.has(row.domain))
+      return;
     // A friend marked this domain private — do not surface it to anyone
     // else's ceremony, even if both share points there.
     if (row.visibility === 'private') return;
-    const current = candidates.get(row.userId) ?? { displayName: row.displayName?.trim() || 'Someone', sharedDomains: [] };
+    const current = candidates.get(row.userId) ?? {
+      displayName: row.displayName?.trim() || 'Someone',
+      sharedDomains: [],
+    };
     current.sharedDomains.push(row.domain);
     candidates.set(row.userId, current);
   });
 
-  const [best] = [...candidates.entries()].sort((a, b) => b[1].sharedDomains.length - a[1].sharedDomains.length);
+  const [best] = [...candidates.entries()].sort(
+    (a, b) => b[1].sharedDomains.length - a[1].sharedDomains.length,
+  );
   if (!best || best[1].sharedDomains.length === 0) return null;
-  return { userId: best[0], displayName: best[1].displayName, sharedDomains: best[1].sharedDomains.sort() };
+  return {
+    userId: best[0],
+    displayName: best[1].displayName,
+    sharedDomains: best[1].sharedDomains.sort(),
+  };
 }
 
-async function computeBeat5(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Beat5Gave | null> {
+async function computeBeat5(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+): Promise<Beat5Gave | null> {
   const rows = await db
     .select({
       questionId: masteryEvents.questionId,
@@ -412,16 +485,19 @@ async function computeBeat5(userId: string, cycleStart: Date, cycleEndExclusive:
     })
     .from(masteryEvents)
     .leftJoin(questions, eq(masteryEvents.questionId, questions.id))
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.sourceType, 'author_credit'),
-      ne(masteryEvents.answeredByUserId, userId),
-      gte(masteryEvents.createdAt, cycleStart),
-      lt(masteryEvents.createdAt, cycleEndExclusive),
-    ));
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        eq(masteryEvents.sourceType, 'author_credit'),
+        ne(masteryEvents.answeredByUserId, userId),
+        gte(masteryEvents.createdAt, cycleStart),
+        lt(masteryEvents.createdAt, cycleEndExclusive),
+      ),
+    );
 
   if (rows.length === 0) return null;
-  const totalCreatorPoints = Math.round(rows.reduce((sum, row) => sum + Number(row.awardedPoints ?? 0), 0) * 10) / 10;
+  const totalCreatorPoints =
+    Math.round(rows.reduce((sum, row) => sum + Number(row.awardedPoints ?? 0), 0) * 10) / 10;
   const byQuestion = new Map<string, { text: string; answeredCount: number }>();
   rows.forEach((row) => {
     if (!row.questionId || !row.questionText) return;
@@ -465,12 +541,14 @@ async function computeBeat1FriendFallback(
         eq(profileDomainVisibility.canonicalSubcategory, playerMastery.canonicalSubcategory),
       ),
     )
-    .where(and(
-      inArray(playerMastery.userId, friendIds),
-      isNotNull(playerMastery.tierReachedAt),
-      gte(playerMastery.tierReachedAt, cycleStart),
-      lt(playerMastery.tierReachedAt, cycleEndExclusive),
-    ));
+    .where(
+      and(
+        inArray(playerMastery.userId, friendIds),
+        isNotNull(playerMastery.tierReachedAt),
+        gte(playerMastery.tierReachedAt, cycleStart),
+        lt(playerMastery.tierReachedAt, cycleEndExclusive),
+      ),
+    );
 
   const byFriend = new Map<string, { friendName: string; domains: string[] }>();
   rows.forEach((row) => {
@@ -511,13 +589,15 @@ async function computeBeat5FriendFallback(
     })
     .from(masteryEvents)
     .innerJoin(users, eq(masteryEvents.userId, users.id))
-    .where(and(
-      inArray(masteryEvents.userId, friendIds),
-      eq(masteryEvents.sourceType, 'author_credit'),
-      ne(masteryEvents.answeredByUserId, masteryEvents.userId),
-      gte(masteryEvents.createdAt, cycleStart),
-      lt(masteryEvents.createdAt, cycleEndExclusive),
-    ));
+    .where(
+      and(
+        inArray(masteryEvents.userId, friendIds),
+        eq(masteryEvents.sourceType, 'author_credit'),
+        ne(masteryEvents.answeredByUserId, masteryEvents.userId),
+        gte(masteryEvents.createdAt, cycleStart),
+        lt(masteryEvents.createdAt, cycleEndExclusive),
+      ),
+    );
 
   const byFriend = new Map<string, { friendName: string; total: number }>();
   rows.forEach((row) => {
@@ -553,17 +633,23 @@ async function countActiveAnsweringPlayers(
   const rows = await db
     .selectDistinct({ userId: masteryEvents.userId })
     .from(masteryEvents)
-    .where(and(
-      inArray(masteryEvents.userId, friendIds),
-      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-      gte(masteryEvents.createdAt, cycleStart),
-      lt(masteryEvents.createdAt, cycleEndExclusive),
-    ));
+    .where(
+      and(
+        inArray(masteryEvents.userId, friendIds),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        gte(masteryEvents.createdAt, cycleStart),
+        lt(masteryEvents.createdAt, cycleEndExclusive),
+      ),
+    );
 
   return rows.length + 1;
 }
 
-export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: Date): Promise<BeatsPayload> {
+export async function computeBeats(
+  userId: string,
+  cycleStart: Date,
+  cycleEnd: Date,
+): Promise<BeatsPayload> {
   const cycleEndExclusive = endExclusive(cycleEnd);
   const [beat1, beat2, beat3, beat4, beat5, activeAnsweringPlayers] = await Promise.all([
     computeBeat1(userId, cycleStart, cycleEndExclusive),
@@ -578,8 +664,12 @@ export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: D
   // in the cycle; avoids the extra queries (and the awkward "your friend did X
   // and so did you" double-render) when the primary beat is present.
   const [beat1FriendFallback, beat5FriendFallback] = await Promise.all([
-    beat1 ? Promise.resolve(null) : computeBeat1FriendFallback(userId, cycleStart, cycleEndExclusive),
-    beat5 ? Promise.resolve(null) : computeBeat5FriendFallback(userId, cycleStart, cycleEndExclusive),
+    beat1
+      ? Promise.resolve(null)
+      : computeBeat1FriendFallback(userId, cycleStart, cycleEndExclusive),
+    beat5
+      ? Promise.resolve(null)
+      : computeBeat5FriendFallback(userId, cycleStart, cycleEndExclusive),
   ]);
 
   const mode = ceremonyModeFromAnsweringCount(activeAnsweringPlayers);

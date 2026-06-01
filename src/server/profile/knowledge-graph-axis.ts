@@ -7,5 +7,5 @@ export function getAxisPosition(masteryPoints: number): number {
   const tierIndex = TIER_ORDER.indexOf(tier);
   const bandFloor = tierIndex * 0.25;
   const bandWidth = 0.25;
-  return bandFloor + (progressWithinTier * bandWidth);
+  return bandFloor + progressWithinTier * bandWidth;
 }

@@ -1,8 +1,8 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ButtonHTMLAttributes } from 'react';
 
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils';
 
-type FeedActionLinkProps = ButtonHTMLAttributes<HTMLButtonElement>
+type FeedActionLinkProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
 /**
  * The feed's primary inline action (Answer → / Try again → / Recheck →).
@@ -20,11 +20,11 @@ export function FeedActionLink({ className, type, ...props }: FeedActionLinkProp
       className={cn(
         'inline-flex min-h-11 items-center font-serif text-[18px] font-semibold tracking-[0.05em] text-[var(--brand-link)] underline underline-offset-4 transition',
         'hover:opacity-70 active:opacity-90',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-card)]',
+        'focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-card)] focus-visible:outline-none',
         'disabled:pointer-events-none disabled:opacity-60',
         className,
       )}
       {...props}
     />
-  )
+  );
 }

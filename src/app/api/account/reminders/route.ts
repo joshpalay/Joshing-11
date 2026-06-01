@@ -2,10 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
-import {
-  getReminderState,
-  updateReminderPreferences,
-} from '@/server/db/queries/account';
+import { getReminderState, updateReminderPreferences } from '@/server/db/queries/account';
 
 export const dynamic = 'force-dynamic';
 

@@ -74,13 +74,18 @@ Reformulations should preserve the author's apparent intent while fixing the iss
   try {
     // loggedMessagesCreate enforces the timeout via AbortSignal — no more
     // Promise.race + setTimeout (which leaked a timer on the success path).
-    const response = await loggedMessagesCreate(client, 'critique', {
-      model: ANTHROPIC_MODEL,
-      max_tokens: 700,
-      temperature: 0.2,
-      system: `Return only valid JSON. No markdown or prose outside JSON.${INSTRUCTION_USER_INPUT_GUIDANCE}`,
-      messages: [{ role: 'user', content: prompt }],
-    }, { timeoutMs: CRITIQUE_TIMEOUT_MS });
+    const response = await loggedMessagesCreate(
+      client,
+      'critique',
+      {
+        model: ANTHROPIC_MODEL,
+        max_tokens: 700,
+        temperature: 0.2,
+        system: `Return only valid JSON. No markdown or prose outside JSON.${INSTRUCTION_USER_INPUT_GUIDANCE}`,
+        messages: [{ role: 'user', content: prompt }],
+      },
+      { timeoutMs: CRITIQUE_TIMEOUT_MS },
+    );
     const rawText = extractTextContent(response.content);
     const result = parseCritique(rawText);
     console.info('[llm/critique] completed', { input: questionText, output: result });

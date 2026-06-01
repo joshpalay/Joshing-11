@@ -15,63 +15,65 @@ export type User = typeof users.$inferSelect;
 export type Friendship = typeof friendships.$inferSelect;
 
 export type FriendHubFriend = {
-  id: string
-  displayName: string
-  declaredInterests: string[]
-  sharedInterests: string[]
-  lastActiveAt: Date | null
-}
+  id: string;
+  displayName: string;
+  declaredInterests: string[];
+  sharedInterests: string[];
+  lastActiveAt: Date | null;
+};
 
 export type IncomingFriendRequest = {
-  id: string
-  requesterId: string
-  requesterName: string
-  suggestedInterests: string[]
-  personalNote: string | null
-  createdAt: Date
-}
+  id: string;
+  requesterId: string;
+  requesterName: string;
+  suggestedInterests: string[];
+  personalNote: string | null;
+  createdAt: Date;
+};
 
 export type OutboundFriendRequest = {
-  id: string
-  recipientId: string
-  recipientName: string
-  personalNote: string | null
-  createdAt: Date
-}
+  id: string;
+  recipientId: string;
+  recipientName: string;
+  personalNote: string | null;
+  createdAt: Date;
+};
 
 export type FriendsHub = {
-  friends: FriendHubFriend[]
-  incomingRequests: IncomingFriendRequest[]
-  outboundRequests: OutboundFriendRequest[]
-}
+  friends: FriendHubFriend[];
+  incomingRequests: IncomingFriendRequest[];
+  outboundRequests: OutboundFriendRequest[];
+};
 
 function displayName(name: string | null, fallback: string): string {
-  return name?.trim() || fallback
+  return name?.trim() || fallback;
 }
 
 function normalizeSuggestedInterests(value: unknown): string[] {
-  if (!value || typeof value !== 'object' || !('suggestedInterests' in value)) return []
+  if (!value || typeof value !== 'object' || !('suggestedInterests' in value)) return [];
 
-  const suggestedInterests = (value as { suggestedInterests?: unknown }).suggestedInterests
-  if (!Array.isArray(suggestedInterests)) return []
+  const suggestedInterests = (value as { suggestedInterests?: unknown }).suggestedInterests;
+  if (!Array.isArray(suggestedInterests)) return [];
 
   return suggestedInterests
     .filter((interest): interest is string => typeof interest === 'string')
     .map((interest) => interest.trim())
-    .filter(Boolean)
+    .filter(Boolean);
 }
 
 export async function getFriends(userId: string): Promise<User[]> {
   const rows = await db
     .select({ userAId: friendships.userAId, userBId: friendships.userBId })
     .from(friendships)
-    .where(and(
-      eq(friendships.status, 'active'),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ));
-  const friendIds = rows.map((friendship) => (
-    friendship.userAId === userId ? friendship.userBId : friendship.userAId
-  ));
+    .where(
+      and(
+        eq(friendships.status, 'active'),
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+      ),
+    );
+  const friendIds = rows.map((friendship) =>
+    friendship.userAId === userId ? friendship.userBId : friendship.userAId,
+  );
   if (friendIds.length === 0) return [];
 
   return db
@@ -99,10 +101,12 @@ export async function getRecentDirectSendRecipients(userId: string, limit = 3): 
   const recentRows = await db
     .select({ recipientUserId: feedItems.recipientUserId })
     .from(feedItems)
-    .where(and(
-      eq(feedItems.sourceUserId, userId),
-      eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
-    ))
+    .where(
+      and(
+        eq(feedItems.sourceUserId, userId),
+        eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
+      ),
+    )
     .orderBy(desc(feedItems.sourceEventAt))
     .limit(50);
 
@@ -133,7 +137,7 @@ export async function getRecentDirectSendRecipients(userId: string, limit = 3): 
 // user did something, and together they survive when only one is present
 // (e.g. an authored question earns mastery without an answeredAt row).
 async function getLastActiveByUserId(userIds: string[]): Promise<Map<string, Date>> {
-  if (userIds.length === 0) return new Map()
+  if (userIds.length === 0) return new Map();
 
   const [responseRows, masteryRows] = await Promise.all([
     db
@@ -142,10 +146,12 @@ async function getLastActiveByUserId(userIds: string[]): Promise<Map<string, Dat
         lastAt: sql<Date>`max(${joshingGameResponses.answeredAt})`.as('last_at'),
       })
       .from(joshingGameResponses)
-      .where(and(
-        inArray(joshingGameResponses.userId, userIds),
-        sql`${joshingGameResponses.answeredAt} is not null`,
-      ))
+      .where(
+        and(
+          inArray(joshingGameResponses.userId, userIds),
+          sql`${joshingGameResponses.answeredAt} is not null`,
+        ),
+      )
       .groupBy(joshingGameResponses.userId),
     db
       .select({
@@ -155,67 +161,72 @@ async function getLastActiveByUserId(userIds: string[]): Promise<Map<string, Dat
       .from(masteryEvents)
       .where(inArray(masteryEvents.userId, userIds))
       .groupBy(masteryEvents.userId),
-  ])
+  ]);
 
-  const lastActive = new Map<string, Date>()
+  const lastActive = new Map<string, Date>();
   for (const row of [...responseRows, ...masteryRows]) {
-    if (!row.lastAt) continue
-    const next = row.lastAt instanceof Date ? row.lastAt : new Date(row.lastAt)
-    if (Number.isNaN(next.getTime())) continue
-    const existing = lastActive.get(row.userId)
-    if (!existing || next > existing) lastActive.set(row.userId, next)
+    if (!row.lastAt) continue;
+    const next = row.lastAt instanceof Date ? row.lastAt : new Date(row.lastAt);
+    if (Number.isNaN(next.getTime())) continue;
+    const existing = lastActive.get(row.userId);
+    if (!existing || next > existing) lastActive.set(row.userId, next);
   }
-  return lastActive
+  return lastActive;
 }
 
 export async function getFriendsHub(userId: string): Promise<FriendsHub> {
   const activeFriendships = await db
     .select({ userAId: friendships.userAId, userBId: friendships.userBId })
     .from(friendships)
-    .where(and(
-      eq(friendships.status, 'active'),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ))
+    .where(
+      and(
+        eq(friendships.status, 'active'),
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+      ),
+    );
 
-  const friendIds = activeFriendships.map((friendship) => (
-    friendship.userAId === userId ? friendship.userBId : friendship.userAId
-  ))
+  const friendIds = activeFriendships.map((friendship) =>
+    friendship.userAId === userId ? friendship.userBId : friendship.userAId,
+  );
 
-  const friendRows = friendIds.length === 0
-    ? []
-    : await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        phoneNumber: users.phoneNumber,
-      })
-      .from(users)
-      .where(inArray(users.id, friendIds))
-      .orderBy(asc(users.displayName), asc(users.phoneNumber))
+  const friendRows =
+    friendIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: users.id,
+            displayName: users.displayName,
+            phoneNumber: users.phoneNumber,
+          })
+          .from(users)
+          .where(inArray(users.id, friendIds))
+          .orderBy(asc(users.displayName), asc(users.phoneNumber));
 
-  const interestRows = friendIds.length === 0
-    ? []
-    : await db
-      .select({ userId: declaredInterests.userId, domain: declaredInterests.domain })
-      .from(declaredInterests)
-      .where(and(
-        eq(declaredInterests.isActive, true),
-        inArray(declaredInterests.userId, [userId, ...friendIds]),
-      ))
-      .orderBy(asc(declaredInterests.domain))
+  const interestRows =
+    friendIds.length === 0
+      ? []
+      : await db
+          .select({ userId: declaredInterests.userId, domain: declaredInterests.domain })
+          .from(declaredInterests)
+          .where(
+            and(
+              eq(declaredInterests.isActive, true),
+              inArray(declaredInterests.userId, [userId, ...friendIds]),
+            ),
+          )
+          .orderBy(asc(declaredInterests.domain));
 
-  const interestsByUser = new Map<string, string[]>()
+  const interestsByUser = new Map<string, string[]>();
   for (const row of interestRows) {
-    const current = interestsByUser.get(row.userId) ?? []
-    current.push(row.domain)
-    interestsByUser.set(row.userId, current)
+    const current = interestsByUser.get(row.userId) ?? [];
+    current.push(row.domain);
+    interestsByUser.set(row.userId, current);
   }
 
-  const viewerInterests = new Set(interestsByUser.get(userId) ?? [])
+  const viewerInterests = new Set(interestsByUser.get(userId) ?? []);
 
-  const lastActiveByUser = friendIds.length === 0
-    ? new Map<string, Date>()
-    : await getLastActiveByUserId(friendIds)
+  const lastActiveByUser =
+    friendIds.length === 0 ? new Map<string, Date>() : await getLastActiveByUserId(friendIds);
 
   const incomingRows = await db
     .select({
@@ -229,12 +240,14 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
     })
     .from(friendships)
     .innerJoin(users, eq(users.id, friendships.requestedByUserId))
-    .where(and(
-      eq(friendships.status, 'pending'),
-      ne(friendships.requestedByUserId, userId),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ))
-    .orderBy(asc(friendships.createdAt))
+    .where(
+      and(
+        eq(friendships.status, 'pending'),
+        ne(friendships.requestedByUserId, userId),
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+      ),
+    )
+    .orderBy(asc(friendships.createdAt));
 
   const outboundRows = await db
     .select({
@@ -245,40 +258,43 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
       createdAt: friendships.createdAt,
     })
     .from(friendships)
-    .where(and(
-      eq(friendships.status, 'pending'),
-      eq(friendships.requestedByUserId, userId),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ))
-    .orderBy(desc(friendships.createdAt))
+    .where(
+      and(
+        eq(friendships.status, 'pending'),
+        eq(friendships.requestedByUserId, userId),
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+      ),
+    )
+    .orderBy(desc(friendships.createdAt));
 
-  const outboundRecipientIds = outboundRows.map((row) => (
-    row.recipientUserAId === userId ? row.recipientUserBId : row.recipientUserAId
-  ))
+  const outboundRecipientIds = outboundRows.map((row) =>
+    row.recipientUserAId === userId ? row.recipientUserBId : row.recipientUserAId,
+  );
 
-  const outboundRecipients = outboundRecipientIds.length === 0
-    ? []
-    : await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        phoneNumber: users.phoneNumber,
-      })
-      .from(users)
-      .where(inArray(users.id, outboundRecipientIds))
+  const outboundRecipients =
+    outboundRecipientIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: users.id,
+            displayName: users.displayName,
+            phoneNumber: users.phoneNumber,
+          })
+          .from(users)
+          .where(inArray(users.id, outboundRecipientIds));
 
-  const outboundRecipientById = new Map(outboundRecipients.map((row) => [row.id, row] as const))
+  const outboundRecipientById = new Map(outboundRecipients.map((row) => [row.id, row] as const));
 
   return {
     friends: friendRows.map((friend) => {
-      const friendInterests = interestsByUser.get(friend.id) ?? []
+      const friendInterests = interestsByUser.get(friend.id) ?? [];
       return {
         id: friend.id,
         displayName: displayName(friend.displayName, friend.phoneNumber),
         declaredInterests: friendInterests,
         sharedInterests: friendInterests.filter((interest) => viewerInterests.has(interest)),
         lastActiveAt: lastActiveByUser.get(friend.id) ?? null,
-      }
+      };
     }),
     incomingRequests: incomingRows.map((request) => ({
       id: request.id,
@@ -290,29 +306,32 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
     })),
     outboundRequests: outboundRows
       .map((row) => {
-        const recipientId = row.recipientUserAId === userId ? row.recipientUserBId : row.recipientUserAId
-        const recipient = outboundRecipientById.get(recipientId)
-        if (!recipient) return null
+        const recipientId =
+          row.recipientUserAId === userId ? row.recipientUserBId : row.recipientUserAId;
+        const recipient = outboundRecipientById.get(recipientId);
+        if (!recipient) return null;
         return {
           id: row.id,
           recipientId,
           recipientName: displayName(recipient.displayName, recipient.phoneNumber),
           personalNote: row.personalNote,
           createdAt: row.createdAt,
-        }
+        };
       })
       .filter((row): row is OutboundFriendRequest => row !== null),
-  }
+  };
 }
 
 export async function getFriendship(userAId: string, userBId: string): Promise<Friendship | null> {
   const [friendship] = await db
     .select()
     .from(friendships)
-    .where(or(
-      and(eq(friendships.userAId, userAId), eq(friendships.userBId, userBId)),
-      and(eq(friendships.userAId, userBId), eq(friendships.userBId, userAId)),
-    ))
+    .where(
+      or(
+        and(eq(friendships.userAId, userAId), eq(friendships.userBId, userBId)),
+        and(eq(friendships.userAId, userBId), eq(friendships.userBId, userAId)),
+      ),
+    )
     .limit(1);
 
   return friendship ?? null;
@@ -343,10 +362,12 @@ export async function getFriendAndFoFUserIds(userId: string): Promise<{
   const directRows = await db
     .select({ userAId: friendships.userAId, userBId: friendships.userBId })
     .from(friendships)
-    .where(and(
-      eq(friendships.status, 'active'),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ));
+    .where(
+      and(
+        eq(friendships.status, 'active'),
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+      ),
+    );
 
   const direct = new Set<string>();
   for (const row of directRows) {
@@ -362,13 +383,12 @@ export async function getFriendAndFoFUserIds(userId: string): Promise<{
   const fofRows = await db
     .select({ userAId: friendships.userAId, userBId: friendships.userBId })
     .from(friendships)
-    .where(and(
-      eq(friendships.status, 'active'),
-      or(
-        inArray(friendships.userAId, directList),
-        inArray(friendships.userBId, directList),
+    .where(
+      and(
+        eq(friendships.status, 'active'),
+        or(inArray(friendships.userAId, directList), inArray(friendships.userBId, directList)),
       ),
-    ));
+    );
 
   const extended = new Set<string>();
   for (const row of fofRows) {

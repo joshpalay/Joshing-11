@@ -4,7 +4,11 @@ import { parseAnswerRecheck } from '@/server/llm/recheck';
 
 describe('answer recheck parser', () => {
   it('parses accepted appeals and normalizes accepted alternative text', () => {
-    expect(parseAnswerRecheck('{"decision":"accept","confidence":0.91,"reason":"That is an equivalent title.","accepted_alternative":"Eroica"}')).toEqual({
+    expect(
+      parseAnswerRecheck(
+        '{"decision":"accept","confidence":0.91,"reason":"That is an equivalent title.","accepted_alternative":"Eroica"}',
+      ),
+    ).toEqual({
       decision: 'accept',
       confidence: 0.91,
       reason: 'That is an equivalent title.',

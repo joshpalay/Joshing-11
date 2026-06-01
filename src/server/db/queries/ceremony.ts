@@ -37,12 +37,9 @@ export async function getCeremonyById(ceremonyId: string): Promise<BiweeklyCerem
  * If Sunday after 08:00 UTC, returns next Sunday.
  */
 export function getNextCeremonyAt(now: Date = new Date()): Date {
-  const next = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-    8, 0, 0, 0,
-  ));
+  const next = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 8, 0, 0, 0),
+  );
   const dayOfWeek = now.getUTCDay();
   if (dayOfWeek === 0) {
     // Sunday: today at 8am if still before, else next Sunday.

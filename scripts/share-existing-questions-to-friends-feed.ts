@@ -51,23 +51,28 @@ function parseQuestionIds(): string[] {
     .map((id) => id.trim())
     .filter(Boolean);
 
-  const fromArgs = process.argv.flatMap((arg, index, args) => {
-    if (arg.startsWith('--question-id=')) return [arg.slice('--question-id='.length).trim()];
-    if (arg === '--question-id') return [args[index + 1]?.trim() ?? ''];
-    return [];
-  }).filter(Boolean);
+  const fromArgs = process.argv
+    .flatMap((arg, index, args) => {
+      if (arg.startsWith('--question-id=')) return [arg.slice('--question-id='.length).trim()];
+      if (arg === '--question-id') return [args[index + 1]?.trim() ?? ''];
+      return [];
+    })
+    .filter(Boolean);
 
   return [...new Set([...fromEnv, ...fromArgs])];
 }
 
 async function getActiveFriendIds(client: PoolClient, userId: string): Promise<string[]> {
-  const { rows } = await client.query<FriendRow>(`
+  const { rows } = await client.query<FriendRow>(
+    `
     SELECT CASE WHEN "userAId" = $1 THEN "userBId" ELSE "userAId" END AS friend_id
     FROM "Friendship"
     WHERE status = 'active'
       AND ($1 IN ("userAId", "userBId"))
     ORDER BY friend_id
-  `, [userId]);
+  `,
+    [userId],
+  );
 
   return rows.map((row) => row.friend_id);
 }
@@ -79,26 +84,36 @@ async function getDismissedRecipientIds(
 ): Promise<Set<string>> {
   if (friendIds.length === 0 || !canonicalSubcategory) return new Set();
 
-  const { rows } = await client.query<{ userId: string }>(`
+  const { rows } = await client.query<{ userId: string }>(
+    `
     SELECT "userId"
     FROM "FeedDismissedDomain"
     WHERE "userId" = ANY($1::text[])
       AND "canonicalSubcategory" = $2
       AND "reinstatedAt" IS NULL
-  `, [friendIds, canonicalSubcategory]);
+  `,
+    [friendIds, canonicalSubcategory],
+  );
 
   return new Set(rows.map((row) => row.userId));
 }
 
-async function hasBlockingFeedItem(client: PoolClient, recipientUserId: string, questionId: string): Promise<boolean> {
-  const { rowCount } = await client.query(`
+async function hasBlockingFeedItem(
+  client: PoolClient,
+  recipientUserId: string,
+  questionId: string,
+): Promise<boolean> {
+  const { rowCount } = await client.query(
+    `
     SELECT 1
     FROM "FeedItem"
     WHERE "recipientUserId" = $1
       AND "questionId" = $2
       AND state = ANY($3::text[])
     LIMIT 1
-  `, [recipientUserId, questionId, BLOCKING_FEED_STATES]);
+  `,
+    [recipientUserId, questionId, BLOCKING_FEED_STATES],
+  );
 
   return Boolean(rowCount);
 }
@@ -124,7 +139,11 @@ async function repairQuestion(client: PoolClient, question: QuestionRow): Promis
   if (invalidReason || !question.creator_id) return result;
 
   const friendIds = await getActiveFriendIds(client, question.creator_id);
-  const dismissedRecipientIds = await getDismissedRecipientIds(client, friendIds, question.canonical_subcategory);
+  const dismissedRecipientIds = await getDismissedRecipientIds(
+    client,
+    friendIds,
+    question.canonical_subcategory,
+  );
   result.friendCount = friendIds.length;
 
   for (const friendId of friendIds) {
@@ -140,22 +159,28 @@ async function repairQuestion(client: PoolClient, question: QuestionRow): Promis
 
     result.createdCount += 1;
     if (!DRY_RUN) {
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO "FeedItem" (
           id, "recipientUserId", "questionId", "sourceType", "sourceUserId", "sourceEventAt", state, "isPinned", "createdAt"
         )
         VALUES (gen_random_uuid()::text, $1, $2, 'authored_shared', $3, now(), 'active', false, now())
-      `, [friendId, question.id, question.creator_id]);
+      `,
+        [friendId, question.id, question.creator_id],
+      );
     }
   }
 
   if (!DRY_RUN && result.createdCount > 0) {
-    await client.query(`
+    await client.query(
+      `
       UPDATE "Question"
       SET "sharedToFriendsFeed" = true,
           updated_at = now()
       WHERE id = $1
-    `, [question.id]);
+    `,
+      [question.id],
+    );
   }
 
   return result;
@@ -169,31 +194,40 @@ async function main() {
     throw new Error('Pass QUESTION_IDS as a comma-separated env var or pass --question-id=<id>.');
   }
 
-  console.log(DRY_RUN ? '[dry-run] No changes will be made. Pass --apply to mutate.' : '[apply] Changes will be written.');
+  console.log(
+    DRY_RUN
+      ? '[dry-run] No changes will be made. Pass --apply to mutate.'
+      : '[apply] Changes will be written.',
+  );
   console.log(`Repairing ${questionIds.length} question(s).`);
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    const { rows: questions } = await pool.query<QuestionRow>(`
+    const { rows: questions } = await pool.query<QuestionRow>(
+      `
       SELECT id, creator_id, question_text, visibility, deleted_at, canonical_subcategory, "sharedToFriendsFeed"
       FROM "Question"
       WHERE id = ANY($1::text[])
       ORDER BY created_at DESC
-    `, [questionIds]);
+    `,
+      [questionIds],
+    );
 
     const foundIds = new Set(questions.map((question) => question.id));
     const missingIds = questionIds.filter((id) => !foundIds.has(id));
     if (missingIds.length > 0) console.warn('Missing question ids:', missingIds);
 
-    console.table(questions.map((question) => ({
-      id: question.id,
-      creator_id: question.creator_id,
-      sharedToFriendsFeed: question.sharedToFriendsFeed,
-      visibility: question.visibility,
-      deleted_at: question.deleted_at,
-      canonical_subcategory: question.canonical_subcategory,
-      question_text: question.question_text,
-    })));
+    console.table(
+      questions.map((question) => ({
+        id: question.id,
+        creator_id: question.creator_id,
+        sharedToFriendsFeed: question.sharedToFriendsFeed,
+        visibility: question.visibility,
+        deleted_at: question.deleted_at,
+        canonical_subcategory: question.canonical_subcategory,
+        question_text: question.question_text,
+      })),
+    );
 
     const results: RepairResult[] = [];
     for (const question of questions) {
@@ -211,17 +245,22 @@ async function main() {
       }
     }
 
-    console.table(results.map((result) => ({
-      questionId: result.questionId,
-      friendCount: result.friendCount,
-      createdCount: result.createdCount,
-      skippedDismissedDomainCount: result.skippedDismissedDomainRecipientIds.length,
-      skippedExistingFeedCount: result.skippedExistingFeedRecipientIds.length,
-      skippedInvalidQuestion: result.skippedInvalidQuestion,
-    })));
+    console.table(
+      results.map((result) => ({
+        questionId: result.questionId,
+        friendCount: result.friendCount,
+        createdCount: result.createdCount,
+        skippedDismissedDomainCount: result.skippedDismissedDomainRecipientIds.length,
+        skippedExistingFeedCount: result.skippedExistingFeedRecipientIds.length,
+        skippedInvalidQuestion: result.skippedInvalidQuestion,
+      })),
+    );
 
     for (const result of results) {
-      if (result.skippedDismissedDomainRecipientIds.length > 0 || result.skippedExistingFeedRecipientIds.length > 0) {
+      if (
+        result.skippedDismissedDomainRecipientIds.length > 0 ||
+        result.skippedExistingFeedRecipientIds.length > 0
+      ) {
         console.log(`Question ${result.questionId} skipped recipient ids:`, {
           skippedDismissedDomainRecipientIds: result.skippedDismissedDomainRecipientIds,
           skippedExistingFeedRecipientIds: result.skippedExistingFeedRecipientIds,

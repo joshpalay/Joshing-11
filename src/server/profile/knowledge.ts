@@ -8,19 +8,28 @@ export async function getKnowledgeOverview(userId: string): Promise<KnowledgeOve
   return null as unknown as KnowledgeOverview;
 }
 
-export async function getDomainDetail(userId: string, domainName: string): Promise<DomainDetail | null> {
+export async function getDomainDetail(
+  userId: string,
+  domainName: string,
+): Promise<DomainDetail | null> {
   // TODO Phase 8: port to Drizzle when friend profiles are built
   void userId;
   void domainName;
   return null;
 }
 
-export async function setDomainVisibility(params: { userId: string; domainName: string; isVisible: boolean }): Promise<void> {
+export async function setDomainVisibility(params: {
+  userId: string;
+  domainName: string;
+  isVisible: boolean;
+}): Promise<void> {
   // TODO Phase 8: port to Drizzle when friend profiles are built
   void params;
 }
 
-export async function getShareableKnowledgeOverview(userId: string): Promise<KnowledgeOverview | null> {
+export async function getShareableKnowledgeOverview(
+  userId: string,
+): Promise<KnowledgeOverview | null> {
   // TODO Phase 8: port to Drizzle when friend profiles are built
   void userId;
   return null;

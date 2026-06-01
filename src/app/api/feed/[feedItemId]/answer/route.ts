@@ -39,11 +39,12 @@ type MasteryTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 function parseBody(value: unknown): { submittedAnswer: string } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const submittedAnswer = typeof record.submitted_answer === 'string'
-    ? record.submitted_answer.trim()
-    : typeof record.answer === 'string'
-      ? record.answer.trim()
-      : null;
+  const submittedAnswer =
+    typeof record.submitted_answer === 'string'
+      ? record.submitted_answer.trim()
+      : typeof record.answer === 'string'
+        ? record.answer.trim()
+        : null;
 
   return submittedAnswer ? { submittedAnswer } : null;
 }
@@ -71,7 +72,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   if (!row) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   if (row.feedItem.state === 'dismissed' || row.feedItem.state === 'rolled_off') {
-    return NextResponse.json({ error: 'invalid_state', message: 'This Feed item is already closed.' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'invalid_state', message: 'This Feed item is already closed.' },
+      { status: 400 },
+    );
   }
   // direct_sent questions are personal asks from a specific friend. A wrong
   // answer keeps the card actionable so the recipient can take another swing
@@ -79,10 +83,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // that were already answered correctly — stay closed once answered.
   if (row.feedItem.state === 'answered') {
     const allowRetry =
-      row.feedItem.sourceType === 'direct_sent'
-      && row.feedItem.answerResult === 'incorrect';
+      row.feedItem.sourceType === 'direct_sent' && row.feedItem.answerResult === 'incorrect';
     if (!allowRetry) {
-      return NextResponse.json({ error: 'invalid_state', message: 'This Feed item is already closed.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'invalid_state', message: 'This Feed item is already closed.' },
+        { status: 400 },
+      );
     }
   }
 
@@ -115,7 +121,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const existingMastery = await db
     .select()
     .from(playerMastery)
-    .where(and(eq(playerMastery.userId, session.userId), eq(playerMastery.canonicalSubcategory, domain)))
+    .where(
+      and(eq(playerMastery.userId, session.userId), eq(playerMastery.canonicalSubcategory, domain)),
+    )
     .limit(1);
 
   const previousTier: MasteryTier = existingMastery[0]?.tier ?? 'establishing';
@@ -217,19 +225,31 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Only correct Feed answers are eligible to become public/social friend Feed cards.
   // Incorrect answers persist privately on this viewer's Feed item as answered_by_you.
   if (isCorrect) {
-    after(() => createFeedItemsForFriendsFromAnswer(
-      session.userId,
-      question.id,
-      'correct',
-      `feed:${feedItemId}:${session.userId}`,
-    ));
+    after(() =>
+      createFeedItemsForFriendsFromAnswer(
+        session.userId,
+        question.id,
+        'correct',
+        `feed:${feedItemId}:${session.userId}`,
+      ),
+    );
   }
 
   const explanation = isCorrect
-    ? (question.explainerFullCorrect ?? question.explainerFull ?? question.explainerBrief ?? question.factualExplanation)
-    : (question.explainerFullWrong ?? question.explainerFull ?? question.explainerBrief ?? question.factualExplanation);
+    ? (question.explainerFullCorrect ??
+      question.explainerFull ??
+      question.explainerBrief ??
+      question.factualExplanation)
+    : (question.explainerFullWrong ??
+      question.explainerFull ??
+      question.explainerBrief ??
+      question.factualExplanation);
 
-  const insideJoke = await selectInsideJokeForViewer(question.insideJoke, question.creatorId, session.userId);
+  const insideJoke = await selectInsideJokeForViewer(
+    question.insideJoke,
+    question.creatorId,
+    session.userId,
+  );
 
   return NextResponse.json({
     isCorrect,

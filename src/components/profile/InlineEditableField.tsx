@@ -113,9 +113,10 @@ export function InlineEditableField({
         credentials: 'include',
         body: JSON.stringify(payload),
       });
-      const body = (await response.json().catch(() => null)) as
-        | { ok?: boolean; message?: string }
-        | null;
+      const body = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        message?: string;
+      } | null;
       if (!response.ok || !body?.ok) {
         throw new Error(body?.message ?? 'Could not save.');
       }
@@ -146,7 +147,7 @@ export function InlineEditableField({
       ref={(el) => {
         inputRef.current = el;
       }}
-      className="min-h-20 w-full resize-y rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-foreground"
+      className="bg-background focus:border-foreground min-h-20 w-full resize-y rounded-md border px-3 py-2 text-base outline-none"
       value={draft}
       maxLength={maxLength}
       placeholder={placeholder}
@@ -167,7 +168,7 @@ export function InlineEditableField({
       ref={(el) => {
         inputRef.current = el;
       }}
-      className="w-full rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-foreground"
+      className="bg-background focus:border-foreground w-full rounded-md border px-3 py-2 text-base outline-none"
       value={draft}
       maxLength={maxLength}
       placeholder={placeholder}
@@ -187,17 +188,17 @@ export function InlineEditableField({
 
   if (editing) {
     return (
-      <div className={variant === 'card' ? 'rounded-xl border bg-card p-4' : ''}>
+      <div className={variant === 'card' ? 'bg-card rounded-xl border p-4' : ''}>
         {variant === 'card' ? (
           <div className="mb-2 flex items-baseline justify-between gap-3">
-            <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="text-muted-foreground text-xs font-medium tracking-[0.08em] uppercase">
               {label}
             </p>
             <SaveStatusIndicator status={status} />
           </div>
         ) : null}
         {InputEl}
-        <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="text-muted-foreground mt-1 flex items-center justify-between text-xs">
           <span>
             {multiline ? '⌘+Enter to save, Esc to cancel' : 'Enter to save, Esc to cancel'}
           </span>
@@ -205,17 +206,17 @@ export function InlineEditableField({
             {draft.length} / {maxLength}
           </span>
         </div>
-        {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+        {error ? <p className="text-destructive mt-1 text-xs">{error}</p> : null}
       </div>
     );
   }
 
   const trimmed = value.trim();
   return (
-    <div className={variant === 'card' ? 'rounded-xl border bg-card p-4' : ''}>
+    <div className={variant === 'card' ? 'bg-card rounded-xl border p-4' : ''}>
       {variant === 'card' ? (
         <div className="mb-2 flex items-baseline justify-between gap-3">
-          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <p className="text-muted-foreground text-xs font-medium tracking-[0.08em] uppercase">
             {label}
           </p>
           <SaveStatusIndicator status={status} />
@@ -224,7 +225,7 @@ export function InlineEditableField({
       <button
         type="button"
         aria-label={`Edit ${label.toLowerCase()}`}
-        className="block w-full rounded-md px-1 py-0.5 text-left hover:bg-muted/40"
+        className="hover:bg-muted/40 block w-full rounded-md px-1 py-0.5 text-left"
         onClick={beginEdit}
       >
         {trimmed.length > 0 ? (
@@ -238,7 +239,7 @@ export function InlineEditableField({
           <SaveStatusIndicator status={status} />
         </div>
       ) : null}
-      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="text-destructive mt-1 text-xs">{error}</p> : null}
     </div>
   );
 }
@@ -246,7 +247,7 @@ export function InlineEditableField({
 function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   if (status === 'saving') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
         <Loader2 className="size-3 animate-spin" />
         Saving…
       </span>

@@ -1,36 +1,36 @@
-import type { ReactNode } from 'react'
-import Link from 'next/link'
+import type { ReactNode } from 'react';
+import Link from 'next/link';
 
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils';
 
-import { visibleFeedCategory } from './category'
-import { FeedActionLink } from './FeedActionLink'
-import { FeedCardShell } from './FeedCardShell'
-import { FeedDismissButton } from './FeedDismissButton'
-import type { FeedCardBaseItem } from './types'
-import { colorForCategory, colorForUser } from './visual'
+import { visibleFeedCategory } from './category';
+import { FeedActionLink } from './FeedActionLink';
+import { FeedCardShell } from './FeedCardShell';
+import { FeedDismissButton } from './FeedDismissButton';
+import type { FeedCardBaseItem } from './types';
+import { colorForCategory, colorForUser } from './visual';
 
 type FeedCardProps = {
-  item: FeedCardBaseItem
-  overflow?: ReactNode
-  onAnswer?: () => void
+  item: FeedCardBaseItem;
+  overflow?: ReactNode;
+  onAnswer?: () => void;
   /** Quiet, secondary dismiss control (bottom-left, opposite Answer). View-state only. */
-  onDismiss?: () => void
-  footer?: ReactNode
-  className?: string
-  headerContent?: ReactNode
+  onDismiss?: () => void;
+  footer?: ReactNode;
+  className?: string;
+  headerContent?: ReactNode;
   /** Contextual verb shown after the name, e.g. "knows", "sent you this". */
-  verb?: string
-  dimQuestion?: boolean
-}
+  verb?: string;
+  dimQuestion?: boolean;
+};
 
 // display/card/update — category line in Cormorant SemiBold (Figma 16/24/0.64px/black).
 function CategoryLine({ category }: { category: string }) {
   return (
-    <p className="font-serif text-[16px] font-semibold leading-[24px] tracking-[0.04em] text-black">
+    <p className="font-serif text-[16px] leading-[24px] font-semibold tracking-[0.04em] text-black">
       {category}
     </p>
-  )
+  );
 }
 
 // display/card/question — the focal serif question (Figma Cormorant SemiBold 24/32/1.2px).
@@ -38,7 +38,7 @@ function QuestionText({ question, dim }: { question: string; dim?: boolean }) {
   return (
     <p
       className={cn(
-        'mt-3 font-serif font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]',
+        'mt-3 font-serif leading-[32px] font-semibold tracking-[0.05em] text-[var(--brand-ink)]',
         dim ? 'text-[16px] opacity-65' : 'text-[24px]',
       )}
     >
@@ -50,7 +50,7 @@ function QuestionText({ question, dim }: { question: string; dim?: boolean }) {
         &rdquo;
       </span>
     </p>
-  )
+  );
 }
 
 export function FeedCard({
@@ -64,12 +64,12 @@ export function FeedCard({
   verb,
   dimQuestion,
 }: FeedCardProps) {
-  const categoryColor = colorForCategory(item.category)
-  const visibleCategory = visibleFeedCategory(item.category)
-  const authorName = item.avatarName ?? 'Someone'
+  const categoryColor = colorForCategory(item.category);
+  const visibleCategory = visibleFeedCategory(item.category);
+  const authorName = item.avatarName ?? 'Someone';
   // Figma colors the actor name in the user's avatar color (e.g. Allan blue,
   // Sarah slate); fall back to the link slate when no user id is present.
-  const nameColor = item.avatarUserId ? colorForUser(item.avatarUserId) : 'var(--brand-link)'
+  const nameColor = item.avatarUserId ? colorForUser(item.avatarUserId) : 'var(--brand-link)';
 
   if (item.viewerIsAuthor) {
     return (
@@ -102,7 +102,7 @@ export function FeedCard({
           {footer ? <div className="mt-3">{footer}</div> : null}
         </div>
       </FeedCardShell>
-    )
+    );
   }
 
   return (
@@ -116,7 +116,11 @@ export function FeedCard({
               <>
                 <p className="text-[15px] leading-[23px] tracking-[0.05em] text-black">
                   {item.authorHref ? (
-                    <Link href={item.authorHref} className="font-medium" style={{ color: nameColor }}>
+                    <Link
+                      href={item.authorHref}
+                      className="font-medium"
+                      style={{ color: nameColor }}
+                    >
                       {authorName}
                     </Link>
                   ) : (
@@ -156,5 +160,5 @@ export function FeedCard({
         ) : null}
       </div>
     </FeedCardShell>
-  )
+  );
 }

@@ -47,7 +47,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       {
         error: 'invalid_format',
-        message: 'Handle must start with a letter and use only lowercase letters, numbers, and underscores.',
+        message:
+          'Handle must start with a letter and use only lowercase letters, numbers, and underscores.',
       },
       { status: 400 },
     );

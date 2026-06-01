@@ -18,13 +18,10 @@ export const WRONG_ANSWER_REACTIONS = [
   { key: 'knew_i_wouldnt', label: "Knew I wouldn't get it", emoji: ':sweat_smile:' },
 ] as const;
 
-export const CANNED_REACTIONS = [
-  ...CORRECT_ANSWER_REACTIONS,
-  ...WRONG_ANSWER_REACTIONS,
-] as const;
+export const CANNED_REACTIONS = [...CORRECT_ANSWER_REACTIONS, ...WRONG_ANSWER_REACTIONS] as const;
 
-export type ReactionKey = typeof CANNED_REACTIONS[number]['key'];
-export type WrongAnswerReactionKey = typeof WRONG_ANSWER_REACTIONS[number]['key'];
+export type ReactionKey = (typeof CANNED_REACTIONS)[number]['key'];
+export type WrongAnswerReactionKey = (typeof WRONG_ANSWER_REACTIONS)[number]['key'];
 
 export function getCannedReaction(key: string) {
   return CANNED_REACTIONS.find((reaction) => reaction.key === key) ?? null;

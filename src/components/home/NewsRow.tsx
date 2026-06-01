@@ -1,23 +1,23 @@
-import Link from 'next/link'
+import Link from 'next/link';
 
-import type { ActivityItemView } from '@/server/db/queries/activity'
+import type { ActivityItemView } from '@/server/db/queries/activity';
 
 type NewsRowCopy = {
-  headline: React.ReactNode
-  secondLine: string | null
-}
+  headline: React.ReactNode;
+  secondLine: string | null;
+};
 
 function actorName(item: ActivityItemView): string {
-  return item.actor?.displayName ?? 'Someone'
+  return item.actor?.displayName ?? 'Someone';
 }
 
 // The actor's name is the only link in a news row — it points at their
 // profile. When we don't have a user id (e.g. "You shared…" rows) it stays
 // plain bold text.
 function ActorName({ item }: { item: ActivityItemView }) {
-  const name = actorName(item)
+  const name = actorName(item);
   if (!item.actorUserId) {
-    return <b>{name}</b>
+    return <b>{name}</b>;
   }
   return (
     <Link
@@ -26,22 +26,22 @@ function ActorName({ item }: { item: ActivityItemView }) {
     >
       {name}
     </Link>
-  )
+  );
 }
 
 function relativeTime(value: Date): string {
-  const diffMs = Date.now() - value.getTime()
-  const minutes = Math.floor(diffMs / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d`
-  const weeks = Math.floor(days / 7)
-  if (weeks < 4) return `${weeks}w`
-  const months = Math.floor(days / 30)
-  return `${months}mo`
+  const diffMs = Date.now() - value.getTime();
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) return `${weeks}w`;
+  const months = Math.floor(days / 30);
+  return `${months}mo`;
 }
 
 // Compact second-line copy for Home — full subcopy lives on /activities.
@@ -50,10 +50,10 @@ function relativeTime(value: Date): string {
 function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy {
   switch (item.type) {
     case 'friend_answered_your_question': {
-      const faq = item.reference.friendAnsweredQuestion
-      const correct = faq?.result === 'correct'
-      const verb = correct ? 'got' : 'answered'
-      const domain = faq?.domain?.trim() || null
+      const faq = item.reference.friendAnsweredQuestion;
+      const correct = faq?.result === 'correct';
+      const verb = correct ? 'got' : 'answered';
+      const domain = faq?.domain?.trim() || null;
       return {
         headline: (
           <>
@@ -61,26 +61,25 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: domain,
-      }
+      };
     }
 
     case 'declared_promoted': {
-      const dp = item.reference.declaredPromoted
-      const domain = dp?.domain?.trim() || null
+      const dp = item.reference.declaredPromoted;
+      const domain = dp?.domain?.trim() || null;
       return {
         headline: (
           <>
-            {actor}{' '}
-            {domain ? 'opened a new domain in' : 'opened up a new domain on your map'}
+            {actor} {domain ? 'opened a new domain in' : 'opened up a new domain on your map'}
           </>
         ),
         secondLine: domain,
-      }
+      };
     }
 
     case 'friend_mastery': {
-      const mastery = item.reference.masteryEvent
-      const tier = mastery?.tier ?? 'a new tier'
+      const mastery = item.reference.masteryEvent;
+      const tier = mastery?.tier ?? 'a new tier';
       return {
         headline: (
           <>
@@ -88,38 +87,30 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: mastery?.domain ?? null,
-      }
+      };
     }
 
     case 'reaction_received': {
-      const reaction = item.reference.reaction
+      const reaction = item.reference.reaction;
       const label = reaction?.reactionLabel
         ? `${reaction.reactionEmoji ? `${reaction.reactionEmoji} ` : ''}${reaction.reactionLabel}`
-        : null
+        : null;
       return {
-        headline: (
-          <>
-            {actor} reacted to your question
-          </>
-        ),
+        headline: <>{actor} reacted to your question</>,
         secondLine: label,
-      }
+      };
     }
 
     case 'question_curated':
       return {
-        headline: (
-          <>
-            {actor} saved your question
-          </>
-        ),
+        headline: <>{actor} saved your question</>,
         secondLine: null,
-      }
+      };
 
     case 'authored_question_shared': {
-      const shared = item.reference.authoredSharedQuestion
-      const count = shared?.recipientCount ?? 0
-      const friendWord = count === 1 ? 'friend' : 'friends'
+      const shared = item.reference.authoredSharedQuestion;
+      const count = shared?.recipientCount ?? 0;
+      const friendWord = count === 1 ? 'friend' : 'friends';
       return {
         headline: (
           <>
@@ -127,20 +118,20 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
           </>
         ),
         secondLine: shared?.domain ?? null,
-      }
+      };
     }
 
     default:
       return {
         headline: <>Something happened on Joshing</>,
         secondLine: null,
-      }
+      };
   }
 }
 
 export function NewsRow({ item }: { item: ActivityItemView }) {
-  const copy = buildCopy(item, <ActorName item={item} />)
-  const timestamp = relativeTime(item.createdAt)
+  const copy = buildCopy(item, <ActorName item={item} />);
+  const timestamp = relativeTime(item.createdAt);
 
   return (
     <div className="flex items-start justify-between gap-3">
@@ -158,5 +149,5 @@ export function NewsRow({ item }: { item: ActivityItemView }) {
         {timestamp}
       </span>
     </div>
-  )
+  );
 }

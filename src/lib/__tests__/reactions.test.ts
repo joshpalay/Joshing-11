@@ -11,12 +11,7 @@ import {
 describe('reaction canned-list classification', () => {
   it('exposes the four wrong-answer canned types from §8.10b', () => {
     const keys = WRONG_ANSWER_REACTIONS.map((reaction) => reaction.key);
-    expect(keys).toEqual([
-      'didnt_know_tell_me',
-      'need_story',
-      'adding_to_list',
-      'knew_i_wouldnt',
-    ]);
+    expect(keys).toEqual(['didnt_know_tell_me', 'need_story', 'adding_to_list', 'knew_i_wouldnt']);
   });
 
   it('keeps the correct-answer and wrong-answer sets disjoint', () => {

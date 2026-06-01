@@ -15,6 +15,16 @@ export const mockKnowledgeDomains: Domain[] = [
   { name: 'Diasporic Literature', tier: 'familiar', progressWithinTier: 0.44, masteryPoints: 1650 },
   { name: 'Political Theology', tier: 'familiar', progressWithinTier: 0.12, masteryPoints: 1430 },
   { name: 'Food Systems', tier: 'establishing', progressWithinTier: 0.74, masteryPoints: 970 },
-  { name: 'Oceanic Trade Routes', tier: 'establishing', progressWithinTier: 0.39, masteryPoints: 640 },
-  { name: 'Urban Biodiversity', tier: 'establishing', progressWithinTier: 0.19, masteryPoints: 510 },
+  {
+    name: 'Oceanic Trade Routes',
+    tier: 'establishing',
+    progressWithinTier: 0.39,
+    masteryPoints: 640,
+  },
+  {
+    name: 'Urban Biodiversity',
+    tier: 'establishing',
+    progressWithinTier: 0.19,
+    masteryPoints: 510,
+  },
 ];

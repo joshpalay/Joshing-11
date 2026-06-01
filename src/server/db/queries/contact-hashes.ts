@@ -1,9 +1,9 @@
-import { and, count, desc, eq, gt, ne, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, ne, sql } from 'drizzle-orm';
 
-import { contactHashes, db, friendInvitations, users } from '@/server/db'
-import { getRelationships, type RelationshipResult } from '@/server/db/queries/friend-requests'
+import { contactHashes, db, friendInvitations, users } from '@/server/db';
+import { getRelationships, type RelationshipResult } from '@/server/db/queries/friend-requests';
 
-const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Count of other users who (a) have uploaded a ContactHash that matches the
 // caller's phoneHash AND (b) are discoverableByContacts. Used by the upload
@@ -19,19 +19,19 @@ export async function countMatchableUsers(callerId: string): Promise<number> {
         ne(users.id, callerId),
         eq(users.discoverableByContacts, true),
       ),
-    )
+    );
 
-  return row?.value ?? 0
+  return row?.value ?? 0;
 }
 
 export type ContactMatch = {
-  id: string
-  handle: string | null
-  displayName: string | null
-  avatarColor: string | null
-  createdAt: Date
-  relationship: RelationshipResult
-}
+  id: string;
+  handle: string | null;
+  displayName: string | null;
+  avatarColor: string | null;
+  createdAt: Date;
+  relationship: RelationshipResult;
+};
 
 // Users whose phoneHash equals one of the caller's uploaded ContactHash rows
 // AND who have opted into contact-based discovery. Block detection (via
@@ -55,19 +55,22 @@ export async function listContactMatches(callerId: string): Promise<ContactMatch
         eq(users.discoverableByContacts, true),
       ),
     )
-    .orderBy(desc(users.createdAt))
+    .orderBy(desc(users.createdAt));
 
-  if (rows.length === 0) return []
+  if (rows.length === 0) return [];
 
-  const relationships = await getRelationships(callerId, rows.map((r) => r.id))
+  const relationships = await getRelationships(
+    callerId,
+    rows.map((r) => r.id),
+  );
 
-  const result: ContactMatch[] = []
+  const result: ContactMatch[] = [];
   for (const row of rows) {
-    const relationship = relationships.get(row.id)
-    if (!relationship || relationship.isBlocked) continue
-    result.push({ ...row, relationship })
+    const relationship = relationships.get(row.id);
+    if (!relationship || relationship.isBlocked) continue;
+    result.push({ ...row, relationship });
   }
-  return result
+  return result;
 }
 
 // MAX(uploadedAt) for the caller's ContactHash rows. NULL when they've never
@@ -76,10 +79,10 @@ export async function getLastContactHashUpload(callerId: string): Promise<Date |
   const [row] = await db
     .select({ uploadedAt: sql<Date>`MAX(${contactHashes.uploadedAt})`.as('uploaded_at') })
     .from(contactHashes)
-    .where(eq(contactHashes.userId, callerId))
+    .where(eq(contactHashes.userId, callerId));
 
-  if (!row?.uploadedAt) return null
-  return row.uploadedAt instanceof Date ? row.uploadedAt : new Date(row.uploadedAt)
+  if (!row?.uploadedAt) return null;
+  return row.uploadedAt instanceof Date ? row.uploadedAt : new Date(row.uploadedAt);
 }
 
 // "Has anything new happened in the discovery space since this user last
@@ -96,17 +99,17 @@ export async function getLastContactHashUpload(callerId: string): Promise<Date |
 // Result is opaque to callers: `{ hasNew, count }` only. No row data is
 // surfaced from this helper; the actual rendering pulls fresh data via
 // listContactMatches / listInviteReflections.
-export type NewDiscoveryStatus = { hasNew: boolean; count: number }
+export type NewDiscoveryStatus = { hasNew: boolean; count: number };
 
 export async function getNewDiscoveryStatus(callerId: string): Promise<NewDiscoveryStatus> {
   const [thresholdRow] = await db
     .select({ threshold: users.lastFriendDiscoveryCheckAt })
     .from(users)
     .where(eq(users.id, callerId))
-    .limit(1)
+    .limit(1);
 
-  if (!thresholdRow) return { hasNew: false, count: 0 }
-  const threshold = thresholdRow.threshold ?? new Date(0)
+  if (!thresholdRow) return { hasNew: false, count: 0 };
+  const threshold = thresholdRow.threshold ?? new Date(0);
 
   // Friend-pair filter: "no active or pending Friendship between caller and X".
   // Reused for both halves.
@@ -117,7 +120,7 @@ export async function getNewDiscoveryStatus(callerId: string): Promise<NewDiscov
         (f."userAId" = ${callerId} AND f."userBId" = ${otherId})
         OR (f."userAId" = ${otherId} AND f."userBId" = ${callerId})
       )
-  )`
+  )`;
 
   // Contact-hash matches who joined since the threshold.
   const contactMatchRows = await db
@@ -132,7 +135,7 @@ export async function getNewDiscoveryStatus(callerId: string): Promise<NewDiscov
         gt(users.createdAt, threshold),
         noFriendshipExists(users.id),
       ),
-    )
+    );
 
   // SMS-invite reflections — users the caller invited who joined since the
   // threshold AND aren't already friends/pending.
@@ -146,52 +149,55 @@ export async function getNewDiscoveryStatus(callerId: string): Promise<NewDiscov
         gt(users.createdAt, threshold),
         noFriendshipExists(users.id),
       ),
-    )
+    );
 
   // Dedupe — a single user could be both a contact match AND an invite
   // reflection. Both are valid signals but they shouldn't double-count.
-  const ids = new Set<string>()
-  for (const row of contactMatchRows) ids.add(row.id)
-  for (const row of reflectionRows) ids.add(row.id)
+  const ids = new Set<string>();
+  for (const row of contactMatchRows) ids.add(row.id);
+  for (const row of reflectionRows) ids.add(row.id);
 
-  return { hasNew: ids.size > 0, count: ids.size }
+  return { hasNew: ids.size > 0, count: ids.size };
 }
 
 // Stamp NOW() onto users.last_friend_discovery_check_at. Called on every
 // visit to /friends/find. Idempotent.
-export async function markDiscoveryChecked(callerId: string, now: Date = new Date()): Promise<void> {
-  await db
-    .update(users)
-    .set({ lastFriendDiscoveryCheckAt: now })
-    .where(eq(users.id, callerId))
+export async function markDiscoveryChecked(
+  callerId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await db.update(users).set({ lastFriendDiscoveryCheckAt: now }).where(eq(users.id, callerId));
 }
 
 export function isRefreshDue(lastUploadedAt: Date | null, now: Date = new Date()): boolean {
-  if (!lastUploadedAt) return true
-  return now.getTime() - lastUploadedAt.getTime() > ONE_WEEK_MS
+  if (!lastUploadedAt) return true;
+  return now.getTime() - lastUploadedAt.getTime() > ONE_WEEK_MS;
 }
 
 // Replaces all ContactHash rows for a user in one transaction. Returns the
 // count uploaded and a preview of how many of those resolve to a
 // discoverable user.
-export async function replaceContactHashes(callerId: string, hashes: string[]): Promise<{ uploaded: number; matchCount: number }> {
+export async function replaceContactHashes(
+  callerId: string,
+  hashes: string[],
+): Promise<{ uploaded: number; matchCount: number }> {
   await db.transaction(async (tx) => {
-    await tx.delete(contactHashes).where(eq(contactHashes.userId, callerId))
+    await tx.delete(contactHashes).where(eq(contactHashes.userId, callerId));
     if (hashes.length > 0) {
       await tx
         .insert(contactHashes)
         .values(hashes.map((phoneHash) => ({ userId: callerId, phoneHash })))
-        .onConflictDoNothing()
+        .onConflictDoNothing();
     }
-  })
+  });
 
-  const matchCount = hashes.length === 0 ? 0 : await countMatchableUsers(callerId)
-  return { uploaded: hashes.length, matchCount }
+  const matchCount = hashes.length === 0 ? 0 : await countMatchableUsers(callerId);
+  return { uploaded: hashes.length, matchCount };
 }
 
 export async function clearContactHashes(callerId: string): Promise<void> {
-  await db.delete(contactHashes).where(eq(contactHashes.userId, callerId))
+  await db.delete(contactHashes).where(eq(contactHashes.userId, callerId));
 }
 
 // Re-export so callers don't need a second import path.
-export { contactHashes }
+export { contactHashes };

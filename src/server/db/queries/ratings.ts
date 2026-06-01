@@ -58,34 +58,48 @@ export async function setRating(
     const propagated = await db
       .select({ id: feedItems.id })
       .from(feedItems)
-      .where(and(
-        eq(feedItems.sourceUserId, userId),
-        eq(feedItems.questionId, questionId),
-        inArray(feedItems.state, ['active', 'skipped']),
-      ));
+      .where(
+        and(
+          eq(feedItems.sourceUserId, userId),
+          eq(feedItems.questionId, questionId),
+          inArray(feedItems.state, ['active', 'skipped']),
+        ),
+      );
 
     if (propagated.length > 0) {
       await db
         .update(feedItems)
         .set({ state: 'rolled_off' })
-        .where(inArray(feedItems.id, propagated.map((r) => r.id)));
+        .where(
+          inArray(
+            feedItems.id,
+            propagated.map((r) => r.id),
+          ),
+        );
     }
 
     // Also soft-delete the user's own FeedItem for this question
     const ownItems = await db
       .select({ id: feedItems.id })
       .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        eq(feedItems.questionId, questionId),
-        inArray(feedItems.state, ['active', 'skipped']),
-      ));
+      .where(
+        and(
+          eq(feedItems.recipientUserId, userId),
+          eq(feedItems.questionId, questionId),
+          inArray(feedItems.state, ['active', 'skipped']),
+        ),
+      );
 
     if (ownItems.length > 0) {
       await db
         .update(feedItems)
         .set({ state: 'rolled_off' })
-        .where(inArray(feedItems.id, ownItems.map((r) => r.id)));
+        .where(
+          inArray(
+            feedItems.id,
+            ownItems.map((r) => r.id),
+          ),
+        );
     }
   }
 }

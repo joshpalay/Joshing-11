@@ -23,11 +23,12 @@ type MasteryTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 function parseBody(value: unknown): { submittedAnswer: string } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const submittedAnswer = typeof record.submitted_answer === 'string'
-    ? record.submitted_answer.trim()
-    : typeof record.answer === 'string'
-      ? record.answer.trim()
-      : null;
+  const submittedAnswer =
+    typeof record.submitted_answer === 'string'
+      ? record.submitted_answer.trim()
+      : typeof record.answer === 'string'
+        ? record.answer.trim()
+        : null;
 
   return submittedAnswer ? { submittedAnswer } : null;
 }
@@ -79,7 +80,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const existingMastery = await db
     .select()
     .from(playerMastery)
-    .where(and(eq(playerMastery.userId, session.userId), eq(playerMastery.canonicalSubcategory, domain)))
+    .where(
+      and(eq(playerMastery.userId, session.userId), eq(playerMastery.canonicalSubcategory, domain)),
+    )
     .limit(1);
 
   const previousTier: MasteryTier = existingMastery[0]?.tier ?? 'establishing';
@@ -164,12 +167,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (isCorrect) {
-    after(() => createFeedItemsForFriendsFromAnswer(
-      session.userId,
-      question.id,
-      'correct',
-      sourceId,
-    ));
+    after(() =>
+      createFeedItemsForFriendsFromAnswer(session.userId, question.id, 'correct', sourceId),
+    );
   }
 
   return NextResponse.json({

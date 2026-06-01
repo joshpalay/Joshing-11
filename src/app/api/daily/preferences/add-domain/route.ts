@@ -18,7 +18,10 @@ export async function POST(request: NextRequest) {
 
   const domain = parseDomain(await request.json().catch(() => null));
   if (!domain) {
-    return NextResponse.json({ error: 'validation', message: 'domain is required' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'domain is required' },
+      { status: 400 },
+    );
   }
 
   const [preferences, knowledgeBase] = await Promise.all([

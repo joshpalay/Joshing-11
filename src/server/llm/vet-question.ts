@@ -76,7 +76,12 @@ function buildUserMessage(input: VetQuestionInput): string {
     lines.push(wrapUserInput('author_explanation', input.explanation));
   }
   if (input.canonicalSubcategory) {
-    lines.push(wrapUserInput('categorised_as', `${input.canonicalSubcategory}${input.broadCategory ? ` (${input.broadCategory})` : ''}`));
+    lines.push(
+      wrapUserInput(
+        'categorised_as',
+        `${input.canonicalSubcategory}${input.broadCategory ? ` (${input.broadCategory})` : ''}`,
+      ),
+    );
   }
   lines.push('Vet this submission. Return JSON only.');
   return lines.join('\n');
@@ -110,13 +115,18 @@ export async function vetQuestion(input: VetQuestionInput): Promise<VetVerdict> 
   let response;
   try {
     // ~700 tokens — below Haiku's 2048 cacheable threshold; plain string.
-    response = await loggedMessagesCreate(client, 'vet-question', {
-      model: HAIKU_MODEL,
-      max_tokens: 400,
-      temperature: 0,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserMessage(input) }],
-    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
+    response = await loggedMessagesCreate(
+      client,
+      'vet-question',
+      {
+        model: HAIKU_MODEL,
+        max_tokens: 400,
+        temperature: 0,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: buildUserMessage(input) }],
+      },
+      { timeoutMs: HAIKU_GATE_TIMEOUT_MS },
+    );
   } catch (error) {
     console.warn('[vetQuestion] request_failed', {
       message: error instanceof Error ? error.message : String(error),
@@ -141,11 +151,17 @@ export async function vetQuestion(input: VetQuestionInput): Promise<VetVerdict> 
   const reason = trimmed(parsed.reason, 'vetted');
 
   // Hard rejects first.
-  if (factual === 'fail') return { status: 'rejected', score: overall, reason: `factual: ${reason}` };
+  if (factual === 'fail')
+    return { status: 'rejected', score: overall, reason: `factual: ${reason}` };
   if (safety === 'fail') return { status: 'rejected', score: overall, reason: `safety: ${reason}` };
-  if (answerLeaked) return { status: 'rejected', score: overall, reason: `answer in question: ${reason}` };
+  if (answerLeaked)
+    return { status: 'rejected', score: overall, reason: `answer in question: ${reason}` };
   if (quality < QUALITY_APPROVAL_THRESHOLD) {
-    return { status: 'rejected', score: overall, reason: `quality ${quality.toFixed(2)}: ${reason}` };
+    return {
+      status: 'rejected',
+      score: overall,
+      reason: `quality ${quality.toFixed(2)}: ${reason}`,
+    };
   }
 
   // Cannot verify the fact, but no other red flags — let a human (or a later
@@ -156,4 +172,3 @@ export async function vetQuestion(input: VetQuestionInput): Promise<VetVerdict> 
 
   return { status: 'approved', score: overall, reason };
 }
-

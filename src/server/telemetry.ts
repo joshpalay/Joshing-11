@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHash } from 'crypto';
 
 export type TelemetryEventName =
   | 'add_friend_started'
@@ -21,32 +21,29 @@ export type TelemetryEventName =
   | 'friend_request_ignored'
   | 'friend_request_from_profile'
   | 'friend_request_cancelled'
-  | 'friendship_removed'
+  | 'friendship_removed';
 
-type TelemetryValue = string | number | boolean | null | undefined
-export type TelemetryMetadata = Record<string, TelemetryValue>
+type TelemetryValue = string | number | boolean | null | undefined;
+export type TelemetryMetadata = Record<string, TelemetryValue>;
 
-const SENSITIVE_KEY_PATTERN = /phone|token|message|interest(s)?$/i
+const SENSITIVE_KEY_PATTERN = /phone|token|message|interest(s)?$/i;
 
 export function hashTelemetryValue(value: string): string {
-  return createHash('sha256').update(value).digest('hex').slice(0, 16)
+  return createHash('sha256').update(value).digest('hex').slice(0, 16);
 }
 
 function sanitizeMetadata(metadata: TelemetryMetadata): TelemetryMetadata {
   return Object.fromEntries(
     Object.entries(metadata).filter(([key, value]) => {
-      if (value === undefined) return false
-      return !SENSITIVE_KEY_PATTERN.test(key)
-    })
-  )
+      if (value === undefined) return false;
+      return !SENSITIVE_KEY_PATTERN.test(key);
+    }),
+  );
 }
 
-export function logTelemetry(
-  event: TelemetryEventName,
-  metadata: TelemetryMetadata = {}
-): void {
+export function logTelemetry(event: TelemetryEventName, metadata: TelemetryMetadata = {}): void {
   console.info(`[telemetry] ${event}`, {
     event,
     ...sanitizeMetadata(metadata),
-  })
+  });
 }

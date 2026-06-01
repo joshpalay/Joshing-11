@@ -16,7 +16,13 @@ import {
   questions,
   skippedDailyQuestions,
 } from '@/server/db';
-import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
+import {
+  ANTHROPIC_MODEL,
+  extractTextContent,
+  getAnthropicClient,
+  loggedMessagesCreate,
+  parseJsonObject,
+} from '@/lib/llm';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 import { effectiveTier, resolveTier } from '@/server/mastery/tiers';
 import type { MasteryTier } from '@/types/db';
@@ -105,7 +111,10 @@ function latestDate(rows: Array<{ updatedAt: Date | null }>): Date | null {
   }, null);
 }
 
-function broadCategoryFor(rows: Array<{ canonicalSubcategory: string; broadCategory: string | null }>, target: string): string | null {
+function broadCategoryFor(
+  rows: Array<{ canonicalSubcategory: string; broadCategory: string | null }>,
+  target: string,
+): string | null {
   const targetRow = rows.find((row) => domainKey(row.canonicalSubcategory) === domainKey(target));
   if (targetRow?.broadCategory) return targetRow.broadCategory;
   const counts = new Map<string, number>();
@@ -113,7 +122,9 @@ function broadCategoryFor(rows: Array<{ canonicalSubcategory: string; broadCateg
     if (!row.broadCategory) continue;
     counts.set(row.broadCategory, (counts.get(row.broadCategory) ?? 0) + 1);
   }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+  return (
+    [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null
+  );
 }
 
 async function upsertMergedPlayerMastery(
@@ -195,12 +206,16 @@ const DOMAIN_VISIBILITY_RANK: Record<DomainVisibility, number> = {
   private: 2,
 };
 
-function mostRestrictiveVisibility(rows: Array<{ visibility: DomainVisibility }>): DomainVisibility {
-  return rows.reduce<DomainVisibility>((mostRestrictive, row) => (
-    DOMAIN_VISIBILITY_RANK[row.visibility] > DOMAIN_VISIBILITY_RANK[mostRestrictive]
-      ? row.visibility
-      : mostRestrictive
-  ), 'public');
+function mostRestrictiveVisibility(
+  rows: Array<{ visibility: DomainVisibility }>,
+): DomainVisibility {
+  return rows.reduce<DomainVisibility>(
+    (mostRestrictive, row) =>
+      DOMAIN_VISIBILITY_RANK[row.visibility] > DOMAIN_VISIBILITY_RANK[mostRestrictive]
+        ? row.visibility
+        : mostRestrictive,
+    'public',
+  );
 }
 
 function isProfileDomainVisible(visibility: DomainVisibility): boolean {
@@ -217,39 +232,43 @@ export async function consolidateProfileDomainVisibility(
   },
 ): Promise<void> {
   const target = normalizeDomain(values.target);
-  const domainsToConsolidate = [...new Set([...values.sourceDomains, target].map(normalizeDomain).filter(Boolean))];
+  const domainsToConsolidate = [
+    ...new Set([...values.sourceDomains, target].map(normalizeDomain).filter(Boolean)),
+  ];
   const existingRows = await tx
     .select({ visibility: profileDomainVisibility.visibility })
     .from(profileDomainVisibility)
-    .where(and(
-      eq(profileDomainVisibility.userId, values.userId),
-      or(
-        inArray(profileDomainVisibility.domain, domainsToConsolidate),
-        inArray(profileDomainVisibility.canonicalSubcategory, domainsToConsolidate),
+    .where(
+      and(
+        eq(profileDomainVisibility.userId, values.userId),
+        or(
+          inArray(profileDomainVisibility.domain, domainsToConsolidate),
+          inArray(profileDomainVisibility.canonicalSubcategory, domainsToConsolidate),
+        ),
       ),
-    ));
+    );
   const visibility = mostRestrictiveVisibility(existingRows);
 
   await tx
     .delete(profileDomainVisibility)
-    .where(and(
-      eq(profileDomainVisibility.userId, values.userId),
-      or(
-        inArray(profileDomainVisibility.domain, domainsToConsolidate),
-        inArray(profileDomainVisibility.canonicalSubcategory, domainsToConsolidate),
+    .where(
+      and(
+        eq(profileDomainVisibility.userId, values.userId),
+        or(
+          inArray(profileDomainVisibility.domain, domainsToConsolidate),
+          inArray(profileDomainVisibility.canonicalSubcategory, domainsToConsolidate),
+        ),
       ),
-    ));
+    );
 
-  await tx
-    .insert(profileDomainVisibility)
-    .values({
-      userId: values.userId,
-      canonicalSubcategory: target,
-      domain: target,
-      visibility,
-      isVisible: isProfileDomainVisible(visibility),
-      updatedAt: values.updatedAt ?? new Date(),
-    });
+  await tx.insert(profileDomainVisibility).values({
+    userId: values.userId,
+    canonicalSubcategory: target,
+    domain: target,
+    visibility,
+    isVisible: isProfileDomainVisible(visibility),
+    updatedAt: values.updatedAt ?? new Date(),
+  });
 }
 
 function mergeDomainList(domains: string[], sourceDomains: string[], target: string): string[] {
@@ -282,10 +301,17 @@ async function consolidateDailyPreferenceDomains(
 
   if (!preference) return;
 
-  const selectedDomains = mergeDomainList(preference.selectedDomains ?? [], values.sourceDomains, values.target);
-  const before = (preference.selectedDomains ?? []).filter((domain): domain is string => typeof domain === 'string');
-  const changed = selectedDomains.length !== before.length
-    || selectedDomains.some((domain, index) => domain !== before[index]);
+  const selectedDomains = mergeDomainList(
+    preference.selectedDomains ?? [],
+    values.sourceDomains,
+    values.target,
+  );
+  const before = (preference.selectedDomains ?? []).filter(
+    (domain): domain is string => typeof domain === 'string',
+  );
+  const changed =
+    selectedDomains.length !== before.length ||
+    selectedDomains.some((domain, index) => domain !== before[index]);
 
   if (!changed) return;
 
@@ -297,7 +323,11 @@ async function consolidateDailyPreferenceDomains(
 
 type DomainDifficultyRow = Pick<
   typeof userDomainDifficulties.$inferSelect,
-  'canonicalSubcategory' | 'servedDifficulty' | 'consecutiveCorrect' | 'consecutiveIncorrect' | 'lastUpdated'
+  | 'canonicalSubcategory'
+  | 'servedDifficulty'
+  | 'consecutiveCorrect'
+  | 'consecutiveIncorrect'
+  | 'lastUpdated'
 >;
 
 function mostRecentDomainDifficulty(rows: DomainDifficultyRow[]): DomainDifficultyRow {
@@ -310,9 +340,16 @@ function mostRecentDomainDifficulty(rows: DomainDifficultyRow[]): DomainDifficul
 
 async function consolidateUserDomainDifficulties(
   tx: DbClient,
-  values: { userId: string; sourceDomains: string[]; sourceDomainsToDelete: string[]; target: string },
+  values: {
+    userId: string;
+    sourceDomains: string[];
+    sourceDomainsToDelete: string[];
+    target: string;
+  },
 ): Promise<void> {
-  const domainsToConsolidate = [...new Set([...values.sourceDomains, values.target].map(normalizeDomain).filter(Boolean))];
+  const domainsToConsolidate = [
+    ...new Set([...values.sourceDomains, values.target].map(normalizeDomain).filter(Boolean)),
+  ];
   const rows = await tx
     .select({
       canonicalSubcategory: userDomainDifficulties.canonicalSubcategory,
@@ -322,10 +359,12 @@ async function consolidateUserDomainDifficulties(
       lastUpdated: userDomainDifficulties.lastUpdated,
     })
     .from(userDomainDifficulties)
-    .where(and(
-      eq(userDomainDifficulties.userId, values.userId),
-      inArray(userDomainDifficulties.canonicalSubcategory, domainsToConsolidate),
-    ));
+    .where(
+      and(
+        eq(userDomainDifficulties.userId, values.userId),
+        inArray(userDomainDifficulties.canonicalSubcategory, domainsToConsolidate),
+      ),
+    );
 
   if (rows.length > 0) {
     // Treat the most recently updated row as the user's current adaptive preference.
@@ -356,30 +395,40 @@ async function consolidateUserDomainDifficulties(
   if (values.sourceDomainsToDelete.length > 0) {
     await tx
       .delete(userDomainDifficulties)
-      .where(and(
-        eq(userDomainDifficulties.userId, values.userId),
-        inArray(userDomainDifficulties.canonicalSubcategory, values.sourceDomainsToDelete),
-      ));
+      .where(
+        and(
+          eq(userDomainDifficulties.userId, values.userId),
+          inArray(userDomainDifficulties.canonicalSubcategory, values.sourceDomainsToDelete),
+        ),
+      );
   }
 }
 
 async function consolidateUserDomainExclusions(
   tx: DbClient,
-  values: { userId: string; sourceDomains: string[]; sourceDomainsToDelete: string[]; target: string },
+  values: {
+    userId: string;
+    sourceDomains: string[];
+    sourceDomainsToDelete: string[];
+    target: string;
+  },
 ): Promise<void> {
   const rows = await tx
     .select({ excludedAt: userDomainExclusions.excludedAt })
     .from(userDomainExclusions)
-    .where(and(
-      eq(userDomainExclusions.userId, values.userId),
-      inArray(userDomainExclusions.canonicalSubcategory, values.sourceDomains),
-    ));
+    .where(
+      and(
+        eq(userDomainExclusions.userId, values.userId),
+        inArray(userDomainExclusions.canonicalSubcategory, values.sourceDomains),
+      ),
+    );
 
   if (rows.length > 0) {
-    const earliestExcludedAt = rows.reduce<Date | null>((earliest, row) => {
-      if (!row.excludedAt) return earliest;
-      return !earliest || row.excludedAt < earliest ? row.excludedAt : earliest;
-    }, null) ?? new Date();
+    const earliestExcludedAt =
+      rows.reduce<Date | null>((earliest, row) => {
+        if (!row.excludedAt) return earliest;
+        return !earliest || row.excludedAt < earliest ? row.excludedAt : earliest;
+      }, null) ?? new Date();
 
     await tx
       .insert(userDomainExclusions)
@@ -396,10 +445,12 @@ async function consolidateUserDomainExclusions(
   if (values.sourceDomainsToDelete.length > 0) {
     await tx
       .delete(userDomainExclusions)
-      .where(and(
-        eq(userDomainExclusions.userId, values.userId),
-        inArray(userDomainExclusions.canonicalSubcategory, values.sourceDomainsToDelete),
-      ));
+      .where(
+        and(
+          eq(userDomainExclusions.userId, values.userId),
+          inArray(userDomainExclusions.canonicalSubcategory, values.sourceDomainsToDelete),
+        ),
+      );
   }
 }
 
@@ -414,7 +465,10 @@ async function consolidateFeedDismissedDomains(
     select ${randomUUID()}, ${values.userId}, ${values.target}, min("dismissedAt"), null
     from "FeedDismissedDomain"
     where "userId" = ${values.userId}
-      and "canonicalSubcategory" in (${sql.join(values.sourceDomainsToDelete.map((domain) => sql`${domain}`), sql`, `)})
+      and "canonicalSubcategory" in (${sql.join(
+        values.sourceDomainsToDelete.map((domain) => sql`${domain}`),
+        sql`, `,
+      )})
       and "reinstatedAt" is null
     having count(*) > 0
     on conflict do nothing
@@ -422,21 +476,26 @@ async function consolidateFeedDismissedDomains(
 
   await tx
     .delete(feedDismissedDomains)
-    .where(and(
-      eq(feedDismissedDomains.userId, values.userId),
-      inArray(feedDismissedDomains.canonicalSubcategory, values.sourceDomainsToDelete),
-    ));
+    .where(
+      and(
+        eq(feedDismissedDomains.userId, values.userId),
+        inArray(feedDismissedDomains.canonicalSubcategory, values.sourceDomainsToDelete),
+      ),
+    );
 }
 
 function parseSuggestedMerges(raw: unknown): SuggestedMerge[] {
-  const record = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
+  const record =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
   if (!record || !Array.isArray(record.merges)) return [];
 
   return record.merges.flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
     const merge = item as Record<string, unknown>;
     const sources = Array.isArray(merge.sources)
-      ? merge.sources.flatMap((source) => typeof source === 'string' ? [normalizeDomain(source)] : []).filter(Boolean)
+      ? merge.sources
+          .flatMap((source) => (typeof source === 'string' ? [normalizeDomain(source)] : []))
+          .filter(Boolean)
       : [];
     const target = typeof merge.target === 'string' ? normalizeDomain(merge.target) : '';
     const rationale = typeof merge.rationale === 'string' ? merge.rationale.trim() : '';
@@ -503,7 +562,11 @@ If no merges are needed: { "merges": [] }`;
   } catch (err) {
     const status = (err as { status?: number }).status;
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[tidy] Anthropic merge suggestion failed', { model: ANTHROPIC_MODEL, status, message });
+    console.error('[tidy] Anthropic merge suggestion failed', {
+      model: ANTHROPIC_MODEL,
+      status,
+      message,
+    });
     throw new Error(`LLM merge suggestion failed: ${message}`);
   }
 
@@ -530,21 +593,28 @@ export async function applyMergesForUser(
         .filter((row): row is PlayerMasteryMergeRow => Boolean(row))
         .filter((row) => !consumedSourceKeys.has(domainKey(row.canonicalSubcategory)));
 
-      const uniqueSourceRows = [...new Map(sourceRows.map((row) => [domainKey(row.canonicalSubcategory), row])).values()];
-      const onlySourceKey = uniqueSourceRows.length === 1
-        ? domainKey(uniqueSourceRows[0].canonicalSubcategory)
-        : null;
-      const isApplicableMerge = uniqueSourceRows.length >= 2 || (onlySourceKey !== null && onlySourceKey !== targetKey);
+      const uniqueSourceRows = [
+        ...new Map(sourceRows.map((row) => [domainKey(row.canonicalSubcategory), row])).values(),
+      ];
+      const onlySourceKey =
+        uniqueSourceRows.length === 1 ? domainKey(uniqueSourceRows[0].canonicalSubcategory) : null;
+      const isApplicableMerge =
+        uniqueSourceRows.length >= 2 || (onlySourceKey !== null && onlySourceKey !== targetKey);
       if (!isApplicableMerge) continue;
 
       const existingTarget = byKey.get(targetKey);
-      const rowsToTotal = existingTarget && !uniqueSourceRows.some((row) => row.id === existingTarget.id)
-        ? [existingTarget, ...uniqueSourceRows]
-        : uniqueSourceRows;
+      const rowsToTotal =
+        existingTarget && !uniqueSourceRows.some((row) => row.id === existingTarget.id)
+          ? [existingTarget, ...uniqueSourceRows]
+          : uniqueSourceRows;
       const sourceDomains = uniqueSourceRows.map((row) => row.canonicalSubcategory);
-      const sourceDomainsToDelete = sourceDomains.filter((source) => domainKey(source) !== targetKey);
+      const sourceDomainsToDelete = sourceDomains.filter(
+        (source) => domainKey(source) !== targetKey,
+      );
       const sourceKeysToDelete = sourceDomainsToDelete.map(domainKey);
-      const sourceRowsToDelete = uniqueSourceRows.filter((row) => sourceKeysToDelete.includes(domainKey(row.canonicalSubcategory)));
+      const sourceRowsToDelete = uniqueSourceRows.filter((row) =>
+        sourceKeysToDelete.includes(domainKey(row.canonicalSubcategory)),
+      );
       const totalPoints = rowsToTotal.reduce((sum, row) => sum + Number(row.totalPoints ?? 0), 0);
       const authorCreditRows = await tx
         .select({
@@ -552,19 +622,25 @@ export async function applyMergesForUser(
           distinctQuestions: sql<number>`count(distinct ${masteryEvents.questionId})`,
         })
         .from(masteryEvents)
-        .where(and(
-          eq(masteryEvents.userId, userId),
-          inArray(masteryEvents.canonicalSubcategory, sourceDomains),
-          eq(masteryEvents.sourceType, 'author_credit'),
-        ));
+        .where(
+          and(
+            eq(masteryEvents.userId, userId),
+            inArray(masteryEvents.canonicalSubcategory, sourceDomains),
+            eq(masteryEvents.sourceType, 'author_credit'),
+          ),
+        );
       const tierByPoints = effectiveTier(
         totalPoints,
         Number(authorCreditRows[0]?.points ?? 0),
         Number(authorCreditRows[0]?.distinctQuestions ?? 0),
       );
       const strongestExistingTier = maxTier(rowsToTotal);
-      const tier = TIER_RANK[strongestExistingTier] > TIER_RANK[tierByPoints] ? strongestExistingTier : tierByPoints;
-      const updatedAt = latestDate(rowsToTotal.map((row) => ({ updatedAt: row.updatedAt }))) ?? new Date();
+      const tier =
+        TIER_RANK[strongestExistingTier] > TIER_RANK[tierByPoints]
+          ? strongestExistingTier
+          : tierByPoints;
+      const updatedAt =
+        latestDate(rowsToTotal.map((row) => ({ updatedAt: row.updatedAt }))) ?? new Date();
       const broadCategory = broadCategoryFor(rowsToTotal, target);
 
       await upsertMergedPlayerMastery(tx, {
@@ -573,46 +649,73 @@ export async function applyMergesForUser(
         broadCategory,
         totalPoints,
         tier,
-        lifetimePointsBaseline: rowsToTotal.reduce((sum, row) => sum + Number(row.lifetimePointsBaseline ?? 0), 0),
+        lifetimePointsBaseline: rowsToTotal.reduce(
+          (sum, row) => sum + Number(row.lifetimePointsBaseline ?? 0),
+          0,
+        ),
         updatedAt,
       });
 
       if (sourceDomainsToDelete.length > 0) {
         await tx
           .delete(playerMastery)
-          .where(and(
-            eq(playerMastery.userId, userId),
-            inArray(playerMastery.canonicalSubcategory, sourceDomainsToDelete),
-          ));
+          .where(
+            and(
+              eq(playerMastery.userId, userId),
+              inArray(playerMastery.canonicalSubcategory, sourceDomainsToDelete),
+            ),
+          );
       }
 
       await tx
         .update(masteryEvents)
         .set({ canonicalSubcategory: target })
-        .where(and(eq(masteryEvents.userId, userId), inArray(masteryEvents.canonicalSubcategory, sourceDomains)));
+        .where(
+          and(
+            eq(masteryEvents.userId, userId),
+            inArray(masteryEvents.canonicalSubcategory, sourceDomains),
+          ),
+        );
 
       await tx
         .update(questions)
         .set({ canonicalSubcategory: target, broadCategory })
-        .where(and(eq(questions.creatorId, userId), inArray(questions.canonicalSubcategory, sourceDomains)));
+        .where(
+          and(
+            eq(questions.creatorId, userId),
+            inArray(questions.canonicalSubcategory, sourceDomains),
+          ),
+        );
 
       await tx
         .update(generatedQuestions)
         .set({ canonicalSubcategory: target, broadCategory: broadCategory ?? 'General Knowledge' })
-        .where(and(eq(generatedQuestions.userId, userId), inArray(generatedQuestions.canonicalSubcategory, sourceDomains)));
+        .where(
+          and(
+            eq(generatedQuestions.userId, userId),
+            inArray(generatedQuestions.canonicalSubcategory, sourceDomains),
+          ),
+        );
 
       await tx
         .update(skippedDailyQuestions)
         .set({ canonicalSubcategory: target })
-        .where(and(eq(skippedDailyQuestions.userId, userId), inArray(skippedDailyQuestions.canonicalSubcategory, sourceDomains)));
+        .where(
+          and(
+            eq(skippedDailyQuestions.userId, userId),
+            inArray(skippedDailyQuestions.canonicalSubcategory, sourceDomains),
+          ),
+        );
 
       const declaredSourceRows = await tx
         .select({ isActive: declaredInterests.isActive })
         .from(declaredInterests)
-        .where(and(
-          eq(declaredInterests.userId, userId),
-          inArray(declaredInterests.domain, sourceDomains),
-        ));
+        .where(
+          and(
+            eq(declaredInterests.userId, userId),
+            inArray(declaredInterests.domain, sourceDomains),
+          ),
+        );
 
       if (declaredSourceRows.length > 0) {
         await tx
@@ -635,7 +738,12 @@ export async function applyMergesForUser(
         if (sourceDomainsToDelete.length > 0) {
           await tx
             .delete(declaredInterests)
-            .where(and(eq(declaredInterests.userId, userId), inArray(declaredInterests.domain, sourceDomainsToDelete)));
+            .where(
+              and(
+                eq(declaredInterests.userId, userId),
+                inArray(declaredInterests.domain, sourceDomainsToDelete),
+              ),
+            );
         }
       }
 
@@ -690,7 +798,9 @@ export async function applyMergesForUser(
       });
 
       if (verbose) {
-        console.log(`  [backfill-domains] APPLIED: [${sourceDomains.join(', ')}] → "${target}" (${totalPoints} pts, tier: ${tier}) — ${suggestion.rationale}`);
+        console.log(
+          `  [backfill-domains] APPLIED: [${sourceDomains.join(', ')}] → "${target}" (${totalPoints} pts, tier: ${tier}) — ${suggestion.rationale}`,
+        );
       }
 
       for (const row of sourceRowsToDelete) {
@@ -734,7 +844,10 @@ export async function runDomainMergesForUser(userId: string): Promise<MergeResul
     .groupBy(masteryEvents.canonicalSubcategory);
 
   const countByDomain = new Map(
-    questionCountRows.map((row) => [domainKey(row.canonicalSubcategory), Number(row.questionCount)]),
+    questionCountRows.map((row) => [
+      domainKey(row.canonicalSubcategory),
+      Number(row.questionCount),
+    ]),
   );
 
   const domainsWithContext = masteryRows.map((row) => ({
@@ -777,7 +890,13 @@ export async function runAggressiveDomainBackfillForUser(
 
   const domainsBefore = masteryRows.length;
   if (masteryRows.length < 2) {
-    return { mergesProposed: 0, mergesApplied: 0, domainsBefore, domainsAfter: domainsBefore, details: [] };
+    return {
+      mergesProposed: 0,
+      mergesApplied: 0,
+      domainsBefore,
+      domainsAfter: domainsBefore,
+      details: [],
+    };
   }
 
   const questionCountRows = await db
@@ -790,7 +909,10 @@ export async function runAggressiveDomainBackfillForUser(
     .groupBy(masteryEvents.canonicalSubcategory);
 
   const countByDomain = new Map(
-    questionCountRows.map((row) => [domainKey(row.canonicalSubcategory), Number(row.questionCount)]),
+    questionCountRows.map((row) => [
+      domainKey(row.canonicalSubcategory),
+      Number(row.questionCount),
+    ]),
   );
 
   const domainsWithContext = masteryRows.map((row) => ({
@@ -817,7 +939,11 @@ export async function runAggressiveDomainBackfillForUser(
       mergesApplied: 0,
       domainsBefore,
       domainsAfter: domainsBefore,
-      details: suggestions.map((s) => ({ sources: s.sources, target: s.target, rationale: s.rationale })),
+      details: suggestions.map((s) => ({
+        sources: s.sources,
+        target: s.target,
+        rationale: s.rationale,
+      })),
     };
   }
 
@@ -865,7 +991,11 @@ export async function getStrongestCategory(db: DbClient, userId: string) {
     })
     .from(playerMastery)
     .where(eq(playerMastery.userId, userId))
-    .orderBy(desc(playerMastery.totalPoints), desc(playerMastery.updatedAt), asc(playerMastery.canonicalSubcategory))
+    .orderBy(
+      desc(playerMastery.totalPoints),
+      desc(playerMastery.updatedAt),
+      asc(playerMastery.canonicalSubcategory),
+    )
     .limit(1);
 
   return strongest ?? null;
@@ -908,14 +1038,14 @@ export async function getMasteryMovement(db: DbClient, input: MasteryMovementInp
       tier: playerMastery.tier,
     })
     .from(playerMastery)
-    .where(and(
-      eq(playerMastery.userId, input.userId),
-      inArray(playerMastery.canonicalSubcategory, subcategories),
-    ));
+    .where(
+      and(
+        eq(playerMastery.userId, input.userId),
+        inArray(playerMastery.canonicalSubcategory, subcategories),
+      ),
+    );
 
-  const afterBySubcategory = new Map(
-    afterRows.map((row) => [row.canonical_subcategory, row])
-  );
+  const afterBySubcategory = new Map(afterRows.map((row) => [row.canonical_subcategory, row]));
 
   return subcategories
     .map((subcategory) => {
@@ -933,5 +1063,9 @@ export async function getMasteryMovement(db: DbClient, input: MasteryMovementInp
         tier_after: after?.tier ?? resolveTier(afterPoints),
       };
     })
-    .sort((a, b) => b.points_delta - a.points_delta || a.canonical_subcategory.localeCompare(b.canonical_subcategory));
+    .sort(
+      (a, b) =>
+        b.points_delta - a.points_delta ||
+        a.canonical_subcategory.localeCompare(b.canonical_subcategory),
+    );
 }

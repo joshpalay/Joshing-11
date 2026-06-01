@@ -6,23 +6,10 @@ import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
 import { LatelyFeed, type LatelyFeedItem } from '@/components/lately/LatelyFeed';
-import {
-  CREAM,
-  FH,
-  FS,
-  HILITE,
-  INK,
-  INK2,
-} from '@/components/lately/tokens';
-import {
-  UnderlineName,
-  UtilityActionLink,
-} from '@/components/lately/UtilityCard';
+import { CREAM, FH, FS, HILITE, INK, INK2 } from '@/components/lately/tokens';
+import { UnderlineName, UtilityActionLink } from '@/components/lately/UtilityCard';
 import { getSession } from '@/server/auth/session';
-import {
-  getActivitiesForUser,
-  type ActivityItemView,
-} from '@/server/db/queries/activity';
+import { getActivitiesForUser, type ActivityItemView } from '@/server/db/queries/activity';
 import { getLatelyMoments } from '@/server/db/queries/lately';
 import { getUserById } from '@/server/db/queries/users';
 
@@ -45,8 +32,7 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     }
     return (
       <>
-        <UnderlineName>{actorName(item)}</UnderlineName> sent you a Joshing
-        Game: {title}
+        <UnderlineName>{actorName(item)}</UnderlineName> sent you a Joshing Game: {title}
       </>
     );
   }
@@ -67,8 +53,7 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     return (
       <>
         <UnderlineName>{actorName(item)}</UnderlineName> reached{' '}
-        {masteryEvent?.tier ?? 'a new tier'} in{' '}
-        {masteryEvent?.domain ?? 'a domain'}
+        {masteryEvent?.tier ?? 'a new tier'} in {masteryEvent?.domain ?? 'a domain'}
       </>
     );
   }
@@ -80,8 +65,7 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
   if (item.type === 'friend_request') {
     return (
       <>
-        <UnderlineName>{actorName(item)}</UnderlineName> thought of you for
-        Joshing.
+        <UnderlineName>{actorName(item)}</UnderlineName> thought of you for Joshing.
       </>
     );
   }
@@ -89,8 +73,7 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
   if (item.type === 'friend_request_accepted') {
     return (
       <>
-        You and <UnderlineName>{actorName(item)}</UnderlineName> are now
-        friends
+        You and <UnderlineName>{actorName(item)}</UnderlineName> are now friends
       </>
     );
   }
@@ -98,8 +81,8 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
   if (item.type === 'invited_friend_played_first_five') {
     return (
       <>
-        <UnderlineName>{actorName(item)}</UnderlineName> accepted your
-        invitation and played their first 5 questions
+        <UnderlineName>{actorName(item)}</UnderlineName> accepted your invitation and played their
+        first 5 questions
       </>
     );
   }
@@ -107,8 +90,7 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
   if (item.type === 'reaction_received') {
     return (
       <>
-        <UnderlineName>{actorName(item)}</UnderlineName> reacted to your
-        question
+        <UnderlineName>{actorName(item)}</UnderlineName> reacted to your question
       </>
     );
   }
@@ -158,13 +140,13 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     const domain = dp?.domain;
     return domain ? (
       <>
-        <UnderlineName>{actorName(item)}</UnderlineName> answered your {domain}{' '}
-        question — that domain is now proven territory on your map
+        <UnderlineName>{actorName(item)}</UnderlineName> answered your {domain} question — that
+        domain is now proven territory on your map
       </>
     ) : (
       <>
-        <UnderlineName>{actorName(item)}</UnderlineName> answered your question
-        — a domain is now proven territory on your map
+        <UnderlineName>{actorName(item)}</UnderlineName> answered your question — a domain is now
+        proven territory on your map
       </>
     );
   }
@@ -172,8 +154,7 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
   if (item.type === 'grade_dispute_filed') {
     return (
       <>
-        <UnderlineName>{actorName(item)}</UnderlineName> asked for a re-look at
-        your question
+        <UnderlineName>{actorName(item)}</UnderlineName> asked for a re-look at your question
       </>
     );
   }
@@ -189,9 +170,7 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
     return (
       <div className="text-muted-foreground mt-1 space-y-1 text-sm">
         {directQuestion.personalMessage ? (
-          <p className="italic">
-            &ldquo;{directQuestion.personalMessage}&rdquo;
-          </p>
+          <p className="italic">&ldquo;{directQuestion.personalMessage}&rdquo;</p>
         ) : null}
         <p className="line-clamp-2">{directQuestion.questionText}</p>
       </div>
@@ -232,8 +211,7 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
     return (
       <div className="bg-background mt-1 space-y-1 rounded-md border p-3 text-sm leading-6">
         <p>
-          <span className="text-foreground font-medium">Question:</span>{' '}
-          {dispute.questionText}
+          <span className="text-foreground font-medium">Question:</span> {dispute.questionText}
         </p>
         <p className="text-muted-foreground">
           <span className="text-foreground font-medium">Canonical answer:</span>{' '}
@@ -276,10 +254,7 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
   );
 }
 
-function disputeStatusLabel(
-  status: string,
-  acceptedAlternative: string | null,
-): string {
+function disputeStatusLabel(status: string, acceptedAlternative: string | null): string {
   if (status === 'alternative_added') {
     return acceptedAlternative
       ? `Accepted — added "${acceptedAlternative}" as an alternative.`
@@ -297,41 +272,22 @@ function activityAction(item: ActivityItemView): ReactNode | null {
     const complete = item.reference.game?.viewerStatus === 'complete';
     return (
       <UtilityActionLink
-        href={
-          complete
-            ? `/games/${item.referenceId}/summary`
-            : `/games/${item.referenceId}`
-        }
+        href={complete ? `/games/${item.referenceId}/summary` : `/games/${item.referenceId}`}
         label={complete ? 'See results' : 'Play'}
       />
     );
   }
 
   if (item.type === 'joshing_game_progress') {
-    return (
-      <UtilityActionLink
-        href={`/games/${item.referenceId}/summary`}
-        label="See so far"
-      />
-    );
+    return <UtilityActionLink href={`/games/${item.referenceId}/summary`} label="See so far" />;
   }
 
   if (item.type === 'joshing_game_result') {
-    return (
-      <UtilityActionLink
-        href={`/games/${item.referenceId}/summary`}
-        label="See results"
-      />
-    );
+    return <UtilityActionLink href={`/games/${item.referenceId}/summary`} label="See results" />;
   }
 
   if (item.type === 'ceremony_ready') {
-    return (
-      <UtilityActionLink
-        href={`/ceremony/${item.referenceId}`}
-        label="See it now"
-      />
-    );
+    return <UtilityActionLink href={`/ceremony/${item.referenceId}`} label="See it now" />;
   }
 
   if (item.type === 'reaction_received') {
@@ -349,11 +305,7 @@ function activityAction(item: ActivityItemView): ReactNode | null {
 
   if (item.type === 'friend_request') {
     const request = item.reference.friendshipRequest;
-    if (
-      !request ||
-      request.status !== 'pending' ||
-      request.requestedByUserId === item.userId
-    ) {
+    if (!request || request.status !== 'pending' || request.requestedByUserId === item.userId) {
       return null;
     }
     return <FriendRequestActions friendshipId={request.id} />;
@@ -361,9 +313,7 @@ function activityAction(item: ActivityItemView): ReactNode | null {
 
   if (item.type === 'declared_promoted') {
     const domain = item.reference.declaredPromoted?.domain;
-    const href = domain
-      ? `/knowledge/${encodeURIComponent(domain)}`
-      : '/knowledge';
+    const href = domain ? `/knowledge/${encodeURIComponent(domain)}` : '/knowledge';
     return <UtilityActionLink href={href} label="See your map" />;
   }
 
@@ -386,13 +336,11 @@ function activityToFeedItem(item: ActivityItemView): LatelyFeedItem {
 
   const italicBody: ReactNode | null =
     item.type === 'received_direct_question'
-      ? item.reference.directQuestion?.category ?? null
+      ? (item.reference.directQuestion?.category ?? null)
       : null;
 
   const anchorId =
-    item.type === 'friend_request' && item.referenceId
-      ? `friendship-${item.referenceId}`
-      : null;
+    item.type === 'friend_request' && item.referenceId ? `friendship-${item.referenceId}` : null;
 
   return {
     kind: 'utility',
@@ -406,8 +354,7 @@ function activityToFeedItem(item: ActivityItemView): LatelyFeedItem {
         item.type === 'ceremony_ready'
           ? 'A look at the questions, friends, and territories that defined your week.'
           : null,
-      extra:
-        item.type === 'received_direct_question' ? null : subcopy,
+      extra: item.type === 'received_direct_question' ? null : subcopy,
       action: activityAction(item),
       anchorId,
     },
@@ -425,8 +372,9 @@ export default async function ActivitiesPage() {
   ]);
   const tz = viewer?.timezone ?? 'America/New_York';
 
-  const utilityItems: LatelyFeedItem[] = filterUtilityActivities(items, moments)
-    .map(activityToFeedItem);
+  const utilityItems: LatelyFeedItem[] = filterUtilityActivities(items, moments).map(
+    activityToFeedItem,
+  );
 
   const momentItems: LatelyFeedItem[] = moments.map((m) => ({
     kind: 'moment',

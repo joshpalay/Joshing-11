@@ -87,7 +87,12 @@ function hexToRgb(color: string): { r: number; g: number; b: number } {
 
 // ── Bubble ─────────────────────────────────────────────────────────────────────
 
-function Bubble({ points, maxPoints, broadCategory, size }: {
+function Bubble({
+  points,
+  maxPoints,
+  broadCategory,
+  size,
+}: {
   points: number;
   maxPoints: number;
   broadCategory: string;
@@ -123,7 +128,14 @@ export type SharePortraitCardProps = {
 export const SharePortraitCard = forwardRef<HTMLDivElement, SharePortraitCardProps>(
   function SharePortraitCard({ entries, playerDisplayName }, ref) {
     const valid = entries
-      .filter((e) => e.totalMasteryPoints > 0 && e.broadCategory && e.broadCategory !== 'General Knowledge' && e.broadCategory !== 'general_knowledge' && e.broadCategory !== 'other')
+      .filter(
+        (e) =>
+          e.totalMasteryPoints > 0 &&
+          e.broadCategory &&
+          e.broadCategory !== 'General Knowledge' &&
+          e.broadCategory !== 'general_knowledge' &&
+          e.broadCategory !== 'other',
+      )
       .sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints);
 
     const maxPoints = valid.length > 0 ? valid[0].totalMasteryPoints : 1;
@@ -142,10 +154,7 @@ export const SharePortraitCard = forwardRef<HTMLDivElement, SharePortraitCardPro
     }
 
     return (
-      <div
-        ref={ref}
-        style={cardStyle}
-      >
+      <div ref={ref} style={cardStyle}>
         {/* Header */}
         <div style={headerStyle}>
           <span style={headerLeftStyle}>{playerDisplayName}</span>
@@ -228,7 +237,7 @@ export const SharePortraitCard = forwardRef<HTMLDivElement, SharePortraitCardPro
         </div>
       </div>
     );
-  }
+  },
 );
 
 // ── Styles ─────────────────────────────────────────────────────────────────────

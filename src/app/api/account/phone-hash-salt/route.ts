@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
-import { getSession } from '@/server/auth/session'
+import { getSession } from '@/server/auth/session';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 // Returns the PHONE_HASH_SALT used by the client-side contact-hashing path
 // (ContactMatchBlock). The salt is NOT a true secret — it lives on every
@@ -13,10 +13,10 @@ export const dynamic = 'force-dynamic'
 // is therefore non-functional until ops sets the env var. The rest of the
 // app keeps working (the boot guard at instrumentation.ts only warns).
 export async function GET() {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const salt = process.env.PHONE_HASH_SALT
+  const salt = process.env.PHONE_HASH_SALT;
   if (!salt) {
     return NextResponse.json(
       {
@@ -24,8 +24,8 @@ export async function GET() {
         message: 'Contact-hash matching is not configured. Try again later.',
       },
       { status: 500 },
-    )
+    );
   }
 
-  return NextResponse.json({ salt })
+  return NextResponse.json({ salt });
 }

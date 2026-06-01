@@ -1,15 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
+import { NextRequest, NextResponse } from 'next/server';
+import { sql } from 'drizzle-orm';
 
-import { db } from '@/server/db'
+import { db } from '@/server/db';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 function isAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET
-  if (!secret) return true
-  const authHeader = request.headers.get('authorization')
-  return authHeader === `Bearer ${secret}`
+  const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET;
+  if (!secret) return true;
+  const authHeader = request.headers.get('authorization');
+  return authHeader === `Bearer ${secret}`;
 }
 
 // Two-step cleanup on the Friendship table:
@@ -20,7 +20,7 @@ function isAuthorized(request: NextRequest): boolean {
 // No ActivityItems are written — expiration and GC are passive.
 export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
   const expiredResult = await db.execute(sql`
@@ -30,18 +30,18 @@ export async function GET(request: NextRequest) {
     WHERE "status" = 'pending'
       AND "expiresAt" IS NOT NULL
       AND "expiresAt" < NOW()
-  `)
+  `);
 
   const deletedResult = await db.execute(sql`
     DELETE FROM "Friendship"
     WHERE "status" IN ('declined', 'expired')
       AND "resolvedAt" IS NOT NULL
       AND "resolvedAt" < NOW() - INTERVAL '60 days'
-  `)
+  `);
 
   return NextResponse.json({
     ok: true,
     expired: expiredResult.rowCount ?? 0,
     deleted: deletedResult.rowCount ?? 0,
-  })
+  });
 }

@@ -242,10 +242,14 @@ export async function register() {
         ) AS exists
       `);
 
-      const categoryExists = typeResult.rows[0]?.exists === true || typeResult.rows[0]?.exists === 'true';
+      const categoryExists =
+        typeResult.rows[0]?.exists === true || typeResult.rows[0]?.exists === 'true';
       if (categoryExists) {
         const migrationsFolder = path.join(process.cwd(), 'drizzle');
-        const migrationSql = fs.readFileSync(path.join(migrationsFolder, '0000_material_lyja.sql'), 'utf8');
+        const migrationSql = fs.readFileSync(
+          path.join(migrationsFolder, '0000_material_lyja.sql'),
+          'utf8',
+        );
         const hash = crypto.createHash('sha256').update(migrationSql).digest('hex');
 
         // Ensure Drizzle's internal migration tracking schema and table exist
@@ -779,7 +783,10 @@ export async function register() {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
       });
     } catch (err) {
-      console.error('[instrumentation] DB migration failed — server will start but schema may be out of date:', err);
+      console.error(
+        '[instrumentation] DB migration failed — server will start but schema may be out of date:',
+        err,
+      );
     } finally {
       await pool.end();
     }

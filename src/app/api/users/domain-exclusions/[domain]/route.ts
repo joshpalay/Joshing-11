@@ -17,15 +17,20 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { domain: rawDomain } = await context.params;
   const domain = decodeURIComponent(rawDomain).trim().replace(/\s+/g, ' ');
   if (!domain) {
-    return NextResponse.json({ error: 'validation', message: 'domain is required' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'domain is required' },
+      { status: 400 },
+    );
   }
 
   await db
     .delete(userDomainExclusions)
-    .where(and(
-      eq(userDomainExclusions.userId, session.userId),
-      eq(userDomainExclusions.canonicalSubcategory, domain),
-    ));
+    .where(
+      and(
+        eq(userDomainExclusions.userId, session.userId),
+        eq(userDomainExclusions.canonicalSubcategory, domain),
+      ),
+    );
 
   return NextResponse.json({ ok: true });
 }

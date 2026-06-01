@@ -1,18 +1,18 @@
 type DismissedFeedBarProps = {
   /** Visible category label for the mute affordance; omit/null to hide it. */
-  category: string | null
+  category: string | null;
   /** Restores the full card — no side effects, nothing learned. */
-  onUndo: () => void
+  onUndo: () => void;
   /** The only mute path from here — wired to the existing category-mute handler. */
-  onMute: () => void
-  disabled?: boolean
+  onMute: () => void;
+  disabled?: boolean;
   /** The canonical answer to surface on the card back. null = none to show. */
-  answer?: string | null
+  answer?: string | null;
   /** True while the on-demand answer fetch is in flight. */
-  answerLoading?: boolean
+  answerLoading?: boolean;
   /** True if the on-demand answer fetch failed. */
-  answerError?: boolean
-}
+  answerError?: boolean;
+};
 
 /**
  * The dismissed card rendered as the "back of the card": a solid muted surface
@@ -61,13 +61,9 @@ export function DismissedFeedBar({
       </div>
       <div className="mt-2">
         {answerLoading ? (
-          <span className="text-muted-foreground text-[13px] italic">
-            Revealing answer…
-          </span>
+          <span className="text-muted-foreground text-[13px] italic">Revealing answer…</span>
         ) : answerError ? (
-          <span className="text-muted-foreground text-[13px] italic">
-            Answer unavailable
-          </span>
+          <span className="text-muted-foreground text-[13px] italic">Answer unavailable</span>
         ) : answer ? (
           <p
             className="text-[13px] italic"
@@ -82,5 +78,5 @@ export function DismissedFeedBar({
         ) : null}
       </div>
     </div>
-  )
+  );
 }

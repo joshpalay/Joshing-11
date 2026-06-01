@@ -43,10 +43,7 @@ describe('parseFactualGateResponse', () => {
 
   it('truncates very long reason strings', () => {
     const long = 'x'.repeat(500);
-    const result = parseFactualGateResponse(
-      `{"drop_indices":[0],"reasons":{"0":"${long}"}}`,
-      1,
-    );
+    const result = parseFactualGateResponse(`{"drop_indices":[0],"reasons":{"0":"${long}"}}`, 1);
     expect(result.reasons[0].length).toBe(200);
   });
 });

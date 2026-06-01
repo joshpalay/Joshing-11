@@ -1,12 +1,12 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server';
 
-import { readSessionClaims } from '@/server/auth/session'
+import { readSessionClaims } from '@/server/auth/session';
 
-const SESSION_COOKIE_NAME = 'joshing_session'
+const SESSION_COOKIE_NAME = 'joshing_session';
 
 function tagTiming(response: NextResponse, startedAt: number): NextResponse {
-  response.headers.set('Server-Timing', `proxy;dur=${Date.now() - startedAt}`)
-  return response
+  response.headers.set('Server-Timing', `proxy;dur=${Date.now() - startedAt}`);
+  return response;
 }
 
 /**
@@ -24,18 +24,18 @@ function tagTiming(response: NextResponse, startedAt: number): NextResponse {
  * additional fence, not a replacement.
  */
 export async function middleware(request: NextRequest) {
-  const startedAt = Date.now()
+  const startedAt = Date.now();
   if (request.method === 'OPTIONS') {
-    return tagTiming(new NextResponse(null, { status: 200 }), startedAt)
+    return tagTiming(new NextResponse(null, { status: 200 }), startedAt);
   }
 
-  const { pathname, search } = request.nextUrl
-  const isApi = pathname.startsWith('/api/')
-  const isLoginPage = pathname === '/login'
-  const isInvitePage = pathname.startsWith('/invite/')
+  const { pathname, search } = request.nextUrl;
+  const isApi = pathname.startsWith('/api/');
+  const isLoginPage = pathname === '/login';
+  const isInvitePage = pathname.startsWith('/invite/');
 
-  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value
-  const claims = await readSessionClaims(token)
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const claims = await readSessionClaims(token);
 
   if (!claims) {
     if (isApi) {
@@ -45,12 +45,12 @@ export async function middleware(request: NextRequest) {
           { status: 401 },
         ),
         startedAt,
-      )
+      );
     }
-    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt)
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('next', pathname + search)
-    return tagTiming(NextResponse.redirect(loginUrl), startedAt)
+    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt);
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('next', pathname + search);
+    return tagTiming(NextResponse.redirect(loginUrl), startedAt);
   }
 
   // Legacy session: valid JWT but no `inv` claim. Trigger graceful refresh.
@@ -65,30 +65,30 @@ export async function middleware(request: NextRequest) {
           { status: 401 },
         ),
         startedAt,
-      )
+      );
     }
-    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt)
-    const refreshUrl = new URL('/api/auth/refresh-session', request.url)
-    refreshUrl.searchParams.set('next', pathname + search)
-    return tagTiming(NextResponse.redirect(refreshUrl), startedAt)
+    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt);
+    const refreshUrl = new URL('/api/auth/refresh-session', request.url);
+    refreshUrl.searchParams.set('next', pathname + search);
+    return tagTiming(NextResponse.redirect(refreshUrl), startedAt);
   }
 
   // Authenticated with valid invitation. API requests pass through; page
   // requests get the onboarding/login routing pass.
-  if (isApi) return tagTiming(NextResponse.next(), startedAt)
+  if (isApi) return tagTiming(NextResponse.next(), startedAt);
 
-  const isOnboardingPage = pathname === '/onboarding'
+  const isOnboardingPage = pathname === '/onboarding';
   const isAllowedOnboardingPath =
     isOnboardingPage ||
     pathname === '/logout' ||
     pathname.startsWith('/api/onboarding/') ||
-    pathname.startsWith('/api/auth/')
+    pathname.startsWith('/api/auth/');
 
   if (claims.onboardingComplete) {
     if (isLoginPage || isOnboardingPage) {
-      return tagTiming(NextResponse.redirect(new URL('/', request.url)), startedAt)
+      return tagTiming(NextResponse.redirect(new URL('/', request.url)), startedAt);
     }
-    return tagTiming(NextResponse.next(), startedAt)
+    return tagTiming(NextResponse.next(), startedAt);
   }
 
   // claims.onboardingComplete is false: either the user genuinely hasn't
@@ -96,14 +96,11 @@ export async function middleware(request: NextRequest) {
   // their JWT is missing the field. Allow onboarding/auth paths through and
   // route everything else to the refresh endpoint, which does one DB read,
   // re-mints the JWT if needed, and bounces back. Steady-state is JWT-only.
-  if (isAllowedOnboardingPath) return tagTiming(NextResponse.next(), startedAt)
+  if (isAllowedOnboardingPath) return tagTiming(NextResponse.next(), startedAt);
 
-  const refreshUrl = new URL(
-    '/api/auth/refresh-onboarding-claim',
-    request.url,
-  )
-  refreshUrl.searchParams.set('next', pathname + search)
-  return tagTiming(NextResponse.redirect(refreshUrl), startedAt)
+  const refreshUrl = new URL('/api/auth/refresh-onboarding-claim', request.url);
+  refreshUrl.searchParams.set('next', pathname + search);
+  return tagTiming(NextResponse.redirect(refreshUrl), startedAt);
 }
 
 /**
@@ -120,10 +117,10 @@ export async function middleware(request: NextRequest) {
  * handles authenticated users hitting those pages (e.g. redirecting them
  * to /).
  */
-export { middleware as proxy }
+export { middleware as proxy };
 
 export const config = {
   matcher: [
     '/((?!api/auth|api/cron|api/share|api/telemetry|share|images|_next/static|_next/image|favicon\\.ico|__nextjs).*)',
   ],
-}
+};

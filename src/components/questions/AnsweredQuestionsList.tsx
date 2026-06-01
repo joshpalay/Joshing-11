@@ -12,7 +12,11 @@ export type AnsweredQuestionItem = {
   sourceLabel: string;
 };
 
-const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
 
 function formatDate(value: string | null): string {
   if (!value) return '';
@@ -36,7 +40,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
     return (
       <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
         <h2 className="font-serif text-2xl font-semibold">No answers yet.</h2>
-        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-2 max-w-sm text-sm">
           Questions you answer in your feed, daily five, or Joshing games will show up here.
         </p>
       </section>
@@ -45,7 +49,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
 
   return (
     <section>
-      <div className="hidden grid-cols-[2fr_2fr_1fr_1fr] gap-3 border-b px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
+      <div className="text-muted-foreground hidden grid-cols-[2fr_2fr_1fr_1fr] gap-3 border-b px-3 pb-2 text-xs font-medium tracking-wide uppercase sm:grid">
         <div>Question</div>
         <div>Your answer</div>
         <div>Asked by</div>
@@ -62,35 +66,35 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
               className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[2fr_2fr_1fr_1fr] sm:items-start sm:gap-3"
             >
               <div className="text-sm">
-                <p className="line-clamp-3 text-foreground">{item.questionText}</p>
+                <p className="text-foreground line-clamp-3">{item.questionText}</p>
               </div>
               <div className="text-sm">
                 <span
                   className={
                     answer.muted
-                      ? 'italic text-muted-foreground'
+                      ? 'text-muted-foreground italic'
                       : correct
                         ? 'text-foreground'
                         : skipped
-                          ? 'italic text-muted-foreground'
-                          : 'text-foreground line-through decoration-muted-foreground/60'
+                          ? 'text-muted-foreground italic'
+                          : 'text-foreground decoration-muted-foreground/60 line-through'
                   }
                 >
                   {answer.text}
                 </span>
                 {!answer.muted && !correct && !skipped ? (
-                  <span className="ml-2 text-xs text-muted-foreground">
+                  <span className="text-muted-foreground ml-2 text-xs">
                     correct: {item.correctAnswer}
                   </span>
                 ) : null}
-                <p className="mt-0.5 text-xs text-muted-foreground sm:hidden">
+                <p className="text-muted-foreground mt-0.5 text-xs sm:hidden">
                   Asked by {askerDisplay(item)} · {formatDate(item.answeredAt)}
                 </p>
               </div>
-              <div className="hidden text-sm text-muted-foreground sm:block">
+              <div className="text-muted-foreground hidden text-sm sm:block">
                 {askerDisplay(item)}
               </div>
-              <div className="hidden text-sm text-muted-foreground sm:block">
+              <div className="text-muted-foreground hidden text-sm sm:block">
                 {formatDate(item.answeredAt)}
               </div>
             </li>

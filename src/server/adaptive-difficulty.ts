@@ -126,7 +126,8 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
     return {
       targetCorrectRate: 0.78,
       difficultyLabel: 'approachable trivia',
-      promptHint: 'Target roughly a 78% correct rate. Write friendly, recognizable questions a casually interested person in the domain would get — lean on well-known facts, not deep cuts.',
+      promptHint:
+        'Target roughly a 78% correct rate. Write friendly, recognizable questions a casually interested person in the domain would get — lean on well-known facts, not deep cuts.',
       estimate: 'accessible',
     };
   }
@@ -135,7 +136,8 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
     return {
       targetCorrectRate: 0.62,
       difficultyLabel: 'fair and familiar',
-      promptHint: 'Target roughly a 62% correct rate. Write questions a reasonably engaged fan of the domain should know without needing specialist depth.',
+      promptHint:
+        'Target roughly a 62% correct rate. Write questions a reasonably engaged fan of the domain should know without needing specialist depth.',
       estimate: 'moderate',
     };
   }
@@ -144,7 +146,8 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
     return {
       targetCorrectRate: 0.35,
       difficultyLabel: 'hard for someone with depth',
-      promptHint: 'Target roughly a 35% correct rate. Write questions that are hard even for someone with real depth in the domain.',
+      promptHint:
+        'Target roughly a 35% correct rate. Write questions that are hard even for someone with real depth in the domain.',
       estimate: 'specialist',
     };
   }
@@ -152,7 +155,8 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
   return {
     targetCorrectRate: 0.15,
     difficultyLabel: 'expert-level deep cuts',
-    promptHint: 'Target roughly a 15% correct rate. Write expert-level deep cuts with specific facts, dates, terminology, or details.',
+    promptHint:
+      'Target roughly a 15% correct rate. Write expert-level deep cuts with specific facts, dates, terminology, or details.',
     estimate: 'specialist',
   };
 }
@@ -205,12 +209,20 @@ export function computeDomainDifficultyStep(
   if (isCorrect && nextCorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'specialist') {
     nextDifficulty = stepDifficulty(existing.servedDifficulty, 1);
     nextCorrect = 0;
-  } else if (!isCorrect && nextIncorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'accessible') {
+  } else if (
+    !isCorrect &&
+    nextIncorrect >= STREAK_TO_STEP &&
+    existing.servedDifficulty !== 'accessible'
+  ) {
     nextDifficulty = stepDifficulty(existing.servedDifficulty, -1);
     nextIncorrect = 0;
   }
 
-  return { servedDifficulty: nextDifficulty, consecutiveCorrect: nextCorrect, consecutiveIncorrect: nextIncorrect };
+  return {
+    servedDifficulty: nextDifficulty,
+    consecutiveCorrect: nextCorrect,
+    consecutiveIncorrect: nextIncorrect,
+  };
 }
 
 /**
@@ -228,10 +240,12 @@ export async function updateDomainDifficultyOnAnswer(
   const [existing] = await db
     .select()
     .from(userDomainDifficulties)
-    .where(and(
-      eq(userDomainDifficulties.userId, userId),
-      eq(userDomainDifficulties.canonicalSubcategory, canonicalSubcategory),
-    ))
+    .where(
+      and(
+        eq(userDomainDifficulties.userId, userId),
+        eq(userDomainDifficulties.canonicalSubcategory, canonicalSubcategory),
+      ),
+    )
     .limit(1);
 
   if (!existing) {
@@ -279,22 +293,23 @@ export async function getDomainDifficultyOverrides(
       servedDifficulty: userDomainDifficulties.servedDifficulty,
     })
     .from(userDomainDifficulties)
-    .where(and(
-      eq(userDomainDifficulties.userId, userId),
-      inArray(userDomainDifficulties.canonicalSubcategory, domains),
-    ));
+    .where(
+      and(
+        eq(userDomainDifficulties.userId, userId),
+        inArray(userDomainDifficulties.canonicalSubcategory, domains),
+      ),
+    );
 
   const known = new Map<string, ServedDifficulty>();
   for (const row of rows) {
     known.set(row.canonicalSubcategory, row.servedDifficulty as ServedDifficulty);
   }
 
-  const seedLevel = known.size === domains.length
-    ? null
-    : await readCurrentAdaptiveLevel(userId);
+  const seedLevel = known.size === domains.length ? null : await readCurrentAdaptiveLevel(userId);
 
   for (const domain of domains) {
-    const served = known.get(domain) ?? seedDifficultyFromAdaptiveLevel(seedLevel ?? MIN_ADAPTIVE_LEVEL);
+    const served =
+      known.get(domain) ?? seedDifficultyFromAdaptiveLevel(seedLevel ?? MIN_ADAPTIVE_LEVEL);
     overrides.set(domain, SERVED_TO_PREFERENCE[served]);
   }
 

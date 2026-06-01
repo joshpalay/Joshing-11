@@ -18,7 +18,8 @@ export async function POST(_request: Request, context: RouteContext) {
   const { ceremonyId } = await context.params;
   const ceremony = await getCeremonyById(ceremonyId);
   if (!ceremony) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  if (ceremony.userId !== session.userId) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (ceremony.userId !== session.userId)
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   if (!ceremony.viewedAt) {
     await db

@@ -33,7 +33,9 @@ function describeError(error: unknown): string {
       if (value === undefined || value === null) continue;
       if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
         const stringValue = String(value);
-        parts.push(`${key}=${stringValue.length > 400 ? `${stringValue.slice(0, 400)}…` : stringValue}`);
+        parts.push(
+          `${key}=${stringValue.length > 400 ? `${stringValue.slice(0, 400)}…` : stringValue}`,
+        );
       }
     }
     if (parts.length > 0) lines.push(`${label}: ${parts.join(' · ')}`);
@@ -81,7 +83,11 @@ export async function backfillMissingFeedItemsForAnswerer(
   const filters = [
     isNull(masteryEvents.questionId),
     inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-    inArray(masteryEvents.answerState, ['first_correct', 'first_correct_after_wrong', 'repeat_correct']),
+    inArray(masteryEvents.answerState, [
+      'first_correct',
+      'first_correct_after_wrong',
+      'repeat_correct',
+    ]),
   ];
   if (options.answererUserId) {
     filters.push(eq(masteryEvents.answeredByUserId, options.answererUserId));
@@ -119,7 +125,10 @@ export async function backfillMissingFeedItemsForAnswerer(
 
     let canonicalQuestionId: string;
     try {
-      const persisted = await persistGeneratedQuestion(generatedQuestionId, row.canonicalSubcategory);
+      const persisted = await persistGeneratedQuestion(
+        generatedQuestionId,
+        row.canonicalSubcategory,
+      );
       canonicalQuestionId = persisted.questionId;
     } catch (error) {
       result.persistFailures += 1;

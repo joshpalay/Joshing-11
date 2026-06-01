@@ -12,18 +12,18 @@
 // the inviter's evergreen users.invite_token, generated on demand at
 // /api/account/invite-token and rotatable from /account/privacy.
 
-import type { ReactNode } from 'react'
-import { redirect } from 'next/navigation'
-import Link from 'next/link'
+import type { ReactNode } from 'react';
+import { redirect } from 'next/navigation';
+import Link from 'next/link';
 
-import { AddFriendButton } from '@/components/friends/AddFriendButton'
-import { getSession } from '@/server/auth/session'
-import { getRelationship } from '@/server/db/queries/friend-requests'
-import { resolveInviteLink } from '@/server/friends/user-invite-token'
+import { AddFriendButton } from '@/components/friends/AddFriendButton';
+import { getSession } from '@/server/auth/session';
+import { getRelationship } from '@/server/db/queries/friend-requests';
+import { resolveInviteLink } from '@/server/friends/user-invite-token';
 
 type InvitePageProps = {
-  params: Promise<{ handle: string; token: string }>
-}
+  params: Promise<{ handle: string; token: string }>;
+};
 
 function InviteShell({ children }: { children: ReactNode }) {
   return (
@@ -32,29 +32,29 @@ function InviteShell({ children }: { children: ReactNode }) {
         {children}
       </section>
     </main>
-  )
+  );
 }
 
 function loginHref(handle: string, token: string): string {
   const params = new URLSearchParams({
     inviteHandle: handle,
     inviteUserToken: token,
-  })
-  return `/login?${params.toString()}`
+  });
+  return `/login?${params.toString()}`;
 }
 
 export default async function UserInvitePage({ params }: InvitePageProps) {
-  const { handle, token } = await params
-  const inviter = await resolveInviteLink(handle, token)
+  const { handle, token } = await params;
+  const inviter = await resolveInviteLink(handle, token);
 
   if (!inviter) {
     return (
       <InviteShell>
         <div className="space-y-4 text-center">
-          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             Link not valid
           </p>
-          <h1 className="font-serif text-2xl font-semibold leading-tight">
+          <h1 className="font-serif text-2xl leading-tight font-semibold">
             This invite link is no longer valid.
           </h1>
           <p className="text-muted-foreground text-sm leading-6">
@@ -68,28 +68,28 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
           </Link>
         </div>
       </InviteShell>
-    )
+    );
   }
 
-  const session = await getSession()
-  const displayName = inviter.inviterDisplayName?.trim() || `@${inviter.inviterHandle}`
+  const session = await getSession();
+  const displayName = inviter.inviterDisplayName?.trim() || `@${inviter.inviterHandle}`;
 
   // Logged-in as the inviter themselves — bounce to /friends.
   if (session?.userId === inviter.inviterUserId) {
-    redirect('/friends')
+    redirect('/friends');
   }
 
   // Logged-in as someone else — render an inline send-friend-request UI.
   if (session) {
-    const relationship = await getRelationship(session.userId, inviter.inviterUserId)
+    const relationship = await getRelationship(session.userId, inviter.inviterUserId);
     return (
       <InviteShell>
         <div className="space-y-5">
           <div>
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               You were invited
             </p>
-            <h1 className="mt-2 font-serif text-3xl font-semibold leading-tight">
+            <h1 className="mt-2 font-serif text-3xl leading-tight font-semibold">
               {displayName} invited you to connect on Joshing.
             </h1>
           </div>
@@ -106,7 +106,7 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
           </Link>
         </div>
       </InviteShell>
-    )
+    );
   }
 
   // Logged-out — landing card → /login with the invite params attached.
@@ -114,7 +114,7 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
     <InviteShell>
       <div className="space-y-5">
         <div>
-          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             A note from a friend
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-normal">
@@ -132,5 +132,5 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
         </Link>
       </div>
     </InviteShell>
-  )
+  );
 }

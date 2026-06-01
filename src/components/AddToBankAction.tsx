@@ -74,16 +74,18 @@ export function AddToBankAction({
         disabled={isPending}
         onClick={toggle}
         className={cn(
-          'inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-60',
+          'text-muted-foreground hover:bg-muted hover:text-foreground inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm transition disabled:opacity-60',
           inBank ? 'border-amber-300 bg-amber-50 text-amber-700' : '',
           className,
         )}
       >
-        <Bookmark className={cn('size-4 transition-transform', inBank ? 'scale-110 fill-current' : '')} />
+        <Bookmark
+          className={cn('size-4 transition-transform', inBank ? 'scale-110 fill-current' : '')}
+        />
         {label ? <span>{label}</span> : null}
       </button>
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
+        <div className="bg-foreground text-background fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm shadow-lg md:bottom-8">
           {toast}
         </div>
       ) : null}

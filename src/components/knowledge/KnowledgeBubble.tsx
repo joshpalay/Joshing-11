@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react';
 
 /**
  * Single source for the domain "bubble" gradient — a soft radial fill that
@@ -9,22 +9,22 @@ import type { CSSProperties, ReactNode } from 'react'
  * audit C8 — consolidate the circle renderers behind one primitive.)
  */
 export function domainBubbleGradient(light: string): string {
-  return `radial-gradient(circle at 38% 38%, ${light.replace('0.12', '0.22')}, ${light})`
+  return `radial-gradient(circle at 38% 38%, ${light.replace('0.12', '0.22')}, ${light})`;
 }
 
 export type KnowledgeBubbleProps = {
   /** Circle diameter in px. */
-  diameter: number
+  diameter: number;
   /** Domain `light` color; builds the radial gradient unless `background` is set. */
-  light?: string
+  light?: string;
   /** Explicit background override (ghost/declared fills that aren't a domain gradient). */
-  background?: string
-  opacity?: number
-  border?: string
+  background?: string;
+  opacity?: number;
+  border?: string;
   /** Centered content — a domain icon, a mastery count, etc. */
-  children?: ReactNode
-  style?: CSSProperties
-}
+  children?: ReactNode;
+  style?: CSSProperties;
+};
 
 /**
  * The leaf circle every knowledge renderer draws: a round, gradient-filled disc
@@ -58,5 +58,5 @@ export function KnowledgeBubble({
     >
       {children}
     </div>
-  )
+  );
 }

@@ -17,7 +17,7 @@ export function Hero({ isComplete }: { isComplete: boolean }) {
           What else is around?
         </p>
       </header>
-    )
+    );
   }
 
   return (
@@ -36,5 +36,5 @@ export function Hero({ isComplete }: { isComplete: boolean }) {
         Five questions from your world. Play, then see what&rsquo;s around.
       </p>
     </header>
-  )
+  );
 }

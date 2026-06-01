@@ -11,7 +11,11 @@ function isoDate(date: Date): string {
 }
 
 function appUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    'http://localhost:3000'
+  ).replace(/\/$/, '');
 }
 
 async function findExistingCeremony(
@@ -22,11 +26,13 @@ async function findExistingCeremony(
   const [row] = await db
     .select({ id: biweeklyCeremonies.id })
     .from(biweeklyCeremonies)
-    .where(and(
-      eq(biweeklyCeremonies.userId, userId),
-      eq(biweeklyCeremonies.cycleStart, cycleStartIso),
-      eq(biweeklyCeremonies.cycleEnd, cycleEndIso),
-    ))
+    .where(
+      and(
+        eq(biweeklyCeremonies.userId, userId),
+        eq(biweeklyCeremonies.cycleStart, cycleStartIso),
+        eq(biweeklyCeremonies.cycleEnd, cycleEndIso),
+      ),
+    )
     .limit(1);
   return row?.id ?? null;
 }
@@ -39,11 +45,13 @@ async function hasMasteryEventInCycle(
   const [row] = await db
     .select({ id: masteryEvents.id })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      gte(masteryEvents.createdAt, cycleStart),
-      lte(masteryEvents.createdAt, cycleEnd),
-    ))
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        gte(masteryEvents.createdAt, cycleStart),
+        lte(masteryEvents.createdAt, cycleEnd),
+      ),
+    )
     .limit(1);
   return Boolean(row);
 }

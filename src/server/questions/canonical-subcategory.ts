@@ -20,27 +20,23 @@ const FORBIDDEN_CANONICAL_SUBCATEGORIES = new Set<string>([
   'general_knowledge',
   'trivia',
   'potpourri',
-])
+]);
 
 // Anything shorter than this after normalization is treated as generic. This
 // catches single-letter and abbreviation-fragment labels like "A" and "Mr"
 // that previously slipped past the bucket-name blocklist (see the categorizer
 // fallback in src/lib/llm.ts).
-const MIN_SUBCATEGORY_LENGTH = 3
+const MIN_SUBCATEGORY_LENGTH = 3;
 
 function normalizeForCheck(value: string): string {
-  return value
-    .trim()
-    .replace(/[_-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .toLowerCase()
+  return value.trim().replace(/[_-]/g, ' ').replace(/\s+/g, ' ').toLowerCase();
 }
 
 export function isGenericSubcategory(value: string | null | undefined): boolean {
-  if (!value) return true
-  const normalized = normalizeForCheck(value)
-  if (normalized.length < MIN_SUBCATEGORY_LENGTH) return true
-  return FORBIDDEN_CANONICAL_SUBCATEGORIES.has(normalized)
+  if (!value) return true;
+  const normalized = normalizeForCheck(value);
+  if (normalized.length < MIN_SUBCATEGORY_LENGTH) return true;
+  return FORBIDDEN_CANONICAL_SUBCATEGORIES.has(normalized);
 }
 
 export class GenericCanonicalSubcategoryError extends Error {
@@ -49,8 +45,8 @@ export class GenericCanonicalSubcategoryError extends Error {
       `Refusing to persist question with generic canonical_subcategory '${
         attempted ?? '(empty)'
       }'. The categorizer must return a hyper-specific label.`,
-    )
-    this.name = 'GenericCanonicalSubcategoryError'
+    );
+    this.name = 'GenericCanonicalSubcategoryError';
   }
 }
 
@@ -62,6 +58,6 @@ export function assertSpecificCanonicalSubcategory(
   value: string | null | undefined,
 ): asserts value is string {
   if (isGenericSubcategory(value)) {
-    throw new GenericCanonicalSubcategoryError(value)
+    throw new GenericCanonicalSubcategoryError(value);
   }
 }

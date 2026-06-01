@@ -40,12 +40,18 @@ const { dbMock, state } = vi.hoisted(() => {
   };
 
   function columnValue(column: string, feedItem: FeedRow, question: QuestionRow | undefined) {
-    if (column.startsWith('feedItems.')) return feedItem[column.slice('feedItems.'.length) as keyof FeedRow];
-    if (column.startsWith('questions.')) return question?.[column.slice('questions.'.length) as keyof QuestionRow];
+    if (column.startsWith('feedItems.'))
+      return feedItem[column.slice('feedItems.'.length) as keyof FeedRow];
+    if (column.startsWith('questions.'))
+      return question?.[column.slice('questions.'.length) as keyof QuestionRow];
     return undefined;
   }
 
-  function evaluate(predicate: Predicate | undefined, feedItem: FeedRow, question: QuestionRow | undefined): boolean {
+  function evaluate(
+    predicate: Predicate | undefined,
+    feedItem: FeedRow,
+    question: QuestionRow | undefined,
+  ): boolean {
     if (!predicate) return true;
     switch (predicate.op) {
       case 'eq':
@@ -77,8 +83,13 @@ const { dbMock, state } = vi.hoisted(() => {
 
   function queryRows(predicate: Predicate | undefined, selection: unknown) {
     const matched = state.feedRows
-      .map((feedItem) => ({ feedItem, question: state.questionRows.find((question) => question.id === feedItem.questionId) }))
-      .filter(({ feedItem, question }) => Boolean(question) && evaluate(predicate, feedItem, question));
+      .map((feedItem) => ({
+        feedItem,
+        question: state.questionRows.find((question) => question.id === feedItem.questionId),
+      }))
+      .filter(
+        ({ feedItem, question }) => Boolean(question) && evaluate(predicate, feedItem, question),
+      );
 
     if ((selection as { value?: unknown })?.value) return [{ value: matched.length }];
     return matched.map(({ feedItem }) => ({ item: feedItem }));
@@ -89,7 +100,8 @@ const { dbMock, state } = vi.hoisted(() => {
       orderBy: vi.fn(() => ({
         limit: vi.fn(async (limit: number) => rows.slice(0, limit)),
       })),
-      then: (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(rows).then(resolve, reject),
+      then: (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve(rows).then(resolve, reject),
     };
   }
 
@@ -98,7 +110,9 @@ const { dbMock, state } = vi.hoisted(() => {
       from: vi.fn(() => ({
         where: vi.fn((predicate: Predicate | undefined) => makeThenable(predicate ? [] : [])),
         innerJoin: vi.fn(() => ({
-          where: vi.fn((predicate: Predicate | undefined) => makeThenable(queryRows(predicate, selection))),
+          where: vi.fn((predicate: Predicate | undefined) =>
+            makeThenable(queryRows(predicate, selection)),
+          ),
         })),
       })),
     })),
@@ -166,20 +180,24 @@ describe('getFeedForUser feed visibility', () => {
 
   it('returns an active pinned direct_sent feed item', async () => {
     const sourceEventAt = new Date('2026-05-14T12:00:00.000Z');
-    state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
-    state.feedRows = [{
-      id: 'feed-direct-1',
-      recipientUserId: 'recipient-1',
-      questionId: 'question-1',
-      sourceType: 'direct_sent',
-      sourceUserId: 'sender-1',
-      sourceResult: null,
-      sourceEventAt,
-      personalMessage: 'Try this one.',
-      state: 'active',
-      isPinned: true,
-      joshingGameId: null,
-    }];
+    state.questionRows = [
+      { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-direct-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-1',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt,
+        personalMessage: 'Try this one.',
+        state: 'active',
+        isPinned: true,
+        joshingGameId: null,
+      },
+    ];
 
     const result = await getFeedForUser('recipient-1');
 
@@ -200,20 +218,24 @@ describe('getFeedForUser feed visibility', () => {
     // the client keeps the just-answered card in local React state for the
     // current page session and it disappears on the next load.
     const sourceEventAt = new Date('2026-05-14T12:00:00.000Z');
-    state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
-    state.feedRows = [{
-      id: 'feed-answered-1',
-      recipientUserId: 'recipient-1',
-      questionId: 'question-1',
-      sourceType: 'direct_sent',
-      sourceUserId: 'sender-1',
-      sourceResult: null,
-      sourceEventAt,
-      personalMessage: 'Try this one.',
-      state: 'answered',
-      isPinned: true,
-      joshingGameId: null,
-    }];
+    state.questionRows = [
+      { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-answered-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-1',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt,
+        personalMessage: 'Try this one.',
+        state: 'answered',
+        isPinned: true,
+        joshingGameId: null,
+      },
+    ];
 
     const result = await getFeedForUser('recipient-1');
 
@@ -221,22 +243,25 @@ describe('getFeedForUser feed visibility', () => {
     expect(result.totalCount).toBe(0);
   });
 
-
   it('excludes incorrect friend_answered items from the public social Feed', async () => {
-    state.questionRows = [{ id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' }];
-    state.feedRows = [{
-      id: 'feed-friend-wrong',
-      recipientUserId: 'recipient-1',
-      questionId: 'question-1',
-      sourceType: 'friend_answered',
-      sourceUserId: 'friend-1',
-      sourceResult: 'incorrect',
-      sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
-      personalMessage: null,
-      state: 'active',
-      isPinned: false,
-      joshingGameId: null,
-    }];
+    state.questionRows = [
+      { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-friend-wrong',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-1',
+        sourceType: 'friend_answered',
+        sourceUserId: 'friend-1',
+        sourceResult: 'incorrect',
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+    ];
 
     const result = await getFeedForUser('recipient-1');
 
@@ -326,11 +351,29 @@ describe('getFeedForUser feed visibility', () => {
   it('excludes feed items for questions the viewer authored', async () => {
     state.questionRows = [
       // Viewer is the author — must be filtered out
-      { id: 'question-own', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music', creatorId: 'recipient-1' },
+      {
+        id: 'question-own',
+        visibility: 'public',
+        deletedAt: null,
+        canonicalSubcategory: 'Music',
+        creatorId: 'recipient-1',
+      },
       // Authored by someone else — should remain visible
-      { id: 'question-friend', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music', creatorId: 'author-2' },
+      {
+        id: 'question-friend',
+        visibility: 'public',
+        deletedAt: null,
+        canonicalSubcategory: 'Music',
+        creatorId: 'author-2',
+      },
       // System-generated (no author) — should remain visible
-      { id: 'question-system', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music', creatorId: null },
+      {
+        id: 'question-system',
+        visibility: 'public',
+        deletedAt: null,
+        canonicalSubcategory: 'Music',
+        creatorId: null,
+      },
     ];
     state.feedRows = [
       {
@@ -376,7 +419,10 @@ describe('getFeedForUser feed visibility', () => {
 
     const result = await getFeedForUser('recipient-1');
 
-    expect(result.items.map((item) => item.id).sort()).toEqual(['feed-friend-authored', 'feed-system-authored']);
+    expect(result.items.map((item) => item.id).sort()).toEqual([
+      'feed-friend-authored',
+      'feed-system-authored',
+    ]);
     expect(result.totalCount).toBe(2);
   });
 

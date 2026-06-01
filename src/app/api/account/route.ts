@@ -28,7 +28,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => null) as { displayName?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { displayName?: unknown } | null;
   const displayName = typeof body?.displayName === 'string' ? body.displayName.trim() : '';
 
   if (displayName.length < 2 || displayName.length > 30) {
@@ -43,7 +43,6 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({ ok: true });
 }
-
 
 export async function DELETE() {
   const session = await getSession();

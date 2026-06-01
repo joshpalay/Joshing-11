@@ -36,8 +36,7 @@ export function assignCaption(
   dir: LatelyDirection,
   friendFirstName: string,
 ): string {
-  const pool =
-    dir === 'they_got_you' ? THEY_GOT_YOU_CAPTIONS : YOU_GOT_THEM_CAPTIONS;
+  const pool = dir === 'they_got_you' ? THEY_GOT_YOU_CAPTIONS : YOU_GOT_THEM_CAPTIONS;
   const template = pool[djb2(momentId) % pool.length];
   return template.replace('{NAME}', friendFirstName.toUpperCase());
 }
@@ -99,16 +98,14 @@ export function bucketMoments(
   return bucketByDay(moments, (m) => m.answeredAt, tz, now);
 }
 
-export function formatMomentTime(
-  answeredAt: Date,
-  bucket: LatelyBucketLabel,
-  tz: string,
-): string {
+export function formatMomentTime(answeredAt: Date, bucket: LatelyBucketLabel, tz: string): string {
   if (bucket === 'EARLIER THIS WEEK') {
     const weekday = new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
       weekday: 'short',
-    }).format(answeredAt).toUpperCase();
+    })
+      .format(answeredAt)
+      .toUpperCase();
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
       hour: 'numeric',

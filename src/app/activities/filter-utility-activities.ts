@@ -14,21 +14,21 @@ export function filterUtilityActivities(
   moments: LatelyMoment[],
 ): ActivityItemView[] {
   const youGotThemQuestionIds = new Set(
-    moments
-      .filter((m) => m.dir === 'you_got_them')
-      .map((m) => m.questionId),
+    moments.filter((m) => m.dir === 'you_got_them').map((m) => m.questionId),
   );
   return items.filter((i) => {
     if (
       i.type === 'friend_answered_your_question' &&
       i.reference.friendAnsweredQuestion?.result === 'correct'
-    ) return false;
+    )
+      return false;
     if (i.type === 'declared_promoted') return false;
     if (
       i.type === 'received_direct_question' &&
       i.reference.directQuestion?.questionId &&
       youGotThemQuestionIds.has(i.reference.directQuestion.questionId)
-    ) return false;
+    )
+      return false;
     return true;
   });
 }

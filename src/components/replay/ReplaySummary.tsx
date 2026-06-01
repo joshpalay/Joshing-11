@@ -67,15 +67,18 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
         }}
       >
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>This round</p>
-        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[#111111]">
-          {correct}<span className="text-3xl text-[var(--text-muted)]">/{total}</span>
+        <p className="mt-2 font-mono text-5xl leading-none font-bold text-[#111111]">
+          {correct}
+          <span className="text-3xl text-[var(--text-muted)]">/{total}</span>
         </p>
         <p style={{ ...monoStyle, marginTop: '12px', color: 'var(--text-muted)' }}>
           correct · practice only
         </p>
       </div>
 
-      <h3 className="mt-6" style={titleStyle}>Round Recap</h3>
+      <h3 className="mt-6" style={titleStyle}>
+        Round Recap
+      </h3>
       <div className="mt-3 space-y-3">
         {results.map(({ item, submitted, isCorrect, correctAnswer, explanation }) => (
           <article key={item.dailyQueueItemId} className="card p-4">
@@ -84,7 +87,7 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
                 {item.domainDisplayName} · originally missed {item.queueDate}
               </p>
               <span
-                className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
+                className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase ${
                   isCorrect
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                     : 'border-rose-200 bg-rose-50 text-rose-700'
@@ -93,7 +96,7 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
                 {isCorrect ? 'CORRECT' : 'WRONG'}
               </span>
             </div>
-            <p className="mt-3 font-medium leading-snug text-[var(--text)]">{item.questionText}</p>
+            <p className="mt-3 leading-snug font-medium text-[var(--text)]">{item.questionText}</p>
             <div className="mt-3 space-y-1 text-sm">
               <p className="text-[var(--text-muted)]">
                 <span className="font-medium text-[var(--text)]">You:</span>{' '}
@@ -112,22 +115,17 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
 
       <div className="mt-6 flex flex-wrap gap-2">
         {hasMore ? (
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={onPlayNext}
-            disabled={loadingNext}
-          >
+          <button type="button" className="btn-primary" onClick={onPlayNext} disabled={loadingNext}>
             {loadingNext ? 'Loading…' : 'Play next 5'}
           </button>
         ) : null}
-        <Link href="/" className="btn-ghost">Back home</Link>
+        <Link href="/" className="btn-ghost">
+          Back home
+        </Link>
       </div>
 
       {!hasMore ? (
-        <p className="mt-3 text-sm text-[var(--text-muted)]">
-          Nothing left to practice right now.
-        </p>
+        <p className="mt-3 text-sm text-[var(--text-muted)]">Nothing left to practice right now.</p>
       ) : null}
     </section>
   );

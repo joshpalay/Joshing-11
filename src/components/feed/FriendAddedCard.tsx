@@ -1,18 +1,18 @@
-import type { ReactNode } from 'react'
-import Link from 'next/link'
+import type { ReactNode } from 'react';
+import Link from 'next/link';
 
-import { visibleFeedCategory } from './category'
-import { SparkleEnvelope } from './SparkleEnvelope'
-import type { FriendAddedFeedItem } from './types'
+import { visibleFeedCategory } from './category';
+import { SparkleEnvelope } from './SparkleEnvelope';
+import type { FriendAddedFeedItem } from './types';
 
 type FriendAddedCardProps = {
-  item: FriendAddedFeedItem
-  overflow?: ReactNode
-  onAnswer?: () => void
-  onDismiss?: () => void
-  onHideCategory?: () => void
-  className?: string
-}
+  item: FriendAddedFeedItem;
+  overflow?: ReactNode;
+  onAnswer?: () => void;
+  onDismiss?: () => void;
+  onHideCategory?: () => void;
+  className?: string;
+};
 
 export function FriendAddedCard({
   item,
@@ -22,9 +22,9 @@ export function FriendAddedCard({
   onHideCategory,
   className,
 }: FriendAddedCardProps) {
-  const visibleCategory = visibleFeedCategory(item.category)
-  const friendName = item.friendName || item.avatarName || 'A friend'
-  const friendHref = item.friendHref ?? item.authorHref ?? null
+  const visibleCategory = visibleFeedCategory(item.category);
+  const friendName = item.friendName || item.avatarName || 'A friend';
+  const friendHref = item.friendHref ?? item.authorHref ?? null;
 
   const signal = (
     <>
@@ -50,7 +50,7 @@ export function FriendAddedCard({
         </>
       ) : null}
     </>
-  )
+  );
 
   return (
     <SparkleEnvelope
@@ -62,5 +62,5 @@ export function FriendAddedCard({
       onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
       className={className}
     />
-  )
+  );
 }

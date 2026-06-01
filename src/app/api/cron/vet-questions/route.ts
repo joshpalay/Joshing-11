@@ -43,11 +43,13 @@ export async function GET(request: NextRequest) {
       canonicalSubcategory: questions.canonicalSubcategory,
     })
     .from(questions)
-    .where(and(
-      eq(questions.publicStatus, 'not_scored'),
-      eq(questions.visibility, 'public'),
-      isNull(questions.deletedAt),
-    ))
+    .where(
+      and(
+        eq(questions.publicStatus, 'not_scored'),
+        eq(questions.visibility, 'public'),
+        isNull(questions.deletedAt),
+      ),
+    )
     .limit(BATCH_SIZE);
 
   const results = {
@@ -74,7 +76,8 @@ export async function GET(request: NextRequest) {
       // null score — the row was already in that state and nothing changed.
       // Storing the reason still helps observability, so write when reason
       // moved.
-      const noChange = scoring.publicStatus === 'not_scored' && scoring.publicEligibilityScore === null;
+      const noChange =
+        scoring.publicStatus === 'not_scored' && scoring.publicEligibilityScore === null;
       if (!noChange) {
         await db
           .update(questions)

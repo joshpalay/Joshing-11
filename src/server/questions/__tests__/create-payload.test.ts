@@ -119,7 +119,7 @@ describe('create question payload categorization', () => {
 
     it('rejects multi-word answers that appear in the question', () => {
       const result = readCreateQuestionPayload({
-        text: "Who wrote The Waste Land, the 1922 poem?",
+        text: 'Who wrote The Waste Land, the 1922 poem?',
         correctAnswer: 'The Waste Land',
         verified: true,
         critiqueIterations: 0,

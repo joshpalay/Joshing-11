@@ -57,7 +57,9 @@ describe('saveDeclaredInterests categorization backstop', () => {
   });
 
   it('leaves a real broad category untouched without calling the categorizer', async () => {
-    const result = await saveDeclaredInterests('user-1', [{ label: 'Jazz', broadCategory: 'Music' }]);
+    const result = await saveDeclaredInterests('user-1', [
+      { label: 'Jazz', broadCategory: 'Music' },
+    ]);
     expect(categorizeInterestDomainMock).not.toHaveBeenCalled();
     expect(result).toEqual([{ label: 'Jazz', broadCategory: 'Music', description: null }]);
   });

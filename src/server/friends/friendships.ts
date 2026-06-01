@@ -1,40 +1,41 @@
-import { and, eq, ne, or } from 'drizzle-orm'
+import { and, eq, ne, or } from 'drizzle-orm';
 
-import { writeActivity } from '@/server/activity/write-activity'
-import { db, friendships } from '@/server/db'
+import { writeActivity } from '@/server/activity/write-activity';
+import { db, friendships } from '@/server/db';
 
 export type FriendshipRequestState =
   | 'created'
   | 'already_friends'
   | 'pending_existing'
   | 'reverse_pending'
-  | 'reopened'
+  | 'reopened';
 
 export type FriendshipRequestContext = {
-  suggestedInterests?: string[]
-}
+  suggestedInterests?: string[];
+};
 
 type FriendshipWriter = {
   insert: (table: typeof friendships) => {
     values: (values: typeof friendships.$inferInsert) => {
       onConflictDoUpdate: (config: {
-        target: [typeof friendships.userAId, typeof friendships.userBId]
-        set: Partial<typeof friendships.$inferInsert>
-      }) => Promise<unknown>
-    }
-  }
-}
+        target: [typeof friendships.userAId, typeof friendships.userBId];
+        set: Partial<typeof friendships.$inferInsert>;
+      }) => Promise<unknown>;
+    };
+  };
+};
 
 export function friendshipPair(a: string, b: string) {
-  return a < b ? { userAId: a, userBId: b } : { userAId: b, userBId: a }
+  return a < b ? { userAId: a, userBId: b } : { userAId: b, userBId: a };
 }
 
-
-function requestContextForSuggestedInterests(suggestedInterests: string[]): FriendshipRequestContext | null {
-  return suggestedInterests.length > 0 ? { suggestedInterests } : null
+function requestContextForSuggestedInterests(
+  suggestedInterests: string[],
+): FriendshipRequestContext | null {
+  return suggestedInterests.length > 0 ? { suggestedInterests } : null;
 }
 
-const DIRECT_REQUEST_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000
+const DIRECT_REQUEST_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 
 export async function createOrReusePendingFriendshipRequest({
   inviterUserId,
@@ -44,37 +45,40 @@ export async function createOrReusePendingFriendshipRequest({
   expiresAt,
   now = new Date(),
 }: {
-  inviterUserId: string
-  inviteeUserId: string
-  suggestedInterests?: string[]
-  personalNote?: string
+  inviterUserId: string;
+  inviteeUserId: string;
+  suggestedInterests?: string[];
+  personalNote?: string;
   // Defaults to NOW() + 30 days when undefined. Pass null to opt out
   // (the SMS-invite caller does this — those invitations don't expire).
-  expiresAt?: Date | null
-  now?: Date
+  expiresAt?: Date | null;
+  now?: Date;
 }): Promise<{ friendship: typeof friendships.$inferSelect; state: FriendshipRequestState }> {
-  const pair = friendshipPair(inviterUserId, inviteeUserId)
-  const requestContext = requestContextForSuggestedInterests(suggestedInterests)
-  const trimmedNote = personalNote?.trim() || null
+  const pair = friendshipPair(inviterUserId, inviteeUserId);
+  const requestContext = requestContextForSuggestedInterests(suggestedInterests);
+  const trimmedNote = personalNote?.trim() || null;
   const resolvedExpiresAt =
-    expiresAt === undefined ? new Date(now.getTime() + DIRECT_REQUEST_EXPIRY_MS) : expiresAt
+    expiresAt === undefined ? new Date(now.getTime() + DIRECT_REQUEST_EXPIRY_MS) : expiresAt;
 
   const [existingFriendship] = await db
     .select()
     .from(friendships)
     .where(and(eq(friendships.userAId, pair.userAId), eq(friendships.userBId, pair.userBId)))
-    .limit(1)
+    .limit(1);
 
   if (existingFriendship?.status === 'active') {
-    return { friendship: existingFriendship, state: 'already_friends' }
+    return { friendship: existingFriendship, state: 'already_friends' };
   }
 
   if (existingFriendship?.status === 'pending') {
     // Reuse — caller must Cancel first to overwrite the note or expiry.
     return {
       friendship: existingFriendship,
-      state: existingFriendship.requestedByUserId === inviterUserId ? 'pending_existing' : 'reverse_pending',
-    }
+      state:
+        existingFriendship.requestedByUserId === inviterUserId
+          ? 'pending_existing'
+          : 'reverse_pending',
+    };
   }
 
   if (existingFriendship) {
@@ -95,9 +99,9 @@ export async function createOrReusePendingFriendshipRequest({
         ...(trimmedNote !== null ? { personalNote: trimmedNote } : {}),
       })
       .where(eq(friendships.id, existingFriendship.id))
-      .returning()
+      .returning();
 
-    if (!reopenedFriendship) throw new Error('Friendship request could not be reopened')
+    if (!reopenedFriendship) throw new Error('Friendship request could not be reopened');
 
     await writeActivity({
       userId: inviteeUserId,
@@ -105,9 +109,9 @@ export async function createOrReusePendingFriendshipRequest({
       actorUserId: inviterUserId,
       referenceId: reopenedFriendship.id,
       referenceType: 'friendship',
-    })
+    });
 
-    return { friendship: reopenedFriendship, state: 'reopened' }
+    return { friendship: reopenedFriendship, state: 'reopened' };
   }
 
   const [friendship] = await db
@@ -125,9 +129,9 @@ export async function createOrReusePendingFriendshipRequest({
       expiresAt: resolvedExpiresAt,
       resolvedAt: null,
     })
-    .returning()
+    .returning();
 
-  if (!friendship) throw new Error('Friendship request could not be created')
+  if (!friendship) throw new Error('Friendship request could not be created');
 
   await writeActivity({
     userId: inviteeUserId,
@@ -135,9 +139,9 @@ export async function createOrReusePendingFriendshipRequest({
     actorUserId: inviterUserId,
     referenceId: friendship.id,
     referenceType: 'friendship',
-  })
+  });
 
-  return { friendship, state: 'created' }
+  return { friendship, state: 'created' };
 }
 
 export async function acceptPendingFriendshipRequest({
@@ -145,9 +149,9 @@ export async function acceptPendingFriendshipRequest({
   userId,
   now = new Date(),
 }: {
-  friendshipId: string
-  userId: string
-  now?: Date
+  friendshipId: string;
+  userId: string;
+  now?: Date;
 }): Promise<typeof friendships.$inferSelect | null> {
   const [friendship] = await db
     .update(friendships)
@@ -163,12 +167,12 @@ export async function acceptPendingFriendshipRequest({
         eq(friendships.id, friendshipId),
         eq(friendships.status, 'pending'),
         ne(friendships.requestedByUserId, userId),
-        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
-      )
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+      ),
     )
-    .returning()
+    .returning();
 
-  if (!friendship) return null
+  if (!friendship) return null;
 
   await writeActivity({
     userId: friendship.requestedByUserId,
@@ -176,9 +180,9 @@ export async function acceptPendingFriendshipRequest({
     actorUserId: userId,
     referenceId: friendship.id,
     referenceType: 'friendship',
-  })
+  });
 
-  return friendship
+  return friendship;
 }
 
 export async function ignorePendingFriendshipRequest({
@@ -186,9 +190,9 @@ export async function ignorePendingFriendshipRequest({
   userId,
   now = new Date(),
 }: {
-  friendshipId: string
-  userId: string
-  now?: Date
+  friendshipId: string;
+  userId: string;
+  now?: Date;
 }): Promise<typeof friendships.$inferSelect | null> {
   const [friendship] = await db
     .update(friendships)
@@ -203,12 +207,12 @@ export async function ignorePendingFriendshipRequest({
         eq(friendships.id, friendshipId),
         eq(friendships.status, 'pending'),
         ne(friendships.requestedByUserId, userId),
-        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
-      )
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+      ),
     )
-    .returning()
+    .returning();
 
-  return friendship ?? null
+  return friendship ?? null;
 }
 
 export async function cancelPendingFriendshipRequest({
@@ -216,9 +220,9 @@ export async function cancelPendingFriendshipRequest({
   userId,
   now = new Date(),
 }: {
-  friendshipId: string
-  userId: string
-  now?: Date
+  friendshipId: string;
+  userId: string;
+  now?: Date;
 }): Promise<typeof friendships.$inferSelect | null> {
   const [friendship] = await db
     .update(friendships)
@@ -233,12 +237,12 @@ export async function cancelPendingFriendshipRequest({
         eq(friendships.id, friendshipId),
         eq(friendships.status, 'pending'),
         eq(friendships.requestedByUserId, userId),
-        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
-      )
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+      ),
     )
-    .returning()
+    .returning();
 
-  return friendship ?? null
+  return friendship ?? null;
 }
 
 export async function removeFriendship({
@@ -246,9 +250,9 @@ export async function removeFriendship({
   userId,
   now = new Date(),
 }: {
-  friendshipId: string
-  userId: string
-  now?: Date
+  friendshipId: string;
+  userId: string;
+  now?: Date;
 }): Promise<typeof friendships.$inferSelect | null> {
   const [friendship] = await db
     .update(friendships)
@@ -261,12 +265,12 @@ export async function removeFriendship({
       and(
         eq(friendships.id, friendshipId),
         eq(friendships.status, 'active'),
-        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
-      )
+        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
+      ),
     )
-    .returning()
+    .returning();
 
-  return friendship ?? null
+  return friendship ?? null;
 }
 
 export async function upsertInvitationFriendship(
@@ -276,12 +280,12 @@ export async function upsertInvitationFriendship(
     inviteeUserId,
     formedAt,
   }: {
-    inviterUserId: string
-    inviteeUserId: string
-    formedAt: Date
-  }
+    inviterUserId: string;
+    inviteeUserId: string;
+    formedAt: Date;
+  },
 ) {
-  const pair = friendshipPair(inviterUserId, inviteeUserId)
+  const pair = friendshipPair(inviterUserId, inviteeUserId);
 
   await writer
     .insert(friendships)
@@ -306,5 +310,5 @@ export async function upsertInvitationFriendship(
         removedByUserId: null,
         requestContext: null,
       },
-    })
+    });
 }

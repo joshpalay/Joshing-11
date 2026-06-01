@@ -109,7 +109,11 @@ export async function awardPersonalDailyBotMastery(input: {
     const authorCreditDistinctQuestionCount = authorCredit?.distinctQuestionCount ?? 0;
     const previousTier: MasteryTier = existingMastery?.tier ?? 'establishing';
     const nextPoints = (existingMastery?.totalPoints ?? 0) + awardedPoints;
-    const nextTier = effectiveTier(nextPoints, authorCreditInDomain, authorCreditDistinctQuestionCount);
+    const nextTier = effectiveTier(
+      nextPoints,
+      authorCreditInDomain,
+      authorCreditDistinctQuestionCount,
+    );
     const tierCrossed = nextTier !== previousTier;
     const now = new Date();
 

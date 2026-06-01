@@ -30,7 +30,10 @@ import {
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
-import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
+import {
+  isGenericCanonicalAnswer,
+  normalizeCanonicalAnswerLabel,
+} from '@/server/answers/canonical-answer';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { textContainsAnswer } from '@/server/questions/self-answering';
@@ -200,9 +203,8 @@ function normalizeSubAngles(value: unknown): string[] {
     if (typeof item !== 'string') continue;
     const trimmed = item.trim();
     if (!trimmed) continue;
-    const truncated = trimmed.length > SUB_ANGLE_MAX_CHARS
-      ? trimmed.slice(0, SUB_ANGLE_MAX_CHARS).trim()
-      : trimmed;
+    const truncated =
+      trimmed.length > SUB_ANGLE_MAX_CHARS ? trimmed.slice(0, SUB_ANGLE_MAX_CHARS).trim() : trimmed;
     const key = truncated.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -219,7 +221,10 @@ const FIXED_DIFFICULTY_LEVELS: Record<string, number> = {
   ridiculous: 4.0,
 };
 
-function difficultyInstruction(preference: string | undefined, adaptiveLevel?: number | null): string | null {
+function difficultyInstruction(
+  preference: string | undefined,
+  adaptiveLevel?: number | null,
+): string | null {
   if (!preference) return null;
   if (preference === 'adaptive') {
     return mapAdaptiveLevelToDifficultyHint(adaptiveLevel ?? 1).promptHint;
@@ -242,18 +247,20 @@ function buildUserPrompt(
   adaptiveLevel?: number | null,
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
 ): string {
-  const prevBlock = prev.length > 0
-    ? prev
-        .slice(0, RECENT_QUESTION_TEXT_LIMIT)
-        .map((entry) => `[${entry.domain}] ${entry.text}`)
-        .join('\n')
-    : '(none yet)';
-  const factKeyBlock = prevFactKeys.length > 0
-    ? prevFactKeys
-        .slice(0, RECENT_FACT_KEY_LIMIT)
-        .map((entry) => `[${entry.domain}] ${entry.factKey}`)
-        .join('\n')
-    : '(none yet)';
+  const prevBlock =
+    prev.length > 0
+      ? prev
+          .slice(0, RECENT_QUESTION_TEXT_LIMIT)
+          .map((entry) => `[${entry.domain}] ${entry.text}`)
+          .join('\n')
+      : '(none yet)';
+  const factKeyBlock =
+    prevFactKeys.length > 0
+      ? prevFactKeys
+          .slice(0, RECENT_FACT_KEY_LIMIT)
+          .map((entry) => `[${entry.domain}] ${entry.factKey}`)
+          .join('\n')
+      : '(none yet)';
 
   let calibration = '';
   if (domainSkips && domainSkips.size > 0) {
@@ -261,7 +268,9 @@ function buildUserPrompt(
     for (const domain of domains) {
       const countForDomain = domainSkips.get(domain);
       if (countForDomain !== undefined && countForDomain > 0) {
-        lines.push(`- ${domain} (${countForDomain} pass${countForDomain === 1 ? '' : 'es'} in the last 7 days)`);
+        lines.push(
+          `- ${domain} (${countForDomain} pass${countForDomain === 1 ? '' : 'es'} in the last 7 days)`,
+        );
       }
     }
     if (lines.length > 0) {
@@ -284,10 +293,13 @@ ${lines.join('\n')}`;
     }
 
     if (perDomain.length > 0) {
-      const uniqueInstructions = new Set(perDomain.map((line) => line.split(': ').slice(1).join(': ')));
-      difficultyHint = uniqueInstructions.size === 1
-        ? `\n\nDifficulty instruction: ${Array.from(uniqueInstructions)[0]}`
-        : `\n\nDifficulty instruction by domain:\n${perDomain.join('\n')}`;
+      const uniqueInstructions = new Set(
+        perDomain.map((line) => line.split(': ').slice(1).join(': ')),
+      );
+      difficultyHint =
+        uniqueInstructions.size === 1
+          ? `\n\nDifficulty instruction: ${Array.from(uniqueInstructions)[0]}`
+          : `\n\nDifficulty instruction by domain:\n${perDomain.join('\n')}`;
     }
   } else {
     const instruction = difficultyInstruction(difficultyPreference, adaptiveLevel);
@@ -378,7 +390,8 @@ function parseQuestions(raw: string): LlmQuestion[] {
       // normalizeFactKey rejected.
       console.warn('[daily/generate-questions] fact_key missing or unnormalizable', {
         domain: canonical,
-        rawType: factKeyRaw === undefined ? 'undefined' : factKeyRaw === null ? 'null' : typeof factKeyRaw,
+        rawType:
+          factKeyRaw === undefined ? 'undefined' : factKeyRaw === null ? 'null' : typeof factKeyRaw,
         rawValue: typeof factKeyRaw === 'string' ? factKeyRaw.slice(0, 120) : null,
         questionPreview: questionText.slice(0, 80),
       });
@@ -443,13 +456,18 @@ async function findBatchDuplicates(questions: LlmQuestion[]): Promise<Set<number
   const userMessage = wrapUserInput('batch', body);
 
   try {
-    const response = await loggedMessagesCreate(client, 'batch-dedupe', {
-      model: HAIKU_MODEL,
-      max_tokens: 200,
-      temperature: 0,
-      system: BATCH_DEDUPE_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
+    const response = await loggedMessagesCreate(
+      client,
+      'batch-dedupe',
+      {
+        model: HAIKU_MODEL,
+        max_tokens: 200,
+        temperature: 0,
+        system: BATCH_DEDUPE_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+      },
+      { timeoutMs: HAIKU_GATE_TIMEOUT_MS },
+    );
     const parsed = parseJsonObject(extractTextContent(response.content));
     const rawList = parsed?.duplicate_indices;
     if (!Array.isArray(rawList)) return new Set();
@@ -512,13 +530,18 @@ async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   const userMessage = wrapUserInput('batch', body);
 
   try {
-    const response = await loggedMessagesCreate(client, 'quality-gate', {
-      model: HAIKU_MODEL,
-      max_tokens: 500,
-      temperature: 0,
-      system: QUALITY_GATE_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
+    const response = await loggedMessagesCreate(
+      client,
+      'quality-gate',
+      {
+        model: HAIKU_MODEL,
+        max_tokens: 500,
+        temperature: 0,
+        system: QUALITY_GATE_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+      },
+      { timeoutMs: HAIKU_GATE_TIMEOUT_MS },
+    );
     const parsed = parseJsonObject(extractTextContent(response.content));
     const rawList = parsed?.drop_indices;
     const rawReasons = parsed?.reasons;
@@ -589,12 +612,7 @@ export function parseFactualGateResponse(
   const rawList = parsed.drop_indices;
   if (Array.isArray(rawList)) {
     for (const value of rawList) {
-      if (
-        typeof value === 'number' &&
-        Number.isInteger(value) &&
-        value >= 0 &&
-        value < batchSize
-      ) {
+      if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < batchSize) {
         toDrop.add(value);
       }
     }
@@ -630,13 +648,18 @@ async function findFactualFailures(generated: LlmQuestion[]): Promise<{
   const userMessage = wrapUserInput('batch', body);
 
   try {
-    const response = await loggedMessagesCreate(client, 'factual-gate', {
-      model: HAIKU_MODEL,
-      max_tokens: 500,
-      temperature: 0,
-      system: FACTUAL_GATE_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
+    const response = await loggedMessagesCreate(
+      client,
+      'factual-gate',
+      {
+        model: HAIKU_MODEL,
+        max_tokens: 500,
+        temperature: 0,
+        system: FACTUAL_GATE_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+      },
+      { timeoutMs: HAIKU_GATE_TIMEOUT_MS },
+    );
     return parseFactualGateResponse(extractTextContent(response.content), generated.length);
   } catch (err) {
     // Fail open: a Haiku outage should not block the daily queue. A wrong
@@ -692,9 +715,7 @@ async function findRecentHistoryDuplicates(
   if (!client) return new Set();
 
   const recentSlice = recent.slice(0, RECENT_HISTORY_GATE_LIMIT);
-  const recentBlock = recentSlice
-    .map((entry) => `- [${entry.domain}] ${entry.text}`)
-    .join('\n');
+  const recentBlock = recentSlice.map((entry) => `- [${entry.domain}] ${entry.text}`).join('\n');
   const newBlock = generated
     .map((q, i) => `[${i}] [${q.canonical_subcategory}] ${q.question_text} (answer: ${q.answer})`)
     .join('\n');
@@ -708,13 +729,18 @@ ${wrapUserInput('new_batch', newBlock)}
 Which NEW indices duplicate any RECENT entry?`;
 
   try {
-    const response = await loggedMessagesCreate(client, 'history-dedupe', {
-      model: HAIKU_MODEL,
-      max_tokens: 200,
-      temperature: 0,
-      system: RECENT_HISTORY_GATE_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
+    const response = await loggedMessagesCreate(
+      client,
+      'history-dedupe',
+      {
+        model: HAIKU_MODEL,
+        max_tokens: 200,
+        temperature: 0,
+        system: RECENT_HISTORY_GATE_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+      },
+      { timeoutMs: HAIKU_GATE_TIMEOUT_MS },
+    );
     const parsed = parseJsonObject(extractTextContent(response.content));
     const rawList = parsed?.duplicate_indices;
     if (!Array.isArray(rawList)) return new Set();
@@ -767,28 +793,33 @@ async function callLlmOnce(
   // threshold. The cron fans out with USER_CONCURRENCY=4, so concurrent
   // batches hit the cache. The 5-min TTL means later sequential batches
   // miss, but the concurrent slice is worth the surcharge.
-  const response = await loggedMessagesCreate(client, 'generate-questions', {
-    model: ANTHROPIC_MODEL,
-    max_tokens: 2000,
-    temperature: 0.8,
-    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-    messages: [
-      {
-        role: 'user',
-        content: buildUserPrompt(
-          domains,
-          count,
-          previousQuestionTexts,
-          previousFactKeys,
-          domainSkips,
-          difficultyPreference,
-          domainDifficultyOverrides,
-          adaptiveLevel,
-          subAnglesByDomain,
-        ),
-      },
-    ],
-  }, { timeoutMs: GENERATION_TIMEOUT_MS });
+  const response = await loggedMessagesCreate(
+    client,
+    'generate-questions',
+    {
+      model: ANTHROPIC_MODEL,
+      max_tokens: 2000,
+      temperature: 0.8,
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      messages: [
+        {
+          role: 'user',
+          content: buildUserPrompt(
+            domains,
+            count,
+            previousQuestionTexts,
+            previousFactKeys,
+            domainSkips,
+            difficultyPreference,
+            domainDifficultyOverrides,
+            adaptiveLevel,
+            subAnglesByDomain,
+          ),
+        },
+      ],
+    },
+    { timeoutMs: GENERATION_TIMEOUT_MS },
+  );
 
   const text = extractTextContent(response.content);
   return parseQuestions(text);
@@ -990,10 +1021,13 @@ export async function generateDailyQuestions(
     ).catch(() => ({ canonicalDomain: question.canonical_subcategory, reconciled: false }));
 
     if (isGenericSubcategory(canonicalDomain)) {
-      console.warn('[daily/generate-questions] skipping question with generic canonical subcategory', {
-        proposed: question.canonical_subcategory,
-        reconciled: canonicalDomain,
-      });
+      console.warn(
+        '[daily/generate-questions] skipping question with generic canonical subcategory',
+        {
+          proposed: question.canonical_subcategory,
+          reconciled: canonicalDomain,
+        },
+      );
       continue;
     }
 
@@ -1110,9 +1144,7 @@ function selectDiverseDomains(
   // Fill remaining slots if there are more slots than categories
   if (selected.length < count) {
     const used = new Set(selected);
-    const remaining = eligibleKb
-      .filter((d) => !used.has(d.domain))
-      .sort(() => Math.random() - 0.5);
+    const remaining = eligibleKb.filter((d) => !used.has(d.domain)).sort(() => Math.random() - 0.5);
     for (const d of remaining) {
       if (selected.length >= count) break;
       selected.push(d.domain);
@@ -1126,22 +1158,18 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   userId: string,
   count: number,
 ): Promise<GeneratedQuestionRow[]> {
-  const [
-    knowledgeBase,
-    preferences,
-    previousQuestionTexts,
-    previousFactKeys,
-    recentDomainCounts,
-  ] = await Promise.all([
-    getKnowledgeBase(userId),
-    getDailyPreferences(userId),
-    getRecentDailyQuestionTexts(userId),
-    getRecentFactKeys(userId),
-    getRecentDomainCounts(userId).catch(() => new Map<string, number>()),
-  ]);
-  const adaptiveLevel = preferences.difficulty === 'adaptive'
-    ? await updateAdaptiveLevel(userId)
-    : FIXED_DIFFICULTY_LEVELS[preferences.difficulty] ?? null;
+  const [knowledgeBase, preferences, previousQuestionTexts, previousFactKeys, recentDomainCounts] =
+    await Promise.all([
+      getKnowledgeBase(userId),
+      getDailyPreferences(userId),
+      getRecentDailyQuestionTexts(userId),
+      getRecentFactKeys(userId),
+      getRecentDomainCounts(userId).catch(() => new Map<string, number>()),
+    ]);
+  const adaptiveLevel =
+    preferences.difficulty === 'adaptive'
+      ? await updateAdaptiveLevel(userId)
+      : (FIXED_DIFFICULTY_LEVELS[preferences.difficulty] ?? null);
 
   const allDomains = knowledgeBase.map((domain) => domain.domain);
 
@@ -1172,11 +1200,14 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     domainsForRound = selectDiverseDomains(knowledgeBase, count, recentDomainCounts);
   }
 
-  const domainDifficultyOverrides = preferences.difficulty === 'adaptive'
-    ? await getDomainDifficultyOverrides(userId, domainsForRound).catch(() => undefined)
-    : undefined;
+  const domainDifficultyOverrides =
+    preferences.difficulty === 'adaptive'
+      ? await getDomainDifficultyOverrides(userId, domainsForRound).catch(() => undefined)
+      : undefined;
 
-  const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
+  const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(
+    () => undefined,
+  );
 
   // Try to fill slots from the cross-user bank (previously-generated questions
   // for the same domain AND difficulty tier) before burning fresh Sonnet calls.
@@ -1263,7 +1294,9 @@ async function pickBankPicksForDomains(
       adaptiveLevel,
     );
     if (!difficulty) continue;
-    const source = await pickBankSource(userId, domain, difficulty, avoidFactKeys).catch(() => null);
+    const source = await pickBankSource(userId, domain, difficulty, avoidFactKeys).catch(
+      () => null,
+    );
     if (!source) continue;
     if (isGenericSubcategory(source.canonicalSubcategory)) continue;
 

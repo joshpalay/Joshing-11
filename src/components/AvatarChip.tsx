@@ -7,31 +7,31 @@
 // back to colorForUser() so this works for any caller that hasn't (or can't)
 // load the column. initialsFor() is the same helper the feed cards use.
 
-import { AVATAR_COLORS, colorForUser, initialsFor, isDarkColor } from '@/components/feed/visual'
+import { AVATAR_COLORS, colorForUser, initialsFor, isDarkColor } from '@/components/feed/visual';
 
-type Size = 'sm' | 'md' | 'lg'
+type Size = 'sm' | 'md' | 'lg';
 
 const SIZE_CLASSES: Record<Size, string> = {
   sm: 'h-7 w-7 text-[10px]',
   md: 'h-9 w-9 text-xs',
   lg: 'h-12 w-12 text-sm',
-}
+};
 
 function normalizeColor(color: string | null | undefined, userId: string): string {
-  if (color && (AVATAR_COLORS as readonly string[]).includes(color)) return color
-  return colorForUser(userId)
+  if (color && (AVATAR_COLORS as readonly string[]).includes(color)) return color;
+  return colorForUser(userId);
 }
 
 type AvatarChipProps = {
-  displayName: string
-  userId: string
-  color?: string | null
-  size?: Size
-}
+  displayName: string;
+  userId: string;
+  color?: string | null;
+  size?: Size;
+};
 
 export function AvatarChip({ displayName, userId, color, size = 'md' }: AvatarChipProps) {
-  const bg = normalizeColor(color, userId)
-  const onDark = isDarkColor(bg)
+  const bg = normalizeColor(color, userId);
+  const onDark = isDarkColor(bg);
   return (
     <div
       aria-hidden
@@ -43,5 +43,5 @@ export function AvatarChip({ displayName, userId, color, size = 'md' }: AvatarCh
     >
       {initialsFor(displayName)}
     </div>
-  )
+  );
 }

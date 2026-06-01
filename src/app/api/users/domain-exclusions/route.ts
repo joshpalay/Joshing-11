@@ -66,11 +66,13 @@ export async function DELETE(request: NextRequest) {
 
   await db
     .delete(userDomainExclusions)
-    .where(and(
-      eq(userDomainExclusions.userId, session.userId),
-      eq(userDomainExclusions.scope, payload.scope),
-      eq(userDomainExclusions.canonicalSubcategory, payload.canonical_subcategory),
-    ));
+    .where(
+      and(
+        eq(userDomainExclusions.userId, session.userId),
+        eq(userDomainExclusions.scope, payload.scope),
+        eq(userDomainExclusions.canonicalSubcategory, payload.canonical_subcategory),
+      ),
+    );
 
   return NextResponse.json({ ok: true });
 }

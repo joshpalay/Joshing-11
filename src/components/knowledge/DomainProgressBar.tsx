@@ -7,5 +7,11 @@ type Props = {
 };
 
 export function DomainProgressBar({ tier, progressWithinTier }: Props) {
-  return <TierProgressBar tier={tier} progressWithinTier={progressWithinTier} ariaLabelPrefix="Domain progression" />;
+  return (
+    <TierProgressBar
+      tier={tier}
+      progressWithinTier={progressWithinTier}
+      ariaLabelPrefix="Domain progression"
+    />
+  );
 }

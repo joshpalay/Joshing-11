@@ -6,7 +6,13 @@ import { effectiveTier } from '@/server/mastery/tiers';
 import type { AnswerState, MasteryTier } from '@/types/db';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 
-type MasteryEventSourceType = 'daily' | 'feed' | 'joshing_game' | 'catchup' | 'author_credit' | 'curator_credit';
+type MasteryEventSourceType =
+  | 'daily'
+  | 'feed'
+  | 'joshing_game'
+  | 'catchup'
+  | 'author_credit'
+  | 'curator_credit';
 
 export type WriteMasteryEventParams = {
   userId: string;
@@ -40,11 +46,13 @@ async function readAuthorCredit(userId: string, domain: string) {
       distinctQuestions: sql<number>`count(distinct ${masteryEvents.questionId})`,
     })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.canonicalSubcategory, domain),
-      eq(masteryEvents.sourceType, 'author_credit'),
-    ));
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        eq(masteryEvents.canonicalSubcategory, domain),
+        eq(masteryEvents.sourceType, 'author_credit'),
+      ),
+    );
 
   return {
     points: Number(row?.points ?? 0),
@@ -63,7 +71,9 @@ async function writeTierCrossingActivityForFriends(params: {
   // friend system is built. Friends list: getFriends(userId).
 }
 
-export async function writeMasteryEvent(params: WriteMasteryEventParams): Promise<MasteryEventWriteResult> {
+export async function writeMasteryEvent(
+  params: WriteMasteryEventParams,
+): Promise<MasteryEventWriteResult> {
   const [existingMastery, authorCredit] = await Promise.all([
     db
       .select({
@@ -73,10 +83,12 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
         tierReachedAt: playerMastery.tierReachedAt,
       })
       .from(playerMastery)
-      .where(and(
-        eq(playerMastery.userId, params.userId),
-        eq(playerMastery.canonicalSubcategory, params.domain),
-      ))
+      .where(
+        and(
+          eq(playerMastery.userId, params.userId),
+          eq(playerMastery.canonicalSubcategory, params.domain),
+        ),
+      )
       .limit(1),
     readAuthorCredit(params.userId, params.domain),
   ]);
@@ -85,9 +97,10 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
   const broadCategory = normalizeBroadCategory(params.broadCategory ?? existing?.broadCategory);
   const previousTier: MasteryTier = existing?.tier ?? 'establishing';
   const nextTotalPoints = (existing?.totalPoints ?? 0) + params.pointsAwarded;
-  const nextTier = params.pointsAwarded > 0
-    ? effectiveTier(nextTotalPoints, authorCredit.points, authorCredit.distinctQuestions)
-    : previousTier;
+  const nextTier =
+    params.pointsAwarded > 0
+      ? effectiveTier(nextTotalPoints, authorCredit.points, authorCredit.distinctQuestions)
+      : previousTier;
   const tierChanged = previousTier !== nextTier;
   const openedNewTerritory = !existing && params.pointsAwarded > 0;
 
@@ -156,7 +169,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
             broadCategory,
             totalPoints: nextTotalPoints,
             tier: nextTier,
-            tierReachedAt: tierChanged ? new Date() : existing?.tierReachedAt ?? null,
+            tierReachedAt: tierChanged ? new Date() : (existing?.tierReachedAt ?? null),
             updatedAt: new Date(),
           },
         });

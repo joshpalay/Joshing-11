@@ -4,12 +4,7 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { gradeAnswer } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
-import {
-  dailyQueues,
-  db,
-  generatedQuestions,
-  questions,
-} from '@/server/db';
+import { dailyQueues, db, generatedQuestions, questions } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
@@ -19,7 +14,10 @@ import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { type QueueSlot } from '@/server/daily/types';
 import { asQueueSlots } from '@/server/daily/catchup';
 import { resolveDailyBasePoints } from '@/server/daily/types';
-import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
+import {
+  isGenericCanonicalAnswer,
+  normalizeCanonicalAnswerLabel,
+} from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
@@ -42,7 +40,9 @@ function dailyAnswerErrorResponse(status: number, error: DailyAnswerErrorCode, m
   return NextResponse.json({ error, message }, { status });
 }
 
-async function resolveCanonicalAnswer(question: typeof generatedQuestions.$inferSelect): Promise<string> {
+async function resolveCanonicalAnswer(
+  question: typeof generatedQuestions.$inferSelect,
+): Promise<string> {
   const currentAnswer = normalizeCanonicalAnswerLabel(question.answer);
   if (!isGenericCanonicalAnswer(currentAnswer)) return currentAnswer;
 
@@ -75,19 +75,23 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
   return repairedAnswer;
 }
 
-function parseBody(value: unknown): { queueId: string; slotIndex: number; submittedAnswer: string; gaveUp: boolean } | null {
+function parseBody(
+  value: unknown,
+): { queueId: string; slotIndex: number; submittedAnswer: string; gaveUp: boolean } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const queueId = typeof record.queue_id === 'string' ? record.queue_id : null;
-  const slotIndex = typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
-    ? record.slot_index
-    : null;
+  const slotIndex =
+    typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
+      ? record.slot_index
+      : null;
   const gaveUp = record.gave_up === true;
-  const submittedAnswer = typeof record.submitted_answer === 'string'
-    ? record.submitted_answer.trim()
-    : typeof record.answer === 'string'
-      ? record.answer.trim()
-      : '';
+  const submittedAnswer =
+    typeof record.submitted_answer === 'string'
+      ? record.submitted_answer.trim()
+      : typeof record.answer === 'string'
+        ? record.answer.trim()
+        : '';
 
   if (!queueId || slotIndex === null) return null;
   if (!gaveUp && !submittedAnswer) return null;
@@ -98,12 +102,20 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session) {
-      return dailyAnswerErrorResponse(401, 'unauthorized', "Please sign in to answer today's question.");
+      return dailyAnswerErrorResponse(
+        401,
+        'unauthorized',
+        "Please sign in to answer today's question.",
+      );
     }
 
     const parsed = parseBody(await request.json().catch(() => null));
     if (!parsed) {
-      return dailyAnswerErrorResponse(400, 'validation', 'queue_id, slot_index, and submitted_answer are required');
+      return dailyAnswerErrorResponse(
+        400,
+        'validation',
+        'queue_id, slot_index, and submitted_answer are required',
+      );
     }
 
     const [queue] = await db
@@ -125,7 +137,11 @@ export async function POST(request: NextRequest) {
       return dailyAnswerErrorResponse(400, 'invalid_state', 'That question is already closed.');
     }
     if (!slot.generated_question_id && !slot.question_id) {
-      return dailyAnswerErrorResponse(400, 'invalid_state', 'That Daily Five slot is not ready yet.');
+      return dailyAnswerErrorResponse(
+        400,
+        'invalid_state',
+        'That Daily Five slot is not ready yet.',
+      );
     }
 
     // The Daily 5 mixes two slot shapes — bot-generated questions live in
@@ -149,13 +165,19 @@ export async function POST(request: NextRequest) {
       const [row] = await db
         .select()
         .from(generatedQuestions)
-        .where(and(
-          eq(generatedQuestions.id, slot.generated_question_id),
-          eq(generatedQuestions.userId, session.userId),
-        ))
+        .where(
+          and(
+            eq(generatedQuestions.id, slot.generated_question_id),
+            eq(generatedQuestions.userId, session.userId),
+          ),
+        )
         .limit(1);
       if (!row) {
-        return dailyAnswerErrorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+        return dailyAnswerErrorResponse(
+          404,
+          'question_not_found',
+          'We could not find that Daily Five question.',
+        );
       }
       question = {
         generatedId: row.id,
@@ -174,13 +196,15 @@ export async function POST(request: NextRequest) {
         .where(eq(questions.id, slot.question_id!))
         .limit(1);
       if (!row || row.deletedAt) {
-        return dailyAnswerErrorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
+        return dailyAnswerErrorResponse(
+          404,
+          'question_not_found',
+          'We could not find that Daily Five question.',
+        );
       }
-      const explainer = row.explainerFull
-        ?? row.explainerBrief
-        ?? row.factualExplanation
-        ?? null;
-      const difficulty = row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate ?? null;
+      const explainer = row.explainerFull ?? row.explainerBrief ?? row.factualExplanation ?? null;
+      const difficulty =
+        row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate ?? null;
       question = {
         generatedId: null,
         canonicalId: row.id,
@@ -247,13 +271,22 @@ export async function POST(request: NextRequest) {
           const persisted = await persistGeneratedQuestion(question.generatedId, slot.domain);
           canonicalQuestionId = persisted.questionId;
           const [persistedQuestion] = await db
-            .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category, insideJoke: questions.insideJoke })
+            .select({
+              creatorId: questions.creatorId,
+              domain: questions.canonicalSubcategory,
+              broadCategory: questions.broadCategory,
+              category: questions.category,
+              insideJoke: questions.insideJoke,
+            })
             .from(questions)
             .where(eq(questions.id, persisted.questionId))
             .limit(1);
           persistedCreatorId = persistedQuestion?.creatorId ?? null;
           persistedDomainForCreator =
-            persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+            persistedQuestion?.domain ||
+            persistedQuestion?.broadCategory ||
+            persistedQuestion?.category ||
+            null;
           persistedInsideJoke = persistedQuestion?.insideJoke ?? null;
         } catch (error) {
           const finalAttempt = persistAttempt >= 2;
@@ -310,10 +343,7 @@ export async function POST(request: NextRequest) {
         : Promise.resolve<{ result: 'correct' | 'wrong' }[]>([]),
       selectInsideJokeForViewer(persistedInsideJoke, persistedCreatorId, session.userId),
     ]);
-    const masteryAnswerState = computeAnswerState(
-      isCorrect ? 'correct' : 'wrong',
-      priorAnswers,
-    );
+    const masteryAnswerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
     const basePoints = question.basePoints;
     // A correct answer in an unfamiliar domain default-adds it to the player's
     // Knowledge base — including bot-generated Daily Five questions, which now
@@ -343,16 +373,17 @@ export async function POST(request: NextRequest) {
       } satisfies QueueSlot;
     });
 
-    await db
-      .update(dailyQueues)
-      .set({ slots: nextSlots })
-      .where(eq(dailyQueues.id, queue.id));
+    await db.update(dailyQueues).set({ slots: nextSlots }).where(eq(dailyQueues.id, queue.id));
 
     let masteryDelta = null;
     try {
       masteryDelta = await writeMasteryEvent({
         userId: session.userId,
-        questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,
+        questionId:
+          question.generatedId ??
+          question.canonicalId ??
+          canonicalQuestionId ??
+          `${queue.id}:${parsed.slotIndex}`,
         domain: question.canonicalSubcategory,
         answerState: masteryAnswerState,
         pointsAwarded,
@@ -429,7 +460,12 @@ export async function POST(request: NextRequest) {
     if (canonicalQuestionId && !parsed.gaveUp) {
       const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
       try {
-        if (isCorrect && persistedCreatorId && persistedCreatorId !== session.userId && persistedDomainForCreator) {
+        if (
+          isCorrect &&
+          persistedCreatorId &&
+          persistedCreatorId !== session.userId &&
+          persistedDomainForCreator
+        ) {
           void promoteDeclaredToDemonstrated({
             userId: persistedCreatorId,
             domain: persistedDomainForCreator,
@@ -454,12 +490,14 @@ export async function POST(request: NextRequest) {
         // own errors (see create-feed-items-for-answer.ts). after() keeps the
         // function alive past the response so Vercel doesn't freeze the work
         // mid-flight — bare `void` would drop the promise on production lambdas.
-        after(() => createFeedItemsForFriendsFromAnswer(
-          session.userId,
-          canonicalQuestionId,
-          isCorrect ? 'correct' : 'incorrect',
-          `daily:${propagationKey}:${session.userId}`,
-        ));
+        after(() =>
+          createFeedItemsForFriendsFromAnswer(
+            session.userId,
+            canonicalQuestionId,
+            isCorrect ? 'correct' : 'incorrect',
+            `daily:${propagationKey}:${session.userId}`,
+          ),
+        );
       } catch (error) {
         console.warn('[daily/answer] feed propagation failed', {
           generatedQuestionId: question.generatedId,

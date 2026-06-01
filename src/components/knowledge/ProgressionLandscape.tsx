@@ -57,8 +57,14 @@ function consumeScrollHint(): boolean {
 const GRID_CIRCLE_BOUNDS_DESKTOP = { minDiameter: 18, maxDiameter: 120 } as const;
 const GRID_CIRCLE_BOUNDS_MOBILE = { minDiameter: 15, maxDiameter: 108 } as const;
 
-function getCircleDiameter(correctAnswerCount: number, tier: Tier, maxForTier: number, isMobile: boolean): number {
-  if (correctAnswerCount === 0) return isMobile ? GHOST_CIRCLE_DIAMETER_MOBILE : GHOST_CIRCLE_DIAMETER;
+function getCircleDiameter(
+  correctAnswerCount: number,
+  tier: Tier,
+  maxForTier: number,
+  isMobile: boolean,
+): number {
+  if (correctAnswerCount === 0)
+    return isMobile ? GHOST_CIRCLE_DIAMETER_MOBILE : GHOST_CIRCLE_DIAMETER;
   return getDomainCircleSize(
     tier,
     correctAnswerCount,
@@ -171,12 +177,14 @@ export function ProgressionLandscape({
     return result;
   }, [domains]);
 
-  const sortedCategories = [...new Set(domains.map((domain) => domain.broadCategory ?? ''))].sort((a, b) => {
-    if (!a && !b) return 0;
-    if (!a) return 1;
-    if (!b) return -1;
-    return a.localeCompare(b);
-  });
+  const sortedCategories = [...new Set(domains.map((domain) => domain.broadCategory ?? ''))].sort(
+    (a, b) => {
+      if (!a && !b) return 0;
+      if (!a) return 1;
+      if (!b) return -1;
+      return a.localeCompare(b);
+    },
+  );
 
   const tierCategoryDomains = new Map<Tier, Map<string, ProgressionDomain[]>>();
   for (const tier of TIERS) tierCategoryDomains.set(tier, new Map());
@@ -192,23 +200,33 @@ export function ProgressionLandscape({
 
   for (const catMap of tierCategoryDomains.values()) {
     for (const [category, list] of catMap) {
-      catMap.set(category, [...list].sort((a, b) => {
-        const aGhost = a.correctAnswerCount === 0;
-        const bGhost = b.correctAnswerCount === 0;
-        if (aGhost !== bGhost) return aGhost ? 1 : -1;
-        return b.correctAnswerCount - a.correctAnswerCount;
-      }));
+      catMap.set(
+        category,
+        [...list].sort((a, b) => {
+          const aGhost = a.correctAnswerCount === 0;
+          const bGhost = b.correctAnswerCount === 0;
+          if (aGhost !== bGhost) return aGhost ? 1 : -1;
+          return b.correctAnswerCount - a.correctAnswerCount;
+        }),
+      );
     }
   }
 
   const gridStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: isMobile ? `repeat(4, ${MOBILE_COL_WIDTH}px)` : 'repeat(4, minmax(100px, 1fr))',
+    gridTemplateColumns: isMobile
+      ? `repeat(4, ${MOBILE_COL_WIDTH}px)`
+      : 'repeat(4, minmax(100px, 1fr))',
     minWidth: isMobile ? `${MOBILE_COL_WIDTH * 4}px` : undefined,
   };
 
   const containerStyle: CSSProperties = isMobile
-    ? { overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch', position: 'relative' }
+    ? {
+        overflowX: 'auto',
+        overflowY: 'visible',
+        WebkitOverflowScrolling: 'touch',
+        position: 'relative',
+      }
     : {};
 
   return (
@@ -222,7 +240,10 @@ export function ProgressionLandscape({
               ref={(el) => {
                 headerRefs.current[tier] = el;
               }}
-              style={{ ...colHeaderStyle, borderRight: i < 3 ? '1px solid var(--warm-border)' : undefined }}
+              style={{
+                ...colHeaderStyle,
+                borderRight: i < 3 ? '1px solid var(--warm-border)' : undefined,
+              }}
             >
               {KNOWLEDGE_TIER_LABEL[tier].toUpperCase()}
             </div>
@@ -233,12 +254,27 @@ export function ProgressionLandscape({
               {TIERS.map((tier, colIdx) => {
                 const cellDomains = tierCategoryDomains.get(tier)?.get(category) ?? [];
                 return (
-                  <div key={`${category}-${tier}`} style={{ ...cellStyle, borderRight: colIdx < 3 ? '1px solid var(--warm-border)' : undefined }}>
-                    <div style={categoryLabelStyle}>{colIdx === 0 ? (category || 'General Knowledge') : ''}</div>
+                  <div
+                    key={`${category}-${tier}`}
+                    style={{
+                      ...cellStyle,
+                      borderRight: colIdx < 3 ? '1px solid var(--warm-border)' : undefined,
+                    }}
+                  >
+                    <div style={categoryLabelStyle}>
+                      {colIdx === 0 ? category || 'General Knowledge' : ''}
+                    </div>
                     {cellDomains.map((domain) => {
                       const isGhost = domain.correctAnswerCount === 0;
-                      const diameter = getCircleDiameter(domain.correctAnswerCount, tier, maxPerTier[tier], isMobile);
-                      const isHighlighted = highlightSlug === domain.canonicalSubcategorySlug && expiredHighlightSlug !== domain.canonicalSubcategorySlug;
+                      const diameter = getCircleDiameter(
+                        domain.correctAnswerCount,
+                        tier,
+                        maxPerTier[tier],
+                        isMobile,
+                      );
+                      const isHighlighted =
+                        highlightSlug === domain.canonicalSubcategorySlug &&
+                        expiredHighlightSlug !== domain.canonicalSubcategorySlug;
 
                       return (
                         <div key={domain.canonicalSubcategorySlug} style={circleRowStyle}>
@@ -253,7 +289,11 @@ export function ProgressionLandscape({
                             isGhost={isGhost}
                             showTierLabel={!columnHeadersVisible[tier]}
                             territoryType={domain.territoryType}
-                            onTap={isGhost ? undefined : () => onDomainSelect?.(domain.canonicalSubcategory)}
+                            onTap={
+                              isGhost
+                                ? undefined
+                                : () => onDomainSelect?.(domain.canonicalSubcategory)
+                            }
                           />
                         </div>
                       );
@@ -265,7 +305,9 @@ export function ProgressionLandscape({
           ))}
         </div>
       </div>
-      {isMobile && showScrollHint && <p style={scrollHintStyle}>SCROLL TO SEE YOUR FULL PROGRESSION -&gt;</p>}
+      {isMobile && showScrollHint && (
+        <p style={scrollHintStyle}>SCROLL TO SEE YOUR FULL PROGRESSION -&gt;</p>
+      )}
     </div>
   );
 }

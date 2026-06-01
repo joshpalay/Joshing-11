@@ -103,7 +103,15 @@ function GrowthCircleRow({
         </div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 17, fontFamily: G_FM, color: G_INK, fontWeight: 'bold', lineHeight: 1 }}>
+        <div
+          style={{
+            fontSize: 17,
+            fontFamily: G_FM,
+            color: G_INK,
+            fontWeight: 'bold',
+            lineHeight: 1,
+          }}
+        >
           +{row.masteryPoints}
         </div>
         <div
@@ -156,7 +164,9 @@ export function GrowthSection({
         </Link>
       ) : null}
       {rows.length === 0 ? (
-        <p style={{ marginTop: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{emptyCopy}</p>
+        <p style={{ marginTop: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+          {emptyCopy}
+        </p>
       ) : (
         <div style={{ margin: '12px 0 0' }}>
           {rows.map((row, i) => (
@@ -199,19 +209,23 @@ export function ImpactSection({
     return (
       <section className="card px-5 py-4">
         <h2 style={titleStyle}>{title}</h2>
-        <p style={{ marginTop: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{emptyCopy}</p>
+        <p style={{ marginTop: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+          {emptyCopy}
+        </p>
       </section>
     );
   }
 
-  const landedCopy = summary.questionsThatLanded === 0
-    ? 'None of your questions were answered correctly this season.'
-    : `${summary.questionsThatLanded} of your questions were answered correctly this season.`;
-  const engagedCopy = summary.engagedNames.length === 0
-    ? null
-    : summary.engagedNames.length === 1
-      ? `${summary.engagedNames[0]} knew your territory.`
-      : `${summary.engagedNames[0]} and ${summary.engagedNames[1]} knew your territory.`;
+  const landedCopy =
+    summary.questionsThatLanded === 0
+      ? 'None of your questions were answered correctly this season.'
+      : `${summary.questionsThatLanded} of your questions were answered correctly this season.`;
+  const engagedCopy =
+    summary.engagedNames.length === 0
+      ? null
+      : summary.engagedNames.length === 1
+        ? `${summary.engagedNames[0]} knew your territory.`
+        : `${summary.engagedNames[0]} and ${summary.engagedNames[1]} knew your territory.`;
 
   return (
     <section className="card px-5 py-4">
@@ -219,21 +233,42 @@ export function ImpactSection({
       <div style={{ marginTop: '12px', display: 'grid', gap: '10px' }}>
         <p style={{ fontSize: '0.92rem', color: 'var(--text)', lineHeight: 1.45 }}>{landedCopy}</p>
         {summary.bestQuestion ? (
-          <article style={{ border: '1px solid var(--border)', borderRadius: '12px', padding: '0.85rem 0.95rem' }}>
-            <p style={{ ...monoStyle, color: 'var(--text-muted)', fontSize: '0.58rem' }}>{summary.bestQuestion.category}</p>
-            <p style={{ marginTop: '6px', fontSize: '0.92rem', color: 'var(--text)', lineHeight: 1.45 }}>&ldquo;{summary.bestQuestion.questionText}&rdquo;</p>
+          <article
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '0.85rem 0.95rem',
+            }}
+          >
+            <p style={{ ...monoStyle, color: 'var(--text-muted)', fontSize: '0.58rem' }}>
+              {summary.bestQuestion.category}
+            </p>
+            <p
+              style={{
+                marginTop: '6px',
+                fontSize: '0.92rem',
+                color: 'var(--text)',
+                lineHeight: 1.45,
+              }}
+            >
+              &ldquo;{summary.bestQuestion.questionText}&rdquo;
+            </p>
             <p style={{ marginTop: '6px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Asked by you · {summary.bestQuestion.correctCount} {summary.bestQuestion.correctCount === 1 ? 'player' : 'players'} got it right
+              Asked by you · {summary.bestQuestion.correctCount}{' '}
+              {summary.bestQuestion.correctCount === 1 ? 'player' : 'players'} got it right
             </p>
           </article>
         ) : null}
         {summary.starsEarned > 0 ? (
           <p style={{ fontSize: '0.92rem', color: 'var(--text)', lineHeight: 1.45 }}>
-            Your questions earned {summary.starsEarned} {summary.starsEarned === 1 ? 'star' : 'stars'} this season.
+            Your questions earned {summary.starsEarned}{' '}
+            {summary.starsEarned === 1 ? 'star' : 'stars'} this season.
           </p>
         ) : null}
         {engagedCopy ? (
-          <p style={{ fontSize: '0.92rem', color: 'var(--text)', lineHeight: 1.45 }}>{engagedCopy}</p>
+          <p style={{ fontSize: '0.92rem', color: 'var(--text)', lineHeight: 1.45 }}>
+            {engagedCopy}
+          </p>
         ) : null}
       </div>
     </section>
@@ -253,23 +288,57 @@ export function DiscoverySection({ rows, emptyCopy }: { rows: DiscoveryRow[]; em
   return (
     <section className="card px-5 py-4">
       <h2 style={titleStyle}>What You Discovered</h2>
-      <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+      <p
+        style={{
+          marginTop: '8px',
+          fontSize: '0.88rem',
+          color: 'var(--text-muted)',
+          lineHeight: 1.5,
+        }}
+      >
         Missed and expired prompts become context you can carry into the next conversation.
       </p>
       {rows.length === 0 ? (
-        <p style={{ marginTop: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{emptyCopy}</p>
+        <p style={{ marginTop: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+          {emptyCopy}
+        </p>
       ) : (
         <div style={{ marginTop: '12px', display: 'grid', gap: '12px' }}>
           {rows.map((row) => (
-            <article key={row.id} style={{ borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
-              <p style={{ fontSize: '0.92rem', color: 'var(--text)', lineHeight: 1.45 }}>{row.questionText}</p>
-              <p style={{ ...monoStyle, color: 'var(--text-muted)', marginTop: '6px' }}>Answer: {row.answerText}</p>
+            <article
+              key={row.id}
+              style={{ borderTop: '1px solid var(--border)', paddingTop: '10px' }}
+            >
+              <p style={{ fontSize: '0.92rem', color: 'var(--text)', lineHeight: 1.45 }}>
+                {row.questionText}
+              </p>
+              <p style={{ ...monoStyle, color: 'var(--text-muted)', marginTop: '6px' }}>
+                Answer: {row.answerText}
+              </p>
               {row.factualExplanation ? (
-                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: '7px', lineHeight: 1.45 }}>{row.factualExplanation}</p>
+                <p
+                  style={{
+                    fontSize: '0.86rem',
+                    color: 'var(--text-muted)',
+                    marginTop: '7px',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {row.factualExplanation}
+                </p>
               ) : null}
               {row.creatorNote ? (
-                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: '7px', fontStyle: 'italic', lineHeight: 1.45 }}>
-                  {row.creatorName ? `${row.creatorName}: ` : ''}{row.creatorNote}
+                <p
+                  style={{
+                    fontSize: '0.86rem',
+                    color: 'var(--text-muted)',
+                    marginTop: '7px',
+                    fontStyle: 'italic',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {row.creatorName ? `${row.creatorName}: ` : ''}
+                  {row.creatorNote}
                 </p>
               ) : null}
             </article>

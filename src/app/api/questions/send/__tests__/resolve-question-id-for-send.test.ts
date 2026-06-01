@@ -47,7 +47,10 @@ vi.mock('drizzle-orm', () => ({
   and: vi.fn((...predicates) => ({ op: 'and', predicates })),
   eq: vi.fn((column, value) => ({ op: 'eq', column, value })),
   gt: vi.fn((column, value) => ({ op: 'gt', column, value })),
-  sql: Object.assign(vi.fn(() => ({ op: 'sql' })), { raw: vi.fn() }),
+  sql: Object.assign(
+    vi.fn(() => ({ op: 'sql' })),
+    { raw: vi.fn() },
+  ),
 }));
 
 // The route module pulls in several collaborators at import time; stub them so

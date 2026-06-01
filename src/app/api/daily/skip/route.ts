@@ -17,9 +17,10 @@ function parseBody(value: unknown): { queueId: string; slotIndex: number } | nul
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const queueId = typeof record.queue_id === 'string' ? record.queue_id : null;
-  const slotIndex = typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
-    ? record.slot_index
-    : null;
+  const slotIndex =
+    typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
+      ? record.slot_index
+      : null;
   return queueId && slotIndex !== null ? { queueId, slotIndex } : null;
 }
 
@@ -46,10 +47,16 @@ export async function POST(request: NextRequest) {
   const slots = asQueueSlots(queue.slots);
   const slot = slots.find((item) => item.slot_index === parsed.slotIndex);
   if (!slot) {
-    return NextResponse.json({ error: 'validation', message: 'slot_index out of range' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'slot_index out of range' },
+      { status: 400 },
+    );
   }
   if (slot.answered || slot.skipped) {
-    return NextResponse.json({ error: 'invalid_state', message: 'slot is already closed' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'invalid_state', message: 'slot is already closed' },
+      { status: 400 },
+    );
   }
 
   const currentSkipCount = slots.filter((item) => item.skipped).length;
@@ -61,7 +68,7 @@ export async function POST(request: NextRequest) {
   }
 
   const nextSlots = slots.map((item) =>
-    item.slot_index === parsed.slotIndex ? { ...item, skipped: true } satisfies QueueSlot : item
+    item.slot_index === parsed.slotIndex ? ({ ...item, skipped: true } satisfies QueueSlot) : item,
   );
 
   await db.transaction(async (tx) => {
@@ -74,10 +81,7 @@ export async function POST(request: NextRequest) {
       skippedAt: new Date(),
     });
 
-    await tx
-      .update(dailyQueues)
-      .set({ slots: nextSlots })
-      .where(eq(dailyQueues.id, queue.id));
+    await tx.update(dailyQueues).set({ slots: nextSlots }).where(eq(dailyQueues.id, queue.id));
   });
 
   const answeredCount = nextSlots.filter((item) => item.answered).length;

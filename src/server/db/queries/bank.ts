@@ -1,9 +1,20 @@
 import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { writeActivity } from '@/server/activity/write-activity';
-import { db, feedItems, joshingGameResponses, questions, userQuestionBank, users } from '@/server/db';
+import {
+  db,
+  feedItems,
+  joshingGameResponses,
+  questions,
+  userQuestionBank,
+  users,
+} from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { bankQuestionSelectColumns, type QuestionView, toQuestionView } from '@/server/db/queries/questions';
+import {
+  bankQuestionSelectColumns,
+  type QuestionView,
+  toQuestionView,
+} from '@/server/db/queries/questions';
 
 export type BankContextType = 'feed' | 'joshing_game' | 'manual';
 
@@ -48,11 +59,13 @@ async function getAnswerersForQuestions(
       })
       .from(joshingGameResponses)
       .innerJoin(users, eq(joshingGameResponses.userId, users.id))
-      .where(and(
-        inArray(joshingGameResponses.questionId, questionIds),
-        ne(joshingGameResponses.userId, viewerUserId),
-        sql`${joshingGameResponses.answeredAt} is not null`,
-      ))
+      .where(
+        and(
+          inArray(joshingGameResponses.questionId, questionIds),
+          ne(joshingGameResponses.userId, viewerUserId),
+          sql`${joshingGameResponses.answeredAt} is not null`,
+        ),
+      )
       .groupBy(joshingGameResponses.questionId, joshingGameResponses.userId, users.displayName),
     db
       .select({
@@ -63,16 +76,21 @@ async function getAnswerersForQuestions(
       })
       .from(feedItems)
       .innerJoin(users, eq(feedItems.recipientUserId, users.id))
-      .where(and(
-        inArray(feedItems.questionId, questionIds),
-        ne(feedItems.recipientUserId, viewerUserId),
-        sql`${feedItems.answerResult} is not null`,
-        isNull(feedItems.joshingGameId),
-      ))
+      .where(
+        and(
+          inArray(feedItems.questionId, questionIds),
+          ne(feedItems.recipientUserId, viewerUserId),
+          sql`${feedItems.answerResult} is not null`,
+          isNull(feedItems.joshingGameId),
+        ),
+      )
       .groupBy(feedItems.questionId, feedItems.recipientUserId, users.displayName),
   ]);
 
-  const byQuestion = new Map<string, Map<string, { displayName: string | null; answeredAt: number }>>();
+  const byQuestion = new Map<
+    string,
+    Map<string, { displayName: string | null; answeredAt: number }>
+  >();
   for (const row of [...gameRows, ...feedRows]) {
     if (!row.questionId || !row.userId) continue;
     const answeredAt = row.answeredAt ? new Date(row.answeredAt).getTime() : 0;
@@ -177,14 +195,19 @@ export async function isInBank(userId: string, questionId: string): Promise<bool
   return Boolean(row);
 }
 
-export async function checkBankedQuestions(userId: string, questionIds: string[]): Promise<Record<string, boolean>> {
+export async function checkBankedQuestions(
+  userId: string,
+  questionIds: string[],
+): Promise<Record<string, boolean>> {
   const uniqueIds = [...new Set(questionIds)].filter(Boolean);
   if (uniqueIds.length === 0) return {};
 
   const rows = await db
     .select({ questionId: userQuestionBank.questionId })
     .from(userQuestionBank)
-    .where(and(eq(userQuestionBank.userId, userId), inArray(userQuestionBank.questionId, uniqueIds)));
+    .where(
+      and(eq(userQuestionBank.userId, userId), inArray(userQuestionBank.questionId, uniqueIds)),
+    );
 
   const banked = new Set(rows.map((row) => row.questionId));
   return Object.fromEntries(uniqueIds.map((id) => [id, banked.has(id)]));
@@ -219,17 +242,19 @@ export async function getBankedQuestions(
     userId,
   );
 
-  return Promise.all(rows.map(async (row) => {
-    const view = await toQuestionView(row.question);
-    const answerers = answerersByQuestion.get(row.question.id);
-    return {
-      ...view,
-      bankEntryId: row.bank.id,
-      bankedAt: row.bank.addedAt.toISOString(),
-      isInBank: true,
-      isOwnAuthored: row.question.creatorId === userId,
-      authorName: row.question.creatorId === userId ? 'You' : displayName(row.author.displayName),
-      answerers: answerers && answerers.total > 0 ? answerers : undefined,
-    };
-  }));
+  return Promise.all(
+    rows.map(async (row) => {
+      const view = await toQuestionView(row.question);
+      const answerers = answerersByQuestion.get(row.question.id);
+      return {
+        ...view,
+        bankEntryId: row.bank.id,
+        bankedAt: row.bank.addedAt.toISOString(),
+        isInBank: true,
+        isOwnAuthored: row.question.creatorId === userId,
+        authorName: row.question.creatorId === userId ? 'You' : displayName(row.author.displayName),
+        answerers: answerers && answerers.total > 0 ? answerers : undefined,
+      };
+    }),
+  );
 }

@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { getAnthropicClient, HAIKU_MODEL, loggedMessagesCreate, ANTHROPIC_MODEL, extractTextContent } from '@/lib/llm';
+import {
+  getAnthropicClient,
+  HAIKU_MODEL,
+  loggedMessagesCreate,
+  ANTHROPIC_MODEL,
+  extractTextContent,
+} from '@/lib/llm';
 
 import type { ScenarioLog } from './scenario-context';
 
@@ -32,16 +38,26 @@ function parseReview(text: string): ReviewResult {
     return {
       ok: true,
       summary: typeof parsed.summary === 'string' ? parsed.summary : '',
-      observations: Array.isArray(parsed.observations) ? parsed.observations.filter((x): x is string => typeof x === 'string') : [],
-      bugs: Array.isArray(parsed.bugs) ? parsed.bugs.filter((x): x is string => typeof x === 'string') : [],
-      uxNotes: Array.isArray(parsed.uxNotes) ? parsed.uxNotes.filter((x): x is string => typeof x === 'string') : [],
+      observations: Array.isArray(parsed.observations)
+        ? parsed.observations.filter((x): x is string => typeof x === 'string')
+        : [],
+      bugs: Array.isArray(parsed.bugs)
+        ? parsed.bugs.filter((x): x is string => typeof x === 'string')
+        : [],
+      uxNotes: Array.isArray(parsed.uxNotes)
+        ? parsed.uxNotes.filter((x): x is string => typeof x === 'string')
+        : [],
     };
   } catch {
     return fallbackReview('invalid_json');
   }
 }
 
-function pickReviewScreenshots(logs: ScenarioLog[], perScenarioLimit = 2, totalLimit = 12): string[] {
+function pickReviewScreenshots(
+  logs: ScenarioLog[],
+  perScenarioLimit = 2,
+  totalLimit = 12,
+): string[] {
   const files: string[] = [];
   for (const log of logs) {
     let perScenario = 0;
@@ -57,7 +73,10 @@ function pickReviewScreenshots(logs: ScenarioLog[], perScenarioLimit = 2, totalL
   return files;
 }
 
-function imageBlock(filePath: string): { type: 'image'; source: { type: 'base64'; media_type: 'image/png'; data: string } } {
+function imageBlock(filePath: string): {
+  type: 'image';
+  source: { type: 'base64'; media_type: 'image/png'; data: string };
+} {
   const data = readFileSync(filePath).toString('base64');
   return { type: 'image', source: { type: 'base64', media_type: 'image/png', data } };
 }
@@ -79,7 +98,8 @@ export async function reviewSession(params: {
       a.kind === 'assert_pass' ? { pass: a.label } : { fail: a.label, message: a.message },
     ),
     events: log.events.map((e) => {
-      if (e.kind === 'screenshot') return { kind: e.kind, note: e.note, file: path.basename(e.file) };
+      if (e.kind === 'screenshot')
+        return { kind: e.kind, note: e.note, file: path.basename(e.file) };
       return e;
     }),
   }));
@@ -128,8 +148,18 @@ export async function quickWrongAnswer(canonical: string): Promise<string> {
       model: HAIKU_MODEL,
       max_tokens: 30,
       temperature: 0.6,
-      system: [{ type: 'text', text: 'Return one short, plausibly-wrong trivia answer in the same category. No prose, just the answer.' }],
-      messages: [{ role: 'user', content: `Canonical correct answer: ${canonical}. Give a plausible wrong answer in the same category.` }],
+      system: [
+        {
+          type: 'text',
+          text: 'Return one short, plausibly-wrong trivia answer in the same category. No prose, just the answer.',
+        },
+      ],
+      messages: [
+        {
+          role: 'user',
+          content: `Canonical correct answer: ${canonical}. Give a plausible wrong answer in the same category.`,
+        },
+      ],
     });
     const text = extractTextContent(response.content).trim();
     return text || `not-${canonical.toLowerCase()}`;

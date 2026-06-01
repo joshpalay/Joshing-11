@@ -1,5 +1,5 @@
-import FriendsHubPage from '@/components/FriendsHubPage'
+import FriendsHubPage from '@/components/FriendsHubPage';
 
 export default function FriendsPage() {
-  return <FriendsHubPage />
+  return <FriendsHubPage />;
 }

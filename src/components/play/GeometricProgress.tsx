@@ -12,20 +12,21 @@ export function GeometricProgress({
   results: Record<number, 'correct' | 'wrong' | 'expired'>;
 }) {
   return (
-    <div className="flex items-center gap-1.5 justify-center" aria-hidden>
+    <div className="flex items-center justify-center gap-1.5" aria-hidden>
       {Array.from({ length: total }, (_, i) => {
         const pos = i + 1;
         const res = results[pos];
         const isCurrent = pos === current;
         const done = !!res;
 
-        const dotColor = res === 'correct'
-          ? 'var(--success)'
-          : res === 'wrong'
-            ? 'var(--wrong)'
-            : res === 'expired'
-              ? 'color-mix(in srgb, var(--text-muted) 60%, transparent)'
-              : 'color-mix(in srgb, var(--text) 22%, transparent)';
+        const dotColor =
+          res === 'correct'
+            ? 'var(--success)'
+            : res === 'wrong'
+              ? 'var(--wrong)'
+              : res === 'expired'
+                ? 'color-mix(in srgb, var(--text-muted) 60%, transparent)'
+                : 'color-mix(in srgb, var(--text) 22%, transparent)';
 
         return (
           <span

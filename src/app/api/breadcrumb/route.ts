@@ -101,7 +101,12 @@ async function handleJoshingGame(userId: string, body: z.infer<typeof joshingGam
     const [recipient] = await db
       .select({ id: joshingGameRecipients.id })
       .from(joshingGameRecipients)
-      .where(and(eq(joshingGameRecipients.gameId, body.gameId), eq(joshingGameRecipients.userId, userId)))
+      .where(
+        and(
+          eq(joshingGameRecipients.gameId, body.gameId),
+          eq(joshingGameRecipients.userId, userId),
+        ),
+      )
       .limit(1);
     if (!recipient) return errorResponse(403, 'forbidden', 'Not a participant of this game.');
   }
@@ -113,11 +118,13 @@ async function handleJoshingGame(userId: string, body: z.infer<typeof joshingGam
     })
     .from(joshingGameResponses)
     .innerJoin(questions, eq(joshingGameResponses.questionId, questions.id))
-    .where(and(
-      eq(joshingGameResponses.gameId, body.gameId),
-      eq(joshingGameResponses.questionId, body.questionId),
-      eq(joshingGameResponses.userId, userId),
-    ))
+    .where(
+      and(
+        eq(joshingGameResponses.gameId, body.gameId),
+        eq(joshingGameResponses.questionId, body.questionId),
+        eq(joshingGameResponses.userId, userId),
+      ),
+    )
     .limit(1);
 
   if (!row) return errorResponse(404, 'not_found', 'No answer recorded for that question.');
@@ -130,7 +137,8 @@ async function handleJoshingGame(userId: string, body: z.infer<typeof joshingGam
   if (!isCorrect && !submittedAnswer) {
     return NextResponse.json({ breadcrumb: null });
   }
-  const domain = row.question.canonicalSubcategory || row.question.broadCategory || row.question.category;
+  const domain =
+    row.question.canonicalSubcategory || row.question.broadCategory || row.question.category;
 
   const breadcrumb = await generateBreadcrumb({
     questionId: row.question.id,

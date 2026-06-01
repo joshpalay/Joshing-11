@@ -66,9 +66,7 @@ export async function GET() {
   // slot whose replacement failed to generate leaves nothing pending, so the
   // round is genuinely over even though fewer than five were answered.
   const isComplete = isRoundComplete(slots);
-  const questionsRemaining = isComplete
-    ? 0
-    : Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0);
+  const questionsRemaining = isComplete ? 0 : Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0);
 
   return NextResponse.json({
     questionsRemaining,

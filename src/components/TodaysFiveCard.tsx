@@ -1,40 +1,40 @@
-'use client'
+'use client';
 
-import Link from 'next/link'
-import { Settings } from 'lucide-react'
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import Link from 'next/link';
+import { Settings } from 'lucide-react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
-import { formatNextResetTimeLocal } from '@/lib/games/timezone'
+import { formatNextResetTimeLocal } from '@/lib/games/timezone';
 
 // useSyncExternalStore inputs for the client-only reset-time label. Hoisted so
 // the subscribe/snapshot functions are stable across renders.
-const subscribeNoop = () => () => {}
-const getResetTimeSnapshot = () => formatNextResetTimeLocal()
-const getResetTimeServerSnapshot = (): string | null => null
+const subscribeNoop = () => () => {};
+const getResetTimeSnapshot = () => formatNextResetTimeLocal();
+const getResetTimeServerSnapshot = (): string | null => null;
 
-export type SlotOutcome = 'correct' | 'incorrect' | 'skipped' | 'unanswered'
+export type SlotOutcome = 'correct' | 'incorrect' | 'skipped' | 'unanswered';
 
 export type DailyStatus = {
-  questionsRemaining: number
-  questionsAnswered: number
-  isComplete: boolean
-  nextRoundAt: string
-  queueId: string | null
-  slotOutcomes: SlotOutcome[]
-}
+  questionsRemaining: number;
+  questionsAnswered: number;
+  isComplete: boolean;
+  nextRoundAt: string;
+  queueId: string | null;
+  slotOutcomes: SlotOutcome[];
+};
 
 export type DailyPreferences = {
-  difficulty: 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive'
-  domainMode: 'random' | 'custom'
-  selectedDomains: string[]
-}
+  difficulty: 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive';
+  domainMode: 'random' | 'custom';
+  selectedDomains: string[];
+};
 
 type TodaysFiveCardProps = {
   /** When supplied, the initial /api/daily/status fetch is skipped. */
-  initialStatus?: DailyStatus | null
+  initialStatus?: DailyStatus | null;
   /** When supplied, the initial /api/daily/preferences fetch is skipped. */
-  initialPreferences?: DailyPreferences | null
-}
+  initialPreferences?: DailyPreferences | null;
+};
 
 const DIFFICULTY_LABELS: Record<string, string> = {
   normal: 'Establishing',
@@ -42,15 +42,15 @@ const DIFFICULTY_LABELS: Record<string, string> = {
   challenging: 'Solid',
   ridiculous: 'Mastery',
   adaptive: 'Adaptive',
-}
+};
 
 function preferenceSummary(prefs: DailyPreferences): string {
-  const diffLabel = DIFFICULTY_LABELS[prefs.difficulty] ?? 'Adaptive'
-  if (prefs.domainMode === 'random') return `${diffLabel} · Random`
-  if (prefs.selectedDomains.length === 0) return `${diffLabel} · Custom`
-  const domains = prefs.selectedDomains.slice(0, 3).join(', ')
-  const extra = prefs.selectedDomains.length > 3 ? ` +${prefs.selectedDomains.length - 3}` : ''
-  return `${diffLabel} · ${domains}${extra}`
+  const diffLabel = DIFFICULTY_LABELS[prefs.difficulty] ?? 'Adaptive';
+  if (prefs.domainMode === 'random') return `${diffLabel} · Random`;
+  if (prefs.selectedDomains.length === 0) return `${diffLabel} · Custom`;
+  const domains = prefs.selectedDomains.slice(0, 3).join(', ');
+  const extra = prefs.selectedDomains.length > 3 ? ` +${prefs.selectedDomains.length - 3}` : '';
+  return `${diffLabel} · ${domains}${extra}`;
 }
 
 const FALLBACK_STATUS: DailyStatus = {
@@ -60,59 +60,65 @@ const FALLBACK_STATUS: DailyStatus = {
   nextRoundAt: new Date().toISOString(),
   queueId: null,
   slotOutcomes: ['unanswered', 'unanswered', 'unanswered', 'unanswered', 'unanswered'],
-}
+};
 
 const VALID_OUTCOMES: ReadonlySet<SlotOutcome> = new Set<SlotOutcome>([
   'correct',
   'incorrect',
   'skipped',
   'unanswered',
-])
+]);
 
 function normalizeSlotOutcomes(value: unknown): SlotOutcome[] {
-  const fallback: SlotOutcome[] = ['unanswered', 'unanswered', 'unanswered', 'unanswered', 'unanswered']
-  if (!Array.isArray(value)) return fallback
+  const fallback: SlotOutcome[] = [
+    'unanswered',
+    'unanswered',
+    'unanswered',
+    'unanswered',
+    'unanswered',
+  ];
+  if (!Array.isArray(value)) return fallback;
   return fallback.map((unanswered, index) => {
-    const candidate = value[index]
+    const candidate = value[index];
     return typeof candidate === 'string' && VALID_OUTCOMES.has(candidate as SlotOutcome)
       ? (candidate as SlotOutcome)
-      : unanswered
-  })
+      : unanswered;
+  });
 }
 
 export default function TodaysFiveCard({
   initialStatus = null,
   initialPreferences = null,
 }: TodaysFiveCardProps = {}) {
-  const [status, setStatus] = useState<DailyStatus | null>(initialStatus)
-  const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences)
-  const [resetting, setResetting] = useState(false)
-  const [resetError, setResetError] = useState<string | null>(null)
+  const [status, setStatus] = useState<DailyStatus | null>(initialStatus);
+  const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   // Client-only reset-time label; null during SSR to keep hydration stable.
   const resetTime = useSyncExternalStore(
     subscribeNoop,
     getResetTimeSnapshot,
     getResetTimeServerSnapshot,
-  )
+  );
   // Skip the initial /api/daily/* fetch when the server already provided both.
-  const skipInitialFetchRef = useRef(initialStatus !== null && initialPreferences !== null)
+  const skipInitialFetchRef = useRef(initialStatus !== null && initialPreferences !== null);
 
   useEffect(() => {
     if (skipInitialFetchRef.current) {
-      skipInitialFetchRef.current = false
-      return
+      skipInitialFetchRef.current = false;
+      return;
     }
-    let cancelled = false
+    let cancelled = false;
 
     async function loadStatus() {
       try {
         const [statusResponse, prefsResponse] = await Promise.all([
           fetch('/api/daily/status', { cache: 'no-store', credentials: 'include' }),
           fetch('/api/daily/preferences', { cache: 'no-store', credentials: 'include' }),
-        ])
-        if (!statusResponse.ok) throw new Error('daily status unavailable')
-        const body = await statusResponse.json()
-        if (cancelled) return
+        ]);
+        if (!statusResponse.ok) throw new Error('daily status unavailable');
+        const body = await statusResponse.json();
+        if (cancelled) return;
         setStatus({
           questionsRemaining:
             typeof body.questionsRemaining === 'number'
@@ -131,84 +137,74 @@ export default function TodaysFiveCard({
                 ? body.complete
                 : FALLBACK_STATUS.isComplete,
           nextRoundAt:
-            typeof body.nextRoundAt === 'string'
-              ? body.nextRoundAt
-              : FALLBACK_STATUS.nextRoundAt,
+            typeof body.nextRoundAt === 'string' ? body.nextRoundAt : FALLBACK_STATUS.nextRoundAt,
           queueId: typeof body.queue_id === 'string' ? body.queue_id : null,
           slotOutcomes: normalizeSlotOutcomes(body.slotOutcomes),
-        })
+        });
         if (prefsResponse.ok) {
-          const prefsBody = await prefsResponse.json()
-          const prefs = prefsBody?.preferences
+          const prefsBody = await prefsResponse.json();
+          const prefs = prefsBody?.preferences;
           if (prefs) {
             setPreferences({
               difficulty: prefs.difficulty ?? 'adaptive',
               domainMode: prefs.domainMode ?? 'random',
               selectedDomains: Array.isArray(prefs.selectedDomains) ? prefs.selectedDomains : [],
-            })
+            });
           }
         }
       } catch {
-        if (!cancelled) setStatus(FALLBACK_STATUS)
+        if (!cancelled) setStatus(FALLBACK_STATUS);
       }
     }
 
-    void loadStatus()
+    void loadStatus();
 
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
-  const effectiveStatus = status ?? FALLBACK_STATUS
-  const answered = Math.max(0, Math.min(effectiveStatus.questionsAnswered, 5))
-  const isComplete =
-    effectiveStatus.isComplete || effectiveStatus.questionsRemaining <= 0
-  const hasStartedRound = Boolean(effectiveStatus.queueId) && answered > 0
-  const playHref = isComplete
-    ? '/daily/summary'
-    : '/daily'
+  const effectiveStatus = status ?? FALLBACK_STATUS;
+  const answered = Math.max(0, Math.min(effectiveStatus.questionsAnswered, 5));
+  const isComplete = effectiveStatus.isComplete || effectiveStatus.questionsRemaining <= 0;
+  const hasStartedRound = Boolean(effectiveStatus.queueId) && answered > 0;
+  const playHref = isComplete ? '/daily/summary' : '/daily';
   const actionLabel = isComplete
     ? "See today's recap →"
     : hasStartedRound
       ? 'Resume round'
-      : 'Play now'
+      : 'Play now';
   const subtext = isComplete
     ? resetTime
       ? `Today done · Five new at ${resetTime} tomorrow`
       : 'Today done · Five new tomorrow'
     : answered > 0
       ? `${answered} of 5 answered`
-      : 'Ready when you are'
+      : 'Ready when you are';
   // Editorial serif headline (display/Body-Serif), contextual to round state.
   const headline = isComplete
     ? 'Today, done.'
     : hasStartedRound
       ? 'Pick up where you left off'
-      : 'Ready when you are!'
+      : 'Ready when you are!';
 
   const resetForToday = async () => {
-    if (resetting) return
-    setResetError(null)
-    setResetting(true)
+    if (resetting) return;
+    setResetError(null);
+    setResetting(true);
     try {
       const response = await fetch('/api/daily/reset', {
         method: 'POST',
         credentials: 'include',
-      })
-      const body = await response.json().catch(() => null)
-      if (!response.ok)
-        throw new Error(body?.message ?? 'Could not reset daily round.')
-      window.location.assign('/daily')
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message ?? 'Could not reset daily round.');
+      window.location.assign('/daily');
     } catch (caught) {
-      setResetError(
-        caught instanceof Error
-          ? caught.message
-          : 'Could not reset daily round.'
-      )
-      setResetting(false)
+      setResetError(caught instanceof Error ? caught.message : 'Could not reset daily round.');
+      setResetting(false);
     }
-  }
+  };
 
   return (
     <div className="bg-card text-card-foreground w-full rounded-[4px] border border-[var(--brand-border)] px-4 py-5 shadow-[0_4px_12px_rgba(40,32,30,0.04)]">
@@ -229,13 +225,10 @@ export default function TodaysFiveCard({
         {headline}
       </h2>
 
-      <div
-        className="mt-3 flex items-center gap-2"
-        aria-label={`${answered} of 5 answered`}
-      >
+      <div className="mt-3 flex items-center gap-2" aria-label={`${answered} of 5 answered`}>
         {Array.from({ length: 5 }, (_, index) => {
-          const outcome = effectiveStatus.slotOutcomes[index] ?? 'unanswered'
-          const isFilled = outcome !== 'unanswered'
+          const outcome = effectiveStatus.slotOutcomes[index] ?? 'unanswered';
+          const isFilled = outcome !== 'unanswered';
           const background =
             outcome === 'correct'
               ? 'var(--success)'
@@ -243,7 +236,7 @@ export default function TodaysFiveCard({
                 ? 'var(--destructive)'
                 : outcome === 'skipped'
                   ? 'color-mix(in srgb, var(--brand-ink) 35%, transparent)'
-                  : 'transparent'
+                  : 'transparent';
           const label =
             outcome === 'correct'
               ? 'Correct'
@@ -251,7 +244,7 @@ export default function TodaysFiveCard({
                 ? 'Wrong'
                 : outcome === 'skipped'
                   ? 'Skipped'
-                  : 'Not answered'
+                  : 'Not answered';
           return (
             <span
               key={index}
@@ -268,7 +261,7 @@ export default function TodaysFiveCard({
                 opacity: isFilled ? 0.95 : 0.7,
               }}
             />
-          )
+          );
         })}
       </div>
 
@@ -291,16 +284,14 @@ export default function TodaysFiveCard({
           <button
             type="button"
             onClick={() => {
-              void resetForToday()
+              void resetForToday();
             }}
             disabled={resetting}
             className="mt-2 w-full text-center text-xs font-medium tracking-[0.08em] text-[var(--brand-ink-400)] uppercase underline underline-offset-4 disabled:opacity-60"
           >
             {resetting ? 'Resetting…' : 'Reset game for today and play again'}
           </button>
-          {resetError ? (
-            <p className="text-destructive mt-2 text-xs">{resetError}</p>
-          ) : null}
+          {resetError ? <p className="text-destructive mt-2 text-xs">{resetError}</p> : null}
         </>
       ) : (
         <Link
@@ -311,5 +302,5 @@ export default function TodaysFiveCard({
         </Link>
       )}
     </div>
-  )
+  );
 }

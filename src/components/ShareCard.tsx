@@ -16,7 +16,10 @@ export type ShareCardBeatsPayload = {
   } | null;
   beat3: { userId?: string; displayName: string; contributionCount: number }[] | null;
   beat4: { userId?: string; displayName: string; sharedDomains: string[] } | null;
-  beat5: { totalCreatorPoints: number; topQuestion: { text: string; answeredCount: number } | null } | null;
+  beat5: {
+    totalCreatorPoints: number;
+    topQuestion: { text: string; answeredCount: number } | null;
+  } | null;
 };
 
 export type ShareCardProps = {
@@ -55,7 +58,8 @@ function buildHighlights(payload: ShareCardBeatsPayload): string[] {
     highlights.push(`Crossed into ${KNOWLEDGE_TIER_LABEL[mastered.toTier]} in ${mastered.domain}`);
   }
 
-  const discovered = payload.beat2?.friendMediated[0] ?? payload.beat2?.authored[0] ?? payload.beat2?.promoted[0];
+  const discovered =
+    payload.beat2?.friendMediated[0] ?? payload.beat2?.authored[0] ?? payload.beat2?.promoted[0];
   if (discovered) {
     highlights.push(`Picked up ${discovered.domain}`);
   }
@@ -75,46 +79,49 @@ function buildHighlights(payload: ShareCardBeatsPayload): string[] {
   return highlights.slice(0, 3);
 }
 
-export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
-  function ShareCard({ beatsPayload, userName, cycleStart, cycleEnd, size = 'portrait' }, ref) {
-    const points = estimatePoints(beatsPayload);
-    const highlights = buildHighlights(beatsPayload);
-    const dimensions = size === 'square' ? squareStyle : portraitStyle;
+export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
+  { beatsPayload, userName, cycleStart, cycleEnd, size = 'portrait' },
+  ref,
+) {
+  const points = estimatePoints(beatsPayload);
+  const highlights = buildHighlights(beatsPayload);
+  const dimensions = size === 'square' ? squareStyle : portraitStyle;
 
-    return (
-      <div ref={ref} style={{ ...cardStyle, ...dimensions }}>
-        <div style={topStyle}>
-          <div>
-            <p style={kickerStyle}>JOSHING · TWO WEEKS</p>
-            <p style={dateStyle}>{formatRange(cycleStart, cycleEnd)}</p>
-          </div>
-          <p style={nameStyle}>{userName}</p>
+  return (
+    <div ref={ref} style={{ ...cardStyle, ...dimensions }}>
+      <div style={topStyle}>
+        <div>
+          <p style={kickerStyle}>JOSHING · TWO WEEKS</p>
+          <p style={dateStyle}>{formatRange(cycleStart, cycleEnd)}</p>
         </div>
+        <p style={nameStyle}>{userName}</p>
+      </div>
 
-        <div style={centerStyle}>
-          <p style={pointsStyle}>{points}</p>
-          <p style={pointsLabelStyle}>points this cycle</p>
-        </div>
+      <div style={centerStyle}>
+        <p style={pointsStyle}>{points}</p>
+        <p style={pointsLabelStyle}>points this cycle</p>
+      </div>
 
-        <div style={highlightListStyle}>
-          {highlights.length > 0 ? highlights.map((highlight, index) => (
+      <div style={highlightListStyle}>
+        {highlights.length > 0 ? (
+          highlights.map((highlight, index) => (
             <div key={highlight} style={highlightRowStyle}>
               <span style={highlightIndexStyle}>{index + 1}</span>
               <p style={highlightTextStyle}>{highlight}</p>
             </div>
-          )) : (
-            <p style={emptyStyle}>A quiet cycle still counts.</p>
-          )}
-        </div>
-
-        <div style={footerStyle}>
-          <span>joshing.app</span>
-          <span style={footerRuleStyle} />
-        </div>
+          ))
+        ) : (
+          <p style={emptyStyle}>A quiet cycle still counts.</p>
+        )}
       </div>
-    );
-  },
-);
+
+      <div style={footerStyle}>
+        <span>joshing.app</span>
+        <span style={footerRuleStyle} />
+      </div>
+    </div>
+  );
+});
 
 // Live DOM (not rasterized — rendered on the public /share/ceremony/[token] page
 // and the in-app ceremony review), so this references brand tokens and re-themes.

@@ -127,7 +127,9 @@ export function TopUpAreasModal({
     } catch {
       // Fall back to the raw input if canonicalization fails.
       setSelected((current) =>
-        current.length >= maxNew ? current : [...current, { label: raw, broadCategory: 'General Knowledge' }],
+        current.length >= maxNew
+          ? current
+          : [...current, { label: raw, broadCategory: 'General Knowledge' }],
       );
       setCustomInput('');
     } finally {
@@ -228,8 +230,8 @@ export function TopUpAreasModal({
           Add two more areas?
         </p>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          You started with three. Pick up to {maxNew} more and we&rsquo;ll weave them into your daily
-          questions.
+          You started with three. Pick up to {maxNew} more and we&rsquo;ll weave them into your
+          daily questions.
         </p>
 
         <div className="mt-4">
@@ -250,22 +252,31 @@ export function TopUpAreasModal({
                       type="button"
                       disabled={busy || atCap}
                       onClick={() =>
-                        toggle({ label: suggestion.domain, broadCategory: suggestion.broadCategory })
+                        toggle({
+                          label: suggestion.domain,
+                          broadCategory: suggestion.broadCategory,
+                        })
                       }
                       className="w-full rounded-[var(--radius-md)] border px-3 py-2 text-left transition-colors disabled:opacity-50"
                       style={{
                         borderColor: active ? 'var(--accent)' : 'var(--border)',
-                        background: active ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
+                        background: active
+                          ? 'color-mix(in srgb, var(--accent) 12%, transparent)'
+                          : 'transparent',
                       }}
                     >
                       <span className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-[var(--text)]">{suggestion.domain}</span>
-                        <span className="text-[0.65rem] uppercase tracking-[0.06em] text-[var(--text-muted)]">
+                        <span className="text-sm font-medium text-[var(--text)]">
+                          {suggestion.domain}
+                        </span>
+                        <span className="text-[0.65rem] tracking-[0.06em] text-[var(--text-muted)] uppercase">
                           {suggestion.broadCategory}
                         </span>
                       </span>
                       {suggestion.rationale ? (
-                        <span className="mt-1 block text-xs text-[var(--text-muted)]">{suggestion.rationale}</span>
+                        <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                          {suggestion.rationale}
+                        </span>
                       ) : null}
                     </button>
                   </li>
@@ -295,7 +306,9 @@ export function TopUpAreasModal({
             type="button"
             className="shrink-0 rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-raised)] disabled:opacity-50"
             style={{ borderColor: 'var(--border)' }}
-            disabled={busy || addingCustom || selected.length >= maxNew || customInput.trim().length < 2}
+            disabled={
+              busy || addingCustom || selected.length >= maxNew || customInput.trim().length < 2
+            }
             onClick={() => void addCustom()}
           >
             {addingCustom ? '…' : 'Add'}
@@ -311,7 +324,10 @@ export function TopUpAreasModal({
                 disabled={busy}
                 onClick={() => toggle(item)}
                 className="rounded-full border px-3 py-1 text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-raised)]"
-                style={{ borderColor: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}
+                style={{
+                  borderColor: 'var(--accent)',
+                  background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                }}
               >
                 {item.label} ✕
               </button>
@@ -332,7 +348,9 @@ export function TopUpAreasModal({
             disabled={busy || selected.length === 0}
             onClick={() => void save()}
           >
-            {saving ? '…' : `Add ${selected.length || ''} ${selected.length === 1 ? 'area' : 'areas'}`.trim()}
+            {saving
+              ? '…'
+              : `Add ${selected.length || ''} ${selected.length === 1 ? 'area' : 'areas'}`.trim()}
           </button>
           <button
             type="button"

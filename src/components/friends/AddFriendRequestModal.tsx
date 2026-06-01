@@ -1,18 +1,18 @@
-'use client'
+'use client';
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react';
 
-const MAX_NOTE_LENGTH = 160
-const COUNTER_VISIBLE_AT = 120
+const MAX_NOTE_LENGTH = 160;
+const COUNTER_VISIBLE_AT = 120;
 
 type Props = {
-  onClose: () => void
-  targetUserId: string
-  targetDisplayName: string
+  onClose: () => void;
+  targetUserId: string;
+  targetDisplayName: string;
   // Called with the new friendship id after a successful send. The parent
   // typically flips its UI to "pending_outbound" and refreshes.
-  onSent: (friendshipId: string) => void
-}
+  onSent: (friendshipId: string) => void;
+};
 
 type SendErrorKey =
   | 'already_friends'
@@ -23,67 +23,62 @@ type SendErrorKey =
   | 'invalid_body'
   | 'self_request'
   | 'network'
-  | 'unknown'
+  | 'unknown';
 
 function describeError(error: SendErrorKey, message?: string): string {
-  if (message) return message
+  if (message) return message;
   switch (error) {
     case 'already_friends':
-      return 'You are already friends.'
+      return 'You are already friends.';
     case 'already_pending':
-      return 'You already have a pending request with this person.'
+      return 'You already have a pending request with this person.';
     case 'inbound_exists':
-      return 'They sent you a request — accept it instead.'
+      return 'They sent you a request — accept it instead.';
     case 'recently_sent':
-      return 'You sent this person a request recently. Try again later.'
+      return 'You sent this person a request recently. Try again later.';
     case 'not_found':
-      return 'This person isn’t available right now.'
+      return 'This person isn’t available right now.';
     case 'invalid_body':
-      return 'That note didn’t look right. Try shortening it.'
+      return 'That note didn’t look right. Try shortening it.';
     case 'self_request':
-      return 'You cannot friend yourself.'
+      return 'You cannot friend yourself.';
     case 'network':
-      return 'Network error. Please try again.'
+      return 'Network error. Please try again.';
     default:
-      return 'Something went wrong. Please try again.'
+      return 'Something went wrong. Please try again.';
   }
 }
 
 // Parent mounts this component when the modal should be open and unmounts
 // it on close. That keeps state (note draft, error) fresh on each open
 // without needing a reset-on-open effect.
-export function AddFriendRequestModal({
-  onClose,
-  targetUserId,
-  targetDisplayName,
-  onSent,
-}: Props) {
-  const [note, setNote] = useState('')
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+export function AddFriendRequestModal({ onClose, targetUserId, targetDisplayName, onSent }: Props) {
+  const [note, setNote] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    textareaRef.current?.focus()
-  }, [])
+    textareaRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   async function send() {
-    if (sending) return
-    const trimmed = note.trim()
+    if (sending) return;
+    const trimmed = note.trim();
     if (trimmed.length > MAX_NOTE_LENGTH) {
-      setError(`Notes are capped at ${MAX_NOTE_LENGTH} characters.`)
-      return
+      setError(`Notes are capped at ${MAX_NOTE_LENGTH} characters.`);
+      return;
     }
-    setSending(true)
-    setError(null)
+    setSending(true);
+    setError(null);
     try {
       const response = await fetch('/api/friend-requests', {
         method: 'POST',
@@ -93,36 +88,34 @@ export function AddFriendRequestModal({
           inviteeUserId: targetUserId,
           personalNote: trimmed.length > 0 ? trimmed : undefined,
         }),
-      })
+      });
       const body = (await response.json().catch(() => null)) as
         | { ok: boolean; friendship?: { id: string } }
         | { error: SendErrorKey; message?: string }
-        | null
+        | null;
 
       if (!response.ok || !body || !('ok' in body) || !body.ok || !body.friendship) {
-        const errorBody = body && 'error' in body ? body : null
-        setError(
-          describeError(errorBody?.error ?? 'unknown', errorBody?.message)
-        )
-        return
+        const errorBody = body && 'error' in body ? body : null;
+        setError(describeError(errorBody?.error ?? 'unknown', errorBody?.message));
+        return;
       }
-      onSent(body.friendship.id)
-      onClose()
+      onSent(body.friendship.id);
+      onClose();
     } catch {
-      setError(describeError('network'))
+      setError(describeError('network'));
     } finally {
-      setSending(false)
+      setSending(false);
     }
   }
 
-  const counterVisible = note.length >= COUNTER_VISIBLE_AT
-  const remaining = MAX_NOTE_LENGTH - note.length
+  const counterVisible = note.length >= COUNTER_VISIBLE_AT;
+  const remaining = MAX_NOTE_LENGTH - note.length;
 
   return (
     <>
       <div
         onClick={() => {
-          if (!sending) onClose()
+          if (!sending) onClose();
         }}
         style={{
           position: 'fixed',
@@ -176,7 +169,7 @@ export function AddFriendRequestModal({
           rows={4}
           placeholder="Hey — I keep meaning to ask you about that thing…"
           disabled={sending}
-          className="border-border bg-card text-foreground placeholder:text-muted-foreground w-full resize-none rounded-lg border p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+          className="border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary/40 w-full resize-none rounded-lg border p-3 text-sm focus:ring-2 focus:outline-none"
         />
         <div className="mt-1 flex h-5 items-center justify-end">
           {counterVisible ? (
@@ -187,16 +180,9 @@ export function AddFriendRequestModal({
             </span>
           ) : null}
         </div>
-        {error ? (
-          <p className="text-destructive mt-2 text-sm">{error}</p>
-        ) : null}
+        {error ? <p className="text-destructive mt-2 text-sm">{error}</p> : null}
         <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={onClose}
-            disabled={sending}
-          >
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={sending}>
             Cancel
           </button>
           <button
@@ -210,5 +196,5 @@ export function AddFriendRequestModal({
         </div>
       </div>
     </>
-  )
+  );
 }

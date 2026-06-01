@@ -1,10 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
-import {
-  getSession,
-  refreshSessionOnboardingClaim,
-} from '@/server/auth/session'
-import { getUserOnboardingProfile } from '@/server/db/queries/users'
+import { getSession, refreshSessionOnboardingClaim } from '@/server/auth/session';
+import { getUserOnboardingProfile } from '@/server/db/queries/users';
 
 /**
  * Graceful migration endpoint for sessions issued before the `onb` JWT
@@ -16,34 +13,34 @@ import { getUserOnboardingProfile } from '@/server/db/queries/users'
  */
 
 function safeNextPath(rawNext: string | null): string {
-  if (!rawNext) return '/'
+  if (!rawNext) return '/';
   // Only allow same-origin relative paths.
-  if (!rawNext.startsWith('/') || rawNext.startsWith('//')) return '/'
-  return rawNext
+  if (!rawNext.startsWith('/') || rawNext.startsWith('//')) return '/';
+  return rawNext;
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url)
-  const next = safeNextPath(url.searchParams.get('next'))
+  const url = new URL(request.url);
+  const next = safeNextPath(url.searchParams.get('next'));
 
-  const session = await getSession()
+  const session = await getSession();
   if (!session) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  const user = await getUserOnboardingProfile(session.userId)
+  const user = await getUserOnboardingProfile(session.userId);
   if (!user) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   if (!user.onboardingComplete) {
-    return NextResponse.redirect(new URL('/onboarding', request.url))
+    return NextResponse.redirect(new URL('/onboarding', request.url));
   }
 
-  const refreshed = await refreshSessionOnboardingClaim()
+  const refreshed = await refreshSessionOnboardingClaim();
   if (!refreshed) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  return NextResponse.redirect(new URL(next, request.url))
+  return NextResponse.redirect(new URL(next, request.url));
 }

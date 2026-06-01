@@ -7,10 +7,7 @@ import { db, profileSectionVisibility } from '@/server/db';
  * independently. Mirrors the Postgres `ProfileSection` enum defined in
  * `src/server/db/schema.ts` and migration 0054.
  */
-export type ProfileSection =
-  | 'knowledge_base'
-  | 'friends_list'
-  | 'authored_questions';
+export type ProfileSection = 'knowledge_base' | 'friends_list' | 'authored_questions';
 
 export type SectionVisibility = 'public' | 'friends' | 'private';
 
@@ -47,11 +44,7 @@ function isSectionVisibility(value: unknown): value is SectionVisibility {
 }
 
 function isProfileSection(value: unknown): value is ProfileSection {
-  return (
-    value === 'knowledge_base' ||
-    value === 'friends_list' ||
-    value === 'authored_questions'
-  );
+  return value === 'knowledge_base' || value === 'friends_list' || value === 'authored_questions';
 }
 
 /**

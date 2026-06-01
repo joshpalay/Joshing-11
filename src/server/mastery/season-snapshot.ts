@@ -25,7 +25,7 @@ type SnapshotSeasonMasteryInput = {
  */
 export async function snapshotSeasonMasteryStart(
   db: DbClient,
-  input: SnapshotSeasonMasteryInput
+  input: SnapshotSeasonMasteryInput,
 ): Promise<void> {
   void db;
   void input;

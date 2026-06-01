@@ -21,7 +21,7 @@ export function QuestionRatingButtons({ questionId }: { questionId: string }) {
     let active = true;
 
     fetch(`/api/questions/${questionId}/rating`)
-      .then((response) => response.ok ? response.json() : null)
+      .then((response) => (response.ok ? response.json() : null))
       .then((data: { myRating: Rating | null; counts: Counts } | null) => {
         if (!active || !data) return;
         setMyRating(data.myRating);
@@ -60,7 +60,7 @@ export function QuestionRatingButtons({ questionId }: { questionId: string }) {
 
       const fresh = await fetch(`/api/questions/${questionId}/rating`);
       if (fresh.ok) {
-        const data = await fresh.json() as { myRating: Rating | null; counts: Counts };
+        const data = (await fresh.json()) as { myRating: Rating | null; counts: Counts };
         setMyRating(data.myRating);
         setCounts(data.counts);
       }
@@ -73,7 +73,7 @@ export function QuestionRatingButtons({ questionId }: { questionId: string }) {
         aria-label="Thumbs up"
         aria-pressed={myRating === 'up'}
         className={cn(
-          'inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition',
+          'text-muted-foreground inline-flex size-9 items-center justify-center rounded-md border transition',
           myRating === 'up'
             ? 'border-amber-300 bg-amber-100 text-amber-700'
             : 'border-border bg-background hover:bg-muted hover:text-foreground',
@@ -89,7 +89,7 @@ export function QuestionRatingButtons({ questionId }: { questionId: string }) {
         aria-label="Thumbs down"
         aria-pressed={myRating === 'down'}
         className={cn(
-          'inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition',
+          'text-muted-foreground inline-flex size-9 items-center justify-center rounded-md border transition',
           myRating === 'down'
             ? 'border-stone-400 bg-stone-200 text-stone-800'
             : 'border-border bg-background hover:bg-muted hover:text-foreground',

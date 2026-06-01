@@ -38,7 +38,8 @@ function parseBody(value: unknown): AnswerBody | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const questionId = typeof record.questionId === 'string' ? record.questionId.trim() : null;
-  const submittedAnswer = typeof record.submittedAnswer === 'string' ? record.submittedAnswer.trim() : null;
+  const submittedAnswer =
+    typeof record.submittedAnswer === 'string' ? record.submittedAnswer.trim() : null;
 
   return questionId && submittedAnswer ? { questionId, submittedAnswer } : null;
 }
@@ -75,7 +76,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!existingView) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
   const isCreator = existingView.game.creatorId === session.userId;
-  const isRecipient = existingView.recipients.some((recipient) => recipient.userId === session.userId);
+  const isRecipient = existingView.recipients.some(
+    (recipient) => recipient.userId === session.userId,
+  );
   if (!isCreator && !isRecipient) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
@@ -91,13 +94,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
     const completion = await checkJoshingGameCompletion({ gameId: id, userId: session.userId });
 
-    const answeredQuestion = existingView.questions.find((item) => item.questionId === parsed.questionId);
+    const answeredQuestion = existingView.questions.find(
+      (item) => item.questionId === parsed.questionId,
+    );
     const correctAnswer = answeredQuestion?.question.answerText ?? '';
     const domain = answeredQuestion
-      ? answeredQuestion.question.canonicalSubcategory || answeredQuestion.question.broadCategory || answeredQuestion.question.category
+      ? answeredQuestion.question.canonicalSubcategory ||
+        answeredQuestion.question.broadCategory ||
+        answeredQuestion.question.category
       : 'General Knowledge';
 
-    if (grade.isCorrect && answeredQuestion?.question.creatorId && answeredQuestion.question.creatorId !== session.userId) {
+    if (
+      grade.isCorrect &&
+      answeredQuestion?.question.creatorId &&
+      answeredQuestion.question.creatorId !== session.userId
+    ) {
       void promoteDeclaredToDemonstrated({
         userId: answeredQuestion.question.creatorId,
         domain,
@@ -106,12 +117,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
-    after(() => createFeedItemsForFriendsFromAnswer(
-      session.userId,
-      parsed.questionId,
-      grade.isCorrect ? 'correct' : 'incorrect',
-      `joshing_game:${id}:${parsed.questionId}:${session.userId}`,
-    ));
+    after(() =>
+      createFeedItemsForFriendsFromAnswer(
+        session.userId,
+        parsed.questionId,
+        grade.isCorrect ? 'correct' : 'incorrect',
+        `joshing_game:${id}:${parsed.questionId}:${session.userId}`,
+      ),
+    );
 
     const newlyComplete = completion.userComplete && !beforeCompletion.userComplete;
     const creator = await getSmsUser(existingView.game.creatorId);
@@ -178,7 +191,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   } catch (error) {
     if (error instanceof JoshingGameValidationError) {
-      const status = error.message === 'userId is not a recipient or creator of this game' ? 403 : error.status;
+      const status =
+        error.message === 'userId is not a recipient or creator of this game' ? 403 : error.status;
       return NextResponse.json({ error: 'validation', message: error.message }, { status });
     }
     throw error;

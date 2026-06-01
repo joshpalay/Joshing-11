@@ -1,8 +1,8 @@
-'use client'
+'use client';
 
-import Link from 'next/link'
-import { Flag, Heart, MoreHorizontal, X } from 'lucide-react'
-import LoadingScreen from '@/components/LoadingScreen'
+import Link from 'next/link';
+import { Flag, Heart, MoreHorizontal, X } from 'lucide-react';
+import LoadingScreen from '@/components/LoadingScreen';
 import {
   type CSSProperties,
   useCallback,
@@ -12,28 +12,24 @@ import {
   useState,
   useSyncExternalStore,
   useTransition,
-} from 'react'
+} from 'react';
 
-import { SendQuestionAction } from '@/components/SendQuestionAction'
-import { AddToBankAction } from '@/components/AddToBankAction'
-import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
-import MasteryMoment from '@/components/review/MasteryMoment'
-import { cn } from '@/lib/utils'
-import { formatNextResetTimeLocal } from '@/lib/games/timezone'
-import type {
-  DailySummaryView,
-  QuestionRecap,
-} from '@/server/db/queries/daily-summary'
-import { RoundReminderCard } from './RoundReminderCard'
+import { SendQuestionAction } from '@/components/SendQuestionAction';
+import { AddToBankAction } from '@/components/AddToBankAction';
+import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay';
+import MasteryMoment from '@/components/review/MasteryMoment';
+import { cn } from '@/lib/utils';
+import { formatNextResetTimeLocal } from '@/lib/games/timezone';
+import type { DailySummaryView, QuestionRecap } from '@/server/db/queries/daily-summary';
+import { RoundReminderCard } from './RoundReminderCard';
 
 // useSyncExternalStore inputs for the client-only reset-time label. Hoisted so
 // the subscribe/snapshot functions are stable across renders.
-const subscribeNoop = () => () => {}
-const getResetTimeSnapshot = () => formatNextResetTimeLocal()
-const getResetTimeServerSnapshot = (): string | null => null
+const subscribeNoop = () => () => {};
+const getResetTimeSnapshot = () => formatNextResetTimeLocal();
+const getResetTimeServerSnapshot = (): string | null => null;
 
-type FeedbackSignal = 'thumbs_up' | 'thumbs_down'
-
+type FeedbackSignal = 'thumbs_up' | 'thumbs_down';
 
 const DAILY_DIFFICULTY_LABELS: Record<string, string> = {
   normal: 'Establishing',
@@ -41,11 +37,11 @@ const DAILY_DIFFICULTY_LABELS: Record<string, string> = {
   challenging: 'Solid',
   ridiculous: 'Mastery',
   adaptive: 'Adaptive',
-}
+};
 
 function dailyDifficultyLabel(value: string | null | undefined): string | null {
-  if (!value) return null
-  return DAILY_DIFFICULTY_LABELS[value] ?? value
+  if (!value) return null;
+  return DAILY_DIFFICULTY_LABELS[value] ?? value;
 }
 
 const monoStyle: CSSProperties = {
@@ -53,7 +49,7 @@ const monoStyle: CSSProperties = {
   fontSize: '0.62rem',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
-}
+};
 
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
@@ -62,149 +58,137 @@ const titleStyle: CSSProperties = {
   color: 'var(--brand-ink)',
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
-}
+};
 
 function formatDate(value: string) {
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(undefined, {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-  }).format(date)
+  }).format(date);
 }
 
 function formatTier(tier: string) {
-  return tier.replace(/_/g, ' ').toUpperCase()
+  return tier.replace(/_/g, ' ').toUpperCase();
 }
 
 function interpretiveLine(summary: DailySummaryView): string | null {
   // 1. Tier crossing
-  const crossing = summary.tierCrossings[0]
+  const crossing = summary.tierCrossings[0];
   if (crossing) {
     const domain =
-      summary.domainGains.find((gain) => gain.domain === crossing.domain)
-        ?.displayName ?? crossing.domain
-    return `You moved to ${formatTier(crossing.toTier).toLowerCase()} in ${domain}.`
+      summary.domainGains.find((gain) => gain.domain === crossing.domain)?.displayName ??
+      crossing.domain;
+    return `You moved to ${formatTier(crossing.toTier).toLowerCase()} in ${domain}.`;
   }
 
   // 2. First correct in new demonstrated domain
-  const newDomain = summary.domainGains.find((gain) => gain.isNewTerritory)
-  if (newDomain) return `You found new ground in ${newDomain.displayName}.`
+  const newDomain = summary.domainGains.find((gain) => gain.isNewTerritory);
+  if (newDomain) return `You found new ground in ${newDomain.displayName}.`;
 
-  const answered = summary.questions.filter((q) => !q.isSkipped)
-  const total = answered.length
+  const answered = summary.questions.filter((q) => !q.isSkipped);
+  const total = answered.length;
 
   // 3. 5/5
-  if (total > 0 && summary.totalCorrect === total && total === 5)
-    return 'Clean sweep.'
+  if (total > 0 && summary.totalCorrect === total && total === 5) return 'Clean sweep.';
 
   // 4. 0/5
-  if (total > 0 && summary.totalCorrect === 0 && total === 5)
-    return 'Every one of them. Tomorrow.'
+  if (total > 0 && summary.totalCorrect === 0 && total === 5) return 'Every one of them. Tomorrow.';
 
   // 5. 3+ correct in a row
-  let streak = 0
-  let maxStreak = 0
+  let streak = 0;
+  let maxStreak = 0;
   for (const q of answered) {
     if (q.isCorrect) {
-      streak += 1
-      if (streak > maxStreak) maxStreak = streak
+      streak += 1;
+      if (streak > maxStreak) maxStreak = streak;
     } else {
-      streak = 0
+      streak = 0;
     }
   }
-  if (maxStreak >= 3) return 'Three in a row at one point.'
+  if (maxStreak >= 3) return 'Three in a row at one point.';
 
   // 6. All wrong in a single domain
-  const domainGroups = new Map<string, { total: number; wrong: number }>()
+  const domainGroups = new Map<string, { total: number; wrong: number }>();
   for (const q of answered) {
-    const key = q.domainDisplayName
-    const entry = domainGroups.get(key) ?? { total: 0, wrong: 0 }
-    entry.total += 1
-    if (!q.isCorrect) entry.wrong += 1
-    domainGroups.set(key, entry)
+    const key = q.domainDisplayName;
+    const entry = domainGroups.get(key) ?? { total: 0, wrong: 0 };
+    entry.total += 1;
+    if (!q.isCorrect) entry.wrong += 1;
+    domainGroups.set(key, entry);
   }
   for (const [domain, counts] of domainGroups) {
     if (counts.total >= 2 && counts.wrong === counts.total) {
-      return `${domain} is worth a deeper look.`
+      return `${domain} is worth a deeper look.`;
     }
   }
 
-  return null
+  return null;
 }
 
 export default function DailySummaryPage() {
-  const [summary, setSummary] = useState<DailySummaryView | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [summary, setSummary] = useState<DailySummaryView | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   // Client-only reset-time label; null during SSR to keep hydration stable.
   const resetTime = useSyncExternalStore(
     subscribeNoop,
     getResetTimeSnapshot,
     getResetTimeServerSnapshot,
-  )
+  );
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     async function load() {
       try {
         const response = await fetch('/api/daily/summary', {
           credentials: 'include',
           cache: 'no-store',
-        })
-        const body = await response.json().catch(() => null)
-        if (!response.ok)
-          throw new Error(body?.message ?? 'Could not load your daily summary.')
-        if (!cancelled) setSummary(body as DailySummaryView)
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.message ?? 'Could not load your daily summary.');
+        if (!cancelled) setSummary(body as DailySummaryView);
       } catch (caught) {
         if (!cancelled)
-          setError(
-            caught instanceof Error
-              ? caught.message
-              : 'Could not load your daily summary.'
-          )
+          setError(caught instanceof Error ? caught.message : 'Could not load your daily summary.');
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
       }
     }
-    void load()
+    void load();
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
-  const line = useMemo(
-    () => (summary ? interpretiveLine(summary) : null),
-    [summary]
-  )
+  const line = useMemo(() => (summary ? interpretiveLine(summary) : null), [summary]);
   const growthCircleItems = useMemo(() => {
-    if (!summary) return []
+    if (!summary) return [];
     return summary.domainGains.map((gain) => ({
       canonical_subcategory: gain.displayName,
       broad_category: gain.broadCategory,
       points_total: gain.totalPoints,
       points_gained_this_round: gain.pointsGained,
       tier_current: gain.currentTier,
-    }))
-  }, [summary])
-  const firstTierCrossing = summary?.tierCrossings[0] ?? null
+    }));
+  }, [summary]);
+  const firstTierCrossing = summary?.tierCrossings[0] ?? null;
 
   if (loading) {
-    return <LoadingScreen fullScreen label="Loading summary" />
+    return <LoadingScreen fullScreen label="Loading summary" />;
   }
 
   if (error || !summary) {
     return (
       <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
-        <p className="text-muted-foreground text-sm">
-          {error ?? 'No summary is ready yet.'}
-        </p>
+        <p className="text-muted-foreground text-sm">{error ?? 'No summary is ready yet.'}</p>
         <Link className="btn-ghost mt-4" href="/">
           Back home
         </Link>
       </main>
-    )
+    );
   }
 
   return (
@@ -219,9 +203,7 @@ export default function DailySummaryPage() {
         <h1 className="mt-2 font-serif text-[2rem] leading-tight text-[var(--brand-ink)]">
           How you did
         </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {formatDate(summary.date)}
-        </p>
+        <p className="text-muted-foreground mt-1 text-sm">{formatDate(summary.date)}</p>
         <p
           style={{
             ...monoStyle,
@@ -248,9 +230,8 @@ export default function DailySummaryPage() {
       {firstTierCrossing ? (
         <MasteryMoment
           subcategory={
-            summary.domainGains.find(
-              (gain) => gain.domain === firstTierCrossing.domain
-            )?.displayName ?? firstTierCrossing.domain
+            summary.domainGains.find((gain) => gain.domain === firstTierCrossing.domain)
+              ?.displayName ?? firstTierCrossing.domain
           }
           newTier={firstTierCrossing.toTier}
         />
@@ -297,30 +278,30 @@ export default function DailySummaryPage() {
         </Link>
       </div>
     </main>
-  )
+  );
 }
 
 function bridgeSentence(bridge: NonNullable<DailySummaryView['recentFriendBridge']>): string {
-  const { friendName, cardType, domainDisplayName } = bridge
-  const domain = domainDisplayName?.trim() || 'something new'
+  const { friendName, cardType, domainDisplayName } = bridge;
+  const domain = domainDisplayName?.trim() || 'something new';
   switch (cardType) {
     case 'friend_answered':
-      return `${friendName} answered ${domain}.`
+      return `${friendName} answered ${domain}.`;
     case 'friend_liked':
-      return `${friendName} liked a question about ${domain}.`
+      return `${friendName} liked a question about ${domain}.`;
     case 'friend_added':
-      return `${friendName} just joined.`
+      return `${friendName} just joined.`;
     default:
-      return `${friendName} is around today.`
+      return `${friendName} is around today.`;
   }
 }
 
 function InterpretiveLine({ text }: { text: string }) {
-  const [visible, setVisible] = useState(false)
+  const [visible, setVisible] = useState(false);
   useEffect(() => {
-    const t = window.setTimeout(() => setVisible(true), 300)
-    return () => window.clearTimeout(t)
-  }, [])
+    const t = window.setTimeout(() => setVisible(true), 300);
+    return () => window.clearTimeout(t);
+  }, []);
   return (
     <p
       className="text-muted-foreground mt-4 text-sm leading-6 italic"
@@ -328,25 +309,25 @@ function InterpretiveLine({ text }: { text: string }) {
     >
       {text}
     </p>
-  )
+  );
 }
 
 function QuestionCard({ question }: { question: QuestionRecap }) {
-  const [isOverflowOpen, setIsOverflowOpen] = useState(false)
-  const [rating, setRating] = useState<FeedbackSignal | null>(null)
-  const [isFeedbackPending, startFeedbackTransition] = useTransition()
+  const [isOverflowOpen, setIsOverflowOpen] = useState(false);
+  const [rating, setRating] = useState<FeedbackSignal | null>(null);
+  const [isFeedbackPending, startFeedbackTransition] = useTransition();
   const [exclusionState, setExclusionState] = useState<ExclusionState>({
     kind: 'idle',
-  })
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  });
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateFeedback = useCallback(
     (next: FeedbackSignal) => {
-      const previous = rating
-      const signal = previous === next ? null : next
-      setRating(signal)
+      const previous = rating;
+      const signal = previous === next ? null : next;
+      setRating(signal);
 
-      if (!signal) return
+      if (!signal) return;
       startFeedbackTransition(async () => {
         const response = await fetch('/api/daily/feedback', {
           method: 'POST',
@@ -356,60 +337,57 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
             generated_question_id: question.questionId,
             signal,
           }),
-        })
-        if (!response.ok) setRating(previous)
-      })
+        });
+        if (!response.ok) setRating(previous);
+      });
     },
-    [question.questionId, rating]
-  )
+    [question.questionId, rating],
+  );
 
   const handleExcludeDomain = useCallback(async () => {
-    setIsOverflowOpen(false)
-    setExclusionState({ kind: 'confirmed' })
+    setIsOverflowOpen(false);
+    setExclusionState({ kind: 'confirmed' });
     undoTimerRef.current = setTimeout(() => {
-      undoTimerRef.current = null
-    }, 5000)
+      undoTimerRef.current = null;
+    }, 5000);
     try {
       await fetch('/api/users/domain-exclusions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ canonical_subcategory: question.domain }),
-      })
+      });
     } catch {
       // Optimistic UI is acceptable here; the next summary load will reflect persisted state.
     }
-  }, [question.domain])
+  }, [question.domain]);
 
   const handleUndoExcludeDomain = useCallback(async () => {
     if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current)
-      undoTimerRef.current = null
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
     }
-    setExclusionState({ kind: 'undone' })
+    setExclusionState({ kind: 'undone' });
     try {
-      await fetch(
-        `/api/users/domain-exclusions/${encodeURIComponent(question.domain)}`,
-        {
-          method: 'DELETE',
-          credentials: 'include',
-        }
-      )
+      await fetch(`/api/users/domain-exclusions/${encodeURIComponent(question.domain)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
     } catch {
       // Fire-and-forget; the affordance returns on reload if persistence failed.
     }
-  }, [question.domain])
+  }, [question.domain]);
 
   const handleReportContent = useCallback(() => {
-    updateFeedback('thumbs_down')
-    setIsOverflowOpen(false)
-  }, [updateFeedback])
+    updateFeedback('thumbs_down');
+    setIsOverflowOpen(false);
+  }, [updateFeedback]);
 
   useEffect(() => {
     return () => {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
-    }
-  }, [])
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
 
   return (
     <article
@@ -435,7 +413,11 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
           className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase"
           style={
             question.isSkipped
-              ? { borderColor: 'var(--brand-border)', background: 'var(--secondary)', color: 'var(--brand-ink-400)' }
+              ? {
+                  borderColor: 'var(--brand-border)',
+                  background: 'var(--secondary)',
+                  color: 'var(--brand-ink-400)',
+                }
               : question.isCorrect
                 ? {
                     borderColor: 'color-mix(in srgb, var(--success) 35%, var(--brand-border))',
@@ -449,11 +431,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
                   }
           }
         >
-          {question.isSkipped
-            ? 'SKIPPED'
-            : question.isCorrect
-              ? 'CORRECT'
-              : 'WRONG'}
+          {question.isSkipped ? 'SKIPPED' : question.isCorrect ? 'CORRECT' : 'WRONG'}
         </span>
         <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
           {question.authorName ? null : `JOSHING BOT · ${question.domainDisplayName.toUpperCase()}`}
@@ -503,9 +481,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
         <MoreHorizontal className="size-5" />
       </button>
 
-      <p className="text-foreground mt-4 leading-snug font-medium">
-        {question.questionText}
-      </p>
+      <p className="text-foreground mt-4 leading-snug font-medium">{question.questionText}</p>
       <div className="mt-4 space-y-1 text-sm">
         <p className="text-muted-foreground">
           <span className="text-foreground font-medium">You:</span>{' '}
@@ -533,10 +509,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
       ) : null}
       {exclusionState.kind === 'confirmed' ? (
         <div className="bg-muted/35 text-muted-foreground mt-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs">
-          <span>
-            {question.domainDisplayName} won&apos;t appear in your daily queue
-            anymore.
-          </span>
+          <span>{question.domainDisplayName} won&apos;t appear in your daily queue anymore.</span>
           <button
             type="button"
             onClick={handleUndoExcludeDomain}
@@ -552,7 +525,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
           aria-pressed={rating === 'thumbs_up'}
           className={cn(
             'text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex size-11 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none',
-            rating === 'thumbs_up' ? 'bg-rose-50 text-rose-600' : ''
+            rating === 'thumbs_up' ? 'bg-rose-50 text-rose-600' : '',
           )}
           disabled={isFeedbackPending}
           type="button"
@@ -561,7 +534,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
           <Heart
             className={cn(
               'size-5 transition-transform',
-              rating === 'thumbs_up' ? 'scale-110 fill-current' : ''
+              rating === 'thumbs_up' ? 'scale-110 fill-current' : '',
             )}
           />
         </button>
@@ -588,7 +561,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
         />
       ) : null}
     </article>
-  )
+  );
 }
 
 function QuestionCardOverflowMenu({
@@ -600,13 +573,13 @@ function QuestionCardOverflowMenu({
   reportSelected,
   reportDisabled,
 }: {
-  question: QuestionRecap
-  onClose: () => void
-  onHideQuestionsLikeThis: () => void
-  onMuteCategory: () => void
-  onReportContent: () => void
-  reportSelected: boolean
-  reportDisabled: boolean
+  question: QuestionRecap;
+  onClose: () => void;
+  onHideQuestionsLikeThis: () => void;
+  onMuteCategory: () => void;
+  onReportContent: () => void;
+  reportSelected: boolean;
+  reportDisabled: boolean;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:top-14 sm:right-3 sm:block sm:bg-transparent sm:p-0">
@@ -665,7 +638,7 @@ function QuestionCardOverflowMenu({
           aria-pressed={reportSelected}
           className={cn(
             'text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm transition disabled:opacity-60',
-            reportSelected ? 'bg-muted text-foreground' : ''
+            reportSelected ? 'bg-muted text-foreground' : '',
           )}
         >
           <Flag className="size-4" />
@@ -673,10 +646,7 @@ function QuestionCardOverflowMenu({
         </button>
       </div>
     </div>
-  )
+  );
 }
 
-type ExclusionState =
-  | { kind: 'idle' }
-  | { kind: 'confirmed' }
-  | { kind: 'undone' }
+type ExclusionState = { kind: 'idle' } | { kind: 'confirmed' } | { kind: 'undone' };

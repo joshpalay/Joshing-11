@@ -23,9 +23,7 @@ export function PreviewBanner({ label, exitHref }: Props) {
     <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
       <div className="flex min-w-0 items-center gap-2">
         <Eye className="size-4 flex-none" />
-        <span className="truncate">
-          Previewing your profile as {label}.
-        </span>
+        <span className="truncate">Previewing your profile as {label}.</span>
       </div>
       <Link
         href={exitHref}

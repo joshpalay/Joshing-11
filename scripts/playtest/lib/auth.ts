@@ -23,7 +23,9 @@ export async function authenticateAsTestUser(
     body: JSON.stringify({ phone }),
   });
   if (!otpRes.ok) {
-    throw new Error(`[playtest/auth] request-otp failed ${otpRes.status} for ${phone}: ${await otpRes.text()}`);
+    throw new Error(
+      `[playtest/auth] request-otp failed ${otpRes.status} for ${phone}: ${await otpRes.text()}`,
+    );
   }
 
   const verifyRes = await fetch(`${baseUrl}/api/auth/verify-otp`, {
@@ -32,12 +34,16 @@ export async function authenticateAsTestUser(
     body: JSON.stringify({ phone, code: '000000' }),
   });
   if (!verifyRes.ok) {
-    throw new Error(`[playtest/auth] verify-otp failed ${verifyRes.status} for ${phone}: ${await verifyRes.text()}`);
+    throw new Error(
+      `[playtest/auth] verify-otp failed ${verifyRes.status} for ${phone}: ${await verifyRes.text()}`,
+    );
   }
 
   const cookie = parseSetCookie(verifyRes.headers.get('set-cookie'));
   if (!cookie) {
-    throw new Error(`[playtest/auth] verify-otp returned no ${SESSION_COOKIE_NAME} cookie for ${phone}`);
+    throw new Error(
+      `[playtest/auth] verify-otp returned no ${SESSION_COOKIE_NAME} cookie for ${phone}`,
+    );
   }
   return cookie;
 }

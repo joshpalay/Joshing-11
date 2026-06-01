@@ -1,18 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-import {
-  CREAM,
-  FF,
-  FI,
-  FM,
-  FS,
-  INK,
-  INK2,
-  INK3,
-  PAPER,
-  RULE,
-} from './tokens';
+import { CREAM, FF, FI, FM, FS, INK, INK2, INK3, PAPER, RULE } from './tokens';
 
 type Props = {
   caption: string;
@@ -139,13 +128,7 @@ const inkButtonStyle = {
   textDecoration: 'none',
 } as const;
 
-export function UtilityActionLink({
-  href,
-  label,
-}: {
-  href: string;
-  label: string;
-}) {
+export function UtilityActionLink({ href, label }: { href: string; label: string }) {
   return (
     <Link href={href} style={inkButtonStyle}>
       {label.toUpperCase()} →

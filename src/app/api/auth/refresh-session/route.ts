@@ -1,9 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
-import {
-  getSession,
-  refreshSessionInvitationClaim,
-} from '@/server/auth/session'
+import { getSession, refreshSessionInvitationClaim } from '@/server/auth/session';
 
 /**
  * Graceful migration endpoint for sessions issued before the `inv` JWT
@@ -16,30 +13,30 @@ import {
  */
 
 function safeNextPath(rawNext: string | null): string {
-  if (!rawNext) return '/'
+  if (!rawNext) return '/';
   // Only allow same-origin relative paths. Strip anything that looks like
   // an absolute URL or protocol-relative URL to prevent open-redirect.
-  if (!rawNext.startsWith('/') || rawNext.startsWith('//')) return '/'
-  return rawNext
+  if (!rawNext.startsWith('/') || rawNext.startsWith('//')) return '/';
+  return rawNext;
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url)
-  const next = safeNextPath(url.searchParams.get('next'))
+  const url = new URL(request.url);
+  const next = safeNextPath(url.searchParams.get('next'));
 
-  const session = await getSession()
+  const session = await getSession();
   if (!session) {
-    const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
+    const loginUrl = new URL('/login', request.url);
+    return NextResponse.redirect(loginUrl);
   }
 
-  const refreshed = await refreshSessionInvitationClaim()
+  const refreshed = await refreshSessionInvitationClaim();
   if (!refreshed) {
     // The JWT couldn't be re-signed (e.g. cookie disappeared mid-flow).
     // Treat as auth failure rather than looping back to the same URL.
-    const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
+    const loginUrl = new URL('/login', request.url);
+    return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.redirect(new URL(next, request.url))
+  return NextResponse.redirect(new URL(next, request.url));
 }

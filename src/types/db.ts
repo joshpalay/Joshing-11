@@ -13,11 +13,7 @@ export type AnswerState =
  */
 export type DifficultyEstimate = (typeof difficultyEstimateEnum.enumValues)[number];
 
-export type MasteryTier =
-  | 'establishing'
-  | 'familiar'
-  | 'solid'
-  | 'mastery';
+export type MasteryTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 
 export type SmsMessageType = Exclude<
   (typeof smsMessageTypeEnum.enumValues)[number],

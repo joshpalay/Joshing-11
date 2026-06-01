@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import {
-  getSession,
-  refreshSessionOnboardingClaim,
-} from '@/server/auth/session';
+import { getSession, refreshSessionOnboardingClaim } from '@/server/auth/session';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { logTelemetry } from '@/server/telemetry';
 import {
@@ -25,9 +22,10 @@ function parseInterest(value: unknown): DeclaredInterestInput | null {
   const domain = typeof record.domain === 'string' ? record.domain.trim().replace(/\s+/g, ' ') : '';
   if (domain.length < 2 || domain.length > 100) return null;
 
-  const broadCategory = typeof record.broadCategory === 'string' && record.broadCategory.trim()
-    ? normalizeBroadCategory(record.broadCategory)
-    : null;
+  const broadCategory =
+    typeof record.broadCategory === 'string' && record.broadCategory.trim()
+      ? normalizeBroadCategory(record.broadCategory)
+      : null;
 
   return {
     label: domain,
@@ -76,12 +74,16 @@ export async function POST(request: Request) {
     interests &&
     interests.length === 0 &&
     telemetry.inviteInterestCount > 0 &&
-    telemetry.inviteSelectedCount === 0
+    telemetry.inviteSelectedCount === 0,
   );
 
   if (!interests || (interests.length === 0 && !isInviteSkip)) {
     return NextResponse.json(
-      { error: 'invalid_request', message: 'Save 1 to 5 interests, or skip invite suggestions. Domains must be 2 to 100 characters.' },
+      {
+        error: 'invalid_request',
+        message:
+          'Save 1 to 5 interests, or skip invite suggestions. Domains must be 2 to 100 characters.',
+      },
       { status: 400 },
     );
   }
@@ -103,11 +105,12 @@ export async function POST(request: Request) {
     await refreshSessionOnboardingClaim();
 
     if (telemetry.inviteInterestCount > 0) {
-      const event = telemetry.inviteSelectedCount === 0
-        ? 'friend_onboarding_interests_skipped'
-        : telemetry.inviteSelectedCount >= telemetry.inviteInterestCount
-          ? 'friend_onboarding_interests_accepted_all'
-          : 'friend_onboarding_interests_partial';
+      const event =
+        telemetry.inviteSelectedCount === 0
+          ? 'friend_onboarding_interests_skipped'
+          : telemetry.inviteSelectedCount >= telemetry.inviteInterestCount
+            ? 'friend_onboarding_interests_accepted_all'
+            : 'friend_onboarding_interests_partial';
 
       logTelemetry(event, {
         user_id: session.userId,

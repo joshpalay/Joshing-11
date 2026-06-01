@@ -75,7 +75,7 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border bg-card p-5 text-card-foreground">
+      <section className="bg-card text-card-foreground rounded-xl border p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex flex-wrap items-center gap-2">
@@ -84,10 +84,9 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
                 Coming soon
               </span>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              SMS notifications are coming soon — this functionality isn&apos;t
-              available yet. Once it&apos;s ready, we&apos;ll text {maskedPhone}{' '}
-              when a new round opens.
+            <p className="text-muted-foreground mt-1 text-sm">
+              SMS notifications are coming soon — this functionality isn&apos;t available yet. Once
+              it&apos;s ready, we&apos;ll text {maskedPhone} when a new round opens.
             </p>
           </div>
           <Switch
@@ -100,11 +99,11 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
         </div>
       </section>
 
-      <section className="rounded-xl border bg-card p-5 text-card-foreground">
+      <section className="bg-card text-card-foreground rounded-xl border p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col">
             <h3 className="font-serif text-lg font-semibold">Email reminders</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-sm">
               {hasVerifiedEmail
                 ? `Email ${state.email} when a new round opens.`
                 : 'Add an email address to enable email reminders.'}
@@ -147,24 +146,22 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
         ) : null}
 
         {hasPendingEmail && !hasVerifiedEmail ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Awaiting verification (coming soon). We saved {state.pendingEmail} and
-            will email a confirmation link once email reminders launch.
+          <p className="text-muted-foreground mt-3 text-xs">
+            Awaiting verification (coming soon). We saved {state.pendingEmail} and will email a
+            confirmation link once email reminders launch.
           </p>
         ) : null}
         {hasVerifiedEmail && emailOn ? (
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="text-muted-foreground mt-3 text-xs">
             Saved. Emails will start when reminders launch.
           </p>
         ) : null}
-        {emailError ? (
-          <p className="mt-2 text-xs text-rose-700">{emailError}</p>
-        ) : null}
+        {emailError ? <p className="mt-2 text-xs text-rose-700">{emailError}</p> : null}
       </section>
 
-      <p className="text-xs text-muted-foreground">
-        Reminders aren&apos;t sending yet — we&apos;re collecting preferences while
-        we finish setting up message delivery.
+      <p className="text-muted-foreground text-xs">
+        Reminders aren&apos;t sending yet — we&apos;re collecting preferences while we finish
+        setting up message delivery.
       </p>
     </div>
   );

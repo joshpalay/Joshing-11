@@ -51,7 +51,10 @@ export function getMasteryTierProgress(points: number): MasteryTierProgress {
  * Width of the current mastery band (or last band for mastery), used to scale portrait created/answered
  * weights on the same tier-relative track as the mastery bar.
  */
-export function getTierBandWidthForPortraitBars(tier: MasteryTier, thresholds: Record<MasteryTier, number>): number {
+export function getTierBandWidthForPortraitBars(
+  tier: MasteryTier,
+  thresholds: Record<MasteryTier, number>,
+): number {
   const idx = ORDER.indexOf(tier);
   if (tier === 'mastery') {
     return Math.max(1, thresholds.mastery - thresholds.solid);
@@ -60,7 +63,11 @@ export function getTierBandWidthForPortraitBars(tier: MasteryTier, thresholds: R
   return Math.max(1, thresholds[next] - thresholds[tier]);
 }
 
-export function portraitScoreBarRatio(score: number, tier: MasteryTier, thresholds: Record<MasteryTier, number>): number {
+export function portraitScoreBarRatio(
+  score: number,
+  tier: MasteryTier,
+  thresholds: Record<MasteryTier, number>,
+): number {
   const w = getTierBandWidthForPortraitBars(tier, thresholds);
   if (w <= 0) return 0;
   return Math.max(0, Math.min(1, score / w));

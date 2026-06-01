@@ -1,8 +1,8 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ButtonHTMLAttributes } from 'react';
 
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils';
 
-type FeedDismissButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
+type FeedDismissButtonProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
 /**
  * The quiet, secondary dismiss control on an unanswered question card, sitting
@@ -17,7 +17,7 @@ export function FeedDismissButton({ className, type, ...props }: FeedDismissButt
       className={cn(
         'text-muted-foreground inline-flex min-h-11 items-center text-sm font-medium transition',
         'hover:opacity-70 active:opacity-90',
-        'focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none focus-visible:ring-2',
+        'focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
         'disabled:pointer-events-none disabled:opacity-60',
         className,
       )}
@@ -25,5 +25,5 @@ export function FeedDismissButton({ className, type, ...props }: FeedDismissButt
     >
       Dismiss
     </button>
-  )
+  );
 }

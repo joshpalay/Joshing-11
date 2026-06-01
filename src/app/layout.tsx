@@ -1,7 +1,7 @@
-import type { Metadata } from 'next'
-import { Caveat, Cormorant_Garamond, Inter, Montserrat, Playfair_Display } from 'next/font/google'
-import './globals.css'
-import { Nav } from "@/components/Nav";
+import type { Metadata } from 'next';
+import { Caveat, Cormorant_Garamond, Inter, Montserrat, Playfair_Display } from 'next/font/google';
+import './globals.css';
+import { Nav } from '@/components/Nav';
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 import { getUserOnboardingProfile } from '@/server/db/queries/users';
 import { getBellBadgeCount } from '@/server/db/queries/activity';
@@ -13,7 +13,7 @@ const montserrat = Montserrat({
   subsets: ['latin'],
   variable: '--font-sans-body',
   display: 'swap',
-})
+});
 
 // F5.2: editorial italic register for category names (Categories on Portrait,
 // PortraitCircles labels). Loaded with italic style; component CSS picks it
@@ -23,7 +23,7 @@ const playfair = Playfair_Display({
   style: ['italic'],
   variable: '--font-display',
   display: 'swap',
-})
+});
 
 // Editorial serif register from the Figma design system (display/Body-Serif,
 // display/card/question|update|action). Cormorant Garamond is the project's
@@ -37,14 +37,14 @@ const cormorant = Cormorant_Garamond({
   style: ['normal', 'italic'],
   variable: '--font-cormorant',
   display: 'swap',
-})
+});
 
 // Handwritten register for the Lately flourish on /activities. Used sparingly.
 const caveat = Caveat({
   subsets: ['latin'],
   variable: '--font-caveat',
   display: 'swap',
-})
+});
 
 // Inter — loaded for opt-in use (e.g. the login subtitle's display/heading/section
 // spec). Exposed via --font-inter and surfaced to Tailwind as `font-inter` in
@@ -53,27 +53,23 @@ const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
   display: 'swap',
-})
+});
 
 export const metadata: Metadata = {
   title: 'Joshing',
   description: 'A daily knowledge game',
-}
+};
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const sessionToken = await getSessionToken()
-  const claims = await readSessionClaims(sessionToken)
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const sessionToken = await getSessionToken();
+  const claims = await readSessionClaims(sessionToken);
   const [profile, bellBadgeCount, discoveryStatus] = claims
     ? await Promise.all([
         getUserOnboardingProfile(claims.userId),
         getBellBadgeCount(claims.userId).catch(() => 0),
         getNewDiscoveryStatus(claims.userId).catch(() => ({ hasNew: false, count: 0 })),
       ])
-    : [null, 0, { hasNew: false, count: 0 }]
+    : [null, 0, { hasNew: false, count: 0 }];
   return (
     <html
       lang="en"
@@ -89,5 +85,5 @@ export default async function RootLayout({
         {children}
       </body>
     </html>
-  )
+  );
 }

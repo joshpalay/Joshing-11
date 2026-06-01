@@ -27,11 +27,7 @@ export type PreviewAs = 'stranger' | 'friend' | { userId: string };
  * string (interpreted as a user id). `resolvePreviewAs` does the
  * ownership + existence checks.
  */
-export const previewAsSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(128);
+export const previewAsSchema = z.string().trim().min(1).max(128);
 
 /**
  * Parse and authorize a raw `?previewAs=` query-string value. Returns

@@ -1,31 +1,32 @@
-'use client'
+'use client';
 
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react';
 
-import { KnowledgeCircle } from '@/components/knowledge/CategoryCircles'
-import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
-import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
-import type { MasteryTier } from '@/types/db'
+import { KnowledgeCircle } from '@/components/knowledge/CategoryCircles';
+import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
+import type { MasteryTier } from '@/types/db';
 
-import { visibleFeedCategory } from './category'
-import { FeedActionLink } from './FeedActionLink'
-import { FeedCardShell } from './FeedCardShell'
-import type { AnsweredByYouFeedItem, AnsweredByYouPairedFriend } from './types'
-import { colorForCategory, colorForUser, initialsFor, isDarkColor } from './visual'
+import { visibleFeedCategory } from './category';
+import { FeedActionLink } from './FeedActionLink';
+import { FeedCardShell } from './FeedCardShell';
+import type { AnsweredByYouFeedItem, AnsweredByYouPairedFriend } from './types';
+import { colorForCategory, colorForUser, initialsFor, isDarkColor } from './visual';
 
 function tierLabel(tier: string): string {
-  const normalized = tier.toLowerCase() as MasteryTier
-  return KNOWLEDGE_TIER_LABEL[normalized] ?? tier
+  const normalized = tier.toLowerCase() as MasteryTier;
+  return KNOWLEDGE_TIER_LABEL[normalized] ?? tier;
 }
 
 function KnowledgeGainIndicator({ item }: { item: AnsweredByYouFeedItem }) {
-  const broad = item.broadCategory ?? item.category ?? 'General'
-  const tooltipArea = visibleFeedCategory(item.category) ?? broad
-  const dc = getPortraitDomainColor(broad)
-  const tierChanged = Boolean(item.masteryDelta?.tierChanged)
-  const tierLine = tierChanged && item.masteryDelta
-    ? `${tierLabel(item.masteryDelta.previousTier)} → ${tierLabel(item.masteryDelta.newTier)}`
-    : null
+  const broad = item.broadCategory ?? item.category ?? 'General';
+  const tooltipArea = visibleFeedCategory(item.category) ?? broad;
+  const dc = getPortraitDomainColor(broad);
+  const tierChanged = Boolean(item.masteryDelta?.tierChanged);
+  const tierLine =
+    tierChanged && item.masteryDelta
+      ? `${tierLabel(item.masteryDelta.previousTier)} → ${tierLabel(item.masteryDelta.newTier)}`
+      : null;
 
   return (
     <div
@@ -33,23 +34,17 @@ function KnowledgeGainIndicator({ item }: { item: AnsweredByYouFeedItem }) {
       title={`+ Knowledge in ${tooltipArea}`}
       aria-label={`Knowledge gained in ${tooltipArea}${tierLine ? `, ${tierLine}` : ''}`}
     >
-      <KnowledgeCircle
-        broadCategory={broad}
-        pointsAfter={1}
-        maxPoints={1}
-        animate
-        size={28}
-      />
+      <KnowledgeCircle broadCategory={broad} pointsAfter={1} maxPoints={1} animate size={28} />
       {tierLine ? (
         <span
-          className="font-mono text-[9px] uppercase tracking-[0.1em]"
+          className="font-mono text-[9px] tracking-[0.1em] uppercase"
           style={{ color: dc.primary }}
         >
           {tierLine}
         </span>
       ) : null}
     </div>
-  )
+  );
 }
 
 function AvatarDisc({
@@ -58,12 +53,12 @@ function AvatarDisc({
   size = 28,
   ring = false,
 }: {
-  initials: string
-  bg: string
-  size?: number
-  ring?: boolean
+  initials: string;
+  bg: string;
+  size?: number;
+  ring?: boolean;
 }) {
-  const onDark = isDarkColor(bg)
+  const onDark = isDarkColor(bg);
   return (
     <div
       aria-hidden
@@ -78,78 +73,78 @@ function AvatarDisc({
     >
       {initials}
     </div>
-  )
+  );
 }
 
 function AnsweredAvatarStack({
   pairedFriend,
   categoryColor,
 }: {
-  pairedFriend?: AnsweredByYouPairedFriend | null
-  categoryColor: string
+  pairedFriend?: AnsweredByYouPairedFriend | null;
+  categoryColor: string;
 }) {
-  const viewerInitials = 'You'
+  const viewerInitials = 'You';
   if (!pairedFriend) {
-    return (
-      <AvatarDisc initials={viewerInitials} bg={categoryColor} size={32} />
-    )
+    return <AvatarDisc initials={viewerInitials} bg={categoryColor} size={32} />;
   }
-  const friendColor = colorForUser(pairedFriend.userId)
-  const friendInitials = initialsFor(pairedFriend.displayName)
+  const friendColor = colorForUser(pairedFriend.userId);
+  const friendInitials = initialsFor(pairedFriend.displayName);
   return (
     <div className="relative shrink-0" style={{ width: 44, height: 28 }}>
-      <div className="absolute left-0 top-0">
+      <div className="absolute top-0 left-0">
         <AvatarDisc initials={viewerInitials} bg={categoryColor} size={28} />
       </div>
-      <div className="absolute left-[16px] top-0">
+      <div className="absolute top-0 left-[16px]">
         <AvatarDisc initials={friendInitials} bg={friendColor} size={28} ring />
       </div>
     </div>
-  )
+  );
 }
 
 export type FeedRecheckAction = {
-  onSubmit: () => Promise<{ accepted: boolean; message: string }>
-}
+  onSubmit: () => Promise<{ accepted: boolean; message: string }>;
+};
 
 type AnsweredByYouCardProps = {
-  item: AnsweredByYouFeedItem
-  recheckAction?: FeedRecheckAction | null
+  item: AnsweredByYouFeedItem;
+  recheckAction?: FeedRecheckAction | null;
   // Optional retry handler for direct_sent wrong answers — opens the answer
   // sheet so the recipient can take another swing without leaving the feed.
-  onRetry?: () => void
-  overflow?: ReactNode
-}
+  onRetry?: () => void;
+  overflow?: ReactNode;
+};
 
 function AnsweredResult({
   item,
   recheckAction,
   onRetry,
 }: {
-  item: AnsweredByYouFeedItem
-  recheckAction?: FeedRecheckAction | null
-  onRetry?: () => void
+  item: AnsweredByYouFeedItem;
+  recheckAction?: FeedRecheckAction | null;
+  onRetry?: () => void;
 }) {
-  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle')
-  const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
-  const [recheckAccepted, setRecheckAccepted] = useState(false)
+  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>(
+    'idle',
+  );
+  const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
+  const [recheckAccepted, setRecheckAccepted] = useState(false);
 
   const requestRecheck = useCallback(async () => {
-    if (!recheckAction || recheckState === 'submitting') return
-    setRecheckState('submitting')
-    setRecheckMessage(null)
-    setRecheckAccepted(false)
+    if (!recheckAction || recheckState === 'submitting') return;
+    setRecheckState('submitting');
+    setRecheckMessage(null);
+    setRecheckAccepted(false);
     try {
-      const outcome = await recheckAction.onSubmit()
-      setRecheckState('done')
-      setRecheckMessage(outcome.message)
-      setRecheckAccepted(outcome.accepted)
+      const outcome = await recheckAction.onSubmit();
+      setRecheckState('done');
+      setRecheckMessage(outcome.message);
+      setRecheckAccepted(outcome.accepted);
     } catch {
-      setRecheckState('error')
-      setRecheckMessage('Could not recheck that answer.')
-      setRecheckAccepted(false)
+      setRecheckState('error');
+      setRecheckMessage('Could not recheck that answer.');
+      setRecheckAccepted(false);
     }
-  }, [recheckAction, recheckState])
+  }, [recheckAction, recheckState]);
 
   return (
     <div className="w-full space-y-1.5">
@@ -175,8 +170,8 @@ function AnsweredResult({
         </p>
       ) : null}
       {item.creatorNote ? (
-        <div className="mt-1.5 rounded-md border bg-muted/40 px-3 py-2">
-          <p className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-muted-foreground">
+        <div className="bg-muted/40 mt-1.5 rounded-md border px-3 py-2">
+          <p className="text-muted-foreground text-[0.6rem] font-semibold tracking-[0.16em] uppercase">
             Why they asked
           </p>
           <p
@@ -187,11 +182,9 @@ function AnsweredResult({
           </p>
         </div>
       ) : null}
-      {(onRetry || (recheckAction && recheckState !== 'done')) ? (
+      {onRetry || (recheckAction && recheckState !== 'done') ? (
         <div className="flex items-center justify-end gap-4 pt-2">
-          {onRetry ? (
-            <FeedActionLink onClick={onRetry}>Try again →</FeedActionLink>
-          ) : null}
+          {onRetry ? <FeedActionLink onClick={onRetry}>Try again →</FeedActionLink> : null}
           {recheckAction && recheckState !== 'done' ? (
             <FeedActionLink
               onClick={() => void requestRecheck()}
@@ -214,7 +207,9 @@ function AnsweredResult({
               color: 'var(--game-correct)',
             }}
           >
-            <span aria-hidden className="text-[15px] leading-none">✓</span>
+            <span aria-hidden className="text-[15px] leading-none">
+              ✓
+            </span>
             <span>{recheckMessage}</span>
           </div>
         ) : (
@@ -232,12 +227,17 @@ function AnsweredResult({
         )
       ) : null}
     </div>
-  )
+  );
 }
 
-export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: AnsweredByYouCardProps) {
-  const category = visibleFeedCategory(item.category)
-  const categoryColor = colorForCategory(item.category)
+export function AnsweredByYouCard({
+  item,
+  recheckAction,
+  onRetry,
+  overflow,
+}: AnsweredByYouCardProps) {
+  const category = visibleFeedCategory(item.category);
+  const categoryColor = colorForCategory(item.category);
 
   return (
     <FeedCardShell accentColor={categoryColor} accentPlacement="left">
@@ -248,21 +248,18 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
         }}
       >
         <div className="flex items-center gap-3">
-          <AnsweredAvatarStack
-            pairedFriend={item.pairedFriend}
-            categoryColor={categoryColor}
-          />
+          <AnsweredAvatarStack pairedFriend={item.pairedFriend} categoryColor={categoryColor} />
 
           <div className="min-w-0 flex-1">
             <p
-              className="text-[11px] uppercase leading-none tracking-[0.08em]"
+              className="text-[11px] leading-none tracking-[0.08em] uppercase"
               style={{ color: 'var(--ink)', opacity: 0.7 }}
             >
               You answered
             </p>
             {category ? (
               <p
-                className="mt-1 truncate text-[12px] italic leading-tight"
+                className="mt-1 truncate text-[12px] leading-tight italic"
                 style={{
                   fontFamily: 'var(--font-literata)',
                   color: 'var(--ink)',
@@ -300,7 +297,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
 
         {item.personalMessage ? (
           <p
-            className="mt-2 text-[13px] italic leading-snug"
+            className="mt-2 text-[13px] leading-snug italic"
             style={{
               fontFamily: 'var(--font-literata)',
               color: 'var(--ink)',
@@ -316,5 +313,5 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
         <AnsweredResult item={item} recheckAction={recheckAction} onRetry={onRetry} />
       </div>
     </FeedCardShell>
-  )
+  );
 }

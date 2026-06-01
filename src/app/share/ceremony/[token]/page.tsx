@@ -18,7 +18,11 @@ type ShareCardResponse = {
 };
 
 function baseUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    'http://localhost:3000'
+  ).replace(/\/$/, '');
 }
 
 async function getShareCard(token: string): Promise<ShareCardResponse | null> {
@@ -30,7 +34,11 @@ async function getShareCard(token: string): Promise<ShareCardResponse | null> {
   return response.json();
 }
 
-export default async function CeremonySharePage({ params }: { params: Promise<{ token: string }> }) {
+export default async function CeremonySharePage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
   const { token } = await params;
   const data = await getShareCard(token);
 
@@ -48,10 +56,12 @@ export default async function CeremonySharePage({ params }: { params: Promise<{ 
 
         <section className="w-full space-y-4 text-center">
           <details className="rounded-md border border-stone-700 bg-stone-900/70 px-4 py-3 text-left">
-            <summary className="cursor-pointer text-sm font-medium text-stone-100">What&rsquo;s this?</summary>
+            <summary className="cursor-pointer text-sm font-medium text-stone-100">
+              What&rsquo;s this?
+            </summary>
             <p className="mt-3 text-sm leading-6 text-stone-300">
-              Joshing is a private knowledge game with friends. Every week, it turns what you learned,
-              wrote, and shared into a small reflection.
+              Joshing is a private knowledge game with friends. Every week, it turns what you
+              learned, wrote, and shared into a small reflection.
             </p>
           </details>
 

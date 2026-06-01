@@ -1,6 +1,6 @@
-'use client'
+'use client';
 
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react';
 
 import {
   AnsweredByYouCard,
@@ -8,41 +8,41 @@ import {
   DirectSentCard,
   type AnsweredByYouFeedItem,
   type DirectSentFeedItem,
-} from '@/components/feed'
+} from '@/components/feed';
 
 export type AuthoredQuestionItem = {
-  id: string
-  questionText: string
-  category: string | null
-  createdAt: string
-  viewerAnswered: { result: 'correct' | 'incorrect' } | null
-}
+  id: string;
+  questionText: string;
+  category: string | null;
+  createdAt: string;
+  viewerAnswered: { result: 'correct' | 'incorrect' } | null;
+};
 
 type AnswerResult = {
-  isCorrect: boolean
-  correctAnswer: string
-  explanation: string | null
-  awardedPoints: number | null
-  creatorNote: string | null
-  submittedAnswer: string
-}
+  isCorrect: boolean;
+  correctAnswer: string;
+  explanation: string | null;
+  awardedPoints: number | null;
+  creatorNote: string | null;
+  submittedAnswer: string;
+};
 
 type AuthoredQuestionsFeedProps = {
-  questions: AuthoredQuestionItem[]
-  friendDisplayName: string
-  friendUserId: string
-  friendProfileHref: string
-}
+  questions: AuthoredQuestionItem[];
+  friendDisplayName: string;
+  friendUserId: string;
+  friendProfileHref: string;
+};
 
 function formatDate(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  const now = new Date()
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const now = new Date();
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
-  }).format(date)
+  }).format(date);
 }
 
 function baseFields(
@@ -51,7 +51,7 @@ function baseFields(
   friendDisplayName: string,
   friendUserId: string,
 ) {
-  const dateLabel = formatDate(item.createdAt)
+  const dateLabel = formatDate(item.createdAt);
   const metadata: ReactNode = (
     <span className="text-muted-foreground text-xs">
       {item.category ? <>{item.category}</> : null}
@@ -59,7 +59,7 @@ function baseFields(
       {dateLabel ? <>{dateLabel}</> : null}
       {answered ? <> · You answered</> : null}
     </span>
-  )
+  );
 
   return {
     id: item.id,
@@ -70,7 +70,7 @@ function baseFields(
     isInBank: false,
     avatarName: friendDisplayName,
     avatarUserId: friendUserId,
-  }
+  };
 }
 
 export function AuthoredQuestionsFeed({
@@ -79,67 +79,53 @@ export function AuthoredQuestionsFeed({
   friendUserId,
   friendProfileHref,
 }: AuthoredQuestionsFeedProps) {
-  const [results, setResults] = useState<Record<string, AnswerResult>>({})
-  const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [results, setResults] = useState<Record<string, AnswerResult>>({});
+  const [answerSheetId, setAnswerSheetId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const submitAnswer = useCallback(
-    async (item: AuthoredQuestionItem, submittedAnswer: string) => {
-      setBusyId(item.id)
-      setError(null)
-      try {
-        const response = await fetch(`/api/questions/${item.id}/answer`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ submitted_answer: submittedAnswer }),
-        })
-        const body = (await response.json().catch(() => null)) as
-          | {
-              isCorrect?: boolean
-              correctAnswer?: string
-              explanation?: string | null
-              pointsAwarded?: number | null
-              creatorNote?: string | null
-              message?: string
-            }
-          | null
-        if (!response.ok || !body || typeof body.isCorrect !== 'boolean') {
-          throw new Error(body?.message ?? 'Could not submit that answer.')
-        }
-        const result: AnswerResult = {
-          isCorrect: body.isCorrect,
-          correctAnswer: body.correctAnswer ?? '',
-          explanation: body.explanation ?? null,
-          awardedPoints: body.pointsAwarded ?? null,
-          creatorNote: body.creatorNote ?? null,
-          submittedAnswer,
-        }
-        setResults((current) => ({ ...current, [item.id]: result }))
-        setAnswerSheetId(null)
-      } catch (caught) {
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : 'Could not submit that answer.',
-        )
-      } finally {
-        setBusyId(null)
+  const submitAnswer = useCallback(async (item: AuthoredQuestionItem, submittedAnswer: string) => {
+    setBusyId(item.id);
+    setError(null);
+    try {
+      const response = await fetch(`/api/questions/${item.id}/answer`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ submitted_answer: submittedAnswer }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        isCorrect?: boolean;
+        correctAnswer?: string;
+        explanation?: string | null;
+        pointsAwarded?: number | null;
+        creatorNote?: string | null;
+        message?: string;
+      } | null;
+      if (!response.ok || !body || typeof body.isCorrect !== 'boolean') {
+        throw new Error(body?.message ?? 'Could not submit that answer.');
       }
-    },
-    [],
-  )
+      const result: AnswerResult = {
+        isCorrect: body.isCorrect,
+        correctAnswer: body.correctAnswer ?? '',
+        explanation: body.explanation ?? null,
+        awardedPoints: body.pointsAwarded ?? null,
+        creatorNote: body.creatorNote ?? null,
+        submittedAnswer,
+      };
+      setResults((current) => ({ ...current, [item.id]: result }));
+      setAnswerSheetId(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not submit that answer.');
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
 
-  const sheetItem = answerSheetId
-    ? questions.find((q) => q.id === answerSheetId) ?? null
-    : null
+  const sheetItem = answerSheetId ? (questions.find((q) => q.id === answerSheetId) ?? null) : null;
 
   return (
-    <section
-      className="mt-5"
-      aria-label={`Questions ${friendDisplayName} wrote`}
-    >
+    <section className="mt-5" aria-label={`Questions ${friendDisplayName} wrote`}>
       <div className="mb-4">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
           Questions
@@ -162,14 +148,14 @@ export function AuthoredQuestionsFeed({
       ) : (
         <div className="space-y-3">
           {questions.map((item) => {
-            const localResult = results[item.id]
-            const persistedAnswered = item.viewerAnswered !== null
-            const isAnswered = Boolean(localResult) || persistedAnswered
+            const localResult = results[item.id];
+            const persistedAnswered = item.viewerAnswered !== null;
+            const isAnswered = Boolean(localResult) || persistedAnswered;
 
             if (isAnswered) {
               const isCorrect = localResult
                 ? localResult.isCorrect
-                : item.viewerAnswered?.result === 'correct'
+                : item.viewerAnswered?.result === 'correct';
 
               const answeredItem: AnsweredByYouFeedItem = {
                 ...baseFields(item, true, friendDisplayName, friendUserId),
@@ -187,9 +173,9 @@ export function AuthoredQuestionsFeed({
                 explanation: localResult?.explanation ?? null,
                 creatorNote: localResult?.creatorNote ?? null,
                 unverifiedAnswer: false,
-              }
+              };
 
-              return <AnsweredByYouCard key={item.id} item={answeredItem} />
+              return <AnsweredByYouCard key={item.id} item={answeredItem} />;
             }
 
             const directSent: DirectSentFeedItem = {
@@ -197,7 +183,7 @@ export function AuthoredQuestionsFeed({
               type: 'direct_sent',
               senderName: friendDisplayName,
               senderHref: friendProfileHref,
-            }
+            };
 
             return (
               <DirectSentCard
@@ -205,7 +191,7 @@ export function AuthoredQuestionsFeed({
                 item={directSent}
                 onAnswer={() => setAnswerSheetId(item.id)}
               />
-            )
+            );
           })}
         </div>
       )}
@@ -220,5 +206,5 @@ export function AuthoredQuestionsFeed({
         />
       ) : null}
     </section>
-  )
+  );
 }

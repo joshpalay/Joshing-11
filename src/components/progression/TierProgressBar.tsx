@@ -8,7 +8,11 @@ type TierProgressBarProps = {
   ariaLabelPrefix?: string;
 };
 
-export function TierProgressBar({ tier, progressWithinTier, ariaLabelPrefix = 'Domain progression' }: TierProgressBarProps) {
+export function TierProgressBar({
+  tier,
+  progressWithinTier,
+  ariaLabelPrefix = 'Domain progression',
+}: TierProgressBarProps) {
   const clamped = Math.max(0, Math.min(1, progressWithinTier));
   const fillRatio = tier === 'mastery' ? 1 : clamped;
   const tierLabel = getKnowledgeTierProgressionLabel(tier);

@@ -22,7 +22,12 @@ type Props = {
   preselectedIds?: string[];
 };
 
-export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5, preselectedIds = [] }: Props) {
+export function QuestionBankPicker({
+  onSelect,
+  onQuestionsLoaded,
+  maxSelect = 5,
+  preselectedIds = [],
+}: Props) {
   const [questions, setQuestions] = useState<QuestionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set(preselectedIds));
@@ -66,7 +71,11 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
   };
 
   if (loading) {
-    return <p className="font-mono text-xs uppercase text-[var(--text-muted)]">Loading your questions…</p>;
+    return (
+      <p className="font-mono text-xs text-[var(--text-muted)] uppercase">
+        Loading your questions…
+      </p>
+    );
   }
 
   if (error) {
@@ -78,7 +87,7 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
       <p className="mb-3 text-sm text-[var(--text-muted)]">
         Pick up to {maxSelect} questions from your bank to contribute.
         {selected.size > 0 && (
-          <span className="ml-2 font-mono text-xs uppercase text-[var(--primary)]">
+          <span className="ml-2 font-mono text-xs text-[var(--primary)] uppercase">
             {selected.size} selected
           </span>
         )}
@@ -89,7 +98,7 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
           <p className="text-sm text-[var(--text-muted)]">Your question bank is empty.</p>
           <Link
             href="/questions"
-            className="mt-2 inline-block font-mono text-xs uppercase text-[var(--primary)] hover:underline"
+            className="mt-2 inline-block font-mono text-xs text-[var(--primary)] uppercase hover:underline"
           >
             Add questions first
           </Link>
@@ -106,8 +115,8 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
                     isSelected
                       ? 'border-[var(--primary)] bg-[var(--primary)]/5'
                       : isDisabled
-                      ? 'cursor-not-allowed border-[var(--border)] bg-[var(--card-bg)] opacity-50'
-                      : 'border-[var(--border)] bg-[var(--card-bg)] hover:border-[var(--primary)]/50'
+                        ? 'cursor-not-allowed border-[var(--border)] bg-[var(--card-bg)] opacity-50'
+                        : 'border-[var(--border)] bg-[var(--card-bg)] hover:border-[var(--primary)]/50'
                   }`}
                 >
                   <input
@@ -121,8 +130,12 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
                     {q.short_label && (
                       <p className="text-sm font-semibold text-[var(--text)]">{q.short_label}</p>
                     )}
-                    <p className={`text-sm text-[var(--text${q.short_label ? '-muted' : ''})]`}>{q.question_text.length > 80 ? q.question_text.slice(0, 80) + '…' : q.question_text}</p>
-                    <p className="mt-0.5 font-mono text-xs uppercase text-[var(--text-muted)]">
+                    <p className={`text-sm text-[var(--text${q.short_label ? '-muted' : ''})]`}>
+                      {q.question_text.length > 80
+                        ? q.question_text.slice(0, 80) + '…'
+                        : q.question_text}
+                    </p>
+                    <p className="mt-0.5 font-mono text-xs text-[var(--text-muted)] uppercase">
                       {categoryLabel(q.category)}
                       {' · '}
                       {q.isOwnAuthored ? 'Written by you' : `From ${q.authorName ?? 'a friend'}`}

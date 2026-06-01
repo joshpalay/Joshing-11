@@ -14,15 +14,20 @@ import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
  * The windowed model uses this ordinal to determine the credit amount for the
  * next correct answerer.
  */
-export async function countAuthorCreditEvents(questionId: string, authorId: string): Promise<number> {
+export async function countAuthorCreditEvents(
+  questionId: string,
+  authorId: string,
+): Promise<number> {
   const [row] = await db
     .select({ value: count() })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, authorId),
-      eq(masteryEvents.questionId, questionId),
-      eq(masteryEvents.sourceType, 'author_credit'),
-    ));
+    .where(
+      and(
+        eq(masteryEvents.userId, authorId),
+        eq(masteryEvents.questionId, questionId),
+        eq(masteryEvents.sourceType, 'author_credit'),
+      ),
+    );
 
   return row?.value ?? 0;
 }
@@ -30,8 +35,8 @@ export async function countAuthorCreditEvents(questionId: string, authorId: stri
 type QuestionStats = {
   correctCount: number;
   askedCount: number;
-  calibratedDifficulty: typeof questions.$inferSelect['calibratedDifficulty'];
-  llmDifficulty: typeof questions.$inferSelect['llmDifficulty'];
+  calibratedDifficulty: (typeof questions.$inferSelect)['calibratedDifficulty'];
+  llmDifficulty: (typeof questions.$inferSelect)['llmDifficulty'];
 };
 
 export type AwardAuthorCreditParams = {

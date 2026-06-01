@@ -47,13 +47,18 @@ export function DomainVisibilityToggle({ domainName, initialVisibility, onChange
 
   return (
     <div>
-      <div className="grid grid-cols-3 rounded-full border bg-card p-1 text-sm font-medium" aria-label={`Visibility for ${domainName}`}>
+      <div
+        className="bg-card grid grid-cols-3 rounded-full border p-1 text-sm font-medium"
+        aria-label={`Visibility for ${domainName}`}
+      >
         {OPTIONS.map((option) => (
           <button
             key={option}
             type="button"
             className={`min-h-10 rounded-full px-3 capitalize transition ${
-              visibility === option ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+              visibility === option
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
             onClick={() => void setNextVisibility(option)}
             disabled={isSaving}
@@ -63,7 +68,7 @@ export function DomainVisibilityToggle({ domainName, initialVisibility, onChange
           </button>
         ))}
       </div>
-      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="text-destructive mt-2 text-sm">{error}</p> : null}
     </div>
   );
 }

@@ -34,7 +34,9 @@ async function main(): Promise<void> {
   const runId = args.runId ?? newRunId();
   ensureRunDirs(runId);
   console.log(`[playtest] starting run ${runId} (audits/playtest-${runId}/)`);
-  console.log(`[playtest] running ${picked.length} scenario(s): ${picked.map((s) => s.id).join(', ')}`);
+  console.log(
+    `[playtest] running ${picked.length} scenario(s): ${picked.map((s) => s.id).join(', ')}`,
+  );
 
   const browser = await launchBrowser(args.headed);
   try {
@@ -54,7 +56,9 @@ async function main(): Promise<void> {
 
     const failedScenarios = logs.filter((log) => log.status === 'fail');
     if (failedScenarios.length > 0) {
-      console.error(`[playtest] ${failedScenarios.length} scenario(s) failed: ${failedScenarios.map((s) => s.scenarioId).join(', ')}`);
+      console.error(
+        `[playtest] ${failedScenarios.length} scenario(s) failed: ${failedScenarios.map((s) => s.scenarioId).join(', ')}`,
+      );
       process.exitCode = 1;
     }
 

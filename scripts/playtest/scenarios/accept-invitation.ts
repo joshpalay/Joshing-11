@@ -59,14 +59,19 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
       const page = await browserCtx.newPage();
 
       // 1. Visit the invite landing.
-      await page.goto(`${ctx.baseUrl}/invite/${invitation.token}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${ctx.baseUrl}/invite/${invitation.token}`, {
+        waitUntil: 'domcontentloaded',
+      });
       await page.waitForLoadState('networkidle').catch(() => undefined);
       events.push({ kind: 'navigated', url: page.url(), at: now() });
       const landingShot = path.join(ctx.screenshotDir, 'accept-invitation--landing.png');
       await page.screenshot({ path: landingShot, fullPage: false });
       events.push({ kind: 'screenshot', file: landingShot, note: 'invite landing', at: now() });
 
-      const landingText = await page.locator('body').innerText().catch(() => '');
+      const landingText = await page
+        .locator('body')
+        .innerText()
+        .catch(() => '');
       asserts.check(
         'invite landing names inviter',
         landingText.includes('[TEST] Alice'),
@@ -81,7 +86,9 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
       // 2. Click through to /login?invitationToken=…
       const seeNoteLink = page.locator('a', { hasText: 'See the note' }).first();
       await Promise.all([
-        page.waitForURL((url) => url.pathname.startsWith('/login'), { timeout: 10_000 }).catch(() => undefined),
+        page
+          .waitForURL((url) => url.pathname.startsWith('/login'), { timeout: 10_000 })
+          .catch(() => undefined),
         seeNoteLink.click(),
       ]);
       await page.waitForLoadState('networkidle').catch(() => undefined);
@@ -102,7 +109,9 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
       const codeInput = page.locator('input[placeholder="000000"]').first();
       await codeInput.waitFor({ state: 'visible', timeout: 10_000 });
       await codeInput.fill('000000');
-      const verifyResponsePromise = page.waitForResponse('**/api/auth/verify-otp', { timeout: 15_000 });
+      const verifyResponsePromise = page.waitForResponse('**/api/auth/verify-otp', {
+        timeout: 15_000,
+      });
       await codeInput.press('Enter');
       const verifyResponse = await verifyResponsePromise.catch(() => null);
       asserts.expectTruthy('/api/auth/verify-otp response observed', !!verifyResponse);
@@ -131,26 +140,47 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
         });
 
         const [acceptedRow] = await db
-          .select({ id: friendInvitations.id, acceptedAt: friendInvitations.acceptedAt, inviteeUserId: friendInvitations.inviteeUserId })
+          .select({
+            id: friendInvitations.id,
+            acceptedAt: friendInvitations.acceptedAt,
+            inviteeUserId: friendInvitations.inviteeUserId,
+          })
           .from(friendInvitations)
-          .where(and(eq(friendInvitations.id, invitation.id), isNotNull(friendInvitations.acceptedAt)))
+          .where(
+            and(eq(friendInvitations.id, invitation.id), isNotNull(friendInvitations.acceptedAt)),
+          )
           .limit(1);
         asserts.expectTruthy('invitation row marked accepted', !!acceptedRow);
-        if (acceptedRow) asserts.expectEqual('invitation.inviteeUserId is Carol.id', acceptedRow.inviteeUserId, carol.id);
+        if (acceptedRow)
+          asserts.expectEqual(
+            'invitation.inviteeUserId is Carol.id',
+            acceptedRow.inviteeUserId,
+            carol.id,
+          );
 
         const [friendship] = await db
-          .select({ id: friendships.id, status: friendships.status, formedVia: friendships.formedVia })
+          .select({
+            id: friendships.id,
+            status: friendships.status,
+            formedVia: friendships.formedVia,
+          })
           .from(friendships)
-          .where(or(
-            and(eq(friendships.userAId, alice.id), eq(friendships.userBId, carol.id)),
-            and(eq(friendships.userAId, carol.id), eq(friendships.userBId, alice.id)),
-          ))
+          .where(
+            or(
+              and(eq(friendships.userAId, alice.id), eq(friendships.userBId, carol.id)),
+              and(eq(friendships.userAId, carol.id), eq(friendships.userBId, alice.id)),
+            ),
+          )
           .limit(1);
         asserts.expectTruthy('friendship row created', !!friendship);
         if (friendship) {
           ctx.manifest.trackFriendship({ id: friendship.id, scenarioId: ctx.scenarioId });
           asserts.expectEqual('friendship status active', friendship.status, 'active');
-          asserts.expectEqual('friendship formedVia invitation', friendship.formedVia, 'invitation');
+          asserts.expectEqual(
+            'friendship formedVia invitation',
+            friendship.formedVia,
+            'invitation',
+          );
         }
       }
 
@@ -182,6 +212,7 @@ async function run(ctx: ScenarioContext): Promise<ScenarioLog> {
 export const acceptInvitationScenario: Scenario = {
   id: 'accept-invitation',
   displayName: 'Accept a friend invitation end-to-end',
-  description: 'Open /invite/<token> in a fresh context, complete OTP signup, verify Friendship row exists.',
+  description:
+    'Open /invite/<token> in a fresh context, complete OTP signup, verify Friendship row exists.',
   run,
 };

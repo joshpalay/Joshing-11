@@ -76,7 +76,9 @@ export function CompletedRecapHeader({
                 background: 'var(--surface)',
               }}
             >
-              <p style={{ ...monoStyle, color: 'var(--text-muted)', fontSize: '0.52rem' }}>{item.label}</p>
+              <p style={{ ...monoStyle, color: 'var(--text-muted)', fontSize: '0.52rem' }}>
+                {item.label}
+              </p>
               <p
                 style={{
                   marginTop: '2px',
@@ -112,7 +114,9 @@ export function StandingsCard({ rows }: { rows: StandingsRow[] }) {
     <section className="card px-5 py-4">
       <h3 style={{ ...monoStyle, color: 'var(--text-muted)' }}>Standings</h3>
       {rows.length === 0 ? (
-        <p style={{ marginTop: '10px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>No answers recorded yet.</p>
+        <p style={{ marginTop: '10px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          No answers recorded yet.
+        </p>
       ) : (
         <div style={{ marginTop: '12px', display: 'grid', gap: '8px' }}>
           {rows.map((row, index) => (
@@ -173,7 +177,13 @@ export function QuestionHistoryFilters({
   categories: QuestionHistoryCategoryFilterOption[];
 }) {
   const items: QuestionHistoryFilter[] = ['all', 'mine', 'starred'];
-  const resultItems: QuestionHistoryResultFilter[] = ['all', 'correct', 'wrong', 'expired', 'unanswered'];
+  const resultItems: QuestionHistoryResultFilter[] = [
+    'all',
+    'correct',
+    'wrong',
+    'expired',
+    'unanswered',
+  ];
   const authorItems: QuestionHistoryAuthorFilter[] = ['all', 'mine', 'others'];
   return (
     <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
@@ -274,7 +284,11 @@ export function PostGameActions({
     <section className="card px-5 py-4" style={{ display: 'grid', gap: '12px' }}>
       <h3 style={{ ...monoStyle, color: 'var(--text-muted)' }}>Next</h3>
       {primary ? (
-        <Link href={primary.href} className="btn-primary" style={{ textAlign: 'center', textDecoration: 'none' }}>
+        <Link
+          href={primary.href}
+          className="btn-primary"
+          style={{ textAlign: 'center', textDecoration: 'none' }}
+        >
           {primary.label}
         </Link>
       ) : null}
@@ -295,4 +309,9 @@ export function PostGameActions({
   );
 }
 
-export type { QuestionHistoryAuthorFilter, QuestionHistoryCategoryFilterOption, QuestionHistoryFilter, QuestionHistoryResultFilter };
+export type {
+  QuestionHistoryAuthorFilter,
+  QuestionHistoryCategoryFilterOption,
+  QuestionHistoryFilter,
+  QuestionHistoryResultFilter,
+};

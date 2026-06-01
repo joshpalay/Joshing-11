@@ -22,9 +22,10 @@ function parseBody(value: unknown): { dailyQueueItemId: string; reason?: Dismiss
   return typeof dailyQueueItemId === 'string'
     ? {
         dailyQueueItemId,
-        reason: typeof reason === 'string' && DISMISS_REASONS.has(reason as DismissReason)
-          ? reason as DismissReason
-          : undefined,
+        reason:
+          typeof reason === 'string' && DISMISS_REASONS.has(reason as DismissReason)
+            ? (reason as DismissReason)
+            : undefined,
       }
     : null;
 }
@@ -38,13 +39,19 @@ export async function POST(request: NextRequest) {
     return catchUpErrorResponse(400, 'validation', 'dailyQueueItemId is required');
   }
 
-  const catchupItem = (await getCatchupQuestions(session.userId))
-    .find((item) => item.dailyQueueItemId === parsed.dailyQueueItemId);
-  if (!catchupItem) return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found');
+  const catchupItem = (await getCatchupQuestions(session.userId)).find(
+    (item) => item.dailyQueueItemId === parsed.dailyQueueItemId,
+  );
+  if (!catchupItem)
+    return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found');
 
   if (catchupItem.surface === 'feed') {
     if (!catchupItem.feedItemId) {
-      return catchUpErrorResponse(500, 'invalid_state', 'Feed catch-up item missing feed reference');
+      return catchUpErrorResponse(
+        500,
+        'invalid_state',
+        'Feed catch-up item missing feed reference',
+      );
     }
     const [feedItem] = await db
       .select()
@@ -67,7 +74,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (catchupItem.queueId === null || catchupItem.slotIndex === null) {
-    return catchUpErrorResponse(500, 'invalid_state', 'Daily catch-up item missing queue reference');
+    return catchUpErrorResponse(
+      500,
+      'invalid_state',
+      'Daily catch-up item missing queue reference',
+    );
   }
 
   const [queue] = await db
@@ -92,11 +103,12 @@ export async function POST(request: NextRequest) {
   const nextSlots = replaceQueueSlot(
     slots,
     catchupItem.slotIndex,
-    (item) => ({
-      ...item,
-      dismissed_at: dismissedAt,
-      dismissed_reason: parsed.reason,
-    }) satisfies QueueSlot,
+    (item) =>
+      ({
+        ...item,
+        dismissed_at: dismissedAt,
+        dismissed_reason: parsed.reason,
+      }) satisfies QueueSlot,
   );
 
   await db

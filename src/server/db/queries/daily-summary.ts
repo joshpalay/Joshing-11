@@ -112,10 +112,12 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       ? db
           .select()
           .from(generatedQuestions)
-          .where(and(
-            eq(generatedQuestions.userId, userId),
-            inArray(generatedQuestions.id, generatedIds),
-          ))
+          .where(
+            and(
+              eq(generatedQuestions.userId, userId),
+              inArray(generatedQuestions.id, generatedIds),
+            ),
+          )
       : Promise.resolve([]),
     queue
       ? db
@@ -124,11 +126,13 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
             awardedPoints: masteryEvents.awardedPoints,
           })
           .from(masteryEvents)
-          .where(and(
-            eq(masteryEvents.userId, userId),
-            eq(masteryEvents.sessionContext, 'daily'),
-            sql`${masteryEvents.answerId} like ${`daily:${queue.id}:%`}`,
-          ))
+          .where(
+            and(
+              eq(masteryEvents.userId, userId),
+              eq(masteryEvents.sessionContext, 'daily'),
+              sql`${masteryEvents.answerId} like ${`daily:${queue.id}:%`}`,
+            ),
+          )
       : Promise.resolve([]),
     getDailyPreferences(userId),
   ]);
@@ -139,7 +143,10 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
 
   for (const event of todayEvents) {
     touchedDomains.add(event.domain);
-    pointsByDomain.set(event.domain, (pointsByDomain.get(event.domain) ?? 0) + Number(event.awardedPoints ?? 0));
+    pointsByDomain.set(
+      event.domain,
+      (pointsByDomain.get(event.domain) ?? 0) + Number(event.awardedPoints ?? 0),
+    );
   }
 
   const slotPointsByDomain = new Map<string, number>();
@@ -160,37 +167,45 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     pointsByDomain.set(domain, Math.max(pointsByDomain.get(domain) ?? 0, slotPoints));
   }
 
-  const priorRows = touchedDomains.size > 0
-    ? await db
-        .select({
-          domain: masteryEvents.canonicalSubcategory,
-          count: sql<number>`count(*)`,
-        })
-        .from(masteryEvents)
-        .where(and(
-          eq(masteryEvents.userId, userId),
-          inArray(masteryEvents.canonicalSubcategory, [...touchedDomains]),
-          lt(masteryEvents.createdAt, dateStart(dateString)),
-        ))
-        .groupBy(masteryEvents.canonicalSubcategory)
-    : [];
-  const priorEventDomains = new Set(priorRows.filter((row) => Number(row.count) > 0).map((row) => row.domain));
+  const priorRows =
+    touchedDomains.size > 0
+      ? await db
+          .select({
+            domain: masteryEvents.canonicalSubcategory,
+            count: sql<number>`count(*)`,
+          })
+          .from(masteryEvents)
+          .where(
+            and(
+              eq(masteryEvents.userId, userId),
+              inArray(masteryEvents.canonicalSubcategory, [...touchedDomains]),
+              lt(masteryEvents.createdAt, dateStart(dateString)),
+            ),
+          )
+          .groupBy(masteryEvents.canonicalSubcategory)
+      : [];
+  const priorEventDomains = new Set(
+    priorRows.filter((row) => Number(row.count) > 0).map((row) => row.domain),
+  );
   const newTerritory = [...touchedDomains].filter((domain) => !priorEventDomains.has(domain));
 
-  const masteryRows = touchedDomains.size > 0
-    ? await db
-        .select({
-          domain: playerMastery.canonicalSubcategory,
-          broadCategory: playerMastery.broadCategory,
-          totalPoints: playerMastery.totalPoints,
-          tier: playerMastery.tier,
-        })
-        .from(playerMastery)
-        .where(and(
-          eq(playerMastery.userId, userId),
-          inArray(playerMastery.canonicalSubcategory, [...touchedDomains]),
-        ))
-    : [];
+  const masteryRows =
+    touchedDomains.size > 0
+      ? await db
+          .select({
+            domain: playerMastery.canonicalSubcategory,
+            broadCategory: playerMastery.broadCategory,
+            totalPoints: playerMastery.totalPoints,
+            tier: playerMastery.tier,
+          })
+          .from(playerMastery)
+          .where(
+            and(
+              eq(playerMastery.userId, userId),
+              inArray(playerMastery.canonicalSubcategory, [...touchedDomains]),
+            ),
+          )
+      : [];
   const masteryByDomain = new Map(masteryRows.map((row) => [row.domain, row]));
 
   const tierCrossings: TierCrossing[] = [...pointsByDomain.entries()]
@@ -209,9 +224,14 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const bankedById = await checkBankedQuestions(userId, recapQuestionIds);
 
   const recaps = slots.map<QuestionRecap>((slot) => {
-    const generated = slot.generated_question_id ? questionById.get(slot.generated_question_id) : null;
+    const generated = slot.generated_question_id
+      ? questionById.get(slot.generated_question_id)
+      : null;
     const domain = slot.domain || generated?.canonicalSubcategory || 'General';
-    const questionId = slot.question_id ?? slot.generated_question_id ?? `${queue?.id ?? dateString}:${slot.slot_index}`;
+    const questionId =
+      slot.question_id ??
+      slot.generated_question_id ??
+      `${queue?.id ?? dateString}:${slot.slot_index}`;
     return {
       questionId,
       bankQuestionId: slot.question_id ?? null,
@@ -233,11 +253,16 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const totalAnswered = slots.filter((slot) => slot.answered).length;
   const totalCorrect = slots.filter((slot) => slot.answer_state === 'correct').length;
   const pointsEarned = [...pointsByDomain.values()].reduce((sum, points) => sum + points, 0);
-  const gainedDomains = [...touchedDomains].filter((domain) => (pointsByDomain.get(domain) ?? 0) > 0);
+  const gainedDomains = [...touchedDomains].filter(
+    (domain) => (pointsByDomain.get(domain) ?? 0) > 0,
+  );
 
   const recentFriendBridge = await getRecentFriendBridge(userId);
-  const { isFirstCompletedRound, reminderPromptState } =
-    await computeReminderPromptState(userId, dateString, totalAnswered);
+  const { isFirstCompletedRound, reminderPromptState } = await computeReminderPromptState(
+    userId,
+    dateString,
+    totalAnswered,
+  );
 
   return {
     date: dateString,
@@ -253,11 +278,16 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
         displayName: displayNameForDomain(domain),
         broadCategory: masteryByDomain.get(domain)?.broadCategory || domain,
         pointsGained: pointsByDomain.get(domain) ?? 0,
-        totalPoints: Number(masteryByDomain.get(domain)?.totalPoints ?? pointsByDomain.get(domain) ?? 0),
-        currentTier: masteryByDomain.get(domain)?.tier ?? resolveTier(pointsByDomain.get(domain) ?? 0),
+        totalPoints: Number(
+          masteryByDomain.get(domain)?.totalPoints ?? pointsByDomain.get(domain) ?? 0,
+        ),
+        currentTier:
+          masteryByDomain.get(domain)?.tier ?? resolveTier(pointsByDomain.get(domain) ?? 0),
         isNewTerritory: newTerritory.includes(domain),
       }))
-      .sort((a, b) => b.pointsGained - a.pointsGained || a.displayName.localeCompare(b.displayName)),
+      .sort(
+        (a, b) => b.pointsGained - a.pointsGained || a.displayName.localeCompare(b.displayName),
+      ),
     newTerritory,
     tierCrossings,
     recentFriendBridge,
@@ -282,14 +312,16 @@ async function computeReminderPromptState(
   const [prior] = await db
     .select({ id: dailyQueues.id })
     .from(dailyQueues)
-    .where(and(
-      eq(dailyQueues.userId, userId),
-      ne(dailyQueues.queueDate, todayString),
-      sql`EXISTS (
+    .where(
+      and(
+        eq(dailyQueues.userId, userId),
+        ne(dailyQueues.queueDate, todayString),
+        sql`EXISTS (
         SELECT 1 FROM jsonb_array_elements(${dailyQueues.slots}) slot
         WHERE (slot->>'answered')::boolean IS TRUE
       )`,
-    ))
+      ),
+    )
     .limit(1);
 
   const isFirstCompletedRound = !prior;

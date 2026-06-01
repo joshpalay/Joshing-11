@@ -2,10 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
-import {
-  getDiscoverability,
-  updateDiscoverability,
-} from '@/server/db/queries/account';
+import { getDiscoverability, updateDiscoverability } from '@/server/db/queries/account';
 
 export const dynamic = 'force-dynamic';
 

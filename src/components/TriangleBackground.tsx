@@ -16,7 +16,9 @@ type TriangleBackgroundProps = {
  */
 export default function TriangleBackground({ children, className }: TriangleBackgroundProps) {
   return (
-    <div className={`relative min-h-screen w-full overflow-hidden bg-[var(--brand-cream-page)] ${className ?? ''}`}>
+    <div
+      className={`relative min-h-screen w-full overflow-hidden bg-[var(--brand-cream-page)] ${className ?? ''}`}
+    >
       <Image
         src="/images/Variant4.png"
         alt=""

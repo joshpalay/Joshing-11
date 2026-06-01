@@ -50,17 +50,29 @@ vi.mock('@/server/db', async () => {
           const kind = tableKind(table);
           if ('points' in selection && 'distinctQuestions' in selection) {
             const authorCreditEvents = state.masteryEvents.filter(
-              (row) => isSourceDomain(row.canonicalSubcategory) && row.sourceType === 'author_credit',
+              (row) =>
+                isSourceDomain(row.canonicalSubcategory) && row.sourceType === 'author_credit',
             );
-            return [{
-              points: authorCreditEvents.reduce((sum, row) => sum + Number(row.awardedPoints ?? 0), 0),
-              distinctQuestions: new Set(authorCreditEvents.map((row) => row.questionId)).size,
-            }];
+            return [
+              {
+                points: authorCreditEvents.reduce(
+                  (sum, row) => sum + Number(row.awardedPoints ?? 0),
+                  0,
+                ),
+                distinctQuestions: new Set(authorCreditEvents.map((row) => row.questionId)).size,
+              },
+            ];
           }
           if (kind === 'declaredInterests') return [];
           if (kind === 'dailyPreferences') return state.dailyPreferences;
-          if (kind === 'userDomainDifficulties') return state.userDomainDifficulties.filter((row) => isMergedDomain(row.canonicalSubcategory));
-          if (kind === 'userDomainExclusions') return state.userDomainExclusions.filter((row) => isSourceDomain(row.canonicalSubcategory));
+          if (kind === 'userDomainDifficulties')
+            return state.userDomainDifficulties.filter((row) =>
+              isMergedDomain(row.canonicalSubcategory),
+            );
+          if (kind === 'userDomainExclusions')
+            return state.userDomainExclusions.filter((row) =>
+              isSourceDomain(row.canonicalSubcategory),
+            );
           if (kind === 'profileDomainVisibility') {
             return state.profileDomainVisibility.filter(
               (row) => isMergedDomain(row.domain) || isMergedDomain(row.canonicalSubcategory),
@@ -75,10 +87,15 @@ vi.mock('@/server/db', async () => {
         const kind = tableKind(table);
         if (kind === 'playerMastery') {
           const existingIndex = state.playerMastery.findIndex(
-            (row) => row.userId === values.userId && row.canonicalSubcategory === values.canonicalSubcategory,
+            (row) =>
+              row.userId === values.userId &&
+              row.canonicalSubcategory === values.canonicalSubcategory,
           );
           if (existingIndex >= 0) {
-            state.playerMastery[existingIndex] = { ...state.playerMastery[existingIndex], ...values };
+            state.playerMastery[existingIndex] = {
+              ...state.playerMastery[existingIndex],
+              ...values,
+            };
           } else {
             state.playerMastery.push({ ...values });
           }
@@ -87,17 +104,24 @@ vi.mock('@/server/db', async () => {
         if (kind === 'profileDomainVisibility') state.profileDomainVisibility.push({ ...values });
         if (kind === 'userDomainDifficulties') {
           const existingIndex = state.userDomainDifficulties.findIndex(
-            (row) => row.userId === values.userId && row.canonicalSubcategory === values.canonicalSubcategory,
+            (row) =>
+              row.userId === values.userId &&
+              row.canonicalSubcategory === values.canonicalSubcategory,
           );
           if (existingIndex >= 0) {
-            state.userDomainDifficulties[existingIndex] = { ...state.userDomainDifficulties[existingIndex], ...values };
+            state.userDomainDifficulties[existingIndex] = {
+              ...state.userDomainDifficulties[existingIndex],
+              ...values,
+            };
           } else {
             state.userDomainDifficulties.push({ ...values });
           }
         }
         if (kind === 'userDomainExclusions') {
           const exists = state.userDomainExclusions.some(
-            (row) => row.userId === values.userId && row.canonicalSubcategory === values.canonicalSubcategory,
+            (row) =>
+              row.userId === values.userId &&
+              row.canonicalSubcategory === values.canonicalSubcategory,
           );
           if (!exists) state.userDomainExclusions.push({ ...values });
         }
@@ -111,7 +135,9 @@ vi.mock('@/server/db', async () => {
       where: vi.fn(async () => {
         const kind = tableKind(table);
         if (kind === 'playerMastery') {
-          state.playerMastery = state.playerMastery.filter((row) => !isSourceDomain(row.canonicalSubcategory));
+          state.playerMastery = state.playerMastery.filter(
+            (row) => !isSourceDomain(row.canonicalSubcategory),
+          );
         }
         if (kind === 'profileDomainVisibility') {
           state.profileDomainVisibility = state.profileDomainVisibility.filter(
@@ -119,13 +145,19 @@ vi.mock('@/server/db', async () => {
           );
         }
         if (kind === 'userDomainDifficulties') {
-          state.userDomainDifficulties = state.userDomainDifficulties.filter((row) => !isSourceDomain(row.canonicalSubcategory));
+          state.userDomainDifficulties = state.userDomainDifficulties.filter(
+            (row) => !isSourceDomain(row.canonicalSubcategory),
+          );
         }
         if (kind === 'userDomainExclusions') {
-          state.userDomainExclusions = state.userDomainExclusions.filter((row) => !isSourceDomain(row.canonicalSubcategory));
+          state.userDomainExclusions = state.userDomainExclusions.filter(
+            (row) => !isSourceDomain(row.canonicalSubcategory),
+          );
         }
         if (kind === 'feedDismissedDomains') {
-          state.feedDismissedDomains = state.feedDismissedDomains.filter((row) => !isSourceDomain(row.canonicalSubcategory));
+          state.feedDismissedDomains = state.feedDismissedDomains.filter(
+            (row) => !isSourceDomain(row.canonicalSubcategory),
+          );
         }
       }),
     })),
@@ -150,19 +182,21 @@ vi.mock('@/server/db', async () => {
       set: vi.fn((values: Row) => ({
         where: vi.fn(async () => {
           const kind = tableKind(table);
-          const rows = kind === 'masteryEvents'
-            ? state.masteryEvents
-            : kind === 'questions'
-              ? state.questions
-              : kind === 'generatedQuestions'
-                ? state.generatedQuestions
-                : kind === 'skippedDailyQuestions'
-                  ? state.skippedDailyQuestions
-                  : kind === 'dailyPreferences'
-                    ? state.dailyPreferences
-                    : [];
+          const rows =
+            kind === 'masteryEvents'
+              ? state.masteryEvents
+              : kind === 'questions'
+                ? state.questions
+                : kind === 'generatedQuestions'
+                  ? state.generatedQuestions
+                  : kind === 'skippedDailyQuestions'
+                    ? state.skippedDailyQuestions
+                    : kind === 'dailyPreferences'
+                      ? state.dailyPreferences
+                      : [];
           for (const row of rows) {
-            if (kind === 'dailyPreferences' || isSourceDomain(row.canonicalSubcategory)) Object.assign(row, values);
+            if (kind === 'dailyPreferences' || isSourceDomain(row.canonicalSubcategory))
+              Object.assign(row, values);
           }
         }),
       })),
@@ -219,17 +253,47 @@ describe('applyMergesForUser', () => {
         awardedPoints: 42,
       },
     ];
-    state.questions = [{ id: 'question-1', creatorId: 'user-1', canonicalSubcategory: 'Ulysses – Structure & Symbolism' }];
-    state.generatedQuestions = [{ id: 'generated-1', userId: 'user-1', canonicalSubcategory: 'Ulysses – Structure & Symbolism' }];
-    state.skippedDailyQuestions = [{ id: 'skipped-1', userId: 'user-1', canonicalSubcategory: 'Ulysses – Structure & Symbolism' }];
+    state.questions = [
+      {
+        id: 'question-1',
+        creatorId: 'user-1',
+        canonicalSubcategory: 'Ulysses – Structure & Symbolism',
+      },
+    ];
+    state.generatedQuestions = [
+      {
+        id: 'generated-1',
+        userId: 'user-1',
+        canonicalSubcategory: 'Ulysses – Structure & Symbolism',
+      },
+    ];
+    state.skippedDailyQuestions = [
+      {
+        id: 'skipped-1',
+        userId: 'user-1',
+        canonicalSubcategory: 'Ulysses – Structure & Symbolism',
+      },
+    ];
 
-    const details = await applyMergesForUser('user-1', [sourceRow], [{
-      sources: ['Ulysses – Structure & Symbolism'],
-      target: 'Ulysses',
-      rationale: 'Facet should roll up to parent work.',
-    }]);
+    const details = await applyMergesForUser(
+      'user-1',
+      [sourceRow],
+      [
+        {
+          sources: ['Ulysses – Structure & Symbolism'],
+          target: 'Ulysses',
+          rationale: 'Facet should roll up to parent work.',
+        },
+      ],
+    );
 
-    expect(details).toEqual([{ sources: ['Ulysses – Structure & Symbolism'], target: 'Ulysses', rationale: 'Facet should roll up to parent work.' }]);
+    expect(details).toEqual([
+      {
+        sources: ['Ulysses – Structure & Symbolism'],
+        target: 'Ulysses',
+        rationale: 'Facet should roll up to parent work.',
+      },
+    ]);
     expect(state.playerMastery).toEqual([
       expect.objectContaining({
         userId: 'user-1',
@@ -240,16 +304,26 @@ describe('applyMergesForUser', () => {
         lifetimePointsBaseline: 7,
       }),
     ]);
-    expect(state.playerMastery).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ canonicalSubcategory: 'Ulysses – Structure & Symbolism' }),
-    ]));
-    expect(state.masteryEvents).toEqual(expect.arrayContaining([
-      expect.objectContaining({ canonicalSubcategory: 'Ulysses', questionId: 'question-1' }),
-      expect.objectContaining({ canonicalSubcategory: 'Ulysses', sourceType: 'domain_merged' }),
-    ]));
-    expect(state.questions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses', broadCategory: 'Literature' })]);
-    expect(state.generatedQuestions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses', broadCategory: 'Literature' })]);
-    expect(state.skippedDailyQuestions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses' })]);
+    expect(state.playerMastery).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ canonicalSubcategory: 'Ulysses – Structure & Symbolism' }),
+      ]),
+    );
+    expect(state.masteryEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ canonicalSubcategory: 'Ulysses', questionId: 'question-1' }),
+        expect.objectContaining({ canonicalSubcategory: 'Ulysses', sourceType: 'domain_merged' }),
+      ]),
+    );
+    expect(state.questions).toEqual([
+      expect.objectContaining({ canonicalSubcategory: 'Ulysses', broadCategory: 'Literature' }),
+    ]);
+    expect(state.generatedQuestions).toEqual([
+      expect.objectContaining({ canonicalSubcategory: 'Ulysses', broadCategory: 'Literature' }),
+    ]);
+    expect(state.skippedDailyQuestions).toEqual([
+      expect.objectContaining({ canonicalSubcategory: 'Ulysses' }),
+    ]);
   });
 
   it('keeps the tidied target private when any source visibility is private', async () => {
@@ -283,11 +357,17 @@ describe('applyMergesForUser', () => {
       },
     ];
 
-    await applyMergesForUser('user-1', [sourceRow], [{
-      sources: ['Ulysses – Structure & Symbolism'],
-      target: 'Ulysses',
-      rationale: 'Facet should roll up to parent work.',
-    }]);
+    await applyMergesForUser(
+      'user-1',
+      [sourceRow],
+      [
+        {
+          sources: ['Ulysses – Structure & Symbolism'],
+          target: 'Ulysses',
+          rationale: 'Facet should roll up to parent work.',
+        },
+      ],
+    );
 
     expect(state.profileDomainVisibility).toEqual([
       expect.objectContaining({
@@ -314,11 +394,13 @@ describe('applyMergesForUser', () => {
     };
 
     state.playerMastery = [{ ...sourceRow }];
-    state.dailyPreferences = [{
-      id: 'daily-pref-1',
-      userId: 'user-1',
-      selectedDomains: ['Ulysses – Structure & Symbolism', 'Ulysses', 'Modernism'],
-    }];
+    state.dailyPreferences = [
+      {
+        id: 'daily-pref-1',
+        userId: 'user-1',
+        selectedDomains: ['Ulysses – Structure & Symbolism', 'Ulysses', 'Modernism'],
+      },
+    ];
     state.userDomainDifficulties = [
       {
         id: 'difficulty-source',
@@ -339,12 +421,14 @@ describe('applyMergesForUser', () => {
         lastUpdated: new Date('2026-05-01T00:00:00.000Z'),
       },
     ];
-    state.userDomainExclusions = [{
-      id: 'exclusion-source',
-      userId: 'user-1',
-      canonicalSubcategory: 'Ulysses – Structure & Symbolism',
-      excludedAt: new Date('2026-05-02T00:00:00.000Z'),
-    }];
+    state.userDomainExclusions = [
+      {
+        id: 'exclusion-source',
+        userId: 'user-1',
+        canonicalSubcategory: 'Ulysses – Structure & Symbolism',
+        excludedAt: new Date('2026-05-02T00:00:00.000Z'),
+      },
+    ];
     state.feedDismissedDomains = [
       {
         id: 'dismissed-source',
@@ -355,11 +439,17 @@ describe('applyMergesForUser', () => {
       },
     ];
 
-    await applyMergesForUser('user-1', [sourceRow], [{
-      sources: ['Ulysses – Structure & Symbolism'],
-      target: 'Ulysses',
-      rationale: 'Facet should roll up to parent work.',
-    }]);
+    await applyMergesForUser(
+      'user-1',
+      [sourceRow],
+      [
+        {
+          sources: ['Ulysses – Structure & Symbolism'],
+          target: 'Ulysses',
+          rationale: 'Facet should roll up to parent work.',
+        },
+      ],
+    );
 
     expect(state.dailyPreferences[0].selectedDomains).toEqual(['Ulysses', 'Modernism']);
     expect(state.userDomainDifficulties).toEqual([
@@ -375,7 +465,11 @@ describe('applyMergesForUser', () => {
       expect.objectContaining({ userId: 'user-1', canonicalSubcategory: 'Ulysses' }),
     ]);
     expect(state.feedDismissedDomains).toEqual([
-      expect.objectContaining({ userId: 'user-1', canonicalSubcategory: 'Ulysses', reinstatedAt: null }),
+      expect.objectContaining({
+        userId: 'user-1',
+        canonicalSubcategory: 'Ulysses',
+        reinstatedAt: null,
+      }),
     ]);
 
     const sourceDomainReferences = [

@@ -67,7 +67,9 @@ export async function createReaction(params: CreateReactionParams): Promise<{ id
         contextType: params.contextType,
         contextId: params.contextId,
         reactionType: params.reactionType,
-        customMessage: params.customMessage?.trim() ? params.customMessage.trim().slice(0, 160) : null,
+        customMessage: params.customMessage?.trim()
+          ? params.customMessage.trim().slice(0, 160)
+          : null,
         includeSubmittedAnswer: params.includeSubmittedAnswer ?? false,
       })
       .returning({ id: questionReactions.id });
@@ -89,9 +91,11 @@ export async function createReaction(params: CreateReactionParams): Promise<{ id
     const reaction = reactionCopy(params.reactionType);
     const senderName = displayName(sender[0]?.displayName ?? null);
     const body = `${senderName} reacted to your question: ${reaction.label}`;
-    sendSms(recipientRow.phoneNumber, body, 'question_reaction', params.recipientUserId).catch((error) => {
-      console.error('Reaction SMS failed', error);
-    });
+    sendSms(recipientRow.phoneNumber, body, 'question_reaction', params.recipientUserId).catch(
+      (error) => {
+        console.error('Reaction SMS failed', error);
+      },
+    );
   }
 
   return created;
@@ -154,14 +158,17 @@ export async function getUnrepliedReactionCount(userId: string): Promise<number>
     const rows = await db
       .select({ id: questionReactions.id })
       .from(questionReactions)
-      .where(and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)));
+      .where(
+        and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)),
+      );
 
     return rows.length;
   } catch (error) {
-    const missingCamelCaseColumn = pgErrorCode(error) === '42703'
-      && (pgErrorMessage(error)?.includes('recipientUserId')
-        || pgErrorMessage(error)?.includes('repliedAt')
-        || pgErrorMessage(error)?.includes('QuestionReaction'));
+    const missingCamelCaseColumn =
+      pgErrorCode(error) === '42703' &&
+      (pgErrorMessage(error)?.includes('recipientUserId') ||
+        pgErrorMessage(error)?.includes('repliedAt') ||
+        pgErrorMessage(error)?.includes('QuestionReaction'));
     if (!missingCamelCaseColumn) throw error;
 
     const result = await db.execute(sql<{ value: string }>`

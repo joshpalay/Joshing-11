@@ -74,9 +74,11 @@ export function InlineHandleField({
         credentials: 'include',
         body: JSON.stringify({ handle: draft.trim().toLowerCase() }),
       });
-      const body = (await response.json().catch(() => null)) as
-        | { ok?: boolean; handle?: string; message?: string }
-        | null;
+      const body = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        handle?: string;
+        message?: string;
+      } | null;
       if (!response.ok || !body?.ok || !body.handle) {
         throw new Error(body?.message ?? 'Could not save.');
       }
@@ -99,7 +101,7 @@ export function InlineHandleField({
         <span className="text-muted-foreground">@</span>
         <input
           autoFocus
-          className="flex-1 rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-foreground"
+          className="bg-background focus:border-foreground flex-1 rounded-md border px-3 py-2 text-base outline-none"
           value={draft}
           maxLength={20}
           placeholder="handle"
@@ -138,7 +140,7 @@ export function InlineHandleField({
           </div>
         </div>
       ) : (
-        <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="text-muted-foreground mt-2 flex items-center justify-between text-xs">
           <span>Enter to save, Esc to cancel</span>
           <span>{draft.length} / 20</span>
         </div>
@@ -148,27 +150,27 @@ export function InlineHandleField({
 
   if (editing) {
     return (
-      <div className={variant === 'card' ? 'rounded-xl border bg-card p-4' : ''}>
+      <div className={variant === 'card' ? 'bg-card rounded-xl border p-4' : ''}>
         {variant === 'card' ? (
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="text-muted-foreground text-xs font-medium tracking-[0.08em] uppercase">
               Handle
             </p>
             <SaveStatusIndicator status={status} />
           </div>
         ) : null}
         {editor}
-        {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+        {error ? <p className="text-destructive mt-2 text-xs">{error}</p> : null}
       </div>
     );
   }
 
   const trimmed = value.trim();
   return (
-    <div className={variant === 'card' ? 'rounded-xl border bg-card p-4' : ''}>
+    <div className={variant === 'card' ? 'bg-card rounded-xl border p-4' : ''}>
       {variant === 'card' ? (
         <div className="flex items-baseline justify-between gap-3">
-          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <p className="text-muted-foreground text-xs font-medium tracking-[0.08em] uppercase">
             Handle
           </p>
           <SaveStatusIndicator status={status} />
@@ -177,7 +179,7 @@ export function InlineHandleField({
       <button
         type="button"
         aria-label="Edit handle"
-        className="block w-full rounded-md px-1 py-0.5 text-left text-sm text-muted-foreground hover:bg-muted/40"
+        className="text-muted-foreground hover:bg-muted/40 block w-full rounded-md px-1 py-0.5 text-left text-sm"
         onClick={beginEdit}
       >
         {trimmed.length > 0 ? `@${trimmed}` : <span>Pick a handle</span>}
@@ -189,16 +191,16 @@ export function InlineHandleField({
       ) : null}
       {variant === 'card' ? (
         cooldownInfo.locked ? (
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="text-muted-foreground mt-2 text-xs">
             Next change available {cooldownInfo.unlockDate.toLocaleDateString()}.
           </p>
         ) : (
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="text-muted-foreground mt-2 text-xs">
             You can change your handle once every {cooldownDays} days.
           </p>
         )
       ) : null}
-      {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="text-destructive mt-2 text-xs">{error}</p> : null}
     </div>
   );
 }
@@ -213,7 +215,7 @@ function computeHandleCooldown(lastChangedAtIso: string | null, cooldownDays: nu
 function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   if (status === 'saving') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
         <Loader2 className="size-3 animate-spin" />
         Saving…
       </span>

@@ -4,10 +4,7 @@ describe('consolidateProfileDomainVisibility', () => {
   it('deletes colliding visibility aliases and inserts one target row with the most restrictive visibility', async () => {
     process.env.DATABASE_URL ??= 'postgres://user:pass@localhost:5432/joshing_test';
     const { consolidateProfileDomainVisibility } = await import('@/server/mastery/ceremony');
-    const existingRows = [
-      { visibility: 'public' as const },
-      { visibility: 'private' as const },
-    ];
+    const existingRows = [{ visibility: 'public' as const }, { visibility: 'private' as const }];
     const selectWhere = vi.fn(async () => existingRows);
     const deleteWhere = vi.fn(async () => undefined);
     const insertValues = vi.fn(async () => undefined);

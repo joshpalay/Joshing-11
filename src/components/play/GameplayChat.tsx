@@ -92,7 +92,13 @@ export type ChatMessage =
       roundsRemaining: number;
       nextRoundOpensAt: string | null;
     }
-  | { id: string; kind: 'session_close'; scoreLine: string; interpretiveLine: string | null; summaryHref?: string }
+  | {
+      id: string;
+      kind: 'session_close';
+      scoreLine: string;
+      interpretiveLine: string | null;
+      summaryHref?: string;
+    }
   | {
       id: string;
       kind: 'bonus_offer';
@@ -110,10 +116,14 @@ const CORRECT_COPY: Array<{ headline: string; subLabel: string }> = [
 
 function wrongHeadline(variant: number): string {
   switch (variant % 3) {
-    case 0: return 'Not this time — here\u2019s the answer.';
-    case 1: return 'You\u2019ll know this one next time.';
-    case 2: return 'Close, but not quite.';
-    default: return 'Not this time — here\u2019s the answer.';
+    case 0:
+      return 'Not this time — here\u2019s the answer.';
+    case 1:
+      return 'You\u2019ll know this one next time.';
+    case 2:
+      return 'Close, but not quite.';
+    default:
+      return 'Not this time — here\u2019s the answer.';
   }
 }
 
@@ -193,7 +203,7 @@ function QuestionRow({
     if (!isNew) return;
     const t = window.setTimeout(() => setVisible(true), 30);
     return () => window.clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -226,12 +236,21 @@ function QuestionRow({
             lineHeight: 1.3,
           }}
         >
-          <span style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginRight: '6px' }}>
+          <span
+            style={{
+              ...monoStyle,
+              fontSize: '0.55rem',
+              color: 'var(--text-muted)',
+              marginRight: '6px',
+            }}
+          >
             FROM
           </span>
           <span style={{ fontWeight: 600 }}>{creatorName}</span>
           {creatorName.trim().toLowerCase() === 'joshing' ? null : (
-            <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>gave you this</span>
+            <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
+              gave you this
+            </span>
           )}
         </p>
       ) : null}
@@ -248,7 +267,9 @@ function QuestionRow({
           }}
         >
           <span style={{ fontWeight: 600 }}>{firstNameFrom(answererName)}</span>
-          <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>answered this correctly</span>
+          <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
+            answered this correctly
+          </span>
         </p>
       ) : null}
       <div
@@ -284,9 +305,10 @@ function QuestionRow({
                   letterSpacing: '0.01em',
                   borderRadius: '999px',
                   border: '1px solid var(--border)',
-                  background: badge.tone === 'warning'
-                    ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
-                    : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                  background:
+                    badge.tone === 'warning'
+                      ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
+                      : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
                   color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
                   padding: '3px 9px',
                 }}
@@ -438,17 +460,28 @@ function RelationalFeedbackFade({ text }: { text: string }) {
 
 function reactionEmoji(value: string): string {
   switch (value) {
-    case ':exploding_head:': return '🤯';
-    case ':ok_hand:': return '👌';
-    case ':smirk:': return '😏';
-    case ':face_palm:': return '🤦';
-    case ':sunny:': return '☀️';
-    case ':thought_balloon:': return '💭';
-    case ':thinking_face:': return '🤔';
-    case ':open_book:': return '📖';
-    case ':memo:': return '📝';
-    case ':sweat_smile:': return '😅';
-    default: return value;
+    case ':exploding_head:':
+      return '🤯';
+    case ':ok_hand:':
+      return '👌';
+    case ':smirk:':
+      return '😏';
+    case ':face_palm:':
+      return '🤦';
+    case ':sunny:':
+      return '☀️';
+    case ':thought_balloon:':
+      return '💭';
+    case ':thinking_face:':
+      return '🤔';
+    case ':open_book:':
+      return '📖';
+    case ':memo:':
+      return '📝';
+    case ':sweat_smile:':
+      return '😅';
+    default:
+      return value;
   }
 }
 
@@ -475,29 +508,38 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
     return () => window.clearTimeout(timer);
   }, [status]);
 
-  const sendReaction = useCallback(async (reactionType: ReactionKey) => {
-    setStatus('sending');
-    try {
-      const response = await fetch('/api/reactions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          questionId: prompt.questionId,
-          contextType: prompt.contextType,
-          contextId: prompt.contextId,
-          reactionType,
-          customMessage: customMessage.trim() || null,
-          includeSubmittedAnswer:
-            includeSubmittedAnswer && isWrongAnswerReactionKey(reactionType),
-        }),
-      });
-      if (!response.ok) throw new Error('Could not send reaction');
-      setStatus('sent');
-    } catch {
-      setStatus('error');
-    }
-  }, [customMessage, includeSubmittedAnswer, prompt.contextId, prompt.contextType, prompt.questionId]);
+  const sendReaction = useCallback(
+    async (reactionType: ReactionKey) => {
+      setStatus('sending');
+      try {
+        const response = await fetch('/api/reactions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            questionId: prompt.questionId,
+            contextType: prompt.contextType,
+            contextId: prompt.contextId,
+            reactionType,
+            customMessage: customMessage.trim() || null,
+            includeSubmittedAnswer:
+              includeSubmittedAnswer && isWrongAnswerReactionKey(reactionType),
+          }),
+        });
+        if (!response.ok) throw new Error('Could not send reaction');
+        setStatus('sent');
+      } catch {
+        setStatus('error');
+      }
+    },
+    [
+      customMessage,
+      includeSubmittedAnswer,
+      prompt.contextId,
+      prompt.contextType,
+      prompt.questionId,
+    ],
+  );
 
   if (status === 'hidden') return null;
 
@@ -511,7 +553,14 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
 
   return (
     <div style={{ marginTop: '10px', maxWidth: '100%' }}>
-      <p style={{ ...monoStyle, marginBottom: '6px', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+      <p
+        style={{
+          ...monoStyle,
+          marginBottom: '6px',
+          fontSize: '0.6rem',
+          color: 'var(--text-muted)',
+        }}
+      >
         React to {prompt.senderName}?
       </p>
       {customOpen ? (
@@ -553,7 +602,15 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
           Include what I wrote
         </label>
       ) : null}
-      <div style={{ display: 'flex', gap: '6px', maxWidth: '100%', overflowX: 'auto', paddingBottom: '3px' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '6px',
+          maxWidth: '100%',
+          overflowX: 'auto',
+          paddingBottom: '3px',
+        }}
+      >
         {cannedSet.map((reaction) => (
           <button
             key={reaction.key}
@@ -574,7 +631,9 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
               cursor: status === 'sending' ? 'default' : 'pointer',
             }}
           >
-            <span aria-hidden style={{ marginRight: '5px' }}>{reactionEmoji(reaction.emoji)}</span>
+            <span aria-hidden style={{ marginRight: '5px' }}>
+              {reactionEmoji(reaction.emoji)}
+            </span>
             {reaction.label}
           </button>
         ))}
@@ -711,7 +770,9 @@ function ResultRow({
   recheckAction?: RecheckAction | null;
   openedTerritoryDomain?: string | null;
 }) {
-  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
+  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>(
+    'idle',
+  );
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
   const [recheckAccepted, setRecheckAccepted] = useState(false);
   const expired = result === 'expired';
@@ -739,33 +800,36 @@ function ResultRow({
   // red "not quite"); neutral for expired/gave-up.
   const resultToneStyle: CSSProperties = expired
     ? {
-      background: 'var(--surface-2)',
-      border: '1px solid var(--border)',
-      borderLeft: '3px solid var(--border)',
-    }
+        background: 'var(--surface-2)',
+        border: '1px solid var(--border)',
+        borderLeft: '3px solid var(--border)',
+      }
     : correct
       ? {
-        // Figma Correct (#366045) — forest green, lighter card body than the
-        // vivid --success used elsewhere.
-        background: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
-        border: '1px solid color-mix(in srgb, var(--game-correct) 26%, var(--border))',
-        borderLeft: '3px solid var(--game-correct)',
-      }
+          // Figma Correct (#366045) — forest green, lighter card body than the
+          // vivid --success used elsewhere.
+          background: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
+          border: '1px solid color-mix(in srgb, var(--game-correct) 26%, var(--border))',
+          borderLeft: '3px solid var(--game-correct)',
+        }
       : gaveUp
         ? {
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
-          borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
-        }
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+            borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
+          }
         : {
-          // Figma text/wrong (#c96b4a) body + game/wrong/in-question (#c33d14) bar.
-          background: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
-          border: '1px solid color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
-          borderLeft: '3px solid var(--game-wrong-strong)',
-        };
+            // Figma text/wrong (#c96b4a) body + game/wrong/in-question (#c33d14) bar.
+            background: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
+            border: '1px solid color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
+            borderLeft: '3px solid var(--game-wrong-strong)',
+          };
 
   return (
-    <div className="flex flex-col gap-0 pt-0.5" style={{ alignItems: 'flex-start', maxWidth: '88%' }}>
+    <div
+      className="flex flex-col gap-0 pt-0.5"
+      style={{ alignItems: 'flex-start', maxWidth: '88%' }}
+    >
       <div
         style={{
           ...resultToneStyle,
@@ -781,14 +845,29 @@ function ResultRow({
           <span style={{ color: 'var(--text-muted)' }}>This one wasn&apos;t recorded in time.</span>
         ) : correct ? (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-correct)', fontWeight: 600 }}>
+            <p
+              style={{
+                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+                color: 'var(--game-correct)',
+                fontWeight: 600,
+              }}
+            >
               <span style={{ color: 'var(--game-correct)', marginRight: '6px' }}>✓</span>
               {copy.headline}
             </p>
-            <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            <p
+              style={{
+                ...monoStyle,
+                fontSize: '0.55rem',
+                color: 'var(--text-muted)',
+                marginTop: '4px',
+              }}
+            >
               {copy.subLabel}
             </p>
-            {relationalFeedbackLine ? <RelationalFeedbackFade text={relationalFeedbackLine} /> : null}
+            {relationalFeedbackLine ? (
+              <RelationalFeedbackFade text={relationalFeedbackLine} />
+            ) : null}
           </>
         ) : gaveUp ? (
           <>
@@ -817,7 +896,13 @@ function ResultRow({
           </>
         ) : (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-wrong-strong)', fontWeight: 600 }}>
+            <p
+              style={{
+                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+                color: 'var(--game-wrong-strong)',
+                fontWeight: 600,
+              }}
+            >
               <span style={{ color: 'var(--game-wrong-strong)', marginRight: '6px' }}>✕</span>
               {wrongHeadline(copyVariant)}
             </p>
@@ -836,19 +921,40 @@ function ResultRow({
                 {correctAnswer}
               </p>
             ) : null}
-            <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            <p
+              style={{
+                ...monoStyle,
+                fontSize: '0.55rem',
+                color: 'var(--text-muted)',
+                marginTop: '4px',
+              }}
+            >
               Now it&rsquo;s in yours too
             </p>
             {(() => {
               const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant);
               return namedSubLabel ? (
-                <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                <p
+                  style={{
+                    ...monoStyle,
+                    fontSize: '0.6rem',
+                    color: 'var(--text-muted)',
+                    marginTop: '4px',
+                  }}
+                >
                   {namedSubLabel}
                 </p>
               ) : null;
             })()}
             {consolation ? (
-              <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              <p
+                style={{
+                  marginTop: '8px',
+                  fontSize: '0.88rem',
+                  color: 'var(--text-muted)',
+                  fontStyle: 'italic',
+                }}
+              >
                 {consolation}
               </p>
             ) : null}
@@ -863,7 +969,10 @@ function ResultRow({
                     border: '1px solid var(--border)',
                     background: 'var(--surface)',
                     color: 'var(--text)',
-                    cursor: recheckState === 'submitting' || recheckState === 'done' ? 'default' : 'pointer',
+                    cursor:
+                      recheckState === 'submitting' || recheckState === 'done'
+                        ? 'default'
+                        : 'pointer',
                     fontFamily: 'var(--font-mono)',
                     fontSize: '0.58rem',
                     letterSpacing: '0.06em',
@@ -884,7 +993,8 @@ function ResultRow({
                         alignItems: 'center',
                         gap: '8px',
                         borderRadius: 'var(--radius-md)',
-                        border: '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
+                        border:
+                          '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
                         background: 'color-mix(in srgb, var(--game-correct) 12%, var(--surface))',
                         color: 'var(--game-correct)',
                         padding: '8px 12px',
@@ -893,11 +1003,22 @@ function ResultRow({
                         lineHeight: 1.35,
                       }}
                     >
-                      <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                      <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>
+                        ✓
+                      </span>
                       <span>{recheckMessage}</span>
                     </div>
                   ) : (
-                    <p role="status" aria-live="polite" style={{ marginTop: '6px', fontSize: '0.78rem', color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)', lineHeight: 1.35 }}>
+                    <p
+                      role="status"
+                      aria-live="polite"
+                      style={{
+                        marginTop: '6px',
+                        fontSize: '0.78rem',
+                        color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)',
+                        lineHeight: 1.35,
+                      }}
+                    >
                       {recheckMessage}
                     </p>
                   )
@@ -906,11 +1027,20 @@ function ResultRow({
             ) : null}
           </>
         )}
-        {breadcrumb
-          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} />
-          : explanation ? <ExplanationLine text={explanation} /> : null}
+        {breadcrumb ? (
+          <BreadcrumbLine text={breadcrumb} creatorName={creatorName} />
+        ) : explanation ? (
+          <ExplanationLine text={explanation} />
+        ) : null}
         {typeof pointsAwarded === 'number' ? (
-          <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
+          <p
+            style={{
+              ...monoStyle,
+              fontSize: '0.55rem',
+              color: 'var(--text-muted)',
+              marginTop: '10px',
+            }}
+          >
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
             {pointsLabel ? ` - ${pointsLabel}` : ''}
           </p>
@@ -1058,7 +1188,11 @@ function SessionCompleteRow({
         <Link
           href={detailsHref}
           className="mt-2 inline-flex text-sm"
-          style={{ color: 'var(--text-muted)', textDecoration: 'underline', textUnderlineOffset: '2px' }}
+          style={{
+            color: 'var(--text-muted)',
+            textDecoration: 'underline',
+            textUnderlineOffset: '2px',
+          }}
         >
           Game details
         </Link>
@@ -1109,7 +1243,9 @@ function BonusOfferRow({
       >
         {available} more {available === 1 ? 'question' : 'questions'} in the pool.
       </p>
-      <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Untimed. Counts toward your score.</p>
+      <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+        Untimed. Counts toward your score.
+      </p>
       <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
         <button type="button" className="btn-primary" onClick={onAccept}>
           Keep going

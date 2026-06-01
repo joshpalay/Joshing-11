@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import * as React from "react";
+import * as React from 'react';
 
 type LoadingScreenProps = {
   label?: string;
@@ -14,14 +14,14 @@ const SIZE = 56;
 const TRI_H = SIZE * 0.8660254;
 
 const PALETTE = [
-  "#1F3556",
-  "#BC4632",
-  "#5D7E96",
-  "#D9A441",
-  "#E8DCC0",
-  "#F4ECD8",
-  "#3A5973",
-  "#A03A2C",
+  '#1F3556',
+  '#BC4632',
+  '#5D7E96',
+  '#D9A441',
+  '#E8DCC0',
+  '#F4ECD8',
+  '#3A5973',
+  '#A03A2C',
 ];
 
 function rand(seed: number) {
@@ -110,18 +110,18 @@ type FloatTri = {
 
 function buildFloaters(): FloatTri[] {
   const specs: Array<[number, number, number, string, number]> = [
-    [80, 180, 110, "#BC4632", 0.5],
-    [310, 240, 140, "#1F3556", 0.45],
-    [60, 540, 130, "#D9A441", 0.45],
-    [340, 650, 100, "#5D7E96", 0.5],
-    [200, 380, 160, "#3A5973", 0.35],
-    [160, 780, 90, "#A03A2C", 0.45],
-    [40, 80, 120, "#5D7E96", 0.4],
-    [360, 420, 110, "#D9A441", 0.5],
-    [220, 120, 80, "#A03A2C", 0.5],
-    [120, 320, 100, "#1F3556", 0.4],
-    [280, 560, 130, "#BC4632", 0.35],
-    [80, 720, 110, "#3A5973", 0.4],
+    [80, 180, 110, '#BC4632', 0.5],
+    [310, 240, 140, '#1F3556', 0.45],
+    [60, 540, 130, '#D9A441', 0.45],
+    [340, 650, 100, '#5D7E96', 0.5],
+    [200, 380, 160, '#3A5973', 0.35],
+    [160, 780, 90, '#A03A2C', 0.45],
+    [40, 80, 120, '#5D7E96', 0.4],
+    [360, 420, 110, '#D9A441', 0.5],
+    [220, 120, 80, '#A03A2C', 0.5],
+    [120, 320, 100, '#1F3556', 0.4],
+    [280, 560, 130, '#BC4632', 0.35],
+    [80, 720, 110, '#3A5973', 0.4],
   ];
 
   return specs.map(([cx, cy, size, color, opacity], i) => {
@@ -132,7 +132,7 @@ function buildFloaters(): FloatTri[] {
       [cx, cy - h / 2],
     ]
       .map(([x, y]) => `${x},${y}`)
-      .join(" ");
+      .join(' ');
     const seed = i + 1;
     const dx = (rand(seed * 31) - 0.5) * 100;
     const dy = (rand(seed * 47) - 0.5) * 100;
@@ -146,7 +146,7 @@ function buildFloaters(): FloatTri[] {
 }
 
 export default function LoadingScreen({
-  label = "Loading",
+  label = 'Loading',
   className,
   fullScreen = false,
 }: LoadingScreenProps) {
@@ -154,14 +154,12 @@ export default function LoadingScreen({
   const floaters = React.useMemo(() => buildFloaters(), []);
 
   const wrapperClass = [
-    "isolate flex items-center justify-center overflow-hidden bg-[#E8DCC0]",
-    fullScreen
-      ? "fixed inset-0 z-[60]"
-      : "relative h-full w-full min-h-[480px]",
-    className ?? "",
+    'isolate flex items-center justify-center overflow-hidden bg-[#E8DCC0]',
+    fullScreen ? 'fixed inset-0 z-[60]' : 'relative h-full w-full min-h-[480px]',
+    className ?? '',
   ]
     .filter(Boolean)
-    .join(" ");
+    .join(' ');
 
   return (
     <div
@@ -185,32 +183,32 @@ export default function LoadingScreen({
               points={t.points}
               style={
                 {
-                  fill: "var(--tri-color-a)",
+                  fill: 'var(--tri-color-a)',
                   animation: `triangle-breathe ${t.breatheDuration}s ease-in-out ${t.breatheDelay}s infinite, triangle-color-swap ${t.swapDuration}s steps(1, end) ${t.swapDelay}s infinite`,
-                  ["--tri-color-a" as string]: t.colorA,
-                  ["--tri-color-b" as string]: t.colorB,
-                  ["--tri-opacity-low" as string]: String(t.opacityLow),
-                  ["--tri-opacity-high" as string]: String(t.opacityHigh),
+                  ['--tri-color-a' as string]: t.colorA,
+                  ['--tri-color-b' as string]: t.colorB,
+                  ['--tri-opacity-low' as string]: String(t.opacityLow),
+                  ['--tri-opacity-high' as string]: String(t.opacityHigh),
                 } as React.CSSProperties
               }
             />
           ))}
         </g>
 
-        <g style={{ mixBlendMode: "multiply" }}>
+        <g style={{ mixBlendMode: 'multiply' }}>
           {floaters.map((f, i) => (
             <g
               key={i}
               className="triangle-loader-float"
               style={
                 {
-                  transformBox: "fill-box",
+                  transformBox: 'fill-box',
                   transformOrigin: `${f.cx}px ${f.cy}px`,
                   animation: `triangle-drift ${f.duration}s ease-in-out ${f.delay}s infinite`,
-                  ["--tri-dx" as string]: `${f.dx}px`,
-                  ["--tri-dy" as string]: `${f.dy}px`,
-                  ["--tri-dr" as string]: `${f.dr}deg`,
-                  ["--tri-ds" as string]: String(f.ds),
+                  ['--tri-dx' as string]: `${f.dx}px`,
+                  ['--tri-dy' as string]: `${f.dy}px`,
+                  ['--tri-dr' as string]: `${f.dr}deg`,
+                  ['--tri-ds' as string]: String(f.ds),
                 } as React.CSSProperties
               }
             >
@@ -228,29 +226,29 @@ export default function LoadingScreen({
       <div className="relative z-10 mx-6 flex w-full max-w-xs flex-col items-center rounded-2xl bg-[#F5EBD3] px-8 py-10 shadow-[0_8px_24px_rgba(20,18,8,0.18)] ring-1 ring-black/5">
         <p
           className="text-3xl font-black tracking-[0.18em] text-[#1a1208]"
-          style={{ fontFamily: "var(--font-literata, Georgia), serif" }}
+          style={{ fontFamily: 'var(--font-literata, Georgia), serif' }}
         >
           JOSHING
         </p>
         <div className="mt-6 h-px w-12 bg-[#1a1208]/20" aria-hidden="true" />
-        <p className="mt-5 flex items-baseline gap-1 text-sm font-medium tracking-wider uppercase text-[#1a1208]/70">
+        <p className="mt-5 flex items-baseline gap-1 text-sm font-medium tracking-wider text-[#1a1208]/70 uppercase">
           <span>{label}</span>
           <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
             <span
               className="triangle-loader-dot inline-block"
-              style={{ animation: "loading-dot 1.2s ease-in-out 0s infinite" }}
+              style={{ animation: 'loading-dot 1.2s ease-in-out 0s infinite' }}
             >
               .
             </span>
             <span
               className="triangle-loader-dot inline-block"
-              style={{ animation: "loading-dot 1.2s ease-in-out 0.2s infinite" }}
+              style={{ animation: 'loading-dot 1.2s ease-in-out 0.2s infinite' }}
             >
               .
             </span>
             <span
               className="triangle-loader-dot inline-block"
-              style={{ animation: "loading-dot 1.2s ease-in-out 0.4s infinite" }}
+              style={{ animation: 'loading-dot 1.2s ease-in-out 0.4s infinite' }}
             >
               .
             </span>

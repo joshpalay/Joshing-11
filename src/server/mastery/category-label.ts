@@ -24,9 +24,11 @@ function coalesceHyperSpecificLabels(input: {
   normalized_subcategory?: string | null;
   source_canonical_subcategory?: string | null;
 }): string | null {
-  return normalizeLabel(input.canonical_subcategory)
-    ?? normalizeLabel(input.normalized_subcategory)
-    ?? normalizeLabel(input.source_canonical_subcategory);
+  return (
+    normalizeLabel(input.canonical_subcategory) ??
+    normalizeLabel(input.normalized_subcategory) ??
+    normalizeLabel(input.source_canonical_subcategory)
+  );
 }
 
 function emitSuppressedRowTelemetry(input: ResolveCategoryLabelInput): void {
@@ -61,7 +63,9 @@ export type ResolveReviewCategoryDisplayInput = ResolveCategoryLabelInput & {
  * End-of-review category rows: hyper-specific label, else broad category (not `other`), else Potpourri.
  * Does not emit missing-label telemetry (fallback is intentional).
  */
-export function resolveReviewCategoryDisplayLabel(input: ResolveReviewCategoryDisplayInput): string {
+export function resolveReviewCategoryDisplayLabel(
+  input: ResolveReviewCategoryDisplayInput,
+): string {
   const specific = coalesceHyperSpecificLabels(input);
   if (specific) return specific;
 
@@ -80,4 +84,3 @@ export function resolveReviewCategoryDisplayLabel(input: ResolveReviewCategoryDi
 export function resolveMasteryRoundBucketLabel(input: ResolveCategoryLabelInput): string {
   return coalesceHyperSpecificLabels(input) ?? UNCATEGORIZED_SUBCATEGORY_DISPLAY;
 }
-

@@ -48,18 +48,25 @@ export async function POST(_request: Request, context: RouteContext) {
   const propagated = await db
     .select({ id: feedItems.id })
     .from(feedItems)
-    .where(and(
-      eq(feedItems.sourceUserId, session.userId),
-      eq(feedItems.questionId, questionId),
-      ne(feedItems.recipientUserId, session.userId),
-      inArray(feedItems.state, ['active', 'skipped']),
-    ));
+    .where(
+      and(
+        eq(feedItems.sourceUserId, session.userId),
+        eq(feedItems.questionId, questionId),
+        ne(feedItems.recipientUserId, session.userId),
+        inArray(feedItems.state, ['active', 'skipped']),
+      ),
+    );
 
   if (propagated.length > 0) {
     await db
       .update(feedItems)
       .set({ state: 'rolled_off' })
-      .where(inArray(feedItems.id, propagated.map((r) => r.id)));
+      .where(
+        inArray(
+          feedItems.id,
+          propagated.map((r) => r.id),
+        ),
+      );
   }
 
   return NextResponse.json({ ok: true });
@@ -81,11 +88,13 @@ export async function DELETE(_request: Request, context: RouteContext) {
   // Remove thumbs_down signal
   await db
     .delete(questionFeedback)
-    .where(and(
-      eq(questionFeedback.userId, session.userId),
-      eq(questionFeedback.questionId, item.questionId),
-      eq(questionFeedback.signal, 'thumbs_down'),
-    ));
+    .where(
+      and(
+        eq(questionFeedback.userId, session.userId),
+        eq(questionFeedback.questionId, item.questionId),
+        eq(questionFeedback.signal, 'thumbs_down'),
+      ),
+    );
 
   // Restore feed item to active
   await db

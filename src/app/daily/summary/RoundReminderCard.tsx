@@ -1,7 +1,7 @@
-'use client'
+'use client';
 
-import Link from 'next/link'
-import { type CSSProperties, useState } from 'react'
+import Link from 'next/link';
+import { type CSSProperties, useState } from 'react';
 
 type CardState =
   | { kind: 'idle' }
@@ -10,7 +10,7 @@ type CardState =
   | { kind: 'email-form'; value: string; error: string | null; saving: boolean }
   | { kind: 'email-saved'; email: string }
   | { kind: 'dismissing' }
-  | { kind: 'hidden' }
+  | { kind: 'hidden' };
 
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
@@ -19,7 +19,7 @@ const titleStyle: CSSProperties = {
   color: '#111111',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-}
+};
 
 async function patchReminders(body: Record<string, unknown>): Promise<boolean> {
   const response = await fetch('/api/account/reminders', {
@@ -27,14 +27,14 @@ async function patchReminders(body: Record<string, unknown>): Promise<boolean> {
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  })
-  return response.ok
+  });
+  return response.ok;
 }
 
 export function RoundReminderCard() {
-  const [state, setState] = useState<CardState>({ kind: 'idle' })
+  const [state, setState] = useState<CardState>({ kind: 'idle' });
 
-  if (state.kind === 'hidden') return null
+  if (state.kind === 'hidden') return null;
 
   if (state.kind === 'sms-confirmed') {
     return (
@@ -49,7 +49,7 @@ export function RoundReminderCard() {
           </Link>
         </p>
       </section>
-    )
+    );
   }
 
   if (state.kind === 'email-saved') {
@@ -65,7 +65,7 @@ export function RoundReminderCard() {
           </Link>
         </p>
       </section>
-    )
+    );
   }
 
   if (state.kind === 'email-form') {
@@ -75,19 +75,19 @@ export function RoundReminderCard() {
         <form
           className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start"
           onSubmit={async (event) => {
-            event.preventDefault()
-            const trimmed = state.value.trim()
+            event.preventDefault();
+            const trimmed = state.value.trim();
             if (!trimmed) {
-              setState({ ...state, error: 'Please enter an email address.' })
-              return
+              setState({ ...state, error: 'Please enter an email address.' });
+              return;
             }
-            setState({ ...state, saving: true, error: null })
-            const ok = await patchReminders({ pendingEmail: trimmed })
+            setState({ ...state, saving: true, error: null });
+            const ok = await patchReminders({ pendingEmail: trimmed });
             if (!ok) {
-              setState({ ...state, saving: false, error: 'Could not save. Try again.' })
-              return
+              setState({ ...state, saving: false, error: 'Could not save. Try again.' });
+              return;
             }
-            setState({ kind: 'email-saved', email: trimmed })
+            setState({ kind: 'email-saved', email: trimmed });
           }}
         >
           <input
@@ -98,17 +98,11 @@ export function RoundReminderCard() {
             placeholder="you@example.com"
             value={state.value}
             disabled={state.saving}
-            onChange={(event) =>
-              setState({ ...state, value: event.target.value, error: null })
-            }
+            onChange={(event) => setState({ ...state, value: event.target.value, error: null })}
             className="bg-background flex-1 rounded-lg border px-3 py-2 text-sm"
           />
           <div className="flex gap-2">
-            <button
-              type="submit"
-              className="btn-primary text-sm"
-              disabled={state.saving}
-            >
+            <button type="submit" className="btn-primary text-sm" disabled={state.saving}>
               {state.saving ? 'Saving…' : 'Save'}
             </button>
             <button
@@ -121,19 +115,17 @@ export function RoundReminderCard() {
             </button>
           </div>
         </form>
-        {state.error ? (
-          <p className="mt-2 text-xs text-rose-700">{state.error}</p>
-        ) : null}
+        {state.error ? <p className="mt-2 text-xs text-rose-700">{state.error}</p> : null}
         <p className="text-muted-foreground mt-3 text-xs leading-5">
           We&apos;ll send a confirmation email once email reminders launch.
         </p>
       </section>
-    )
+    );
   }
 
-  const sendingSms = state.kind === 'sms-saving'
-  const dismissing = state.kind === 'dismissing'
-  const busy = sendingSms || dismissing
+  const sendingSms = state.kind === 'sms-saving';
+  const dismissing = state.kind === 'dismissing';
+  const busy = sendingSms || dismissing;
 
   return (
     <section className="card mt-5 px-5 py-4">
@@ -147,9 +139,9 @@ export function RoundReminderCard() {
           className="btn-primary text-sm sm:flex-1"
           disabled={busy}
           onClick={async () => {
-            setState({ kind: 'sms-saving' })
-            const ok = await patchReminders({ smsOptIn: 'opted_in' })
-            setState(ok ? { kind: 'sms-confirmed' } : { kind: 'idle' })
+            setState({ kind: 'sms-saving' });
+            const ok = await patchReminders({ smsOptIn: 'opted_in' });
+            setState(ok ? { kind: 'sms-confirmed' } : { kind: 'idle' });
           }}
         >
           {sendingSms ? 'Saving…' : 'Yes, text me'}
@@ -158,9 +150,7 @@ export function RoundReminderCard() {
           type="button"
           className="btn-ghost text-sm sm:flex-1"
           disabled={busy}
-          onClick={() =>
-            setState({ kind: 'email-form', value: '', error: null, saving: false })
-          }
+          onClick={() => setState({ kind: 'email-form', value: '', error: null, saving: false })}
         >
           Use email instead
         </button>
@@ -169,14 +159,14 @@ export function RoundReminderCard() {
           className="btn-ghost text-sm sm:flex-1"
           disabled={busy}
           onClick={async () => {
-            setState({ kind: 'dismissing' })
-            const ok = await patchReminders({ dismissed: true })
-            setState(ok ? { kind: 'hidden' } : { kind: 'idle' })
+            setState({ kind: 'dismissing' });
+            const ok = await patchReminders({ dismissed: true });
+            setState(ok ? { kind: 'hidden' } : { kind: 'idle' });
           }}
         >
           {dismissing ? 'Saving…' : 'No thanks'}
         </button>
       </div>
     </section>
-  )
+  );
 }

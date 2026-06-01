@@ -47,7 +47,14 @@ function EventRow({ row }: { row: FriendCoverageEventRow }) {
   const color = DIAGNOSIS_COLORS[row.diagnosis] ?? '#000';
   return (
     <tr style={{ verticalAlign: 'top' }}>
-      <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+      <td
+        style={{
+          padding: '4px 8px',
+          fontFamily: 'monospace',
+          fontSize: '11px',
+          whiteSpace: 'nowrap',
+        }}
+      >
         {fmtTimestamp(row.answeredAt)}
       </td>
       <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px' }}>
@@ -56,29 +63,61 @@ function EventRow({ row }: { row: FriendCoverageEventRow }) {
       <td style={{ padding: '4px 8px', fontSize: '12px', maxWidth: '380px' }}>
         <div>{row.questionTextSnippet ?? <em>(question missing)</em>}</div>
         <div style={{ fontFamily: 'monospace', fontSize: '10px', color: '#666' }}>
-          q={row.questionId ?? 'null'} domain={row.questionCanonicalSubcategory ?? row.questionBroadCategory ?? 'null'} visibility={row.questionVisibility ?? 'null'} source={row.questionSource ?? 'null'} deletedAt={row.questionDeletedAt ?? 'null'} creator={row.questionCreatorId ?? 'null'}
+          q={row.questionId ?? 'null'} domain=
+          {row.questionCanonicalSubcategory ?? row.questionBroadCategory ?? 'null'} visibility=
+          {row.questionVisibility ?? 'null'} source={row.questionSource ?? 'null'} deletedAt=
+          {row.questionDeletedAt ?? 'null'} creator={row.questionCreatorId ?? 'null'}
         </div>
       </td>
-      <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
-        elig={fmtBool(row.eligibilityWouldPass)}<br />
-        thumbsDown={fmtBool(row.friendThumbsDown)}<br />
+      <td
+        style={{
+          padding: '4px 8px',
+          fontFamily: 'monospace',
+          fontSize: '11px',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        elig={fmtBool(row.eligibilityWouldPass)}
+        <br />
+        thumbsDown={fmtBool(row.friendThumbsDown)}
+        <br />
         dismissed={fmtBool(row.viewerDomainDismissed)}
       </td>
-      <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+      <td
+        style={{
+          padding: '4px 8px',
+          fontFamily: 'monospace',
+          fontSize: '11px',
+          whiteSpace: 'nowrap',
+        }}
+      >
         {row.feedItem ? (
           <>
             id={row.feedItem.id.slice(0, 8)}…<br />
-            state={row.feedItem.state}<br />
-            sourceResult={row.feedItem.sourceResult ?? 'null'}<br />
-            sourceEventAt={fmtTimestamp(row.feedItem.sourceEventAt)}<br />
-            sourceAnswerId={row.feedItem.sourceAnswerId ?? 'null'}<br />
+            state={row.feedItem.state}
+            <br />
+            sourceResult={row.feedItem.sourceResult ?? 'null'}
+            <br />
+            sourceEventAt={fmtTimestamp(row.feedItem.sourceEventAt)}
+            <br />
+            sourceAnswerId={row.feedItem.sourceAnswerId ?? 'null'}
+            <br />
             isPinned={fmtBool(row.feedItem.isPinned)}
           </>
         ) : (
           <span style={{ color: '#a02500' }}>no row</span>
         )}
       </td>
-      <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontSize: '12px', fontWeight: 'bold', color, whiteSpace: 'nowrap' }}>
+      <td
+        style={{
+          padding: '4px 8px',
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          fontWeight: 'bold',
+          color,
+          whiteSpace: 'nowrap',
+        }}
+      >
         {row.diagnosis}
       </td>
     </tr>
@@ -96,11 +135,15 @@ function FriendBlock({ block }: { block: FriendCoverageFriendBlock }) {
         {' · '}friendship={block.friendshipStatus ?? '(none)'}
         {' · '}rows={block.recentCorrectAnswers.length}
         {missingCanonical > 0 && (
-          <span style={{ color: '#a02500' }}>{' · '}missingCanonical={missingCanonical}</span>
+          <span style={{ color: '#a02500' }}>
+            {' · '}missingCanonical={missingCanonical}
+          </span>
         )}
       </summary>
 
-      {block.note && <p style={{ color: '#666', fontSize: '12px', marginTop: '8px' }}>{block.note}</p>}
+      {block.note && (
+        <p style={{ color: '#666', fontSize: '12px', marginTop: '8px' }}>{block.note}</p>
+      )}
 
       {missingCanonical > 0 && <BackfillButton answererUserId={block.friendUserId} />}
 
@@ -108,7 +151,9 @@ function FriendBlock({ block }: { block: FriendCoverageFriendBlock }) {
         <table style={{ width: '100%', marginTop: '8px', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f4f4f4' }}>
-              <th style={{ padding: '4px 8px', textAlign: 'left', fontSize: '11px' }}>answered_at</th>
+              <th style={{ padding: '4px 8px', textAlign: 'left', fontSize: '11px' }}>
+                answered_at
+              </th>
               <th style={{ padding: '4px 8px', textAlign: 'left', fontSize: '11px' }}>source</th>
               <th style={{ padding: '4px 8px', textAlign: 'left', fontSize: '11px' }}>question</th>
               <th style={{ padding: '4px 8px', textAlign: 'left', fontSize: '11px' }}>gates</th>
@@ -148,35 +193,64 @@ export default async function FriendCoverageDebugPage({ searchParams }: PageProp
     }, {});
 
   return (
-    <main style={{ padding: '16px', maxWidth: '1400px', margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>
+    <main
+      style={{
+        padding: '16px',
+        maxWidth: '1400px',
+        margin: '0 auto',
+        fontFamily: 'system-ui, sans-serif',
+      }}
+    >
       <h1 style={{ fontFamily: 'monospace', fontSize: '18px' }}>Feed friend-coverage diagnostic</h1>
       <p style={{ color: '#666', fontSize: '12px', marginTop: '4px' }}>
-        For each friend, the most recent <code>limit</code> correct daily / catchup mastery events, and whether each one is visible in your feed (and if not, why). This is a diagnostic, not product UI.
+        For each friend, the most recent <code>limit</code> correct daily / catchup mastery events,
+        and whether each one is visible in your feed (and if not, why). This is a diagnostic, not
+        product UI.
       </p>
 
       <form method="get" style={{ marginTop: '12px', fontSize: '12px' }}>
         <label>
           friend name/phone/id:{' '}
-          <input name="friend" defaultValue={friendQuery ?? ''} style={{ padding: '2px 6px', fontFamily: 'monospace' }} />
-        </label>
-        {' '}
+          <input
+            name="friend"
+            defaultValue={friendQuery ?? ''}
+            style={{ padding: '2px 6px', fontFamily: 'monospace' }}
+          />
+        </label>{' '}
         <label>
           limit:{' '}
-          <input name="limit" defaultValue={String(limit)} style={{ padding: '2px 6px', width: '60px', fontFamily: 'monospace' }} />
-        </label>
-        {' '}
-        <button type="submit" style={{ padding: '3px 10px' }}>Run</button>
+          <input
+            name="limit"
+            defaultValue={String(limit)}
+            style={{ padding: '2px 6px', width: '60px', fontFamily: 'monospace' }}
+          />
+        </label>{' '}
+        <button type="submit" style={{ padding: '3px 10px' }}>
+          Run
+        </button>
       </form>
 
-      <section style={{ marginTop: '16px', padding: '8px 12px', background: '#fafafa', border: '1px solid #eee', fontFamily: 'monospace', fontSize: '12px' }}>
+      <section
+        style={{
+          marginTop: '16px',
+          padding: '8px 12px',
+          background: '#fafafa',
+          border: '1px solid #eee',
+          fontFamily: 'monospace',
+          fontSize: '12px',
+        }}
+      >
         <div>viewer={data.viewerUserId}</div>
-        <div>friendQuery={data.friendQuery ?? '(all)'} limit={data.limit}</div>
+        <div>
+          friendQuery={data.friendQuery ?? '(all)'} limit={data.limit}
+        </div>
         <div>
           friendships={data.summary.totalFriendshipsForViewer}
           {' · '}active={data.summary.activeFriendCount}
-          {' · '}viewerActiveFeedItems={data.summary.viewerActiveFeedItemCount}/{data.summary.rolloffCap}
+          {' · '}viewerActiveFeedItems={data.summary.viewerActiveFeedItemCount}/
+          {data.summary.rolloffCap}
           {data.summary.viewerActiveFeedItemCount >= data.summary.rolloffCap && (
-            <strong style={{ color: '#a02500' }}>{' '}— rolloff is in play</strong>
+            <strong style={{ color: '#a02500' }}> — rolloff is in play</strong>
           )}
         </div>
         <div style={{ marginTop: '6px' }}>
@@ -184,10 +258,16 @@ export default async function FriendCoverageDebugPage({ searchParams }: PageProp
           {Object.keys(diagnosisCounts).length === 0
             ? '(none)'
             : Object.entries(diagnosisCounts).map(([k, v]) => (
-              <span key={k} style={{ marginRight: '12px', color: DIAGNOSIS_COLORS[k as FriendCoverageDiagnosis] ?? '#000' }}>
-                {k}={v}
-              </span>
-            ))}
+                <span
+                  key={k}
+                  style={{
+                    marginRight: '12px',
+                    color: DIAGNOSIS_COLORS[k as FriendCoverageDiagnosis] ?? '#000',
+                  }}
+                >
+                  {k}={v}
+                </span>
+              ))}
         </div>
       </section>
 

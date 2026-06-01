@@ -5,14 +5,22 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 
-import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
+import {
+  GameplayChatThread,
+  newMessageId,
+  type ChatMessage,
+  type RecheckActionResult,
+} from '@/components/play/GameplayChat';
 import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { TopUpAreasModal, type TopUpInterest } from '@/components/daily/TopUpAreasModal';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
-import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
+import {
+  buildSessionCloseLines,
+  type SessionSlotSummary,
+} from '@/server/mastery/session-close-copy';
 
 function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
   // Figma shows the topic/category as the question chip (not the difficulty tier).
@@ -20,7 +28,9 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
     (slot.broad_category && slot.broad_category.trim()) ||
     (slot.category ? categoryLabel(slot.category) : '') ||
     slot.domain;
-  const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category ? [{ label: category }] : [];
+  const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category
+    ? [{ label: category }]
+    : [];
   // Daily Five +2 bonus slots (friend-answered) carry an answerer and are always
   // "accessible" — surface the accessibility badge so the lighter pick reads as
   // a deliberate, easier add rather than a generation miss.
@@ -78,7 +88,11 @@ const ANSWER_ERROR_MESSAGES: Record<string, string> = {
 };
 
 function answerFailureMessage(body: FailedAnswerResponse | null): string {
-  return body?.message ?? (body?.error ? ANSWER_ERROR_MESSAGES[body.error] : undefined) ?? 'Could not record that answer.';
+  return (
+    body?.message ??
+    (body?.error ? ANSWER_ERROR_MESSAGES[body.error] : undefined) ??
+    'Could not record that answer.'
+  );
 }
 
 // Returns the slot the player should be on, or null when the round is over.
@@ -91,7 +105,10 @@ function currentPendingSlot(slots: QueueSlot[]): QueueSlot | null {
   return slots.find((slot) => !slot.answered && !slot.skipped) ?? null;
 }
 
-function sessionCloseLines(slots: QueueSlot[]): { scoreLine: string; interpretiveLine: string | null } {
+function sessionCloseLines(slots: QueueSlot[]): {
+  scoreLine: string;
+  interpretiveLine: string | null;
+} {
   if (slots.length > 0 && slots.every((slot) => slot.skipped)) {
     return { scoreLine: "We'll come back to these.", interpretiveLine: null };
   }
@@ -119,13 +136,18 @@ export default function DailyPage() {
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
   const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
-  const [areaTopUp, setAreaTopUp] = useState<{ existing: TopUpInterest[]; maxNew: number } | null>(null);
+  const [areaTopUp, setAreaTopUp] = useState<{ existing: TopUpInterest[]; maxNew: number } | null>(
+    null,
+  );
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/daily/queue', { cache: 'no-store', credentials: 'include' });
+      const response = await fetch('/api/daily/queue', {
+        cache: 'no-store',
+        credentials: 'include',
+      });
       const body = await response.json().catch(() => null);
 
       if (response.ok && body?.queue === null) {
@@ -146,7 +168,10 @@ export default function DailyPage() {
           }
           throw new Error(createBody?.message ?? 'Could not load today.');
         }
-        const refetchResponse = await fetch('/api/daily/queue', { cache: 'no-store', credentials: 'include' });
+        const refetchResponse = await fetch('/api/daily/queue', {
+          cache: 'no-store',
+          credentials: 'include',
+        });
         const refetchBody = await refetchResponse.json().catch(() => null);
         if (!refetchResponse.ok) {
           throw new Error(refetchBody?.message ?? 'Could not load today.');
@@ -157,7 +182,11 @@ export default function DailyPage() {
           return;
         }
         const refetchSlots = Array.isArray(refetchBody.slots) ? refetchBody.slots : [];
-        setQueue({ queue_id: refetchBody.queue_id, queue_date: refetchBody.queue_date, slots: refetchSlots });
+        setQueue({
+          queue_id: refetchBody.queue_id,
+          queue_date: refetchBody.queue_date,
+          slots: refetchSlots,
+        });
         setLoading(false);
         return;
       }
@@ -210,9 +239,11 @@ export default function DailyPage() {
           credentials: 'include',
         });
         if (!response.ok) return;
-        const body = (await response.json().catch(() => null)) as
-          | { eligible?: boolean; existing?: TopUpInterest[]; remainingSlots?: number }
-          | null;
+        const body = (await response.json().catch(() => null)) as {
+          eligible?: boolean;
+          existing?: TopUpInterest[];
+          remainingSlots?: number;
+        } | null;
         if (cancelled || !body?.eligible) return;
         setAreaTopUp({
           existing: Array.isArray(body.existing) ? body.existing : [],
@@ -236,54 +267,72 @@ export default function DailyPage() {
   const queueLength = queue && queue.slots.length > 0 ? queue.slots.length : DAILY_QUEUE_SIZE;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
 
+  const requestRecheck = useCallback(
+    async (slotIndex: number): Promise<RecheckActionResult> => {
+      if (!queue) throw new Error('No active queue');
 
-  const requestRecheck = useCallback(async (slotIndex: number): Promise<RecheckActionResult> => {
-    if (!queue) throw new Error('No active queue');
+      const response = await fetch('/api/daily/recheck', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slotIndex }),
+      });
+      const body = (await response.json().catch(() => null)) as
+        | RecheckResponse
+        | FailedAnswerResponse
+        | null;
 
-    const response = await fetch('/api/daily/recheck', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slotIndex }),
-    });
-    const body = await response.json().catch(() => null) as RecheckResponse | FailedAnswerResponse | null;
+      if (!response.ok) {
+        throw new Error(
+          body && 'message' in body && body.message
+            ? body.message
+            : 'Could not recheck that answer.',
+        );
+      }
 
-    if (!response.ok) {
-      throw new Error(body && 'message' in body && body.message ? body.message : 'Could not recheck that answer.');
-    }
+      const accepted = Boolean(body && 'accepted' in body && body.accepted);
+      const status = body && 'status' in body ? body.status : accepted ? 'accepted' : 'rejected';
+      const reason = body && 'reason' in body && body.reason ? body.reason : null;
+      const pointsAwarded =
+        body && 'pointsAwarded' in body && typeof body.pointsAwarded === 'number'
+          ? body.pointsAwarded
+          : 0;
+      const correctAnswer =
+        body && 'correctAnswer' in body && body.correctAnswer ? body.correctAnswer : undefined;
 
-    const accepted = Boolean(body && 'accepted' in body && body.accepted);
-    const status = body && 'status' in body ? body.status : accepted ? 'accepted' : 'rejected';
-    const reason = body && 'reason' in body && body.reason ? body.reason : null;
-    const pointsAwarded = body && 'pointsAwarded' in body && typeof body.pointsAwarded === 'number' ? body.pointsAwarded : 0;
-    const correctAnswer = body && 'correctAnswer' in body && body.correctAnswer ? body.correctAnswer : undefined;
+      setQueue((existing) =>
+        existing
+          ? {
+              ...existing,
+              slots: existing.slots.map((slot) =>
+                slot.slot_index === slotIndex
+                  ? {
+                      ...slot,
+                      answer_state: accepted ? 'correct' : 'incorrect',
+                      awarded_points: accepted ? pointsAwarded : slot.awarded_points,
+                      reveal_canonical_answer: correctAnswer ?? slot.reveal_canonical_answer,
+                      recheck_status: status,
+                      recheck_reason: reason,
+                    }
+                  : slot,
+              ),
+            }
+          : existing,
+      );
 
-    setQueue((existing) => existing
-      ? {
-          ...existing,
-          slots: existing.slots.map((slot) =>
-            slot.slot_index === slotIndex
-              ? {
-                  ...slot,
-                  answer_state: accepted ? 'correct' : 'incorrect',
-                  awarded_points: accepted ? pointsAwarded : slot.awarded_points,
-                  reveal_canonical_answer: correctAnswer ?? slot.reveal_canonical_answer,
-                  recheck_status: status,
-                  recheck_reason: reason,
-                }
-              : slot
-          ),
-        }
-      : existing);
-
-    if (accepted) {
-      return { accepted: true, message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.` };
-    }
-    if (status === 'needs_human') {
-      return { accepted: false, message: reason ?? 'Flagged for a human look.' };
-    }
-    return { accepted: false, message: reason ?? 'Rechecked and still marked wrong.' };
-  }, [queue]);
+      if (accepted) {
+        return {
+          accepted: true,
+          message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
+        };
+      }
+      if (status === 'needs_human') {
+        return { accepted: false, message: reason ?? 'Flagged for a human look.' };
+      }
+      return { accepted: false, message: reason ?? 'Rechecked and still marked wrong.' };
+    },
+    [queue],
+  );
 
   const messages = useMemo<ChatMessage[]>(() => {
     if (!queue) return [];
@@ -312,7 +361,8 @@ export default function DailyPage() {
           questionText: slot.question_text,
           result: slot.answer_state === 'correct' ? 'correct' : gaveUp ? 'gave_up' : 'wrong',
           submitted: slot.submitted_answer ?? '',
-          correctAnswer: slot.answer_state === 'correct' ? null : slot.reveal_canonical_answer ?? null,
+          correctAnswer:
+            slot.answer_state === 'correct' ? null : (slot.reveal_canonical_answer ?? null),
           consolation: slot.reveal_quip ?? null,
           insideJoke: slot.reveal_inside_joke ?? null,
           authorNote: slot.source === 'friend' ? (slot.author_note ?? null) : null,
@@ -322,9 +372,10 @@ export default function DailyPage() {
           creatorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
           canonicalSubcategory: slot.domain,
           openedTerritoryDomain: openedTerritoryBySlot[slot.slot_index] ?? null,
-          recheckAction: slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
-            ? { onSubmit: () => requestRecheck(slot.slot_index) }
-            : null,
+          recheckAction:
+            slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
+              ? { onSubmit: () => requestRecheck(slot.slot_index) }
+              : null,
         });
         continue;
       }
@@ -372,7 +423,16 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer, pendingGiveUp, openedTerritoryBySlot]);
+  }, [
+    allDone,
+    currentSlot?.slot_index,
+    queue,
+    requestRecheck,
+    submitting,
+    answer,
+    pendingGiveUp,
+    openedTerritoryBySlot,
+  ]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -394,94 +454,106 @@ export default function DailyPage() {
         body: JSON.stringify({ source: 'daily', queueId, slotIndex }),
       });
       if (!response.ok) return;
-      const body = await response.json().catch(() => null) as { breadcrumb?: string | null } | null;
+      const body = (await response.json().catch(() => null)) as {
+        breadcrumb?: string | null;
+      } | null;
       const breadcrumb = body?.breadcrumb ?? null;
       if (!breadcrumb) return;
-      setQueue((existing) => existing && existing.queue_id === queueId
-        ? {
-            ...existing,
-            slots: existing.slots.map((slot) =>
-              slot.slot_index === slotIndex
-                ? { ...slot, reveal_breadcrumb: breadcrumb }
-                : slot,
-            ),
-          }
-        : existing);
+      setQueue((existing) =>
+        existing && existing.queue_id === queueId
+          ? {
+              ...existing,
+              slots: existing.slots.map((slot) =>
+                slot.slot_index === slotIndex ? { ...slot, reveal_breadcrumb: breadcrumb } : slot,
+              ),
+            }
+          : existing,
+      );
     } catch {
       // Breadcrumb is purely additive context; failure is silently ignored.
     }
   }, []);
 
-  const postAnswer = useCallback(async (opts: { submittedAnswer: string; gaveUp: boolean }) => {
-    if (!queue || !currentSlot || submitting) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/daily/answer', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          queue_id: queue.queue_id,
-          slot_index: currentSlot.slot_index,
-          submitted_answer: opts.submittedAnswer,
-          gave_up: opts.gaveUp,
-        }),
-      });
-      if (!response.ok) {
-        const failedBody = await response.json().catch(() => null) as FailedAnswerResponse | null;
-        throw new Error(answerFailureMessage(failedBody));
-      }
+  const postAnswer = useCallback(
+    async (opts: { submittedAnswer: string; gaveUp: boolean }) => {
+      if (!queue || !currentSlot || submitting) return;
+      setSubmitting(true);
+      setError(null);
+      try {
+        const response = await fetch('/api/daily/answer', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            queue_id: queue.queue_id,
+            slot_index: currentSlot.slot_index,
+            submitted_answer: opts.submittedAnswer,
+            gave_up: opts.gaveUp,
+          }),
+        });
+        if (!response.ok) {
+          const failedBody = (await response
+            .json()
+            .catch(() => null)) as FailedAnswerResponse | null;
+          throw new Error(answerFailureMessage(failedBody));
+        }
 
-      const body = await response.json().catch(() => null) as AnswerResponse | null;
-      if (!body) {
-        throw new Error('Could not record that answer.');
-      }
+        const body = (await response.json().catch(() => null)) as AnswerResponse | null;
+        if (!body) {
+          throw new Error('Could not record that answer.');
+        }
 
-      const isCorrect = Boolean(body.isCorrect ?? body.correct);
-      // A correct answer in an unfamiliar domain default-adds it to the KB
-      // (B-1). The server reports the freshly-opened domain on masteryDelta;
-      // stash it per-slot so the reveal can surface the "Added — remove?" undo.
-      // Client-only — deliberately not persisted into the QueueSlot schema.
-      const masteryDelta = body.masteryDelta ?? body.mastery_delta;
-      const openedDomain = isCorrect ? pickOpenedTerritoryDomain(masteryDelta) : null;
-      if (openedDomain) {
-        setOpenedTerritoryBySlot((existing) => ({ ...existing, [currentSlot.slot_index]: openedDomain }));
-      }
-      setQueue((existing) => existing
-        ? {
+        const isCorrect = Boolean(body.isCorrect ?? body.correct);
+        // A correct answer in an unfamiliar domain default-adds it to the KB
+        // (B-1). The server reports the freshly-opened domain on masteryDelta;
+        // stash it per-slot so the reveal can surface the "Added — remove?" undo.
+        // Client-only — deliberately not persisted into the QueueSlot schema.
+        const masteryDelta = body.masteryDelta ?? body.mastery_delta;
+        const openedDomain = isCorrect ? pickOpenedTerritoryDomain(masteryDelta) : null;
+        if (openedDomain) {
+          setOpenedTerritoryBySlot((existing) => ({
             ...existing,
-            slots: existing.slots.map((slot) =>
-              slot.slot_index === currentSlot.slot_index
-                ? {
-                    ...slot,
-                    answered: true,
-                    answer_state: isCorrect ? 'correct' : 'incorrect',
-                    submitted_answer: opts.gaveUp ? '' : opts.submittedAnswer,
-                    awarded_points: body.pointsAwarded ?? body.awarded_points ?? 0,
-                    reveal_canonical_answer: body.correctAnswer ?? body.answer,
-                    reveal_explainer: body.explanation ?? body.explainer,
-                    reveal_breadcrumb: null,
-                    reveal_quip: opts.gaveUp ? null : body.consolation ?? null,
-                    reveal_inside_joke: body.insideJoke ?? null,
-                  }
-                : slot
-            ),
-          }
-        : existing);
-      setPausedAfterSlotIndex(currentSlot.slot_index);
-      window.setTimeout(() => setPausedAfterSlotIndex(null), 850);
-      setAnswer('');
+            [currentSlot.slot_index]: openedDomain,
+          }));
+        }
+        setQueue((existing) =>
+          existing
+            ? {
+                ...existing,
+                slots: existing.slots.map((slot) =>
+                  slot.slot_index === currentSlot.slot_index
+                    ? {
+                        ...slot,
+                        answered: true,
+                        answer_state: isCorrect ? 'correct' : 'incorrect',
+                        submitted_answer: opts.gaveUp ? '' : opts.submittedAnswer,
+                        awarded_points: body.pointsAwarded ?? body.awarded_points ?? 0,
+                        reveal_canonical_answer: body.correctAnswer ?? body.answer,
+                        reveal_explainer: body.explanation ?? body.explainer,
+                        reveal_breadcrumb: null,
+                        reveal_quip: opts.gaveUp ? null : (body.consolation ?? null),
+                        reveal_inside_joke: body.insideJoke ?? null,
+                      }
+                    : slot,
+                ),
+              }
+            : existing,
+        );
+        setPausedAfterSlotIndex(currentSlot.slot_index);
+        window.setTimeout(() => setPausedAfterSlotIndex(null), 850);
+        setAnswer('');
 
-      if (!opts.gaveUp) {
-        void fetchBreadcrumb(queue.queue_id, currentSlot.slot_index);
+        if (!opts.gaveUp) {
+          void fetchBreadcrumb(queue.queue_id, currentSlot.slot_index);
+        }
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Could not record that answer.');
+      } finally {
+        setSubmitting(false);
       }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not record that answer.');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [currentSlot, fetchBreadcrumb, queue, submitting]);
+    },
+    [currentSlot, fetchBreadcrumb, queue, submitting],
+  );
 
   const submitAnswer = useCallback(async () => {
     const trimmed = answer.trim();
@@ -510,8 +582,12 @@ export default function DailyPage() {
       >
         <div className="flex items-center gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Daily Five</p>
-            <h1 className="font-serif text-xl font-semibold text-[var(--text)]">Today&apos;s five</h1>
+            <p className="text-xs tracking-[0.1em] text-[var(--text-muted)] uppercase">
+              Daily Five
+            </p>
+            <h1 className="font-serif text-xl font-semibold text-[var(--text)]">
+              Today&apos;s five
+            </h1>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -523,7 +599,7 @@ export default function DailyPage() {
           <Link
             href="/"
             aria-label="Close"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             <X className="size-5" strokeWidth={1.9} />
           </Link>
@@ -532,12 +608,15 @@ export default function DailyPage() {
 
       <section
         className="flex-1 overflow-y-auto px-4 py-4"
-        style={{ paddingBottom: "calc(24px + env(safe-area-inset-bottom))" }}
+        style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}
       >
         {loading ? (
           <LoadingScreen fullScreen label="Loading today" />
         ) : error ? (
-          <div className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm text-[var(--danger)]" style={{ borderColor: 'var(--danger)' }}>
+          <div
+            className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm text-[var(--danger)]"
+            style={{ borderColor: 'var(--danger)' }}
+          >
             {error}
           </div>
         ) : (
@@ -572,7 +651,11 @@ export default function DailyPage() {
               className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
               style={{ borderColor: 'var(--border)' }}
             />
-            <button type="submit" className="btn-primary shrink-0" disabled={submitting || !answer.trim()}>
+            <button
+              type="submit"
+              className="btn-primary shrink-0"
+              disabled={submitting || !answer.trim()}
+            >
               {submitting ? '...' : 'Answer'}
             </button>
           </div>

@@ -58,8 +58,12 @@ export default function DailyCatchupPage() {
         }}
       >
         <div className="flex items-center justify-between gap-3">
-          <nav className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
-            <button type="button" onClick={() => router.push('/')} className="underline-offset-4 hover:underline">
+          <nav className="text-[0.62rem] font-medium tracking-[0.12em] text-[var(--text-muted)] uppercase">
+            <button
+              type="button"
+              onClick={() => router.push('/')}
+              className="underline-offset-4 hover:underline"
+            >
               Home
             </button>
             <span className="px-1.5">/</span>
@@ -68,14 +72,16 @@ export default function DailyCatchupPage() {
           <Link
             href="/"
             aria-label="Close"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             <X className="size-5" strokeWidth={1.9} />
           </Link>
         </div>
         <div className="mt-2 flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">Catch up</p>
+            <p className="text-xs font-medium tracking-[0.12em] text-[var(--text-muted)] uppercase">
+              Catch up
+            </p>
             <h1 className="font-serif text-xl font-semibold text-[var(--text)]">
               {loading
                 ? 'Missed questions'
@@ -83,7 +89,7 @@ export default function DailyCatchupPage() {
             </h1>
           </div>
           {!loading && hasItems ? (
-            <p className="shrink-0 text-right text-[0.65rem] font-medium uppercase tracking-[0.1em] text-[var(--text-muted)]">
+            <p className="shrink-0 text-right text-[0.65rem] font-medium tracking-[0.1em] text-[var(--text-muted)] uppercase">
               {remainingLabel}
             </p>
           ) : null}
@@ -103,7 +109,10 @@ export default function DailyCatchupPage() {
         ) : error ? (
           <div
             className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm text-[var(--danger)]"
-            style={{ borderColor: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 10%, var(--surface))' }}
+            style={{
+              borderColor: 'var(--danger)',
+              background: 'color-mix(in srgb, var(--danger) 10%, var(--surface))',
+            }}
           >
             <p>{error}</p>
             <button type="button" className="btn-ghost mt-3" onClick={() => void reload()}>
@@ -111,7 +120,10 @@ export default function DailyCatchupPage() {
             </button>
           </div>
         ) : !hasItems ? (
-          <div className="mt-10 rounded-[var(--radius-md)] border p-5 text-center" style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}>
+          <div
+            className="mt-10 rounded-[var(--radius-md)] border p-5 text-center"
+            style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+          >
             <p className="font-serif text-lg text-[var(--text)]">{CATCH_UP_EMPTY_COPY}</p>
             <button type="button" className="btn-primary mt-4" onClick={() => router.push('/')}>
               Back home
@@ -130,7 +142,9 @@ export default function DailyCatchupPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm leading-6 text-[var(--text)]">{introCopy}</p>
-                    <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{CATCH_UP_POINTS_CAPTION}</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+                      {CATCH_UP_POINTS_CAPTION}
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -153,10 +167,12 @@ export default function DailyCatchupPage() {
                   background: 'color-mix(in srgb, var(--success) 8%, var(--surface-2))',
                 }}
               >
-                <p className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-[var(--success)]">
+                <p className="text-[0.62rem] font-medium tracking-[0.12em] text-[var(--success)] uppercase">
                   All handled
                 </p>
-                <h2 className="mt-2 font-serif text-2xl font-semibold text-[var(--text)]">{CATCH_UP_COMPLETION_COPY}</h2>
+                <h2 className="mt-2 font-serif text-2xl font-semibold text-[var(--text)]">
+                  {CATCH_UP_COMPLETION_COPY}
+                </h2>
                 <p className="mt-3 text-sm text-[var(--text-muted)]">
                   {caughtUpCount} caught up - {stats.correct} correct - {stats.dismissed} dismissed
                 </p>
@@ -200,14 +216,18 @@ export default function DailyCatchupPage() {
               className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
               style={{ borderColor: 'var(--border)' }}
             />
-            <button type="submit" className="btn-primary shrink-0" disabled={submitting || isResolvingTurn || !answer.trim()}>
+            <button
+              type="submit"
+              className="btn-primary shrink-0"
+              disabled={submitting || isResolvingTurn || !answer.trim()}
+            >
               {submitting ? '...' : 'Answer'}
             </button>
           </div>
           <div className="mt-2 flex items-center gap-3">
             <button
               type="button"
-              className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)] underline-offset-4 hover:underline disabled:opacity-50"
+              className="text-xs font-medium tracking-[0.08em] text-[var(--text-muted)] uppercase underline-offset-4 hover:underline disabled:opacity-50"
               disabled={submitting || isResolvingTurn}
               onClick={skipCurrent}
             >
@@ -218,9 +238,18 @@ export default function DailyCatchupPage() {
       ) : null}
 
       {confirmingDismiss ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/35 px-4 py-5" role="dialog" aria-modal="true">
-          <div className="mx-auto w-full max-w-md rounded-[var(--radius-md)] border bg-[var(--surface)] p-4 shadow-lg" style={{ borderColor: 'var(--border)' }}>
-            <h2 className="font-serif text-lg font-semibold text-[var(--text)]">Drop this from catch-up?</h2>
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/35 px-4 py-5"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="mx-auto w-full max-w-md rounded-[var(--radius-md)] border bg-[var(--surface)] p-4 shadow-lg"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <h2 className="font-serif text-lg font-semibold text-[var(--text)]">
+              Drop this from catch-up?
+            </h2>
             <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
               It will stop appearing in this catch-up list.
             </p>
@@ -236,7 +265,12 @@ export default function DailyCatchupPage() {
               >
                 Yes, drop it
               </button>
-              <button type="button" className="btn-ghost flex-1" disabled={submitting} onClick={() => setConfirmingDismiss(false)}>
+              <button
+                type="button"
+                className="btn-ghost flex-1"
+                disabled={submitting}
+                onClick={() => setConfirmingDismiss(false)}
+              >
                 Cancel
               </button>
             </div>

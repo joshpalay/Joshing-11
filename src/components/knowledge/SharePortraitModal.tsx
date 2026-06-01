@@ -48,7 +48,9 @@ export function SharePortraitModal({
 
   // Load Playfair Display on mount
   useEffect(() => {
-    loadPlayfairDisplay().then(() => setFontReady(true)).catch(() => setFontReady(true));
+    loadPlayfairDisplay()
+      .then(() => setFontReady(true))
+      .catch(() => setFontReady(true));
   }, []);
 
   const captureCanvas = useCallback(async () => {
@@ -69,15 +71,14 @@ export function SharePortraitModal({
     try {
       if (!fontReady) await loadPlayfairDisplay();
       const canvas = await captureCanvas();
-      if (!canvas) { setPhase('error'); return; }
+      if (!canvas) {
+        setPhase('error');
+        return;
+      }
 
       const dataUrl = canvas.toDataURL('image/png');
 
-      if (
-        typeof navigator !== 'undefined' &&
-        'share' in navigator &&
-        'canShare' in navigator
-      ) {
+      if (typeof navigator !== 'undefined' && 'share' in navigator && 'canShare' in navigator) {
         const blob = await (await fetch(dataUrl)).blob();
         const file = new File([blob], 'joshing-portrait.png', { type: 'image/png' });
         if (navigator.canShare({ files: [file] })) {
@@ -107,7 +108,10 @@ export function SharePortraitModal({
     try {
       if (!fontReady) await loadPlayfairDisplay();
       const canvas = await captureCanvas();
-      if (!canvas) { setPhase('error'); return; }
+      if (!canvas) {
+        setPhase('error');
+        return;
+      }
       const link = document.createElement('a');
       link.download = 'joshing-portrait.png';
       link.href = canvas.toDataURL('image/png');
@@ -130,19 +134,23 @@ export function SharePortraitModal({
 
   // Close on Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
   return (
-    <div style={overlayStyle} onClick={handleOverlayClick} role="dialog" aria-modal="true" aria-label="Share portrait">
+    <div
+      style={overlayStyle}
+      onClick={handleOverlayClick}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Share portrait"
+    >
       <div style={contentStyle}>
-        <SharePortraitCard
-          ref={cardRef}
-          entries={entries}
-          playerDisplayName={playerDisplayName}
-        />
+        <SharePortraitCard ref={cardRef} entries={entries} playerDisplayName={playerDisplayName} />
 
         <div style={buttonRowStyle}>
           <button
@@ -165,19 +173,12 @@ export function SharePortraitModal({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isCapturing}
-            className="btn-ghost px-6"
-          >
+          <button type="button" onClick={onClose} disabled={isCapturing} className="btn-ghost px-6">
             Cancel
           </button>
         </div>
 
-        {phase === 'error' && (
-          <p style={errorStyle}>Something went wrong. Try again.</p>
-        )}
+        {phase === 'error' && <p style={errorStyle}>Something went wrong. Try again.</p>}
       </div>
     </div>
   );

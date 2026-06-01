@@ -35,7 +35,6 @@ if (DRY_RUN) {
   console.log('[backfill-domains] APPLY mode — data will be modified.\n');
 }
 
-
 function logDatabaseErrorCause(err: unknown) {
   const cause = err instanceof Error ? err.cause : undefined;
   if (!cause || typeof cause !== 'object') return;
@@ -43,14 +42,19 @@ function logDatabaseErrorCause(err: unknown) {
   const pgCause = cause as Record<string, unknown>;
   const fields = ['code', 'schema', 'table', 'column', 'constraint', 'detail']
     .map((key) => [key, pgCause[key]] as const)
-    .filter((entry): entry is readonly [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
+    .filter(
+      (entry): entry is readonly [string, string] =>
+        typeof entry[1] === 'string' && entry[1].length > 0,
+    );
 
   const causeMessage = cause instanceof Error ? cause.message : undefined;
   if (causeMessage) {
     console.error(`[backfill-domains] database cause: ${causeMessage}`);
   }
   if (fields.length > 0) {
-    console.error(`[backfill-domains] database details: ${fields.map(([key, value]) => `${key}=${value}`).join(' ')}`);
+    console.error(
+      `[backfill-domains] database details: ${fields.map(([key, value]) => `${key}=${value}`).join(' ')}`,
+    );
   }
 }
 

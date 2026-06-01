@@ -28,7 +28,10 @@ export async function POST(request: NextRequest) {
     );
   }
   if (parsed.recipientUserId === session.userId) {
-    return NextResponse.json({ error: 'validation', message: 'Choose a friend to send this to.' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'validation', message: 'Choose a friend to send this to.' },
+      { status: 400 },
+    );
   }
 
   const friends = await getFriends(session.userId);
@@ -43,10 +46,15 @@ export async function POST(request: NextRequest) {
       ? db.select().from(questions).where(eq(questions.id, sendableQuestionId)).limit(1)
       : Promise.resolve([]),
     db.select().from(users).where(eq(users.id, parsed.recipientUserId)).limit(1),
-    db.select({ displayName: users.displayName }).from(users).where(eq(users.id, session.userId)).limit(1),
+    db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, session.userId))
+      .limit(1),
   ]);
 
-  if (!question[0] || !recipient[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (!question[0] || !recipient[0])
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
   const [alreadyCorrect, alreadyInFeed] = await Promise.all([
     userAnsweredQuestionCorrectly(parsed.recipientUserId, sendableQuestionId!),
@@ -54,7 +62,10 @@ export async function POST(request: NextRequest) {
   ]);
   if (alreadyCorrect) {
     return NextResponse.json(
-      { error: 'already_answered', message: 'That friend has already answered this one correctly.' },
+      {
+        error: 'already_answered',
+        message: 'That friend has already answered this one correctly.',
+      },
       { status: 409 },
     );
   }
@@ -68,12 +79,14 @@ export async function POST(request: NextRequest) {
   const [sentToday] = await db
     .select({ count: sql<number>`count(*)` })
     .from(feedItems)
-    .where(and(
-      eq(feedItems.recipientUserId, parsed.recipientUserId),
-      eq(feedItems.sourceUserId, session.userId),
-      eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
-      gt(feedItems.createdAt, lastTwentyFourHours()),
-    ));
+    .where(
+      and(
+        eq(feedItems.recipientUserId, parsed.recipientUserId),
+        eq(feedItems.sourceUserId, session.userId),
+        eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
+        gt(feedItems.createdAt, lastTwentyFourHours()),
+      ),
+    );
 
   if (Number(sentToday?.count ?? 0) >= 5) {
     return NextResponse.json(
@@ -118,26 +131,31 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ item: created }, { status: 201 });
 }
 
-function parseBody(value: unknown): { questionId: string; recipientUserId: string; personalMessage: string | null } | null {
+function parseBody(
+  value: unknown,
+): { questionId: string; recipientUserId: string; personalMessage: string | null } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const questionId = typeof record.question_id === 'string'
-    ? record.question_id
-    : typeof record.questionId === 'string'
-      ? record.questionId
-      : null;
-  const recipientUserId = typeof record.recipient_user_id === 'string'
-    ? record.recipient_user_id
-    : typeof record.friend_id === 'string'
-      ? record.friend_id
-      : typeof record.recipientUserId === 'string'
-        ? record.recipientUserId
+  const questionId =
+    typeof record.question_id === 'string'
+      ? record.question_id
+      : typeof record.questionId === 'string'
+        ? record.questionId
         : null;
-  const rawMessage = typeof record.personalMessage === 'string'
-    ? record.personalMessage
-    : typeof record.personal_message === 'string'
-      ? record.personal_message
-      : '';
+  const recipientUserId =
+    typeof record.recipient_user_id === 'string'
+      ? record.recipient_user_id
+      : typeof record.friend_id === 'string'
+        ? record.friend_id
+        : typeof record.recipientUserId === 'string'
+          ? record.recipientUserId
+          : null;
+  const rawMessage =
+    typeof record.personalMessage === 'string'
+      ? record.personalMessage
+      : typeof record.personal_message === 'string'
+        ? record.personal_message
+        : '';
   const personalMessage = rawMessage.trim().slice(0, 200) || null;
 
   return questionId && recipientUserId ? { questionId, recipientUserId, personalMessage } : null;
@@ -148,7 +166,11 @@ function lastTwentyFourHours(date = new Date()) {
 }
 
 export async function resolveQuestionIdForSend(questionId: string): Promise<string | null> {
-  const [question] = await db.select({ id: questions.id }).from(questions).where(eq(questions.id, questionId)).limit(1);
+  const [question] = await db
+    .select({ id: questions.id })
+    .from(questions)
+    .where(eq(questions.id, questionId))
+    .limit(1);
   if (question) return question.id;
 
   const [generated] = await db
@@ -176,9 +198,12 @@ export async function resolveQuestionIdForSend(questionId: string): Promise<stri
       category: 'general_knowledge',
       broadCategory: generated.broadCategory,
       canonicalSubcategory: generated.canonicalSubcategory,
-      difficultyEstimate: generated.difficultyEstimate === 'accessible' || generated.difficultyEstimate === 'moderate' || generated.difficultyEstimate === 'specialist'
-        ? generated.difficultyEstimate
-        : null,
+      difficultyEstimate:
+        generated.difficultyEstimate === 'accessible' ||
+        generated.difficultyEstimate === 'moderate' ||
+        generated.difficultyEstimate === 'specialist'
+          ? generated.difficultyEstimate
+          : null,
     })
     .returning({ id: questions.id });
 

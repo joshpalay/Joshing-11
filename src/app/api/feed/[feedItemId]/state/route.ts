@@ -47,22 +47,31 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   if (!item) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  const isCollapsedType = (item.sourceType === 'thumbs_upped' || item.sourceType === 'friend_answered') && item.questionId;
+  const isCollapsedType =
+    (item.sourceType === 'thumbs_upped' || item.sourceType === 'friend_answered') &&
+    item.questionId;
   if (isCollapsedType) {
     // Dismiss all collapsed items for this question in the recipient's feed
     const relatedItems = await db
       .select({ id: feedItems.id })
       .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, item.recipientUserId),
-        eq(feedItems.questionId, item.questionId!),
-        eq(feedItems.sourceType, item.sourceType),
-      ));
+      .where(
+        and(
+          eq(feedItems.recipientUserId, item.recipientUserId),
+          eq(feedItems.questionId, item.questionId!),
+          eq(feedItems.sourceType, item.sourceType),
+        ),
+      );
 
     await db
       .update(feedItems)
       .set({ state })
-      .where(inArray(feedItems.id, relatedItems.map((r) => r.id)));
+      .where(
+        inArray(
+          feedItems.id,
+          relatedItems.map((r) => r.id),
+        ),
+      );
   } else {
     await updateFeedItemState(feedItemId, state);
   }

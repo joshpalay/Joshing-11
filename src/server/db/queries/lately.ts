@@ -105,8 +105,7 @@ export async function getLatelyMoments(userId: string): Promise<LatelyMoment[]> 
   for (const row of rows) {
     if (!row.answeredAt) continue;
     if (!row.friendId) continue;
-    const dir: LatelyDirection =
-      row.creatorId === userId ? 'they_got_you' : 'you_got_them';
+    const dir: LatelyDirection = row.creatorId === userId ? 'they_got_you' : 'you_got_them';
     const friendName = row.friendDisplayName?.trim() || 'A friend';
     moments.push({
       momentId: row.momentId,

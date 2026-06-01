@@ -16,7 +16,9 @@ export type ActiveDeclaredInterestRow = {
 // state lives on PLAYER_MASTERY, so keep this query column-narrowed and never
 // select the legacy DeclaredInterest.territory_type column. Some deployed
 // databases do not have that column, and selecting it breaks onboarding saves.
-export async function getActiveDeclaredInterests(userId: string): Promise<ActiveDeclaredInterestRow[]> {
+export async function getActiveDeclaredInterests(
+  userId: string,
+): Promise<ActiveDeclaredInterestRow[]> {
   const rows = await db
     .select({
       id: declaredInterests.id,

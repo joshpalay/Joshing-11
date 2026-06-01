@@ -96,7 +96,14 @@ export default function MasteryMoment({
         >
           {formatTierLabel(newTier)}
         </p>
-        <p style={{ fontSize: '0.95rem', color: 'var(--brand-ink-400)', maxWidth: '22rem', lineHeight: 1.45 }}>
+        <p
+          style={{
+            fontSize: '0.95rem',
+            color: 'var(--brand-ink-400)',
+            maxWidth: '22rem',
+            lineHeight: 1.45,
+          }}
+        >
           {copyForTier(newTier, subcategory)}
         </p>
       </div>

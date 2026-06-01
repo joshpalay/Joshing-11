@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as { rating?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { rating?: unknown } | null;
   const rating = parseRating(body?.rating);
   if (rating === undefined) {
     return NextResponse.json({ error: 'rating must be up, down, or null' }, { status: 400 });

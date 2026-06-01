@@ -70,9 +70,7 @@ export function MomentRow({
   );
 
   const categorySpan = (
-    <span style={{ fontFamily: FI, fontStyle: 'italic', fontWeight: 500 }}>
-      {moment.category}
-    </span>
+    <span style={{ fontFamily: FI, fontStyle: 'italic', fontWeight: 500 }}>{moment.category}</span>
   );
 
   return (

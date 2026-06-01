@@ -28,10 +28,10 @@ export function SessionCloseMessage({
 
   return (
     <>
-      <p className="text-[1.22rem] text-[var(--text)] leading-relaxed">{scoreLine}</p>
+      <p className="text-[1.22rem] leading-relaxed text-[var(--text)]">{scoreLine}</p>
       {interpretiveLine ? (
         <p
-          className="mt-1 text-[1.05rem] text-[var(--text-muted)] leading-relaxed"
+          className="mt-1 text-[1.05rem] leading-relaxed text-[var(--text-muted)]"
           style={{ opacity: showInterpretive ? 1 : 0, transition: 'opacity 0.25s ease' }}
         >
           {interpretiveLine}

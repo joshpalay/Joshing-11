@@ -20,8 +20,10 @@ export function categoryGainsSourceLines(row: CategoryGainsDeltaRow): string[] {
   const lines: string[] = [];
   if (row.points_from_answers > 0) lines.push(`+${row.points_from_answers} from answers`);
   if (row.points_from_catchup > 0) lines.push(`+${row.points_from_catchup} from catch-up`);
-  if (row.points_from_author_credit > 0) lines.push(`+${row.points_from_author_credit} when others got your questions right`);
-  if (row.points_from_authored > 0) lines.push(`+${row.points_from_authored} from questions you wrote`);
+  if (row.points_from_author_credit > 0)
+    lines.push(`+${row.points_from_author_credit} when others got your questions right`);
+  if (row.points_from_authored > 0)
+    lines.push(`+${row.points_from_authored} from questions you wrote`);
   return lines;
 }
 

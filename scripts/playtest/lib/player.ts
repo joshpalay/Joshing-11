@@ -9,8 +9,20 @@ import { screenshotDir } from './manifest';
 export type PlayerEvent =
   | { kind: 'navigated'; url: string; at: string }
   | { kind: 'question_seen'; index: number; text: string; at: string }
-  | { kind: 'answer_submitted'; index: number; text: string; intent: 'correct' | 'wrong'; at: string }
-  | { kind: 'result_observed'; index: number; correct: boolean; pointsAwarded: number | null; at: string }
+  | {
+      kind: 'answer_submitted';
+      index: number;
+      text: string;
+      intent: 'correct' | 'wrong';
+      at: string;
+    }
+  | {
+      kind: 'result_observed';
+      index: number;
+      correct: boolean;
+      pointsAwarded: number | null;
+      at: string;
+    }
   | { kind: 'console'; level: string; text: string; at: string }
   | { kind: 'network_error'; url: string; status: number | null; at: string }
   | { kind: 'screenshot'; file: string; note: string; at: string }
@@ -58,9 +70,20 @@ async function readCurrentQuestionText(page: Page): Promise<string> {
   // Fallback to the last visible <p> inside the chat thread.
   const testNodes = page.locator('p', { hasText: '[TEST]' });
   if ((await testNodes.count()) > 0) {
-    return ((await testNodes.last().innerText().catch(() => '')) ?? '').trim();
+    return (
+      (await testNodes
+        .last()
+        .innerText()
+        .catch(() => '')) ?? ''
+    ).trim();
   }
-  return ((await page.locator('main p').last().innerText().catch(() => '')) ?? '').trim();
+  return (
+    (await page
+      .locator('main p')
+      .last()
+      .innerText()
+      .catch(() => '')) ?? ''
+  ).trim();
 }
 
 export async function playGame(params: {
@@ -108,7 +131,11 @@ export async function playGame(params: {
   try {
     await inputLocator.first().waitFor({ state: 'visible', timeout: 10_000 });
   } catch {
-    const overlay = await page.locator('[data-nextjs-dialog], #nextjs__container_errors_label').first().innerText().catch(() => '');
+    const overlay = await page
+      .locator('[data-nextjs-dialog], #nextjs__container_errors_label')
+      .first()
+      .innerText()
+      .catch(() => '');
     const trimmedOverlay = overlay.trim();
     const detail = trimmedOverlay
       ? ` Next.js error overlay: ${trimmedOverlay.slice(0, 200)}`
@@ -131,15 +158,16 @@ export async function playGame(params: {
 
     const intent = pickIntent(params.correctnessRate);
     const canonical = canonicalAnswerFor(questionText);
-    const answer = intent === 'correct' && canonical
-      ? canonical
-      : await wrongAnswerFor(canonical ?? 'unknown');
+    const answer =
+      intent === 'correct' && canonical ? canonical : await wrongAnswerFor(canonical ?? 'unknown');
 
     const input = page.locator('input[placeholder="Your answer..."]');
     await input.fill(answer);
     await snap(page, params.runId, `q${index}-before-submit`, log);
 
-    const responsePromise = page.waitForResponse(answerUrlMatcher, { timeout: 15_000 }).catch(() => null);
+    const responsePromise = page
+      .waitForResponse(answerUrlMatcher, { timeout: 15_000 })
+      .catch(() => null);
     // Press Enter rather than clicking [type="submit"]. The bottom <nav
     // aria-label="Primary navigation"> is fixed at the same bottom edge as
     // the sticky answer form and intercepts pointer events on the Send
@@ -153,13 +181,20 @@ export async function playGame(params: {
     let correct = false;
     let pointsAwarded: number | null = null;
     if (response) {
-      const body = await response.json().catch(() => null) as { isCorrect?: boolean; pointsAwarded?: number } | null;
+      const body = (await response.json().catch(() => null)) as {
+        isCorrect?: boolean;
+        pointsAwarded?: number;
+      } | null;
       if (body) {
         correct = body.isCorrect === true;
         pointsAwarded = typeof body.pointsAwarded === 'number' ? body.pointsAwarded : null;
       }
     } else {
-      log.events.push({ kind: 'error', message: `no response to ${answerUrlMatcher} within 15s`, at: now() });
+      log.events.push({
+        kind: 'error',
+        message: `no response to ${answerUrlMatcher} within 15s`,
+        at: now(),
+      });
     }
     log.events.push({ kind: 'result_observed', index, correct, pointsAwarded, at: now() });
 

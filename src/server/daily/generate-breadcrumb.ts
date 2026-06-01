@@ -75,11 +75,13 @@ export async function generateBreadcrumb(params: GenerateBreadcrumbParams): Prom
     model: BREADCRUMB_MODEL,
     max_tokens: 120,
     temperature: 0.55,
-    system: [{
-      type: 'text',
-      text: 'You write tiny contextual breadcrumbs for a warm trivia chat. Return plain text only, no markdown.',
-      cache_control: { type: 'ephemeral' },
-    }],
+    system: [
+      {
+        type: 'text',
+        text: 'You write tiny contextual breadcrumbs for a warm trivia chat. Return plain text only, no markdown.',
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
     messages: [
       {
         role: 'user',

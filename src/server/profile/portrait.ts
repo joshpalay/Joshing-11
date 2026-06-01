@@ -64,7 +64,9 @@ export function getTopCategoriesForMultitudes(
   masteryByCategory: Map<string, MasteryTier>,
   portraitState: PortraitState,
 ): Array<{ canonical_subcategory: string; tier: MasteryTier }> {
-  const sorted = [...categories].sort((a, b) => (b.declared_score + b.proven_score) - (a.declared_score + a.proven_score));
+  const sorted = [...categories].sort(
+    (a, b) => b.declared_score + b.proven_score - (a.declared_score + a.proven_score),
+  );
   const takeCount = portraitState === 'sparse' ? 2 : portraitState === 'developing' ? 3 : 4;
 
   return sorted.slice(0, takeCount).map((item) => ({

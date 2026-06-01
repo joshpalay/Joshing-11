@@ -22,10 +22,7 @@ const APPLY = args.includes('--apply');
 async function main() {
   console.log(`[backfill-avatar-colors] ${APPLY ? 'APPLY' : 'DRY RUN'} mode\n`);
 
-  const candidates = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(isNull(users.avatarColor));
+  const candidates = await db.select({ id: users.id }).from(users).where(isNull(users.avatarColor));
 
   console.log(`[backfill-avatar-colors] ${candidates.length} users without an avatar color.`);
 

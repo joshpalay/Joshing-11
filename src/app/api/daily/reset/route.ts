@@ -14,7 +14,9 @@ export async function POST() {
   const { assignmentDateStr } = getDailyAssignmentBounds();
   await db
     .delete(dailyQueues)
-    .where(and(eq(dailyQueues.userId, session.userId), eq(dailyQueues.queueDate, assignmentDateStr)));
+    .where(
+      and(eq(dailyQueues.userId, session.userId), eq(dailyQueues.queueDate, assignmentDateStr)),
+    );
 
   return NextResponse.json({ ok: true });
 }

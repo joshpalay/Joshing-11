@@ -30,7 +30,11 @@ assert.equal(
 // Already dismissed/completed — the prompt is strictly one-time, regardless of
 // whether the timestamp arrives as a Date or an ISO string.
 assert.equal(
-  isAreaTopUpEligible({ onboardingComplete: true, dismissedAt: new Date(), activeInterestCount: 3 }),
+  isAreaTopUpEligible({
+    onboardingComplete: true,
+    dismissedAt: new Date(),
+    activeInterestCount: 3,
+  }),
   false,
 );
 assert.equal(

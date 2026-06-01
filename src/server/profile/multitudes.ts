@@ -4,7 +4,8 @@ import type { MasteryTier } from '@/types/db';
 import type { PortraitState } from '@/server/profile/portrait';
 
 const MODEL = 'claude-sonnet-4-6';
-const SYSTEM_PROMPT = "You are writing a one-line identity statement for a player in a trivia game where knowledge is identity. Their strongest territories are listed. Write a single sentence — 12 to 25 words — that names their intellectual world with warmth and specificity. Tone: a well-written author bio, not a stats report. Never say 'you are' — the sentence should read like a caption. Specific nouns, not abstractions. The sentence should make the player feel recognized, not evaluated.";
+const SYSTEM_PROMPT =
+  "You are writing a one-line identity statement for a player in a trivia game where knowledge is identity. Their strongest territories are listed. Write a single sentence — 12 to 25 words — that names their intellectual world with warmth and specificity. Tone: a well-written author bio, not a stats report. Never say 'you are' — the sentence should read like a caption. Specific nouns, not abstractions. The sentence should make the player feel recognized, not evaluated.";
 
 type CacheValue = {
   copy: string;
@@ -57,8 +58,8 @@ function truncateCopy(copy: string): string {
   console.warn(
     `[multitudes] generated copy exceeded ${TRUNCATION_THRESHOLD_WORDS} words; truncated to ${TRUNCATED_WORD_COUNT} words`,
     {
-    originalWordCount: words.length,
-    truncatedWordCount: TRUNCATED_WORD_COUNT,
+      originalWordCount: words.length,
+      truncatedWordCount: TRUNCATED_WORD_COUNT,
     },
   );
   return truncated;
@@ -72,7 +73,9 @@ export async function generateMultitudesCopy(input: {
   top_categories: Array<{ canonical_subcategory: string; tier: MasteryTier }>;
   portrait_state: PortraitState;
 }): Promise<{ copy: string; usedFallback: boolean }> {
-  const categoryNames = input.top_categories.map((item) => item.canonical_subcategory).filter(Boolean);
+  const categoryNames = input.top_categories
+    .map((item) => item.canonical_subcategory)
+    .filter(Boolean);
   if (categoryNames.length === 0) {
     return { copy: '', usedFallback: true };
   }

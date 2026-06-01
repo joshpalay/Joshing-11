@@ -36,8 +36,16 @@ type AdaptiveLevelResponse = {
 
 const DIFFICULTIES: { value: Difficulty; label: string; copy: string }[] = [
   { value: 'normal', label: 'Establishing', copy: 'Approachable, core-recognition questions.' },
-  { value: 'moderate', label: 'Familiar', copy: 'Recognizable questions for anyone reasonably engaged with the domain.' },
-  { value: 'challenging', label: 'Solid', copy: 'Deeper-domain questions with more specific recall.' },
+  {
+    value: 'moderate',
+    label: 'Familiar',
+    copy: 'Recognizable questions for anyone reasonably engaged with the domain.',
+  },
+  {
+    value: 'challenging',
+    label: 'Solid',
+    copy: 'Deeper-domain questions with more specific recall.',
+  },
   { value: 'ridiculous', label: 'Mastery', copy: 'Mastery-level deep cuts within the domain.' },
   { value: 'adaptive', label: 'Adaptive', copy: 'Calibrated to your recent performance.' },
 ];
@@ -106,7 +114,11 @@ function DailySetupContent() {
           fetch('/api/account/adaptive-level', { credentials: 'include', cache: 'no-store' }),
         ]);
 
-        if (statusResponse.status === 401 || preferencesResponse.status === 401 || adaptiveResponse.status === 401) {
+        if (
+          statusResponse.status === 401 ||
+          preferencesResponse.status === 401 ||
+          adaptiveResponse.status === 401
+        ) {
           router.replace('/login');
           return;
         }
@@ -138,7 +150,11 @@ function DailySetupContent() {
         const availableDomains = body.domains ?? [];
         if (
           requestedCustom &&
-          !availableDomains.some((domain) => domain.domain.toLocaleLowerCase('en-US') === requestedDomain.toLocaleLowerCase('en-US'))
+          !availableDomains.some(
+            (domain) =>
+              domain.domain.toLocaleLowerCase('en-US') ===
+              requestedDomain.toLocaleLowerCase('en-US'),
+          )
         ) {
           router.replace(`/knowledge?emptyDomain=${encodeURIComponent(requestedDomain)}`);
           return;
@@ -147,15 +163,18 @@ function DailySetupContent() {
         setHasUnstartedQueue(Boolean(status.queue_id));
         setDomains(availableDomains);
         setDifficulty(body.preferences?.difficulty ?? 'adaptive');
-        setDomainMode(requestedCustom ? 'custom' : body.preferences?.domainMode ?? 'random');
-        setSelectedDomains(new Set(requestedCustom ? [requestedDomain] : body.preferences?.selectedDomains ?? []));
+        setDomainMode(requestedCustom ? 'custom' : (body.preferences?.domainMode ?? 'random'));
+        setSelectedDomains(
+          new Set(requestedCustom ? [requestedDomain] : (body.preferences?.selectedDomains ?? [])),
+        );
 
         if (adaptiveResponse.ok) {
           const adaptiveBody = (await adaptiveResponse.json()) as AdaptiveLevelResponse;
           setAdaptiveLabel(adaptiveBody.label ?? null);
         }
       } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : 'Could not load setup.');
+        if (!cancelled)
+          setError(caught instanceof Error ? caught.message : 'Could not load setup.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -169,11 +188,15 @@ function DailySetupContent() {
 
   const categoryGroups = useMemo(() => groupByCategory(domains), [domains]);
   const masteryDomains = useMemo(
-    () => [...domains].sort((a, b) => masteryDistance(a) - masteryDistance(b) || a.domain.localeCompare(b.domain)),
+    () =>
+      [...domains].sort(
+        (a, b) => masteryDistance(a) - masteryDistance(b) || a.domain.localeCompare(b.domain),
+      ),
     [domains],
   );
   const selectedCount = selectedDomains.size;
-  const canStart = !submitting && domains.length > 0 && (domainMode === 'random' || selectedCount > 0);
+  const canStart =
+    !submitting && domains.length > 0 && (domainMode === 'random' || selectedCount > 0);
 
   const toggleDomain = useCallback((domain: string) => {
     setSelectedDomains((existing) => {
@@ -260,22 +283,22 @@ function DailySetupContent() {
   return (
     <main className="mx-auto min-h-dvh max-w-xl px-4 py-8 pb-32">
       <header className="mb-8">
-        <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
           Today&apos;s Five
         </p>
-        <h1 className="mt-3 font-serif text-4xl font-semibold leading-tight text-foreground">
+        <h1 className="text-foreground mt-3 font-serif text-4xl leading-tight font-semibold">
           Set up your round
         </h1>
       </header>
 
       {roundComplete ? (
-        <p className="mb-6 rounded-lg border bg-card p-3 text-sm text-muted-foreground">
+        <p className="bg-card text-muted-foreground mb-6 rounded-lg border p-3 text-sm">
           Today&apos;s round is done. Changes save for your next round.
         </p>
       ) : null}
 
       <section className="border-b pb-7">
-        <p className="mb-3 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.12em] uppercase">
           Difficulty
         </p>
         <div className="flex flex-wrap gap-3">
@@ -286,7 +309,7 @@ function DailySetupContent() {
                 key={item.value}
                 type="button"
                 onClick={() => setDifficulty(item.value)}
-                className={`min-h-11 whitespace-nowrap rounded-full border px-5 text-xs font-medium uppercase tracking-[0.08em] transition ${
+                className={`min-h-11 rounded-full border px-5 text-xs font-medium tracking-[0.08em] whitespace-nowrap uppercase transition ${
                   active ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'
                 }`}
                 aria-pressed={active}
@@ -296,7 +319,7 @@ function DailySetupContent() {
             );
           })}
         </div>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+        <p className="text-muted-foreground mt-3 text-sm leading-6">
           {difficulty === 'adaptive' && adaptiveLabel
             ? `Calibrated to your recent performance: ${adaptiveLabel}`
             : selectedCopy(difficulty)}
@@ -305,17 +328,17 @@ function DailySetupContent() {
 
       <section className="py-7">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
             Domains
           </p>
           {domainMode === 'custom' ? (
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
               {selectedCount} selected
             </p>
           ) : null}
         </div>
 
-        <div className="mb-4 grid rounded-full border bg-card p-1 text-sm font-medium">
+        <div className="bg-card mb-4 grid rounded-full border p-1 text-sm font-medium">
           <div className="grid grid-cols-2">
             {(['random', 'custom'] as const).map((mode) => (
               <button
@@ -334,12 +357,12 @@ function DailySetupContent() {
         </div>
 
         {domainMode === 'random' ? (
-          <p className="text-sm leading-6 text-muted-foreground">
+          <p className="text-muted-foreground text-sm leading-6">
             We&apos;ll pull from across your full knowledge base.
           </p>
         ) : (
           <div>
-            <div className="mb-4 inline-grid grid-cols-2 rounded-full border bg-card p-1 text-xs font-medium uppercase tracking-[0.08em]">
+            <div className="bg-card mb-4 inline-grid grid-cols-2 rounded-full border p-1 text-xs font-medium tracking-[0.08em] uppercase">
               {[
                 { value: 'category', label: 'By Category' },
                 { value: 'mastery', label: 'By Mastery' },
@@ -349,7 +372,9 @@ function DailySetupContent() {
                   type="button"
                   onClick={() => setSortMode(item.value as DomainSortMode)}
                   className={`min-h-9 rounded-full px-3 ${
-                    sortMode === item.value ? 'bg-foreground text-background' : 'text-muted-foreground'
+                    sortMode === item.value
+                      ? 'bg-foreground text-background'
+                      : 'text-muted-foreground'
                   }`}
                   aria-pressed={sortMode === item.value}
                 >
@@ -359,14 +384,14 @@ function DailySetupContent() {
             </div>
 
             {domains.length === 0 ? (
-              <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+              <p className="bg-card text-muted-foreground rounded-lg border p-4 text-sm">
                 Add interests before starting a Daily Five.
               </p>
             ) : sortMode === 'category' ? (
               <div className="space-y-5">
                 {categoryGroups.map((group) => (
                   <div key={group.category}>
-                    <p className="mb-2 border-b pb-2 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    <p className="text-muted-foreground mb-2 border-b pb-2 text-xs font-medium tracking-[0.12em] uppercase">
                       {group.category}
                     </p>
                     <div className="grid gap-2">
@@ -396,19 +421,19 @@ function DailySetupContent() {
             )}
 
             {selectedCount === 0 ? (
-              <p className="mt-3 text-sm text-destructive">Choose at least one domain to start.</p>
+              <p className="text-destructive mt-3 text-sm">Choose at least one domain to start.</p>
             ) : null}
           </div>
         )}
       </section>
 
       {error ? (
-        <p className="rounded-lg border border-destructive/40 bg-card p-3 text-sm text-destructive">
+        <p className="border-destructive/40 bg-card text-destructive rounded-lg border p-3 text-sm">
           {error}
         </p>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-16 z-50 border-t bg-background/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:bottom-0 md:pb-3">
+      <div className="bg-background/95 fixed inset-x-0 bottom-16 z-50 border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:bottom-0 md:pb-3">
         <div className="mx-auto flex max-w-xl items-center gap-3">
           <Link href="/" className="btn-ghost min-h-11 px-4">
             Home
@@ -446,21 +471,26 @@ function DomainOption({
     <button
       type="button"
       onClick={() => onToggle(domain.domain)}
-      className="flex min-h-14 items-center gap-3 rounded-lg border bg-card px-3 py-2 text-left transition hover:border-foreground/25"
+      className="bg-card hover:border-foreground/25 flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition"
       aria-pressed={selected}
     >
       <span
         className={`grid size-5 shrink-0 place-items-center rounded border ${
-          selected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
+          selected
+            ? 'border-primary bg-primary text-primary-foreground'
+            : 'border-muted-foreground/40'
         }`}
         aria-hidden="true"
       >
         {selected ? <Check className="size-3.5" /> : null}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-foreground">{domain.domain}</span>
-        <span className="mt-0.5 block text-xs text-muted-foreground">
-          {KNOWLEDGE_TIER_LABEL[domain.tier]} {Number.isFinite(masteryDistance(domain)) ? `, ${Math.ceil(masteryDistance(domain))} pts to next tier` : ''}
+        <span className="text-foreground block truncate text-sm font-medium">{domain.domain}</span>
+        <span className="text-muted-foreground mt-0.5 block text-xs">
+          {KNOWLEDGE_TIER_LABEL[domain.tier]}{' '}
+          {Number.isFinite(masteryDistance(domain))
+            ? `, ${Math.ceil(masteryDistance(domain))} pts to next tier`
+            : ''}
         </span>
       </span>
     </button>

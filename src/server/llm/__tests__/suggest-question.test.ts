@@ -22,7 +22,9 @@ async function importModule() {
 describe('parseVerifierResponse', () => {
   it('reads a WRONG verdict with a corrected answer', async () => {
     const { parseVerifierResponse } = await importModule();
-    expect(parseVerifierResponse('{"verdict":"WRONG","corrected_answer":"genuine leather"}')).toEqual({
+    expect(
+      parseVerifierResponse('{"verdict":"WRONG","corrected_answer":"genuine leather"}'),
+    ).toEqual({
       verdict: 'WRONG',
       correctedAnswer: 'genuine leather',
     });
@@ -31,7 +33,10 @@ describe('parseVerifierResponse', () => {
   it('treats malformed or unknown output as fail-open UNVERIFIABLE', async () => {
     const { parseVerifierResponse } = await importModule();
     for (const raw of ['not json', '{}', '{"verdict":"maybe"}', '[]']) {
-      expect(parseVerifierResponse(raw)).toEqual({ verdict: 'UNVERIFIABLE', correctedAnswer: null });
+      expect(parseVerifierResponse(raw)).toEqual({
+        verdict: 'UNVERIFIABLE',
+        correctedAnswer: null,
+      });
     }
   });
 
@@ -109,9 +114,11 @@ describe('suggestQuestionAnswer', () => {
     expect(createMessageMock).toHaveBeenCalledTimes(3);
 
     // The retry must carry the correction hint to the generator.
-    const retryMessage = (createMessageMock.mock.calls[2]![0] as {
-      messages: Array<{ content: string }>;
-    }).messages[0]!.content;
+    const retryMessage = (
+      createMessageMock.mock.calls[2]![0] as {
+        messages: Array<{ content: string }>;
+      }
+    ).messages[0]!.content;
     expect(retryMessage).toContain('genuine leather');
   });
 

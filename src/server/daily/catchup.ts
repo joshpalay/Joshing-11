@@ -45,7 +45,10 @@ export function feedCatchupItemId(feedItemId: string): string {
 
 export function parseCatchupItemId(
   id: string,
-): { surface: 'feed'; feedItemId: string } | { surface: 'daily'; queueId: string; slotIndex: number } | null {
+):
+  | { surface: 'feed'; feedItemId: string }
+  | { surface: 'daily'; queueId: string; slotIndex: number }
+  | null {
   if (id.startsWith(FEED_CATCHUP_ID_PREFIX)) {
     const feedItemId = id.slice(FEED_CATCHUP_ID_PREFIX.length);
     return feedItemId ? { surface: 'feed', feedItemId } : null;

@@ -1,14 +1,40 @@
-import { and, count, desc, eq, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  notExists,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
-import { isVisibleFriendAnsweredSource, visibleFeedSourcePredicate } from '@/server/feed/visibility';
+import {
+  isVisibleFriendAnsweredSource,
+  visibleFeedSourcePredicate,
+} from '@/server/feed/visibility';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
 export type NewFeedItem = typeof feedItems.$inferInsert;
-export type FeedItemState = 'active' | 'answered' | 'skipped' | 'dismissed' | 'rolled_off' | 'played';
+export type FeedItemState =
+  | 'active'
+  | 'answered'
+  | 'skipped'
+  | 'dismissed'
+  | 'rolled_off'
+  | 'played';
 
-export type FriendResult = { userId: string; displayName: string; result: 'correct' | 'incorrect' | null };
+export type FriendResult = {
+  userId: string;
+  displayName: string;
+  result: 'correct' | 'incorrect' | null;
+};
 
 export type ViewerAnswerStatus = { result: 'correct' | 'incorrect' };
 
@@ -117,11 +143,13 @@ async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<Collapsed
       if (isVisibleFriendAnsweredSource(item.sourceType, item.sourceResult)) {
         return {
           ...item,
-          friendResults: [{
-            userId: item.sourceUserId,
-            displayName: nameById.get(item.sourceUserId) ?? 'A friend',
-            result: (item.sourceResult as 'correct' | 'incorrect' | null) ?? null,
-          }],
+          friendResults: [
+            {
+              userId: item.sourceUserId,
+              displayName: nameById.get(item.sourceUserId) ?? 'A friend',
+              result: (item.sourceResult as 'correct' | 'incorrect' | null) ?? null,
+            },
+          ],
         } satisfies CollapsedFeedItem;
       }
       return item;
@@ -145,12 +173,20 @@ async function collapseThumbsUpItems(items: FeedItem[]): Promise<FeedItem[]> {
 
   groups.forEach((group) => {
     if (group.length <= 1) return;
-    const [mostRecent, ...older] = [...group].sort((a, b) => b.sourceEventAt.getTime() - a.sourceEventAt.getTime());
-    older.forEach((item) => { hiddenIds.add(item.id); additionalUserIds.add(item.sourceUserId); });
+    const [mostRecent, ...older] = [...group].sort(
+      (a, b) => b.sourceEventAt.getTime() - a.sourceEventAt.getTime(),
+    );
+    older.forEach((item) => {
+      hiddenIds.add(item.id);
+      additionalUserIds.add(item.sourceUserId);
+    });
     collapsedById.set(mostRecent.id, {
       ...mostRecent,
       thumbsUpCount: group.length,
-      additionalEndorsers: older.map((item) => ({ userId: item.sourceUserId, displayName: 'A friend' })),
+      additionalEndorsers: older.map((item) => ({
+        userId: item.sourceUserId,
+        displayName: 'A friend',
+      })),
     });
   });
 
@@ -168,7 +204,9 @@ async function collapseThumbsUpItems(items: FeedItem[]): Promise<FeedItem[]> {
     });
   }
 
-  return items.filter((item) => !hiddenIds.has(item.id)).map((item) => collapsedById.get(item.id) ?? item);
+  return items
+    .filter((item) => !hiddenIds.has(item.id))
+    .map((item) => collapsedById.get(item.id) ?? item);
 }
 
 export async function getDismissedDomains(userId: string): Promise<string[]> {
@@ -176,10 +214,9 @@ export async function getDismissedDomains(userId: string): Promise<string[]> {
     const rows = await db
       .select({ canonicalSubcategory: feedDismissedDomains.canonicalSubcategory })
       .from(feedDismissedDomains)
-      .where(and(
-        eq(feedDismissedDomains.userId, userId),
-        isNull(feedDismissedDomains.reinstatedAt),
-      ));
+      .where(
+        and(eq(feedDismissedDomains.userId, userId), isNull(feedDismissedDomains.reinstatedAt)),
+      );
     return rows.map((r) => r.canonicalSubcategory);
   } catch (error) {
     if (pgErrorCode(error) === '42P01') return []; // FeedDismissedDomain table not yet migrated
@@ -192,11 +229,13 @@ export async function dismissDomain(userId: string, canonicalSubcategory: string
   const [existing] = await db
     .select({ id: feedDismissedDomains.id })
     .from(feedDismissedDomains)
-    .where(and(
-      eq(feedDismissedDomains.userId, userId),
-      eq(feedDismissedDomains.canonicalSubcategory, canonicalSubcategory),
-      isNull(feedDismissedDomains.reinstatedAt),
-    ))
+    .where(
+      and(
+        eq(feedDismissedDomains.userId, userId),
+        eq(feedDismissedDomains.canonicalSubcategory, canonicalSubcategory),
+        isNull(feedDismissedDomains.reinstatedAt),
+      ),
+    )
     .limit(1);
 
   if (existing) return;
@@ -208,17 +247,24 @@ export async function dismissDomain(userId: string, canonicalSubcategory: string
     .select({ feedItemId: feedItems.id })
     .from(feedItems)
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
-    .where(and(
-      eq(feedItems.recipientUserId, userId),
-      inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES),
-      eq(questions.canonicalSubcategory, canonicalSubcategory),
-    ));
+    .where(
+      and(
+        eq(feedItems.recipientUserId, userId),
+        inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES),
+        eq(questions.canonicalSubcategory, canonicalSubcategory),
+      ),
+    );
 
   if (domainItems.length > 0) {
     await db
       .update(feedItems)
       .set({ state: 'dismissed' })
-      .where(inArray(feedItems.id, domainItems.map((r) => r.feedItemId)));
+      .where(
+        inArray(
+          feedItems.id,
+          domainItems.map((r) => r.feedItemId),
+        ),
+      );
   }
 }
 
@@ -226,11 +272,13 @@ export async function reinstateDomain(userId: string, canonicalSubcategory: stri
   await db
     .update(feedDismissedDomains)
     .set({ reinstatedAt: new Date() })
-    .where(and(
-      eq(feedDismissedDomains.userId, userId),
-      eq(feedDismissedDomains.canonicalSubcategory, canonicalSubcategory),
-      isNull(feedDismissedDomains.reinstatedAt),
-    ));
+    .where(
+      and(
+        eq(feedDismissedDomains.userId, userId),
+        eq(feedDismissedDomains.canonicalSubcategory, canonicalSubcategory),
+        isNull(feedDismissedDomains.reinstatedAt),
+      ),
+    );
 }
 
 export type FeedCursor = {
@@ -261,7 +309,6 @@ function normalizeFeedLimit(limit: number | undefined): number {
   return Math.min(Math.max(Math.trunc(limit!), 1), MAX_FEED_LIMIT);
 }
 
-
 function feedFilterPredicate(filter: FeedFilter | undefined) {
   if (filter === 'sent-to-me') return eq(feedItems.sourceType, 'direct_sent');
   if (filter === 'from-friends') {
@@ -289,11 +336,13 @@ function viewerNotAlreadyAnsweredPredicate(userId: string) {
       db
         .select({ id: masteryEvents.id })
         .from(masteryEvents)
-        .where(and(
-          eq(masteryEvents.userId, userId),
-          eq(masteryEvents.answeredByUserId, userId),
-          eq(masteryEvents.questionId, feedItems.questionId),
-        )),
+        .where(
+          and(
+            eq(masteryEvents.userId, userId),
+            eq(masteryEvents.answeredByUserId, userId),
+            eq(masteryEvents.questionId, feedItems.questionId),
+          ),
+        ),
     ),
   );
 }
@@ -303,24 +352,20 @@ function feedCursorPredicate(cursor: FeedCursor | null | undefined) {
 
   return or(
     lt(feedItems.sourceEventAt, cursor.sourceEventAt),
-    and(
-      eq(feedItems.sourceEventAt, cursor.sourceEventAt),
-      lt(feedItems.id, cursor.id),
-    ),
+    and(eq(feedItems.sourceEventAt, cursor.sourceEventAt), lt(feedItems.id, cursor.id)),
   );
 }
 
 function visibleQuestionPredicate(dismissedDomains: string[]) {
-  const predicates = [
-    eq(questions.visibility, 'public'),
-    isNull(questions.deletedAt),
-  ];
+  const predicates = [eq(questions.visibility, 'public'), isNull(questions.deletedAt)];
 
   if (dismissedDomains.length > 0) {
-    predicates.push(or(
-      isNull(questions.canonicalSubcategory),
-      notInArray(questions.canonicalSubcategory, dismissedDomains),
-    )!);
+    predicates.push(
+      or(
+        isNull(questions.canonicalSubcategory),
+        notInArray(questions.canonicalSubcategory, dismissedDomains),
+      )!,
+    );
   }
 
   return and(...predicates);
@@ -341,23 +386,26 @@ async function fetchVisibleFeedItems(
 ): Promise<FeedItem[]> {
   const cursorPredicate = options.pinned ? undefined : feedCursorPredicate(options.cursor);
 
-  const baseQuery = () => db
-    .select({ item: feedItems })
-    .from(feedItems)
-    .innerJoin(questions, eq(feedItems.questionId, questions.id))
-    .where(and(
-      eq(feedItems.recipientUserId, userId),
-      feedPinnedPredicate(options.pinned),
-      visibleSourcePredicate,
-      feedFilterPredicate(options.filter),
-      inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-      visibleQuestionPredicate(dismissedDomains),
-      viewerNotAuthorPredicate(userId),
-      viewerNotAlreadyAnsweredPredicate(userId),
-      cursorPredicate,
-    ))
-    .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
-    .limit(options.limit);
+  const baseQuery = () =>
+    db
+      .select({ item: feedItems })
+      .from(feedItems)
+      .innerJoin(questions, eq(feedItems.questionId, questions.id))
+      .where(
+        and(
+          eq(feedItems.recipientUserId, userId),
+          feedPinnedPredicate(options.pinned),
+          visibleSourcePredicate,
+          feedFilterPredicate(options.filter),
+          inArray(feedItems.state, ACTIONABLE_FEED_STATES),
+          visibleQuestionPredicate(dismissedDomains),
+          viewerNotAuthorPredicate(userId),
+          viewerNotAlreadyAnsweredPredicate(userId),
+          cursorPredicate,
+        ),
+      )
+      .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
+      .limit(options.limit);
 
   try {
     const rows = await baseQuery();
@@ -366,24 +414,27 @@ async function fetchVisibleFeedItems(
     if (!isMissingOptionalFeedColumn(error)) throw error;
 
     console.warn('[feed/query] Falling back to compatibility FeedItem projection', {
-      missingColumnError: pgErrorMessage(error) ?? (error instanceof Error ? error.message : String(error)),
+      missingColumnError:
+        pgErrorMessage(error) ?? (error instanceof Error ? error.message : String(error)),
     });
 
     const rows = await db
       .select({ item: feedItemCompatibilityColumns })
       .from(feedItems)
       .innerJoin(questions, eq(feedItems.questionId, questions.id))
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        feedPinnedPredicate(options.pinned),
-        visibleSourcePredicate,
-        feedFilterPredicate(options.filter),
-        inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-        visibleQuestionPredicate(dismissedDomains),
-        viewerNotAuthorPredicate(userId),
-        viewerNotAlreadyAnsweredPredicate(userId),
-        cursorPredicate,
-      ))
+      .where(
+        and(
+          eq(feedItems.recipientUserId, userId),
+          feedPinnedPredicate(options.pinned),
+          visibleSourcePredicate,
+          feedFilterPredicate(options.filter),
+          inArray(feedItems.state, ACTIONABLE_FEED_STATES),
+          visibleQuestionPredicate(dismissedDomains),
+          viewerNotAuthorPredicate(userId),
+          viewerNotAlreadyAnsweredPredicate(userId),
+          cursorPredicate,
+        ),
+      )
       .orderBy(desc(feedItems.sourceEventAt), desc(feedItems.id))
       .limit(options.limit);
 
@@ -391,7 +442,10 @@ async function fetchVisibleFeedItems(
   }
 }
 
-export async function getFeedForUser(userId: string, options: FeedForUserOptions = {}): Promise<PaginatedFeedResult> {
+export async function getFeedForUser(
+  userId: string,
+  options: FeedForUserOptions = {},
+): Promise<PaginatedFeedResult> {
   const dismissedDomains = await getDismissedDomains(userId);
   const limit = normalizeFeedLimit(options.limit);
   const filter = options.filter ?? 'all';
@@ -406,21 +460,28 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
     isFirstPage
       ? fetchVisibleFeedItems(userId, dismissedDomains, { limit, pinned: true, filter })
       : Promise.resolve([]),
-    fetchVisibleFeedItems(userId, dismissedDomains, { limit: limit + 1, cursor: options.cursor, pinned: false, filter }),
+    fetchVisibleFeedItems(userId, dismissedDomains, {
+      limit: limit + 1,
+      cursor: options.cursor,
+      pinned: false,
+      filter,
+    }),
     isFirstPage
       ? db
           .select({ value: count() })
           .from(feedItems)
           .innerJoin(questions, eq(feedItems.questionId, questions.id))
-          .where(and(
-            eq(feedItems.recipientUserId, userId),
-            visibleSourcePredicate,
-            feedFilterPredicate(filter),
-            inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-            visibleQuestionPredicate(dismissedDomains),
-            viewerNotAuthorPredicate(userId),
-            viewerNotAlreadyAnsweredPredicate(userId),
-          ))
+          .where(
+            and(
+              eq(feedItems.recipientUserId, userId),
+              visibleSourcePredicate,
+              feedFilterPredicate(filter),
+              inArray(feedItems.state, ACTIONABLE_FEED_STATES),
+              visibleQuestionPredicate(dismissedDomains),
+              viewerNotAuthorPredicate(userId),
+              viewerNotAlreadyAnsweredPredicate(userId),
+            ),
+          )
       : Promise.resolve<{ value: number }[]>([]),
   ]);
 
@@ -433,11 +494,16 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
   const collapsedQuestionIds = collapsed
     .map((item) => item.questionId)
     .filter((id): id is string => Boolean(id));
-  const viewerStatusByQuestion = await getViewerAnswerStatusForQuestions(userId, collapsedQuestionIds);
+  const viewerStatusByQuestion = await getViewerAnswerStatusForQuestions(
+    userId,
+    collapsedQuestionIds,
+  );
 
   const withViewerStatus: CollapsedFeedItem[] = collapsed.map((item) => ({
     ...item,
-    viewerAnswerStatus: item.questionId ? viewerStatusByQuestion.get(item.questionId) ?? null : null,
+    viewerAnswerStatus: item.questionId
+      ? (viewerStatusByQuestion.get(item.questionId) ?? null)
+      : null,
   }));
 
   return {
@@ -469,11 +535,13 @@ export async function rollOffOldItems(userId: string): Promise<number> {
   const overflow = await db
     .select({ id: feedItems.id })
     .from(feedItems)
-    .where(and(
-      eq(feedItems.recipientUserId, userId),
-      eq(feedItems.isPinned, false),
-      inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES),
-    ))
+    .where(
+      and(
+        eq(feedItems.recipientUserId, userId),
+        eq(feedItems.isPinned, false),
+        inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES),
+      ),
+    )
     .orderBy(desc(feedItems.sourceEventAt))
     .offset(50);
 
@@ -482,34 +550,49 @@ export async function rollOffOldItems(userId: string): Promise<number> {
   await db
     .update(feedItems)
     .set({ state: 'rolled_off' })
-    .where(inArray(feedItems.id, overflow.map((item) => item.id)));
+    .where(
+      inArray(
+        feedItems.id,
+        overflow.map((item) => item.id),
+      ),
+    );
 
   return overflow.length;
 }
 
-export async function userHasQuestionInVisibleFeed(userId: string, questionId: string): Promise<boolean> {
+export async function userHasQuestionInVisibleFeed(
+  userId: string,
+  questionId: string,
+): Promise<boolean> {
   const [row] = await db
     .select({ id: feedItems.id })
     .from(feedItems)
-    .where(and(
-      eq(feedItems.recipientUserId, userId),
-      eq(feedItems.questionId, questionId),
-      inArray(feedItems.state, VISIBLE_FEED_STATES),
-    ))
+    .where(
+      and(
+        eq(feedItems.recipientUserId, userId),
+        eq(feedItems.questionId, questionId),
+        inArray(feedItems.state, VISIBLE_FEED_STATES),
+      ),
+    )
     .limit(1);
 
   return Boolean(row);
 }
 
-export async function userHasQuestionInBlockingFeed(userId: string, questionId: string): Promise<boolean> {
+export async function userHasQuestionInBlockingFeed(
+  userId: string,
+  questionId: string,
+): Promise<boolean> {
   const [row] = await db
     .select({ id: feedItems.id })
     .from(feedItems)
-    .where(and(
-      eq(feedItems.recipientUserId, userId),
-      eq(feedItems.questionId, questionId),
-      inArray(feedItems.state, BLOCKING_FEED_STATES),
-    ))
+    .where(
+      and(
+        eq(feedItems.recipientUserId, userId),
+        eq(feedItems.questionId, questionId),
+        inArray(feedItems.state, BLOCKING_FEED_STATES),
+      ),
+    )
     .limit(1);
 
   return Boolean(row);
@@ -528,11 +611,13 @@ export async function getViewerAnswerStatusForQuestions(
       answerState: masteryEvents.answerState,
     })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.answeredByUserId, userId),
-      inArray(masteryEvents.questionId, questionIds),
-    ));
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        eq(masteryEvents.answeredByUserId, userId),
+        inArray(masteryEvents.questionId, questionIds),
+      ),
+    );
 
   for (const row of rows) {
     if (!row.questionId) continue;
@@ -566,28 +651,30 @@ export async function getFeedItemAnswerForRecipient(
     })
     .from(feedItems)
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
-    .where(and(
-      eq(feedItems.id, feedItemId),
-      eq(feedItems.recipientUserId, recipientUserId),
-    ))
+    .where(and(eq(feedItems.id, feedItemId), eq(feedItems.recipientUserId, recipientUserId)))
     .limit(1);
 
   if (!row) return null;
   return { answer: row.answer ?? null, questionText: row.questionText };
 }
 
-export async function userAnsweredQuestionCorrectly(userId: string, questionId: string): Promise<boolean> {
+export async function userAnsweredQuestionCorrectly(
+  userId: string,
+  questionId: string,
+): Promise<boolean> {
   const [row] = await db
     .select({ id: masteryEvents.id })
     .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.questionId, questionId),
-      eq(masteryEvents.answeredByUserId, userId),
-      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-      ne(masteryEvents.answerState, 'incorrect'),
-      sql`${masteryEvents.awardedPoints} > 0`,
-    ))
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        eq(masteryEvents.questionId, questionId),
+        eq(masteryEvents.answeredByUserId, userId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        ne(masteryEvents.answerState, 'incorrect'),
+        sql`${masteryEvents.awardedPoints} > 0`,
+      ),
+    )
     .limit(1);
 
   return Boolean(row);

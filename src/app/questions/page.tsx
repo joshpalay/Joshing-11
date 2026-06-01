@@ -6,7 +6,10 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { MyQuestionCard } from '@/components/questions/MyQuestionCard';
-import { AnsweredQuestionsList, type AnsweredQuestionItem } from '@/components/questions/AnsweredQuestionsList';
+import {
+  AnsweredQuestionsList,
+  type AnsweredQuestionItem,
+} from '@/components/questions/AnsweredQuestionsList';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
@@ -43,17 +46,15 @@ type CreateQuestionResponse = {
   };
 };
 
-const NO_QUESTIONS_PATTERNS = [
-  /no questions/i,
-  /not found/i,
-  /empty/i,
-];
+const NO_QUESTIONS_PATTERNS = [/no questions/i, /not found/i, /empty/i];
 
 function isNoQuestionsResponse(response: Response, body: QuestionsApiResponse | null): boolean {
   const apiMessage = body?.message ?? body?.error ?? '';
-  return response.status === 204
-    || response.status === 404
-    || NO_QUESTIONS_PATTERNS.some((pattern) => pattern.test(apiMessage));
+  return (
+    response.status === 204 ||
+    response.status === 404 ||
+    NO_QUESTIONS_PATTERNS.some((pattern) => pattern.test(apiMessage))
+  );
 }
 
 function initialValues(question: QuestionView): QuestionFormValues {
@@ -72,11 +73,11 @@ function initialValues(question: QuestionView): QuestionFormValues {
 function LoadingSkeleton() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-6 pb-24">
-      <div className="mb-5 h-20 animate-pulse rounded-lg bg-muted" />
-      <div className="mb-5 h-14 animate-pulse rounded-lg bg-muted" />
+      <div className="bg-muted mb-5 h-20 animate-pulse rounded-lg" />
+      <div className="bg-muted mb-5 h-14 animate-pulse rounded-lg" />
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-36 animate-pulse rounded-lg border bg-card" />
+          <div key={index} className="bg-card h-36 animate-pulse rounded-lg border" />
         ))}
       </div>
     </main>
@@ -103,9 +104,9 @@ function QuestionsPageContent() {
   const [domainFilter, setDomainFilter] = useState('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
-  const [drawer, setDrawer] = useState<DrawerState>(() => (
-    searchParams.get('create') === '1' ? { mode: 'create' } : { mode: 'closed' }
-  ));
+  const [drawer, setDrawer] = useState<DrawerState>(() =>
+    searchParams.get('create') === '1' ? { mode: 'create' } : { mode: 'closed' },
+  );
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [cardError, setCardError] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -116,12 +117,13 @@ function QuestionsPageContent() {
     setError(null);
     try {
       const response = await fetch('/api/questions', { cache: 'no-store', credentials: 'include' });
-      const body = await response.json().catch(() => null) as QuestionsApiResponse | null;
+      const body = (await response.json().catch(() => null)) as QuestionsApiResponse | null;
       if (isNoQuestionsResponse(response, body)) {
         setQuestions([]);
         return;
       }
-      if (!response.ok || !Array.isArray(body?.questions)) throw new Error(body?.message ?? body?.error ?? 'Could not load your questions.');
+      if (!response.ok || !Array.isArray(body?.questions))
+        throw new Error(body?.message ?? body?.error ?? 'Could not load your questions.');
       setQuestions(body.questions);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load your questions.');
@@ -138,14 +140,19 @@ function QuestionsPageContent() {
     setAnsweredLoading(true);
     setAnsweredError(null);
     try {
-      const response = await fetch('/api/questions/answered', { cache: 'no-store', credentials: 'include' });
-      const body = await response.json().catch(() => null) as AnsweredApiResponse | null;
+      const response = await fetch('/api/questions/answered', {
+        cache: 'no-store',
+        credentials: 'include',
+      });
+      const body = (await response.json().catch(() => null)) as AnsweredApiResponse | null;
       if (!response.ok || !Array.isArray(body?.items)) {
         throw new Error(body?.message ?? body?.error ?? 'Could not load your answered questions.');
       }
       setAnswered(body.items);
     } catch (caught) {
-      setAnsweredError(caught instanceof Error ? caught.message : 'Could not load your answered questions.');
+      setAnsweredError(
+        caught instanceof Error ? caught.message : 'Could not load your answered questions.',
+      );
     } finally {
       setAnsweredLoading(false);
     }
@@ -163,11 +170,17 @@ function QuestionsPageContent() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const availableDomains = useMemo(() => (
-    [...new Map(questions.map((question) => [question.domain, question.domainDisplayName] as const)).entries()]
-      .map(([domain, label]) => ({ domain, label }))
-      .sort((a, b) => a.label.localeCompare(b.label))
-  ), [questions]);
+  const availableDomains = useMemo(
+    () =>
+      [
+        ...new Map(
+          questions.map((question) => [question.domain, question.domainDisplayName] as const),
+        ).entries(),
+      ]
+        .map(([domain, label]) => ({ domain, label }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [questions],
+  );
 
   const filteredQuestions = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -176,9 +189,14 @@ function QuestionsPageContent() {
       .filter((question) => !query || question.text.toLowerCase().includes(query))
       .slice()
       .sort((a, b) => {
-        if (sortMode === 'most_answered') return b.timesAnswered - a.timesAnswered || Date.parse(b.createdAt) - Date.parse(a.createdAt);
-        if (sortMode === 'hardest') return a.correctRate - b.correctRate || b.timesAnswered - a.timesAnswered;
-        if (sortMode === 'easiest') return b.correctRate - a.correctRate || b.timesAnswered - a.timesAnswered;
+        if (sortMode === 'most_answered')
+          return (
+            b.timesAnswered - a.timesAnswered || Date.parse(b.createdAt) - Date.parse(a.createdAt)
+          );
+        if (sortMode === 'hardest')
+          return a.correctRate - b.correctRate || b.timesAnswered - a.timesAnswered;
+        if (sortMode === 'easiest')
+          return b.correctRate - a.correctRate || b.timesAnswered - a.timesAnswered;
         return Date.parse(b.createdAt) - Date.parse(a.createdAt);
       });
   }, [domainFilter, questions, search, sortMode]);
@@ -196,8 +214,9 @@ function QuestionsPageContent() {
       credentials: 'include',
       body: JSON.stringify(values),
     });
-    const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
-    if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not save that question.');
+    const body = (await response.json().catch(() => null)) as CreateQuestionResponse | null;
+    if (!response.ok || !body?.question)
+      throw new Error(body?.message ?? body?.error ?? 'Could not save that question.');
     setQuestions((current) => [body.question!, ...current]);
     setDrawer({ mode: 'closed' });
     if (values.sendToFriendIds.length > 0) {
@@ -220,9 +239,16 @@ function QuestionsPageContent() {
       credentials: 'include',
       body: JSON.stringify(values),
     });
-    const body = await response.json().catch(() => null) as { question?: QuestionView; error?: string; message?: string } | null;
-    if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not update that question.');
-    setQuestions((current) => current.map((question) => question.id === questionId ? body.question! : question));
+    const body = (await response.json().catch(() => null)) as {
+      question?: QuestionView;
+      error?: string;
+      message?: string;
+    } | null;
+    if (!response.ok || !body?.question)
+      throw new Error(body?.message ?? body?.error ?? 'Could not update that question.');
+    setQuestions((current) =>
+      current.map((question) => (question.id === questionId ? body.question! : question)),
+    );
     setDrawer({ mode: 'closed' });
     setToast('Question updated.');
   }
@@ -241,7 +267,10 @@ function QuestionsPageContent() {
           body: JSON.stringify({ questionId: question.id }),
         });
     if (response.status === 409) {
-      setCardError((current) => ({ ...current, [question.id]: 'This question has been used in a game.' }));
+      setCardError((current) => ({
+        ...current,
+        [question.id]: 'This question has been used in a game.',
+      }));
       setConfirmingId(null);
       return;
     }
@@ -263,7 +292,7 @@ function QuestionsPageContent() {
     return (
       <main className="mx-auto flex min-h-dvh max-w-2xl flex-col items-center justify-center px-4 py-10 text-center">
         <h1 className="font-serif text-3xl font-semibold">Could not load your questions</h1>
-        <p className="mt-3 text-sm text-muted-foreground">{error}</p>
+        <p className="text-muted-foreground mt-3 text-sm">{error}</p>
         <button className="btn-primary mt-5" type="button" onClick={() => void loadQuestions()}>
           Try again
         </button>
@@ -278,7 +307,7 @@ function QuestionsPageContent() {
           type="button"
           className={`px-4 py-2.5 text-sm font-medium transition-colors ${
             tab === 'authored'
-              ? 'border-b-2 border-foreground text-foreground'
+              ? 'border-foreground text-foreground border-b-2'
               : 'text-muted-foreground hover:text-foreground'
           }`}
           onClick={() => setTab('authored')}
@@ -289,7 +318,7 @@ function QuestionsPageContent() {
           type="button"
           className={`px-4 py-2.5 text-sm font-medium transition-colors ${
             tab === 'answered'
-              ? 'border-b-2 border-foreground text-foreground'
+              ? 'border-foreground text-foreground border-b-2'
               : 'text-muted-foreground hover:text-foreground'
           }`}
           onClick={() => setTab('answered')}
@@ -303,30 +332,36 @@ function QuestionsPageContent() {
           <header className="mb-5 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="font-serif text-3xl font-semibold">Your Questions</h1>
-              <p className="mt-1 text-sm text-muted-foreground">{questions.length} questions</p>
+              <p className="text-muted-foreground mt-1 text-sm">{questions.length} questions</p>
             </div>
-            <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={() => setDrawer({ mode: 'create' })}>
+            <button
+              className="btn-primary inline-flex items-center gap-2"
+              type="button"
+              onClick={() => setDrawer({ mode: 'create' })}
+            >
               <Plus className="size-4" />
               Write a question
             </button>
           </header>
 
-          <section className="mb-5 grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3 sm:p-3">
+          <section className="bg-card mb-5 grid grid-cols-2 gap-2 rounded-lg border p-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3 sm:p-3">
             <select
               value={domainFilter}
               onChange={(event) => setDomainFilter(event.target.value)}
-              className="h-11 rounded-md border bg-background px-3 text-sm"
+              className="bg-background h-11 rounded-md border px-3 text-sm"
               aria-label="Filter by domain"
             >
               <option value="all">All domains</option>
               {availableDomains.map((item) => (
-                <option key={item.domain} value={item.domain}>{item.label}</option>
+                <option key={item.domain} value={item.domain}>
+                  {item.label}
+                </option>
               ))}
             </select>
             <select
               value={sortMode}
               onChange={(event) => setSortMode(event.target.value as SortMode)}
-              className="h-11 rounded-md border bg-background px-3 text-sm"
+              className="bg-background h-11 rounded-md border px-3 text-sm"
               aria-label="Sort by"
             >
               <option value="newest">Newest</option>
@@ -335,12 +370,12 @@ function QuestionsPageContent() {
               <option value="easiest">Easiest</option>
             </select>
             <label className="relative col-span-2 sm:col-span-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search questions..."
-                className="h-11 w-full rounded-md border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary"
+                className="bg-background focus:border-primary h-11 w-full rounded-md border pr-3 pl-10 text-sm outline-none"
               />
             </label>
           </section>
@@ -348,17 +383,25 @@ function QuestionsPageContent() {
           {questions.length === 0 ? (
             <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
               <h2 className="font-serif text-2xl font-semibold">No questions yet.</h2>
-              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              <p className="text-muted-foreground mt-2 max-w-sm text-sm">
                 You haven&apos;t written any questions yet. Write one to get started.
               </p>
-              <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create' })}>
+              <button
+                className="btn-primary mt-5"
+                type="button"
+                onClick={() => setDrawer({ mode: 'create' })}
+              >
                 Write a question
               </button>
             </section>
           ) : filteredQuestions.length === 0 ? (
             <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
               <h2 className="font-serif text-2xl font-semibold">No questions match your filter.</h2>
-              <button className="mt-3 text-sm text-primary underline" type="button" onClick={clearFilters}>
+              <button
+                className="text-primary mt-3 text-sm underline"
+                type="button"
+                onClick={clearFilters}
+              >
                 Clear filters
               </button>
             </section>
@@ -384,7 +427,7 @@ function QuestionsPageContent() {
         <>
           <header className="mb-5 border-b pb-5">
             <h1 className="font-serif text-3xl font-semibold">Answered</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-sm">
               {answered === null ? 'Loading…' : `${answered.length} answered`}
             </p>
           </header>
@@ -392,14 +435,18 @@ function QuestionsPageContent() {
           {answeredLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-16 animate-pulse rounded-lg border bg-card" />
+                <div key={index} className="bg-card h-16 animate-pulse rounded-lg border" />
               ))}
             </div>
           ) : answeredError ? (
             <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
               <h2 className="font-serif text-2xl font-semibold">Could not load your answers</h2>
-              <p className="mt-2 text-sm text-muted-foreground">{answeredError}</p>
-              <button className="btn-primary mt-5" type="button" onClick={() => void loadAnswered()}>
+              <p className="text-muted-foreground mt-2 text-sm">{answeredError}</p>
+              <button
+                className="btn-primary mt-5"
+                type="button"
+                onClick={() => void loadAnswered()}
+              >
                 Try again
               </button>
             </section>
@@ -410,22 +457,44 @@ function QuestionsPageContent() {
       )}
 
       {drawer.mode !== 'closed' ? (
-        <div className="fixed inset-0 z-[60] flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
-          <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={() => setDrawer({ mode: 'closed' })} />
-          <aside className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-background px-5 pt-5 shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
+        <div
+          className="fixed inset-0 z-[60] flex items-end bg-black/35 md:items-stretch md:justify-end"
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            className="absolute inset-0 cursor-default"
+            type="button"
+            aria-label="Close"
+            onClick={() => setDrawer({ mode: 'closed' })}
+          />
+          <aside className="bg-background relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg px-5 pt-5 shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{drawer.mode === 'edit' ? 'Edit' : 'Create'}</p>
-                <h2 className="font-serif text-2xl font-semibold">{drawer.mode === 'edit' ? 'Edit question' : 'Write a question'}</h2>
+                <p className="text-muted-foreground text-xs tracking-[0.1em] uppercase">
+                  {drawer.mode === 'edit' ? 'Edit' : 'Create'}
+                </p>
+                <h2 className="font-serif text-2xl font-semibold">
+                  {drawer.mode === 'edit' ? 'Edit question' : 'Write a question'}
+                </h2>
               </div>
-              <button className="rounded-md border p-2 hover:bg-muted" type="button" onClick={() => setDrawer({ mode: 'closed' })} title="Close">
+              <button
+                className="hover:bg-muted rounded-md border p-2"
+                type="button"
+                onClick={() => setDrawer({ mode: 'closed' })}
+                title="Close"
+              >
                 <X className="size-4" />
               </button>
             </div>
             <QuestionForm
               mode={drawer.mode}
               initialValues={drawer.mode === 'edit' ? initialValues(drawer.question) : undefined}
-              onSubmit={drawer.mode === 'edit' ? (values) => saveEdit(drawer.question.id, values) : saveCreate}
+              onSubmit={
+                drawer.mode === 'edit'
+                  ? (values) => saveEdit(drawer.question.id, values)
+                  : saveCreate
+              }
               onCancel={() => setDrawer({ mode: 'closed' })}
             />
           </aside>
@@ -433,7 +502,7 @@ function QuestionsPageContent() {
       ) : null}
 
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
+        <div className="bg-foreground text-background fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm shadow-lg md:bottom-8">
           {toast}
         </div>
       ) : null}

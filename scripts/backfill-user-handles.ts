@@ -96,7 +96,9 @@ async function main() {
     }
   }
 
-  console.log(`\n[backfill-user-handles] done. assigned=${assigned}, fallback=${fallbacks}, skipped=${skipped}`);
+  console.log(
+    `\n[backfill-user-handles] done. assigned=${assigned}, fallback=${fallbacks}, skipped=${skipped}`,
+  );
 }
 
 main()

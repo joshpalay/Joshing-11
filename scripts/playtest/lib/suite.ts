@@ -1,7 +1,12 @@
 import type { Browser } from 'playwright';
 
 import type { PlaytestArgs } from './args';
-import { ManifestBuilder, type Scenario, type ScenarioContext, type ScenarioLog } from './scenario-context';
+import {
+  ManifestBuilder,
+  type Scenario,
+  type ScenarioContext,
+  type ScenarioLog,
+} from './scenario-context';
 import { newManifest, screenshotDir, writeManifest, type PlaytestManifest } from './manifest';
 
 export type SuiteResult = {

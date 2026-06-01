@@ -18,7 +18,10 @@ import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
 
 export class DailyQueueFillError extends Error {
-  constructor(readonly code: DailyQueueFillErrorCode, message: string) {
+  constructor(
+    readonly code: DailyQueueFillErrorCode,
+    message: string,
+  ) {
     super(message);
     this.name = 'DailyQueueFillError';
   }
@@ -116,9 +119,10 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   );
 
   const remaining = DAILY_QUEUE_SIZE - authored.length;
-  const generated = remaining > 0
-    ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining))
-    : [];
+  const generated =
+    remaining > 0
+      ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining))
+      : [];
 
   // Cross-source dedup by normalized question text. The authored picker
   // dedupes by question_id against past queues, and the generator has its

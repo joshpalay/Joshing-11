@@ -22,7 +22,12 @@ export function SendQuestionAction({
 
   return (
     <>
-      <button className={className} type="button" onClick={() => setOpen(true)} title="Send to friend">
+      <button
+        className={className}
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Send to friend"
+      >
         <Send className="size-4" />
         {label ? <span>{label}</span> : null}
       </button>

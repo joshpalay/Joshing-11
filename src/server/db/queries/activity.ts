@@ -129,14 +129,15 @@ function isActivityType(value: string): value is ActivityItemType {
   ].includes(value);
 }
 
-
 function parseFriendshipRequestInterests(value: unknown): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
   const interests = (value as { suggestedInterests?: unknown }).suggestedInterests;
   if (!Array.isArray(interests)) return [];
 
   return interests
-    .filter((interest): interest is string => typeof interest === 'string' && interest.trim().length > 0)
+    .filter(
+      (interest): interest is string => typeof interest === 'string' && interest.trim().length > 0,
+    )
     .map((interest) => interest.trim())
     .slice(0, 3);
 }
@@ -164,19 +165,23 @@ async function hydrateFriendshipRequests(items: ActivityItemRow[]) {
     .from(friendships)
     .where(inArray(friendships.id, friendshipIds));
 
-  return new Map(rows.map((row) => [
-    row.id,
-    {
-      id: row.id,
-      status: row.status,
-      requestedByUserId: row.requestedByUserId,
-      suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
-    },
-  ]));
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      {
+        id: row.id,
+        status: row.status,
+        requestedByUserId: row.requestedByUserId,
+        suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
+      },
+    ]),
+  );
 }
 
 async function hydrateActors(items: ActivityItemRow[]) {
-  const actorIds = [...new Set(items.map((item) => item.actorUserId).filter((id): id is string => Boolean(id)))];
+  const actorIds = [
+    ...new Set(items.map((item) => item.actorUserId).filter((id): id is string => Boolean(id))),
+  ];
   if (actorIds.length === 0) return new Map<string, { displayName: string }>();
 
   const rows = await db
@@ -253,14 +258,17 @@ async function hydrateGames(items: ActivityItemRow[], userId: string) {
       const totalQuestions = questionsByGame.get(game.id)?.size ?? 0;
       const recipients = recipientsByGame.get(game.id) ?? new Set<string>();
       const completedCount = [...recipients].filter(
-        (recipientId) => totalQuestions > 0 && (responsesByGameUser.get(`${game.id}:${recipientId}`)?.size ?? 0) >= totalQuestions,
+        (recipientId) =>
+          totalQuestions > 0 &&
+          (responsesByGameUser.get(`${game.id}:${recipientId}`)?.size ?? 0) >= totalQuestions,
       ).length;
       const viewerAnswered = responsesByGameUser.get(`${game.id}:${userId}`)?.size ?? 0;
-      const viewerStatus: GameViewerStatus = viewerAnswered === 0
-        ? 'not_started'
-        : totalQuestions > 0 && viewerAnswered >= totalQuestions
-          ? 'complete'
-          : 'in_progress';
+      const viewerStatus: GameViewerStatus =
+        viewerAnswered === 0
+          ? 'not_started'
+          : totalQuestions > 0 && viewerAnswered >= totalQuestions
+            ? 'complete'
+            : 'in_progress';
 
       return [
         game.id,
@@ -299,18 +307,22 @@ async function hydrateMasteryEvents(items: ActivityItemRow[]) {
     .from(masteryEvents)
     .where(inArray(masteryEvents.id, masteryEventIds));
 
-  const tierRows = await Promise.all(rows.map(async (row) => {
-    const [mastery] = await db
-      .select({ tier: playerMastery.tier })
-      .from(playerMastery)
-      .where(and(
-        eq(playerMastery.userId, row.userId),
-        eq(playerMastery.canonicalSubcategory, row.domain),
-      ))
-      .limit(1);
+  const tierRows = await Promise.all(
+    rows.map(async (row) => {
+      const [mastery] = await db
+        .select({ tier: playerMastery.tier })
+        .from(playerMastery)
+        .where(
+          and(
+            eq(playerMastery.userId, row.userId),
+            eq(playerMastery.canonicalSubcategory, row.domain),
+          ),
+        )
+        .limit(1);
 
-    return [row.id, { domain: row.domain, tier: mastery?.tier ?? null }] as const;
-  }));
+      return [row.id, { domain: row.domain, tier: mastery?.tier ?? null }] as const;
+    }),
+  );
 
   return new Map(tierRows);
 }
@@ -356,7 +368,11 @@ async function hydrateReactions(items: ActivityItemRow[]) {
     .map((row) => row.contextId!);
   const gameKeys = optedInRows
     .filter((row) => row.contextType === 'joshing_game' && row.contextId)
-    .map((row) => ({ gameId: row.contextId!, questionId: row.questionId, userId: row.senderUserId }));
+    .map((row) => ({
+      gameId: row.contextId!,
+      questionId: row.questionId,
+      userId: row.senderUserId,
+    }));
   const gameIds = [...new Set(gameKeys.map((key) => key.gameId))];
 
   const [feedAnswerRows, gameAnswerRows] = await Promise.all([
@@ -376,42 +392,52 @@ async function hydrateReactions(items: ActivityItemRow[]) {
           })
           .from(joshingGameResponses)
           .where(inArray(joshingGameResponses.gameId, gameIds))
-      : Promise.resolve([] as {
-          gameId: string;
-          questionId: string;
-          userId: string;
-          submittedAnswer: string | null;
-        }[]),
+      : Promise.resolve(
+          [] as {
+            gameId: string;
+            questionId: string;
+            userId: string;
+            submittedAnswer: string | null;
+          }[],
+        ),
   ]);
 
-  const feedAnswerById = new Map(feedAnswerRows.map((row) => [row.id, row.submittedAnswer ?? null]));
+  const feedAnswerById = new Map(
+    feedAnswerRows.map((row) => [row.id, row.submittedAnswer ?? null]),
+  );
   const gameAnswerByKey = new Map(
-    gameAnswerRows.map((row) => [`${row.gameId}:${row.questionId}:${row.userId}`, row.submittedAnswer ?? null]),
+    gameAnswerRows.map((row) => [
+      `${row.gameId}:${row.questionId}:${row.userId}`,
+      row.submittedAnswer ?? null,
+    ]),
   );
 
-  return new Map(rows.map((row) => {
-    const reaction = getCannedReaction(row.reactionType);
-    let submittedAnswer: string | null = null;
-    if (row.includeSubmittedAnswer) {
-      if (row.contextType === 'feed' && row.contextId) {
-        submittedAnswer = feedAnswerById.get(row.contextId) ?? null;
-      } else if (row.contextType === 'joshing_game' && row.contextId) {
-        submittedAnswer = gameAnswerByKey.get(`${row.contextId}:${row.questionId}:${row.senderUserId}`) ?? null;
+  return new Map(
+    rows.map((row) => {
+      const reaction = getCannedReaction(row.reactionType);
+      let submittedAnswer: string | null = null;
+      if (row.includeSubmittedAnswer) {
+        if (row.contextType === 'feed' && row.contextId) {
+          submittedAnswer = feedAnswerById.get(row.contextId) ?? null;
+        } else if (row.contextType === 'joshing_game' && row.contextId) {
+          submittedAnswer =
+            gameAnswerByKey.get(`${row.contextId}:${row.questionId}:${row.senderUserId}`) ?? null;
+        }
       }
-    }
-    return [
-      row.id,
-      {
-        id: row.id,
-        reactionLabel: reaction?.label ?? row.reactionType,
-        reactionEmoji: reaction?.emoji ?? '',
-        customMessage: row.customMessage,
-        repliedAt: row.repliedAt,
-        questionText: row.questionText,
-        submittedAnswer,
-      },
-    ] as const;
-  }));
+      return [
+        row.id,
+        {
+          id: row.id,
+          reactionLabel: reaction?.label ?? row.reactionType,
+          reactionEmoji: reaction?.emoji ?? '',
+          customMessage: row.customMessage,
+          repliedAt: row.repliedAt,
+          questionText: row.questionText,
+          submittedAnswer,
+        },
+      ] as const;
+    }),
+  );
 }
 
 async function hydrateDirectQuestions(items: ActivityItemRow[]) {
@@ -440,16 +466,21 @@ async function hydrateDirectQuestions(items: ActivityItemRow[]) {
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
     .where(inArray(feedItems.id, feedItemIds));
 
-  return new Map(rows.map((row) => [
-    row.feedItemId,
-    {
-      feedItemId: row.feedItemId,
-      questionId: row.questionId,
-      questionText: row.questionText,
-      personalMessage: row.personalMessage,
-      category: row.canonicalSubcategory?.trim() || row.category || null,
-    },
-  ] as const));
+  return new Map(
+    rows.map(
+      (row) =>
+        [
+          row.feedItemId,
+          {
+            feedItemId: row.feedItemId,
+            questionId: row.questionId,
+            questionText: row.questionText,
+            personalMessage: row.personalMessage,
+            category: row.canonicalSubcategory?.trim() || row.category || null,
+          },
+        ] as const,
+    ),
+  );
 }
 
 async function hydrateCuratedQuestions(items: ActivityItemRow[]) {
@@ -480,7 +511,9 @@ async function hydrateGradeDisputes(items: ActivityItemRow[]) {
   const disputeIds = [
     ...new Set(
       items
-        .filter((item) => item.type === 'grade_dispute_filed' && item.referenceType === 'grade_dispute')
+        .filter(
+          (item) => item.type === 'grade_dispute_filed' && item.referenceType === 'grade_dispute',
+        )
         .map((item) => item.referenceId)
         .filter((id): id is string => Boolean(id)),
     ),
@@ -503,27 +536,30 @@ async function hydrateGradeDisputes(items: ActivityItemRow[]) {
     .from(gradeDisputes)
     .where(inArray(gradeDisputes.id, disputeIds));
 
-  return new Map(rows.map((row) => [
-    row.id,
-    {
-      id: row.id,
-      questionText: row.questionText ?? '',
-      canonicalAnswer: row.canonicalAnswer,
-      submittedAnswer: row.submittedAnswer,
-      status: row.status,
-      reviewDecision: row.reviewDecision,
-      reviewReason: row.reviewReason,
-      acceptedAlternative: row.acceptedAlternative,
-    } satisfies NonNullable<ActivityItemView['reference']['gradeDispute']>,
-  ]));
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      {
+        id: row.id,
+        questionText: row.questionText ?? '',
+        canonicalAnswer: row.canonicalAnswer,
+        submittedAnswer: row.submittedAnswer,
+        status: row.status,
+        reviewDecision: row.reviewDecision,
+        reviewReason: row.reviewReason,
+        acceptedAlternative: row.acceptedAlternative,
+      } satisfies NonNullable<ActivityItemView['reference']['gradeDispute']>,
+    ]),
+  );
 }
 
 async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
   const relevant = items.filter(
-    (item) => item.type === 'friend_answered_your_question'
-      && item.referenceType === 'question'
-      && item.referenceId
-      && item.actorUserId,
+    (item) =>
+      item.type === 'friend_answered_your_question' &&
+      item.referenceType === 'question' &&
+      item.referenceId &&
+      item.actorUserId,
   );
   if (relevant.length === 0) {
     return new Map<string, NonNullable<ActivityItemView['reference']['friendAnsweredQuestion']>>();
@@ -534,18 +570,25 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
 
   const [questionRows, masteryRows] = await Promise.all([
     db
-      .select({ id: questions.id, questionText: questions.questionText, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })
+      .select({
+        id: questions.id,
+        questionText: questions.questionText,
+        canonicalSubcategory: questions.canonicalSubcategory,
+        broadCategory: questions.broadCategory,
+      })
       .from(questions)
       .where(inArray(questions.id, questionIds)),
     db
       .select({ userId: masteryEvents.userId, questionId: masteryEvents.questionId })
       .from(masteryEvents)
-      .where(and(
-        inArray(masteryEvents.userId, actorIds),
-        inArray(masteryEvents.questionId, questionIds),
-        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-        sql`${masteryEvents.awardedPoints} > 0`,
-      )),
+      .where(
+        and(
+          inArray(masteryEvents.userId, actorIds),
+          inArray(masteryEvents.questionId, questionIds),
+          inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+          sql`${masteryEvents.awardedPoints} > 0`,
+        ),
+      ),
   ]);
 
   const questionById = new Map(questionRows.map((r) => [r.id, r]));
@@ -559,7 +602,9 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
         {
           domain: q ? (q.canonicalSubcategory ?? q.broadCategory ?? null) : null,
           questionText: q?.questionText ?? null,
-          result: correctSet.has(`${item.actorUserId}:${item.referenceId}`) ? 'correct' : 'incorrect',
+          result: correctSet.has(`${item.actorUserId}:${item.referenceId}`)
+            ? 'correct'
+            : 'incorrect',
         } satisfies NonNullable<ActivityItemView['reference']['friendAnsweredQuestion']>,
       ];
     }),
@@ -568,7 +613,10 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
 
 async function hydrateAuthoredSharedQuestions(items: ActivityItemRow[]) {
   const relevant = items.filter(
-    (item) => item.type === 'authored_question_shared' && item.referenceType === 'question' && item.referenceId,
+    (item) =>
+      item.type === 'authored_question_shared' &&
+      item.referenceType === 'question' &&
+      item.referenceId,
   );
   if (relevant.length === 0) {
     return new Map<string, NonNullable<ActivityItemView['reference']['authoredSharedQuestion']>>();
@@ -577,16 +625,23 @@ async function hydrateAuthoredSharedQuestions(items: ActivityItemRow[]) {
   const questionIds = [...new Set(relevant.map((item) => item.referenceId!))];
   const [questionRows, recipientRows] = await Promise.all([
     db
-      .select({ id: questions.id, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+      .select({
+        id: questions.id,
+        canonicalSubcategory: questions.canonicalSubcategory,
+        broadCategory: questions.broadCategory,
+        category: questions.category,
+      })
       .from(questions)
       .where(inArray(questions.id, questionIds)),
     db
       .select({ questionId: feedItems.questionId, value: count() })
       .from(feedItems)
-      .where(and(
-        inArray(feedItems.questionId, questionIds),
-        eq(feedItems.sourceType, 'authored_shared'),
-      ))
+      .where(
+        and(
+          inArray(feedItems.questionId, questionIds),
+          eq(feedItems.sourceType, 'authored_shared'),
+        ),
+      )
       .groupBy(feedItems.questionId),
   ]);
 
@@ -596,17 +651,23 @@ async function hydrateAuthoredSharedQuestions(items: ActivityItemRow[]) {
   return new Map(
     relevant.map((item) => {
       const question = questionById.get(item.referenceId!);
-      return [item.id, {
-        domain: question ? (question.canonicalSubcategory ?? question.broadCategory ?? question.category) : 'General',
-        recipientCount: Number(countByQuestionId.get(item.referenceId!) ?? 0),
-      }] as const;
+      return [
+        item.id,
+        {
+          domain: question
+            ? (question.canonicalSubcategory ?? question.broadCategory ?? question.category)
+            : 'General',
+          recipientCount: Number(countByQuestionId.get(item.referenceId!) ?? 0),
+        },
+      ] as const;
     }),
   );
 }
 
 async function hydrateDeclaredPromoted(items: ActivityItemRow[]) {
   const relevant = items.filter(
-    (item) => item.type === 'declared_promoted' && item.referenceType === 'question' && item.referenceId,
+    (item) =>
+      item.type === 'declared_promoted' && item.referenceType === 'question' && item.referenceId,
   );
   if (relevant.length === 0) {
     return new Map<string, NonNullable<ActivityItemView['reference']['declaredPromoted']>>();
@@ -614,7 +675,13 @@ async function hydrateDeclaredPromoted(items: ActivityItemRow[]) {
 
   const questionIds = [...new Set(relevant.map((item) => item.referenceId!))];
   const rows = await db
-    .select({ id: questions.id, questionText: questions.questionText, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+    .select({
+      id: questions.id,
+      questionText: questions.questionText,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+      category: questions.category,
+    })
     .from(questions)
     .where(inArray(questions.id, questionIds));
 
@@ -622,10 +689,13 @@ async function hydrateDeclaredPromoted(items: ActivityItemRow[]) {
   return new Map(
     relevant.map((item) => {
       const q = byId.get(item.referenceId!);
-      return [item.id, {
-        domain: q ? (q.canonicalSubcategory ?? q.broadCategory ?? q.category) : '',
-        questionText: q?.questionText ?? '',
-      }] as const;
+      return [
+        item.id,
+        {
+          domain: q ? (q.canonicalSubcategory ?? q.broadCategory ?? q.category) : '',
+          questionText: q?.questionText ?? '',
+        },
+      ] as const;
     }),
   );
 }
@@ -671,38 +741,46 @@ async function hydrateActivityRows(
       referenceType: row.referenceType,
       read: row.read,
       createdAt: row.createdAt,
-      actor: row.actorUserId ? actorsById.get(row.actorUserId) ?? null : null,
+      actor: row.actorUserId ? (actorsById.get(row.actorUserId) ?? null) : null,
       reference: {
-        friendshipRequest: row.referenceType === 'friendship' && row.referenceId
-          ? friendshipRequestsById.get(row.referenceId)
-          : undefined,
-        game: row.referenceType === 'joshing_game' && row.referenceId
-          ? gamesById.get(row.referenceId)
-          : undefined,
-        masteryEvent: row.referenceType === 'mastery_event' && row.referenceId
-          ? masteryEventsById.get(row.referenceId)
-          : undefined,
-        reaction: row.referenceType === 'question_reaction' && row.referenceId
-          ? reactionsById.get(row.referenceId)
-          : undefined,
-        directQuestion: row.referenceType === 'feed_item' && row.referenceId
-          ? directQuestionsById.get(row.referenceId)
-          : undefined,
-        curatedQuestion: row.referenceType === 'question' && row.referenceId && row.type === 'question_curated'
-          ? curatedQuestionsById.get(row.referenceId)
-          : undefined,
-        friendAnsweredQuestion: row.type === 'friend_answered_your_question'
-          ? friendAnsweredQuestionsById.get(row.id)
-          : undefined,
-        authoredSharedQuestion: row.type === 'authored_question_shared'
-          ? authoredSharedQuestionsById.get(row.id)
-          : undefined,
-        declaredPromoted: row.type === 'declared_promoted'
-          ? declaredPromotedById.get(row.id)
-          : undefined,
-        gradeDispute: row.referenceType === 'grade_dispute' && row.referenceId
-          ? gradeDisputesById.get(row.referenceId)
-          : undefined,
+        friendshipRequest:
+          row.referenceType === 'friendship' && row.referenceId
+            ? friendshipRequestsById.get(row.referenceId)
+            : undefined,
+        game:
+          row.referenceType === 'joshing_game' && row.referenceId
+            ? gamesById.get(row.referenceId)
+            : undefined,
+        masteryEvent:
+          row.referenceType === 'mastery_event' && row.referenceId
+            ? masteryEventsById.get(row.referenceId)
+            : undefined,
+        reaction:
+          row.referenceType === 'question_reaction' && row.referenceId
+            ? reactionsById.get(row.referenceId)
+            : undefined,
+        directQuestion:
+          row.referenceType === 'feed_item' && row.referenceId
+            ? directQuestionsById.get(row.referenceId)
+            : undefined,
+        curatedQuestion:
+          row.referenceType === 'question' && row.referenceId && row.type === 'question_curated'
+            ? curatedQuestionsById.get(row.referenceId)
+            : undefined,
+        friendAnsweredQuestion:
+          row.type === 'friend_answered_your_question'
+            ? friendAnsweredQuestionsById.get(row.id)
+            : undefined,
+        authoredSharedQuestion:
+          row.type === 'authored_question_shared'
+            ? authoredSharedQuestionsById.get(row.id)
+            : undefined,
+        declaredPromoted:
+          row.type === 'declared_promoted' ? declaredPromotedById.get(row.id) : undefined,
+        gradeDispute:
+          row.referenceType === 'grade_dispute' && row.referenceId
+            ? gradeDisputesById.get(row.referenceId)
+            : undefined,
       },
     }));
 }
@@ -711,11 +789,13 @@ export async function getActivitiesForUser(userId: string): Promise<ActivityItem
   const rows = await db
     .select()
     .from(activityItems)
-    .where(and(
-      eq(activityItems.userId, userId),
-      isNull(activityItems.deletedAt),
-      gt(activityItems.createdAt, activityCutoff()),
-    ))
+    .where(
+      and(
+        eq(activityItems.userId, userId),
+        isNull(activityItems.deletedAt),
+        gt(activityItems.createdAt, activityCutoff()),
+      ),
+    )
     .orderBy(desc(activityItems.createdAt))
     .limit(100);
 
@@ -729,12 +809,14 @@ export async function getRecentActivityForHome(
   const rows = await db
     .select()
     .from(activityItems)
-    .where(and(
-      eq(activityItems.userId, userId),
-      isNull(activityItems.deletedAt),
-      gt(activityItems.createdAt, activityCutoff()),
-      inArray(activityItems.type, HOME_TOP3_ELIGIBLE_TYPES as readonly string[]),
-    ))
+    .where(
+      and(
+        eq(activityItems.userId, userId),
+        isNull(activityItems.deletedAt),
+        gt(activityItems.createdAt, activityCutoff()),
+        inArray(activityItems.type, HOME_TOP3_ELIGIBLE_TYPES as readonly string[]),
+      ),
+    )
     .orderBy(desc(activityItems.createdAt))
     .limit(limit);
 
@@ -745,26 +827,31 @@ export async function getUnreadCount(userId: string): Promise<number> {
   const [row] = await db
     .select({ value: count() })
     .from(activityItems)
-    .where(and(
-      eq(activityItems.userId, userId),
-      eq(activityItems.read, false),
-      ne(activityItems.type, 'reaction_received'),
-      isNull(activityItems.deletedAt),
-      gt(activityItems.createdAt, activityCutoff()),
-    ));
+    .where(
+      and(
+        eq(activityItems.userId, userId),
+        eq(activityItems.read, false),
+        ne(activityItems.type, 'reaction_received'),
+        isNull(activityItems.deletedAt),
+        gt(activityItems.createdAt, activityCutoff()),
+      ),
+    );
 
   let reactionCount = 0;
   try {
     const [reactionRow] = await db
       .select({ value: count() })
       .from(questionReactions)
-      .where(and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)));
+      .where(
+        and(eq(questionReactions.recipientUserId, userId), isNull(questionReactions.repliedAt)),
+      );
     reactionCount = reactionRow?.value ?? 0;
   } catch (error) {
-    const missingCamelCaseColumn = pgErrorCode(error) === '42703'
-      && (pgErrorMessage(error)?.includes('recipientUserId')
-        || pgErrorMessage(error)?.includes('repliedAt')
-        || pgErrorMessage(error)?.includes('QuestionReaction'));
+    const missingCamelCaseColumn =
+      pgErrorCode(error) === '42703' &&
+      (pgErrorMessage(error)?.includes('recipientUserId') ||
+        pgErrorMessage(error)?.includes('repliedAt') ||
+        pgErrorMessage(error)?.includes('QuestionReaction'));
     if (!missingCamelCaseColumn) throw error;
 
     const result = await db.execute(sql<{ value: string }>`
@@ -786,10 +873,7 @@ export async function markAllRead(userId: string): Promise<void> {
 }
 
 export async function markActivityBellOpened(userId: string): Promise<void> {
-  await db
-    .update(users)
-    .set({ lastActivityBellOpenedAt: new Date() })
-    .where(eq(users.id, userId));
+  await db.update(users).set({ lastActivityBellOpenedAt: new Date() }).where(eq(users.id, userId));
 }
 
 /**
@@ -813,12 +897,14 @@ export async function getBellBadgeCount(userId: string): Promise<number> {
   const topThreeRows = await db
     .select({ id: activityItems.id })
     .from(activityItems)
-    .where(and(
-      eq(activityItems.userId, userId),
-      isNull(activityItems.deletedAt),
-      gt(activityItems.createdAt, activityCutoff()),
-      inArray(activityItems.type, HOME_TOP3_ELIGIBLE_TYPES as readonly string[]),
-    ))
+    .where(
+      and(
+        eq(activityItems.userId, userId),
+        isNull(activityItems.deletedAt),
+        gt(activityItems.createdAt, activityCutoff()),
+        inArray(activityItems.type, HOME_TOP3_ELIGIBLE_TYPES as readonly string[]),
+      ),
+    )
     .orderBy(desc(activityItems.createdAt))
     .limit(3);
   const topThreeIds = topThreeRows.map((row) => row.id);

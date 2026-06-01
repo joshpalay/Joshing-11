@@ -85,7 +85,14 @@ const GENERIC_SUBCATEGORY_NORMALIZED = new Set([
 ]);
 const VALID_SUGGESTION_TYPES = ['factual', 'personal', 'ambiguous', 'factual_uncertain'] as const;
 const VALID_DIFFICULTY_ESTIMATES = ['accessible', 'moderate', 'specialist'] as const;
-const PLACEHOLDER_API_KEYS = new Set(['', 'placeholder', 'your_api_key_here', 'changeme', 'undefined', 'null']);
+const PLACEHOLDER_API_KEYS = new Set([
+  '',
+  'placeholder',
+  'your_api_key_here',
+  'changeme',
+  'undefined',
+  'null',
+]);
 
 let cachedClient: Anthropic | null = null;
 let cachedClientKey: string | null = null;
@@ -236,8 +243,8 @@ export async function loggedMessagesCreate(
     return response;
   } catch (error) {
     const operatorErrorKind = classifyOperatorError(error);
-    const isTimeout = error instanceof Error
-      && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    const isTimeout =
+      error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
     if (operatorErrorKind) {
       console.error(`[llm] ${operatorErrorKind}`, {
         scope,
@@ -350,7 +357,8 @@ function capitalizedPhraseCandidates(value: string): string[] {
   // Leading atom requires 2+ chars so single-letter words like "A" in
   // "A loaf of bread..." don't get picked as a category. Acronyms ([A-Z]{2,})
   // and any continuation atoms still match.
-  const phrasePattern = /\b(?:[A-Z][A-Za-z0-9]+(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,})(?:[-\s]+(?:[A-Z][A-Za-z0-9]*(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,}|of|the|and|for|in|to|a|an))*\b/g;
+  const phrasePattern =
+    /\b(?:[A-Z][A-Za-z0-9]+(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,})(?:[-\s]+(?:[A-Z][A-Za-z0-9]*(?:[.'’][A-Za-z0-9]+)?|[A-Z]{2,}|of|the|and|for|in|to|a|an))*\b/g;
   for (const match of value.matchAll(phrasePattern)) {
     const phrase = match[0]?.trim();
     if (phrase) candidates.push(phrase);
@@ -361,7 +369,7 @@ function capitalizedPhraseCandidates(value: string): string[] {
 function deterministicSubcategoryFallback(
   questionText: string,
   answerText: string,
-  broadCategory: string
+  broadCategory: string,
 ): string {
   const candidateSources = [
     answerText,
@@ -386,7 +394,7 @@ function deterministicSubcategoryFallback(
 function finalizeCategorization(
   result: CategoryResult,
   questionText: string,
-  answerText: string
+  answerText: string,
 ): CategoryResult {
   if (!isTooGenericSubcategory(result.subcategory, result.broad_category)) {
     return result;
@@ -502,7 +510,7 @@ function fallbackCategorization(questionText = '', answerText = ''): CategoryRes
   return finalizeCategorization(
     { subcategory: 'General Knowledge', broad_category: 'Pop Culture', confidence: 0 },
     questionText,
-    answerText
+    answerText,
   );
 }
 
@@ -530,7 +538,7 @@ export async function gradeAnswerWithLLM(
   question: string,
   canonicalAnswer: string,
   submittedAnswer: string,
-  questionType: string
+  questionType: string,
 ): Promise<GradingResponse> {
   const userMessage = `${wrapUserInput('question', question)}
 ${wrapUserInput('correct_answer', canonicalAnswer)}
@@ -577,13 +585,18 @@ Return only valid JSON with keys: result, confidence, reason, consolation. No ex
     // Grading system prompt is ~800 tokens — below Haiku's 2048 cacheable
     // threshold, so cache_control would be a silent no-op. Pass the prompt
     // as a plain string for clarity.
-    const response = await loggedMessagesCreate(client, 'grade', {
-      model: GRADING_MODEL,
-      max_tokens: 300,
-      temperature: 0,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    }, { timeoutMs: GRADE_TIMEOUT_MS });
+    const response = await loggedMessagesCreate(
+      client,
+      'grade',
+      {
+        model: GRADING_MODEL,
+        max_tokens: 300,
+        temperature: 0,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+      },
+      { timeoutMs: GRADE_TIMEOUT_MS },
+    );
 
     const text = extractTextContent(response.content);
     const parsed = parseJsonObject(text);
@@ -614,7 +627,7 @@ Return only valid JSON with keys: result, confidence, reason, consolation. No ex
 export async function categorizeQuestion(
   questionText: string,
   answerText: string,
-  alternateAnswers: readonly string[] = []
+  alternateAnswers: readonly string[] = [],
 ): Promise<CategoryResult> {
   const systemPrompt = `You are a hyper-specific categorizer for a personal trivia game.
 Return exactly this JSON shape:
@@ -653,9 +666,10 @@ Bad subcategories: "Classical Music", "Rock Music", "Musical Theatre", "Literatu
 
 Return JSON only.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
-  const alternatesLine = alternateAnswers.length > 0
-    ? `\n${wrapUserInput('accepted_alternates', alternateAnswers.join(' | '))} (do NOT use as the subcategory label)`
-    : '';
+  const alternatesLine =
+    alternateAnswers.length > 0
+      ? `\n${wrapUserInput('accepted_alternates', alternateAnswers.join(' | '))} (do NOT use as the subcategory label)`
+      : '';
   const userMessage = `${wrapUserInput('question', questionText)}
 ${wrapUserInput('answer', answerText)}${alternatesLine}
 Categorize this question. Return JSON only.`;
@@ -752,9 +766,10 @@ Examples:
 - Answer "Robert's Rules of Order" → "Parliamentary Procedure" (NOT "Robert's Rules of Order", NOT "Rules of Order")
 - Answer "Soil pH" → "Hydrangea Cultivation" (NOT "Soil pH", NOT "Soil Acidity")
 - Answer "The Waste Land" → "Modernist Poetry" (NOT "The Waste Land", NOT "Waste Land")${INSTRUCTION_USER_INPUT_GUIDANCE}`;
-      const altLine = alternateAnswers.length > 0
-        ? `\n${wrapUserInput('alternates_to_avoid', alternateAnswers.join(' | '))}`
-        : '';
+      const altLine =
+        alternateAnswers.length > 0
+          ? `\n${wrapUserInput('alternates_to_avoid', alternateAnswers.join(' | '))}`
+          : '';
       const leakMessage = `${wrapUserInput('question', questionText)}
 ${wrapUserInput('answer', answerText)}${altLine}
 ${wrapUserInput('broad_category', broadCategory)}
@@ -774,9 +789,9 @@ Return JSON only.`;
       const leakParsed = parseJsonObject(leakText);
       const deleaked = asTrimmedString(leakParsed?.subcategory);
       if (
-        deleaked
-        && !isTooGenericSubcategory(deleaked, broadCategory)
-        && !textContainsAnswer(deleaked, answerText, alternateAnswers)
+        deleaked &&
+        !isTooGenericSubcategory(deleaked, broadCategory) &&
+        !textContainsAnswer(deleaked, answerText, alternateAnswers)
       ) {
         subcategory = deleaked;
       } else {
@@ -792,7 +807,7 @@ Return JSON only.`;
     return finalizeCategorization(
       { subcategory, broad_category: broadCategory, confidence },
       questionText,
-      answerText
+      answerText,
     );
   } catch (error) {
     logFallback('categorizeQuestion', 'request_failed', summarizeError(error));
@@ -871,7 +886,7 @@ export async function generateExplainer(
   questionText: string,
   canonicalAnswer: string,
   result: 'correct' | 'wrong' | 'expired',
-  submittedAnswer: string | null
+  submittedAnswer: string | null,
 ): Promise<ExplainerResult> {
   const systemPrompt = `You are writing educational explainers for a personal trivia game.
 Your voice is warm, curious, and knowledgeable — like a friend who genuinely loves this topic and wants to share it, not a textbook.
@@ -895,7 +910,9 @@ FULL (2-3 paragraphs, ~180-250 words):
 Return only valid JSON with "brief" and "full" keys.
 No markdown. No explanation outside the JSON object.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
-  const submittedLine = submittedAnswer ? `\n${wrapUserInput('player_answer', submittedAnswer)}` : '';
+  const submittedLine = submittedAnswer
+    ? `\n${wrapUserInput('player_answer', submittedAnswer)}`
+    : '';
   const userMessage = `${wrapUserInput('question', questionText)}
 ${wrapUserInput('correct_answer', canonicalAnswer)}
 ${wrapUserInput('player_result', result)}${submittedLine}
@@ -943,7 +960,7 @@ Write brief and full explainers. Return JSON only.`;
  */
 export async function generateFactualReflectionExplanation(
   questionText: string,
-  canonicalAnswer: string
+  canonicalAnswer: string,
 ): Promise<string> {
   const systemPrompt = `You write short factual background for a trivia reflection screen.
 Rules:
@@ -974,7 +991,9 @@ Write 2–3 sentences of factual explanation.`;
 
     const text = extractTextContent(response.content).replace(/\s+/g, ' ').trim();
     if (text.length < 20) {
-      logFallback('generateFactualReflectionExplanation', 'too_short', { responseLength: text.length });
+      logFallback('generateFactualReflectionExplanation', 'too_short', {
+        responseLength: text.length,
+      });
       return fallbackFactualReflectionExplanation(canonicalAnswer);
     }
     return text;
@@ -1048,7 +1067,10 @@ Suggest a canonical answer and classify the question type. Return JSON only.`;
     }
 
     const type = asTrimmedString(parsed.type);
-    if (!type || !VALID_SUGGESTION_TYPES.includes(type as typeof VALID_SUGGESTION_TYPES[number])) {
+    if (
+      !type ||
+      !VALID_SUGGESTION_TYPES.includes(type as (typeof VALID_SUGGESTION_TYPES)[number])
+    ) {
       logFallback('suggestAnswer', 'invalid_type_field');
       return fallbackSuggestion();
     }
@@ -1057,18 +1079,26 @@ Suggest a canonical answer and classify the question type. Return JSON only.`;
     const minListItems = isList ? asIntegerOrNull(parsed.min_list_items) : null;
 
     const difficultyRaw = asTrimmedString(parsed.difficulty_estimate);
-    const difficulty: AnswerSuggestionResult['difficulty_estimate'] = difficultyRaw && VALID_DIFFICULTY_ESTIMATES.includes(
-      difficultyRaw as typeof VALID_DIFFICULTY_ESTIMATES[number]
-    )
-      ? difficultyRaw as AnswerSuggestionResult['difficulty_estimate']
-      : null;
+    const difficulty: AnswerSuggestionResult['difficulty_estimate'] =
+      difficultyRaw &&
+      VALID_DIFFICULTY_ESTIMATES.includes(
+        difficultyRaw as (typeof VALID_DIFFICULTY_ESTIMATES)[number],
+      )
+        ? (difficultyRaw as AnswerSuggestionResult['difficulty_estimate'])
+        : null;
 
     const normalizedType = type as AnswerSuggestionResult['type'];
 
     const rawPhrasings = parsed.suggested_phrasings;
-    const suggestedPhrasings: string[] = normalizedType === 'factual_uncertain' && Array.isArray(rawPhrasings)
-      ? rawPhrasings.flatMap((p) => { const s = asTrimmedString(p); return s ? [s] : []; }).slice(0, 3)
-      : [];
+    const suggestedPhrasings: string[] =
+      normalizedType === 'factual_uncertain' && Array.isArray(rawPhrasings)
+        ? rawPhrasings
+            .flatMap((p) => {
+              const s = asTrimmedString(p);
+              return s ? [s] : [];
+            })
+            .slice(0, 3)
+        : [];
 
     return {
       type: normalizedType,
@@ -1076,9 +1106,8 @@ Suggest a canonical answer and classify the question type. Return JSON only.`;
       note: asNullableString(parsed.note),
       is_list: isList,
       min_list_items: minListItems,
-      difficulty_estimate: normalizedType === 'personal' || normalizedType === 'ambiguous'
-        ? null
-        : difficulty,
+      difficulty_estimate:
+        normalizedType === 'personal' || normalizedType === 'ambiguous' ? null : difficulty,
       ...(suggestedPhrasings.length > 0 && { suggested_phrasings: suggestedPhrasings }),
     };
   } catch (error) {
@@ -1096,7 +1125,7 @@ export type TagSuggestionResult = {
 export async function suggestTags(
   questionText: string,
   answerText: string,
-  broadCategory: string
+  broadCategory: string,
 ): Promise<TagSuggestionResult> {
   const systemPrompt = `You are a topic tagger for a personal trivia game.
 Given a question, its answer, and its broad category, suggest 1–3 specific topic tags.
@@ -1148,7 +1177,7 @@ Suggest specific topic tags. Return JSON only.`;
 export async function resolveCanonicalSubcategoryWithLLM(
   incomingLabel: string,
   broadCategory: string,
-  candidates: string[]
+  candidates: string[],
 ): Promise<string | null> {
   if (candidates.length === 0) return null;
 
@@ -1236,9 +1265,10 @@ No explanation outside the JSON.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
       return { cleaned_text: questionText, confidence: 'high' };
     }
 
-    const cleaned_text = typeof parsed.cleaned_text === 'string' && parsed.cleaned_text.trim()
-      ? parsed.cleaned_text.trim()
-      : questionText;
+    const cleaned_text =
+      typeof parsed.cleaned_text === 'string' && parsed.cleaned_text.trim()
+        ? parsed.cleaned_text.trim()
+        : questionText;
     const confidenceRaw = typeof parsed.confidence === 'string' ? parsed.confidence.trim() : '';
     const confidence: CleanQuestionResult['confidence'] =
       confidenceRaw === 'high' || confidenceRaw === 'medium' || confidenceRaw === 'low'

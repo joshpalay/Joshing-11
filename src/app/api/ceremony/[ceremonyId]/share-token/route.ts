@@ -17,8 +17,9 @@ export async function POST(_request: Request, context: RouteContext) {
   const { ceremonyId } = await context.params;
   const ceremony = await getCeremonyById(ceremonyId);
   if (!ceremony) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  if (ceremony.userId !== session.userId) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (ceremony.userId !== session.userId)
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
-  const token = ceremony.shareCardToken ?? await generateShareCardToken(ceremonyId);
+  const token = ceremony.shareCardToken ?? (await generateShareCardToken(ceremonyId));
   return NextResponse.json({ token, url: buildShareCardUrl(token) });
 }

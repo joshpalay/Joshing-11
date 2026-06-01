@@ -6,12 +6,7 @@ import { Share2 } from 'lucide-react';
 export type ExpandingDomain = {
   domain: string;
   momentumScore: number;
-  reason:
-    | 'new-discovery'
-    | 'mastery-shift'
-    | 'social-overlap'
-    | 'saved-questions'
-    | 'active-play';
+  reason: 'new-discovery' | 'mastery-shift' | 'social-overlap' | 'saved-questions' | 'active-play';
   supportingText?: string;
 };
 
@@ -30,9 +25,16 @@ const ROW_ACCENTS = [
   { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)', text: '#7c6332' },
 ];
 
-export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotice }: RecentlyExpandingProps) {
+export function RecentlyExpanding({
+  domains,
+  playerDisplayName = 'Josh',
+  onNotice,
+}: RecentlyExpandingProps) {
   const visibleDomains = domains.slice(0, MAX_EXPANDING_DOMAINS);
-  const shareSummary = useMemo(() => buildShareText(playerDisplayName, visibleDomains), [playerDisplayName, visibleDomains]);
+  const shareSummary = useMemo(
+    () => buildShareText(playerDisplayName, visibleDomains),
+    [playerDisplayName, visibleDomains],
+  );
 
   const shareAll = () => {
     void shareDomain('text', shareSummary, onNotice);
@@ -70,16 +72,14 @@ export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotic
       {domains.length === 0 ? (
         <div style={emptyWrapStyle}>
           <p style={emptyTitleStyle}>Your world is still taking shape.</p>
-          <p style={emptyCopyStyle}>Play a few more rounds and your expanding territory will appear here.</p>
+          <p style={emptyCopyStyle}>
+            Play a few more rounds and your expanding territory will appear here.
+          </p>
         </div>
       ) : (
         <div style={rowsStyle}>
           {visibleDomains.map((domain, index) => (
-            <ExpandingDomainRow
-              key={domain.domain}
-              domain={domain}
-              index={index}
-            />
+            <ExpandingDomainRow key={domain.domain} domain={domain} index={index} />
           ))}
         </div>
       )}
@@ -98,7 +98,10 @@ function ExpandingDomainRow({ domain, index }: RowProps) {
   const initial = getDomainInitial(domain.domain);
 
   return (
-    <div style={{ ...rowStyle, animationDelay: `${Math.min(index * 34, 170)}ms` }} data-expanding-row="true">
+    <div
+      style={{ ...rowStyle, animationDelay: `${Math.min(index * 34, 170)}ms` }}
+      data-expanding-row="true"
+    >
       <div
         style={{ ...badgeStyle, borderColor: accent.border, background: accent.fill }}
         aria-hidden="true"
@@ -148,15 +151,29 @@ function getRowActivity(domain: ExpandingDomain): string {
   }
 }
 
-function buildShareText(playerDisplayName: string, domains: Pick<ExpandingDomain, 'domain'>[]): string {
-  const names = domains.map((domain) => domain.domain).filter(Boolean).slice(0, MAX_EXPANDING_DOMAINS);
-  const owner = playerDisplayName.trim().toLowerCase() === 'you' ? 'Your' : `${playerDisplayName}'s`;
+function buildShareText(
+  playerDisplayName: string,
+  domains: Pick<ExpandingDomain, 'domain'>[],
+): string {
+  const names = domains
+    .map((domain) => domain.domain)
+    .filter(Boolean)
+    .slice(0, MAX_EXPANDING_DOMAINS);
+  const owner =
+    playerDisplayName.trim().toLowerCase() === 'you' ? 'Your' : `${playerDisplayName}'s`;
   if (names.length === 0) return `${owner} world is still taking shape on Joshing.`;
   return `${owner} knowledge is growing in these territories:\n${names.map((name, index) => `${index + 1}. ${name}`).join('\n')}`;
 }
 
-async function shareDomain(target: 'text' | 'facebook' | 'x' | 'instagram', text: string, onNotice?: (message: string) => void) {
-  const url = typeof window !== 'undefined' ? window.location.origin + '/knowledge' : 'https://joshing.app/knowledge';
+async function shareDomain(
+  target: 'text' | 'facebook' | 'x' | 'instagram',
+  text: string,
+  onNotice?: (message: string) => void,
+) {
+  const url =
+    typeof window !== 'undefined'
+      ? window.location.origin + '/knowledge'
+      : 'https://joshing.app/knowledge';
   if (target === 'text' && navigator.share) {
     try {
       await navigator.share({ text, url });
@@ -167,17 +184,27 @@ async function shareDomain(target: 'text' | 'facebook' | 'x' | 'instagram', text
   }
 
   if (target === 'facebook') {
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+    window.open(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
     return;
   }
 
   if (target === 'x') {
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(`${text}\n${url}`)}`, '_blank', 'noopener,noreferrer');
+    window.open(
+      `https://twitter.com/intent/tweet?text=${encodeURIComponent(`${text}\n${url}`)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
     return;
   }
 
   await copyShareText(`${text}\n${url}`);
-  onNotice?.(target === 'instagram' ? 'Story text copied.' : 'Recently expanding territories copied.');
+  onNotice?.(
+    target === 'instagram' ? 'Story text copied.' : 'Recently expanding territories copied.',
+  );
 }
 
 async function copyShareText(text: string) {

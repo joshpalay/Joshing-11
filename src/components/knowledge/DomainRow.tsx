@@ -59,7 +59,8 @@ export function DomainRow({
                     key={`${domain}-dot-${index}`}
                     style={{
                       ...dotStyle,
-                      background: index < contributionDots ? 'var(--warm-ink)' : 'var(--warm-border-soft)',
+                      background:
+                        index < contributionDots ? 'var(--warm-ink)' : 'var(--warm-border-soft)',
                     }}
                   />
                 ))}

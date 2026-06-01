@@ -1,11 +1,11 @@
-'use client'
+'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
-import { Check, Edit3, Loader2, Plus, X } from 'lucide-react'
-import { COUNTRIES } from '@/lib/onboarding/countries'
-import { US_STATES } from '@/lib/onboarding/us-regions'
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { Check, Edit3, Loader2, Plus, X } from 'lucide-react';
+import { COUNTRIES } from '@/lib/onboarding/countries';
+import { US_STATES } from '@/lib/onboarding/us-regions';
 
 type CurrentStep =
   | 'display-name'
@@ -13,67 +13,66 @@ type CurrentStep =
   | 'invite-suggestions'
   | 'background'
   | 'warmup'
-  | 'review'
+  | 'review';
 
 export type WarmupAnswers = {
-  deepDive?: string
-  hourLongTopic?: string
-  anythingElse?: string
-}
+  deepDive?: string;
+  hourLongTopic?: string;
+  anythingElse?: string;
+};
 
 export type ProposedInterest = {
-  domain: string
-  broadCategory: string
-  rationale?: string | null
-}
+  domain: string;
+  broadCategory: string;
+  rationale?: string | null;
+};
 
 type SelectedInterest = {
-  domain: string
-  broadCategory: string
-}
+  domain: string;
+  broadCategory: string;
+};
 
-export type PreSeededInterest = ProposedInterest
+export type PreSeededInterest = ProposedInterest;
 
 type OnboardingFlowProps = {
-  preSeededInterests: PreSeededInterest[]
-  inviterName?: string | null
-  inviteeDisplayName?: string | null
-  initialDisplayName?: string | null
-  initialHandle?: string | null
-}
+  preSeededInterests: PreSeededInterest[];
+  inviterName?: string | null;
+  inviteeDisplayName?: string | null;
+  initialDisplayName?: string | null;
+  initialHandle?: string | null;
+};
 
-const DISPLAY_NAME_MIN = 2
-const DISPLAY_NAME_MAX = 30
-const HANDLE_MIN = 3
-const HANDLE_MAX = 20
-const HANDLE_FORMAT = /^[a-z][a-z0-9_]{2,19}$/
+const DISPLAY_NAME_MIN = 2;
+const DISPLAY_NAME_MAX = 30;
+const HANDLE_MIN = 3;
+const HANDLE_MAX = 20;
+const HANDLE_FORMAT = /^[a-z][a-z0-9_]{2,19}$/;
 
 function sanitizeForHandle(input: string): string {
   return input
     .toLowerCase()
     .replace(/[^a-z0-9_]/g, '')
     .replace(/^[^a-z]+/, '')
-    .slice(0, HANDLE_MAX)
+    .slice(0, HANDLE_MAX);
 }
 
 type CanonicalSuggestion = {
-  original: string
-  suggested: string
-  broadCategory: string
-  explanation: string | null
-}
+  original: string;
+  suggested: string;
+  broadCategory: string;
+  explanation: string | null;
+};
 
 const WARMUP_FIELDS: Array<{
-  field: keyof WarmupAnswers
-  label: string
-  placeholder: string
-  optional?: boolean
+  field: keyof WarmupAnswers;
+  label: string;
+  placeholder: string;
+  optional?: boolean;
 }> = [
   {
     field: 'deepDive',
     label: "A book, composer, or filmmaker you've gone deep on?",
-    placeholder:
-      "e.g. Middlemarch, or Tchaikovsky's symphonies, or Werner Herzog",
+    placeholder: "e.g. Middlemarch, or Tchaikovsky's symphonies, or Werner Herzog",
   },
   {
     field: 'hourLongTopic',
@@ -86,58 +85,48 @@ const WARMUP_FIELDS: Array<{
     placeholder: 'Anything',
     optional: true,
   },
-]
+];
 
 const LOADING_COPY = [
   'Reading your answers...',
   'Looking for connections...',
   'Building your map...',
-]
+];
 
 const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
   { step: 'background', label: 'About You' },
   { step: 'warmup', label: 'Warmup' },
   { step: 'review', label: 'Review' },
-]
+];
 
 function normalizeDomain(domain: string) {
-  return domain.trim().replace(/\s+/g, ' ')
+  return domain.trim().replace(/\s+/g, ' ');
 }
 
 function selectedKey(interest: SelectedInterest) {
-  return interest.domain.trim().toLowerCase()
+  return interest.domain.trim().toLowerCase();
 }
 
 function toSelected(interest: ProposedInterest): SelectedInterest | null {
-  const domain = normalizeDomain(interest.domain)
-  if (domain.length < 2) return null
+  const domain = normalizeDomain(interest.domain);
+  if (domain.length < 2) return null;
 
   return {
     domain,
     broadCategory:
       normalizeDomain(interest.broadCategory || 'General Knowledge') || 'General Knowledge',
-  }
+  };
 }
 
-function isSelected(
-  selectedInterests: SelectedInterest[],
-  interest: ProposedInterest
-) {
-  const selected = toSelected(interest)
+function isSelected(selectedInterests: SelectedInterest[], interest: ProposedInterest) {
+  const selected = toSelected(interest);
   return selected
-    ? selectedInterests.some(
-        (item) => selectedKey(item) === selectedKey(selected)
-      )
-    : false
+    ? selectedInterests.some((item) => selectedKey(item) === selectedKey(selected))
+    : false;
 }
 
 function Spinner({ small = false }: { small?: boolean }) {
-  return (
-    <Loader2
-      className={`${small ? 'size-4' : 'size-7'} animate-spin`}
-      aria-hidden="true"
-    />
-  )
+  return <Loader2 className={`${small ? 'size-4' : 'size-7'} animate-spin`} aria-hidden="true" />;
 }
 
 function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
@@ -146,17 +135,14 @@ function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
       ? -1
       : Math.max(
           0,
-          STEP_DOTS.findIndex((item) => item.step === currentStep)
-        )
+          STEP_DOTS.findIndex((item) => item.step === currentStep),
+        );
 
   return (
-    <div
-      className="flex items-center justify-center gap-3"
-      aria-label="Onboarding progress"
-    >
+    <div className="flex items-center justify-center gap-3" aria-label="Onboarding progress">
       {STEP_DOTS.map((item, index) => {
-        const active = index <= activeIndex
-        const current = item.step === currentStep
+        const active = index <= activeIndex;
+        const current = item.step === currentStep;
 
         return (
           <div key={item.step} className="flex items-center gap-2">
@@ -169,21 +155,19 @@ function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
             />
             <span className="sr-only">{item.label}</span>
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="space-y-2">
-      <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">
-        {title}
-      </h1>
+      <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">{title}</h1>
       <p className="text-muted-foreground text-base leading-7">{subtitle}</p>
     </div>
-  )
+  );
 }
 
 export default function OnboardingFlow({
@@ -193,87 +177,72 @@ export default function OnboardingFlow({
   initialDisplayName,
   initialHandle,
 }: OnboardingFlowProps) {
-  const router = useRouter()
-  const hasInitialDisplayName = Boolean(initialDisplayName?.trim())
-  const hasInitialHandle = Boolean(initialHandle?.trim())
+  const router = useRouter();
+  const hasInitialDisplayName = Boolean(initialDisplayName?.trim());
+  const hasInitialHandle = Boolean(initialHandle?.trim());
   const [currentStep, setCurrentStep] = useState<CurrentStep>(() => {
-    if (!hasInitialDisplayName) return 'display-name'
-    if (!hasInitialHandle) return 'handle'
-    return preSeededInterests.length > 0 ? 'invite-suggestions' : 'background'
-  })
+    if (!hasInitialDisplayName) return 'display-name';
+    if (!hasInitialHandle) return 'handle';
+    return preSeededInterests.length > 0 ? 'invite-suggestions' : 'background';
+  });
   const [displayName, setDisplayName] = useState<string>(() =>
-    (initialDisplayName ?? inviteeDisplayName ?? '')
-      .trim()
-      .slice(0, DISPLAY_NAME_MAX)
-  )
-  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false)
-  const [displayNameError, setDisplayNameError] = useState<string | null>(null)
+    (initialDisplayName ?? inviteeDisplayName ?? '').trim().slice(0, DISPLAY_NAME_MAX),
+  );
+  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [handle, setHandle] = useState<string>(() => {
-    const seed = initialHandle?.trim()
-    if (seed) return seed.toLowerCase().slice(0, HANDLE_MAX)
-    return sanitizeForHandle(initialDisplayName ?? inviteeDisplayName ?? '')
-  })
-  const [handleTouched, setHandleTouched] = useState(false)
+    const seed = initialHandle?.trim();
+    if (seed) return seed.toLowerCase().slice(0, HANDLE_MAX);
+    return sanitizeForHandle(initialDisplayName ?? inviteeDisplayName ?? '');
+  });
+  const [handleTouched, setHandleTouched] = useState(false);
   const [handleStatus, setHandleStatus] = useState<
     | { state: 'idle' }
     | { state: 'checking' }
     | { state: 'available' }
     | { state: 'unavailable'; reason: 'format' | 'reserved' | 'taken' }
-  >({ state: 'idle' })
-  const [isSavingHandle, setIsSavingHandle] = useState(false)
-  const [handleError, setHandleError] = useState<string | null>(null)
-  const [birthYear, setBirthYear] = useState('')
-  const [grewUpCountry, setGrewUpCountry] = useState('')
-  const [grewUpRegion, setGrewUpRegion] = useState('')
-  const [warmupAnswers, setWarmupAnswers] = useState<WarmupAnswers>({})
-  const [proposedInterests, setProposedInterests] = useState<
-    ProposedInterest[] | null
-  >(null)
+  >({ state: 'idle' });
+  const [isSavingHandle, setIsSavingHandle] = useState(false);
+  const [handleError, setHandleError] = useState<string | null>(null);
+  const [birthYear, setBirthYear] = useState('');
+  const [grewUpCountry, setGrewUpCountry] = useState('');
+  const [grewUpRegion, setGrewUpRegion] = useState('');
+  const [warmupAnswers, setWarmupAnswers] = useState<WarmupAnswers>({});
+  const [proposedInterests, setProposedInterests] = useState<ProposedInterest[] | null>(null);
   const [inviteInterests, setInviteInterests] = useState<PreSeededInterest[]>(
-    () => preSeededInterests
-  )
-  const [selectedInterests, setSelectedInterests] = useState<
-    SelectedInterest[]
-  >(() =>
+    () => preSeededInterests,
+  );
+  const [selectedInterests, setSelectedInterests] = useState<SelectedInterest[]>(() =>
     preSeededInterests
       .flatMap((interest) => {
-        const selected = toSelected(interest)
-        return selected ? [selected] : []
+        const selected = toSelected(interest);
+        return selected ? [selected] : [];
       })
-      .slice(0, 5)
-  )
-  const [isLoading, setIsLoading] = useState(false)
-  const [isCanonicalizing, setIsCanonicalizing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [loadingCopyIndex, setLoadingCopyIndex] = useState(0)
-  const [editingKey, setEditingKey] = useState<string | null>(null)
-  const [editingDomain, setEditingDomain] = useState('')
-  const [showComposer, setShowComposer] = useState(false)
-  const [customInput, setCustomInput] = useState('')
-  const [canonicalSuggestion, setCanonicalSuggestion] =
-    useState<CanonicalSuggestion | null>(null)
-  const [customChoice, setCustomChoice] = useState<'suggested' | 'mine' | null>(
-    null
-  )
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const displayInviterName = inviterName?.trim()
-    ? inviterName.trim()
-    : 'A friend'
+      .slice(0, 5),
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCanonicalizing, setIsCanonicalizing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingCopyIndex, setLoadingCopyIndex] = useState(0);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingDomain, setEditingDomain] = useState('');
+  const [showComposer, setShowComposer] = useState(false);
+  const [customInput, setCustomInput] = useState('');
+  const [canonicalSuggestion, setCanonicalSuggestion] = useState<CanonicalSuggestion | null>(null);
+  const [customChoice, setCustomChoice] = useState<'suggested' | 'mine' | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const displayInviterName = inviterName?.trim() ? inviterName.trim() : 'A friend';
 
-  const parsedBirthYear = parseInt(birthYear, 10)
-  const maxBirthYear = new Date().getFullYear() - 13
+  const parsedBirthYear = parseInt(birthYear, 10);
+  const maxBirthYear = new Date().getFullYear() - 13;
   const birthYearValid =
-    birthYear.length === 4 &&
-    parsedBirthYear >= 1920 &&
-    parsedBirthYear <= maxBirthYear
+    birthYear.length === 4 && parsedBirthYear >= 1920 && parsedBirthYear <= maxBirthYear;
   const canAdvanceBackground =
-    birthYearValid &&
-    grewUpCountry !== '' &&
-    (grewUpCountry !== 'US' || grewUpRegion !== '')
+    birthYearValid && grewUpCountry !== '' && (grewUpCountry !== 'US' || grewUpRegion !== '');
 
   const canGenerate =
     normalizeDomain(warmupAnswers.deepDive ?? '').length > 0 &&
-    normalizeDomain(warmupAnswers.hourLongTopic ?? '').length > 0
+    normalizeDomain(warmupAnswers.hourLongTopic ?? '').length > 0;
 
   const reviewInterests = useMemo(
     () => [
@@ -282,221 +251,198 @@ export default function OnboardingFlow({
         (interest) =>
           !inviteInterests.some(
             (seeded) =>
-              selectedKey(
-                toSelected(seeded) ?? { domain: '', broadCategory: '' }
-              ) ===
-              selectedKey(
-                toSelected(interest) ?? { domain: '', broadCategory: '' }
-              )
-          )
+              selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) ===
+              selectedKey(toSelected(interest) ?? { domain: '', broadCategory: '' }),
+          ),
       ),
     ],
-    [inviteInterests, proposedInterests]
-  )
+    [inviteInterests, proposedInterests],
+  );
 
   useEffect(() => {
-    if (currentStep !== 'handle') return
+    if (currentStep !== 'handle') return;
 
-    const candidate = handle.trim().toLowerCase()
-    const controller = new AbortController()
+    const candidate = handle.trim().toLowerCase();
+    const controller = new AbortController();
 
     const immediate = window.setTimeout(() => {
       if (candidate.length < HANDLE_MIN) {
-        setHandleStatus({ state: 'idle' })
-        return
+        setHandleStatus({ state: 'idle' });
+        return;
       }
       if (!HANDLE_FORMAT.test(candidate)) {
-        setHandleStatus({ state: 'unavailable', reason: 'format' })
-        return
+        setHandleStatus({ state: 'unavailable', reason: 'format' });
+        return;
       }
-      setHandleStatus({ state: 'checking' })
-    }, 0)
+      setHandleStatus({ state: 'checking' });
+    }, 0);
 
     const debounced = window.setTimeout(async () => {
-      if (
-        candidate.length < HANDLE_MIN ||
-        !HANDLE_FORMAT.test(candidate)
-      ) {
-        return
+      if (candidate.length < HANDLE_MIN || !HANDLE_FORMAT.test(candidate)) {
+        return;
       }
       try {
-        const response = await fetch(
-          `/api/handle/check?handle=${encodeURIComponent(candidate)}`,
-          { signal: controller.signal },
-        )
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok) return
+        const response = await fetch(`/api/handle/check?handle=${encodeURIComponent(candidate)}`, {
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) return;
         if (data?.available === true) {
-          setHandleStatus({ state: 'available' })
+          setHandleStatus({ state: 'available' });
         } else if (typeof data?.reason === 'string') {
           setHandleStatus({
             state: 'unavailable',
             reason: data.reason as 'format' | 'reserved' | 'taken',
-          })
+          });
         }
       } catch (fetchError) {
-        if (
-          !(fetchError instanceof DOMException && fetchError.name === 'AbortError')
-        ) {
-          setHandleStatus({ state: 'idle' })
+        if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
+          setHandleStatus({ state: 'idle' });
         }
       }
-    }, 300)
+    }, 300);
 
     return () => {
-      controller.abort()
-      window.clearTimeout(immediate)
-      window.clearTimeout(debounced)
-    }
-  }, [currentStep, handle])
+      controller.abort();
+      window.clearTimeout(immediate);
+      window.clearTimeout(debounced);
+    };
+  }, [currentStep, handle]);
 
   useEffect(() => {
-    if (!isLoading || currentStep !== 'warmup') return
+    if (!isLoading || currentStep !== 'warmup') return;
 
     const interval = window.setInterval(() => {
-      setLoadingCopyIndex((current) => (current + 1) % LOADING_COPY.length)
-    }, 3000)
+      setLoadingCopyIndex((current) => (current + 1) % LOADING_COPY.length);
+    }, 3000);
 
-    return () => window.clearInterval(interval)
-  }, [currentStep, isLoading])
+    return () => window.clearInterval(interval);
+  }, [currentStep, isLoading]);
 
   useEffect(() => {
-    const rawInput = normalizeDomain(customInput)
+    const rawInput = normalizeDomain(customInput);
     const resetTimer = window.setTimeout(() => {
-      setCanonicalSuggestion(null)
-      setCustomChoice(null)
-      if (!showComposer || rawInput.length <= 3) setIsCanonicalizing(false)
-    }, 0)
+      setCanonicalSuggestion(null);
+      setCustomChoice(null);
+      if (!showComposer || rawInput.length <= 3) setIsCanonicalizing(false);
+    }, 0);
 
     if (!showComposer || rawInput.length <= 3) {
-      return () => window.clearTimeout(resetTimer)
+      return () => window.clearTimeout(resetTimer);
     }
 
-    const controller = new AbortController()
+    const controller = new AbortController();
     const timer = window.setTimeout(async () => {
-      setIsCanonicalizing(true)
+      setIsCanonicalizing(true);
       try {
         const response = await fetch('/api/onboarding/canonicalize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ rawInput }),
           signal: controller.signal,
-        })
-        const data = await response.json().catch(() => ({}))
+        });
+        const data = await response.json().catch(() => ({}));
 
-        if (!response.ok || typeof data?.suggested !== 'string') return
+        if (!response.ok || typeof data?.suggested !== 'string') return;
 
         setCanonicalSuggestion({
           original: data.original ?? rawInput,
           suggested: data.suggested,
           broadCategory: data.broadCategory ?? 'General Knowledge',
           explanation: data.explanation ?? null,
-        })
+        });
       } catch (fetchError) {
-        if (
-          !(
-            fetchError instanceof DOMException &&
-            fetchError.name === 'AbortError'
-          )
-        ) {
-          setCanonicalSuggestion(null)
+        if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
+          setCanonicalSuggestion(null);
         }
       } finally {
-        if (!controller.signal.aborted) setIsCanonicalizing(false)
+        if (!controller.signal.aborted) setIsCanonicalizing(false);
       }
-    }, 800)
+    }, 800);
 
     return () => {
-      controller.abort()
-      window.clearTimeout(resetTimer)
-      window.clearTimeout(timer)
-    }
-  }, [customInput, showComposer])
+      controller.abort();
+      window.clearTimeout(resetTimer);
+      window.clearTimeout(timer);
+    };
+  }, [customInput, showComposer]);
 
   function updateWarmupAnswer(field: keyof WarmupAnswers, value: string) {
     setWarmupAnswers((current) => ({
       ...current,
       [field]: value.slice(0, 200),
-    }))
+    }));
   }
 
   function toggleInterest(interest: ProposedInterest) {
-    const selected = toSelected(interest)
-    if (!selected) return
+    const selected = toSelected(interest);
+    if (!selected) return;
 
     setSelectedInterests((current) => {
-      const exists = current.some(
-        (item) => selectedKey(item) === selectedKey(selected)
-      )
-      if (exists)
-        return current.filter(
-          (item) => selectedKey(item) !== selectedKey(selected)
-        )
-      if (current.length >= 5) return current
-      return [...current, selected]
-    })
+      const exists = current.some((item) => selectedKey(item) === selectedKey(selected));
+      if (exists) return current.filter((item) => selectedKey(item) !== selectedKey(selected));
+      if (current.length >= 5) return current;
+      return [...current, selected];
+    });
   }
 
   function beginEdit(interest: ProposedInterest) {
-    const selected = toSelected(interest)
-    if (!selected) return
+    const selected = toSelected(interest);
+    if (!selected) return;
 
-    setEditingKey(selectedKey(selected))
-    setEditingDomain(selected.domain)
+    setEditingKey(selectedKey(selected));
+    setEditingDomain(selected.domain);
   }
 
   function saveEdit(interest: ProposedInterest) {
-    const selected = toSelected(interest)
-    const nextDomain = normalizeDomain(editingDomain)
-    if (!selected || nextDomain.length < 2) return
+    const selected = toSelected(interest);
+    const nextDomain = normalizeDomain(editingDomain);
+    if (!selected || nextDomain.length < 2) return;
 
-    const edited = { ...interest, domain: nextDomain }
+    const edited = { ...interest, domain: nextDomain };
     setInviteInterests((current) =>
       current.map((item) =>
-        selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) ===
-        selectedKey(selected)
+        selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) === selectedKey(selected)
           ? edited
-          : item
-      )
-    )
+          : item,
+      ),
+    );
     setProposedInterests(
       (current) =>
         current?.map((item) =>
           selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) ===
           selectedKey(selected)
             ? edited
-            : item
-        ) ?? current
-    )
+            : item,
+        ) ?? current,
+    );
     setSelectedInterests((current) =>
       current.map((item) =>
-        selectedKey(item) === selectedKey(selected)
-          ? { ...item, domain: nextDomain }
-          : item
-      )
-    )
-    setEditingKey(null)
-    setEditingDomain('')
+        selectedKey(item) === selectedKey(selected) ? { ...item, domain: nextDomain } : item,
+      ),
+    );
+    setEditingKey(null);
+    setEditingDomain('');
   }
 
   function startLongPress(interest: ProposedInterest) {
-    clearLongPress()
-    longPressTimer.current = setTimeout(() => beginEdit(interest), 500)
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => beginEdit(interest), 500);
   }
 
   function clearLongPress() {
     if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
     }
   }
 
   async function generateProposals() {
-    if (!canGenerate) return
+    if (!canGenerate) return;
 
-    setError(null)
-    setIsLoading(true)
-    setLoadingCopyIndex(0)
+    setError(null);
+    setIsLoading(true);
+    setLoadingCopyIndex(0);
 
     try {
       const response = await fetch('/api/onboarding/propose-interests', {
@@ -513,165 +459,157 @@ export default function OnboardingFlow({
                 }
               : undefined,
         }),
-      })
-      const data = await response.json().catch(() => ({}))
+      });
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok || !Array.isArray(data?.proposedInterests)) {
-        setError(
-          "We couldn't generate suggestions. You can try again or write your own."
-        )
-        return
+        setError("We couldn't generate suggestions. You can try again or write your own.");
+        return;
       }
 
-      setProposedInterests(data.proposedInterests)
-      setCurrentStep('review')
+      setProposedInterests(data.proposedInterests);
+      setCurrentStep('review');
     } catch {
-      setError(
-        "We couldn't generate suggestions. You can try again or write your own."
-      )
+      setError("We couldn't generate suggestions. You can try again or write your own.");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
   }
 
   async function submitDisplayName() {
-    const trimmed = displayName.trim().replace(/\s+/g, ' ')
+    const trimmed = displayName.trim().replace(/\s+/g, ' ');
     if (trimmed.length < DISPLAY_NAME_MIN || trimmed.length > DISPLAY_NAME_MAX) {
       setDisplayNameError(
-        `Pick something between ${DISPLAY_NAME_MIN} and ${DISPLAY_NAME_MAX} characters.`
-      )
-      return
+        `Pick something between ${DISPLAY_NAME_MIN} and ${DISPLAY_NAME_MAX} characters.`,
+      );
+      return;
     }
 
-    setDisplayNameError(null)
-    setIsSavingDisplayName(true)
+    setDisplayNameError(null);
+    setIsSavingDisplayName(true);
 
     try {
       const response = await fetch('/api/account', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ displayName: trimmed }),
-      })
-      const data = await response.json().catch(() => ({}))
+      });
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         setDisplayNameError(
-          typeof data?.error === 'string'
-            ? data.error
-            : "We couldn't save that name. Try again."
-        )
-        return
+          typeof data?.error === 'string' ? data.error : "We couldn't save that name. Try again.",
+        );
+        return;
       }
 
-      setDisplayName(trimmed)
+      setDisplayName(trimmed);
       if (!handle && !hasInitialHandle) {
-        setHandle(sanitizeForHandle(trimmed))
+        setHandle(sanitizeForHandle(trimmed));
       }
-      setCurrentStep(hasInitialHandle ? nextStepAfterHandle() : 'handle')
+      setCurrentStep(hasInitialHandle ? nextStepAfterHandle() : 'handle');
     } catch {
-      setDisplayNameError("We couldn't save that name. Try again.")
+      setDisplayNameError("We couldn't save that name. Try again.");
     } finally {
-      setIsSavingDisplayName(false)
+      setIsSavingDisplayName(false);
     }
   }
 
   function nextStepAfterHandle(): CurrentStep {
-    return inviteInterests.length > 0 ? 'invite-suggestions' : 'background'
+    return inviteInterests.length > 0 ? 'invite-suggestions' : 'background';
   }
 
   async function submitHandle() {
-    const candidate = handle.trim().toLowerCase()
+    const candidate = handle.trim().toLowerCase();
     if (!HANDLE_FORMAT.test(candidate)) {
       setHandleError(
-        'Handle must be 3–20 characters, start with a letter, and use only lowercase letters, numbers, and underscores.'
-      )
-      return
+        'Handle must be 3–20 characters, start with a letter, and use only lowercase letters, numbers, and underscores.',
+      );
+      return;
     }
 
-    setIsSavingHandle(true)
-    setHandleError(null)
+    setIsSavingHandle(true);
+    setHandleError(null);
 
     try {
       const response = await fetch('/api/account/handle', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ handle: candidate }),
-      })
-      const data = await response.json().catch(() => ({}))
+      });
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         setHandleError(
           typeof data?.message === 'string'
             ? data.message
-            : "We couldn't save that handle. Try again."
-        )
-        return
+            : "We couldn't save that handle. Try again.",
+        );
+        return;
       }
 
-      setHandle(candidate)
-      setCurrentStep(nextStepAfterHandle())
+      setHandle(candidate);
+      setCurrentStep(nextStepAfterHandle());
     } catch {
-      setHandleError("We couldn't save that handle. Try again.")
+      setHandleError("We couldn't save that handle. Try again.");
     } finally {
-      setIsSavingHandle(false)
+      setIsSavingHandle(false);
     }
   }
 
   function keepInviteInterests() {
-    setError(null)
+    setError(null);
     const toSave = inviteInterests
       .flatMap((interest) => {
-        const selected = toSelected(interest)
-        return selected ? [selected] : []
+        const selected = toSelected(interest);
+        return selected ? [selected] : [];
       })
-      .slice(0, 5)
-    saveInterests(toSave)
+      .slice(0, 5);
+    saveInterests(toSave);
   }
 
   function reviewInviteInterests() {
-    setError(null)
+    setError(null);
     setSelectedInterests(
       inviteInterests
         .flatMap((interest) => {
-          const selected = toSelected(interest)
-          return selected ? [selected] : []
+          const selected = toSelected(interest);
+          return selected ? [selected] : [];
         })
-        .slice(0, 5)
-    )
-    setCurrentStep('background')
+        .slice(0, 5),
+    );
+    setCurrentStep('background');
   }
 
   function skipInviteInterests() {
-    setError(null)
-    setSelectedInterests([])
-    setInviteInterests([])
-    setCurrentStep('background')
+    setError(null);
+    setSelectedInterests([]);
+    setInviteInterests([]);
+    setCurrentStep('background');
   }
 
   async function saveInterests(interestsOverride?: SelectedInterest[]) {
     const cleanSelected = (interestsOverride ?? selectedInterests)
       .flatMap((interest) => {
-        const selected = toSelected(interest)
-        return selected ? [selected] : []
+        const selected = toSelected(interest);
+        return selected ? [selected] : [];
       })
-      .slice(0, 5)
+      .slice(0, 5);
 
     const inviteSelectedCount = inviteInterests.filter((interest) => {
-      const selected = toSelected(interest)
+      const selected = toSelected(interest);
       return selected
-        ? cleanSelected.some(
-            (item) => selectedKey(item) === selectedKey(selected)
-          )
-        : false
-    }).length
+        ? cleanSelected.some((item) => selectedKey(item) === selectedKey(selected))
+        : false;
+    }).length;
 
     if (cleanSelected.length === 0) {
-      setError('Pick at least 1 to continue.')
-      return
+      setError('Pick at least 1 to continue.');
+      return;
     }
 
-    setError(null)
-    setIsLoading(true)
+    setError(null);
+    setIsLoading(true);
 
     try {
       const response = await fetch('/api/onboarding/save-interests', {
@@ -684,48 +622,47 @@ export default function OnboardingFlow({
             inviteSelectedCount,
           },
         }),
-      })
-      const data = await response.json().catch(() => ({}))
+      });
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok || data?.ok !== true) {
-        setError(data?.message ?? data?.error ?? 'Unable to save interests.')
-        return
+        setError(data?.message ?? data?.error ?? 'Unable to save interests.');
+        return;
       }
 
-      router.push('/')
+      router.push('/');
     } catch {
-      setError('Unable to save interests.')
+      setError('Unable to save interests.');
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
   }
 
   function skipSuggestions() {
-    setError(null)
-    setProposedInterests([])
-    setShowComposer(true)
-    setCurrentStep('review')
+    setError(null);
+    setProposedInterests([]);
+    setShowComposer(true);
+    setCurrentStep('review');
   }
 
   function addCustomInterest() {
-    const rawInput = normalizeDomain(customInput)
+    const rawInput = normalizeDomain(customInput);
     const chosenDomain =
       customChoice === 'suggested' && canonicalSuggestion
         ? canonicalSuggestion.suggested
-        : rawInput
-    const broadCategory = canonicalSuggestion?.broadCategory ?? 'General Knowledge'
-    const selected = toSelected({ domain: chosenDomain, broadCategory })
+        : rawInput;
+    const broadCategory = canonicalSuggestion?.broadCategory ?? 'General Knowledge';
+    const selected = toSelected({ domain: chosenDomain, broadCategory });
 
-    if (!selected || selectedInterests.length >= 5) return
+    if (!selected || selectedInterests.length >= 5) return;
 
     setSelectedInterests((current) => {
-      if (current.some((item) => selectedKey(item) === selectedKey(selected)))
-        return current
-      return [...current, selected].slice(0, 5)
-    })
-    setCustomInput('')
-    setCanonicalSuggestion(null)
-    setCustomChoice(null)
+      if (current.some((item) => selectedKey(item) === selectedKey(selected))) return current;
+      return [...current, selected].slice(0, 5);
+    });
+    setCustomInput('');
+    setCanonicalSuggestion(null);
+    setCustomChoice(null);
   }
 
   if (isLoading && currentStep === 'warmup') {
@@ -735,12 +672,10 @@ export default function OnboardingFlow({
           <div className="bg-card grid size-16 place-items-center rounded-full border shadow-sm">
             <Spinner />
           </div>
-          <p className="text-xl font-semibold">
-            {LOADING_COPY[loadingCopyIndex]}
-          </p>
+          <p className="text-xl font-semibold">{LOADING_COPY[loadingCopyIndex]}</p>
         </div>
       </main>
-    )
+    );
   }
 
   return (
@@ -763,8 +698,8 @@ export default function OnboardingFlow({
               <form
                 className="space-y-4"
                 onSubmit={(event) => {
-                  event.preventDefault()
-                  if (!isSavingDisplayName) void submitDisplayName()
+                  event.preventDefault();
+                  if (!isSavingDisplayName) void submitDisplayName();
                 }}
               >
                 <label className="block">
@@ -778,8 +713,8 @@ export default function OnboardingFlow({
                     maxLength={DISPLAY_NAME_MAX}
                     value={displayName}
                     onChange={(e) => {
-                      setDisplayName(e.target.value.slice(0, DISPLAY_NAME_MAX))
-                      if (displayNameError) setDisplayNameError(null)
+                      setDisplayName(e.target.value.slice(0, DISPLAY_NAME_MAX));
+                      if (displayNameError) setDisplayNameError(null);
                     }}
                   />
                 </label>
@@ -791,10 +726,7 @@ export default function OnboardingFlow({
                 <button
                   type="submit"
                   className="btn-primary h-12 w-full"
-                  disabled={
-                    isSavingDisplayName ||
-                    displayName.trim().length < DISPLAY_NAME_MIN
-                  }
+                  disabled={isSavingDisplayName || displayName.trim().length < DISPLAY_NAME_MIN}
                 >
                   {isSavingDisplayName ? 'Saving...' : 'Continue'}
                 </button>
@@ -812,8 +744,8 @@ export default function OnboardingFlow({
               <form
                 className="space-y-4"
                 onSubmit={(event) => {
-                  event.preventDefault()
-                  if (!isSavingHandle) void submitHandle()
+                  event.preventDefault();
+                  if (!isSavingHandle) void submitHandle();
                 }}
               >
                 <label className="block">
@@ -831,14 +763,14 @@ export default function OnboardingFlow({
                       maxLength={HANDLE_MAX}
                       value={handle}
                       onChange={(e) => {
-                        setHandleTouched(true)
+                        setHandleTouched(true);
                         setHandle(
                           e.target.value
                             .toLowerCase()
                             .replace(/[^a-z0-9_]/g, '')
                             .slice(0, HANDLE_MAX),
-                        )
-                        if (handleError) setHandleError(null)
+                        );
+                        if (handleError) setHandleError(null);
                       }}
                     />
                   </div>
@@ -868,9 +800,7 @@ export default function OnboardingFlow({
                   </p>
                 ) : null}
 
-                {handleError ? (
-                  <p className="text-destructive text-sm">{handleError}</p>
-                ) : null}
+                {handleError ? <p className="text-destructive text-sm">{handleError}</p> : null}
 
                 <button
                   type="submit"
@@ -954,9 +884,7 @@ export default function OnboardingFlow({
 
               <div className="space-y-5">
                 <label className="block">
-                  <span className="text-sm font-medium">
-                    What year were you born?
-                  </span>
+                  <span className="text-sm font-medium">What year were you born?</span>
                   <input
                     type="number"
                     className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
@@ -974,15 +902,13 @@ export default function OnboardingFlow({
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium">
-                    Where did you grow up?
-                  </span>
+                  <span className="text-sm font-medium">Where did you grow up?</span>
                   <select
                     className="bg-card focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
                     value={grewUpCountry}
                     onChange={(e) => {
-                      setGrewUpCountry(e.target.value)
-                      setGrewUpRegion('')
+                      setGrewUpCountry(e.target.value);
+                      setGrewUpRegion('');
                     }}
                   >
                     <option value="">Select a country</option>
@@ -1043,38 +969,29 @@ export default function OnboardingFlow({
               />
 
               <div className="space-y-4">
-                {WARMUP_FIELDS.map(
-                  ({ field, label, placeholder, optional }) => {
-                    const value = warmupAnswers[field] ?? ''
-                    return (
-                      <label key={field} className="block">
-                        <span className="text-sm font-medium">
-                          {label}
-                          {optional ? (
-                            <span className="text-muted-foreground">
-                              {' '}
-                              optional
-                            </span>
-                          ) : null}
+                {WARMUP_FIELDS.map(({ field, label, placeholder, optional }) => {
+                  const value = warmupAnswers[field] ?? '';
+                  return (
+                    <label key={field} className="block">
+                      <span className="text-sm font-medium">
+                        {label}
+                        {optional ? <span className="text-muted-foreground"> optional</span> : null}
+                      </span>
+                      <input
+                        className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
+                        maxLength={200}
+                        placeholder={placeholder}
+                        value={value}
+                        onChange={(event) => updateWarmupAnswer(field, event.target.value)}
+                      />
+                      {value.length > 150 ? (
+                        <span className="text-muted-foreground mt-1 block text-right text-xs">
+                          {value.length}/200
                         </span>
-                        <input
-                          className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
-                          maxLength={200}
-                          placeholder={placeholder}
-                          value={value}
-                          onChange={(event) =>
-                            updateWarmupAnswer(field, event.target.value)
-                          }
-                        />
-                        {value.length > 150 ? (
-                          <span className="text-muted-foreground mt-1 block text-right text-xs">
-                            {value.length}/200
-                          </span>
-                        ) : null}
-                      </label>
-                    )
-                  }
-                )}
+                      ) : null}
+                    </label>
+                  );
+                })}
               </div>
 
               {error ? (
@@ -1089,11 +1006,7 @@ export default function OnboardingFlow({
                       >
                         Try again
                       </button>
-                      <button
-                        type="button"
-                        className="btn-ghost h-10"
-                        onClick={skipSuggestions}
-                      >
+                      <button type="button" className="btn-ghost h-10" onClick={skipSuggestions}>
                         Skip suggestions
                       </button>
                     </>
@@ -1130,38 +1043,26 @@ export default function OnboardingFlow({
 
               <div className="space-y-3">
                 {reviewInterests.map((interest) => {
-                  const selected = isSelected(selectedInterests, interest)
-                  const normalized = toSelected(interest)
-                  const atCap = selectedInterests.length >= 5 && !selected
+                  const selected = isSelected(selectedInterests, interest);
+                  const normalized = toSelected(interest);
+                  const atCap = selectedInterests.length >= 5 && !selected;
                   const fromInvite = inviteInterests.some(
                     (seeded) =>
-                      selectedKey(
-                        toSelected(seeded) ?? { domain: '', broadCategory: '' }
-                      ) ===
-                      selectedKey(
-                        normalized ?? { domain: '', broadCategory: '' }
-                      )
-                  )
-                  const key = `${interest.domain}-${interest.broadCategory}`
-                  const editing = normalized
-                    ? editingKey === selectedKey(normalized)
-                    : false
+                      selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) ===
+                      selectedKey(normalized ?? { domain: '', broadCategory: '' }),
+                  );
+                  const key = `${interest.domain}-${interest.broadCategory}`;
+                  const editing = normalized ? editingKey === selectedKey(normalized) : false;
 
                   return (
                     <div
                       key={key}
                       className={[
                         'rounded-lg border p-4 transition',
-                        selected
-                          ? 'border-foreground bg-foreground text-background'
-                          : 'bg-card',
+                        selected ? 'border-foreground bg-foreground text-background' : 'bg-card',
                         atCap ? 'opacity-45' : '',
                       ].join(' ')}
-                      title={
-                        atCap
-                          ? '5 max - deselect one to add another'
-                          : undefined
-                      }
+                      title={atCap ? '5 max - deselect one to add another' : undefined}
                       onPointerDown={() => startLongPress(interest)}
                       onPointerUp={clearLongPress}
                       onPointerLeave={clearLongPress}
@@ -1172,9 +1073,7 @@ export default function OnboardingFlow({
                             className="bg-background text-foreground focus:ring-ring h-11 w-full rounded-md border px-3 text-base outline-none focus:ring-2"
                             value={editingDomain}
                             maxLength={100}
-                            onChange={(event) =>
-                              setEditingDomain(event.target.value)
-                            }
+                            onChange={(event) => setEditingDomain(event.target.value)}
                           />
                           <div className="flex gap-2">
                             <button
@@ -1236,7 +1135,7 @@ export default function OnboardingFlow({
                         </div>
                       )}
                     </div>
-                  )
+                  );
                 })}
               </div>
 
@@ -1284,9 +1183,7 @@ export default function OnboardingFlow({
                         <div className="bg-background space-y-3 rounded-md border p-3">
                           <p>
                             Suggested:{' '}
-                            <span className="font-medium">
-                              {canonicalSuggestion.suggested}
-                            </span>
+                            <span className="font-medium">{canonicalSuggestion.suggested}</span>
                           </p>
                           <div className="flex flex-wrap gap-2">
                             <button
@@ -1332,16 +1229,10 @@ export default function OnboardingFlow({
                   </div>
                 ) : null}
                 <div className="mb-3 flex items-center justify-between text-sm">
-                  <span className="font-medium">
-                    {selectedInterests.length} of 5 selected
-                  </span>
+                  <span className="font-medium">{selectedInterests.length} of 5 selected</span>
                   <span className="text-muted-foreground">
-                    {selectedInterests.length === 0
-                      ? 'Pick at least 1 to continue'
-                      : null}
-                    {selectedInterests.length === 5
-                      ? '5 max - deselect one to add another'
-                      : null}
+                    {selectedInterests.length === 0 ? 'Pick at least 1 to continue' : null}
+                    {selectedInterests.length === 5 ? '5 max - deselect one to add another' : null}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1365,26 +1256,17 @@ export default function OnboardingFlow({
               </div>
             </div>
           ) : null}
-
         </div>
       </section>
     </main>
-  )
+  );
 }
 
-function ErrorPanel({
-  message,
-  actions,
-}: {
-  message: string
-  actions?: ReactNode
-}) {
+function ErrorPanel({ message, actions }: { message: string; actions?: ReactNode }) {
   return (
     <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
       <p>{message}</p>
-      {actions ? (
-        <div className="mt-3 flex flex-wrap gap-2">{actions}</div>
-      ) : null}
+      {actions ? <div className="mt-3 flex flex-wrap gap-2">{actions}</div> : null}
     </div>
-  )
+  );
 }

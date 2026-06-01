@@ -11,8 +11,9 @@ type RouteContext = {
 
 function canViewGame(view: Awaited<ReturnType<typeof getJoshingGame>>, userId: string): boolean {
   return Boolean(
-    view
-    && (view.game.creatorId === userId || view.recipients.some((recipient) => recipient.userId === userId)),
+    view &&
+    (view.game.creatorId === userId ||
+      view.recipients.some((recipient) => recipient.userId === userId)),
   );
 }
 

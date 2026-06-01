@@ -35,7 +35,8 @@ vi.mock('@/server/db', async () => {
   return {
     ...schema,
     db: {
-      transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({ delete: () => deleteChain() }),
+      transaction: async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({ delete: () => deleteChain() }),
     },
   };
 });

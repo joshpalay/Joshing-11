@@ -1,53 +1,51 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
 
-type InviteTokenResponse = { token: string; url: string }
+type InviteTokenResponse = { token: string; url: string };
 
 // Side-by-side: "Send a personal invite" (opens the existing AddFriendInvite
 // 3-step modal via the friend-invitations:create-new event) and "Copy invite
 // link" (fetches/persists the per-user invite token and copies the URL).
 export function InviteSomeoneNew() {
-  const [copying, setCopying] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [copying, setCopying] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!toast) return
-    const timer = window.setTimeout(() => setToast(null), 1800)
-    return () => window.clearTimeout(timer)
-  }, [toast])
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   function openPersonalInvite() {
-    window.dispatchEvent(
-      new CustomEvent('friend-invitations:create-new', { detail: {} }),
-    )
+    window.dispatchEvent(new CustomEvent('friend-invitations:create-new', { detail: {} }));
   }
 
   async function copyInviteLink() {
-    if (copying) return
-    setCopying(true)
-    setError(null)
+    if (copying) return;
+    setCopying(true);
+    setError(null);
     try {
       const response = await fetch('/api/account/invite-token', {
         credentials: 'include',
-      })
+      });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { message?: string } | null
-        setError(body?.message ?? 'Could not fetch your invite link.')
-        return
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+        setError(body?.message ?? 'Could not fetch your invite link.');
+        return;
       }
-      const body = (await response.json().catch(() => null)) as InviteTokenResponse | null
+      const body = (await response.json().catch(() => null)) as InviteTokenResponse | null;
       if (!body?.url) {
-        setError('Could not build your invite link.')
-        return
+        setError('Could not build your invite link.');
+        return;
       }
-      await navigator.clipboard.writeText(body.url)
-      setToast('Link copied.')
+      await navigator.clipboard.writeText(body.url);
+      setToast('Link copied.');
     } catch {
-      setError('Could not copy your invite link.')
+      setError('Could not copy your invite link.');
     } finally {
-      setCopying(false)
+      setCopying(false);
     }
   }
 
@@ -76,10 +74,10 @@ export function InviteSomeoneNew() {
       </div>
       {error ? <p className="text-destructive mt-2 text-sm">{error}</p> : null}
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+        <div className="bg-foreground text-background fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm shadow-lg">
           {toast}
         </div>
       ) : null}
     </section>
-  )
+  );
 }

@@ -20,12 +20,12 @@ export function DomainList({ domains, onDomainSelect }: DomainListProps) {
   if (domains.length === 0) return null;
 
   return (
-    <div className="mt-4 divide-y rounded-lg border bg-card text-card-foreground">
+    <div className="bg-card text-card-foreground mt-4 divide-y rounded-lg border">
       {domains.map((domain) => (
         <button
           key={domain.domain}
           type="button"
-          className="block w-full bg-transparent px-4 py-0 text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="hover:bg-muted/50 focus-visible:ring-ring block w-full bg-transparent px-4 py-0 text-left transition-colors first:rounded-t-lg last:rounded-b-lg focus-visible:ring-2 focus-visible:outline-none"
           onClick={() => onDomainSelect?.(domain.domain)}
         >
           <DomainRow

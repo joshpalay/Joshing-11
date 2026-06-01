@@ -32,7 +32,7 @@ export type GameWinnerResult = {
 export async function computeGameWinner(
   prisma: DbClient,
   gameId: string,
-  groupId: string
+  groupId: string,
 ): Promise<GameWinnerResult> {
   void prisma;
   void gameId;

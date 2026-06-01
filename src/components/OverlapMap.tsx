@@ -111,8 +111,20 @@ function CategoryItem({
         aria-label={`${players[0].name} and ${players[1].name} share ${sharedPct} percent of ${cell.canonicalSubcategory}`}
       >
         {/* fill via CSS (not the SVG attribute) so var() player colors resolve */}
-        <circle cx={cxA} cy={cy} r={rA} style={{ fill: players[0].color }} opacity={CIRCLE_OPACITY} />
-        <circle cx={cxB} cy={cy} r={rB} style={{ fill: players[1].color }} opacity={CIRCLE_OPACITY} />
+        <circle
+          cx={cxA}
+          cy={cy}
+          r={rA}
+          style={{ fill: players[0].color }}
+          opacity={CIRCLE_OPACITY}
+        />
+        <circle
+          cx={cxB}
+          cy={cy}
+          r={rB}
+          style={{ fill: players[1].color }}
+          opacity={CIRCLE_OPACITY}
+        />
       </svg>
       <p
         style={{
@@ -145,9 +157,10 @@ export function OverlapMap({ players, cells }: OverlapMapProps): ReactElement | 
     grouped.set(cell.broadCategory, list);
   }
 
-  const maxScore = visible.length === 0
-    ? 1
-    : Math.max(1, ...visible.flatMap((cell) => [cell.aScore, cell.bScore]));
+  const maxScore =
+    visible.length === 0
+      ? 1
+      : Math.max(1, ...visible.flatMap((cell) => [cell.aScore, cell.bScore]));
 
   const strongest = visible.reduce<OverlapMapCell | null>((best, cell) => {
     const ratio = overlapRatioOf(cell);
@@ -168,7 +181,9 @@ export function OverlapMap({ players, cells }: OverlapMapProps): ReactElement | 
         color: INK,
       }}
     >
-      <span style={{ fontStyle: 'normal', fontFamily: 'var(--font-neutral), system-ui, sans-serif' }}>
+      <span
+        style={{ fontStyle: 'normal', fontFamily: 'var(--font-neutral), system-ui, sans-serif' }}
+      >
         Where you&apos;ve met
       </span>
       <br />
@@ -246,7 +261,9 @@ export function OverlapMap({ players, cells }: OverlapMapProps): ReactElement | 
           const domainColor = getPortraitDomainColor(broad).primary;
           return (
             <div key={broad}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}
+              >
                 <span
                   aria-hidden
                   style={{
@@ -269,7 +286,11 @@ export function OverlapMap({ players, cells }: OverlapMapProps): ReactElement | 
               >
                 {items
                   .slice()
-                  .sort((a, b) => b.sharedCorrect - a.sharedCorrect || a.canonicalSubcategory.localeCompare(b.canonicalSubcategory))
+                  .sort(
+                    (a, b) =>
+                      b.sharedCorrect - a.sharedCorrect ||
+                      a.canonicalSubcategory.localeCompare(b.canonicalSubcategory),
+                  )
                   .map((cell) => (
                     <CategoryItem
                       key={cell.canonicalSubcategory}
@@ -318,7 +339,8 @@ export function OverlapMap({ players, cells }: OverlapMapProps): ReactElement | 
           lineHeight: 1.4,
         }}
       >
-        Categories where neither of you has answered correctly together are hidden. They&apos;ll appear when you do.
+        Categories where neither of you has answered correctly together are hidden. They&apos;ll
+        appear when you do.
       </p>
     </section>
   );
