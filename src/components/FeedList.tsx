@@ -24,6 +24,7 @@ import {
 } from '@/components/feed'
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
+import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
 
 type FriendResult = {
   userId: string
@@ -363,19 +364,6 @@ function normalizeMasteryDelta(
   const tierChanged =
     typeof r.tierChanged === 'boolean' ? r.tierChanged : previousTier !== newTier
   return { previousTier, newTier, tierChanged }
-}
-
-function pickOpenedNewTerritory(raw: unknown): boolean {
-  if (!raw || typeof raw !== 'object') return false
-  const r = raw as Record<string, unknown>
-  return r.openedNewTerritory === true
-}
-
-function pickOpenedTerritoryDomain(raw: unknown): string | null {
-  if (!raw || typeof raw !== 'object') return null
-  const r = raw as Record<string, unknown>
-  if (r.openedNewTerritory !== true) return null
-  return typeof r.domain === 'string' && r.domain.trim() ? r.domain : null
 }
 
 function pickBroadCategory(

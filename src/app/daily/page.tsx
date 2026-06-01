@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
+import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { TopUpAreasModal, type TopUpInterest } from '@/components/daily/TopUpAreasModal';
 import LoadingScreen from '@/components/LoadingScreen';
@@ -111,6 +112,7 @@ export default function DailyPage() {
   const [error, setError] = useState<string | null>(null);
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
+  const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
   const [areaTopUp, setAreaTopUp] = useState<{ existing: TopUpInterest[]; maxNew: number } | null>(null);
 
   const loadQueue = useCallback(async () => {
@@ -311,6 +313,7 @@ export default function DailyPage() {
           copyVariant: slot.slot_index,
           creatorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
           canonicalSubcategory: slot.domain,
+          openedTerritoryDomain: openedTerritoryBySlot[slot.slot_index] ?? null,
           recheckAction: slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
             ? { onSubmit: () => requestRecheck(slot.slot_index) }
             : null,
@@ -360,7 +363,7 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer, pendingGiveUp]);
+  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer, pendingGiveUp, openedTerritoryBySlot]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -427,6 +430,15 @@ export default function DailyPage() {
       }
 
       const isCorrect = Boolean(body.isCorrect ?? body.correct);
+      // A correct answer in an unfamiliar domain default-adds it to the KB
+      // (B-1). The server reports the freshly-opened domain on masteryDelta;
+      // stash it per-slot so the reveal can surface the "Added — remove?" undo.
+      // Client-only — deliberately not persisted into the QueueSlot schema.
+      const masteryDelta = body.masteryDelta ?? body.mastery_delta;
+      const openedDomain = isCorrect ? pickOpenedTerritoryDomain(masteryDelta) : null;
+      if (openedDomain) {
+        setOpenedTerritoryBySlot((existing) => ({ ...existing, [currentSlot.slot_index]: openedDomain }));
+      }
       setQueue((existing) => existing
         ? {
             ...existing,

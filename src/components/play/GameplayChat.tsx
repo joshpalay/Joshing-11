@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
+import { NewTerritoryUndo } from '@/components/feed/NewTerritoryUndo';
 import {
   CORRECT_ANSWER_REACTIONS,
   WRONG_ANSWER_REACTIONS,
@@ -65,6 +66,8 @@ export type ChatMessage =
       relationalFeedbackLine?: string | null;
       /** Domain exclusion — canonical subcategory for "remove from rotation" affordance */
       canonicalSubcategory?: string | null;
+      /** B-1 — domain newly opened in the KB by this correct answer; surfaces the "Added [Domain] — remove?" undo. */
+      openedTerritoryDomain?: string | null;
       /** Per-answer commentary quip shown below the result bubble */
       quip?: string | null;
       /** Question's stored factual explainer. Rendered as a fallback below the verdict when no breadcrumb arrives (e.g. feed-sourced catch-up items, or when /api/breadcrumb times out). */
@@ -648,6 +651,8 @@ function ResultRow({
   pointsAwarded,
   pointsLabel,
   recheckAction,
+  canonicalSubcategory,
+  openedTerritoryDomain,
 }: {
   result: 'correct' | 'wrong' | 'expired' | 'gave_up';
   submitted: string;
@@ -666,6 +671,7 @@ function ResultRow({
   pointsAwarded?: number | null;
   pointsLabel?: string | null;
   recheckAction?: RecheckAction | null;
+  openedTerritoryDomain?: string | null;
 }) {
   const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
@@ -908,6 +914,9 @@ function ResultRow({
           </p>
         </div>
       ) : null}
+      {correct && openedTerritoryDomain ? (
+        <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
+      ) : null}
       {reactionPrompt ? <QuestionReactionPrompt prompt={reactionPrompt} /> : null}
     </div>
   );
@@ -1128,6 +1137,7 @@ export function GameplayChatThread({
                 pointsAwarded={m.pointsAwarded}
                 pointsLabel={m.pointsLabel}
                 recheckAction={m.recheckAction}
+                openedTerritoryDomain={m.openedTerritoryDomain}
               />
             );
           case 'session_complete':

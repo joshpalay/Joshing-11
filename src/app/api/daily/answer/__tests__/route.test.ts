@@ -129,8 +129,6 @@ vi.mock('@/server/db', () => ({
     category: 'q.c',
     insideJoke: 'q.ij',
   },
-  // PRD §8.4.3: bot slots with points run an extra playerMastery domain check.
-  playerMastery: { userId: 'pm.userId', canonicalSubcategory: 'pm.cs' },
 }))
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({
@@ -167,17 +165,14 @@ import { POST } from '@/app/api/daily/answer/route'
 function setupDbChain() {
   // Reset and re-seed the select() responses in the order the route issues them
   // for a bot slot: dailyQueues (queue) → generatedQuestions (question) →
-  // questions (persisted creator info, post-persist) → playerMastery (the
-  // §8.4.3 domain check). The domain row must be truthy so the route doesn't
-  // zero out points / skip the mastery write for an "unknown domain". When
-  // persistGeneratedQuestion throws, the route skips the creator select, so the
-  // playerMastery check consumes the creator handler instead — still truthy, so
-  // both the happy path and the persist-failure path resolve correctly.
+  // questions (persisted creator info, post-persist). The old PRD §8.4.3
+  // "bot questions can only deepen existing domains" gate (a fourth
+  // playerMastery select) has been removed (B-1) — a correct bot answer now
+  // default-adds the domain via writeMasteryEvent, like the authored path.
   selectCallChain.length = 0
   selectCallChain.push(async () => [dbState.queue])
   selectCallChain.push(async () => [dbState.question])
   selectCallChain.push(async () => [dbState.persistedQuestion])
-  selectCallChain.push(async () => [{ canonicalSubcategory: 'history' }])
 }
 
 function jsonRequest(body: unknown) {
@@ -290,6 +285,36 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
         pointsAwarded: 0,
       }),
     )
+  })
+
+  it('B-1: correct bot answer in an unfamiliar domain default-adds it (no §8.4.3 gate)', async () => {
+    // No playerMastery row is seeded for this domain — under the old gate the
+    // route would zero points and skip the mastery write. Now it must score
+    // the answer fully and surface the freshly-opened territory.
+    setupDbChain()
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+    writeMasteryEventMock.mockResolvedValueOnce({
+      domain: 'history',
+      points: 100,
+      previousTier: 'establishing',
+      newTier: 'establishing',
+      tierChanged: false,
+      openedNewTerritory: true,
+    })
+
+    const res = await POST(jsonRequest(VALID_BODY) as never)
+    expect(res.status).toBe(200)
+
+    // Full points written, not zeroed for an "unknown domain".
+    expect(writeMasteryEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ answerState: 'first_correct', pointsAwarded: 100 }),
+    )
+
+    // The response carries the opened-territory signal the reveal undo reads.
+    const body = await res.json()
+    expect(body.pointsAwarded).toBe(100)
+    expect(body.masteryDelta.openedNewTerritory).toBe(true)
+    expect(body.masteryDelta.domain).toBe('history')
   })
 
   it('persists generated question BEFORE writing mastery event', async () => {

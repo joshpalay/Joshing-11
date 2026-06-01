@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Check, Sparkles, X } from 'lucide-react'
 
-import { AddToDailyFivePrompt } from './AddToDailyFivePrompt'
+import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
@@ -48,7 +48,7 @@ export function AnswerFeedbackSheet({
 }: AnswerFeedbackSheetProps) {
   const visibleCategory = visibleFeedCategory(category)
   const showNewTerritory = openedNewTerritory && isCorrect
-  const showAddToDailyFive = Boolean(openedTerritoryDomain) && isCorrect
+  const showTerritoryUndo = Boolean(openedTerritoryDomain) && isCorrect
   const [bankState, setBankState] = useState<BankState>('idle')
   const hasAutoSavedRef = useRef(false)
 
@@ -177,8 +177,8 @@ export function AnswerFeedbackSheet({
             ) : null}
           </div>
 
-          {showAddToDailyFive && openedTerritoryDomain ? (
-            <AddToDailyFivePrompt
+          {showTerritoryUndo && openedTerritoryDomain ? (
+            <NewTerritoryUndo
               domain={openedTerritoryDomain}
               category={visibleCategory}
             />
