@@ -72,6 +72,11 @@ vi.mock('@/server/db', () => ({
     userAId: 'friendships.userAId',
     userBId: 'friendships.userBId',
   },
+  follows: {
+    followerId: 'follows.followerId',
+    followeeId: 'follows.followeeId',
+    state: 'follows.state',
+  },
   masteryEvents: {
     id: 'masteryEvents.id',
     userId: 'masteryEvents.userId',

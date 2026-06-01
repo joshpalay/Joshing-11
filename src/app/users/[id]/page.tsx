@@ -309,7 +309,7 @@ export default async function UserProfilePage({
             !isOwnerView ? (
               <ProfileFriendButton
                 targetUserId={portrait.user.id}
-                friendship={portrait.friendship}
+                relationship={portrait.relationship}
                 targetDisplayName={portrait.user.displayName}
               />
             ) : null
@@ -364,12 +364,12 @@ export default async function UserProfilePage({
         mindStatement={mindStatement}
         memberSince={portrait.user.memberSince}
         editable={false}
-        friendshipFormedAt={portrait.friendship?.formedAt ?? null}
+        friendshipFormedAt={portrait.relationship?.formedAt ?? null}
         friendButton={
           !isOwnerView ? (
             <ProfileFriendButton
               targetUserId={portrait.user.id}
-              friendship={portrait.friendship}
+              relationship={portrait.relationship}
               targetDisplayName={portrait.user.displayName}
             />
           ) : null

@@ -31,5 +31,5 @@ export async function POST(
     user_id: session.userId,
   })
 
-  return NextResponse.json({ ok: true, friendship: { id: friendship.id, status: friendship.status } })
+  return NextResponse.json({ ok: true, friendship: { id: friendship.id, status: friendship.state } })
 }

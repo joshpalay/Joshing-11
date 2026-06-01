@@ -147,18 +147,11 @@ vi.mock('@/server/db', () => ({
     personalMessage: 'friendInvitations.personalMessage',
     inviteeUserId: 'friendInvitations.inviteeUserId',
   },
-  // upsertInvitationFriendship imports `friendships` from @/server/db (not the
-  // schema barrel). Mirror the columns it touches so the conflict-upsert builds.
-  friendships: {
-    userAId: 'friendships.userAId',
-    userBId: 'friendships.userBId',
-  },
-}))
-
-vi.mock('@/server/db/schema', () => ({
-  friendships: {
-    userAId: 'friendships.userAId',
-    userBId: 'friendships.userBId',
+  // upsertInvitationFriendship imports `follows` from @/server/db. Mirror the
+  // columns it touches so the conflict-upsert builds.
+  follows: {
+    followerId: 'follows.followerId',
+    followeeId: 'follows.followeeId',
   },
 }))
 
@@ -221,16 +214,19 @@ describe('acceptFriendInvitation', () => {
       })
     )
     expect(dbMock.transaction).toHaveBeenCalledTimes(1)
+    // Invitation creates a mutual follow: two approved edges, both directions.
     expect(state.friendshipValues).toEqual([
       expect.objectContaining({
-        userAId: 'user-invitee',
-        userBId: 'user-inviter',
-        status: 'active',
-        requestedByUserId: 'user-inviter',
-        formedVia: 'invitation',
-        formedAt: now,
-        removedAt: null,
-        removedByUserId: null,
+        followerId: 'user-inviter',
+        followeeId: 'user-invitee',
+        state: 'approved',
+        approvedAt: now,
+      }),
+      expect.objectContaining({
+        followerId: 'user-invitee',
+        followeeId: 'user-inviter',
+        state: 'approved',
+        approvedAt: now,
       }),
     ])
   })
@@ -269,12 +265,16 @@ describe('acceptFriendInvitation', () => {
     )
     expect(state.friendshipValues).toEqual([
       expect.objectContaining({
-        userAId: 'user-jaime',
-        userBId: 'user-josh',
-        status: 'active',
-        requestedByUserId: 'user-josh',
-        formedVia: 'invitation',
-        formedAt: now,
+        followerId: 'user-josh',
+        followeeId: 'user-jaime',
+        state: 'approved',
+        approvedAt: now,
+      }),
+      expect.objectContaining({
+        followerId: 'user-jaime',
+        followeeId: 'user-josh',
+        state: 'approved',
+        approvedAt: now,
       }),
     ])
 
@@ -286,11 +286,13 @@ describe('acceptFriendInvitation', () => {
         now,
       })
     ).resolves.toEqual({ accepted: false, reason: 'accepted' })
+    // The already-accepted re-attempt writes no further edges: still exactly
+    // the two approved edges from the single successful acceptance.
     expect(
       state.friendshipValues.filter(
-        (friendship) => (friendship as { status?: string }).status === 'active'
+        (edge) => (edge as { state?: string }).state === 'approved'
       )
-    ).toHaveLength(1)
+    ).toHaveLength(2)
   })
 
   it('rejects a valid token when the verified phone does not match the invitation phone', async () => {

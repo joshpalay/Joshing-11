@@ -113,6 +113,9 @@ vi.mock('@/server/db/queries/questions', () => ({
 
 vi.mock('@/server/db/queries/friends', () => ({
   getFriends: getFriendsMock,
+  // Broadcast fan-out now reads my followers; in these tests the recipient set
+  // is the same fixture, so alias it to the existing mock.
+  getFollowers: getFriendsMock,
 }))
 
 vi.mock('@/server/db/queries/feed', () => ({

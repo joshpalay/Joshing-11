@@ -1,8 +1,9 @@
-import { and, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { db, feedDismissedDomains, feedItems, friendships, questions } from '@/server/db';
+import { db, feedDismissedDomains, feedItems, questions } from '@/server/db';
+import { areFriends } from '@/server/db/queries/friends';
 import { isMainFeedSourceVisible } from '@/server/feed/visibility';
 
 export const dynamic = 'force-dynamic';
@@ -71,18 +72,10 @@ export async function GET(request: NextRequest) {
   ]);
 
   const questionCreatorId = question?.creatorId ?? null;
-  const [friendship, dismissedDomain] = await Promise.all([
+  const [isMutual, dismissedDomain] = await Promise.all([
     questionCreatorId && questionCreatorId !== session.userId
-      ? db
-        .select({ status: friendships.status })
-        .from(friendships)
-        .where(or(
-          and(eq(friendships.userAId, session.userId), eq(friendships.userBId, questionCreatorId)),
-          and(eq(friendships.userAId, questionCreatorId), eq(friendships.userBId, session.userId)),
-        ))
-        .limit(1)
-        .then((rows) => rows[0] ?? null)
-      : Promise.resolve(null),
+      ? areFriends(session.userId, questionCreatorId)
+      : Promise.resolve(false),
     question?.canonicalSubcategory
       ? db
         .select({ id: feedDismissedDomains.id })
@@ -97,7 +90,7 @@ export async function GET(request: NextRequest) {
       : Promise.resolve(null),
   ]);
 
-  const friendshipStatus = friendship?.status ?? null;
+  const friendshipStatus = isMutual ? 'active' : null;
   const domainDismissed = Boolean(dismissedDomain);
 
   return NextResponse.json({

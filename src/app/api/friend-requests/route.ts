@@ -14,8 +14,6 @@ const bodySchema = z.object({
   personalNote: z.string().trim().max(160).optional(),
 })
 
-const RECENTLY_SENT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
-
 export async function POST(request: Request) {
   const session = await getSession()
   if (!session)
@@ -47,20 +45,12 @@ export async function POST(request: Request) {
   }
 
   const now = new Date()
-  const relationship = await getRelationship(session.userId, inviteeUserId, now)
+  const relationship = await getRelationship(session.userId, inviteeUserId)
 
-  // Block detection: target has soft-removed the friendship. Return 404
-  // (don't reveal the block) and don't write anything.
-  if (relationship.isBlocked) {
+  // Already following (mutual or one-directional) — nothing to do.
+  if (relationship.state === 'friends' || relationship.state === 'following') {
     return NextResponse.json(
-      { error: 'not_found', message: 'No such user.' },
-      { status: 404 }
-    )
-  }
-
-  if (relationship.state === 'friends') {
-    return NextResponse.json(
-      { error: 'already_friends', message: 'You are already friends.' },
+      { error: 'already_following', message: 'You already follow this person.' },
       { status: 409 }
     )
   }
@@ -68,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: 'already_pending',
-        message: 'You already have a pending request with this person.',
+        message: 'You already requested to follow this person.',
       },
       { status: 409 }
     )
@@ -77,25 +67,14 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: 'inbound_exists',
-        message: 'They sent you a request — accept it instead.',
+        message: 'They requested to follow you — approve it instead.',
         friendshipId: relationship.friendshipId,
       },
       { status: 409 }
     )
   }
-  if (relationship.state === 'recently_sent') {
-    return NextResponse.json(
-      {
-        error: 'recently_sent',
-        message: 'You sent this person a request recently. Try again later.',
-        // Best-effort retry hint: 30 days from now is the latest the
-        // cooldown could last. Callers don't need millisecond precision.
-        retryAfter: new Date(now.getTime() + RECENTLY_SENT_WINDOW_MS).toISOString(),
-      },
-      { status: 429 }
-    )
-  }
 
+  // 'follows_you' and 'none' fall through: the viewer may follow / follow back.
   const { friendship, state } = await createOrReusePendingFriendshipRequest({
     inviterUserId: session.userId,
     inviteeUserId,
@@ -114,6 +93,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     state,
-    friendship: { id: friendship.id, status: friendship.status },
+    friendship: { id: friendship.id, status: friendship.state },
   })
 }

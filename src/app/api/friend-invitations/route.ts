@@ -551,15 +551,13 @@ export async function POST(request: Request) {
         )
       }
 
+      // Inviting an existing user from the invite flow follows them (pending or
+      // auto-approved per their privacy gate). Follow requests don't expire.
       const { friendship: friendshipRequest, state } =
         await createOrReusePendingFriendshipRequest({
           inviterUserId: session.userId,
           inviteeUserId: existingUser.id,
           suggestedInterests,
-          // SMS-style invitations don't expire under v12. Pass null
-          // explicitly so the new 30-day direct-request default doesn't
-          // bleed into this flow.
-          expiresAt: null,
         })
 
       const inviteUrl = `${getBaseUrl(request)}/activities#friendship-${encodeURIComponent(friendshipRequest.id)}`
@@ -593,7 +591,7 @@ export async function POST(request: Request) {
         expiresAt: null,
         friendshipRequest: {
           id: friendshipRequest.id,
-          status: friendshipRequest.status,
+          status: friendshipRequest.state,
           state,
           inviteeUserId: existingUser.id,
         },

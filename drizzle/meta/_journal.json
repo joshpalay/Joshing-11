@@ -407,6 +407,13 @@
       "when": 1781481600000,
       "tag": "0057_retire_creator_notes_and_quips",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1781568000000,
+      "tag": "0058_follow_model",
+      "breakpoints": true
     }
   ]
 }

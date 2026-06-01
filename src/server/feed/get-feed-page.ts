@@ -9,7 +9,7 @@
 
 import { and, count, eq, inArray, isNull, ne, notExists, or } from 'drizzle-orm';
 
-import { db, feedItems, friendships, masteryEvents, questions, users } from '@/server/db';
+import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import {
   getDismissedDomains,
@@ -155,12 +155,15 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
 
   const [feedPage, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
     getFeedForUser(viewerUserId, { limit, cursor, filter }),
+    // "has_friends" empty-state signal: people I follow are exactly the
+    // authors who can populate my feed, so an approved-outbound-follow count
+    // is the right, single-index proxy (D-1 Stage 3 follow model).
     db
       .select({ value: count() })
-      .from(friendships)
+      .from(follows)
       .where(and(
-        eq(friendships.status, 'active'),
-        or(eq(friendships.userAId, viewerUserId), eq(friendships.userBId, viewerUserId)),
+        eq(follows.followerId, viewerUserId),
+        eq(follows.state, 'approved'),
       ))
       .then((rows) => rows[0]?.value ?? 0),
     getDismissedDomains(viewerUserId),

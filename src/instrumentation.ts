@@ -774,6 +774,79 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0058 (D-1 Stage 3) introduces the directional Follow model:
+    // the FollowState/FollowPrivacy enums, the User.follow_privacy column, the
+    // Follow table, and a backfill from the frozen Friendship table. Guard for
+    // preview/production databases that may have the migration recorded without
+    // the objects present — relationship reads now go through Follow and would
+    // 42P01/42703/42704 before app code can recover. Backfills are
+    // ON CONFLICT DO NOTHING, so this whole block is safe to re-run.
+    try {
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."FollowState" AS ENUM('pending', 'approved');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."FollowPrivacy" AS ENUM('public', 'approval_required');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "follow_privacy" "public"."FollowPrivacy" NOT NULL DEFAULT 'approval_required'
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "Follow" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "followerId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "followeeId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "state" "public"."FollowState" NOT NULL DEFAULT 'pending',
+          "personalNote" text,
+          "requestContext" jsonb,
+          "created_at" timestamptz NOT NULL DEFAULT now(),
+          "approvedAt" timestamptz,
+          CONSTRAINT "Follow_followerId_followeeId_key" UNIQUE ("followerId", "followeeId"),
+          CONSTRAINT "Follow_distinct_users" CHECK ("followerId" <> "followeeId")
+        )
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Follow_followerId_state_idx" ON "Follow" ("followerId", "state")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Follow_followeeId_state_idx" ON "Follow" ("followeeId", "state")
+      `);
+      await db.execute(sql`
+        INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "approvedAt", "created_at")
+        SELECT gen_random_uuid()::text, "userAId", "userBId", 'approved'::"public"."FollowState",
+               COALESCE("formedAt", now()), "createdAt"
+        FROM "Friendship" WHERE "status" = 'active'
+        ON CONFLICT ("followerId", "followeeId") DO NOTHING
+      `);
+      await db.execute(sql`
+        INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "approvedAt", "created_at")
+        SELECT gen_random_uuid()::text, "userBId", "userAId", 'approved'::"public"."FollowState",
+               COALESCE("formedAt", now()), "createdAt"
+        FROM "Friendship" WHERE "status" = 'active'
+        ON CONFLICT ("followerId", "followeeId") DO NOTHING
+      `);
+      await db.execute(sql`
+        INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "personalNote", "requestContext", "created_at")
+        SELECT gen_random_uuid()::text,
+               "requestedByUserId",
+               CASE WHEN "requestedByUserId" = "userAId" THEN "userBId" ELSE "userAId" END,
+               'pending'::"public"."FollowState",
+               "personalNote", "requestContext", "createdAt"
+        FROM "Friendship" WHERE "status" = 'pending'
+        ON CONFLICT ("followerId", "followeeId") DO NOTHING
+      `);
+    } catch {
+      // User or Friendship may not exist yet on a fresh database — migrate()
+      // creates them and applies 0058 in normal order.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

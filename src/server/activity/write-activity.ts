@@ -6,8 +6,17 @@ export type ActivityItemType =
   | 'joshing_game_progress'
   | 'friend_mastery'
   | 'ceremony_ready'
+  // Legacy friend-request types — no longer written (the follow model below
+  // supersedes them) but retained so historical activity rows still type-check
+  // and render against the frozen Friendship table.
   | 'friend_request'
   | 'friend_request_accepted'
+  // D-1 Stage 3 follow model. `follow` = someone followed you (public account,
+  // auto-approved). `follow_request` = someone requested to follow you
+  // (approval_required). `follow_approved` = you approved their request.
+  | 'follow'
+  | 'follow_request'
+  | 'follow_approved'
   // An invited friend both accepted the inviter's invitation and got far
   // enough into the product to play their first five questions. Surfaced to
   // the inviter as a "your invite stuck" milestone. Written from
