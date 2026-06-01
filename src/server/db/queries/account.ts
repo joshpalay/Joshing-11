@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import {
   contactHashes,
@@ -377,6 +377,25 @@ export async function updateDiscoverability(
       discoverableByNicheMatch: patch.nicheMatch ?? current.discoverableByNicheMatch,
     };
   });
+}
+
+// Batched lookup of the niche-match opt-in flag for the niche-match write-point
+// (D-2 WS3). Returns the subset of the supplied ids whose
+// discoverableByNicheMatch is currently true. Used to resolve the asymmetric
+// two-flag gate in notifyNicheMatch with a single query rather than a
+// per-user getDiscoverability round-trip.
+export async function getNicheMatchDiscoverable(
+  userIds: string[],
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(
+      inArray(users.id, userIds),
+      eq(users.discoverableByNicheMatch, true),
+    ));
+  return new Set(rows.map((r) => r.id));
 }
 
 export async function deleteUserAccount(userId: string): Promise<void> {
