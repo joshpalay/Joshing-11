@@ -41,7 +41,7 @@ function diagnose(input: {
   if (question?.deletedAt) return 'question_deleted';
   if (question && question.visibility !== 'public') return 'question_not_public';
   if (!VISIBLE_FEED_STATES.has(feedItem.state)) return 'feed_item_state_hidden';
-  if (!isMainFeedSourceVisible(feedItem.sourceType, feedItem.sourceResult)) return 'source_type_filtered';
+  if (!isMainFeedSourceVisible(feedItem.sourceType)) return 'source_type_filtered';
 
   return 'should_be_visible';
 }

@@ -17,20 +17,22 @@ const publicQuestion = {
 
 describe('correct-answer social feed eligibility', () => {
   it('allows authored and direct-sent sharing but rejects game-publication sources from the main feed', () => {
-    expect(isMainFeedSourceVisible('authored_shared', null)).toBe(true);
-    expect(isMainFeedSourceVisible('authored_shared', 'incorrect')).toBe(true);
-    expect(isMainFeedSourceVisible('joshing_game', null)).toBe(false);
-    expect(isMainFeedSourceVisible('direct_sent', null)).toBe(true);
+    expect(isMainFeedSourceVisible('authored_shared')).toBe(true);
+    expect(isMainFeedSourceVisible('joshing_game')).toBe(false);
+    expect(isMainFeedSourceVisible('direct_sent')).toBe(true);
+    expect(isMainFeedSourceVisible('thumbs_upped')).toBe(true);
   });
 
-  it('allows a correct answer by someone other than the author in a visible social context', () => {
+  it('still flags a correct non-author answer as feed-eligible (the type-3 WRITE survives Stage 5) but no longer renders it', () => {
+    // The write path (Daily +2, presence) still depends on this eligibility check.
     expect(isCorrectAnswerFeedEligible({
       answerIsCorrect: true,
       answererUserId: 'answerer-1',
       question: publicQuestion,
       hasVisibleSocialContext: true,
     })).toBe(true);
-    expect(isMainFeedSourceVisible('friend_answered', 'correct')).toBe(true);
+    // D-1 Stage 5: friend_answered is no longer rendered in the feed.
+    expect(isMainFeedSourceVisible('friend_answered')).toBe(false);
   });
 
   it('allows public daily-generated questions without an author to propagate correct friend answers', () => {
@@ -97,7 +99,7 @@ describe('correct-answer social feed eligibility', () => {
       question: publicQuestion,
       hasVisibleSocialContext: true,
     })).toBe(false);
-    expect(isMainFeedSourceVisible('friend_answered', 'incorrect')).toBe(false);
+    expect(isMainFeedSourceVisible('friend_answered')).toBe(false);
   });
 
   it('rejects private or non-visible questions for unauthorized viewers', () => {
@@ -115,15 +117,19 @@ describe('correct-answer social feed eligibility', () => {
     })).toBe(false);
   });
 
-  it('documents visibility for every source type created by question-sharing routes', () => {
+  it('documents visibility for every source type still rendered in the feed', () => {
+    // D-1 Stage 5: friend_answered is intentionally absent — it is written but
+    // not rendered. Broadcasts/Sent surfaces render authored_shared + direct_sent.
     expect(QUESTION_SHARING_FEED_SOURCE_VISIBILITY).toEqual(expect.arrayContaining([
       expect.objectContaining({ sourceType: 'authored_shared' }),
       expect.objectContaining({ sourceType: 'direct_sent' }),
-      expect.objectContaining({ sourceType: 'friend_answered' }),
     ]));
+    expect(
+      QUESTION_SHARING_FEED_SOURCE_VISIBILITY.some((entry) => entry.sourceType === 'friend_answered'),
+    ).toBe(false);
 
-    for (const { sourceType, sourceResult, visible, reason } of QUESTION_SHARING_FEED_SOURCE_VISIBILITY) {
-      expect(isMainFeedSourceVisible(sourceType, sourceResult)).toBe(visible);
+    for (const { sourceType, visible, reason } of QUESTION_SHARING_FEED_SOURCE_VISIBILITY) {
+      expect(isMainFeedSourceVisible(sourceType)).toBe(visible);
       if (visible) {
         expect(reason).toBeNull();
       } else {

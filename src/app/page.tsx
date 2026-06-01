@@ -129,10 +129,12 @@ async function RecentActivityServerSection({ userId }: { userId: string }) {
 }
 
 async function FromYourFriendsSection({ userId }: { userId: string }) {
+  // D-1 Stage 5: Broadcasts ('from-friends') is the default feed surface, so the
+  // server pre-fetch must match it for FeedList's no-round-trip first paint.
   const feedPage = await getFeedPagePayload(userId, {
     limit: FEED_PAGE_SIZE,
     cursor: null,
-    filter: 'all',
+    filter: 'from-friends',
   })
   return (
     <FeedList

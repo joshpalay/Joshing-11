@@ -9,7 +9,6 @@ import {
   FeedCardShell,
   FeedOverflowMenu,
   FriendAddedCard,
-  FriendAnsweredCard,
   FriendLikedCard,
   feedCardPreviewFixtures,
   getFeedOverflowMenuLabels,
@@ -57,7 +56,6 @@ describe('Feed card preview fixtures', () => {
   it('covers every requested typed card state', () => {
     expect(Object.keys(feedCardPreviewFixtures)).toEqual([
       'directSentUnanswered',
-      'friendAnsweredRight',
       'friendAddedWroteQuestion',
       'friendLikedShared',
       'friendLikedCollapsedMultiEndorsement',
@@ -78,11 +76,6 @@ describe('Feed card preview fixtures', () => {
     expect(directSent).toContain('Food &amp; Drink')
     expect(directSent).toContain('SCOBY')
 
-    const friendAnswered = html(<FriendAnsweredCard item={fixtures.friendAnsweredRight} />)
-    expect(friendAnswered).toContain('Noah')
-    expect(friendAnswered).toContain('Science')
-    expect(friendAnswered).toContain('magnetar')
-
     const friendAdded = html(<FriendAddedCard item={fixtures.friendAddedWroteQuestion} />)
     expect(friendAdded).toContain('Ari')
     expect(friendAdded).toContain('History')
@@ -98,7 +91,6 @@ describe('Feed card preview fixtures', () => {
   it('drops the "has knowledge to share" phrasing from the unanswered question card', () => {
     const variants = [
       html(<DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />),
-      html(<FriendAnsweredCard item={feedCardPreviewFixtures.friendAnsweredRight} />),
       html(<FriendAddedCard item={feedCardPreviewFixtures.friendAddedWroteQuestion} />),
       html(<FriendLikedCard item={feedCardPreviewFixtures.friendLikedShared} />),
     ]
@@ -339,57 +331,6 @@ describe('Feed answered states', () => {
     // Brand action-link treatment (matches "Answer →"): serif, slate, underlined — no offset-shadow box.
     expect(rendered).toContain('text-[var(--brand-link)]')
     expect(rendered).not.toContain('3px 3px 0 var(--ink)')
-  })
-})
-
-describe('FriendAnsweredCard viewer-already-answered footer', () => {
-  it('reframes the header around the viewer when both were correct and uses warm footer copy', () => {
-    const rendered = html(
-      <FriendAnsweredCard
-        item={{
-          ...feedCardPreviewFixtures.friendAnsweredRight,
-          viewerResult: 'correct',
-          friendCorrect: true,
-        }}
-        onAnswer={() => undefined}
-      />
-    )
-    expect(rendered).toContain('got your Science question')
-    expect(rendered).toContain('You both know some Science.')
-    expect(rendered).not.toContain('You both had it')
-    expect(rendered).not.toContain('Answer →')
-  })
-
-  it('renders a "missed your … question" header and "you missed it" footer when viewer was wrong and friend was right', () => {
-    const rendered = html(
-      <FriendAnsweredCard
-        item={{
-          ...feedCardPreviewFixtures.friendAnsweredRight,
-          viewerResult: 'incorrect',
-          friendCorrect: true,
-        }}
-        onAnswer={() => undefined}
-      />
-    )
-    // Friend was right, so from the viewer's perspective the friend "got" their question.
-    expect(rendered).toContain('got your Science question')
-    expect(rendered).toContain('Noah knew this')
-    expect(rendered).toContain('you missed it')
-    expect(rendered).not.toContain('Answer →')
-  })
-
-  it('omits the status footer and the reframed header when the viewer has not answered yet', () => {
-    const rendered = html(
-      <FriendAnsweredCard
-        item={feedCardPreviewFixtures.friendAnsweredRight}
-        onAnswer={() => undefined}
-      />
-    )
-    expect(rendered).toContain('Answer →')
-    expect(rendered).not.toContain('You both had it')
-    expect(rendered).not.toContain('You both know some')
-    expect(rendered).not.toContain('you missed it')
-    expect(rendered).not.toContain('got your Science question')
   })
 })
 
