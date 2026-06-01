@@ -14,6 +14,7 @@ export type QuestionFormValues = {
   critiqueIterations: number;
   sendToFriendIds: string[];
   shareToFeed?: boolean;
+  visibility?: 'public' | 'friends' | 'private';
 };
 
 type CritiqueResult =
@@ -63,6 +64,7 @@ type State = {
   suggesting: boolean;
   specificMode: boolean;
   shareToFeed: boolean;
+  visibility: 'public' | 'friends' | 'private';
   friends: FriendOption[];
   friendsLoading: boolean;
   sendToFriendIds: string[];
@@ -87,6 +89,7 @@ type Action =
   | { type: 'DONE' }
   | { type: 'SPECIFIC_MODE'; value: boolean }
   | { type: 'SHARE_TO_FEED'; value: boolean }
+  | { type: 'VISIBILITY'; value: 'public' | 'friends' | 'private' }
   | { type: 'FRIENDS_LOADING'; value: boolean }
   | { type: 'FRIENDS_LOADED'; friends: FriendOption[] }
   | { type: 'RECENTS_LOADED'; ids: string[] }
@@ -112,6 +115,7 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     suggesting: false,
     specificMode: initialSpecificMode,
     shareToFeed: initialValues?.shareToFeed ?? !initialSpecificMode,
+    visibility: initialValues?.visibility ?? 'public',
     friends: [],
     friendsLoading: false,
     sendToFriendIds: initialValues?.sendToFriendIds ?? [],
@@ -165,6 +169,16 @@ function reducer(state: State, action: Action): State {
     case 'DONE': return { ...state, stage: 'DONE' };
     case 'SPECIFIC_MODE': return { ...state, specificMode: action.value, shareToFeed: action.value ? false : state.shareToFeed, sendToFriendIds: [], friendSearch: '' };
     case 'SHARE_TO_FEED': return { ...state, shareToFeed: action.value, specificMode: action.value ? false : state.specificMode, sendToFriendIds: action.value ? [] : state.sendToFriendIds };
+    case 'VISIBILITY': {
+      // A private question is author-only: broadcasting or direct-sending it
+      // would create feed rows the render-time visibility filter then hides.
+      // Clear those destinations when switching to private (mirrors how
+      // SPECIFIC_MODE clears shareToFeed).
+      if (action.value === 'private') {
+        return { ...state, visibility: action.value, shareToFeed: false, specificMode: false, sendToFriendIds: [], friendSearch: '' };
+      }
+      return { ...state, visibility: action.value };
+    }
     case 'FRIENDS_LOADING': return { ...state, friendsLoading: action.value };
     case 'FRIENDS_LOADED': return { ...state, friends: action.friends, friendsLoading: false };
     case 'RECENTS_LOADED': return { ...state, recentFriendIds: action.ids };
@@ -310,6 +324,10 @@ export function QuestionForm({
     dispatch({ type: 'SHARE_TO_FEED', value: on });
   }
 
+  function setVisibility(value: 'public' | 'friends' | 'private') {
+    dispatch({ type: 'VISIBILITY', value });
+  }
+
   async function runCritique() {
     const questionText = state.questionText.trim();
     if (!questionText) return;
@@ -404,6 +422,7 @@ export function QuestionForm({
         critiqueIterations: state.critiqueIterations,
         sendToFriendIds: state.specificMode ? state.sendToFriendIds : [],
         shareToFeed: state.shareToFeed,
+        visibility: state.visibility,
       });
       dispatch({ type: 'DONE' });
     } catch (caught) {
@@ -572,9 +591,31 @@ export function QuestionForm({
           {showDestinations ? (
             <div className="rounded-md border bg-muted/40 p-4">
               <p className="mb-3 text-xs uppercase tracking-[0.1em] text-muted-foreground">Destinations</p>
+              <div className="mb-3">
+                <p className="mb-2 text-xs uppercase tracking-[0.1em] text-muted-foreground">Who can see this</p>
+                <div className="inline-flex rounded-md border bg-background p-0.5" role="group" aria-label="Question visibility">
+                  {([
+                    { value: 'public', label: 'Public' },
+                    { value: 'friends', label: 'Followers' },
+                    { value: 'private', label: 'Private' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setVisibility(option.value)}
+                      aria-pressed={state.visibility === option.value}
+                      disabled={state.stage === 'SUBMITTING'}
+                      className={['rounded px-3 py-1 text-sm transition', state.visibility === option.value ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted'].join(' ')}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{state.visibility === 'public' ? 'Anyone can see this question.' : state.visibility === 'friends' ? 'Only people who follow you can see this.' : 'Only you can see this — it won’t be shared.'}</p>
+              </div>
               <label className="mb-2 flex cursor-default items-center gap-2 text-sm"><input type="checkbox" checked readOnly disabled className="rounded" /><span className="text-foreground">Save to bank</span></label>
-              <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Share with all friends</span></label>
-              <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.specificMode} onChange={(event) => toggleSpecificMode(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Send to specific friends only</span></label>
+              <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING' || state.visibility === 'private'} /><span className="text-foreground">Share with all friends</span></label>
+              <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.specificMode} onChange={(event) => toggleSpecificMode(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING' || state.visibility === 'private'} /><span className="text-foreground">Send to specific friends only</span></label>
               {state.specificMode ? (
                 <div className="mt-1 space-y-3">
                   {state.sendToFriendIds.length > 0 ? (

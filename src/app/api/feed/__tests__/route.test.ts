@@ -58,6 +58,7 @@ vi.mock('@/server/db/queries/feed', () => ({
   getDismissedDomains: getDismissedDomainsMock,
   getFeedForUser: getFeedForUserMock,
   visibleFeedSourcePredicate: { op: 'visibleFeedSourcePredicate' },
+  questionVisibilityPredicate: vi.fn((viewerUserId) => ({ op: 'questionVisibilityPredicate', viewerUserId })),
 }));
 vi.mock('@/server/db', () => ({
   db: dbMock,

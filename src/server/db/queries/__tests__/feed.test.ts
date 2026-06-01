@@ -10,6 +10,7 @@ const { dbMock, state } = vi.hoisted(() => {
     | { op: 'isNull'; column: string }
     | { op: 'notInArray'; column: string; values: readonly unknown[] }
     | { op: 'notExists' }
+    | { op: 'exists' }
     | { op: 'lt'; column: string; value: unknown };
 
   type FeedRow = {
@@ -70,6 +71,12 @@ const { dbMock, state } = vi.hoisted(() => {
         // viewer-not-already-answered subquery as always passing so the
         // existing visibility cases continue to drive what's exercised here.
         return true;
+      case 'exists':
+        // The tests don't model the follows table; treat the
+        // viewer-follows-author subquery (D-1 Stage 4 'friends' gate) as
+        // passing. Existing cases use 'public' visibility, so this only
+        // matters if a case explicitly exercises followers-only questions.
+        return true;
       case 'lt':
         return String(columnValue(predicate.column, feedItem, question)) < String(predicate.value);
     }
@@ -117,6 +124,7 @@ vi.mock('drizzle-orm', () => ({
   lt: vi.fn((column, value) => ({ op: 'lt', column, value })),
   ne: vi.fn((column, value) => ({ op: 'ne', column, value })),
   notExists: vi.fn(() => ({ op: 'notExists' })),
+  exists: vi.fn(() => ({ op: 'exists' })),
   notInArray: vi.fn((column, values) => ({ op: 'notInArray', column, values })),
   or: vi.fn((...predicates) => ({ op: 'or', predicates })),
   sql: Object.assign(
@@ -144,6 +152,11 @@ vi.mock('@/server/db', () => ({
     isPinned: 'feedItems.isPinned',
   },
   masteryEvents: {},
+  follows: {
+    followerId: 'follows.followerId',
+    followeeId: 'follows.followeeId',
+    state: 'follows.state',
+  },
   questions: {
     id: 'questions.id',
     visibility: 'questions.visibility',

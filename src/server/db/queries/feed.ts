@@ -1,6 +1,6 @@
-import { and, count, desc, eq, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, exists, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
 
-import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
+import { db, feedDismissedDomains, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
 import { isVisibleFriendAnsweredSource, visibleFeedSourcePredicate } from '@/server/feed/visibility';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 
@@ -310,9 +310,36 @@ function feedCursorPredicate(cursor: FeedCursor | null | undefined) {
   );
 }
 
-function visibleQuestionPredicate(dismissedDomains: string[]) {
-  const predicates = [
+// Render-time question visibility (D-1 Stage 4). 'public' renders for anyone;
+// 'friends' is followers-only and renders only when the viewer follows the
+// author (an approved follow edge viewer -> author); 'private' is author-only
+// and never reaches another viewer's feed (the author is also excluded by
+// viewerNotAuthorPredicate). Under the directional follow model, "the author's
+// followers" == users with an approved follow edge pointing at the author.
+// Exported so the empty-state diagnostic counts in get-feed-page.ts apply the
+// identical rule and stay in sync with what actually renders.
+export function questionVisibilityPredicate(viewerUserId: string) {
+  return or(
     eq(questions.visibility, 'public'),
+    and(
+      eq(questions.visibility, 'friends'),
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(follows)
+          .where(and(
+            eq(follows.followerId, viewerUserId),
+            eq(follows.followeeId, questions.creatorId),
+            eq(follows.state, 'approved'),
+          )),
+      ),
+    ),
+  )!;
+}
+
+function visibleQuestionPredicate(viewerUserId: string, dismissedDomains: string[]) {
+  const predicates = [
+    questionVisibilityPredicate(viewerUserId),
     isNull(questions.deletedAt),
   ];
 
@@ -351,7 +378,7 @@ async function fetchVisibleFeedItems(
       visibleSourcePredicate,
       feedFilterPredicate(options.filter),
       inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-      visibleQuestionPredicate(dismissedDomains),
+      visibleQuestionPredicate(userId, dismissedDomains),
       viewerNotAuthorPredicate(userId),
       viewerNotAlreadyAnsweredPredicate(userId),
       cursorPredicate,
@@ -379,7 +406,7 @@ async function fetchVisibleFeedItems(
         visibleSourcePredicate,
         feedFilterPredicate(options.filter),
         inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-        visibleQuestionPredicate(dismissedDomains),
+        visibleQuestionPredicate(userId, dismissedDomains),
         viewerNotAuthorPredicate(userId),
         viewerNotAlreadyAnsweredPredicate(userId),
         cursorPredicate,
@@ -417,7 +444,7 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
             visibleSourcePredicate,
             feedFilterPredicate(filter),
             inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-            visibleQuestionPredicate(dismissedDomains),
+            visibleQuestionPredicate(userId, dismissedDomains),
             viewerNotAuthorPredicate(userId),
             viewerNotAlreadyAnsweredPredicate(userId),
           ))
