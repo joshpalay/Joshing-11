@@ -71,6 +71,16 @@ export type ActivityItemView = Pick<
       questionText: string | null;
       result: 'correct' | 'incorrect';
     };
+    // D-2 niche-match discovery. Hydrated for both new types
+    // (niche_match_answered_your_question / niche_match_you_answered). Reuses
+    // referenceType: 'question' + referenceId: questionId. The result is always
+    // 'correct' by construction (the write only fires on a correct answer), so
+    // unlike friendAnsweredQuestion there is no got-it/couldn't framing — the
+    // domain is the discovery hook.
+    nicheMatch?: {
+      domain: string | null;
+      questionText: string | null;
+    };
     authoredSharedQuestion?: {
       domain: string;
       recipientCount: number;
@@ -130,6 +140,8 @@ function isActivityType(value: string): value is ActivityItemType {
     'authored_question_shared',
     'declared_promoted',
     'grade_dispute_filed',
+    'niche_match_answered_your_question',
+    'niche_match_you_answered',
   ].includes(value);
 }
 
@@ -602,6 +614,52 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
   );
 }
 
+// D-2 niche-match. A parallel hydrator to hydrateFriendAnsweredQuestions —
+// NOT shared, because that one hardcodes its own type filter
+// (friend_answered_your_question) and a mastery-event correctness lookup the
+// niche types don't need (they only ever fire on a correct answer). Both
+// niche types reference the answered question (referenceType 'question'); we
+// surface its domain (the discovery hook) and text. Keyed by item.id so each
+// row hydrates independently even when two rows point at the same question.
+async function hydrateNicheMatchQuestions(items: ActivityItemRow[]) {
+  const relevant = items.filter(
+    (item) =>
+      (item.type === 'niche_match_answered_your_question'
+        || item.type === 'niche_match_you_answered')
+      && item.referenceType === 'question'
+      && item.referenceId,
+  );
+  if (relevant.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['nicheMatch']>>();
+  }
+
+  const questionIds = [...new Set(relevant.map((item) => item.referenceId!))];
+  const questionRows = await db
+    .select({
+      id: questions.id,
+      questionText: questions.questionText,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+    })
+    .from(questions)
+    .where(inArray(questions.id, questionIds));
+
+  const questionById = new Map(questionRows.map((r) => [r.id, r]));
+
+  return new Map(
+    relevant.map((item) => {
+      const q = questionById.get(item.referenceId!);
+      return [
+        item.id,
+        {
+          domain: q ? (q.canonicalSubcategory ?? q.broadCategory ?? null) : null,
+          questionText: q?.questionText ?? null,
+        } satisfies NonNullable<ActivityItemView['reference']['nicheMatch']>,
+      ];
+    }),
+  );
+}
+
 async function hydrateAuthoredSharedQuestions(items: ActivityItemRow[]) {
   const relevant = items.filter(
     (item) => item.type === 'authored_question_shared' && item.referenceType === 'question' && item.referenceId,
@@ -679,6 +737,7 @@ async function hydrateActivityRows(
     directQuestionsById,
     curatedQuestionsById,
     friendAnsweredQuestionsById,
+    nicheMatchById,
     authoredSharedQuestionsById,
     declaredPromotedById,
     gradeDisputesById,
@@ -691,6 +750,7 @@ async function hydrateActivityRows(
     hydrateDirectQuestions(rows),
     hydrateCuratedQuestions(rows),
     hydrateFriendAnsweredQuestions(rows),
+    hydrateNicheMatchQuestions(rows),
     hydrateAuthoredSharedQuestions(rows),
     hydrateDeclaredPromoted(rows),
     hydrateGradeDisputes(rows),
@@ -729,6 +789,10 @@ async function hydrateActivityRows(
           : undefined,
         friendAnsweredQuestion: row.type === 'friend_answered_your_question'
           ? friendAnsweredQuestionsById.get(row.id)
+          : undefined,
+        nicheMatch: row.type === 'niche_match_answered_your_question'
+          || row.type === 'niche_match_you_answered'
+          ? nicheMatchById.get(row.id)
           : undefined,
         authoredSharedQuestion: row.type === 'authored_question_shared'
           ? authoredSharedQuestionsById.get(row.id)

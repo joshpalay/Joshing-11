@@ -32,7 +32,18 @@ export type ActivityItemType =
   // answerer disputes their wrong-answer grade. The dispute is the
   // answerer's explicit ask for a second look, which is the consent gate
   // that exposes their submitted text to the author.
-  | 'grade_dispute_filed';
+  | 'grade_dispute_filed'
+  // D-2 niche-match discovery (slow-burn organic discovery between strangers
+  // through a shared authored question). Two asymmetric writes from
+  // notifyNicheMatch() in src/server/feed/create-feed-items-for-answer.ts,
+  // each gated by the *exposed* party's discoverableByNicheMatch flag.
+  // Deliberately NOT the same as friend_answered_your_question (which targets
+  // prior answerers, is friend-scoped, and carries a got-it/couldn't-get-it
+  // framing). Kept OUT of HOME_TOP3_ELIGIBLE_TYPES and the bell badge below —
+  // this is a slow-burn delight with no volume cues; it surfaces only in the
+  // full /activities list.
+  | 'niche_match_answered_your_question' // author-side: a stranger correctly answered a question you authored
+  | 'niche_match_you_answered'; // answerer-side: you correctly answered a stranger's authored question
 
 // Events surfaced in Home's top-3 RecentActivity and counted by the bell
 // badge. Light type filtering only — chronological within this set. Single

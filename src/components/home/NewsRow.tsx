@@ -64,6 +64,37 @@ function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy 
       }
     }
 
+    // D-2 niche-match discovery. These are excluded from Home's top-3
+    // (not in HOME_TOP3_ELIGIBLE_TYPES), so in practice NewsRow won't be
+    // asked to render them — but the branch keeps the switch honest and
+    // mirrors the friend_answered template. The actor (the opted-in stranger)
+    // links to their profile via <ActorName>, which is the connect path.
+    case 'niche_match_answered_your_question': {
+      const nm = item.reference.nicheMatch
+      const domain = nm?.domain?.trim() || null
+      return {
+        headline: (
+          <>
+            {actor} answered your question
+          </>
+        ),
+        secondLine: domain,
+      }
+    }
+
+    case 'niche_match_you_answered': {
+      const nm = item.reference.nicheMatch
+      const domain = nm?.domain?.trim() || null
+      return {
+        headline: (
+          <>
+            You answered {actor}&apos;s question
+          </>
+        ),
+        secondLine: domain,
+      }
+    }
+
     case 'declared_promoted': {
       const dp = item.reference.declaredPromoted
       const domain = dp?.domain?.trim() || null
