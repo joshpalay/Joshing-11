@@ -48,13 +48,21 @@ export type FeedEventEligibilityInput = {
   hasVisibleSocialContext: boolean;
 };
 
+// LLM-origin questions have no human author. Both daily-generated questions and
+// curated sends ('curated_sent', written by /api/questions/send) carry a null
+// creatorId, so feed eligibility for their correct answers can't be keyed on
+// authorship — they are always eligible (subject to the checks above).
+export function isLlmOriginQuestion(source: string): boolean {
+  return source === 'daily_generated' || source === 'curated_sent';
+}
+
 export function isCorrectAnswerFeedEligible(input: FeedEventEligibilityInput): boolean {
   if (!input.answerIsCorrect) return false;
   if (!input.hasVisibleSocialContext) return false;
   if (!input.question) return false;
   if (input.question.deletedAt) return false;
   if (input.question.visibility !== 'public') return false;
-  if (input.question.source === 'daily_generated') return true;
+  if (isLlmOriginQuestion(input.question.source)) return true;
   if (!input.question.creatorId) return false;
   return input.answererUserId !== input.question.creatorId;
 }

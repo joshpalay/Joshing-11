@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Recipient is not a friend.' }, { status: 403 });
   }
 
-  const sendableQuestionId = await resolveQuestionIdForSend(parsed.questionId, session.userId);
+  const sendableQuestionId = await resolveQuestionIdForSend(parsed.questionId);
 
   const [question, recipient, senderNameRow] = await Promise.all([
     sendableQuestionId
@@ -147,7 +147,7 @@ function lastTwentyFourHours(date = new Date()) {
   return new Date(date.getTime() - 24 * 60 * 60 * 1000);
 }
 
-async function resolveQuestionIdForSend(questionId: string, senderUserId: string): Promise<string | null> {
+export async function resolveQuestionIdForSend(questionId: string): Promise<string | null> {
   const [question] = await db.select({ id: questions.id }).from(questions).where(eq(questions.id, questionId)).limit(1);
   if (question) return question.id;
 
@@ -159,12 +159,17 @@ async function resolveQuestionIdForSend(questionId: string, senderUserId: string
 
   if (!generated) return null;
 
+  // A sent LLM question keeps its LLM/curated provenance: no author is recorded
+  // (creatorId stays null so author/curator credit never accrues to the
+  // forwarder), and source is 'curated_sent' so it is queryably distinct from
+  // both authored questions and daily-generated ones. Who sent it is preserved
+  // separately on the FeedItem (sourceUserId) written by the caller.
   const [created] = await db
     .insert(questions)
     .values({
-      creatorId: senderUserId,
+      creatorId: null,
       sourceQuestionId: generated.id,
-      source: 'authored',
+      source: 'curated_sent',
       questionText: generated.questionText,
       answerText: generated.answer,
       factualExplanation: generated.explainer,

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   QUESTION_SHARING_FEED_SOURCE_VISIBILITY,
   isCorrectAnswerFeedEligible,
+  isLlmOriginQuestion,
   isMainFeedSourceVisible,
   socialFeedDomainLabel,
 } from '@/server/feed/visibility';
@@ -44,6 +45,40 @@ describe('correct-answer social feed eligibility', () => {
       },
       hasVisibleSocialContext: true,
     })).toBe(true);
+  });
+
+  it('allows public curated-sent (forwarded LLM) questions without an author to propagate correct friend answers', () => {
+    expect(isCorrectAnswerFeedEligible({
+      answerIsCorrect: true,
+      answererUserId: 'answerer-1',
+      question: {
+        creatorId: null,
+        source: 'curated_sent' as const,
+        visibility: 'public' as const,
+        deletedAt: null,
+      },
+      hasVisibleSocialContext: true,
+    })).toBe(true);
+  });
+
+  it('rejects wrong answers to curated-sent questions', () => {
+    expect(isCorrectAnswerFeedEligible({
+      answerIsCorrect: false,
+      answererUserId: 'answerer-1',
+      question: {
+        creatorId: null,
+        source: 'curated_sent' as const,
+        visibility: 'public' as const,
+        deletedAt: null,
+      },
+      hasVisibleSocialContext: true,
+    })).toBe(false);
+  });
+
+  it('classifies LLM-origin sources', () => {
+    expect(isLlmOriginQuestion('daily_generated')).toBe(true);
+    expect(isLlmOriginQuestion('curated_sent')).toBe(true);
+    expect(isLlmOriginQuestion('authored')).toBe(false);
   });
 
   it('rejects a correct answer by the author', () => {

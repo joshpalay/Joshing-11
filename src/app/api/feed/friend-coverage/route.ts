@@ -219,7 +219,7 @@ export async function loadFriendCoverage(
     for (const event of events) {
       const questionPayload = event.questionId ? {
         creatorId: event.questionCreatorId,
-        source: event.questionSource as 'authored' | 'daily_generated',
+        source: event.questionSource as 'authored' | 'daily_generated' | 'curated_sent',
         visibility: event.questionVisibility as 'public' | 'private',
         deletedAt: event.questionDeletedAt,
       } : null;
