@@ -95,6 +95,30 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     );
   }
 
+  if (item.type === 'follow_request') {
+    return (
+      <>
+        <UnderlineName>{actorName(item)}</UnderlineName> wants to follow you.
+      </>
+    );
+  }
+
+  if (item.type === 'follow') {
+    return (
+      <>
+        <UnderlineName>{actorName(item)}</UnderlineName> started following you.
+      </>
+    );
+  }
+
+  if (item.type === 'follow_approved') {
+    return (
+      <>
+        <UnderlineName>{actorName(item)}</UnderlineName> accepted your follow.
+      </>
+    );
+  }
+
   if (item.type === 'invited_friend_played_first_five') {
     return (
       <>
@@ -208,7 +232,7 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
     );
   }
 
-  if (item.type === 'friend_request') {
+  if (item.type === 'friend_request' || item.type === 'follow_request') {
     const interests = item.reference.friendshipRequest?.suggestedInterests ?? [];
     if (interests.length === 0) return null;
 
@@ -347,7 +371,7 @@ function activityAction(item: ActivityItemView): ReactNode | null {
     return <UtilityActionLink href="/" label="Answer" />;
   }
 
-  if (item.type === 'friend_request') {
+  if (item.type === 'friend_request' || item.type === 'follow_request') {
     const request = item.reference.friendshipRequest;
     if (
       !request ||
@@ -374,6 +398,7 @@ const INCOMING_TYPES = new Set([
   'received_direct_question',
   'received_joshing_game',
   'friend_request',
+  'follow_request',
 ]);
 
 function activityCaption(item: ActivityItemView): string {
@@ -390,7 +415,7 @@ function activityToFeedItem(item: ActivityItemView): LatelyFeedItem {
       : null;
 
   const anchorId =
-    item.type === 'friend_request' && item.referenceId
+    (item.type === 'friend_request' || item.type === 'follow_request') && item.referenceId
       ? `friendship-${item.referenceId}`
       : null;
 

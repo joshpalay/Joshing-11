@@ -32,13 +32,13 @@ describe('Friends page QA surface', () => {
     expect(html).not.toMatch(forbiddenGamificationCopy)
   })
 
-  it('renders the Friends / Invitations / Sent tab bar with the friends tab active by default', () => {
+  it('renders the Following / Followers / Pending tab bar with following active by default', () => {
     const html = renderToStaticMarkup(<FriendsList />)
 
-    expect(html).toContain('Friends')
-    expect(html).toContain('Invitations')
-    expect(html).toContain('Sent')
-    expect(html).toContain('Loading friends')
+    expect(html).toContain('Following')
+    expect(html).toContain('Followers')
+    expect(html).toContain('Pending')
+    expect(html).toContain('Who can follow you')
     expect(html).not.toMatch(forbiddenGamificationCopy)
   })
 })

@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questionFeedback, questionRatings, questions } from '@/server/db';
 import { writeActivity } from '@/server/activity/write-activity';
-import { getFriends } from '@/server/db/queries/friends';
+import { getFollowers } from '@/server/db/queries/friends';
 import { rollOffOldItems } from '@/server/db/queries/feed';
 import { isCorrectAnswerFeedEligible, SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
@@ -77,7 +77,9 @@ async function _createFeedItemsForFriendsFromAnswer(
   const domain = question.canonicalSubcategory ?? question.broadCategory;
   if (!domain) return;
 
-  const friends = await getFriends(userId);
+  // friend_answered fan-out reaches my followers — people who follow me see
+  // that I answered correctly (directional follow model, D-1 Stage 3).
+  const friends = await getFollowers(userId);
   if (friends.length === 0) {
     await notifyPreviousAnswerers(userId, questionId);
     return;

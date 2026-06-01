@@ -34,6 +34,6 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
-    friendship: { id: friendship.id, status: friendship.status },
+    friendship: { id: friendship.id, status: friendship.state },
   })
 }

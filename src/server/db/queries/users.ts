@@ -114,6 +114,17 @@ export function updateUser(id: string, data: Partial<User>) {
     .then(([user]) => user);
 }
 
+// D-1 Stage 3 — gate on new followers. 'public' lets anyone follow instantly;
+// 'approval_required' makes a follow a request the user approves.
+export function setFollowPrivacy(id: string, followPrivacy: 'public' | 'approval_required') {
+  return db
+    .update(users)
+    .set({ followPrivacy, updatedAt: new Date() })
+    .where(eq(users.id, id))
+    .returning({ id: users.id, followPrivacy: users.followPrivacy })
+    .then(([row]) => row);
+}
+
 export async function saveDeclaredInterests(userId: string, interests: DeclaredInterestInput[]) {
   const normalized = normalizeDeclaredInterests(interests);
 

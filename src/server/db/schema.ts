@@ -36,6 +36,14 @@ export const categoryEnum = pgEnum('Category', [
 ]);
 
 export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends']);
+
+// D-1 Stage 3 — directional follow model.
+// `state` on a follow edge: a follow targeting an approval_required user lands
+// as `pending` (a request the followee approves); a follow targeting a public
+// user lands `approved` immediately. Invites create approved edges directly.
+export const followStateEnum = pgEnum('FollowState', ['pending', 'approved']);
+// Per-user gate on *new* followers. Default approval_required (opt into public).
+export const followPrivacyEnum = pgEnum('FollowPrivacy', ['public', 'approval_required']);
 export const publicStatusEnum = pgEnum('PublicStatus', [
   'not_scored',
   'eligible_pending',
@@ -183,6 +191,8 @@ export const users = pgTable(
     avatarColor: text('avatar_color'),
     discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
+    // D-1 Stage 3 — gate on new followers. Default approval_required; public is opt-in.
+    followPrivacy: followPrivacyEnum('follow_privacy').notNull().default('approval_required'),
     phoneHash: text('phone_hash'),
     lastFriendDiscoveryCheckAt: timestamp('last_friend_discovery_check_at', { withTimezone: true }),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
@@ -716,6 +726,34 @@ export const friendships = pgTable(
     unique('Friendship_userAId_userBId_key').on(table.userAId, table.userBId),
     index('Friendship_userAId_status_idx').on(table.userAId, table.status),
     index('Friendship_userBId_status_idx').on(table.userBId, table.status),
+  ],
+);
+
+// D-1 Stage 3 — directional follow edges. Two rows model a mutual ("friend")
+// relationship; one row models a one-directional follow. The follower is always
+// the requester, so there is no separate requestedByUserId. Unfollow is a hard
+// delete (no `removed` state). `friendships` is frozen and kept for rollback;
+// all relationship reads/writes go through this table.
+export const follows = pgTable(
+  'Follow',
+  {
+    id: id(),
+    followerId: text('followerId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    followeeId: text('followeeId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    state: followStateEnum('state').notNull().default('pending'),
+    // Carried from the originating request so the incoming-request card can
+    // still render a personal note and suggested interests.
+    personalNote: text('personalNote'),
+    requestContext: jsonb('requestContext').$type<{ suggestedInterests?: string[] }>(),
+    createdAt: createdAt(),
+    approvedAt: timestamp('approvedAt', { withTimezone: true }),
+  },
+  (table) => [
+    unique('Follow_followerId_followeeId_key').on(table.followerId, table.followeeId),
+    // "who I follow" + outbound pending; "my followers" + inbound pending.
+    index('Follow_followerId_state_idx').on(table.followerId, table.state),
+    index('Follow_followeeId_state_idx').on(table.followeeId, table.state),
+    check('Follow_distinct_users', sql`${table.followerId} <> ${table.followeeId}`),
   ],
 );
 

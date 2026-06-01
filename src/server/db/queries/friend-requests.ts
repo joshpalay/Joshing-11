@@ -1,91 +1,92 @@
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, or } from 'drizzle-orm'
 
-import { db, friendships } from '@/server/db'
-import { friendshipPair } from '@/server/friends/friendships'
+import { db, follows } from '@/server/db'
 
 export type RelationshipState =
   | 'none'
-  | 'pending_outbound'
-  | 'pending_inbound'
-  | 'friends'
-  | 'recently_sent'
+  | 'pending_outbound' // I requested to follow them; awaiting their approval
+  | 'pending_inbound' // they requested to follow me; awaiting my approval
+  | 'following' // I follow them (approved), one-directional
+  | 'follows_you' // they follow me (approved); I don't follow back
+  | 'friends' // mutual follow (both directions approved)
 
 export type RelationshipResult = {
   state: RelationshipState
-  // Present when state is pending_outbound, pending_inbound, or friends —
-  // so callers can drive accept/cancel/unfriend actions without a second
-  // lookup. null when the row doesn't exist or has been resolved.
+  // The follow-edge id that drives the next action:
+  //   pending_outbound / following / friends -> my outbound edge (cancel / unfollow)
+  //   pending_inbound                        -> their inbound edge (approve / ignore)
+  //   follows_you / none                     -> null (the action is to create a follow)
   friendshipId: string | null
-  // True when the target party has soft-removed this friendship. The UI
-  // never shows a separate "blocked" state — to the viewer it looks like
-  // "none" — but POST /api/friend-requests refuses with 404 (doesn't
-  // reveal the block). Callers that render add-friend affordances on
-  // lists (search results, contact matches) should filter rows where
-  // isBlocked === true before rendering.
+  // When the relevant approved edge formed (mutual or one-directional follow).
+  formedAt: Date | null
+  // Retained for API/type compatibility with list surfaces that filter on it.
+  // Explicit blocking is not modelled under the follow model (an unwanted
+  // follower is handled by the approval gate / unfollow), so this is always
+  // false now.
   isBlocked: boolean
 }
 
-const RECENTLY_SENT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
+type EdgeRow = {
+  id: string
+  followerId: string
+  followeeId: string
+  state: 'pending' | 'approved'
+  approvedAt: Date | null
+}
+
+// Resolve the relationship from the viewer's two directional edges.
+//   outbound = viewer -> target, inbound = target -> viewer
+function resolve(outbound: EdgeRow | undefined, inbound: EdgeRow | undefined): RelationshipResult {
+  const out = outbound?.state
+  const inb = inbound?.state
+
+  if (out === 'approved' && inb === 'approved') {
+    return { state: 'friends', friendshipId: outbound!.id, formedAt: outbound!.approvedAt, isBlocked: false }
+  }
+  // An incoming request I can act on takes precedence so I can approve it.
+  if (inb === 'pending') {
+    return { state: 'pending_inbound', friendshipId: inbound!.id, formedAt: null, isBlocked: false }
+  }
+  if (out === 'pending') {
+    return { state: 'pending_outbound', friendshipId: outbound!.id, formedAt: null, isBlocked: false }
+  }
+  if (out === 'approved') {
+    return { state: 'following', friendshipId: outbound!.id, formedAt: outbound!.approvedAt, isBlocked: false }
+  }
+  if (inb === 'approved') {
+    return { state: 'follows_you', friendshipId: null, formedAt: null, isBlocked: false }
+  }
+  return { state: 'none', friendshipId: null, formedAt: null, isBlocked: false }
+}
 
 // Single source of truth for the viewer's relationship to a target user.
-// Resolution order (highest precedence first):
-//   1. status='active' row                    -> 'friends'
-//   2. status='removed' by target             -> 'none' + isBlocked: true
-//      status='removed' by viewer             -> 'none' (the viewer chose
-//                                                to disconnect; they can re-add)
-//   3. status='pending', requested by viewer  -> 'pending_outbound'
-//   4. status='pending', requested by target  -> 'pending_inbound'
-//   5. status in ('declined','expired') with resolvedAt within 30 days -> 'recently_sent'
-//   6. otherwise                              -> 'none'
 export async function getRelationship(
   viewerId: string,
   targetId: string,
-  now: Date = new Date(),
 ): Promise<RelationshipResult> {
   if (viewerId === targetId) {
-    return { state: 'none', friendshipId: null, isBlocked: false }
+    return { state: 'none', friendshipId: null, formedAt: null, isBlocked: false }
   }
 
-  const pair = friendshipPair(viewerId, targetId)
-  const [row] = await db
-    .select()
-    .from(friendships)
-    .where(and(eq(friendships.userAId, pair.userAId), eq(friendships.userBId, pair.userBId)))
-    .limit(1)
+  const rows = await db
+    .select({
+      id: follows.id,
+      followerId: follows.followerId,
+      followeeId: follows.followeeId,
+      state: follows.state,
+      approvedAt: follows.approvedAt,
+    })
+    .from(follows)
+    .where(
+      or(
+        and(eq(follows.followerId, viewerId), eq(follows.followeeId, targetId)),
+        and(eq(follows.followerId, targetId), eq(follows.followeeId, viewerId)),
+      ),
+    )
 
-  if (!row) {
-    return { state: 'none', friendshipId: null, isBlocked: false }
-  }
-
-  if (row.status === 'active') {
-    return { state: 'friends', friendshipId: row.id, isBlocked: false }
-  }
-
-  if (row.status === 'removed') {
-    const removedByTarget = row.removedByUserId === targetId
-    return { state: 'none', friendshipId: null, isBlocked: removedByTarget }
-  }
-
-  if (row.status === 'pending') {
-    return {
-      state: row.requestedByUserId === viewerId ? 'pending_outbound' : 'pending_inbound',
-      friendshipId: row.id,
-      isBlocked: false,
-    }
-  }
-
-  if (row.status === 'declined' || row.status === 'expired') {
-    const resolvedAt = row.resolvedAt
-    if (resolvedAt && now.getTime() - resolvedAt.getTime() < RECENTLY_SENT_WINDOW_MS) {
-      // Only the original requester is gated by the cooldown — the
-      // declinee can re-send immediately if they change their mind.
-      if (row.requestedByUserId === viewerId) {
-        return { state: 'recently_sent', friendshipId: null, isBlocked: false }
-      }
-    }
-  }
-
-  return { state: 'none', friendshipId: null, isBlocked: false }
+  const outbound = rows.find((row) => row.followerId === viewerId)
+  const inbound = rows.find((row) => row.followerId === targetId)
+  return resolve(outbound, inbound)
 }
 
 // Bulk lookup variant for list surfaces (search results, contact matches).
@@ -93,7 +94,6 @@ export async function getRelationship(
 export async function getRelationships(
   viewerId: string,
   targetIds: string[],
-  now: Date = new Date(),
 ): Promise<Map<string, RelationshipResult>> {
   const result = new Map<string, RelationshipResult>()
   if (targetIds.length === 0) return result
@@ -102,57 +102,30 @@ export async function getRelationships(
   if (uniqueTargets.length === 0) return result
 
   const rows = await db
-    .select()
-    .from(friendships)
+    .select({
+      id: follows.id,
+      followerId: follows.followerId,
+      followeeId: follows.followeeId,
+      state: follows.state,
+      approvedAt: follows.approvedAt,
+    })
+    .from(follows)
     .where(
-      and(
-        sql`(${friendships.userAId} = ${viewerId} AND ${friendships.userBId} IN ${uniqueTargets})
-          OR (${friendships.userBId} = ${viewerId} AND ${friendships.userAId} IN ${uniqueTargets})`,
-        inArray(friendships.status, ['active', 'pending', 'declined', 'expired', 'removed']),
+      or(
+        and(eq(follows.followerId, viewerId), inArray(follows.followeeId, uniqueTargets)),
+        and(eq(follows.followeeId, viewerId), inArray(follows.followerId, uniqueTargets)),
       ),
     )
 
-  const rowsByOther = new Map<string, typeof rows[number]>()
+  const outboundByTarget = new Map<string, EdgeRow>()
+  const inboundByTarget = new Map<string, EdgeRow>()
   for (const row of rows) {
-    const otherId = row.userAId === viewerId ? row.userBId : row.userAId
-    rowsByOther.set(otherId, row)
+    if (row.followerId === viewerId) outboundByTarget.set(row.followeeId, row)
+    else inboundByTarget.set(row.followerId, row)
   }
 
   for (const targetId of uniqueTargets) {
-    const row = rowsByOther.get(targetId)
-    if (!row) {
-      result.set(targetId, { state: 'none', friendshipId: null, isBlocked: false })
-      continue
-    }
-    if (row.status === 'active') {
-      result.set(targetId, { state: 'friends', friendshipId: row.id, isBlocked: false })
-      continue
-    }
-    if (row.status === 'removed') {
-      const removedByTarget = row.removedByUserId === targetId
-      result.set(targetId, { state: 'none', friendshipId: null, isBlocked: removedByTarget })
-      continue
-    }
-    if (row.status === 'pending') {
-      result.set(targetId, {
-        state: row.requestedByUserId === viewerId ? 'pending_outbound' : 'pending_inbound',
-        friendshipId: row.id,
-        isBlocked: false,
-      })
-      continue
-    }
-    if (row.status === 'declined' || row.status === 'expired') {
-      const resolvedAt = row.resolvedAt
-      if (
-        resolvedAt
-        && now.getTime() - resolvedAt.getTime() < RECENTLY_SENT_WINDOW_MS
-        && row.requestedByUserId === viewerId
-      ) {
-        result.set(targetId, { state: 'recently_sent', friendshipId: null, isBlocked: false })
-        continue
-      }
-    }
-    result.set(targetId, { state: 'none', friendshipId: null, isBlocked: false })
+    result.set(targetId, resolve(outboundByTarget.get(targetId), inboundByTarget.get(targetId)))
   }
 
   return result

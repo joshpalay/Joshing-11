@@ -4,6 +4,7 @@ import {
   activityItems,
   db,
   feedItems,
+  follows,
   friendships,
   gradeDisputes,
   joshingGameQuestions,
@@ -118,6 +119,9 @@ function isActivityType(value: string): value is ActivityItemType {
     'ceremony_ready',
     'friend_request',
     'friend_request_accepted',
+    'follow',
+    'follow_request',
+    'follow_approved',
     'invited_friend_played_first_five',
     'received_direct_question',
     'reaction_received',
@@ -142,6 +146,40 @@ function parseFriendshipRequestInterests(value: unknown): string[] {
 }
 
 async function hydrateFriendshipRequests(items: ActivityItemRow[]) {
+  const result = new Map<string, NonNullable<ActivityItemView['reference']['friendshipRequest']>>();
+
+  // New follow-model rows reference the `follows` table; legacy friend-request
+  // rows reference the frozen `friendships` table. Hydrate both into one map
+  // keyed by referenceId, normalising follow `state` onto the same `status`
+  // shape the activity card already reads ('approved' -> 'active').
+  const followIds = [
+    ...new Set(
+      items
+        .filter((item) => item.referenceType === 'follow')
+        .map((item) => item.referenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (followIds.length > 0) {
+    const followRows = await db
+      .select({
+        id: follows.id,
+        state: follows.state,
+        followerId: follows.followerId,
+        requestContext: follows.requestContext,
+      })
+      .from(follows)
+      .where(inArray(follows.id, followIds));
+    for (const row of followRows) {
+      result.set(row.id, {
+        id: row.id,
+        status: row.state === 'approved' ? 'active' : 'pending',
+        requestedByUserId: row.followerId,
+        suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
+      });
+    }
+  }
+
   const friendshipIds = [
     ...new Set(
       items
@@ -150,29 +188,27 @@ async function hydrateFriendshipRequests(items: ActivityItemRow[]) {
         .filter((id): id is string => Boolean(id)),
     ),
   ];
-  if (friendshipIds.length === 0) {
-    return new Map<string, NonNullable<ActivityItemView['reference']['friendshipRequest']>>();
+  if (friendshipIds.length > 0) {
+    const rows = await db
+      .select({
+        id: friendships.id,
+        status: friendships.status,
+        requestedByUserId: friendships.requestedByUserId,
+        requestContext: friendships.requestContext,
+      })
+      .from(friendships)
+      .where(inArray(friendships.id, friendshipIds));
+    for (const row of rows) {
+      result.set(row.id, {
+        id: row.id,
+        status: row.status,
+        requestedByUserId: row.requestedByUserId,
+        suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
+      });
+    }
   }
 
-  const rows = await db
-    .select({
-      id: friendships.id,
-      status: friendships.status,
-      requestedByUserId: friendships.requestedByUserId,
-      requestContext: friendships.requestContext,
-    })
-    .from(friendships)
-    .where(inArray(friendships.id, friendshipIds));
-
-  return new Map(rows.map((row) => [
-    row.id,
-    {
-      id: row.id,
-      status: row.status,
-      requestedByUserId: row.requestedByUserId,
-      suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
-    },
-  ]));
+  return result;
 }
 
 async function hydrateActors(items: ActivityItemRow[]) {
@@ -673,7 +709,7 @@ async function hydrateActivityRows(
       createdAt: row.createdAt,
       actor: row.actorUserId ? actorsById.get(row.actorUserId) ?? null : null,
       reference: {
-        friendshipRequest: row.referenceType === 'friendship' && row.referenceId
+        friendshipRequest: (row.referenceType === 'friendship' || row.referenceType === 'follow') && row.referenceId
           ? friendshipRequestsById.get(row.referenceId)
           : undefined,
         game: row.referenceType === 'joshing_game' && row.referenceId

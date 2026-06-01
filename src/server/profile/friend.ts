@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import { db, declaredInterests } from '@/server/db'
-import { areFriends, getFriends, getFriendship } from '@/server/db/queries/friends'
+import { areFriends, getFriends } from '@/server/db/queries/friends'
+import { getRelationship, type RelationshipResult } from '@/server/db/queries/friend-requests'
 import { getUserById } from '@/server/db/queries/users'
 import type { PreviewAs } from '@/server/profile/preview'
 import {
@@ -28,14 +29,6 @@ export type FriendPortraitMutualFriend = {
   displayName: string
 }
 
-export type FriendPortraitFriendship = {
-  id: string
-  status: string
-  formedAt: Date | null
-  requestedByUserId: string
-  viewerIsRequester: boolean
-}
-
 export type FriendPortraitData = {
   user: {
     id: string
@@ -44,7 +37,9 @@ export type FriendPortraitData = {
     memberSince: Date
   }
   visibility: FriendProfileVisibility
-  friendship: FriendPortraitFriendship | null
+  // The viewer's directional relationship to this profile (follow model).
+  // Drives the follow button and the "friends since" date. Null on own view.
+  relationship: RelationshipResult | null
   interests: FriendPortraitInterest[]
   sharedInterests: string[]
   viewerSoloInterests: string[]
@@ -98,11 +93,11 @@ export async function getFriendPortraitData(
   if (!viewedUser) return null
 
   const isOwnerView = normalizedUserId === normalizedViewerId
-  const friendship = isOwnerView
+  const relationship = isOwnerView
     ? null
-    : await getFriendship(normalizedViewerId, normalizedUserId)
+    : await getRelationship(normalizedViewerId, normalizedUserId)
 
-  const isActiveFriend = !isOwnerView && friendship?.status === 'active'
+  const isActiveFriend = !isOwnerView && relationship?.state === 'friends'
   const realViewer: FriendProfileVisibility = isOwnerView
     ? 'self'
     : isActiveFriend
@@ -211,16 +206,6 @@ export async function getFriendPortraitData(
     mutualFriendsOverflow = Math.max(0, mutuals.length - mutualFriends.length)
   }
 
-  const portraitFriendship: FriendPortraitFriendship | null = friendship
-    ? {
-        id: friendship.id,
-        status: friendship.status,
-        formedAt: friendship.formedAt,
-        requestedByUserId: friendship.requestedByUserId,
-        viewerIsRequester: friendship.requestedByUserId === normalizedViewerId,
-      }
-    : null
-
   // Batch-fetch the owner's per-section visibility settings exactly once,
   // then evaluate the gate purely against the effective viewer. Owners
   // get the full settings map back (for editing UI); other viewers get
@@ -244,7 +229,7 @@ export async function getFriendPortraitData(
       memberSince: viewedUser.createdAt,
     },
     visibility,
-    friendship: portraitFriendship,
+    relationship,
     interests,
     sharedInterests: interests
       .filter((interest) => interest.shared)
