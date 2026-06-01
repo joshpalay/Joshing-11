@@ -305,6 +305,7 @@ export async function assignInitialHandle(params: {
 export type DiscoverabilityState = {
   discoverableByContacts: boolean;
   discoverableByMutualFriends: boolean;
+  discoverableByNicheMatch: boolean;
 };
 
 export async function getDiscoverability(
@@ -314,6 +315,7 @@ export async function getDiscoverability(
     .select({
       discoverableByContacts: users.discoverableByContacts,
       discoverableByMutualFriends: users.discoverableByMutualFriends,
+      discoverableByNicheMatch: users.discoverableByNicheMatch,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -326,6 +328,7 @@ export async function getDiscoverability(
 export type DiscoverabilityPatch = {
   contacts?: boolean;
   mutualFriends?: boolean;
+  nicheMatch?: boolean;
 };
 
 // Updates one or both discoverability flags. Wraps both writes (and the
@@ -345,6 +348,7 @@ export async function updateDiscoverability(
       .select({
         discoverableByContacts: users.discoverableByContacts,
         discoverableByMutualFriends: users.discoverableByMutualFriends,
+        discoverableByNicheMatch: users.discoverableByNicheMatch,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -355,6 +359,8 @@ export async function updateDiscoverability(
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (patch.contacts !== undefined) set.discoverableByContacts = patch.contacts;
     if (patch.mutualFriends !== undefined) set.discoverableByMutualFriends = patch.mutualFriends;
+    // No purge side-effect for niche-match: it stores no uploaded data to revoke.
+    if (patch.nicheMatch !== undefined) set.discoverableByNicheMatch = patch.nicheMatch;
 
     await tx.update(users).set(set).where(eq(users.id, userId));
 
@@ -368,6 +374,7 @@ export async function updateDiscoverability(
       discoverableByContacts: patch.contacts ?? current.discoverableByContacts,
       discoverableByMutualFriends:
         patch.mutualFriends ?? current.discoverableByMutualFriends,
+      discoverableByNicheMatch: patch.nicheMatch ?? current.discoverableByNicheMatch,
     };
   });
 }

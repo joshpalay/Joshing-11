@@ -10,7 +10,7 @@ type Props = {
   initialInviteUrl: string | null;
 };
 
-type PatchKey = 'contacts' | 'mutualFriends';
+type PatchKey = 'contacts' | 'mutualFriends' | 'nicheMatch';
 
 type InviteTokenResponse = { token: string; url: string };
 
@@ -131,7 +131,9 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
     const next: DiscoverabilityState =
       key === 'contacts'
         ? { ...state, discoverableByContacts: !state.discoverableByContacts }
-        : { ...state, discoverableByMutualFriends: !state.discoverableByMutualFriends };
+        : key === 'mutualFriends'
+          ? { ...state, discoverableByMutualFriends: !state.discoverableByMutualFriends }
+          : { ...state, discoverableByNicheMatch: !state.discoverableByNicheMatch };
 
     setState(next);
     setSavingKey(key);
@@ -140,7 +142,9 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
     const body: Partial<Record<PatchKey, boolean>> =
       key === 'contacts'
         ? { contacts: next.discoverableByContacts }
-        : { mutualFriends: next.discoverableByMutualFriends };
+        : key === 'mutualFriends'
+          ? { mutualFriends: next.discoverableByMutualFriends }
+          : { nicheMatch: next.discoverableByNicheMatch };
 
     const result = await patchDiscoverability(body);
     setSavingKey(null);
@@ -169,6 +173,14 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
         checked={state.discoverableByMutualFriends}
         saving={savingKey === 'mutualFriends'}
         onToggle={() => void toggle('mutualFriends')}
+      />
+
+      <ToggleRow
+        title="Let people I've never met discover me through questions we both answer"
+        description="When you correctly answer a stranger's question (or they answer yours), each of you can see the other — a slow way to meet people through shared curiosity. Turn this off to stay hidden from strangers."
+        checked={state.discoverableByNicheMatch}
+        saving={savingKey === 'nicheMatch'}
+        onToggle={() => void toggle('nicheMatch')}
       />
 
       <ToggleRow

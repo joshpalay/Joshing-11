@@ -191,6 +191,11 @@ export const users = pgTable(
     avatarColor: text('avatar_color'),
     discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
+    // D-2 niche-match discovery. TEST-PHASE default ON (DEFAULT true) — deliberate
+    // for the test cohort only. The production default is an OPEN DECISION to
+    // revisit after the test; do not assume default-ON as the shipping default.
+    // See drizzle/0059_niche_match_discoverability.sql.
+    discoverableByNicheMatch: boolean('discoverable_by_niche_match').notNull().default(true),
     // D-1 Stage 3 — gate on new followers. Default approval_required; public is opt-in.
     followPrivacy: followPrivacyEnum('follow_privacy').notNull().default('approval_required'),
     phoneHash: text('phone_hash'),
