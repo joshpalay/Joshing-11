@@ -178,10 +178,10 @@ const wordmarkStyle: CSSProperties = {
 const shareButtonStyle: CSSProperties = {
   minHeight: 38,
   padding: '0 0.82rem',
-  border: '1px solid #ddd6c7',
+  border: '1px solid var(--brand-border)',
   borderRadius: 999,
-  background: '#fffdf8',
-  color: '#1a1208',
+  background: 'var(--brand-card)',
+  color: 'var(--brand-ink)',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -213,24 +213,24 @@ const circlesWrapStyle: CSSProperties = {
 const overflowStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
-  color: '#8a8070',
+  color: 'var(--brand-ink-400)',
   textAlign: 'center',
 }
 
 const tierStyle: CSSProperties = {
   margin: 0,
   fontSize: 13,
-  color: '#1a1208',
+  color: 'var(--brand-ink)',
 }
 
 const rarestStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
-  color: '#8a8070',
+  color: 'var(--brand-ink-400)',
 }
 
 const attributionStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
-  color: '#8a8070',
+  color: 'var(--brand-ink-400)',
 }
