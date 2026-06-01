@@ -127,6 +127,7 @@ function isActivityType(value: string): value is ActivityItemType {
     'ceremony_ready',
     'friend_request',
     'friend_request_accepted',
+    'invited_friend_played_first_five',
     'received_direct_question',
     'reaction_received',
     'question_curated',
