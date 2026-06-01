@@ -2,15 +2,17 @@ import {
   carryForwardUntouchedDailyQueue,
   clearStaleShortTodayQueue,
   createDailyQueueItem,
+  createDailyQueueItemFromAnswerer,
   createDailyQueueItemFromAuthored,
   getKnowledgeBase,
   getTodaysDailyQueue,
+  pickBonusAnswererSlots,
   pickEligibleAuthoredQuestions,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
-import { getFriendAndFoFUserIds } from '@/server/db/queries/friends';
+import { getFollowing, getFriendAndFoFUserIds } from '@/server/db/queries/friends';
 import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { DAILY_BONUS_SLOT_MAX, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
@@ -240,12 +242,36 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   }
 
   let position = 0;
+  const coreQuestionIds = new Set<string>();
   for (const pick of authored) {
     await createDailyQueueItemFromAuthored(userId, pick, position);
+    coreQuestionIds.add(pick.id);
     position += 1;
   }
   for (const question of generatedForQueue.slice(0, DAILY_QUEUE_SIZE - position)) {
     await createDailyQueueItem(userId, question.id, position);
+    position += 1;
+  }
+
+  // Daily Five +2 (D-1 §D). Append up to DAILY_BONUS_SLOT_MAX bonus slots built
+  // from questions that people the viewer follows answered correctly. This is
+  // purely additive: it is NOT counted toward DAILY_QUEUE_SIZE / the achieved
+  // backstop above, never triggers the N<5 generation top-up, and never
+  // backfills a friend slot with LLM/authored content. If 0 qualify we append
+  // nothing (graceful shrink), yielding a 5–7 slot queue. coreQuestionIds keeps
+  // a friend-answered question that already landed as an authored core slot from
+  // also surfacing as a bonus slot.
+  const following = await getFollowing(userId);
+  const followingIds = new Set(following.map((user) => user.id));
+  const bonus = await pickBonusAnswererSlots(
+    userId,
+    followingIds,
+    knowledgeBase,
+    DAILY_BONUS_SLOT_MAX,
+    coreQuestionIds,
+  );
+  for (const pick of bonus) {
+    await createDailyQueueItemFromAnswerer(userId, pick, position);
     position += 1;
   }
 }
