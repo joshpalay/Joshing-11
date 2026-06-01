@@ -12,14 +12,12 @@ import {
   FeedCardSwipe,
   FeedOverflowMenu,
   FriendAddedCard,
-  FriendAnsweredCard,
   FriendLikedCard,
   visibleFeedCategory,
   type AnsweredByYouFeedItem,
   type DirectSentFeedItem,
   type FeedRecheckAction,
   type FriendAddedFeedItem,
-  type FriendAnsweredFeedItem,
   type FriendLikedFeedItem,
 } from '@/components/feed'
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
@@ -38,7 +36,6 @@ type FeedApiItem = {
   question_id: string | null
   card_type:
     | 'direct_sent'
-    | 'friend_answered'
     | 'friend_added'
     | 'friend_liked'
     | 'answered_by_you'
@@ -79,6 +76,8 @@ type FeedMeta = {
   total_item_count: number
   active_item_count: number
   pre_filter_active_count: number
+  broadcasts_item_count: number
+  sent_item_count: number
   page_item_count?: number
   limit?: number
   cursor?: string | null
@@ -271,18 +270,6 @@ function baseTypedFields(item: FeedApiItem, answered = false) {
   }
 }
 
-function friendAnsweredSummary(item: FeedApiItem) {
-  const primaryFriend = item.friend_results?.[0]
-  const friendName =
-    primaryFriend?.displayName ?? item.source_friend_display_name
-
-  if (primaryFriend?.result === 'correct' || item.source_result === 'correct') {
-    return `${friendName} recognized this one. See if you share the same common ground.`
-  }
-
-  return `${friendName} answered this question.`
-}
-
 function toTypedFeedItem(item: FeedApiItem) {
   const base = baseTypedFields(item)
 
@@ -293,15 +280,6 @@ function toTypedFeedItem(item: FeedApiItem) {
       senderName: item.source_friend_display_name,
       senderHref: item.source_profile_href ?? profileHref(item.source_user_id),
     } satisfies DirectSentFeedItem
-  }
-
-  if (item.card_type === 'friend_added') {
-    return {
-      ...base,
-      type: 'friend_added' as const,
-      friendName: item.source_friend_display_name,
-      friendHref: item.source_profile_href ?? profileHref(item.source_user_id),
-    } satisfies FriendAddedFeedItem
   }
 
   if (item.card_type === 'friend_liked') {
@@ -315,42 +293,15 @@ function toTypedFeedItem(item: FeedApiItem) {
     } satisfies FriendLikedFeedItem
   }
 
-  const correctFriends = (item.friend_results ?? [])
-    .filter((friend) => friend.result === 'correct')
-    .map((friend) => ({
-      userId: friend.userId,
-      displayName: friend.displayName,
-      href: profileHref(friend.userId),
-    }))
-
-  // If we have no aggregated friend_results but the source friend got it right, synthesize one.
-  if (
-    correctFriends.length === 0 &&
-    item.source_result === 'correct' &&
-    item.source_user_id
-  ) {
-    correctFriends.push({
-      userId: item.source_user_id,
-      displayName: item.source_friend_display_name,
-      href: profileHref(item.source_user_id),
-    })
-  }
-
+  // D-1 Stage 5: friend_answered is no longer a feed card. friend_added (the
+  // authored_shared broadcast envelope) is the default, and the safe fallback
+  // for any unexpected card_type.
   return {
     ...base,
-    type: 'friend_answered' as const,
-    friendName:
-      item.friend_results?.[0]?.displayName ?? item.source_friend_display_name,
-    friendHref: profileHref(
-      item.friend_results?.[0]?.userId ?? item.source_user_id
-    ),
-    friendCorrect:
-      item.friend_results?.[0]?.result === 'correct' ||
-      item.source_result === 'correct',
-    answerSummary: friendAnsweredSummary(item),
-    correctFriends,
-    viewerResult: item.viewer_answer_status?.result ?? null,
-  } satisfies FriendAnsweredFeedItem
+    type: 'friend_added' as const,
+    friendName: item.source_friend_display_name,
+    friendHref: item.source_profile_href ?? profileHref(item.source_user_id),
+  } satisfies FriendAddedFeedItem
 }
 
 function normalizeMasteryDelta(
@@ -471,6 +422,74 @@ function FeedListLoading() {
   )
 }
 
+// D-1 Stage 5: the feed is exactly two surfaces. Broadcasts is the friend-sourced
+// stream (authored questions + legacy likes); Sent is questions addressed to you.
+const FEED_SURFACE_TABS: ReadonlyArray<{
+  filter: Exclude<FeedFilter, 'all'>
+  label: string
+  count: (meta: FeedMeta | null) => number
+}> = [
+  { filter: 'from-friends', label: 'Broadcasts', count: (meta) => meta?.broadcasts_item_count ?? 0 },
+  { filter: 'sent-to-me', label: 'Sent', count: (meta) => meta?.sent_item_count ?? 0 },
+]
+
+function FeedSurfaceTabs({
+  active,
+  meta,
+  onSelect,
+}: {
+  active: FeedFilter
+  meta: FeedMeta | null
+  onSelect: (filter: FeedFilter) => void
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Feed surfaces"
+      className="mb-3 flex border-b"
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
+        event.preventDefault()
+        const index = FEED_SURFACE_TABS.findIndex((tab) => tab.filter === active)
+        const delta = event.key === 'ArrowRight' ? 1 : -1
+        const next =
+          FEED_SURFACE_TABS[
+            (index + delta + FEED_SURFACE_TABS.length) % FEED_SURFACE_TABS.length
+          ]
+        onSelect(next.filter)
+      }}
+    >
+      {FEED_SURFACE_TABS.map((tab) => {
+        const selected = tab.filter === active
+        const count = tab.count(meta)
+        return (
+          <button
+            key={tab.filter}
+            type="button"
+            role="tab"
+            id={`feed-tab-${tab.filter}`}
+            aria-selected={selected}
+            tabIndex={selected ? 0 : -1}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+              selected
+                ? 'border-foreground text-foreground border-b-2'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => onSelect(tab.filter)}
+          >
+            {tab.label}
+            {count > 0 ? (
+              <span className="bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-xs leading-none">
+                {count}
+              </span>
+            ) : null}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function FeedListContent({
   pageSize = 20,
   infinite = false,
@@ -478,15 +497,15 @@ function FeedListContent({
 }: FeedListProps) {
   const searchParams = useSearchParams()
   const initialFilterParam =
-    searchParams.get('filter') ?? searchParams.get('feed_filter') ?? 'all'
+    searchParams.get('filter') ?? searchParams.get('feed_filter') ?? 'from-friends'
+  // D-1 Stage 5: the feed is two surfaces — Broadcasts ('from-friends', default)
+  // and Sent ('sent-to-me'). Legacy ?filter=all links land on Broadcasts.
   const initialFilter: FeedFilter =
-    initialFilterParam === 'sent-to-me' || initialFilterParam === 'from-friends'
-      ? initialFilterParam
-      : 'all'
-  // initialPage is only valid for the 'all' filter (that's what the server
-  // pre-fetches). If the URL pins a different filter, fall back to client fetch.
-  const initialPageMatchesFilter = initialPage !== null && initialFilter === 'all'
-  const [feedFilter] = useState<FeedFilter>(initialFilter)
+    initialFilterParam === 'sent-to-me' ? 'sent-to-me' : 'from-friends'
+  // initialPage is the server pre-fetch of the default Broadcasts surface, so it
+  // only seeds state when that's the active filter; Sent falls back to a client fetch.
+  const initialPageMatchesFilter = initialPage !== null && initialFilter === 'from-friends'
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const [items, setItems] = useState<FeedApiItem[]>(
     initialPageMatchesFilter ? initialPage!.items : []
@@ -591,6 +610,20 @@ function FeedListContent({
     [feedFilter, pageSize]
   )
 
+  // D-1 Stage 5: switching surface clears the previous tab's list (and its
+  // stale infinite-scroll cursor) before the loadFeed effect refetches.
+  const handleSelectTab = useCallback(
+    (next: FeedFilter) => {
+      if (next === feedFilter) return
+      setItems([])
+      setNextCursor(null)
+      setHasMore(false)
+      setLoadingInitial(true)
+      setFeedFilter(next)
+    },
+    [feedFilter]
+  )
+
   useEffect(() => {
     if (skipInitialFetchRef.current) {
       skipInitialFetchRef.current = false
@@ -627,6 +660,13 @@ function FeedListContent({
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
     if (error) return error
+    // Sent surface: anyone can send you a question, so the follow-based
+    // has_friends signal doesn't apply here.
+    if (feedFilter === 'sent-to-me') {
+      if ((feedMeta?.sent_item_count ?? 0) > 0)
+        return "You've answered every question sent to you."
+      return 'No one has sent you a question yet.'
+    }
     if (!feedMeta?.has_friends)
       return 'When your friends play, their questions will show up here.'
     // pre_filter_active_count > 0 means items exist in active/skipped state but are hidden by domain filters
@@ -639,9 +679,11 @@ function FeedListContent({
     if (feedMeta.total_item_count > 0)
       return "You've answered every question your friends sent. Invite more friends and their questions will show up here."
     return 'Quiet today. Check back when your friends have played.'
-  }, [error, feedMeta, loadingInitial])
+  }, [error, feedFilter, feedMeta, loadingInitial])
 
-  const showInviteFriendCta = !loadingInitial && !error && Boolean(feedMeta)
+  // The invite CTA only makes sense on the friend-sourced Broadcasts surface.
+  const showInviteFriendCta =
+    !loadingInitial && !error && Boolean(feedMeta) && feedFilter === 'from-friends'
 
   const emptyDiagnostics = useMemo(() => {
     if (process.env.NODE_ENV === 'production' || !feedMeta) return null
@@ -651,6 +693,8 @@ function FeedListContent({
       `has_dismissed_domains=${String(feedMeta.has_dismissed_domains)}`,
       `total_item_count=${feedMeta.total_item_count}`,
       `pre_filter_active_count=${feedMeta.pre_filter_active_count}`,
+      `broadcasts_item_count=${feedMeta.broadcasts_item_count}`,
+      `sent_item_count=${feedMeta.sent_item_count}`,
       `active_item_count=${feedMeta.active_item_count}`,
       `page_item_count=${feedMeta.page_item_count ?? items.length}`,
       `limit=${feedMeta.limit ?? pageSize}`,
@@ -1019,6 +1063,8 @@ function FeedListContent({
 
   return (
     <>
+      <FeedSurfaceTabs active={feedFilter} meta={feedMeta} onSelect={handleSelectTab} />
+
       {hideToast ? (
         <div
           role="status"
@@ -1157,12 +1203,7 @@ function FeedListContent({
                 }
 
                 const typedItem = toTypedFeedItem(item)
-                // A friend_answered card the viewer already answered shows a
-                // footer, not the Answer action — so it isn't dismissible.
-                const viewerAnsweredFriendCard =
-                  typedItem.type === 'friend_answered' &&
-                  (typedItem.viewerResult ?? null) !== null
-                const dismissible = !item.viewer_is_author && !viewerAnsweredFriendCard
+                const dismissible = !item.viewer_is_author
                 const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
                 const onDismiss = dismissible ? () => requestDismiss(item) : undefined
 
@@ -1176,16 +1217,6 @@ function FeedListContent({
                       onDismiss={onDismiss}
                     />
                   )
-                } else if (typedItem.type === 'friend_added') {
-                  card = (
-                    <FriendAddedCard
-                      item={typedItem}
-                      overflow={overflow}
-                      onAnswer={onAnswer}
-                      onDismiss={onDismiss}
-                      onHideCategory={() => void hideCategory(item)}
-                    />
-                  )
                 } else if (typedItem.type === 'friend_liked') {
                   card = (
                     <FriendLikedCard
@@ -1197,11 +1228,12 @@ function FeedListContent({
                   )
                 } else {
                   card = (
-                    <FriendAnsweredCard
+                    <FriendAddedCard
                       item={typedItem}
                       overflow={overflow}
                       onAnswer={onAnswer}
                       onDismiss={onDismiss}
+                      onHideCategory={() => void hideCategory(item)}
                     />
                   )
                 }

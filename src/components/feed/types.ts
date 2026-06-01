@@ -20,24 +20,6 @@ export type DirectSentFeedItem = FeedCardBaseItem & {
   senderHref?: string | null
 }
 
-export type FriendAnsweredParticipant = {
-  userId: string
-  displayName: string
-  href?: string | null
-}
-
-export type FriendAnsweredFeedItem = FeedCardBaseItem & {
-  type: 'friend_answered'
-  friendName: string
-  friendHref?: string | null
-  friendCorrect?: boolean | null
-  answerSummary?: ReactNode
-  // Friends who got this question right, in order of recency.
-  correctFriends?: FriendAnsweredParticipant[]
-  // Viewer's own status on the underlying question, regardless of feed-item state.
-  viewerResult?: 'correct' | 'incorrect' | null
-}
-
 export type FriendAddedFeedItem = FeedCardBaseItem & {
   type: 'friend_added'
   friendName: string
@@ -81,7 +63,6 @@ export type AnsweredByYouFeedItem = FeedCardBaseItem & {
 
 export type TypedFeedItem =
   | DirectSentFeedItem
-  | FriendAnsweredFeedItem
   | FriendAddedFeedItem
   | FriendLikedFeedItem
   | AnsweredByYouFeedItem

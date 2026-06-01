@@ -393,10 +393,11 @@ describe('getFeedForUser feed visibility', () => {
     expect(result.totalCount).toBe(2);
   });
 
-  it('applies the from-friends URL filter', async () => {
+  it('applies the from-friends (Broadcasts) URL filter: authored_shared in, direct_sent and friend_answered out', async () => {
     state.questionRows = [
       { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
       { id: 'question-2', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+      { id: 'question-3', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
     ];
     state.feedRows = [
       {
@@ -413,13 +414,27 @@ describe('getFeedForUser feed visibility', () => {
         joshingGameId: null,
       },
       {
-        id: 'feed-friend-1',
+        id: 'feed-authored-1',
         recipientUserId: 'recipient-1',
         questionId: 'question-2',
-        sourceType: 'friend_answered',
+        sourceType: 'authored_shared',
         sourceUserId: 'friend-1',
-        sourceResult: 'correct',
+        sourceResult: null,
         sourceEventAt: new Date('2026-05-14T12:01:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+      {
+        // D-1 Stage 5: friend_answered is still written but no longer rendered.
+        id: 'feed-friend-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-3',
+        sourceType: 'friend_answered',
+        sourceUserId: 'friend-2',
+        sourceResult: 'correct',
+        sourceEventAt: new Date('2026-05-14T12:02:00.000Z'),
         personalMessage: null,
         state: 'active',
         isPinned: false,
@@ -429,7 +444,7 @@ describe('getFeedForUser feed visibility', () => {
 
     const result = await getFeedForUser('recipient-1', { filter: 'from-friends' });
 
-    expect(result.items).toEqual([expect.objectContaining({ id: 'feed-friend-1' })]);
+    expect(result.items).toEqual([expect.objectContaining({ id: 'feed-authored-1' })]);
     expect(result.totalCount).toBe(1);
   });
 });
