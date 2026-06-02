@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
 import { ActivityStream } from '@/components/activity/ActivityStream';
-import { CREAM, FH, FS, HILITE, INK, INK2 } from '@/components/lately/tokens';
+import { CREAM, FS, HILITE, INK, INK2 } from '@/components/lately/tokens';
 import { buildActivityStream } from '@/server/activity/build-stream';
 import { getSession } from '@/server/auth/session';
 import { getUserById } from '@/server/db/queries/users';
@@ -62,31 +62,6 @@ export default async function ActivitiesPage() {
               }}
             />
           </h1>
-        </div>
-        <div
-          style={{
-            fontSize: 13,
-            color: INK2,
-            fontStyle: 'italic',
-            lineHeight: 1.5,
-            marginBottom: 4,
-          }}
-        >
-          Moments of connection from across your games.
-        </div>
-        <div
-          style={{
-            fontFamily: FH,
-            fontSize: 18,
-            color: INK2,
-            marginTop: 6,
-            marginLeft: 2,
-            transform: 'rotate(-1deg)',
-            display: 'inline-block',
-            marginBottom: 8,
-          }}
-        >
-          — the people who get you, getting you.
         </div>
 
         {items.length === 0 ? (
