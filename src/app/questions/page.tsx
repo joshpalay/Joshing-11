@@ -20,7 +20,7 @@ type DrawerState =
   // intent is null for the page's own "Write a question" buttons (and the
   // legacy `?create=1` link), which keep the form's existing defaults. Only the
   // CreateChooser supplies an explicit intent.
-  | { mode: 'create'; intent: CreateIntent | null }
+  | { mode: 'create'; intent: CreateIntent | null; prefillText?: string }
   | { mode: 'edit'; question: QuestionView };
 
 function parseIntent(raw: string | null): CreateIntent | null {
@@ -134,11 +134,13 @@ function QuestionsPageContent() {
   const [domainFilter, setDomainFilter] = useState('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
-  const [drawer, setDrawer] = useState<DrawerState>(() => (
-    searchParams.get('create') === '1'
-      ? { mode: 'create', intent: parseIntent(searchParams.get('intent')) }
-      : { mode: 'closed' }
-  ));
+  const [drawer, setDrawer] = useState<DrawerState>(() => {
+    if (searchParams.get('create') !== '1') return { mode: 'closed' };
+    // The feed's "what would you like to be asked?" prompt rides the idea in
+    // via ?text= so the composer opens pre-filled with the reader's words.
+    const prefillText = searchParams.get('text')?.trim() || undefined;
+    return { mode: 'create', intent: parseIntent(searchParams.get('intent')), prefillText };
+  });
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [cardError, setCardError] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -457,7 +459,9 @@ function QuestionsPageContent() {
             </div>
             <QuestionForm
               mode={drawer.mode}
-              initialValues={drawer.mode === 'edit' ? initialValues(drawer.question) : createFormProps(drawer.intent).initialValues}
+              initialValues={drawer.mode === 'edit'
+                ? initialValues(drawer.question)
+                : { ...createFormProps(drawer.intent).initialValues, ...(drawer.prefillText ? { text: drawer.prefillText } : {}) }}
               initialSpecificMode={drawer.mode === 'create' ? createFormProps(drawer.intent).initialSpecificMode : undefined}
               onSubmit={drawer.mode === 'edit' ? (values) => saveEdit(drawer.question.id, values) : saveCreate}
               onCancel={() => setDrawer({ mode: 'closed' })}

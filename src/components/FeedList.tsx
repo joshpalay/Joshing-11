@@ -2,7 +2,7 @@
 
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   AnsweredByYouCard,
   AnswerFeedbackSheet,
@@ -517,31 +517,62 @@ function FeedSurfaceTabs({
   )
 }
 
-// The two ways to keep the feed alive, paired as one lightweight footer at the
-// bottom of the feed surface — replacing the standalone "Write a question" card
-// that used to duplicate the "Catch up" card's look on the home page.
+// The bottom-of-feed prompt: instead of a passive "two ways to fill your feed"
+// footer, ask the reader what they actually want to be asked and hand their idea
+// straight to the question writer. The typed idea rides through as ?text= so the
+// composer opens pre-filled (see app/questions/page.tsx). "Invite a friend"
+// survives as a secondary link so we don't lose that path.
+// The reader's typed idea rides to the composer via ?text=; an empty box still
+// opens the writer. Pure so the two branches stay test-covered without a DOM.
+export function buildQuestionWriterHref(idea: string): string {
+  const trimmed = idea.trim()
+  return trimmed
+    ? `/questions?create=1&intent=bank&text=${encodeURIComponent(trimmed)}`
+    : '/questions?create=1&intent=bank'
+}
+
 function FeedContributeFooter() {
+  const router = useRouter()
+  const [idea, setIdea] = useState('')
+
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    router.push(buildQuestionWriterHref(idea))
+  }
+
   return (
-    <footer className="flex flex-col items-center gap-1.5 border-t pt-5 pb-8 text-center">
-      <p className="text-muted-foreground text-[11px] font-medium tracking-[0.12em] uppercase">
-        Two ways to fill your Feed
-      </p>
-      <div className="flex items-center justify-center gap-3 text-sm font-medium">
+    <footer className="border-t pt-6 pb-8">
+      <div className="mx-auto flex max-w-md flex-col items-center gap-2 text-center">
+        <p className="text-muted-foreground text-[11px] font-medium tracking-[0.12em] uppercase">
+          Make the questions better
+        </p>
+        <h2 className="font-serif text-xl font-semibold">
+          What&apos;s the best question you&apos;d like to be asked?
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          Tell us the kind of questions you want to see — we&apos;ll take you
+          straight to the question writer.
+        </p>
+        <form
+          onSubmit={handleSubmit}
+          className="mt-2 flex w-full flex-col gap-2 sm:flex-row"
+        >
+          <input
+            value={idea}
+            onChange={(event) => setIdea(event.target.value)}
+            placeholder="A question you'd love to be asked…"
+            aria-label="What question would you like to be asked?"
+            className="h-11 flex-1 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+          />
+          <button type="submit" className="btn-primary h-11 shrink-0">
+            Write a question
+          </button>
+        </form>
         <Link
           href="/friends"
-          className="text-[var(--brand-link)] underline-offset-4 hover:underline"
+          className="text-[var(--brand-link)] mt-1 text-sm font-medium underline-offset-4 hover:underline"
         >
-          Invite a friend
-        </Link>
-        <span aria-hidden className="text-muted-foreground/40">
-          ·
-        </span>
-        <Link
-          href="/questions?create=1&intent=bank"
-          className="text-[var(--brand-link)] underline-offset-4 hover:underline"
-          aria-label="Write a question"
-        >
-          Write a question
+          Or invite a friend
         </Link>
       </div>
     </footer>
