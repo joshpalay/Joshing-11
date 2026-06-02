@@ -10,7 +10,7 @@ import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { TopUpAreasModal, type TopUpInterest } from '@/components/daily/TopUpAreasModal';
 import LoadingScreen from '@/components/LoadingScreen';
-import { categoryLabel } from '@/lib/questions-types';
+import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
 
@@ -48,6 +48,7 @@ type AnswerResponse = {
   answer?: string;
   consolation?: string | null;
   insideJoke?: string | null;
+  insideJokeKind?: InsideJokeKind | null;
   breadcrumb?: string | null;
   masteryDelta?: unknown | null;
   mastery_delta?: unknown | null;
@@ -315,6 +316,7 @@ export default function DailyPage() {
           correctAnswer: slot.answer_state === 'correct' ? null : slot.reveal_canonical_answer ?? null,
           consolation: slot.reveal_quip ?? null,
           insideJoke: slot.reveal_inside_joke ?? null,
+          insideJokeKind: slot.reveal_inside_joke_kind ?? null,
           authorNote: slot.source === 'friend' ? (slot.author_note ?? null) : null,
           breadcrumb: slot.reveal_breadcrumb ?? null,
           explanation: slot.reveal_explainer ?? null,
@@ -464,6 +466,7 @@ export default function DailyPage() {
                     reveal_breadcrumb: null,
                     reveal_quip: opts.gaveUp ? null : body.consolation ?? null,
                     reveal_inside_joke: body.insideJoke ?? null,
+                    reveal_inside_joke_kind: body.insideJokeKind ?? null,
                   }
                 : slot
             ),

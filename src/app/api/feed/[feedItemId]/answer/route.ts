@@ -11,7 +11,7 @@ import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-i
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
-import { areFriends } from '@/server/db/queries/friends';
+import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { getFeedItemAnswerForRecipient } from '@/server/db/queries/feed';
 
 export const dynamic = 'force-dynamic';
@@ -240,17 +240,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     masteryDelta,
     correctAnswer: question.answerText,
     creatorNote: question.creatorNote ?? null,
-    insideJoke,
+    insideJoke: insideJoke?.text ?? null,
+    insideJokeKind: insideJoke?.kind ?? null,
   });
-}
-
-async function selectInsideJokeForViewer(
-  insideJoke: string | null,
-  creatorId: string | null,
-  viewerId: string,
-): Promise<string | null> {
-  if (!insideJoke || !creatorId) return null;
-  if (creatorId === viewerId) return insideJoke;
-  const friends = await areFriends(viewerId, creatorId);
-  return friends ? insideJoke : null;
 }

@@ -512,6 +512,11 @@ export const generatedQuestions = pgTable(
     // per domain and fed back to the generation prompt as positive guidance:
     // "you've covered X, Y, Z — pick something else." See migration 0055.
     subAngles: text('sub_angles').array().notNull().default([]),
+    // Precomputed "between us" aside, generated once at question-generation time
+    // (src/server/daily/generate-questions.ts) and copied into Question.inside_joke
+    // when the row is persisted. Nullable: older rows and any where generation
+    // failed simply have no aside.
+    insideJoke: text('inside_joke'),
     createdAt: createdAt(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedInQueue: boolean('used_in_queue').notNull().default(false),

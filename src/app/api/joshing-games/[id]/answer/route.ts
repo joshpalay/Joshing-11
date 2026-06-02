@@ -13,7 +13,7 @@ import {
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { sendSms } from '@/server/sms';
-import { areFriends } from '@/server/db/queries/friends';
+import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 
 export const dynamic = 'force-dynamic';
 
@@ -174,7 +174,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       answerState: grade.answerState,
       breadcrumb: null,
       viewerStatus: completion.userComplete ? 'complete' : 'in_progress',
-      insideJoke,
+      insideJoke: insideJoke?.text ?? null,
+      insideJokeKind: insideJoke?.kind ?? null,
     });
   } catch (error) {
     if (error instanceof JoshingGameValidationError) {
@@ -183,15 +184,4 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     throw error;
   }
-}
-
-async function selectInsideJokeForViewer(
-  insideJoke: string | null,
-  creatorId: string | null,
-  viewerId: string,
-): Promise<string | null> {
-  if (!insideJoke || !creatorId) return null;
-  if (creatorId === viewerId) return insideJoke;
-  const friends = await areFriends(viewerId, creatorId);
-  return friends ? insideJoke : null;
 }

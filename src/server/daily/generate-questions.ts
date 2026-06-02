@@ -5,6 +5,7 @@ import {
   HAIKU_MODEL,
   INSTRUCTION_USER_INPUT_GUIDANCE,
   extractTextContent,
+  generateInsideJoke,
   getAnthropicClient,
   loggedMessagesCreate,
   parseJsonObject,
@@ -983,7 +984,25 @@ export async function generateDailyQuestions(
   const persisted: GeneratedQuestionRow[] = [];
   const seenFactKeysThisBatch = new Set<string>();
 
-  for (const question of generated.slice(0, count)) {
+  // Precompute the "between us" aside once per question, in parallel, before the
+  // sequential persist loop. generateInsideJoke fails open (returns null), so a
+  // slow/failed aside never blocks question generation — it just lands with no
+  // aside. Mirrors the parallel/fail-open pattern of the LLM gates above.
+  const toPersist = generated.slice(0, count);
+  const insideJokeByQuestion = new Map<(typeof toPersist)[number], string | null>();
+  await Promise.all(
+    toPersist.map(async (question) => {
+      const aside = await generateInsideJoke({
+        questionText: question.question_text,
+        correctAnswer: question.answer,
+        broadCategory: question.broad_category,
+        canonicalSubcategory: question.canonical_subcategory,
+      }).catch(() => null);
+      insideJokeByQuestion.set(question, aside);
+    }),
+  );
+
+  for (const question of toPersist) {
     const { canonicalDomain } = await reconcileProposedDomain(
       question.canonical_subcategory,
       userId,
@@ -1026,6 +1045,7 @@ export async function generateDailyQuestions(
         basePoints,
         factKey,
         subAngles: question.sub_angles,
+        insideJoke: insideJokeByQuestion.get(question) ?? null,
         expiresAt,
         usedInQueue: false,
       })

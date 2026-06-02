@@ -5,6 +5,7 @@ import { Check, Sparkles, X } from 'lucide-react'
 
 import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
+import { INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
 // card (raw --tri-amber #d9a82e is too light for small text). Used by the
@@ -21,6 +22,7 @@ type AnswerFeedbackSheetProps = {
   explanation: string | null
   creatorNote: string | null
   insideJoke?: string | null
+  insideJokeKind?: InsideJokeKind | null
   openedNewTerritory?: boolean
   openedTerritoryDomain?: string | null
   questionId: string
@@ -40,6 +42,7 @@ export function AnswerFeedbackSheet({
   explanation,
   creatorNote,
   insideJoke = null,
+  insideJokeKind = null,
   openedNewTerritory = false,
   openedTerritoryDomain = null,
   questionId,
@@ -233,7 +236,7 @@ export function AnswerFeedbackSheet({
                 className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase"
                 style={{ color: GOLD_INK }}
               >
-                Between us friends
+                {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
               </p>
               <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
                 {insideJoke}
