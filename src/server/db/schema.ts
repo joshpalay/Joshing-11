@@ -492,6 +492,23 @@ export const smsLogs = pgTable(
   ],
 );
 
+export const emailVerificationTokens = pgTable(
+  'EmailVerificationToken',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('EmailVerificationToken_token_hash_key').on(table.tokenHash),
+    index('EmailVerificationToken_user_id_idx').on(table.userId),
+  ],
+);
+
 export const generatedQuestions = pgTable(
   'GeneratedQuestion',
   {

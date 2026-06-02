@@ -6,6 +6,7 @@ import {
   getReminderState,
   updateReminderPreferences,
 } from '@/server/db/queries/account';
+import { sendVerificationEmail } from '@/server/email/send-verification';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,8 @@ export async function PATCH(request: Request) {
     );
   }
 
+  const priorState = await getReminderState(session.userId);
+
   const result = await updateReminderPreferences(session.userId, parsed.data);
   if (!result.ok) {
     if (result.reason === 'not_found') {
@@ -73,5 +76,27 @@ export async function PATCH(request: Request) {
     }
   }
 
-  return NextResponse.json({ state: result.ok ? result.state : null });
+  // Auto-fire the verification email when pendingEmail actually changed.
+  // Best-effort: failure is logged but never blocks the save. The UI can
+  // also call POST /api/account/email/verify/send to retry / resend.
+  let verificationEmailSent = false;
+  if (
+    result.ok
+    && parsed.data.pendingEmail
+    && parsed.data.pendingEmail !== priorState?.pendingEmail
+  ) {
+    const sendResult = await sendVerificationEmail(session.userId);
+    verificationEmailSent = sendResult.ok;
+    if (!sendResult.ok) {
+      console.warn(
+        '[reminders] verification email auto-send failed:',
+        sendResult.reason,
+      );
+    }
+  }
+
+  return NextResponse.json({
+    state: result.ok ? result.state : null,
+    verificationEmailSent,
+  });
 }
