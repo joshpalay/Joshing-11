@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 
 import { newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
+import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 import {
   parseCatchUpAnswerErrorBody,
   userFacingCatchUpSubmitMessage,
@@ -25,6 +26,8 @@ export type CatchupQueueItem = {
   expiresAt: string;
   expiresSoon?: boolean;
   difficultyEstimate?: 'accessible' | 'moderate' | 'specialist' | null;
+  /** Human author's name, or null for LLM-origin questions (rendered non-relationally). */
+  authorName?: string | null;
 };
 
 type CatchupAnswerResponse = {
@@ -102,7 +105,7 @@ function questionMessage(item: CatchupQueueItem): ChatMessage {
     kind: 'question',
     assignmentId: item.dailyQueueItemId,
     questionText: item.questionText,
-    creatorName: null,
+    creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
     subhead: formatQuestionSubhead(item),
     badges,
   };
@@ -198,7 +201,7 @@ export function useCatchupFlow() {
         consolation: null,
         breadcrumb: null,
         copyVariant: item.queueAge,
-        creatorName: 'Joshing',
+        creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
         canonicalSubcategory: item.domain,
       },
     ]);
@@ -283,7 +286,7 @@ export function useCatchupFlow() {
           breadcrumb: null,
           explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
           copyVariant: item.queueAge,
-          creatorName: 'Joshing',
+          creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
           canonicalSubcategory: item.domain,
           pointsAwarded,
           pointsLabel: 'Catch-up - 0.25x points',

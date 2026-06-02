@@ -27,6 +27,20 @@ export type QuestionRecord = {
   contribution_state?: 'addable' | 'already_added' | 'locked_permission' | 'locked_game_state';
 };
 
+// Non-person, non-house attribution for LLM-origin questions
+// (source 'daily_generated' | 'curated_sent'; creatorId === null). A machine
+// question must never render a human name or imply a person wrote it.
+// PLACEHOLDER COPY — flagged for product sign-off. Must NOT be "Joshing"/"Editorial"
+// (those are the house identity, owned by D-3); this is for the non-house LLM origins.
+export const LLM_QUESTION_ATTRIBUTION = 'Generated' as const;
+
+// True when an attribution name is the LLM/non-person label, used to gate
+// person-style copy (e.g. "{name} gave you this") so it never fires for machine
+// questions. Keeps consumers decoupled from the literal value above.
+export function isLlmAttribution(name: string | null | undefined): boolean {
+  return name?.trim() === LLM_QUESTION_ATTRIBUTION;
+}
+
 export const CATEGORIES = [
   'music',
   'literature',

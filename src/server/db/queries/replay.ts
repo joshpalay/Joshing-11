@@ -2,7 +2,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import { categoryLabel } from '@/lib/questions-types';
 import { asQueueSlots, dailyQueueItemId } from '@/server/daily/catchup';
-import { dailyQueues, db, generatedQuestions, questions as canonicalQuestions } from '@/server/db';
+import { dailyQueues, db, generatedQuestions, questions as canonicalQuestions, users } from '@/server/db';
 import type { ReplayItem } from '@/server/replay/session';
 
 export async function getReplayWrongQuestions(userId: string): Promise<ReplayItem[]> {
@@ -55,6 +55,18 @@ export async function getReplayWrongQuestions(userId: string): Promise<ReplayIte
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
   const canonicalById = new Map(canonicalRows.map((question) => [question.id, question]));
 
+  // Resolve human author names for friend-authored slots; bot slots have no
+  // creator and the client labels them non-relationally.
+  const creatorIds = [...new Set(canonicalRows.map((q) => q.creatorId).filter((id): id is string => Boolean(id)))];
+  const authorNameById = creatorIds.length > 0
+    ? new Map(
+        (await db
+          .select({ id: users.id, displayName: users.displayName })
+          .from(users)
+          .where(inArray(users.id, creatorIds))).map((row) => [row.id, row.displayName]),
+      )
+    : new Map<string, string | null>();
+
   return candidates
     .map(({ queue, slot }): ReplayItem | null => {
       if (slot.generated_question_id) {
@@ -72,6 +84,7 @@ export async function getReplayWrongQuestions(userId: string): Promise<ReplayIte
           domain,
           domainDisplayName: categoryLabel(domain),
           originalSubmittedAnswer: slot.submitted_answer ?? null,
+          authorName: null, // bot slot: LLM origin, no human author
         } satisfies ReplayItem;
       }
 
@@ -96,6 +109,7 @@ export async function getReplayWrongQuestions(userId: string): Promise<ReplayIte
         domain,
         domainDisplayName: categoryLabel(domain),
         originalSubmittedAnswer: slot.submitted_answer ?? null,
+        authorName: question.creatorId ? authorNameById.get(question.creatorId) ?? null : null,
       } satisfies ReplayItem;
     })
     .filter((item): item is ReplayItem => Boolean(item));
