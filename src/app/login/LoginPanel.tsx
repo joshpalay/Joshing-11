@@ -20,12 +20,6 @@ const INPUT_CLASS =
 const SUBMIT_CLASS =
   'h-11 w-full rounded-[4px] bg-[var(--brand-navy)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
 
-// A single rounded-rectangle speech bubble (28×20, 6px radius) with a tail at
-// the bottom-left. Reused for both bubbles in the OTP mark — the front bubble
-// is mirrored via an SVG transform so its tail points the other way.
-const BUBBLE_PATH =
-  'M6 0 H22 A6 6 0 0 1 28 6 V14 A6 6 0 0 1 22 20 H13 L7 27 L9 20 H6 A6 6 0 0 1 0 14 V6 A6 6 0 0 1 6 0 Z';
-
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {
     method: 'POST',
@@ -200,25 +194,23 @@ export default function LoginPanel() {
         </form>
       ) : (
         <form className="space-y-[14px]" onSubmit={verifyCode}>
-          {/* Two overlapping rounded speech bubbles — navy behind, orange in
-              front — recreating the Figma two-tone mark. The front bubble is
-              mirrored (tail to the right) and carries a cream halo stroke so it
-              reads as a distinct bubble where it crosses the navy one. */}
+          {/* Two overlapping circular speech bubbles — navy behind, orange in
+              front — recreating the Figma two-tone mark. The bubbles overlap
+              directly (no separating stroke) so the colors meet, with tails
+              pointing down-left and down-right. */}
           <svg
             className="mx-auto h-14 w-auto"
-            viewBox="-2 -2 52 41"
-            fill="none"
+            viewBox="-3 -3 52 44"
             aria-hidden="true"
           >
-            <path d={BUBBLE_PATH} fill="var(--brand-navy)" />
-            <path
-              d={BUBBLE_PATH}
-              transform="translate(47 9) scale(-1 1)"
-              fill="var(--brand-orange)"
-              stroke="var(--brand-cream-card)"
-              strokeWidth={2.5}
-              strokeLinejoin="round"
-            />
+            <g fill="var(--brand-navy)">
+              <circle cx="14" cy="14" r="14" />
+              <path d="M2 21 L9.2 27.2 L1.5 31.5 Z" />
+            </g>
+            <g fill="var(--brand-orange)">
+              <circle cx="30" cy="22" r="14" />
+              <path d="M42 29 L34.8 35.2 L42.5 39.5 Z" />
+            </g>
           </svg>
           <label
             className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
