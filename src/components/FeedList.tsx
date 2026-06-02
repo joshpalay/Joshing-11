@@ -423,6 +423,12 @@ type FeedListProps = {
    * changes and infinite-scroll pages still fetch via /api/feed.
    */
   initialPage?: FeedResponse | null
+  /**
+   * When true, render the contribute footer (Invite a friend · Write a question)
+   * pinned to the bottom of the feed surface on both tabs. Enabled from the
+   * authenticated home render; left off for the logged-out feed.
+   */
+  showContributeFooter?: boolean
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
@@ -511,10 +517,42 @@ function FeedSurfaceTabs({
   )
 }
 
+// The two ways to keep the feed alive, paired as one lightweight footer at the
+// bottom of the feed surface — replacing the standalone "Write a question" card
+// that used to duplicate the "Catch up" card's look on the home page.
+function FeedContributeFooter() {
+  return (
+    <footer className="flex flex-col items-center gap-1.5 border-t pt-5 pb-8 text-center">
+      <p className="text-muted-foreground text-[11px] font-medium tracking-[0.12em] uppercase">
+        Two ways to fill your Feed
+      </p>
+      <div className="flex items-center justify-center gap-3 text-sm font-medium">
+        <Link
+          href="/friends"
+          className="text-[var(--brand-link)] underline-offset-4 hover:underline"
+        >
+          Invite a friend
+        </Link>
+        <span aria-hidden className="text-muted-foreground/40">
+          ·
+        </span>
+        <Link
+          href="/questions?create=1&intent=bank"
+          className="text-[var(--brand-link)] underline-offset-4 hover:underline"
+          aria-label="Write a question"
+        >
+          Write a question
+        </Link>
+      </div>
+    </footer>
+  )
+}
+
 function FeedListContent({
   pageSize = 20,
   infinite = false,
   initialPage = null,
+  showContributeFooter = false,
 }: FeedListProps) {
   const searchParams = useSearchParams()
   const initialFilterParam =
@@ -1114,7 +1152,7 @@ function FeedListContent({
           >
             {emptyCopy}
           </p>
-          {showInviteFriendCta ? (
+          {showInviteFriendCta && !showContributeFooter ? (
             <Link
               href="/friends"
               className="text-primary text-sm font-medium underline-offset-4 hover:underline"
@@ -1296,6 +1334,8 @@ function FeedListContent({
           ) : null}
         </div>
       ) : null}
+
+      {showContributeFooter && !loadingInitial ? <FeedContributeFooter /> : null}
 
       {answerSheetId ? (() => {
         const sheetItem = items.find((item) => item.id === answerSheetId)
