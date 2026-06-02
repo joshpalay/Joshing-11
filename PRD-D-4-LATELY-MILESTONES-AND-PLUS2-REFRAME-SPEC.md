@@ -64,6 +64,7 @@ questions felt wrong pushed prominently into the daily ritual, but good to _opt 
 | **2b. "Accessible" handling** | **Generation _target_, not a post-hoc filter.** | Generate at `difficultyEstimate='accessible'` (`difficultyPreference='normal'`). The old calibrated/llm accessibility _filter_ (`daily.ts:1259-1262`) is retired with the literal path. |
 | **3. De-dup / repetition** | **Rely on normal non-repetition.** | No special cross-Lately guard. Existing `factKey` dedup + recent-history avoidance cover it, and the +2 no longer serves literals (no literal collision possible). |
 | **4. Lately ranking** | **Answered-you > niche-match > skill milestone > other** (my recommendation, confirmed). | The `they_got_you` "answered your question" moment stays most prominent and is **confirmed to surface** (deduped only because the moment represents it — `filter-utility-activities.ts:4-7`); lock with a regression test. New milestone slots **below** niche-match so the slow-burn discovery delight isn't buried. |
+| **5. Milestone answering = FULL credit** (CORRECTION 2) | **Answering a friend's milestone question earns full mastery credit**, not practice-only. | A milestone reveals **someone else's** questions, so the relationship-determined action is **answer**. Answering writes the **same mastery records as a feed answer** (`writeMasteryEvent`, author credit, territory promotion, friend-feed fan-out) via `/api/lately/milestone/answer`; **no double credit** is guaranteed by the existing `answer_state` dedup — a re-answer computes `repeat_correct`, which scores **0** base points. This **supersedes** the Stage-1 practice-only seeded-session grade route. |
 
 ---
 
@@ -172,6 +173,32 @@ those decisions is warranted **after build**.
 
 ## The spec
 
+> **⚠️ Amended by CORRECTION 2 (2026-06-02) — unified quiet stream + relationship-determined action.**
+> This correction supersedes the milestone **presentation** and the seeded-play **session** in §A, and
+> makes §C's "homepage = curated head" relationship explicit. It does **not** touch §B / Stage 2.
+>
+> - **One unified activity stream**, rendered as quiet one-liners (the "What's Happening" register).
+>   Surfaced in two places from the **same items, same source, same rendering**: the homepage
+>   "What's Happening" is the **top few** (the home-eligible head); Lately / `/activities` is the **full**
+>   list. Built once by `buildActivityStream` (`src/server/activity/build-stream.ts`) from the existing
+>   activity rows + Lately moments + Lately milestones, transformed by the pure `@/lib/activity-stream`,
+>   and rendered by `src/components/activity/ActivityStream*`.
+> - **Question-backed items expand in place** (on **both** surfaces; they do not navigate away). The one
+>   action on expand follows from the viewer's **relationship to the question**:
+>   - **Milestone** (a friend's questions = *someone else's*) → **answer** each of the friend's **≤5**
+>     literal questions (`MILESTONE_CARD_QUESTION_CAP = 5`) via the existing feed answer pop-ups
+>     (`AnswerSheet` → `AnswerFeedbackSheet`), **full credit** (decision-ledger #5), progress tracked
+>     ("{k} of {n} answered"), persists after close, **no double credit**.
+>   - **Your authored question a friend/stranger answered** (`they_got_you` moment,
+>     `friend_answered_your_question`, `niche_match_answered_your_question`) = *your own* → reveal it and
+>     **send it onward** (existing send flow). Niche-match keeps its **discover/follow-the-stranger**
+>     action **alongside** send.
+> - **Non-question items** (domain opened, mastery, follows, …) stay **plain one-liners**; not expandable
+>   (some still carry a trailing utility action — friend-request approve, reaction ack, a link).
+> - The **heavy pre-expanded milestone card with per-domain "PLAY →" buttons is removed**, as is the
+>   separate seeded-play **session**; the seeded question-id authorization (`getSeededPlayQuestions`) is
+>   reused to re-authorize the in-place answer route.
+
 ### A. Lately milestone — "Robyn showed her skills in X" (new, additive)
 
 > **⚠️ Amended by A-1 (Amendments section).** Milestones now come in **two forms** — per-domain "deep"
@@ -192,11 +219,15 @@ those decisions is warranted **after build**.
   constant explicit; raising it is the first lever if Lately feels noisy.
 - **Soft copy.** "{First name} showed {their} skills in {domain displayName}." **Never** "mastered" or
   "mastery." Domain label uses the same display-name resolution as the presence section.
-- **Click-through plays the friend's literal questions.** Tapping the milestone launches a play session
-  **seeded with exactly the `questionId`s in that group** (the literal canonical questions the friend
-  answered) — not a generated set. This is the _only_ home for playing a friend's literal questions.
-  Reuse the existing play/queue rendering, seeded from an explicit question-id list rather than the
-  daily generation path. (Build note: a seeded-list play session is the main new surface here; spec-level.)
+- **Expand-in-place answers the friend's literal questions (CORRECTION 2 — supersedes the seeded
+  session).** Tapping the milestone one-liner expands it **in place** (on both homepage and Lately) to
+  reveal **≤5** (`MILESTONE_CARD_QUESTION_CAP`) of the literal `questionId`s in that group — the literal
+  canonical questions the friend answered, not a generated set. Each is **answered via the existing feed
+  answer pop-ups** for **full mastery credit** (decision-ledger #5; route
+  `/api/lately/milestone/answer`, re-authorized by `getSeededPlayQuestions`), with **"{k} of {n}
+  answered"** progress that persists after close and **no double credit**. This is the _only_ home for
+  answering a friend's literal questions. (The earlier "launches a seeded play session" / practice-only
+  grade route is **retired**.)
 - **Whose presence.** **People I follow** — consistent with the feed-item fan-out (items already land in
   my rows only for answerers I follow) and with +2 eligibility (`PRD-D-1` Q4a).
 
@@ -261,6 +292,12 @@ those decisions is warranted **after build**.
 
 ### C. Lately ranking / prominence
 
+> **⚠️ Amended by CORRECTION 2.** Homepage "What's Happening" and Lately are **one stream, not two
+> systems**: both consume the prominence-sorted output of `buildActivityStream`. The homepage renders the
+> **home-eligible head** (`StreamItem.homeEligible`, the `HOME_TOP3_ELIGIBLE_TYPES` set plus
+> `they_got_you` moments and milestones); Lately renders the **full** day-bucketed list. The prominence
+> tiers below are the shared sort key for both.
+
 Define relative prominence (Decision 4), highest first:
 
 1. **Someone answered _your_ authored question** — the `they_got_you` moment. **Most prominent.**
@@ -322,8 +359,17 @@ Define relative prominence (Decision 4), highest first:
       breadth only; multiple deep → multiple deep cards).
 - [ ] Copy: deep = "went deep on {domain}"; plain/per-domain = "showed {their} skills in {domain}";
       breadth = "{Name}'s killing it — {a}, {b}, and N more". **No "mastery"/"mastered".**
-- [ ] Click-through plays the friend's literal `questionId`s; breadth card lets the player pick a domain.
-- [ ] No new write path / no migration (derived like moments).
+- [ ] **CORRECTION 2 — quiet one-liner + expand-in-place.** Milestone renders as a quiet one-liner in the
+      unified stream (breadth names ~2 domains + "and N others"; deep names its one domain), **no
+      per-domain "PLAY" buttons, not pre-expanded**. Tapping expands **in place** (homepage and Lately) to
+      **≤5** (`MILESTONE_CARD_QUESTION_CAP`) of the friend's literal `questionId`s.
+- [ ] **CORRECTION 2 — answer for FULL credit, no double credit.** Each revealed question is answered via
+      the feed answer pop-ups for **full mastery credit** (`/api/lately/milestone/answer`, authorized by
+      `getSeededPlayQuestions`), tracking **"{k} of {n} answered"** that persists after close; a re-answer
+      earns 0 (existing `answer_state` `repeat_correct` dedup). The practice-only seeded-session
+      play page + grade route are **retired**.
+- [ ] No new write path / no migration for the milestone **derivation** (still derived like moments); the
+      full-credit answer route reuses existing mastery-write machinery, no new table.
 
 **Stage 2 — +2 reframe, territory ∪ activity (repoint — A-2)**
 - [ ] `getFriendShapedDomainsAcrossFollows(me)` helper reusing **both** the masteryEvents-recency
@@ -342,6 +388,13 @@ Define relative prominence (Decision 4), highest first:
 **Stage 3 — Lately ranking + "answered-you" guarantee**
 - [ ] Prominence tiers applied: answered-you (`they_got_you`) > niche-match > skill milestones (both
       deep + breadth share this tier) > other.
+- [ ] **CORRECTION 2 — one stream, two surfaces.** Homepage "What's Happening" and Lately render the
+      **same** prominence-sorted stream from the **same source** (`buildActivityStream`): homepage the
+      home-eligible head, Lately the full day-bucketed list, both as quiet one-liners.
+- [ ] **CORRECTION 2 — relationship-determined send.** "Friend answered your question" and niche-match
+      items expand to reveal the **authored question** with a **Send it onward** action (existing send
+      flow); niche-match keeps its discover/follow action **alongside**. Non-question items stay plain
+      one-liners.
 - [ ] Regression test: a friend answering my authored question correctly yields a visible `they_got_you`
       moment; the correct-result activity suppression is safe only because the moment covers it.
 - [ ] A high volume of skill milestones cannot push a `they_got_you` or niche-match item out of view.

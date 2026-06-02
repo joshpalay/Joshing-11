@@ -295,3 +295,68 @@ export async function getSeededPlayQuestions(
   }
   return resolved;
 }
+
+// D-4 CORRECTION 2: a milestone, expanded in the unified activity stream, reveals
+// the friend's literal questions to ANSWER (full credit via the feed pop-up). The
+// stream needs each question's text + display domain to render the collapsed
+// one-liner's expansion. These ids come from the viewer's own derived milestones,
+// so they're already authorized — answering is separately re-authorized in the
+// milestone answer route by construction (getSeededPlayQuestions).
+export type MilestoneCardQuestion = {
+  questionId: string;
+  text: string;
+  domain: string | null;
+};
+
+export async function getMilestoneQuestionText(
+  ids: string[],
+): Promise<Map<string, MilestoneCardQuestion>> {
+  const out = new Map<string, MilestoneCardQuestion>();
+  if (ids.length === 0) return out;
+  const rows = await db
+    .select({
+      id: questions.id,
+      questionText: questions.questionText,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+      category: questions.category,
+      deletedAt: questions.deletedAt,
+    })
+    .from(questions)
+    .where(inArray(questions.id, ids));
+  for (const row of rows) {
+    if (row.deletedAt) continue;
+    out.set(row.id, {
+      questionId: row.id,
+      text: row.questionText,
+      domain: resolveMilestoneDomain(row.canonicalSubcategory, row.broadCategory, row.category),
+    });
+  }
+  return out;
+}
+
+// Which of the given questions the viewer has ALREADY answered correctly. Drives
+// the milestone expansion's "{k} of {n} answered" progress on first render and
+// makes the no-double-credit reality visible (a question already in the viewer's
+// mastery history won't earn new credit on re-answer — it becomes repeat_correct).
+export async function getViewerCorrectlyAnsweredIds(
+  userId: string,
+  ids: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (ids.length === 0) return out;
+  const rows = await db
+    .select({ questionId: masteryEvents.questionId })
+    .from(masteryEvents)
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        inArray(masteryEvents.questionId, ids),
+        inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
+      ),
+    );
+  for (const row of rows) {
+    if (row.questionId) out.add(row.questionId);
+  }
+  return out;
+}
