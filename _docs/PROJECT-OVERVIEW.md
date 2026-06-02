@@ -71,6 +71,7 @@
 
 ## Docs / PRDs
 - **`_docs/ARCHITECTURAL-DECISIONS.md`** — background (treat as reference, may be stale)
-- `_docs/PHASE-STATUS.md`, `_docs/DESIGN-SYSTEM.md`, `_docs/SALVAGE-MANIFEST.md`
-- `_docs/PRD11.md`, `_docs/PRD-v11.1.md`, `_docs/PRD-v11.2.md` — product specs
-- Top-level audits: `PRD-AUDIT.md`, `PRD-V11.1-AUDIT{,-2,-4}.md`, `PRD-11.1-MASTER-ALIGNMENT-AUDIT{,-2}.md`, `PRD_BACKLOG.md`
+- `_docs/DESIGN-SYSTEM.md`, `_docs/SALVAGE-MANIFEST.md`
+- **Current product canon (v12 line):** `DECISIONS.md` + the `PRD-D-*.md` series (`PRD-D-0`–`PRD-D-4`) at repo root.
+- Active backlog: `PRD_BACKLOG.md`. Recent audits live in `audits/`.
+- Superseded specs/audits (v11.x and earlier): `_docs/archive/` (`PRD11.md`, `PRD-v11.1.md`, `PRD-v11.2.md`, `PRD-AUDIT.md`, `PRD-V11.1-AUDIT{,-2,-4}.md`, `PRD-11.1-MASTER-ALIGNMENT-AUDIT{,-2}.md`, `PHASE-STATUS.md`).

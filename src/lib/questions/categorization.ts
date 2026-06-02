@@ -1,7 +1,7 @@
 import { extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
 import { getKnowledgeBase } from '@/server/db/queries/daily';
 
-const RECONCILE_MODEL = 'claude-haiku-4-5';
+const RECONCILE_MODEL = 'claude-haiku-4-5-20251001';
 const RECONCILE_TIMEOUT_MS = 3000;
 
 const RECONCILE_SYSTEM_PROMPT = `You are reconciling a proposed trivia domain label against a user's existing domain list.

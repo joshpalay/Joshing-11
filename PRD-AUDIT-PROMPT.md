@@ -7,7 +7,7 @@ You are auditing one section of the Joshing PRD against the current state of the
 ## Inputs
 
 - **Section to audit:** `<FILL IN — e.g., §8.32 Points and Progression System>`
-- **PRD:** `_docs/PRD-v11.2.md` is the active diff doc (folds v11.3 / v11.4 / v11.5 in place); `_docs/PRD-v11.1.md` is the baseline for sections v11.2 doesn't override. Always read v11.2 first to see what's superseded, then fall back to v11.1. Older files (`_docs/PRD11.md`, `_docs/Joshing_PRD_v10_25 (1).md`) are legacy — ignore them.
+- **PRD:** the canonical spec is the `PRD-D-*` series (`PRD-D-0`–`PRD-D-4`, the "v12 line") plus `DECISIONS.md`; read those first. For sections the D-series doesn't restate, fall back to the archived v11.x diffs: `_docs/archive/PRD-v11.2.md` (folds v11.3 / v11.4 / v11.5 in place), then `_docs/archive/PRD-v11.1.md` for anything v11.2 doesn't override — treat both as superseded/historical context. Older archived files (`_docs/archive/PRD11.md`, `_docs/archive/Joshing_PRD_v10_25 (1).md`) are legacy — ignore them.
 - **Codebase:** the working directory you're running in.
 - **Backlog file:** `PRD_BACKLOG.md` at repo root. Create with an `# PRD Update Backlog` header if it doesn't exist.
 

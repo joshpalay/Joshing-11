@@ -11,7 +11,7 @@ export const DIRECT_SENT_FEED_SOURCE_TYPE = 'direct_sent' as const;
 // broadcast "share to all friends" path, but it was reintroduced in PR #254
 // (2026-05-17) and now backs the "Share with all friends" checkbox in question
 // creation — these rows render as the friend_added "Handwritten" envelope.
-// (PRD-V11.1-AUDIT.md §2/§9/§12 predate that reintroduction and are stale.)
+// (_docs/archive/PRD-V11.1-AUDIT.md §2/§9/§12 predate that reintroduction and are stale.)
 //
 // 'thumbs_upped' is genuinely legacy-read-only: it was retired and is no longer
 // written. Read queries still include it so pre-retirement rows keep rendering.

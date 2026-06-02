@@ -24,24 +24,24 @@ primitive and an honest **authored-vs-curated** provenance model. The capabiliti
 product the restructure is steering toward.
 
 > `[reconstructed]` — assembled from the master alignment audit's enumerated systems
-> (`PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1) and the D-1/D-2/D-3 specs. Capabilities **21–22**
+> (`_docs/archive/PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1) and the D-1/D-2/D-3 specs. Capabilities **21–22**
 > (authoring / niche discovery) and **23** (house author) are the ones the specs name explicitly and
 > are grounded below; the rest are reconstructed groupings.
 
 ### Daily play & knowledge
-1. **Daily Five** — five LLM-generated questions a day, calibrated to the player's Knowledge base. `PRD-AUDIT.md` §2.1.
-2. **Difficulty configuration** — five difficulty options (`normal`, `moderate`, `challenging`, `ridiculous`, `adaptive`). `PRD-AUDIT.md` §2.1.
-3. **Chat-first play** — narrow chat thread, one active question, quiet sequential reveal, no visible countdown. `PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1.
+1. **Daily Five** — five LLM-generated questions a day, calibrated to the player's Knowledge base. `_docs/archive/PRD-AUDIT.md` §2.1.
+2. **Difficulty configuration** — five difficulty options (`normal`, `moderate`, `challenging`, `ridiculous`, `adaptive`). `_docs/archive/PRD-AUDIT.md` §2.1.
+3. **Chat-first play** — narrow chat thread, one active question, quiet sequential reveal, no visible countdown. `_docs/archive/PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1.
 4. **Catch-up** — a dedicated play session for missed Daily Five questions, surfaced when eligible. `PRD_BACKLOG.md` §8.7.
-5. **Knowledge portrait / map** — domain tiers, portrait/circle visualization, dismissed-domain re-open, "Grow your map" explainer. `PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1.
-6. **Knowledge base calibration** — declared + demonstrated domains feed daily generation. `PRD-AUDIT.md` §2.1.
+5. **Knowledge portrait / map** — domain tiers, portrait/circle visualization, dismissed-domain re-open, "Grow your map" explainer. `_docs/archive/PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1.
+6. **Knowledge base calibration** — declared + demonstrated domains feed daily generation. `_docs/archive/PRD-AUDIT.md` §2.1.
 7. **Mastery progression** — domain tiers advanced from `masteryEvents`. `[reconstructed]`
 
 ### Social surface (the restructure core)
 8. **Directional follow** — symmetric friendship replaced by a directional follow edge; "friend" = mutual follow. `PRD-D-1-…` Decision 1 (keystone).
 9. **Feed** — broadcasts + questions sent to me, split from the Daily. `PRD-D-1-…` Context.
 10. **"Sent to you" tab** — direct sends promoted from in-list filter to a first-class Feed tab. `PRD-D-1-…` Decision 3.
-11. **Friend-answer propagation** — a friend's answered question propagates to my Daily +2 bonus slots; thumbs-down does not propagate; dismissed domains respected. `PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1.
+11. **Friend-answer propagation** — a friend's answered question propagates to my Daily +2 bonus slots; thumbs-down does not propagate; dismissed domains respected. `_docs/archive/PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1.
 12. **Daily +2 bonus slots** — 5 base + 0/1/2 friend slots (total 5–7); friend slots are never LLM-backfilled. `PRD-D-1-…` Decision 7.
 13. **Broadcast (followers-only)** — "share with all friends" writes a followers-only broadcast. `PRD-D-1-…` Decision 2.
 14. **Direct send** — send a specific question to a specific person. `PRD-D-1-…` Type 2 (`direct_sent`).
@@ -50,10 +50,10 @@ product the restructure is steering toward.
 17. **Aside / "between us"** — a short provenance-labeled commentary line; `relational` ("Between us friends") for human authors, `editorial` ("Between us!", placeholder copy) for machine-origin. `src/lib/questions-types.ts:47-50`.
 
 ### Ceremony & reflection
-18. **Biweekly Ceremony** — the major reflective artifact (banner, viewed, share token/page, compute/fire services). `PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1, §22.
+18. **Biweekly Ceremony** — the major reflective artifact (banner, viewed, share token/page, compute/fire services). `_docs/archive/PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1, §22.
 
 ### Onboarding
-19. **Onboarding with cultural anchor** — `birth_year`, `grew_up_country`, `grew_up_region` captured; proposal/canonicalization/save routes. `PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1.
+19. **Onboarding with cultural anchor** — `birth_year`, `grew_up_country`, `grew_up_region` captured; proposal/canonicalization/save routes. `_docs/archive/PRD-11.1-MASTER-ALIGNMENT-AUDIT-2.md` §1.
 
 ### Authoring & discovery (specs name these explicitly)
 20. **Authoring** — players author questions into their bank for circulation; no per-round submission cap. `PRD_BACKLOG.md` §5.

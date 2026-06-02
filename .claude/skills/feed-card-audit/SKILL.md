@@ -25,7 +25,7 @@ For each card variant:
    - Optional props that are effectively required (will throw if missing)
 
 3. **Test coverage.**
-   Glob `src/tests/**` for tests that import each card. If a card has no test, report it. If a test imports the card but doesn't render every variant the card handles, that's a coverage gap worth flagging.
+   Glob `src/**/__tests__/**` for tests that import each card. If a card has no test, report it. If a test imports the card but doesn't render every variant the card handles, that's a coverage gap worth flagging.
 
 4. **Style drift.**
    Flag any of the following introduced in feed components:

@@ -5,10 +5,11 @@ shared with friends.
 
 ## Docs
 
-- [Product spec](./_docs/PRD11.md)
+- [Docs index & decisions](./DECISIONS.md) — start here
+- [Product direction (v12 line)](./PRD-D-0-PRODUCT-DIRECTION-AND-DECISIONS.md) — the `PRD-D-*` series is current canon
 - [Architectural decisions](./_docs/ARCHITECTURAL-DECISIONS.md)
-- [Database schema](./_docs/0001_initial_schema.sql)
-- [Phase status](./_docs/PHASE-STATUS.md)
+- [Database schema](./src/server/db/schema.ts) — Drizzle schema (migrations under [`drizzle/`](./drizzle))
+- Superseded v11.x PRDs and audits: [`_docs/archive/`](./_docs/archive)
 
 ## Stack
 
