@@ -5,6 +5,7 @@ import {
   collectMilestoneQuestionIds,
   deriveLatelyMilestones,
   deepMilestoneCopy,
+  MILESTONE_CARD_QUESTION_CAP,
   MILESTONE_DEEP_MIN,
   type LatelyMilestone,
   type MilestoneAnswerRow,
@@ -108,6 +109,75 @@ describe('deriveLatelyMilestones — breadth cards', () => {
     ]);
     const breadth = milestones.filter(isBreadth);
     expect(breadth[0].domains.map((d) => d.domain)).toEqual(['new', 'old']);
+  });
+});
+
+describe('deriveLatelyMilestones — CORRECTION 3 per-line 5-cap + splitting', () => {
+  it('caps a deep line at 5 questions and never splits a deep domain', () => {
+    const over = MILESTONE_CARD_QUESTION_CAP + 2; // 7 correct in one domain
+    const milestones = deriveLatelyMilestones(group(over, { domain: 'jazz' }));
+    const deep = milestones.filter(isDeep);
+    // ONE deep line (not split into multiple same-domain lines)…
+    expect(deep).toHaveLength(1);
+    // …surfacing only 5 of the questions (surplus not surfaced)…
+    expect(deep[0].questionIds).toHaveLength(MILESTONE_CARD_QUESTION_CAP);
+    // …while the underlying count stays honest.
+    expect(deep[0].correctCount).toBe(over);
+  });
+
+  it('keeps the 5 MOST-RECENT questions on an over-cap deep line', () => {
+    const base = new Date('2026-05-01T00:00:00.000Z');
+    // 7 questions, recency ascending q-old0..q-old6; the 5 most-recent are the
+    // last five answeredAt.
+    const rows = Array.from({ length: 7 }, (_, i) =>
+      row({
+        domain: 'jazz',
+        questionId: `q-${i}`,
+        answeredAt: new Date(base.getTime() + i * 60_000),
+      }),
+    );
+    const [deep] = deriveLatelyMilestones(rows).filter(isDeep);
+    expect(deep.questionIds).toHaveLength(MILESTONE_CARD_QUESTION_CAP);
+    expect(new Set(deep.questionIds)).toEqual(
+      new Set(['q-6', 'q-5', 'q-4', 'q-3', 'q-2']),
+    );
+    expect(deep.questionIds).not.toContain('q-0');
+    expect(deep.questionIds).not.toContain('q-1');
+  });
+
+  it('splits light domains into multiple ≤5-question breadth lines', () => {
+    // 3 light domains × 2 questions = 6 questions > cap → splits into 2 lines.
+    const milestones = deriveLatelyMilestones([
+      ...group(2, { domain: 'a', answeredAt: new Date('2026-05-25T00:00:00.000Z') }),
+      ...group(2, { domain: 'b', answeredAt: new Date('2026-05-24T00:00:00.000Z') }),
+      ...group(2, { domain: 'c', answeredAt: new Date('2026-05-23T00:00:00.000Z') }),
+    ]);
+    const breadth = milestones.filter(isBreadth);
+    expect(breadth.length).toBeGreaterThan(1);
+    // No line exceeds the universal cap.
+    for (const line of breadth) {
+      expect(line.questionIds.length).toBeLessThanOrEqual(MILESTONE_CARD_QUESTION_CAP);
+      // Header matches contents: every named domain has its questions on THIS line.
+      const ids = new Set(line.questionIds);
+      for (const d of line.domains) {
+        expect(d.questionIds.every((id) => ids.has(id))).toBe(true);
+      }
+    }
+    // Every domain still surfaces exactly once across the split lines.
+    const allDomains = breadth.flatMap((b) => b.domains.map((d) => d.domain)).sort();
+    expect(allDomains).toEqual(['a', 'b', 'c']);
+    // Distinct ids so each line is its own stream item.
+    expect(new Set(breadth.map((b) => b.id)).size).toBe(breadth.length);
+  });
+
+  it('keeps light domains on one line when they fit within the cap', () => {
+    // 2 + 2 = 4 questions ≤ cap → a single breadth line.
+    const breadth = deriveLatelyMilestones([
+      ...group(2, { domain: 'a' }),
+      ...group(2, { domain: 'b' }),
+    ]).filter(isBreadth);
+    expect(breadth).toHaveLength(1);
+    expect(breadth[0].questionIds).toHaveLength(4);
   });
 });
 
