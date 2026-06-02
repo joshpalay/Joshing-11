@@ -44,7 +44,7 @@ function asQueueSlotDifficulty(
 export type KnowledgeBaseDomain = {
   domain: string;
   broadCategory: string | null;
-  source: 'declared' | 'friend_mediated' | 'authorship';
+  source: 'declared' | 'demonstrated';
   territoryType: 'declared' | 'demonstrated';
   totalPoints: number;
   tier: 'establishing' | 'familiar' | 'solid' | 'mastery';
@@ -225,7 +225,7 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
     domainsByKey.set(key, {
       domain,
       broadCategory: row.broadCategory,
-      source: row.territoryType === 'declared' ? 'declared' : 'friend_mediated',
+      source: row.territoryType === 'declared' ? 'declared' : 'demonstrated',
       territoryType: row.territoryType,
       totalPoints: row.totalPoints,
       tier: row.tier,
@@ -1486,21 +1486,6 @@ export async function getRecentFactKeys(
 
 export async function getAnsweredDailyCount(queue: DailyQueueRow): Promise<number> {
   return asQueueSlots(queue.slots).filter((slot) => slot.answered).length;
-}
-
-export async function userHasFriendMediatedDomain(userId: string, domain: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: masteryEvents.id })
-    .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.canonicalSubcategory, domain),
-      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-      isNotNull(masteryEvents.questionId),
-    ))
-    .limit(1);
-
-  return Boolean(row);
 }
 
 export async function getKBDomainEntry(userId: string, domain: string) {

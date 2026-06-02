@@ -308,6 +308,55 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
     expect(order).toEqual(['persist', 'writeMastery'])
   })
 
+  it('reveals creatorNote + provenance-calibrated aside on the catch-up response (B-7)', async () => {
+    selectCallChain.length = 0
+    selectCallChain.push(async () => [QUEUE])
+    // Self-authored (creatorId === viewer) resolves the relational label
+    // without a friendship lookup, exercising selectInsideJokeForViewer.
+    selectCallChain.push(async () => [
+      {
+        creatorId: 'user-1',
+        domain: 'history',
+        broadCategory: 'humanities',
+        category: 'humanities',
+        insideJoke: 'between us, you nailed this last time',
+        creatorNote: 'wrote this after our trivia night',
+      },
+    ])
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+
+    const response = await POST(jsonRequest(VALID_BODY) as never)
+    const body = await response.json()
+
+    expect(body.insideJoke).toBe('between us, you nailed this last time')
+    expect(body.insideJokeKind).toBe('relational')
+    expect(body.creatorNote).toBe('wrote this after our trivia night')
+  })
+
+  it('hides the aside but still reveals creatorNote when the answer is wrong (one-directional reveal)', async () => {
+    selectCallChain.length = 0
+    selectCallChain.push(async () => [QUEUE])
+    selectCallChain.push(async () => [
+      {
+        creatorId: 'user-1',
+        domain: 'history',
+        broadCategory: 'humanities',
+        category: 'humanities',
+        insideJoke: 'between us',
+        creatorNote: 'a note',
+      },
+    ])
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'wrong', consolation: null })
+
+    const response = await POST(jsonRequest(VALID_BODY) as never)
+    const body = await response.json()
+
+    // Reveal is one-directional: shown on correct OR incorrect, per B-3.
+    expect(body.insideJoke).toBe('between us')
+    expect(body.insideJokeKind).toBe('relational')
+    expect(body.creatorNote).toBe('a note')
+  })
+
   it('graceful fallback when persist fails on every retry: mastery event still written with null eventQuestionId', async () => {
     setupDbChain()
     gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })

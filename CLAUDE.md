@@ -3,7 +3,7 @@
 Project-specific guidance for Claude. Keep this file short; reference, don't duplicate.
 
 ## ORM & migrations
-- **ORM is Drizzle, not Prisma.** Migrations live in `drizzle/` (currently `0000_material_lyja.sql` through `0034_territory_type_enum.sql`).
+- **ORM is Drizzle, not Prisma.** Migrations live in `drizzle/`, numbered from `0000_material_lyja.sql` up to the current head (`0060_generated_question_inside_joke.sql` at time of writing — run `ls drizzle/*.sql | sort | tail -1` for the live head rather than trusting this number).
 - Schema: `src/server/db/schema.ts`. Query helpers: `src/server/db/queries/`.
 - Run migrations manually with `npm run db:migrate`. They are also auto-applied at boot from `src/instrumentation.ts`, which additionally pre-applies several idempotent guards for partially-recorded preview/production databases — read that file before adding a new migration that touches enums, NOT NULL columns, or additive columns.
 
