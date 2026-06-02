@@ -66,3 +66,36 @@ describe('GameplayChat house author labeling (D-3 Stage 2)', () => {
     expect(rendered).not.toContain('editorial-badge');
   });
 });
+
+function houseResultWithNote(): ChatMessage {
+  return {
+    id: 'r1',
+    kind: 'result',
+    assignmentId: 'a1',
+    questionText: 'Who produced Low (1977)?',
+    result: 'correct',
+    submitted: 'Visconti',
+    correctAnswer: null,
+    consolation: null,
+    breadcrumb: null,
+    copyVariant: 0,
+    creatorName: HOUSE_AUTHOR.displayName,
+    creatorIsHouse: true,
+    authorNote: 'A favorite from the archives.',
+  };
+}
+
+describe('GameplayChat house commentary (D-3 Stage 5)', () => {
+  it('renders a house creator-note in editorial voice with the badge, never relational framing', () => {
+    const rendered = html([houseResultWithNote()]);
+    expect(rendered).toContain('A favorite from the archives.');
+    // Editorial treatment, not "Why {name} asked".
+    expect(rendered).toContain('Editor');
+    expect(rendered).toContain('editorial-badge');
+    expect(rendered).not.toContain('Why Joshing asked');
+    // No relational copy anywhere on a house result.
+    expect(rendered).not.toContain('gave you this');
+    expect(rendered).not.toContain('carries this one');
+    expect(rendered).not.toContain('From Joshing');
+  });
+});

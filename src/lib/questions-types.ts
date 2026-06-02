@@ -65,6 +65,10 @@ export const LLM_QUESTION_ATTRIBUTION = 'Generated' as const;
 // and must never be used as a users.id foreign key (Invariant H-1: house is
 // unfollowable / unmatchable / mastery-ineligible by construction).
 // displayName/label are PLACEHOLDER COPY pending product sign-off.
+//
+// House commentary (creator-notes/asides) must be editorial/curator voice and is
+// NEVER relational — see docs/house-editorial-copy-checklist.md (D-3 §E). The
+// render layer strips relational chrome; the note text is a review-gate concern.
 export const HOUSE_AUTHOR = {
   id: 'house',
   displayName: 'Joshing',
