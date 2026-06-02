@@ -16,6 +16,7 @@ import {
 
 import { SendQuestionAction } from '@/components/SendQuestionAction'
 import { AddToBankAction } from '@/components/AddToBankAction'
+import { EditorialBadge } from '@/components/EditorialBadge'
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
 import MasteryMoment from '@/components/review/MasteryMoment'
 import { cn } from '@/lib/utils'
@@ -481,6 +482,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
               FROM
             </span>
             <span style={{ fontWeight: 600 }}>{question.authorName}</span>
+            {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
             <span
               style={{
                 ...monoStyle,
@@ -527,7 +529,9 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
       {question.authorNote ? (
         <p className="bg-muted/40 text-foreground mt-4 rounded-xl border p-3 text-sm leading-6">
           <span className="font-medium">
-            {question.authorName ? `Why ${question.authorName} asked:` : 'Why they asked:'}
+            {question.authorIsHouse
+              ? 'Editor’s note:'
+              : question.authorName ? `Why ${question.authorName} asked:` : 'Why they asked:'}
           </span>{' '}
           {question.authorNote}
         </p>

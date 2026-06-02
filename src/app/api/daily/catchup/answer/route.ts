@@ -148,9 +148,13 @@ async function handleDailyCatchupAnswer({
   let persistedCreatorId: string | null = null;
   let persistedDomainForCreator: string | null = null;
 
-  if (slot.source === 'friend') {
+  // Friend and house (D-3) slots both already live in the canonical `questions`
+  // table — resolve by question_id rather than promoting a GeneratedQuestion.
+  // House questions carry creatorId=null, so persistedCreatorId stays null and
+  // no author credit accrues (house is mastery-ineligible by construction).
+  if (slot.source === 'friend' || slot.source === 'house') {
     if (!slot.question_id) {
-      return catchUpErrorResponse(500, 'invalid_state', 'Friend catch-up slot missing canonical question id');
+      return catchUpErrorResponse(500, 'invalid_state', 'Canonical catch-up slot missing question id');
     }
     canonicalQuestionId = slot.question_id;
     const [canonicalRow] = await db

@@ -52,10 +52,12 @@ export type QuestionRecap = {
   domain: string;
   domainDisplayName: string;
   isInBank: boolean;
-  /** Author display name — set for friend-authored questions (B-3 author's why). */
+  /** Author display name — set for friend-authored and house questions. */
   authorName: string | null;
   /** Author's why — commentary attached at creation, surfaced in the recap. */
   authorNote: string | null;
+  /** D-3: the author is the non-human house/editorial author (Editorial badge, non-relational copy). */
+  authorIsHouse: boolean;
 };
 
 export type DomainGain = {
@@ -224,8 +226,9 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       domain,
       domainDisplayName: displayNameForDomain(domain),
       isInBank: slot.question_id ? Boolean(bankedById[slot.question_id]) : false,
-      authorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
-      authorNote: slot.source === 'friend' ? (slot.author_note ?? null) : null,
+      authorName: slot.source === 'friend' || slot.source === 'house' ? (slot.author_name ?? null) : null,
+      authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
+      authorIsHouse: slot.source === 'house',
     };
   });
 

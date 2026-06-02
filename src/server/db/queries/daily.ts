@@ -16,7 +16,7 @@ import {
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { pgErrorCode } from '@/server/db/pg-error';
-import { CATEGORIES, categoryLabel, resolveAuthorDisplay } from '@/lib/questions-types';
+import { CATEGORIES, categoryLabel, HOUSE_AUTHOR, resolveAuthorDisplay } from '@/lib/questions-types';
 import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import {
@@ -752,6 +752,26 @@ export type AuthoredPick = {
 };
 
 /**
+ * D-3: a labeled non-human house/editorial question selected for the Daily core.
+ * Mirrors AuthoredPick minus the human-author fields — the house identity is
+ * fixed (resolved from HOUSE_AUTHOR at slot-build time), never a users row, so
+ * there is no creatorId / authorName here. `authorNote` carries an optional
+ * editorial aside (populated in Stage 5).
+ */
+export type HousePick = {
+  id: string;
+  questionText: string;
+  answerText: string;
+  alternateAnswers: string[];
+  factualExplanation: string | null;
+  canonicalSubcategory: string;
+  broadCategory: string | null;
+  category: string;
+  difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
+  authorNote: string | null;
+};
+
+/**
  * Returns up to `limit` vetted user-authored questions for the viewer's
  * Daily 5, ranked by social tier: direct friends first, then friends-of-
  * friends, then everyone else. The orchestrator tops up the remaining
@@ -943,6 +963,195 @@ export async function createDailyQueueItemFromAuthored(
     answered: false,
     difficulty_stepped_up: false,
   };
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(dailyQueues)
+      .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
+      .limit(1);
+
+    if (!existing) {
+      const [created] = await tx
+        .insert(dailyQueues)
+        .values({
+          userId,
+          queueDate: assignmentDateStr,
+          slots: [slot],
+        })
+        .returning();
+      return created;
+    }
+
+    const slots = asQueueSlots(existing.slots).filter((item) => item.slot_index !== position);
+    const nextSlots = [...slots, slot].sort((a, b) => a.slot_index - b.slot_index);
+    const [updated] = await tx
+      .update(dailyQueues)
+      .set({ slots: nextSlots })
+      .where(eq(dailyQueues.id, existing.id))
+      .returning();
+    return updated;
+  });
+}
+
+/** Candidate row shape for the pure house selector (subset of canonical columns). */
+export type HouseCandidateRow = {
+  id: string;
+  questionText: string;
+  answerText: string;
+  alternateAnswers: string[] | null;
+  factualExplanation: string | null;
+  canonicalSubcategory: string | null;
+  broadCategory: string | null;
+  category: string | null;
+  difficultyEstimate: string | null;
+  creatorNote: string | null;
+  createdAt: Date | null;
+};
+
+/**
+ * Pure selection step for house questions (extracted for testing, mirroring
+ * selectBonusAnswererPicks). Drops anything the viewer has already seen and
+ * anything in a generic bucket domain, prefers newest curated content, and caps
+ * at `limit`. Domain matching to the viewer's niches happens in the SQL filter
+ * (allowedSubcategories); this step is the in-memory dedup + ordering, NOT the
+ * +2 friend-answer relevance ranking.
+ */
+export function selectHousePicks(
+  rows: HouseCandidateRow[],
+  seenQuestionIds: ReadonlySet<string>,
+  limit: number,
+): HousePick[] {
+  if (limit <= 0) return [];
+  return rows
+    .filter((row) => !seenQuestionIds.has(row.id))
+    .filter((row) => row.canonicalSubcategory && !isGenericSubcategory(row.canonicalSubcategory))
+    .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+    .slice(0, limit)
+    .map((row) => ({
+      id: row.id,
+      questionText: row.questionText,
+      answerText: row.answerText,
+      alternateAnswers: row.alternateAnswers ?? [],
+      factualExplanation: row.factualExplanation,
+      canonicalSubcategory: row.canonicalSubcategory ?? '',
+      broadCategory: row.broadCategory,
+      category: String(row.category ?? ''),
+      difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
+      authorNote: row.creatorNote ?? null,
+    } satisfies HousePick));
+}
+
+/**
+ * D-3 — selects up to `limit` house/editorial questions (canonical rows with
+ * source='house_authored', creatorId null) matched to the viewer's niches by
+ * domain. This is the bank/domain matching path (NOT the +2 relevance ranking):
+ * candidates are constrained to `allowedSubcategories` (the viewer's knowledge
+ * base) exactly like the bot/bank pool, and deduped against questions the viewer
+ * has already seen on a past daily or answered. House questions never enter the
+ * Feed and never occupy a +2 bonus slot (see createDailyQueueItemFromHouse /
+ * isCorrectAnswerFeedEligible).
+ *
+ * House content is editorially curated, so it is NOT gated on the public-vetting
+ * status the authored picker requires — only visibility='public' and not deleted.
+ */
+export async function pickHouseQuestions(
+  viewerUserId: string,
+  limit: number,
+  allowedSubcategories: ReadonlySet<string>,
+): Promise<HousePick[]> {
+  if (limit <= 0) return [];
+  if (allowedSubcategories.size === 0) return [];
+
+  // House questions never reach the viewer's feed (Invariant — house is not
+  // feed-eligible), so dedup only needs past daily queues + answered questions.
+  const [pastQueues, answeredRows] = await Promise.all([
+    db
+      .select({ slots: dailyQueues.slots })
+      .from(dailyQueues)
+      .where(eq(dailyQueues.userId, viewerUserId)),
+    db
+      .select({ questionId: masteryEvents.questionId })
+      .from(masteryEvents)
+      .where(and(
+        eq(masteryEvents.userId, viewerUserId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        isNotNull(masteryEvents.questionId),
+      )),
+  ]);
+  const seenQuestionIds = new Set<string>();
+  for (const row of pastQueues) {
+    for (const slot of asQueueSlots(row.slots)) {
+      if (slot.question_id) seenQuestionIds.add(slot.question_id);
+    }
+  }
+  for (const row of answeredRows) {
+    if (row.questionId) seenQuestionIds.add(row.questionId);
+  }
+
+  const candidates = await db
+    .select({
+      id: canonicalQuestions.id,
+      questionText: canonicalQuestions.questionText,
+      answerText: canonicalQuestions.answerText,
+      alternateAnswers: canonicalQuestions.acceptedAlternatives,
+      factualExplanation: canonicalQuestions.factualExplanation,
+      canonicalSubcategory: canonicalQuestions.canonicalSubcategory,
+      broadCategory: canonicalQuestions.broadCategory,
+      category: canonicalQuestions.category,
+      difficultyEstimate: canonicalQuestions.difficultyEstimate,
+      creatorNote: canonicalQuestions.creatorNote,
+      createdAt: canonicalQuestions.createdAt,
+    })
+    .from(canonicalQuestions)
+    .where(and(
+      eq(canonicalQuestions.source, 'house_authored'),
+      isNull(canonicalQuestions.creatorId),
+      eq(canonicalQuestions.visibility, 'public'),
+      isNotNull(canonicalQuestions.canonicalSubcategory),
+      inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
+      isNull(canonicalQuestions.deletedAt),
+    ))
+    .orderBy(desc(canonicalQuestions.createdAt))
+    .limit(Math.max(limit * 4, 20));
+
+  return selectHousePicks(candidates, seenQuestionIds, limit);
+}
+
+/**
+ * Builds the QueueSlot for a house core slot (pure; extracted for testing).
+ * source='house', a canonical question_id, author_name='Joshing' — and crucially
+ * NO author_id (the house identity is never a users.id; Invariant H-1) and NO
+ * answerer_* fields (so it is unmistakably a core slot, never a +2 bonus slot).
+ */
+export function buildHouseSlot(pick: HousePick, position: number): QueueSlot {
+  return {
+    slot_index: position,
+    source: 'house',
+    question_id: pick.id,
+    author_name: HOUSE_AUTHOR.displayName,
+    author_note: pick.authorNote ?? undefined,
+    domain: pick.canonicalSubcategory,
+    broad_category: pick.broadCategory,
+    category: pick.category || null,
+    question_text: pick.questionText,
+    difficulty_estimate: pick.difficultyEstimate ?? undefined,
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+}
+
+/**
+ * Inserts a house/editorial question into the viewer's daily queue as a
+ * `source: 'house'` core slot. Counterpart to createDailyQueueItemFromAuthored.
+ */
+export async function createDailyQueueItemFromHouse(
+  userId: string,
+  pick: HousePick,
+  position: number,
+): Promise<DailyQueueRow> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+  const slot = buildHouseSlot(pick, position);
 
   return db.transaction(async (tx) => {
     const [existing] = await tx
