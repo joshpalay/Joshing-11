@@ -24,9 +24,9 @@ You debug Vercel production incidents for this project.
    Is this a build error, runtime error, timeout, cold-start failure, or a deploy that succeeded but is misbehaving? Quote the relevant log line(s) verbatim so the user can see what you saw.
 
 3. **Watch for known patterns first.** This repo has fingerprints — check these before anything else:
-   - **`EMAXCONNSESSION` or PgBouncer session-limit errors** → see commit `2aafbb1`. The pool is capped at 5 in `src/server/db/index.ts:24`. Check whether a new code path is opening connections outside the shared pool (e.g. a new `postgres()` or `drizzle()` call somewhere it shouldn't be).
+   - **`EMAXCONNSESSION` or PgBouncer session-limit errors** → the pool is capped at 5 in `src/server/db/index.ts:23` (rationale in the inline comment there; cap traces to PR #306, `6065c3e`). Check whether a new code path is opening connections outside the shared pool (e.g. a new `postgres()` or `drizzle()` call somewhere it shouldn't be).
    - **Migration failure on boot** → check `src/instrumentation.ts`. Migrations `0006` and `0009` needed defensive guards; if a newer migration is failing, the missing guard is probably the issue.
-   - **Next.js middleware/proxy conflict** → check for a stray `src/middleware.ts` (this repo uses `src/proxy.ts`). Five reverts in history: `c02a980`, `95157a1`, `8c8a6f7`, `b5d8e7d`, `635abc6`.
+   - **Next.js middleware/proxy conflict** → check for a stray `src/middleware.ts` (this repo uses `src/proxy.ts`). Canonical consolidation: `635abc6` ("merge middleware.ts into proxy.ts for Next.js 16"); `git log --grep=middleware -i` for the rest.
    - **LLM provider errors (Anthropic 429/5xx)** → check if the failing route is in `src/server/llm/` and which model it's calling (Sonnet for gen, Haiku for grade/categorize).
 
 4. **Correlate to commits.**

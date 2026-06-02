@@ -26,7 +26,7 @@ This repo uses `src/proxy.ts` for Next.js 16 middleware. **`src/middleware.ts` m
    - Confirm it exports the middleware (look for `export const middleware` or equivalent).
    - Report all clear.
 
-4. Run any tests under `src/tests/` whose names mention `middleware` or `proxy`.
+4. Run any tests under `src/**/__tests__/` whose names mention `middleware` or `proxy`.
 
 ## Output
 
