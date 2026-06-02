@@ -23,7 +23,7 @@ import {
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
-import type { InsideJokeKind } from '@/lib/questions-types'
+import type { InsideJokeKind, QuestionSource } from '@/lib/questions-types'
 
 type FriendResult = {
   userId: string
@@ -60,7 +60,10 @@ type FeedApiItem = {
   question_text?: string | null
   // B-6: provenance of the underlying question, used to pick the recipient-facing
   // verb ("wrote you this" for human-authored vs "sent you this" for curated LLM).
-  question_source?: 'authored' | 'daily_generated' | 'curated_sent' | null
+  // Derived from the canonical QuestionSource (D-3 added 'house_authored') so this
+  // can't drift out of sync with the server emitter again — a hand-written literal
+  // here was the B-9 regression (typecheck broke when 'house_authored' was added).
+  question_source?: QuestionSource | null
   is_in_bank: boolean
   domain_pill?: string | null
   broad_category?: string | null

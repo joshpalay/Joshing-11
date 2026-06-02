@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 
 import { newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
-import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
+import { LLM_QUESTION_ATTRIBUTION, type InsideJokeKind } from '@/lib/questions-types';
 import {
   parseCatchUpAnswerErrorBody,
   userFacingCatchUpSubmitMessage,
@@ -32,7 +32,7 @@ export type CatchupQueueItem = {
   authorIsHouse?: boolean;
 };
 
-type CatchupAnswerResponse = {
+export type CatchupAnswerResponse = {
   result?: 'correct' | 'wrong';
   isCorrect?: boolean;
   correct?: boolean;
@@ -44,6 +44,14 @@ type CatchupAnswerResponse = {
   explainer?: string | null;
   consolation?: string | null;
   breadcrumb?: string | null;
+  // B-7/B-9: author commentary + aside travel with the question into catch-up,
+  // gated server-side by selectInsideJokeForViewer (same provenance-calibrated
+  // label and display gate as the live path). The server emits `creatorNote`,
+  // which maps to the message's `authorNote` (matching the live path field name
+  // so GameplayChat renders it with no special-casing).
+  creatorNote?: string | null;
+  insideJoke?: string | null;
+  insideJokeKind?: InsideJokeKind | null;
   nextItem?: CatchupQueueItem | null;
 };
 
@@ -93,6 +101,49 @@ async function fetchBreadcrumbForCatchupMessage(
   } catch {
     // Breadcrumb is purely additive context; failure is silently ignored.
   }
+}
+
+// Builds the result-turn message a catch-up answer produces, mapping the
+// server's provenance-resolved commentary + aside onto the exact field names
+// GameplayChat renders (B-9). Extracted as a pure function so a test can assert
+// these values reach the render layer — the B-7 regression was that the inline
+// builder set creatorName/creatorIsHouse but silently dropped the note/aside,
+// and a green route test never caught it because it asserted on the route JSON
+// the player never sees, not the message the hook builds.
+export function buildCatchupResultMessage(params: {
+  id: string;
+  item: CatchupQueueItem;
+  data: CatchupAnswerResponse;
+  isCorrect: boolean;
+  submittedAnswer: string;
+  pointsAwarded: number;
+}): Extract<ChatMessage, { kind: 'result' }> {
+  const { id, item, data, isCorrect, submittedAnswer, pointsAwarded } = params;
+  return {
+    id,
+    kind: 'result',
+    assignmentId: item.dailyQueueItemId,
+    questionText: item.questionText,
+    result: isCorrect ? 'correct' : 'wrong',
+    submitted: submittedAnswer,
+    correctAnswer: isCorrect ? null : data.correctAnswer ?? data.answer ?? item.correctAnswer,
+    consolation: data.consolation ?? null,
+    breadcrumb: null,
+    explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
+    copyVariant: item.queueAge,
+    creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
+    creatorIsHouse: item.authorIsHouse ?? false,
+    // B-9: surface the server's provenance-resolved commentary + aside.
+    // GameplayChat renders `authorNote` (live path maps server `creatorNote`
+    // to this name) and gates the aside via insideJoke/insideJokeKind, which
+    // the route already calibrated through selectInsideJokeForViewer.
+    authorNote: data.creatorNote ?? null,
+    insideJoke: data.insideJoke ?? null,
+    insideJokeKind: data.insideJokeKind ?? null,
+    canonicalSubcategory: item.domain,
+    pointsAwarded,
+    pointsLabel: 'Catch-up - 0.25x points',
+  };
 }
 
 function questionMessage(item: CatchupQueueItem): ChatMessage {
@@ -278,24 +329,14 @@ export function useCatchupFlow() {
       setMessages((existing) => [
         ...existing,
         { id: newMessageId(), kind: 'user', text: trimmedAnswer },
-        {
+        buildCatchupResultMessage({
           id: resultMessageId,
-          kind: 'result',
-          assignmentId: item.dailyQueueItemId,
-          questionText: item.questionText,
-          result: isCorrect ? 'correct' : 'wrong',
-          submitted: trimmedAnswer,
-          correctAnswer: isCorrect ? null : data.correctAnswer ?? data.answer ?? item.correctAnswer,
-          consolation: data.consolation ?? null,
-          breadcrumb: null,
-          explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
-          copyVariant: item.queueAge,
-          creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
-          creatorIsHouse: item.authorIsHouse ?? false,
-          canonicalSubcategory: item.domain,
+          item,
+          data,
+          isCorrect,
+          submittedAnswer: trimmedAnswer,
           pointsAwarded,
-          pointsLabel: 'Catch-up - 0.25x points',
-        },
+        }),
       ]);
 
       // Breadcrumbs are computed from daily-queue slots only; feed-sourced
