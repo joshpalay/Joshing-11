@@ -114,6 +114,24 @@ describe('notifyNicheMatch — stranger gate', () => {
   });
 });
 
+describe('notifyNicheMatch — D-3 house discovery exclusion (Invariant H-3)', () => {
+  // A house question carries source='house_authored' + creatorId=null, so it
+  // reaches notifyNicheMatch (if at all) with a null creatorId and is dropped by
+  // the same author-gate as the LLM origins — there is no author to discover and
+  // the house author is never a peer. This is held by construction (null
+  // creatorId); the test exists so a future refactor that gives house a real
+  // users.id can't silently turn it into a niche-match discovery target.
+  it('writes NO niche_match_* activity for a correctly-answered house question (null creatorId)', async () => {
+    const HOUSE_CREATOR_ID = null; // house identity is a sentinel, never a users.id
+
+    await notifyNicheMatch(ANSWERER, QUESTION, HOUSE_CREATOR_ID, `daily:house-key:${ANSWERER}`);
+
+    expect(getRelationshipMock).not.toHaveBeenCalled();
+    expect(getNicheMatchDiscoverableMock).not.toHaveBeenCalled();
+    expect(writeActivityMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('notifyNicheMatch — asymmetric two-flag gate (both directions)', () => {
   it('only the answerer opted in: writes ONLY the author-side row (which exposes the answerer)', async () => {
     getNicheMatchDiscoverableMock.mockResolvedValue(new Set([ANSWERER]));

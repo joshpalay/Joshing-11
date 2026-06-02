@@ -44,6 +44,12 @@ describe('GameplayChat house author labeling (D-3 Stage 2)', () => {
     expect(rendered).not.toContain('gave you this');
     // Invariant H-1 at the render layer: house never falls back to 'A friend'.
     expect(rendered).not.toContain('A friend');
+    // Invariant H-3: the house author's name is never a follow/peer-profile
+    // affordance. It renders as plain text — no profile link, no Add-friend CTA.
+    expect(rendered).not.toContain('href="/users/');
+    expect(rendered).not.toMatch(/<a[^>]*>Joshing<\/a>/);
+    expect(rendered).not.toContain('Add friend');
+    expect(rendered).not.toContain('Follow');
   });
 
   it('does NOT badge a human author who merely happens to be named "Joshing" (no string-match false positive)', () => {
