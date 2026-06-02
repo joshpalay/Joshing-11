@@ -54,6 +54,7 @@ function nextItemPayload(item: CatchupQuestion | null) {
     expiresAt: item.expiresAt,
     expiresSoon: item.expiresSoon,
     difficultyEstimate: item.difficultyEstimate,
+    authorName: item.authorName,
   };
 }
 

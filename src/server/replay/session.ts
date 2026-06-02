@@ -9,6 +9,8 @@ export type ReplayItem = {
   domain: string;
   domainDisplayName: string;
   originalSubmittedAnswer: string | null;
+  /** Human author's name, or null for LLM-origin (bot) slots. */
+  authorName: string | null;
 };
 
 export function selectReplaySession<T extends ReplayItem>(

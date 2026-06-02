@@ -19,6 +19,7 @@ import { AddToBankAction } from '@/components/AddToBankAction'
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
 import MasteryMoment from '@/components/review/MasteryMoment'
 import { cn } from '@/lib/utils'
+import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types'
 import { formatNextResetTimeLocal } from '@/lib/games/timezone'
 import type {
   DailySummaryView,
@@ -456,7 +457,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
               : 'WRONG'}
         </span>
         <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          {question.authorName ? null : `JOSHING BOT · ${question.domainDisplayName.toUpperCase()}`}
+          {question.authorName ? null : `${LLM_QUESTION_ATTRIBUTION.toUpperCase()} · ${question.domainDisplayName.toUpperCase()}`}
         </p>
         {question.authorName ? (
           <p

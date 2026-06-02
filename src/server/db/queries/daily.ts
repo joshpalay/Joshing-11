@@ -86,6 +86,13 @@ export type CatchupQueueItem = {
   difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   submittedAnswer: string | null;
   wasSkipped: boolean;
+  /**
+   * Display name of the human author, when one exists. Null for LLM-origin
+   * questions (daily-generated, or curated_sent feed items with no creator) —
+   * the client renders the non-person LLM_QUESTION_ATTRIBUTION label for those
+   * rather than implying a person wrote it.
+   */
+  authorName: string | null;
 };
 
 export type CatchupQuestion = CatchupQueueItem;
@@ -411,6 +418,19 @@ export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
     .where(inArray(generatedQuestions.id, generatedIds));
 }
 
+// Resolve creator display names for a set of (possibly null/duplicate) creator
+// ids, returning a id→name map. Null/absent ids are skipped — their questions
+// are LLM-origin and the client labels them non-relationally.
+async function resolveCreatorNames(creatorIds: Array<string | null>): Promise<Map<string, string | null>> {
+  const ids = [...new Set(creatorIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return new Map();
+  const nameRows = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(inArray(users.id, ids));
+  return new Map(nameRows.map((row) => [row.id, row.displayName]));
+}
+
 export async function getCatchupQuestions(userId: string): Promise<CatchupQuestion[]> {
   const { assignmentDateStr } = getDailyAssignmentBounds();
 
@@ -471,6 +491,10 @@ async function getDailyCatchupItems(
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
   const canonicalById = new Map(canonicalRows.map((question) => [question.id, question]));
 
+  // Resolve human author names for canonical (friend-authored) slots so the
+  // client shows the real person; generated slots have no creator and stay null.
+  const authorNameById = await resolveCreatorNames(canonicalRows.map((q) => q.creatorId));
+
   return candidateSlots
     .map(({ queue, slot }): CatchupQuestion | null => {
       const queueDate = String(queue.queueDate);
@@ -507,6 +531,7 @@ async function getDailyCatchupItems(
           difficultyEstimate: asQueueSlotDifficulty(question.difficultyEstimate) ?? null,
           submittedAnswer: slot.submitted_answer ?? null,
           wasSkipped: Boolean(slot.skipped),
+          authorName: null, // daily-generated: LLM origin, no human author
         } satisfies CatchupQuestion;
       }
 
@@ -545,6 +570,7 @@ async function getDailyCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: slot.submitted_answer ?? null,
         wasSkipped: Boolean(slot.skipped),
+        authorName: question.creatorId ? authorNameById.get(question.creatorId) ?? null : null,
       } satisfies CatchupQuestion;
     })
     .filter((question): question is CatchupQuestion => Boolean(question));
@@ -580,6 +606,10 @@ async function getFeedCatchupItems(
     if (pgErrorCode(error) === '42703') return [];
     throw error;
   }
+
+  // Feed catch-up items can be friend-authored (authored_shared) or LLM
+  // (curated_sent, null creator) — resolve the real author for the former.
+  const authorNameById = await resolveCreatorNames(rows.map(({ question }) => question.creatorId));
 
   return rows
     .map(({ feedItem, question }): CatchupQuestion | null => {
@@ -618,6 +648,7 @@ async function getFeedCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: feedItem.submittedAnswer ?? null,
         wasSkipped: false,
+        authorName: question.creatorId ? authorNameById.get(question.creatorId) ?? null : null,
       } satisfies CatchupQuestion;
     })
     .filter((item): item is CatchupQuestion => Boolean(item));

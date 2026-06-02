@@ -13,6 +13,7 @@ import {
   isWrongAnswerReactionKey,
   type ReactionKey,
 } from '@/lib/reactions';
+import { isLlmAttribution } from '@/lib/questions-types';
 
 export type ReactionPromptData = {
   senderName: string;
@@ -143,7 +144,7 @@ function firstNameFrom(creatorName: string): string {
 
 function wrongNamedSubLabel(creatorName: string | null, variant: number): string | null {
   if (!creatorName) return null;
-  if (creatorName.trim().toLowerCase() === 'joshing') return null;
+  if (isLlmAttribution(creatorName)) return null;
   const firstName = firstNameFrom(creatorName);
   if (!firstName) return null;
   return WRONG_NAMED_SUBLABEL[variant % WRONG_NAMED_SUBLABEL.length]!(firstName);
@@ -230,7 +231,7 @@ function QuestionRow({
             FROM
           </span>
           <span style={{ fontWeight: 600 }}>{creatorName}</span>
-          {creatorName.trim().toLowerCase() === 'joshing' ? null : (
+          {isLlmAttribution(creatorName) ? null : (
             <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>gave you this</span>
           )}
         </p>
@@ -353,7 +354,7 @@ function UserRow({ text }: { text: string }) {
 
 function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: string | null }) {
   const author = creatorName?.trim() ?? null;
-  const isBot = author?.toLowerCase() === 'joshing';
+  const isBot = isLlmAttribution(author);
   const showAuthor = author && !isBot;
   return (
     <div

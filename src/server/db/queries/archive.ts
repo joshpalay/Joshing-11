@@ -15,6 +15,7 @@ import {
   users,
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
+import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 
 export type ArchiveSource = 'daily' | 'feed' | 'joshing_game' | 'sent_to_me' | 'written_by_me';
 export type ArchiveResultFilter = 'correct' | 'incorrect' | 'skipped';
@@ -214,7 +215,7 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
           myRating: null,
           canUseQuestionActions: Boolean(slot.question_id),
           verified: bankQuestion?.verified ?? true,
-          askerName: askerDisplay ?? (generated ? 'Daily Five' : ''),
+          askerName: askerDisplay ?? (generated ? LLM_QUESTION_ATTRIBUTION : ''),
         } satisfies ArchiveItem;
       }),
   );
@@ -288,7 +289,9 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       myRating: null,
       canUseQuestionActions: true,
       verified: question.verified,
-      askerName: creatorUser?.displayName ?? '',
+      // null creatorId here ⟹ LLM-origin (curated_sent); authored feed questions
+      // resolve a real name via the creatorUser left join.
+      askerName: creatorUser?.displayName ?? LLM_QUESTION_ATTRIBUTION,
     } satisfies ArchiveItem;
   });
 }
