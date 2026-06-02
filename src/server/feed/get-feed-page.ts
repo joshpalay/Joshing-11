@@ -32,6 +32,7 @@ const feedQuestionSelectColumns = {
   questionText: questions.questionText,
   answerText: questions.answerText,
   creatorId: questions.creatorId,
+  source: questions.source,
   explainerBrief: questions.explainerBrief,
   factualExplanation: questions.factualExplanation,
   canonicalSubcategory: questions.canonicalSubcategory,
@@ -295,6 +296,13 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         state: item.state,
         is_pinned: item.isPinned,
         question_text: question?.questionText ?? null,
+        // B-6: question provenance so the recipient-facing verb reflects who
+        // actually authored the question (human-authored vs curated LLM), not
+        // the feed item's send mechanism. Only an explicit 'authored' source
+        // ever reads as human authorship downstream; everything else defaults
+        // to the curated verb (B-5: a curated/LLM send must never imply a human
+        // wrote it).
+        question_source: question?.source ?? null,
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
         domain_pill: domain,
