@@ -19,6 +19,7 @@ import {
   UnderlineName,
   UtilityActionLink,
 } from '@/components/lately/UtilityCard';
+import { LATELY_TIER, latelyTierForMomentDir } from '@/lib/lately';
 import { getSession } from '@/server/auth/session';
 import {
   getActivitiesForUser,
@@ -467,6 +468,15 @@ function activityCaption(item: ActivityItemView): string {
   return INCOMING_TYPES.has(item.type) ? 'INCOMING' : 'FROM JOSHING';
 }
 
+// Prominence tier for an activity-backed utility card (D-4 §C). Niche-match
+// discovery is protected (tier 2, above milestones); everything else is "other".
+function latelyTierForActivity(type: ActivityItemView['type']): number {
+  return type === 'niche_match_answered_your_question' ||
+    type === 'niche_match_you_answered'
+    ? LATELY_TIER.NICHE_MATCH
+    : LATELY_TIER.OTHER;
+}
+
 function activityToFeedItem(item: ActivityItemView): LatelyFeedItem {
   const title = <ActivityCopy item={item} />;
   const subcopy = <ActivitySubcopy item={item} />;
@@ -485,6 +495,7 @@ function activityToFeedItem(item: ActivityItemView): LatelyFeedItem {
     kind: 'utility',
     id: item.id,
     sortAt: item.createdAt,
+    tier: latelyTierForActivity(item.type),
     utility: {
       caption: activityCaption(item),
       title,
@@ -520,6 +531,9 @@ export default async function ActivitiesPage() {
     kind: 'moment',
     id: m.momentId,
     sortAt: m.answeredAt,
+    // they_got_you ("answered your question") is the top protected tier; the
+    // reciprocal you_got_them moment is "other".
+    tier: latelyTierForMomentDir(m.dir),
     moment: m,
   }));
 
@@ -527,6 +541,7 @@ export default async function ActivitiesPage() {
     kind: 'milestone',
     id: m.id,
     sortAt: m.sortAt,
+    tier: LATELY_TIER.MILESTONE,
     milestone: m,
   }));
 

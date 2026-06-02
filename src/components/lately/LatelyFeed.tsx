@@ -4,6 +4,7 @@ import {
   assignCaption,
   bucketByDay,
   formatMomentTime,
+  sortByProminence,
   type LatelyBucketLabel,
 } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
@@ -26,9 +27,9 @@ export type LatelyUtilityProps = {
 };
 
 export type LatelyFeedItem =
-  | { kind: 'moment'; id: string; sortAt: Date; moment: LatelyMoment }
-  | { kind: 'milestone'; id: string; sortAt: Date; milestone: LatelyMilestone }
-  | { kind: 'utility'; id: string; sortAt: Date; utility: LatelyUtilityProps };
+  | { kind: 'moment'; id: string; sortAt: Date; tier: number; moment: LatelyMoment }
+  | { kind: 'milestone'; id: string; sortAt: Date; tier: number; milestone: LatelyMilestone }
+  | { kind: 'utility'; id: string; sortAt: Date; tier: number; utility: LatelyUtilityProps };
 
 type Props = {
   items: LatelyFeedItem[];
@@ -55,9 +56,10 @@ export function LatelyFeed({ items, tz }: Props) {
     );
   }
 
-  const sorted = [...items].sort(
-    (a, b) => b.sortAt.getTime() - a.sortAt.getTime(),
-  );
+  // Prominence tiers before recency (D-4 §C): bucketByDay preserves input order
+  // within each day, so this keeps they_got_you / niche-match above a milestone
+  // flood inside every bucket.
+  const sorted = sortByProminence(items);
   const buckets = bucketByDay(sorted, (i) => i.sortAt, tz);
   const visibleItems = buckets.flatMap((b) => b.items);
 
