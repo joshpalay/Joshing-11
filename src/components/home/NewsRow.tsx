@@ -5,12 +5,28 @@ import type { ActivityItemView } from '@/server/db/queries/activity'
 type NewsRowCopy = {
   headline: React.ReactNode
   secondLine: string | null
-  accentColor: string
-  href: string | null
 }
 
 function actorName(item: ActivityItemView): string {
   return item.actor?.displayName ?? 'Someone'
+}
+
+// The actor's name is the only link in a news row — it points at their
+// profile. When we don't have a user id (e.g. "You shared…" rows) it stays
+// plain bold text.
+function ActorName({ item }: { item: ActivityItemView }) {
+  const name = actorName(item)
+  if (!item.actorUserId) {
+    return <b>{name}</b>
+  }
+  return (
+    <Link
+      href={`/users/${item.actorUserId}`}
+      className="font-bold text-[var(--brand-link)] transition hover:opacity-70"
+    >
+      {name}
+    </Link>
+  )
 }
 
 function relativeTime(value: Date): string {
@@ -29,38 +45,67 @@ function relativeTime(value: Date): string {
 }
 
 // Compact second-line copy for Home — full subcopy lives on /activities.
-function buildCopy(item: ActivityItemView): NewsRowCopy {
-  const actor = actorName(item)
-
+// `actor` is the rendered actor name node (a profile link when we have a user
+// id); it's the only interactive element in the row.
+function buildCopy(item: ActivityItemView, actor: React.ReactNode): NewsRowCopy {
   switch (item.type) {
     case 'friend_answered_your_question': {
       const faq = item.reference.friendAnsweredQuestion
       const correct = faq?.result === 'correct'
+      const verb = correct ? 'got' : 'answered'
+      const domain = faq?.domain?.trim() || null
       return {
         headline: (
           <>
-            <b>{actor}</b> {correct ? 'got your question' : 'answered your question'}
+            {actor} {verb} your question
           </>
         ),
-        secondLine: faq?.questionText ?? faq?.domain ?? null,
-        accentColor: correct ? '#d97706' : '#a8a29e',
-        href: '/activities',
+        secondLine: domain,
+      }
+    }
+
+    // D-2 niche-match discovery. These are excluded from Home's top-3
+    // (not in HOME_TOP3_ELIGIBLE_TYPES), so in practice NewsRow won't be
+    // asked to render them — but the branch keeps the switch honest and
+    // mirrors the friend_answered template. The actor (the opted-in stranger)
+    // links to their profile via <ActorName>, which is the connect path.
+    case 'niche_match_answered_your_question': {
+      const nm = item.reference.nicheMatch
+      const domain = nm?.domain?.trim() || null
+      return {
+        headline: (
+          <>
+            {actor} answered your question
+          </>
+        ),
+        secondLine: domain,
+      }
+    }
+
+    case 'niche_match_you_answered': {
+      const nm = item.reference.nicheMatch
+      const domain = nm?.domain?.trim() || null
+      return {
+        headline: (
+          <>
+            You answered {actor}&apos;s question
+          </>
+        ),
+        secondLine: domain,
       }
     }
 
     case 'declared_promoted': {
       const dp = item.reference.declaredPromoted
+      const domain = dp?.domain?.trim() || null
       return {
         headline: (
           <>
-            <b>{actor}</b> proved a domain on your map
+            {actor}{' '}
+            {domain ? 'opened a new domain in' : 'opened up a new domain on your map'}
           </>
         ),
-        secondLine: dp?.questionText || dp?.domain || null,
-        accentColor: '#16a34a',
-        href: dp?.domain
-          ? `/knowledge/${encodeURIComponent(dp.domain)}`
-          : '/knowledge',
+        secondLine: domain,
       }
     }
 
@@ -70,12 +115,10 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
       return {
         headline: (
           <>
-            <b>{actor}</b> reached {tier}
+            {actor} reached {tier}
           </>
         ),
         secondLine: mastery?.domain ?? null,
-        accentColor: '#ca8a04',
-        href: '/activities',
       }
     }
 
@@ -87,40 +130,22 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
       return {
         headline: (
           <>
-            <b>{actor}</b> reacted to your question
+            {actor} reacted to your question
           </>
         ),
         secondLine: label,
-        accentColor: '#ea580c',
-        href: '/activities',
       }
     }
 
-    case 'creator_note_received':
+    case 'question_curated':
       return {
         headline: (
           <>
-            <b>{actor}</b> sent a note about a question you missed
+            {actor} saved your question
           </>
         ),
         secondLine: null,
-        accentColor: '#2563eb',
-        href: '/activities',
       }
-
-    case 'question_curated': {
-      const curated = item.reference.curatedQuestion
-      return {
-        headline: (
-          <>
-            <b>{actor}</b> saved your question
-          </>
-        ),
-        secondLine: curated?.questionText ?? null,
-        accentColor: '#7c3aed',
-        href: '/activities',
-      }
-    }
 
     case 'authored_question_shared': {
       const shared = item.reference.authoredSharedQuestion
@@ -133,8 +158,6 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
           </>
         ),
         secondLine: shared?.domain ?? null,
-        accentColor: '#78716c',
-        href: '/activities',
       }
     }
 
@@ -142,49 +165,29 @@ function buildCopy(item: ActivityItemView): NewsRowCopy {
       return {
         headline: <>Something happened on Joshing</>,
         secondLine: null,
-        accentColor: '#78716c',
-        href: '/activities',
       }
   }
 }
 
 export function NewsRow({ item }: { item: ActivityItemView }) {
-  const copy = buildCopy(item)
+  const copy = buildCopy(item, <ActorName item={item} />)
   const timestamp = relativeTime(item.createdAt)
 
-  const inner = (
-    <div className="flex items-start justify-between gap-3 py-2.5 pl-3 pr-1">
+  return (
+    <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
-        <p className="text-foreground text-sm leading-snug">{copy.headline}</p>
+        <p className="text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)] [&_b]:font-bold [&_b]:text-[var(--brand-link)]">
+          {copy.headline}
+        </p>
         {copy.secondLine ? (
-          <p
-            className="text-muted-foreground mt-0.5 truncate text-[13px] italic"
-            style={{ fontFamily: 'var(--font-display), Georgia, serif' }}
-          >
+          <p className="mt-0.5 line-clamp-2 font-serif text-[14px] leading-[22px] tracking-[0.08em] text-[var(--brand-ink)]">
             {copy.secondLine}
           </p>
         ) : null}
       </div>
-      <span className="text-muted-foreground shrink-0 font-mono text-[10px] uppercase tracking-[0.06em]">
+      <span className="shrink-0 text-[15px] leading-[23px] text-[var(--brand-ink-400)]">
         {timestamp}
       </span>
-    </div>
-  )
-
-  const className = 'block border-l-[3px] transition hover:bg-muted/30'
-  const style = { borderLeftColor: copy.accentColor }
-
-  if (copy.href) {
-    return (
-      <Link href={copy.href} className={className} style={style}>
-        {inner}
-      </Link>
-    )
-  }
-
-  return (
-    <div className={className} style={style}>
-      {inner}
     </div>
   )
 }

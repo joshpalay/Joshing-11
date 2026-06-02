@@ -44,15 +44,10 @@ export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotic
         @keyframes recentExpansionIn {
           to { opacity: 1; transform: translateY(0); }
         }
-        [data-expanding-row="true"] { grid-template-columns: 44px minmax(0, 1fr) minmax(112px, auto) minmax(86px, 112px); }
+        [data-expanding-row="true"] { grid-template-columns: 44px minmax(0, 1fr); }
         @media (hover: hover) {
           button[data-expanding-share="true"] { transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease; }
           button[data-expanding-share="true"]:hover { border-color: #c9bea9; background: #f8f3eb; transform: translateY(-1px); }
-        }
-        @media (max-width: 560px) {
-          [data-expanding-row="true"] { grid-template-columns: 44px minmax(0, 1fr); }
-          [data-expanding-growth="true"] { grid-column: 2; justify-self: start; text-align: left; }
-          [data-expanding-proof="true"] { grid-column: 2; border-left: 0; padding-left: 0; justify-self: start; text-align: left; }
         }
       `}</style>
       <p style={wordmarkStyle}>Joshing</p>
@@ -99,7 +94,7 @@ type RowProps = {
 
 function ExpandingDomainRow({ domain, index }: RowProps) {
   const accent = ROW_ACCENTS[index % ROW_ACCENTS.length];
-  const rowContent = getRowContent(domain, index);
+  const activity = getRowActivity(domain);
   const initial = getDomainInitial(domain.domain);
 
   return (
@@ -112,14 +107,8 @@ function ExpandingDomainRow({ domain, index }: RowProps) {
       </div>
       <div style={rowTextStyle}>
         <h3 style={domainNameStyle}>{domain.domain}</h3>
-        <p style={supportingStyle}>{rowContent.activity}</p>
+        {activity ? <p style={supportingStyle}>{activity}</p> : null}
       </div>
-      <p style={{ ...growthStyle, color: accent.text }} data-expanding-growth="true">
-        <span>{rowContent.from}</span>
-        <span style={arrowStyle}>→</span>
-        <span>{rowContent.to}</span>
-      </p>
-      <p style={proofStyle} data-expanding-proof="true">{rowContent.proof}</p>
     </div>
   );
 }
@@ -132,47 +121,30 @@ function getDomainInitial(domain: string): string {
   return (firstMeaningfulWord?.[0] ?? domain[0] ?? '?').toUpperCase();
 }
 
-function getRowContent(domain: ExpandingDomain, index: number): {
-  activity: string;
-  from: string;
-  to: string;
-  proof: string;
-} {
+/**
+ * Returns the row's supporting line. Prefers the real `supportingText` plumbed
+ * in by the caller; otherwise falls back to a qualitative label derived from the
+ * real `reason` enum. Deliberately carries NO invented numbers or tier
+ * transitions — earlier versions fabricated "+2 levels this week" / "Biggest
+ * jump this week" keyed off the array index, which is not real user data.
+ */
+function getRowActivity(domain: ExpandingDomain): string {
   if (domain.supportingText && !/territory moved recently/i.test(domain.supportingText)) {
-    return {
-      ...growthFor(domain.reason, index),
-      activity: domain.supportingText,
-    };
+    return domain.supportingText;
   }
 
   switch (domain.reason) {
     case 'new-discovery':
-      return { activity: '+1 new territory this week', from: 'Establishing', to: 'Familiar', proof: '1 discovery this week' };
+      return 'New territory';
     case 'social-overlap':
-      return { activity: 'People answered yours', from: 'Establishing', to: 'Familiar', proof: '2 people answered yours' };
+      return 'People answered yours';
     case 'saved-questions':
-      return { activity: 'New questions explored', from: 'Establishing', to: 'Familiar', proof: '2 saved questions' };
+      return 'New questions explored';
     case 'mastery-shift':
-      return { activity: '+2 levels this week', from: 'Familiar', to: 'Solid', proof: index === 2 ? 'Biggest jump this week' : '3 discoveries this week' };
+      return 'Leveling up';
     case 'active-play':
     default:
-      return { activity: 'Revisited and growing', from: 'Familiar', to: 'Solid', proof: 'Fastest growth' };
-  }
-}
-
-function growthFor(reason: ExpandingDomain['reason'], index: number): { from: string; to: string; proof: string } {
-  switch (reason) {
-    case 'new-discovery':
-      return { from: 'Establishing', to: 'Familiar', proof: '1 discovery this week' };
-    case 'social-overlap':
-      return { from: 'Establishing', to: 'Familiar', proof: '2 people answered yours' };
-    case 'saved-questions':
-      return { from: 'Establishing', to: 'Familiar', proof: '2 saved questions' };
-    case 'mastery-shift':
-      return { from: 'Familiar', to: 'Solid', proof: index === 2 ? 'Biggest jump this week' : '3 discoveries this week' };
-    case 'active-play':
-    default:
-      return { from: 'Familiar', to: 'Solid', proof: 'Fastest growth' };
+      return 'Revisited and growing';
   }
 }
 
@@ -225,10 +197,10 @@ async function copyShareText(text: string) {
 }
 
 const boxStyle: CSSProperties = {
-  background: '#fffdf8',
-  border: '1px solid #eee7dc',
-  borderRadius: 14,
-  boxShadow: '0 1px 8px rgba(26, 18, 8, 0.04)',
+  background: 'var(--brand-cream-card)',
+  border: '1px solid var(--brand-border)',
+  borderRadius: 12,
+  boxShadow: '0 4px 12px rgba(40, 32, 30, 0.04)',
   padding: '1.05rem 0.95rem 0.65rem',
   display: 'grid',
   gap: '0.75rem',
@@ -243,19 +215,22 @@ const headerStyle: CSSProperties = {
 
 const wordmarkStyle: CSSProperties = {
   margin: 0,
-  fontFamily: 'var(--font-literata), serif',
-  fontStyle: 'italic',
-  fontSize: '0.78rem',
-  color: '#1a1208',
+  fontFamily: 'var(--font-sans-body), system-ui, sans-serif',
+  fontWeight: 700,
+  fontSize: '0.92rem',
+  color: 'var(--brand-ink)',
+  letterSpacing: '0.01em',
   lineHeight: 1,
 };
 
 const titleStyle: CSSProperties = {
   margin: 0,
-  color: '#1a1208',
-  fontFamily: 'var(--font-literata), Georgia, serif',
-  fontSize: '1rem',
+  color: 'var(--brand-ink)',
+  fontFamily: 'var(--font-sans-body), system-ui, sans-serif',
+  fontSize: '0.8rem',
   fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
 };
 
 const shareButtonStyle: CSSProperties = {
@@ -312,7 +287,7 @@ const domainNameStyle: CSSProperties = {
   margin: 0,
   color: '#1a1208',
   fontFamily: 'var(--font-literata), Georgia, serif',
-  fontSize: '0.8rem',
+  fontSize: '0.92rem',
   fontWeight: 700,
   lineHeight: 1.18,
   overflowWrap: 'anywhere',
@@ -323,32 +298,6 @@ const supportingStyle: CSSProperties = {
   color: '#696257',
   fontSize: '0.68rem',
   lineHeight: 1.25,
-};
-
-const growthStyle: CSSProperties = {
-  margin: 0,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '0.2rem',
-  fontSize: '0.66rem',
-  fontWeight: 700,
-  whiteSpace: 'nowrap',
-};
-
-const arrowStyle: CSSProperties = {
-  color: '#8a8070',
-  fontWeight: 500,
-};
-
-const proofStyle: CSSProperties = {
-  margin: 0,
-  minHeight: 34,
-  borderLeft: '1px solid #f0e8dc',
-  paddingLeft: '0.75rem',
-  color: '#403a33',
-  fontSize: '0.66rem',
-  lineHeight: 1.35,
 };
 
 const emptyWrapStyle: CSSProperties = {

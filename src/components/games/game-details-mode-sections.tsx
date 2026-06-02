@@ -38,7 +38,7 @@ export function CompletedRecapHeader({
           fontFamily: 'var(--font-neutral), system-ui, sans-serif',
           fontSize: '1.2rem',
           fontWeight: 600,
-          color: '#111111',
+          color: 'var(--warm-ink)',
           textTransform: 'uppercase',
           letterSpacing: '0.04em',
         }}

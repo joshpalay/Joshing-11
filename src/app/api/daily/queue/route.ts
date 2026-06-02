@@ -4,10 +4,16 @@ import { getSession } from '@/server/auth/session';
 import { getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
-import { type QueueSlot } from '@/server/daily/types';
+import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export const dynamic = 'force-dynamic';
+// The POST path can fall through to synchronous LLM generation when the cron
+// hasn't pre-built today's queue. A single Sonnet batch is capped at
+// GENERATION_TIMEOUT_MS (35s) and a bounded top-up can follow, so the default
+// function budget is too small — give it headroom so the work completes
+// instead of being platform-killed mid-generation. See queue-orchestrator.ts.
+export const maxDuration = 90;
 
 function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
@@ -15,16 +21,49 @@ function asQueueSlots(value: unknown): QueueSlot[] {
 
 // Drop slots whose domain is a bucket-level label. Older queues built before
 // the upstream guard could contain "general"/"general knowledge" slots; we
-// suppress them here so the user never sees a general question.
-function filterNonGenericSlots(slots: QueueSlot[]): QueueSlot[] {
-  return slots.filter((slot) => !isGenericSubcategory(slot.domain));
+// suppress them here so the user never sees a general question. The orchestrator
+// now counts generic picks as a shortfall and backfills them at build time, so
+// for a freshly built queue this should drop nothing — if it does, the warning
+// below makes it visible instead of silently shrinking the user's Daily Five.
+function partitionGenericSlots(slots: QueueSlot[]): { kept: QueueSlot[]; dropped: QueueSlot[] } {
+  const kept: QueueSlot[] = [];
+  const dropped: QueueSlot[] = [];
+  for (const slot of slots) {
+    (isGenericSubcategory(slot.domain) ? dropped : kept).push(slot);
+  }
+  return { kept, dropped };
 }
 
-function serializeQueue(queue: NonNullable<Awaited<ReturnType<typeof getTodaysDailyQueue>>>, difficultyMode: string) {
+function serializeQueue(
+  queue: NonNullable<Awaited<ReturnType<typeof getTodaysDailyQueue>>>,
+  difficultyMode: string,
+  userId: string,
+) {
+  const raw = asQueueSlots(queue.slots);
+  const { kept, dropped } = partitionGenericSlots(raw);
+
+  // A served queue shorter than DAILY_QUEUE_SIZE is the exact symptom a user
+  // reports as "only 3 of my 5 showed up." Trace it at the moment of serving,
+  // and separate the two causes so the logs say which one happened:
+  //   - dropped.length > 0  → generic slots filtered here on read
+  //   - raw.length < SIZE    → orchestrator persisted a short queue (low yield;
+  //     it logs its own '[daily/queue-orchestrator] persisted short queue')
+  if (kept.length < DAILY_QUEUE_SIZE) {
+    console.warn('[daily/queue] served short queue', {
+      userId,
+      queueDate: queue.queueDate,
+      served: kept.length,
+      expected: DAILY_QUEUE_SIZE,
+      persistedSlots: raw.length,
+      droppedGeneric: dropped.length,
+      droppedGenericDomains: dropped.map((slot) => slot.domain),
+    });
+  }
+
   return {
     queue_id: queue.id,
     queue_date: queue.queueDate,
-    slots: filterNonGenericSlots(asQueueSlots(queue.slots)),
+    slots: kept,
     difficulty_mode: difficultyMode,
   };
 }
@@ -47,7 +86,7 @@ export async function GET() {
     return NextResponse.json({ queue: null, slots: [] });
   }
 
-  return NextResponse.json(serializeQueue(queue, prefs.difficulty));
+  return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId));
 }
 
 export async function POST() {
@@ -75,5 +114,5 @@ export async function POST() {
     return NextResponse.json({ error: 'queue_not_created' }, { status: 500 });
   }
 
-  return NextResponse.json(serializeQueue(queue, prefs.difficulty));
+  return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId));
 }

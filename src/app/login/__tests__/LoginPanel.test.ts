@@ -33,6 +33,7 @@ describe('LoginPanel invitation token query aliases', () => {
         phone: '+17345551234',
         code: '000000',
         invitationToken: token,
+        userInvite: null,
       })
     }
   )
@@ -44,6 +45,7 @@ describe('LoginPanel invitation token query aliases', () => {
       phone: '+17345551234',
       code: '000000',
       invitationToken: null,
+      userInvite: null,
     })
   })
 })

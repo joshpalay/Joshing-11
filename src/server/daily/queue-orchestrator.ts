@@ -1,14 +1,21 @@
 import {
+  carryForwardUntouchedDailyQueue,
+  clearStaleShortTodayQueue,
   createDailyQueueItem,
+  createDailyQueueItemFromAnswerer,
   createDailyQueueItemFromAuthored,
+  createDailyQueueItemFromHouse,
   getKnowledgeBase,
   getTodaysDailyQueue,
+  pickBonusAnswererSlots,
   pickEligibleAuthoredQuestions,
+  pickHouseQuestions,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
-import { getFriendAndFoFUserIds } from '@/server/db/queries/friends';
+import { getFollowing, getFriendAndFoFUserIds } from '@/server/db/queries/friends';
 import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { DAILY_BONUS_SLOT_MAX, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
 
@@ -23,9 +30,49 @@ function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
+// Only start a recovery top-up generation while this much of the function
+// budget is still unspent. A second generation call can take up to
+// GENERATION_TIMEOUT_MS (35s); gating it on elapsed time keeps the retry from
+// pushing the request past the route's maxDuration.
+const TOP_UP_TIME_BUDGET_MS = 30_000;
+
+// The generator's quality/factual/history-dedup gates routinely drop ~half (and
+// for some niche or deep-history domains far more) of each batch. Requesting
+// exactly the gap therefore lands short. Ask for a multiple so enough survive
+// the gates; excess survivors are trimmed to DAILY_QUEUE_SIZE downstream.
+//
+// Over-requesting is only safe because generateDailyQuestionsFromKnowledgeBase
+// now splits the request into GENERATION_CHUNK_SIZE-capped PARALLEL Sonnet calls
+// — each reply stays well under the generator's 2000-token cap, so a large count
+// no longer truncates the JSON to zero (the 2026-05-30 over-provision regression)
+// and total latency stays at one chunk. The graceful-degrade below still backstops
+// any residual shortfall.
+const GENERATION_OVERPROVISION = 2;
+const overRequest = (needed: number) =>
+  Math.min(needed * GENERATION_OVERPROVISION, DAILY_QUEUE_SIZE * 2);
+
 export async function fillDailyQueueForUser(userId: string): Promise<void> {
+  const startedAt = Date.now();
   const existing = await getTodaysDailyQueue(userId);
-  if (existing && asQueueSlots(existing.slots).length > 0) return;
+  if (existing && asQueueSlots(existing.slots).length > 0) {
+    // A populated today-queue normally stands. The exception is a SHORT,
+    // UNTOUCHED queue that carryForwardUntouchedDailyQueue rolled over from a
+    // prior day: that freezes a one-off low-yield day (e.g. the 2026-05-29
+    // over-provision truncation that built a 3-of-5 queue) and re-dates it
+    // forward unchanged every day until the user plays it. clearStaleShort-
+    // TodayQueue drops only that case (a short queue actually built today is
+    // left alone so we don't re-bill the LLM on every load) and lets us fall
+    // through to regenerate a fresh, full set.
+    if (!(await clearStaleShortTodayQueue(userId))) return;
+  }
+
+  // Before billing the LLM for a new set, roll a previous *unplayed* queue
+  // forward to today. The cron builds a queue for every onboarded user daily
+  // with no activity filter, so an absent user would otherwise accrue a fresh
+  // generation every day for questions they never opened. Their last queue is
+  // still sitting unplayed; re-dating it gives them the same five at zero cost.
+  // A played prior queue is left alone, so engaged users still get a fresh set.
+  if (await carryForwardUntouchedDailyQueue(userId)) return;
 
   const [knowledgeBase, preferences] = await Promise.all([
     getKnowledgeBase(userId),
@@ -49,28 +96,202 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   // QueueSlot schema already supports both bot and friend sources
   // (src/server/daily/types.ts), so this is a picker change — no slot-shape
   // migration required.
-  const socialGraph = await getFriendAndFoFUserIds(userId);
-  const authored = await pickEligibleAuthoredQuestions(userId, socialGraph, DAILY_QUEUE_SIZE);
+  //
+  // Constrain authored picks to the viewer's effective knowledge base — in
+  // custom mode that's the explicit selectedDomains list, in random mode
+  // it's the full knowledge base (which getKnowledgeBase already filters
+  // against userDomainExclusions). Without this, the authored picker
+  // surfaced any vetted public question regardless of the viewer's declared
+  // or demonstrated interests.
+  const allowedSubcategories: ReadonlySet<string> = new Set(
+    preferences.domainMode === 'custom'
+      ? preferences.selectedDomains
+      : knowledgeBase.map((domain) => domain.domain),
+  );
 
-  const remaining = DAILY_QUEUE_SIZE - authored.length;
+  const socialGraph = await getFriendAndFoFUserIds(userId);
+  const authored = await pickEligibleAuthoredQuestions(
+    userId,
+    socialGraph,
+    DAILY_QUEUE_SIZE,
+    allowedSubcategories,
+  );
+
+  // D-3: seed curated house/editorial questions into the core for the niches
+  // friend content didn't cover, before falling back to LLM generation. Matched
+  // by domain (the viewer's knowledge base), never the +2 friend-answer ranking.
+  // House content does not enter the Feed and never occupies a +2 bonus slot.
+  const housePicks = await pickHouseQuestions(
+    userId,
+    DAILY_QUEUE_SIZE - authored.length,
+    allowedSubcategories,
+  );
+
+  const remaining = DAILY_QUEUE_SIZE - authored.length - housePicks.length;
   const generated = remaining > 0
-    ? await generateDailyQuestionsFromKnowledgeBase(userId, remaining)
+    ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining))
     : [];
 
-  if (authored.length === 0 && generated.length === 0) {
+  // Cross-source dedup by normalized question text. The authored picker
+  // dedupes by question_id against past queues, and the generator has its
+  // own batch/history dedup — but neither knows about the other, so the
+  // same prompt can land in two slots of the same queue (e.g. an authored
+  // "Apples are in what plant family?" alongside an LLM-generated one).
+  const seenTexts = new Set<string>();
+  const normalize = (text: string) => text.trim().toLowerCase();
+  for (const pick of authored) {
+    seenTexts.add(normalize(pick.questionText));
+  }
+  for (const pick of housePicks) {
+    seenTexts.add(normalize(pick.questionText));
+  }
+  const dedupedGenerated: typeof generated = [];
+  let droppedDuplicates = 0;
+  let droppedGeneric = 0;
+  for (const question of generated) {
+    // Drop bucket-level domains ("general"/"trivia"/short labels) BEFORE the
+    // shortfall count below, so a generic pick is treated as a missing slot the
+    // top-up can backfill — rather than persisting it and letting the read path
+    // (api/daily/queue) silently filter it out, leaving the user one short.
+    if (isGenericSubcategory(question.canonicalSubcategory)) {
+      droppedGeneric += 1;
+      continue;
+    }
+    const key = normalize(question.questionText);
+    if (seenTexts.has(key)) {
+      droppedDuplicates += 1;
+      continue;
+    }
+    seenTexts.add(key);
+    dedupedGenerated.push(question);
+  }
+  if (droppedDuplicates > 0) {
+    console.warn('[daily/queue-orchestrator] dropped duplicate generated questions', {
+      userId,
+      droppedDuplicates,
+      authoredCount: authored.length,
+      generatedCount: generated.length,
+    });
+  }
+
+  // If the first pass came up short — the LLM returned fewer usable questions
+  // than requested, or the quality/dedup gates dropped some — attempt a single
+  // bounded top-up for just the missing slots before failing. A transient slow
+  // or partial Anthropic response (e.g. prod request 9lssf-…, where one Sonnet
+  // call ran ~34s and the queue fell one slot short) otherwise 503s the entire
+  // Daily Five even though most slots generated fine. The top-up is gated on
+  // remaining time budget so the recovery can't push the request past the
+  // route's maxDuration.
+  const topUpGenerated: typeof dedupedGenerated = [];
+  const shortfall = DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length);
+  if (shortfall > 0 && Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS) {
+    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(shortfall));
+    for (const question of extra) {
+      if (isGenericSubcategory(question.canonicalSubcategory)) {
+        droppedGeneric += 1;
+        continue;
+      }
+      const key = normalize(question.questionText);
+      if (seenTexts.has(key)) continue;
+      seenTexts.add(key);
+      topUpGenerated.push(question);
+    }
+    if (topUpGenerated.length > 0) {
+      console.info('[daily/queue-orchestrator] topped up short queue', {
+        userId,
+        shortfall,
+        recovered: topUpGenerated.length,
+      });
+    }
+  }
+
+  const generatedForQueue = [...dedupedGenerated, ...topUpGenerated];
+  const achieved = authored.length + housePicks.length + generatedForQueue.length;
+
+  // Graceful degrade: persist whatever we have instead of failing on a short
+  // queue. Some niche domains have very low generation yield — the
+  // quality/factual/dedup gates correctly reject most of each batch — so even
+  // over-provisioned generation can land short. A shorter Daily Five (the good
+  // questions we did get) beats a 503; the daily cron retries for a full set on
+  // later days. The play flow and home completion are slot-driven (isRound
+  // complete + progress read the ACTUAL slot count), so an N<5 queue renders
+  // and completes correctly — no more "round ends early with blank dots".
+  //
+  // Only fail when there's nothing usable at all, so /api/daily/queue still
+  // surfaces a retryable 503 + the fill-error UI in the genuine zero case.
+  if (achieved === 0) {
+    console.warn('[daily/queue-orchestrator] generation_failed (no usable questions)', {
+      userId,
+      knowledgeBaseDomains: knowledgeBase.length,
+      generatedRaw: generated.length,
+      droppedDuplicates,
+      droppedGeneric,
+      domainMode: preferences.domainMode,
+      selectedDomains: preferences.selectedDomains.length,
+      elapsedMs: Date.now() - startedAt,
+    });
     throw new DailyQueueFillError(
       'generation_failed',
       "Today's Daily Five is taking longer than usual.",
     );
   }
+  if (achieved < DAILY_QUEUE_SIZE) {
+    // Persisted a short queue. Log the cause so it's still visible/actionable:
+    // thin KB (knowledgeBaseDomains) vs low LLM yield (generatedRaw) vs
+    // aggressive dedup (droppedDuplicates) vs skipped top-up (elapsedMs).
+    console.warn('[daily/queue-orchestrator] persisted short queue', {
+      userId,
+      achieved,
+      needed: DAILY_QUEUE_SIZE,
+      authoredCount: authored.length,
+      generatedRaw: generated.length,
+      dedupedGenerated: dedupedGenerated.length,
+      topUpRecovered: topUpGenerated.length,
+      droppedDuplicates,
+      droppedGeneric,
+      knowledgeBaseDomains: knowledgeBase.length,
+      domainMode: preferences.domainMode,
+      selectedDomains: preferences.selectedDomains.length,
+      elapsedMs: Date.now() - startedAt,
+    });
+  }
 
   let position = 0;
+  const coreQuestionIds = new Set<string>();
   for (const pick of authored) {
     await createDailyQueueItemFromAuthored(userId, pick, position);
+    coreQuestionIds.add(pick.id);
     position += 1;
   }
-  for (const question of generated.slice(0, DAILY_QUEUE_SIZE - position)) {
+  for (const pick of housePicks.slice(0, DAILY_QUEUE_SIZE - position)) {
+    await createDailyQueueItemFromHouse(userId, pick, position);
+    coreQuestionIds.add(pick.id);
+    position += 1;
+  }
+  for (const question of generatedForQueue.slice(0, DAILY_QUEUE_SIZE - position)) {
     await createDailyQueueItem(userId, question.id, position);
+    position += 1;
+  }
+
+  // Daily Five +2 (D-1 §D). Append up to DAILY_BONUS_SLOT_MAX bonus slots built
+  // from questions that people the viewer follows answered correctly. This is
+  // purely additive: it is NOT counted toward DAILY_QUEUE_SIZE / the achieved
+  // backstop above, never triggers the N<5 generation top-up, and never
+  // backfills a friend slot with LLM/authored content. If 0 qualify we append
+  // nothing (graceful shrink), yielding a 5–7 slot queue. coreQuestionIds keeps
+  // a friend-answered question that already landed as an authored core slot from
+  // also surfacing as a bonus slot.
+  const following = await getFollowing(userId);
+  const followingIds = new Set(following.map((user) => user.id));
+  const bonus = await pickBonusAnswererSlots(
+    userId,
+    followingIds,
+    knowledgeBase,
+    DAILY_BONUS_SLOT_MAX,
+    coreQuestionIds,
+  );
+  for (const pick of bonus) {
+    await createDailyQueueItemFromAnswerer(userId, pick, position);
     position += 1;
   }
 }

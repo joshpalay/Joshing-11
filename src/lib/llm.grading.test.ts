@@ -42,7 +42,7 @@ describe('gradeAnswerWithLLM', () => {
 
     expect(createMessageMock).toHaveBeenCalledOnce()
     const callArgs = createMessageMock.mock.calls[0]![0] as {
-      system: Array<{ text: string }>
+      system: string | Array<{ text: string }>
       messages: Array<{ content: string }>
     }
     expect(callArgs.messages[0]!.content).toContain('A Ressikan flute (a small flute)')
@@ -76,9 +76,8 @@ describe('gradeAnswerWithLLM', () => {
     const gradeAnswerWithLLM = await importGrader()
     await gradeAnswerWithLLM('q', 'A Ressikan flute (a small flute)', 'penny whistle', 'factual')
 
-    const systemPrompt = (createMessageMock.mock.calls[0]![0] as { system: Array<{ text: string }> })
-      .system[0]!
-      .text
+    const systemArg = (createMessageMock.mock.calls[0]![0] as { system: string | Array<{ text: string }> }).system
+    const systemPrompt = typeof systemArg === 'string' ? systemArg : systemArg[0]!.text
     expect(systemPrompt).toMatch(/parenthetical generic descriptor/i)
     expect(systemPrompt).toMatch(/thing|thingy|thingamajig/i)
   })

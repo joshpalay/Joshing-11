@@ -7,11 +7,12 @@ const {
   persistGeneratedQuestionMock,
   promoteDeclaredToDemonstratedMock,
   readPriorAnswersForQuestionMock,
-  selectQuipMock,
   suggestAnswerMock,
   updateDomainDifficultyOnAnswerMock,
   writeMasteryEventMock,
   dbState,
+  selectCallChain,
+  dbMock,
 } = vi.hoisted(() => {
   const QUEUE = {
     id: 'queue-1',
@@ -50,6 +51,31 @@ const {
     },
   }
 
+  // Drizzle chain mock: db.select().from().where().limit() — returns canned rows
+  // based on which "table" was selected. We dispatch on the order of select()
+  // calls within a single request: queue → question → persistedQuestion. Defined
+  // inside vi.hoisted() so it's initialized before the hoisted vi.mock factory
+  // below references it (otherwise: "Cannot access 'dbMock' before initialization").
+  const selectCallChain: Array<() => Promise<unknown[]>> = []
+
+  const dbMock = {
+    select: vi.fn(() => {
+      const handler = selectCallChain.shift() ?? (async () => [])
+      return {
+        from: () => ({
+          where: () => ({
+            limit: handler,
+          }),
+        }),
+      }
+    }),
+    update: vi.fn(() => ({
+      set: () => ({
+        where: vi.fn(async () => undefined),
+      }),
+    })),
+  }
+
   return {
     createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
     getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
@@ -60,7 +86,6 @@ const {
     })),
     promoteDeclaredToDemonstratedMock: vi.fn(),
     readPriorAnswersForQuestionMock: vi.fn(async () => []),
-    selectQuipMock: vi.fn(() => 'quip'),
     suggestAnswerMock: vi.fn(),
     updateDomainDifficultyOnAnswerMock: vi.fn(async () => undefined),
     writeMasteryEventMock: vi.fn(async () => ({
@@ -72,35 +97,13 @@ const {
       openedNewTerritory: false,
     })),
     dbState,
+    selectCallChain,
+    dbMock,
   }
 })
 
-// Drizzle chain mock: db.select().from().where().limit() — returns canned rows
-// based on which "table" was selected. We dispatch on the order of select()
-// calls within a single request: queue → question → persistedQuestion.
-const selectCallChain: Array<() => Promise<unknown[]>> = []
-
-const dbMock = {
-  select: vi.fn(() => {
-    const handler = selectCallChain.shift() ?? (async () => [])
-    return {
-      from: () => ({
-        where: () => ({
-          limit: handler,
-        }),
-      }),
-    }
-  }),
-  update: vi.fn(() => ({
-    set: () => ({
-      where: vi.fn(async () => undefined),
-    }),
-  })),
-}
-
 vi.mock('@/server/grading', () => ({
   gradeAnswer: gradeAnswerMock,
-  selectQuip: selectQuipMock,
 }))
 
 vi.mock('@/server/adaptive-difficulty', () => ({
@@ -121,6 +124,7 @@ vi.mock('@/server/db', () => ({
     canonicalSubcategory: 'q.cs',
     broadCategory: 'q.bc',
     category: 'q.c',
+    insideJoke: 'q.ij',
   },
 }))
 
@@ -156,7 +160,12 @@ vi.mock('@/server/answer-history', () => ({
 import { POST } from '@/app/api/daily/answer/route'
 
 function setupDbChain() {
-  // Reset and re-seed for one full POST: queue, question, persistedQuestion.
+  // Reset and re-seed the select() responses in the order the route issues them
+  // for a bot slot: dailyQueues (queue) → generatedQuestions (question) →
+  // questions (persisted creator info, post-persist). The old PRD §8.4.3
+  // "bot questions can only deepen existing domains" gate (a fourth
+  // playerMastery select) has been removed (B-1) — a correct bot answer now
+  // default-adds the domain via writeMasteryEvent, like the authored path.
   selectCallChain.length = 0
   selectCallChain.push(async () => [dbState.queue])
   selectCallChain.push(async () => [dbState.question])
@@ -275,6 +284,36 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
     )
   })
 
+  it('B-1: correct bot answer in an unfamiliar domain default-adds it (no §8.4.3 gate)', async () => {
+    // No playerMastery row is seeded for this domain — under the old gate the
+    // route would zero points and skip the mastery write. Now it must score
+    // the answer fully and surface the freshly-opened territory.
+    setupDbChain()
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+    writeMasteryEventMock.mockResolvedValueOnce({
+      domain: 'history',
+      points: 100,
+      previousTier: 'establishing',
+      newTier: 'establishing',
+      tierChanged: false,
+      openedNewTerritory: true,
+    })
+
+    const res = await POST(jsonRequest(VALID_BODY) as never)
+    expect(res.status).toBe(200)
+
+    // Full points written, not zeroed for an "unknown domain".
+    expect(writeMasteryEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ answerState: 'first_correct', pointsAwarded: 100 }),
+    )
+
+    // The response carries the opened-territory signal the reveal undo reads.
+    const body = await res.json()
+    expect(body.pointsAwarded).toBe(100)
+    expect(body.masteryDelta.openedNewTerritory).toBe(true)
+    expect(body.masteryDelta.domain).toBe('history')
+  })
+
   it('persists generated question BEFORE writing mastery event', async () => {
     setupDbChain()
     gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
@@ -303,7 +342,10 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
   it('when persist fails, still records mastery event but with null eventQuestionId (graceful fallback)', async () => {
     setupDbChain()
     gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
-    persistGeneratedQuestionMock.mockRejectedValueOnce(new Error('persist boom'))
+    // The route retries persistence once (persistAttempt < 2), so reject ALL
+    // calls — not just the first — to exercise the full-failure fallback this
+    // test asserts (canonicalQuestionId stays null → eventQuestionId null).
+    persistGeneratedQuestionMock.mockRejectedValue(new Error('persist boom'))
 
     await POST(jsonRequest(VALID_BODY) as never)
 
@@ -317,5 +359,53 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
     )
     // No feed propagation without canonical id.
     expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/daily/answer grader outage (#6 — never score wrong on LLM failure)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    readPriorAnswersForQuestionMock.mockResolvedValue([])
+  })
+
+  it('holds the answer for retry (503) and persists nothing when the grader is unreachable', async () => {
+    setupDbChain()
+    // gradeAnswer signals an unreachable LLM grader via gradedVia: 'fallback'.
+    // Its result is a deterministic 'wrong' placeholder, NOT a real verdict —
+    // the route must refuse to score it rather than penalise an infra outage.
+    gradeAnswerMock.mockResolvedValueOnce({
+      result: 'wrong',
+      consolation: null,
+      confidence: 0,
+      gradedVia: 'fallback',
+    })
+
+    const res = await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.error).toBe('grader_unavailable')
+
+    // The slot must stay untouched (unanswered) so the player can resubmit, and
+    // no scoring side effects may fire.
+    expect(dbMock.update).not.toHaveBeenCalled()
+    expect(writeMasteryEventMock).not.toHaveBeenCalled()
+    expect(updateDomainDifficultyOnAnswerMock).not.toHaveBeenCalled()
+    expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
+  })
+
+  it('still scores give-ups as wrong (grader is skipped, so never held for retry)', async () => {
+    setupDbChain()
+    // gaveUp short-circuits gradeAnswer with gradedVia: 'exact', so this path
+    // must persist a real wrong answer — the outage hold must not swallow it.
+    const res = await POST(
+      jsonRequest({ ...VALID_BODY, gave_up: true, submitted_answer: '' }) as never,
+    )
+
+    expect(res.status).toBe(200)
+    expect(gradeAnswerMock).not.toHaveBeenCalled()
+    expect(writeMasteryEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ answerState: 'incorrect', pointsAwarded: 0 }),
+    )
   })
 })

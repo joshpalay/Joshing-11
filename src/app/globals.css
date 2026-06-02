@@ -7,6 +7,8 @@
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
+    --font-serif: var(--font-cormorant, Georgia, "Times New Roman", serif);
+    --font-inter: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,24 +51,74 @@
 
 :root {
     --font-sans: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+
+    /* ── Joshing brand foundation ───────────────────────────────────────────
+       Sourced from the Figma design system (JOSHING DESIGN SYSTEM): navy ink
+       on warm off-white, with an orange accent and the triangle palette. These
+       named tokens are the single source of truth; the shadcn semantic tokens
+       below are repointed at them so the brand applies app-wide. The triangle
+       values intentionally mirror the LoadingScreen PALETTE for consistency. */
+    --brand-ink:         #0a1f3d;  /* ink/900 — primary text / headings        */
+    --brand-ink-950:     #091729;  /* ink/950 — JOSHING wordmark (Figma fill)  */
+    --brand-ink-700:     #3a4a5f;  /* ink/700 — secondary text                 */
+    --brand-ink-400:     #8a8a8a;  /* ink/400 — muted / timestamps             */
+    --brand-navy:        #1f3a5a;  /* navy/500 — wordmark, primary buttons     */
+    --brand-link:        #4a5d75;  /* Link — inline links                      */
+    --brand-orange:      #d15e36;  /* triangle/orange — accent links           */
+    --brand-cream:       #f8e6c7;  /* triangle/cream                           */
+    --brand-cream-page:  #fcf8f2;  /* Color/Game/Background — app page surface  */
+    --brand-card:        #fdfcfb;  /* cream/50 — content card surface          */
+    --brand-cream-card:  #fbf5e9;  /* warm cream card (login screens only)     */
+    --brand-border:      #e9e2d2;  /* warm hairline border                     */
+    --brand-rule:        rgba(60, 50, 40, 0.14); /* border/rule — divider      */
+    --domain-language:   #7a9eaa;
+    --domain-science:    #8aa68a;
+    --tri-orange:        #d15e36;
+    --tri-cream:         #f8e6c7;
+    --tri-darkteal:      #6d837f;
+    --tri-lightteal:     #adb19e;
+    --tri-darkyellow:    #deae5c;
+    --tri-lighttan:      #edd2a3;
+    --tri-amber:         #d9a82e;
+    /* Gameplay surface — sourced from the Figma "Game" frame variables.
+       game/card/question fill, plus the forest-green/terracotta result accents
+       (Correct, text/wrong, Color/game/wrong/in-question). These intentionally
+       differ from the vivid --success/destructive used elsewhere. */
+    --game-card-question: #faf4e9;  /* game/card/question — question bubble fill */
+    --game-correct:       #366045;  /* Correct — forest green result accent      */
+    --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
+    --game-wrong:         #c96b4a;  /* text/wrong — terracotta result accent     */
+    --game-wrong-strong:  #c33d14;  /* game/wrong/in-question — strong terracotta */
+    /* ──────────────────────────────────────────────────────────────────────
+       Conventions:
+       • Cream tones — `--brand-cream-page` (#fcf8f2) is the app background;
+         `--brand-card` (#fdfcfb, near-white) is the default CONTENT card;
+         `--brand-cream-card` (#fbf5e9, warmer) is reserved for ENTRY/branded
+         surfaces (login, knowledge portrait, sparkle envelope).
+       • Card radius — content cards use `rounded-md`; the login cards use
+         `rounded-[8px]` (Figma) and the envelope uses `rounded-[1.5rem]`.
+       • Correct/wrong — use `--success` (#178245) and #b42318 (destructive ink)
+         with a 3px colored left border (see GameplayChat ResultRow + summary).
+       ──────────────────────────────────────────────────────────────────── */
+
+    --background: var(--brand-cream-page);
+    --foreground: var(--brand-ink);
+    --card: var(--brand-card);
+    --card-foreground: var(--brand-ink);
+    --popover: var(--brand-card);
+    --popover-foreground: var(--brand-ink);
+    --primary: var(--brand-navy);
+    --primary-foreground: #fbf4e3;
+    --secondary: #f1ebdd;
+    --secondary-foreground: var(--brand-ink);
+    --muted: #f1ebdd;
+    --muted-foreground: var(--brand-ink-400);
+    --accent: #f1ebdd;
+    --accent-foreground: var(--brand-ink);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --border: var(--brand-border);
+    --input: var(--brand-border);
+    --ring: var(--brand-navy);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -93,20 +145,37 @@
     --success: #178245;
     --danger: var(--destructive);
     --wrong: var(--destructive);
-    /* Joshing brand palette — INK on CREAM editorial register */
-    --ink:             oklch(0.14 0.018 55);    /* ≈ #1a1208 warm near-black */
-    --cream:           oklch(0.976 0.010 80);   /* ≈ #fdfbf6 off-white surface */
-    --cream-warm:      oklch(0.962 0.018 80);   /* ≈ #f5f0e8 slightly deeper warm */
-    --cream-accent:    oklch(0.930 0.030 80);   /* ≈ #f0e6c8 highlight/accent */
-    --border-warm:     oklch(0.876 0.016 80);   /* ≈ #ddd6c7 warm border */
-    --border-light:    oklch(0.905 0.010 80);   /* ≈ #e8e2d6 lighter inner border */
-    --text-muted-warm: oklch(0.600 0.020 60);   /* ≈ #696257 muted editorial text */
+    /* Legacy editorial aliases — re-pointed at the brand tokens so older
+       surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
+       Knowledge page, replay/catch-up) render with navy ink instead of warm
+       near-black. Keep the names; only the values changed. */
+    --ink:             var(--brand-ink);        /* navy #0a1f3d (was warm near-black) */
+    --cream:           var(--brand-card);        /* #fdfcfb content surface */
+    --cream-warm:      var(--brand-cream-card);  /* #fbf5e9 warm card */
+    --cream-accent:    var(--brand-cream);       /* #f8e6c7 highlight/accent */
+    --border-warm:     var(--brand-border);      /* #e9e2d2 warm border */
+    --border-light:    #eee7d8;                  /* lighter inner border */
+    --text-muted-warm: var(--brand-ink-400);     /* #8a8a8a muted text */
+    /* Warm-brown ink ramp — the Knowledge/Portrait surface intentionally uses a
+       warmer ink than the navy --brand-ink. These were raw hex (#1a1208/#8a8070/
+       #696257/#e8e2d6/…) scattered inline across the knowledge components; the
+       2026-05-30 audit flagged the drift. Tokenized here, kept warm (product
+       decision) rather than re-pointed at the navy ramp. Near-duplicate blacks
+       (#111111, #0e0e0e) collapse onto --warm-ink. */
+    --warm-ink:         #1a1208;  /* primary ink — brown-black            */
+    --warm-ink-700:     #696257;  /* secondary text                       */
+    --warm-ink-500:     #7d7568;  /* muted-strong                         */
+    --warm-ink-400:     #8a8070;  /* muted / timestamps                   */
+    --warm-border:      #e8e2d6;  /* warm hairline border                 */
+    --warm-border-soft: #ddd6c7;  /* lighter warm border                  */
+    --warm-paper:       #faf8f2;  /* warm off-white surface (share chrome)*/
+    --warm-cream:       #f5f0e8;  /* warm cream panel                     */
     --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    /* F5.2: prefer Playfair Display italic for editorial/category labels.
-       Falls back to Georgia if next/font hasn't loaded yet or in non-browser
-       contexts. The next/font variable is wired in src/app/layout.tsx. */
-    --font-literata: var(--font-display, Georgia), "Times New Roman", serif;
+    /* Editorial serif — Cormorant Garamond (the brand serif). Playfair Display
+       italic remains available via --font-display for the few editorial labels
+       that intentionally use it (PortraitCircles, Hero subtitle). */
+    --font-literata: var(--font-cormorant, Georgia), "Times New Roman", serif;
     --radius-sm: 0.375rem;
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;
@@ -166,11 +235,87 @@
     @apply rounded-lg border bg-card text-card-foreground shadow-sm;
   }
 
+  /* Canonical button system. One family of utilities (primary / ghost / danger /
+     icon), all 44px-tall (min-h-11) for touch, all with a focus-visible ring.
+     The shadcn ui/button was removed in favor of these — see the 2026-05-30
+     design audit (C6, button consolidation). */
   .btn-primary {
-    @apply inline-flex min-h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-ghost {
-    @apply inline-flex min-h-10 items-center justify-center rounded-md border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-11 items-center justify-center rounded-md border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+  }
+
+  .btn-danger {
+    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+  }
+
+  .btn-icon {
+    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-md text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+  }
+}
+
+@keyframes triangle-breathe {
+  0%, 100% { opacity: var(--tri-opacity-low, 0.75); }
+  50%      { opacity: var(--tri-opacity-high, 1); }
+}
+
+@keyframes triangle-color-swap {
+  0%, 49%   { fill: var(--tri-color-a, currentColor); }
+  50%, 100% { fill: var(--tri-color-b, currentColor); }
+}
+
+@keyframes triangle-drift {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50%  { transform: translate(var(--tri-dx, 0), var(--tri-dy, 0)) rotate(var(--tri-dr, 0deg)) scale(var(--tri-ds, 1)); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+
+@keyframes triangle-sweep {
+  0%   { transform: translate3d(-110%, -50%, 0) rotate(-22deg); opacity: 0; }
+  20%  { opacity: 0.7; }
+  80%  { opacity: 0.7; }
+  100% { transform: translate3d(110%, -50%, 0) rotate(-22deg); opacity: 0; }
+}
+
+.triangle-loader-sweep {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 235, 211, 0) 0%,
+    rgba(245, 235, 211, 0.4) 50%,
+    rgba(245, 235, 211, 0) 100%
+  );
+  mix-blend-mode: screen;
+  animation: triangle-sweep 12s linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes loading-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%           { opacity: 1;    transform: translateY(-2px); }
+}
+
+/* B-Feed-Swipe-1 — collapse a dismissed feed card before the inline bar shows. */
+@keyframes feed-card-collapse {
+  from { opacity: 1; max-height: 600px; }
+  to   { opacity: 0; max-height: 0; }
+}
+
+.feed-card-collapsing {
+  overflow: hidden;
+  animation: feed-card-collapse 200ms ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .triangle-loader-tri,
+  .triangle-loader-float,
+  .triangle-loader-sweep,
+  .triangle-loader-dot {
+    animation: none !important;
+  }
+
+  .feed-card-collapsing {
+    animation: none !important;
   }
 }

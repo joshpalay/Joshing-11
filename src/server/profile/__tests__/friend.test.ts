@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   dbMock,
-  getFriendshipMock,
+  getRelationshipMock,
   getFriendsMock,
   getUserByIdMock,
   areFriendsMock,
@@ -34,7 +34,7 @@ const {
 
   return {
     dbMock,
-    getFriendshipMock: vi.fn(),
+    getRelationshipMock: vi.fn(),
     getFriendsMock: vi.fn(),
     getUserByIdMock: vi.fn(),
     areFriendsMock: vi.fn(async () => false),
@@ -61,9 +61,12 @@ vi.mock('@/server/db', () => ({
 }))
 
 vi.mock('@/server/db/queries/friends', () => ({
-  getFriendship: getFriendshipMock,
   getFriends: getFriendsMock,
   areFriends: areFriendsMock,
+}))
+
+vi.mock('@/server/db/queries/friend-requests', () => ({
+  getRelationship: getRelationshipMock,
 }))
 
 vi.mock('@/server/db/queries/users', () => ({
@@ -93,11 +96,11 @@ describe('friend portrait data', () => {
       phoneNumber: '+15550101010',
       handle: null,
     })
-    getFriendshipMock.mockResolvedValue({
-      id: 'friendship-1',
-      status: 'active',
+    getRelationshipMock.mockResolvedValue({
+      state: 'friends',
+      friendshipId: 'friendship-1',
       formedAt: new Date('2026-02-01T00:00:00.000Z'),
-      requestedByUserId: 'viewer-1',
+      isBlocked: false,
     })
     getFriendsMock.mockResolvedValue([])
   })
@@ -119,12 +122,11 @@ describe('friend portrait data', () => {
         memberSince: new Date('2026-01-01T00:00:00.000Z'),
       },
       visibility: 'friend',
-      friendship: {
-        id: 'friendship-1',
-        status: 'active',
+      relationship: {
+        state: 'friends',
+        friendshipId: 'friendship-1',
         formedAt: new Date('2026-02-01T00:00:00.000Z'),
-        requestedByUserId: 'viewer-1',
-        viewerIsRequester: true,
+        isBlocked: false,
       },
       interests: [
         { domain: 'Jazz piano', broadCategory: 'Music', shared: true },
@@ -199,22 +201,21 @@ describe('friend portrait data', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101011',
     })
-    getFriendshipMock.mockResolvedValueOnce({
-      id: 'friendship-2',
-      status: 'pending',
+    getRelationshipMock.mockResolvedValueOnce({
+      state: 'pending_outbound',
+      friendshipId: 'friendship-2',
       formedAt: null,
-      requestedByUserId: 'viewer-1',
+      isBlocked: false,
     })
 
     const portrait = await getFriendPortraitData('stranger-1', 'viewer-1')
 
     expect(portrait?.visibility).toBe('stranger')
-    expect(portrait?.friendship).toEqual({
-      id: 'friendship-2',
-      status: 'pending',
+    expect(portrait?.relationship).toEqual({
+      state: 'pending_outbound',
+      friendshipId: 'friendship-2',
       formedAt: null,
-      requestedByUserId: 'viewer-1',
-      viewerIsRequester: true,
+      isBlocked: false,
     })
     expect(portrait?.interests).toEqual([])
     expect(portrait?.sharedInterests).toEqual([])
@@ -229,12 +230,22 @@ describe('friend portrait data', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101012',
     })
-    getFriendshipMock.mockResolvedValueOnce(null)
+    getRelationshipMock.mockResolvedValueOnce({
+      state: 'none',
+      friendshipId: null,
+      formedAt: null,
+      isBlocked: false,
+    })
 
     const portrait = await getFriendPortraitData('stranger-2', 'viewer-1')
 
     expect(portrait?.visibility).toBe('stranger')
-    expect(portrait?.friendship).toBeNull()
+    expect(portrait?.relationship).toEqual({
+      state: 'none',
+      friendshipId: null,
+      formedAt: null,
+      isBlocked: false,
+    })
   })
 
   it('returns mutual friends for non-self views', async () => {
@@ -291,7 +302,12 @@ describe('friend portrait data', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       phoneNumber: '+15550101013',
     })
-    getFriendshipMock.mockResolvedValueOnce(null)
+    getRelationshipMock.mockResolvedValueOnce({
+      state: 'none',
+      friendshipId: null,
+      formedAt: null,
+      isBlocked: false,
+    })
     // Knowledge base is friends-only; everything else is the default 'public'.
     state.sectionSettings = {
       ...state.sectionSettings,

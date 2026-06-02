@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
 import {
   dailyQueues,
@@ -13,8 +14,8 @@ import {
   userQuestionBank,
   users,
 } from '@/server/db';
-import { getDeliveredCreatorNotesForQuestions, type DeliveredCreatorNote } from '@/server/creator-notes';
 import type { QueueSlot } from '@/server/daily/types';
+import { LLM_QUESTION_ATTRIBUTION, resolveAuthorDisplay } from '@/lib/questions-types';
 
 export type ArchiveSource = 'daily' | 'feed' | 'joshing_game' | 'sent_to_me' | 'written_by_me';
 export type ArchiveResultFilter = 'correct' | 'incorrect' | 'skipped';
@@ -36,9 +37,12 @@ export type ArchiveItem = {
   isInBank: boolean;
   myRating: 'up' | 'down' | null;
   canUseQuestionActions: boolean;
-  creatorNote: DeliveredCreatorNote | null;
   verified: boolean;
+  askerName: string;
+  authorIsHouse: boolean;
 };
+
+export type ArchiveKind = 'all' | 'answered';
 
 export type ArchiveResult = {
   items: ArchiveItem[];
@@ -127,7 +131,7 @@ async function decorateItems(userId: string, items: ArchiveItem[]): Promise<Arch
   const actionableIds = [...new Set(items.filter((item) => item.canUseQuestionActions).map((item) => item.questionId))];
   if (actionableIds.length === 0) return items;
 
-  const [bankRows, ratingRows, creatorNotesByQuestionId] = await Promise.all([
+  const [bankRows, ratingRows] = await Promise.all([
     db
       .select({ questionId: userQuestionBank.questionId })
       .from(userQuestionBank)
@@ -136,7 +140,6 @@ async function decorateItems(userId: string, items: ArchiveItem[]): Promise<Arch
       .select({ questionId: questionRatings.questionId, rating: questionRatings.rating })
       .from(questionRatings)
       .where(and(eq(questionRatings.userId, userId), inArray(questionRatings.questionId, actionableIds))),
-    getDeliveredCreatorNotesForQuestions(userId, actionableIds),
   ]);
 
   const banked = new Set(bankRows.map((row) => row.questionId));
@@ -148,7 +151,6 @@ async function decorateItems(userId: string, items: ArchiveItem[]): Promise<Arch
     ...item,
     isInBank: item.canUseQuestionActions ? banked.has(item.questionId) : false,
     myRating: item.canUseQuestionActions ? ratingByQuestionId.get(item.questionId) ?? null : null,
-    creatorNote: creatorNotesByQuestionId.get(item.questionId) ?? item.creatorNote,
   }));
 }
 
@@ -178,6 +180,15 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
   const questionById = new Map(questionRows.map((question) => [question.id, question]));
 
+  const creatorIds = [...new Set(questionRows.map((q) => q.creatorId).filter((id): id is string => Boolean(id)))];
+  const creatorRows = creatorIds.length
+    ? await db
+        .select({ id: users.id, displayName: users.displayName })
+        .from(users)
+        .where(inArray(users.id, creatorIds))
+    : [];
+  const creatorById = new Map(creatorRows.map((row) => [row.id, row.displayName]));
+
   return queues.flatMap((queue) =>
     asQueueSlots(queue.slots)
       .filter((slot) => slot.answered || slot.skipped)
@@ -186,6 +197,14 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
         const bankQuestion = slot.question_id ? questionById.get(slot.question_id) : null;
         const domain = slot.domain || generated?.canonicalSubcategory || questionDomain(bankQuestion);
         const questionId = slot.question_id ?? slot.generated_question_id ?? `${queue.id}:${slot.slot_index}`;
+        const askerDisplay = bankQuestion?.creatorId ? creatorById.get(bankQuestion.creatorId) ?? null : null;
+        // Route the canonical question through resolveAuthorDisplay so a house
+        // slot (creatorId null, source 'house_authored') positively resolves to
+        // 'Joshing' + authorIsHouse, instead of falling through to ''. Pure-LLM
+        // slots carry no bankQuestion, so they keep the 'Generated'/'' fallback.
+        const authored = bankQuestion
+          ? resolveAuthorDisplay(bankQuestion.creatorId, bankQuestion.source, askerDisplay)
+          : { authorName: null, authorIsHouse: false };
         return {
           id: `daily:${queue.id}:${slot.slot_index}`,
           questionId,
@@ -203,23 +222,27 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
           isInBank: false,
           myRating: null,
           canUseQuestionActions: Boolean(slot.question_id),
-          creatorNote: null,
           verified: bankQuestion?.verified ?? true,
+          askerName: authored.authorName ?? askerDisplay ?? (generated ? LLM_QUESTION_ATTRIBUTION : ''),
+          authorIsHouse: authored.authorIsHouse,
         } satisfies ArchiveItem;
       }),
   );
 }
 
 async function readFeedItems(userId: string, source?: ArchiveSource): Promise<ArchiveItem[]> {
+  const creatorUsers = alias(users, 'creator_users');
   const rows = await db
     .select({
       feedItem: feedItems,
       question: questions,
       sourceUser: { displayName: users.displayName },
+      creatorUser: { displayName: creatorUsers.displayName },
     })
     .from(feedItems)
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
     .innerJoin(users, eq(feedItems.sourceUserId, users.id))
+    .leftJoin(creatorUsers, eq(questions.creatorId, creatorUsers.id))
     .where(and(eq(feedItems.recipientUserId, userId), eq(feedItems.state, 'answered')))
     .orderBy(desc(feedItems.sourceEventAt));
 
@@ -252,7 +275,7 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
     if (feedId) eventByFeedId.set(feedId, event);
   }
 
-  return relevantRows.map(({ feedItem, question, sourceUser }) => {
+  return relevantRows.map(({ feedItem, question, sourceUser, creatorUser }) => {
     const sourceName = personName(sourceUser.displayName);
     const domain = questionDomain(question);
     const correctEvent = eventByFeedId.get(feedItem.id);
@@ -266,7 +289,7 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       source: archiveSource,
       sourceLabel: feedItem.sourceType === 'direct_sent' ? `From ${sourceName}` : `Feed · ${sourceName}`,
       result: correctEvent ? 'correct' : 'incorrect',
-      submittedAnswer: null,
+      submittedAnswer: feedItem.submittedAnswer ?? null,
       correctAnswer: question.answerText,
       explanation: questionExplanation(question),
       pointsAwarded: correctEvent ? Number(correctEvent.awardedPoints ?? 0) : 0,
@@ -274,26 +297,32 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       isInBank: false,
       myRating: null,
       canUseQuestionActions: true,
-      creatorNote: null,
       verified: question.verified,
+      // null creatorId here ⟹ LLM-origin (curated_sent); authored feed questions
+      // resolve a real name via the creatorUser left join.
+      askerName: creatorUser?.displayName ?? LLM_QUESTION_ATTRIBUTION,
+      authorIsHouse: false,
     } satisfies ArchiveItem;
   });
 }
 
 async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
+  const creatorUsers = alias(users, 'creator_users_jg');
   const rows = await db
     .select({
       response: joshingGameResponses,
       question: questions,
       game: { title: joshingGames.title },
+      creatorUser: { displayName: creatorUsers.displayName },
     })
     .from(joshingGameResponses)
     .innerJoin(questions, eq(joshingGameResponses.questionId, questions.id))
     .innerJoin(joshingGames, eq(joshingGameResponses.gameId, joshingGames.id))
+    .leftJoin(creatorUsers, eq(questions.creatorId, creatorUsers.id))
     .where(eq(joshingGameResponses.userId, userId))
     .orderBy(desc(joshingGameResponses.answeredAt));
 
-  return rows.map(({ response, question, game }) => {
+  return rows.map(({ response, question, game, creatorUser }) => {
     const domain = questionDomain(question);
     return {
       id: `joshing_game:${response.id}`,
@@ -312,8 +341,9 @@ async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
       isInBank: false,
       myRating: null,
       canUseQuestionActions: true,
-      creatorNote: null,
       verified: question.verified,
+      askerName: creatorUser?.displayName ?? '',
+      authorIsHouse: false,
     } satisfies ArchiveItem;
   });
 }
@@ -366,18 +396,23 @@ async function readWrittenByMeItems(userId: string): Promise<ArchiveItem[]> {
       isInBank: false,
       myRating: null,
       canUseQuestionActions: true,
-      creatorNote: null,
       verified: question.verified,
+      askerName: '',
+      authorIsHouse: false,
     } satisfies ArchiveItem;
   });
 }
 
-async function readAllArchiveItems(userId: string, source?: ArchiveSource): Promise<ArchiveItem[]> {
+async function readAllArchiveItems(
+  userId: string,
+  source?: ArchiveSource,
+  kind: ArchiveKind = 'all',
+): Promise<ArchiveItem[]> {
   const readers: Promise<ArchiveItem[]>[] = [];
   if (!source || source === 'daily') readers.push(readDailyItems(userId));
   if (!source || source === 'feed' || source === 'sent_to_me') readers.push(readFeedItems(userId, source));
   if (!source || source === 'joshing_game') readers.push(readJoshingGameItems(userId));
-  if (!source || source === 'written_by_me') readers.push(readWrittenByMeItems(userId));
+  if (kind !== 'answered' && (!source || source === 'written_by_me')) readers.push(readWrittenByMeItems(userId));
 
   const items = (await Promise.all(readers)).flat();
   return decorateItems(userId, items);
@@ -401,11 +436,14 @@ export async function getArchiveForUser(params: {
   result?: ArchiveResultFilter;
   limit?: number;
   cursor?: string;
+  kind?: ArchiveKind;
 }): Promise<ArchiveResult> {
   const limit = Math.min(Math.max(params.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const cursor = decodeCursor(params.cursor);
-  const allItems = applyFilters(await readAllArchiveItems(params.userId, params.source), params)
-    .sort(compareArchiveItems);
+  const allItems = applyFilters(
+    await readAllArchiveItems(params.userId, params.source, params.kind),
+    params,
+  ).sort(compareArchiveItems);
   const cursorItems = cursor ? allItems.filter((item) => afterCursor(item, cursor)) : allItems;
   const pageItems = cursorItems.slice(0, limit);
 

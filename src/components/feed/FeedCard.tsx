@@ -4,235 +4,157 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
 import { visibleFeedCategory } from './category'
+import { FeedActionLink } from './FeedActionLink'
+import { FeedCardShell } from './FeedCardShell'
+import { FeedDismissButton } from './FeedDismissButton'
 import type { FeedCardBaseItem } from './types'
-import { colorForCategory, initialsFor, isDarkColor } from './visual'
+import { colorForCategory, colorForUser } from './visual'
 
 type FeedCardProps = {
   item: FeedCardBaseItem
   overflow?: ReactNode
   onAnswer?: () => void
+  /** Quiet, secondary dismiss control (bottom-left, opposite Answer). View-state only. */
+  onDismiss?: () => void
   footer?: ReactNode
   className?: string
   headerContent?: ReactNode
+  /** Contextual verb shown after the name, e.g. "knows", "sent you this". */
+  verb?: string
   dimQuestion?: boolean
+}
+
+// display/card/update — category line in Cormorant SemiBold (Figma 16/24/0.64px/black).
+function CategoryLine({ category }: { category: string }) {
+  return (
+    <p className="font-serif text-[16px] font-semibold leading-[24px] tracking-[0.04em] text-black">
+      {category}
+    </p>
+  )
+}
+
+// display/card/question — the focal serif question (Figma Cormorant SemiBold 24/32/1.2px).
+function QuestionText({ question, dim }: { question: string; dim?: boolean }) {
+  return (
+    <p
+      className={cn(
+        'mt-3 font-serif font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]',
+        dim ? 'text-[16px] opacity-65' : 'text-[24px]',
+      )}
+    >
+      <span aria-hidden className="opacity-60">
+        &ldquo;
+      </span>
+      {question}
+      <span aria-hidden className="opacity-60">
+        &rdquo;
+      </span>
+    </p>
+  )
 }
 
 export function FeedCard({
   item,
   overflow,
   onAnswer,
+  onDismiss,
   footer,
   className,
   headerContent,
+  verb,
   dimQuestion,
 }: FeedCardProps) {
   const categoryColor = colorForCategory(item.category)
   const visibleCategory = visibleFeedCategory(item.category)
-  const onDark = isDarkColor(categoryColor)
-  const fgOnCategory = onDark ? 'var(--cream)' : 'var(--ink)'
   const authorName = item.avatarName ?? 'Someone'
+  // Figma colors the actor name in the user's avatar color (e.g. Allan blue,
+  // Sarah slate); fall back to the link slate when no user id is present.
+  const nameColor = item.avatarUserId ? colorForUser(item.avatarUserId) : 'var(--brand-link)'
 
   if (item.viewerIsAuthor) {
     return (
-      <article
-        className={cn(
-          'relative overflow-hidden rounded-2xl border border-[var(--border-warm)] bg-[var(--cream)]',
-          className,
-        )}
-      >
-        <span
-          aria-hidden
-          className="absolute inset-y-0 left-0 w-[2px]"
-          style={{ backgroundColor: categoryColor }}
-        />
-
+      <FeedCardShell accentColor={categoryColor} className={className}>
         <div className="p-[14px]">
-          <div className="flex items-center gap-3">
-            <div
-              aria-hidden
-              className="grid size-9 shrink-0 place-items-center rounded-full text-[11px] font-semibold"
-              style={{ backgroundColor: categoryColor, color: fgOnCategory }}
-            >
-              You
-            </div>
-
-            <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               {headerContent ? (
                 headerContent
               ) : (
                 <>
-                  <p
-                    className="text-[11px] uppercase leading-none tracking-[0.08em]"
-                    style={{ color: 'var(--ink)', opacity: 0.7 }}
-                  >
+                  <p className="text-[11px] leading-none tracking-[0.08em] text-[var(--brand-ink-400)] uppercase">
                     New question
                   </p>
-                  {visibleCategory ? (
-                    <p
-                      className="mt-1 truncate text-[12px] italic leading-tight"
-                      style={{
-                        fontFamily: 'var(--font-literata)',
-                        color: 'var(--ink)',
-                        opacity: 0.7,
-                      }}
-                    >
-                      {visibleCategory}
-                    </p>
-                  ) : null}
+                  {visibleCategory ? <CategoryLine category={visibleCategory} /> : null}
                 </>
               )}
             </div>
-
-            <div className="flex shrink-0 items-center gap-2">
-              {item.timestamp ? (
-                <span
-                  className="text-[11px] leading-none"
-                  style={{ color: 'var(--ink)', opacity: 0.6 }}
-                >
-                  {item.timestamp}
-                </span>
-              ) : null}
-              {overflow ? overflow : null}
-            </div>
+            {overflow ? <div className="shrink-0">{overflow}</div> : null}
           </div>
 
-          <p
-            className="mt-3 text-[17px] leading-snug text-[var(--ink)]"
-            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
-          >
-            &ldquo;{item.question}&rdquo;
-          </p>
+          <QuestionText question={item.question} />
 
           {item.personalMessage ? (
-            <p
-              className="mt-2 text-[13px] italic leading-snug"
-              style={{
-                fontFamily: 'var(--font-literata)',
-                color: 'var(--ink)',
-                opacity: 0.65,
-              }}
-            >
+            <p className="mt-2 font-serif text-[14px] leading-snug text-[var(--brand-ink-700)] italic">
               {item.personalMessage}
             </p>
           ) : null}
 
           {footer ? <div className="mt-3">{footer}</div> : null}
         </div>
-      </article>
+      </FeedCardShell>
     )
   }
 
   return (
-    <article
-      className={cn(
-        'relative overflow-hidden rounded-2xl border border-[var(--border-warm)] bg-[var(--cream)]',
-        className,
-      )}
-    >
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-0 w-[2px]"
-        style={{ backgroundColor: categoryColor }}
-      />
-
+    <FeedCardShell accentColor={categoryColor} className={className}>
       <div className="p-[14px]">
-        <div className="flex items-center gap-3">
-          <div
-            aria-hidden
-            className="grid size-9 shrink-0 place-items-center rounded-full text-[12px] font-semibold tracking-wide"
-            style={{ backgroundColor: categoryColor, color: fgOnCategory }}
-          >
-            {initialsFor(authorName)}
-          </div>
-
-          <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             {headerContent ? (
               headerContent
             ) : (
               <>
-                {item.authorHref ? (
-                  <Link
-                    href={item.authorHref}
-                    className="block truncate text-[16px] leading-tight text-[var(--ink)] underline underline-offset-2"
-                    style={{ textDecorationColor: 'rgb(0 0 0 / 0.35)' }}
-                  >
-                    {authorName}
-                  </Link>
-                ) : (
-                  <span className="block truncate text-[16px] leading-tight text-[var(--ink)]">
-                    {authorName}
-                  </span>
-                )}
-                {visibleCategory ? (
-                  <p
-                    className="mt-0.5 truncate text-[12px] italic leading-tight"
-                    style={{
-                      fontFamily: 'var(--font-literata)',
-                      color: 'var(--ink)',
-                      opacity: 0.7,
-                    }}
-                  >
-                    {visibleCategory}
-                  </p>
-                ) : null}
+                <p className="text-[15px] leading-[23px] tracking-[0.05em] text-black">
+                  {item.authorHref ? (
+                    <Link href={item.authorHref} className="font-medium" style={{ color: nameColor }}>
+                      {authorName}
+                    </Link>
+                  ) : (
+                    <span className="font-medium" style={{ color: nameColor }}>
+                      {authorName}
+                    </span>
+                  )}
+                  {verb ? ` ${verb}` : null}
+                </p>
+                {visibleCategory ? <CategoryLine category={visibleCategory} /> : null}
               </>
             )}
           </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            {item.timestamp ? (
-              <span
-                className="text-[11px] leading-none"
-                style={{ color: 'var(--ink)', opacity: 0.6 }}
-              >
-                {item.timestamp}
-              </span>
-            ) : null}
-            {overflow ? overflow : null}
-          </div>
+          {overflow ? <div className="shrink-0">{overflow}</div> : null}
         </div>
 
-        <p
-          className={cn(
-            'mt-3 leading-snug text-[var(--ink)]',
-            dimQuestion ? 'text-[14px]' : 'text-[17px]',
-          )}
-          style={{
-            fontFamily: 'Georgia, "Times New Roman", serif',
-            ...(dimQuestion ? { opacity: 0.65 } : null),
-          }}
-        >
-          {item.question}
-        </p>
+        <QuestionText question={item.question} dim={dimQuestion} />
 
         {item.personalMessage ? (
-          <p
-            className="mt-2 text-[13px] italic leading-snug"
-            style={{
-              fontFamily: 'var(--font-literata)',
-              color: 'var(--ink)',
-              opacity: 0.65,
-            }}
-          >
+          <p className="mt-2 font-serif text-[14px] leading-snug text-[var(--brand-ink-700)] italic">
             {item.personalMessage}
           </p>
         ) : null}
 
         {onAnswer ? (
-          <div className="mt-3 flex justify-end">
-            <button
-              type="button"
-              onClick={onAnswer}
-              className="inline-flex items-center border-[1.5px] border-[var(--ink)] bg-[var(--cream)] px-[10px] py-[6px] text-[14px] text-[var(--ink)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none"
-              style={{ boxShadow: '4px 4px 0 var(--ink)' }}
-            >
-              Answer →
-            </button>
+          <div
+            className={cn(
+              'mt-3 flex items-center gap-3',
+              onDismiss ? 'justify-between' : 'justify-end',
+            )}
+          >
+            {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
+            <FeedActionLink onClick={onAnswer}>Answer →</FeedActionLink>
           </div>
         ) : footer ? (
           <div className="mt-3">{footer}</div>
         ) : null}
       </div>
-    </article>
+    </FeedCardShell>
   )
 }

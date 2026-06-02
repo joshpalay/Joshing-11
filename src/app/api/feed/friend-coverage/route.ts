@@ -1,12 +1,13 @@
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { parseQuestionSource } from '@/lib/questions-types';
 import { getSession } from '@/server/auth/session';
 import {
   db,
   feedDismissedDomains,
   feedItems,
-  friendships,
+  follows,
   masteryEvents,
   questionFeedback,
   questionRatings,
@@ -111,26 +112,43 @@ export async function loadFriendCoverage(
   friendQuery: string | null,
   limit: number,
 ): Promise<FriendCoverageResponse> {
-  const allFriendships = await db
+  // Follow model (D-1 Stage 3): a "friend" is a mutual follow. Build the
+  // per-other map from approved/pending follow edges in both directions.
+  const followEdges = await db
     .select({
-      friendshipId: friendships.id,
-      status: friendships.status,
-      userAId: friendships.userAId,
-      userBId: friendships.userBId,
+      id: follows.id,
+      followerId: follows.followerId,
+      followeeId: follows.followeeId,
+      state: follows.state,
     })
-    .from(friendships)
+    .from(follows)
     .where(or(
-      eq(friendships.userAId, viewerUserId),
-      eq(friendships.userBId, viewerUserId),
+      eq(follows.followerId, viewerUserId),
+      eq(follows.followeeId, viewerUserId),
     ));
 
-  const friendshipByOtherUserId = new Map<string, { friendshipId: string; status: string }>();
-  for (const row of allFriendships) {
-    const otherId = row.userAId === viewerUserId ? row.userBId : row.userAId;
-    friendshipByOtherUserId.set(otherId, { friendshipId: row.friendshipId, status: row.status });
+  const outboundByOther = new Map<string, { id: string; state: string }>();
+  const inboundStateByOther = new Map<string, string>();
+  for (const edge of followEdges) {
+    if (edge.followerId === viewerUserId) {
+      outboundByOther.set(edge.followeeId, { id: edge.id, state: edge.state });
+    } else {
+      inboundStateByOther.set(edge.followerId, edge.state);
+    }
   }
 
-  const activeFriendCount = allFriendships.filter((row) => row.status === 'active').length;
+  const otherIdsSet = new Set<string>([...outboundByOther.keys(), ...inboundStateByOther.keys()]);
+  const friendshipByOtherUserId = new Map<string, { friendshipId: string | null; status: string }>();
+  for (const otherId of otherIdsSet) {
+    const outbound = outboundByOther.get(otherId);
+    const mutual = outbound?.state === 'approved' && inboundStateByOther.get(otherId) === 'approved';
+    friendshipByOtherUserId.set(otherId, {
+      friendshipId: outbound?.id ?? null,
+      status: mutual ? 'active' : 'pending',
+    });
+  }
+
+  const activeFriendCount = [...friendshipByOtherUserId.values()].filter((f) => f.status === 'active').length;
 
   const viewerActiveFeedItemCount = await db
     .select({ value: sql<number>`COUNT(*)::int`.as('value') })
@@ -143,7 +161,7 @@ export async function loadFriendCoverage(
     .then((rows) => rows[0]?.value ?? 0);
 
   const summary = {
-    totalFriendshipsForViewer: allFriendships.length,
+    totalFriendshipsForViewer: otherIdsSet.size,
     activeFriendCount,
     viewerActiveFeedItemCount,
     rolloffCap: ROLLOFF_CAP,
@@ -217,9 +235,9 @@ export async function loadFriendCoverage(
     const rows: FriendCoverageEventRow[] = [];
 
     for (const event of events) {
-      const questionPayload = event.questionId ? {
+      const questionPayload = event.questionId && event.questionSource !== null ? {
         creatorId: event.questionCreatorId,
-        source: event.questionSource as 'authored' | 'daily_generated',
+        source: parseQuestionSource(event.questionSource),
         visibility: event.questionVisibility as 'public' | 'private',
         deletedAt: event.questionDeletedAt,
       } : null;

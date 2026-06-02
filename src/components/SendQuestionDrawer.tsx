@@ -34,33 +34,41 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
-    setError(null);
-    setLoadingUsers(true);
-    fetch('/api/users', { cache: 'no-store', credentials: 'include' })
-      .then(async (response) => {
+    // Run the load (incl. its initial loading/error state) inside an async
+    // function rather than synchronously in the effect body, which the
+    // react-hooks set-state-in-effect rule flags.
+    void (async () => {
+      setError(null);
+      setLoadingUsers(true);
+      try {
+        const response = await fetch('/api/users', { cache: 'no-store', credentials: 'include' });
         const body = await response.json().catch(() => null);
         if (!response.ok || !Array.isArray(body)) throw new Error(body?.message ?? 'Could not load people.');
         if (active) setUsers(body as UserOption[]);
-      })
-      .catch((caught) => {
+      } catch (caught) {
         if (active) setError(caught instanceof Error ? caught.message : 'Could not load people.');
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoadingUsers(false);
-      });
+      }
+    })();
 
     return () => {
       active = false;
     };
   }, [isOpen]);
 
-  useEffect(() => {
-    if (isOpen) return;
-    setSelectedId(null);
-    setSearch('');
-    setMessage('');
-    setError(null);
-  }, [isOpen]);
+  // Reset the form when the drawer closes — done during render via a stored
+  // previous value (not a set-state-in-effect) per the React docs.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
+    if (!isOpen) {
+      setSelectedId(null);
+      setSearch('');
+      setMessage('');
+      setError(null);
+    }
+  }
 
   useEffect(() => {
     if (!toast) return;
@@ -114,7 +122,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
+      <div className="fixed inset-0 z-[55] flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
         <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={onClose} />
         <aside className="relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-lg bg-background shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
           <header className="flex items-center justify-between gap-3 border-b p-5">

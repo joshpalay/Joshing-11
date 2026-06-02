@@ -2,10 +2,11 @@
 
 import { useState, useMemo, type CSSProperties } from 'react'
 import {
-  getDomainCircleSize,
+  getPortraitCircleSize,
   type CircleSizingTier,
 } from '@/lib/knowledge/circle-sizing'
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
+import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import type { MasteryTier } from '@/types/db'
 
@@ -206,7 +207,7 @@ export function PortraitDomainCircle({
   const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge'
   const dc = getPortraitDomainColor(broadCategory)
   const size = Math.round(
-    getDomainCircleSize(
+    getPortraitCircleSize(
       entry.tier as CircleSizingTier,
       entry.totalMasteryPoints,
       maxPointsForTier
@@ -273,26 +274,18 @@ export function PortraitDomainCircle({
         }}
       >
         <div style={{ position: 'relative', width: size, height: size }}>
-          <div
-            style={{
-              width: size,
-              height: size,
-              borderRadius: '50%',
-              background: `radial-gradient(circle at 38% 38%, ${dc.light.replace('0.12', '0.22')}, ${dc.light})`,
-              opacity,
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              filter: dimForHidden ? 'grayscale(0.6)' : undefined,
-            }}
+          <KnowledgeBubble
+            diameter={size}
+            light={dc.light}
+            opacity={opacity}
+            style={{ filter: dimForHidden ? 'grayscale(0.6)' : undefined }}
           >
             {showMasteryCount && (
               <span
                 style={{
                   fontSize: countFontSize,
                   color: dc.primary,
-                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
                   fontWeight: 'bold',
                   lineHeight: 1,
                 }}
@@ -300,7 +293,7 @@ export function PortraitDomainCircle({
                 {entry.authoredAnsweredCount}
               </span>
             )}
-          </div>
+          </KnowledgeBubble>
           {selected && (
             <div
               aria-hidden
@@ -344,7 +337,7 @@ export function PortraitDomainCircle({
                 placeItems: 'center',
                 fontSize: 12,
                 fontWeight: 700,
-                fontFamily: 'Georgia, "Times New Roman", serif',
+                fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
                 lineHeight: 1,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
               }}
@@ -358,7 +351,7 @@ export function PortraitDomainCircle({
         style={{
           fontSize: 10.5,
           color: dc.text,
-          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
           textAlign: 'center',
           lineHeight: 1.3,
           maxWidth: Math.max(90, resolvedCircleSlotSize),
@@ -378,7 +371,7 @@ function getPortraitEntryCircleSize(
   maxPointsForTier: number
 ): number {
   return Math.round(
-    getDomainCircleSize(
+    getPortraitCircleSize(
       entry.tier as CircleSizingTier,
       entry.totalMasteryPoints,
       maxPointsForTier
@@ -482,7 +475,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
               color: '#b0a090',
               fontStyle: 'italic',
               marginLeft: 'auto',
-              fontFamily: 'Georgia, "Times New Roman", serif',
+              fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
             }}
           >
             Size = depth
@@ -518,7 +511,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
                   marginBottom: 14,
                   paddingBottom: 6,
                   borderBottom: `1px solid ${color}33`,
-                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
                 }}
               >
                 {label}
@@ -623,7 +616,7 @@ const sparsePromptStyle: CSSProperties = {
   fontSize: 13,
   color: '#8a8070',
   fontStyle: 'italic',
-  fontFamily: 'Georgia, "Times New Roman", serif',
+  fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
   textAlign: 'center',
 }
 
@@ -632,5 +625,5 @@ const explainerStyle: CSSProperties = {
   fontSize: 9.5,
   color: '#b0a090',
   fontStyle: 'italic',
-  fontFamily: 'Georgia, "Times New Roman", serif',
+  fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
 }

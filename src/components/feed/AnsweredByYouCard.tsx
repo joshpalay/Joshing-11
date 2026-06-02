@@ -8,6 +8,8 @@ import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import type { MasteryTier } from '@/types/db'
 
 import { visibleFeedCategory } from './category'
+import { FeedActionLink } from './FeedActionLink'
+import { FeedCardShell } from './FeedCardShell'
 import type { AnsweredByYouFeedItem, AnsweredByYouPairedFriend } from './types'
 import { colorForCategory, colorForUser, initialsFor, isDarkColor } from './visual'
 
@@ -149,14 +151,13 @@ function AnsweredResult({
     }
   }, [recheckAction, recheckState])
 
-  const summaryClass = item.isCorrect
-    ? 'text-[14px] font-medium text-emerald-700'
-    : 'text-[14px] font-medium text-stone-800'
-
   return (
     <div className="w-full space-y-1.5">
       <div className="flex items-start justify-between gap-3">
-        <p className={summaryClass}>
+        <p
+          className="text-[14px] font-medium"
+          style={{ color: item.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)' }}
+        >
           {item.answerSummary ?? 'You answered this question.'}
         </p>
         {item.isCorrect ? <KnowledgeGainIndicator item={item} /> : null}
@@ -173,36 +174,31 @@ function AnsweredResult({
           {item.correctAnswer}
         </p>
       ) : null}
-      {!item.isCorrect && item.quip ? (
-        <p
-          className="text-[13px]"
-          style={{ color: 'var(--ink)', opacity: 0.6 }}
-        >
-          {item.quip}
-        </p>
+      {item.creatorNote ? (
+        <div className="mt-1.5 rounded-md border bg-muted/40 px-3 py-2">
+          <p className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-muted-foreground">
+            Why they asked
+          </p>
+          <p
+            className="mt-1 text-[13px] leading-6"
+            style={{ fontFamily: 'var(--font-literata)', color: 'var(--ink)' }}
+          >
+            {item.creatorNote}
+          </p>
+        </div>
       ) : null}
       {(onRetry || (recheckAction && recheckState !== 'done')) ? (
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex items-center justify-end gap-4 pt-2">
           {onRetry ? (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="inline-flex items-center border-[1.5px] border-[var(--ink)] bg-[var(--cream)] px-[8px] py-[4px] text-[12px] text-[var(--ink)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
-              style={{ boxShadow: '3px 3px 0 var(--ink)' }}
-            >
-              Try again →
-            </button>
+            <FeedActionLink onClick={onRetry}>Try again →</FeedActionLink>
           ) : null}
           {recheckAction && recheckState !== 'done' ? (
-            <button
-              type="button"
+            <FeedActionLink
               onClick={() => void requestRecheck()}
               disabled={recheckState === 'submitting'}
-              className="inline-flex items-center border-[1.5px] border-[var(--ink)] bg-[var(--cream)] px-[8px] py-[4px] text-[12px] text-[var(--ink)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-default disabled:opacity-60"
-              style={{ boxShadow: '3px 3px 0 var(--ink)' }}
             >
-              {recheckState === 'submitting' ? 'Rechecking...' : 'Recheck →'}
-            </button>
+              {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
+            </FeedActionLink>
           ) : null}
         </div>
       ) : null}
@@ -213,9 +209,9 @@ function AnsweredResult({
             aria-live="polite"
             className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium"
             style={{
-              backgroundColor: 'color-mix(in srgb, #047857 10%, var(--cream))',
-              borderColor: 'color-mix(in srgb, #047857 35%, var(--border-warm))',
-              color: '#065f46',
+              backgroundColor: 'color-mix(in srgb, var(--game-correct) 12%, var(--cream))',
+              borderColor: 'color-mix(in srgb, var(--game-correct) 35%, var(--border-warm))',
+              color: 'var(--game-correct)',
             }}
           >
             <span aria-hidden className="text-[15px] leading-none">✓</span>
@@ -227,7 +223,7 @@ function AnsweredResult({
             aria-live="polite"
             className="text-[11px]"
             style={{
-              color: recheckState === 'error' ? '#b91c1c' : 'var(--ink)',
+              color: recheckState === 'error' ? 'var(--game-wrong-strong)' : 'var(--ink)',
               opacity: recheckState === 'error' ? 1 : 0.6,
             }}
           >
@@ -244,12 +240,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
   const categoryColor = colorForCategory(item.category)
 
   return (
-    <article className="relative overflow-hidden rounded-2xl border border-[var(--border-warm)] bg-[var(--cream)]">
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-0 w-[2px]"
-        style={{ backgroundColor: categoryColor }}
-      />
+    <FeedCardShell accentColor={categoryColor} accentPlacement="left">
       <div
         className="px-[14px] pt-[14px] pb-[12px]"
         style={{
@@ -299,7 +290,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
         <p
           className="mt-3 text-[16px] leading-snug"
           style={{
-            fontFamily: 'Georgia, "Times New Roman", serif',
+            fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
             color: 'var(--ink)',
             opacity: 0.65,
           }}
@@ -324,6 +315,6 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
       <div className="px-[14px] py-[12px]">
         <AnsweredResult item={item} recheckAction={recheckAction} onRetry={onRetry} />
       </div>
-    </article>
+    </FeedCardShell>
   )
 }

@@ -139,10 +139,10 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
 }
 
 const boxStyle: CSSProperties = {
-  background: '#fffdf8',
-  border: '1px solid #eee7dc',
-  borderRadius: 14,
-  boxShadow: '0 1px 8px rgba(26, 18, 8, 0.04)',
+  background: 'var(--brand-cream-card)',
+  border: '1px solid var(--brand-border)',
+  borderRadius: 12,
+  boxShadow: '0 4px 12px rgba(40, 32, 30, 0.04)',
   padding: '1.05rem 0.95rem 0.95rem',
   display: 'grid',
   gap: '0.85rem',
@@ -157,28 +157,31 @@ const headerStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   margin: 0,
-  color: '#1a1208',
-  fontFamily: 'var(--font-literata), Georgia, serif',
-  fontSize: '1rem',
+  color: 'var(--brand-ink)',
+  fontFamily: 'var(--font-sans-body), system-ui, sans-serif',
+  fontSize: '0.8rem',
   fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
 }
 
 const wordmarkStyle: CSSProperties = {
   margin: 0,
-  fontFamily: 'var(--font-literata), serif',
-  fontStyle: 'italic',
-  fontSize: '0.78rem',
-  color: '#1a1208',
+  fontFamily: 'var(--font-sans-body), system-ui, sans-serif',
+  fontWeight: 700,
+  fontSize: '0.92rem',
+  color: 'var(--brand-ink)',
+  letterSpacing: '0.01em',
   lineHeight: 1,
 }
 
 const shareButtonStyle: CSSProperties = {
   minHeight: 38,
   padding: '0 0.82rem',
-  border: '1px solid #ddd6c7',
+  border: '1px solid var(--brand-border)',
   borderRadius: 999,
-  background: '#fffdf8',
-  color: '#1a1208',
+  background: 'var(--brand-card)',
+  color: 'var(--brand-ink)',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -191,11 +194,11 @@ const shareButtonStyle: CSSProperties = {
 
 const statementStyle: CSSProperties = {
   margin: 0,
-  fontFamily: 'var(--font-literata), serif',
-  fontStyle: 'italic',
-  fontSize: 18,
-  color: '#1a1208',
-  lineHeight: 1.4,
+  fontFamily: 'var(--font-cormorant), Georgia, serif',
+  fontSize: 21,
+  color: 'var(--brand-ink)',
+  lineHeight: 1.35,
+  letterSpacing: '0.01em',
 }
 
 const circlesWrapStyle: CSSProperties = {
@@ -210,24 +213,24 @@ const circlesWrapStyle: CSSProperties = {
 const overflowStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
-  color: '#8a8070',
+  color: 'var(--brand-ink-400)',
   textAlign: 'center',
 }
 
 const tierStyle: CSSProperties = {
   margin: 0,
   fontSize: 13,
-  color: '#1a1208',
+  color: 'var(--brand-ink)',
 }
 
 const rarestStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
-  color: '#8a8070',
+  color: 'var(--brand-ink-400)',
 }
 
 const attributionStyle: CSSProperties = {
   margin: 0,
   fontSize: 11,
-  color: '#8a8070',
+  color: 'var(--brand-ink-400)',
 }

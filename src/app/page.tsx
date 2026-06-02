@@ -1,16 +1,17 @@
 import { Suspense } from 'react'
 import FeedList from '@/components/FeedList'
+import LoadingScreen from '@/components/LoadingScreen'
 import TodaysFiveCard, {
   type DailyPreferences,
   type DailyStatus,
   type SlotOutcome,
 } from '@/components/TodaysFiveCard'
+import { AuthoringPrompt } from '@/components/home/AuthoringPrompt'
 import { CeremonyPin } from '@/components/home/CeremonyPin'
-import { Hero } from '@/components/home/Hero'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { RecentActivitySection } from '@/components/home/RecentActivitySection'
 import { getSession } from '@/server/auth/session'
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types'
+import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getRecentActivityForHome } from '@/server/db/queries/activity'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
@@ -24,14 +25,22 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-4 py-6 pb-32 md:py-10">
-      {session ? (
-        <Suspense fallback={<HeroSkeleton />}>
-          <HeroSection userId={session.userId} />
-        </Suspense>
-      ) : (
-        <Hero isComplete={false} />
-      )}
+    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-[18px] px-4 py-6 pb-32 md:py-10">
+      {/* Triangle banner (Figma Mask group): the SAME Variant4 pattern as the
+          login background, rendered at the same full-viewport-cover scale and
+          clipped to a band so the triangles match login in size. No gradient —
+          a clean band the cards overlap. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 overflow-hidden"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/Variant4.png"
+          alt=""
+          className="absolute inset-x-0 top-0 h-screen w-full object-cover object-center"
+        />
+      </div>
 
       {session ? (
         <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
@@ -59,10 +68,9 @@ export default async function Home() {
         </Suspense>
       ) : null}
 
+      {session ? <AuthoringPrompt /> : null}
+
       <section id="feed">
-        <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
-          From your friends
-        </p>
         {session ? (
           <Suspense fallback={<FeedSkeleton />}>
             <FromYourFriendsSection userId={session.userId} />
@@ -73,12 +81,6 @@ export default async function Home() {
       </section>
     </main>
   )
-}
-
-async function HeroSection({ userId }: { userId: string }) {
-  const queue = await getTodaysDailyQueue(userId)
-  const status = buildDailyStatusSnapshot(queue)
-  return <Hero isComplete={status.isComplete} />
 }
 
 async function TodaysFiveSection({ userId }: { userId: string }) {
@@ -130,10 +132,12 @@ async function RecentActivityServerSection({ userId }: { userId: string }) {
 }
 
 async function FromYourFriendsSection({ userId }: { userId: string }) {
+  // D-1 Stage 5: Broadcasts ('from-friends') is the default feed surface, so the
+  // server pre-fetch must match it for FeedList's no-round-trip first paint.
   const feedPage = await getFeedPagePayload(userId, {
     limit: FEED_PAGE_SIZE,
     cursor: null,
-    filter: 'all',
+    filter: 'from-friends',
   })
   return (
     <FeedList
@@ -174,8 +178,14 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
   const slots: QueueSlot[] = Array.isArray(queue.slots) ? (queue.slots as QueueSlot[]) : []
   const answered = slots.filter((slot) => slot.answered).length
   const questionsAnswered = Math.min(answered, DAILY_QUEUE_SIZE)
-  const questionsRemaining = Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0)
-  const isComplete = questionsAnswered >= DAILY_QUEUE_SIZE
+  // Mirror the /api/daily/status predicate: a round is complete when no slot is
+  // pending (answered or skipped), not when 5 are answered. Skipped slots whose
+  // replacement failed to generate left the home card stuck on "Resume round"
+  // while /daily bounced straight to the summary.
+  const isComplete = isRoundComplete(slots)
+  const questionsRemaining = isComplete
+    ? 0
+    : Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0)
   return {
     questionsRemaining,
     questionsAnswered,
@@ -196,14 +206,10 @@ function CardSkeleton({ minHeight }: { minHeight: string }) {
   )
 }
 
-function HeroSkeleton() {
-  return <div className="h-32" aria-hidden="true" />
-}
-
 function FeedSkeleton() {
   return (
-    <div className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
-      Loading feed…
+    <div className="overflow-hidden rounded-lg">
+      <LoadingScreen label="Loading feed" />
     </div>
   )
 }

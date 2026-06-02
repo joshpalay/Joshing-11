@@ -22,9 +22,11 @@ const MIN_DIAMETER = 22;
 const MAX_DIAMETER = 56;
 const CIRCLE_OPACITY = 0.72;
 
-const INK = '#1a1a1a';
-const CREAM = '#faf8f2';
-const MUTED_INK = '#5a5448';
+// Brand tokens (navy-ink system) — previously a raw brutalist trio
+// (#1a1a1a / #faf8f2 / #5a5448) that drifted off the design system.
+const INK = 'var(--brand-ink)';
+const CREAM = 'var(--brand-card)';
+const MUTED_INK = 'var(--brand-ink-700)';
 
 const cardStyle: CSSProperties = {
   background: CREAM,
@@ -49,7 +51,7 @@ const monoMuted: CSSProperties = {
 };
 
 const courierHeader: CSSProperties = {
-  fontFamily: '"Courier New", ui-monospace, monospace',
+  fontFamily: 'var(--font-mono)',
   fontSize: '0.72rem',
   textTransform: 'uppercase',
   letterSpacing: '0.22em',
@@ -108,8 +110,9 @@ function CategoryItem({
         role="img"
         aria-label={`${players[0].name} and ${players[1].name} share ${sharedPct} percent of ${cell.canonicalSubcategory}`}
       >
-        <circle cx={cxA} cy={cy} r={rA} fill={players[0].color} opacity={CIRCLE_OPACITY} />
-        <circle cx={cxB} cy={cy} r={rB} fill={players[1].color} opacity={CIRCLE_OPACITY} />
+        {/* fill via CSS (not the SVG attribute) so var() player colors resolve */}
+        <circle cx={cxA} cy={cy} r={rA} style={{ fill: players[0].color }} opacity={CIRCLE_OPACITY} />
+        <circle cx={cxB} cy={cy} r={rB} style={{ fill: players[1].color }} opacity={CIRCLE_OPACITY} />
       </svg>
       <p
         style={{

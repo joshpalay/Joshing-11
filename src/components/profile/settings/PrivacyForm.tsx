@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { Switch } from '@/components/ui/Switch';
 import type { DiscoverabilityState } from '@/server/db/queries/account';
 
 type Props = {
@@ -9,7 +10,7 @@ type Props = {
   initialInviteUrl: string | null;
 };
 
-type PatchKey = 'contacts' | 'mutualFriends';
+type PatchKey = 'contacts' | 'mutualFriends' | 'nicheMatch';
 
 type InviteTokenResponse = { token: string; url: string };
 
@@ -58,25 +59,12 @@ function ToggleRow({
           <h3 className="font-serif text-lg font-semibold">{title}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={checked}
-          aria-disabled={disabled || undefined}
+        <Switch
+          checked={checked}
+          onCheckedChange={() => onToggle?.()}
+          label={title}
           disabled={disabled || saving}
-          onClick={onToggle}
-          className={`relative inline-flex h-7 w-12 flex-none items-center rounded-full border transition ${
-            checked ? 'bg-emerald-500 border-emerald-500' : 'bg-muted border-border'
-          } ${disabled ? 'cursor-not-allowed opacity-60' : ''} ${
-            saving ? 'opacity-60' : ''
-          }`}
-        >
-          <span
-            className={`inline-block size-5 rounded-full bg-white shadow transition ${
-              checked ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
+        />
       </div>
     </section>
   );
@@ -88,6 +76,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState<string | null>(initialInviteUrl);
   const [rotating, setRotating] = useState(false);
+  const [confirmingRotate, setConfirmingRotate] = useState(false);
   const [inviteToast, setInviteToast] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
@@ -110,10 +99,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
 
   async function rotateInviteUrl() {
     if (rotating) return;
-    const confirmed = window.confirm(
-      'Rotate your invite link? The old link will stop working immediately.',
-    );
-    if (!confirmed) return;
+    setConfirmingRotate(false);
     setRotating(true);
     setInviteError(null);
     try {
@@ -145,7 +131,9 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
     const next: DiscoverabilityState =
       key === 'contacts'
         ? { ...state, discoverableByContacts: !state.discoverableByContacts }
-        : { ...state, discoverableByMutualFriends: !state.discoverableByMutualFriends };
+        : key === 'mutualFriends'
+          ? { ...state, discoverableByMutualFriends: !state.discoverableByMutualFriends }
+          : { ...state, discoverableByNicheMatch: !state.discoverableByNicheMatch };
 
     setState(next);
     setSavingKey(key);
@@ -154,7 +142,9 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
     const body: Partial<Record<PatchKey, boolean>> =
       key === 'contacts'
         ? { contacts: next.discoverableByContacts }
-        : { mutualFriends: next.discoverableByMutualFriends };
+        : key === 'mutualFriends'
+          ? { mutualFriends: next.discoverableByMutualFriends }
+          : { nicheMatch: next.discoverableByNicheMatch };
 
     const result = await patchDiscoverability(body);
     setSavingKey(null);
@@ -183,6 +173,14 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
         checked={state.discoverableByMutualFriends}
         saving={savingKey === 'mutualFriends'}
         onToggle={() => void toggle('mutualFriends')}
+      />
+
+      <ToggleRow
+        title="Let people I've never met discover me through questions we both answer"
+        description="When you correctly answer a stranger's question (or they answer yours), each of you can see the other — a slow way to meet people through shared curiosity. Turn this off to stay hidden from strangers."
+        checked={state.discoverableByNicheMatch}
+        saving={savingKey === 'nicheMatch'}
+        onToggle={() => void toggle('nicheMatch')}
       />
 
       <ToggleRow
@@ -217,14 +215,34 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
             >
               Copy
             </button>
-            <button
-              type="button"
-              onClick={() => void rotateInviteUrl()}
-              disabled={rotating}
-              className="btn-ghost min-h-9 rounded-full px-4 text-sm"
-            >
-              {rotating ? 'Rotating…' : 'Rotate link'}
-            </button>
+            {confirmingRotate ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void rotateInviteUrl()}
+                  disabled={rotating}
+                  className="btn-danger min-h-9 rounded-full px-4 text-sm"
+                >
+                  {rotating ? 'Rotating…' : 'Rotate — old link stops working'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingRotate(false)}
+                  disabled={rotating}
+                  className="btn-ghost min-h-9 rounded-full px-4 text-sm"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingRotate(true)}
+                className="btn-ghost min-h-9 rounded-full px-4 text-sm"
+              >
+                Rotate link
+              </button>
+            )}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             Rotating invalidates the old link. Use this if you accidentally shared it broadly.

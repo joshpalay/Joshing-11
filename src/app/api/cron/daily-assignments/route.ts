@@ -9,6 +9,17 @@ import { runWithConcurrency } from '@/server/lib/concurrency';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
+// Scheduled at 17:05 UTC (vercel.json) to fire just after the 17:00 UTC daily
+// reset (DAILY_RESET_HOUR_UTC), so it pre-builds the window users are about to
+// play. The previous 06:00 UTC schedule built the window that expired at 17:00
+// UTC and left the 17:00→06:00 UTC span uncovered, forcing evening-US / APAC
+// users onto the synchronous /api/daily/queue generation path.
+//
+// This fans out generation across every onboarded user at USER_CONCURRENCY,
+// each costing up to GENERATION_TIMEOUT_MS, so the default function budget is
+// far too small for a non-trivial user base — give it the plan maximum so the
+// tail of the user list doesn't get dropped by a platform timeout mid-run.
+export const maxDuration = 300;
 
 // Capped at 4 to stay one connection below the 5-cap DB pool. Tune down if
 // the SMS provider's per-second rate becomes the binding limit instead of DB.
@@ -53,6 +64,14 @@ export async function GET(request: NextRequest) {
     generated: 0,
     existing: 0,
     failed: 0,
+    // Breakdown of `failed` by cause so a non-zero count is self-explaining:
+    //  - no_knowledge_base: benign — user hasn't declared interests yet, so
+    //    there's nothing to generate from (they're routed to /daily/setup, not 503).
+    //  - generation: the real failure mode — generation came up short / errored.
+    //  - other: an unexpected (non-DailyQueueFillError) exception.
+    failedNoKnowledgeBase: 0,
+    failedGeneration: 0,
+    failedOther: 0,
     smsSent: 0,
   };
 
@@ -79,16 +98,28 @@ export async function GET(request: NextRequest) {
         results.smsSent += 1;
       }
     } catch (error) {
+      results.failed += 1;
+
       if (error instanceof DailyQueueFillError) {
-        results.failed += 1;
+        if (error.code === 'no_knowledge_base') {
+          results.failedNoKnowledgeBase += 1;
+        } else {
+          results.failedGeneration += 1;
+        }
+        // Was previously swallowed silently; log the reason so a non-zero
+        // `failed` count is diagnosable from the logs as well as the response.
+        console.warn('[cron/daily-assignments] user skipped', {
+          userId: user.id,
+          code: error.code,
+        });
         return;
       }
 
+      results.failedOther += 1;
       console.error('[cron/daily-assignments] user failed', {
         userId: user.id,
         error: error instanceof Error ? error.message : String(error),
       });
-      results.failed += 1;
     }
   });
 

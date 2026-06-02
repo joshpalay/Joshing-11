@@ -474,6 +474,10 @@ function KnowledgePageContent() {
 
   return (
     <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
+      <h1 className="m-0 px-[0.2rem] font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
+        Knowledge
+      </h1>
+
       {tierCrossed && highlightedDomainSlug && (
         <section className="bg-[var(--cream-accent)] text-[var(--ink)] px-[0.95rem] py-3 text-base">
           You reached {tierCrossed} in this domain this session.
@@ -593,20 +597,21 @@ function KnowledgePageContent() {
       </section>
 
       {dismissedDomains.length > 0 && (
-        <section id="focused-feed" className="bg-white border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Dismissed domains">
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">FOCUSED FEED</p>
-          <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — RE-OPEN ANY TIME</p>
+        <section id="focused-feed" className="bg-white border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Hidden areas">
+          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">HIDDEN AREAS</p>
+          <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — UN-HIDE ANY TIME</p>
           <div className="mt-3 flex flex-col gap-2">
             {dismissedDomains.map((domain) => (
               <div key={domain} className="flex items-center justify-between gap-2">
                 <span className="text-sm">{domain}</span>
                 <button
                   type="button"
-                  className="mt-2 border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]"
+                  className="border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]"
                   onClick={() => void reinstateDomain(domain)}
                   disabled={reinstating === domain}
+                  aria-label={`Un-hide ${domain} in your feed`}
                 >
-                  {reinstating === domain ? 'Reopening...' : `Re-open ${domain} in your Feed`}
+                  {reinstating === domain ? 'Un-hiding…' : 'Un-hide'}
                 </button>
               </div>
             ))}
@@ -705,7 +710,7 @@ function KnowledgePageContent() {
       ) : null}
 
       {activeModal?.type === 'tidy' ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
           <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
@@ -737,7 +742,7 @@ function KnowledgePageContent() {
       ) : null}
 
       {activeModal?.type === 'manage-interests' ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
           <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
@@ -779,8 +784,8 @@ function KnowledgePageContent() {
       ) : null}
 
       {activeModal?.type === 'write-question' ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
+          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] px-5 pt-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Write a question</h2>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">

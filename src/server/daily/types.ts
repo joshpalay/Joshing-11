@@ -13,7 +13,12 @@ import type { DifficultyEstimate } from '@/types/db';
 
 type DailyDifficultyEstimate = DifficultyEstimate | 'accessible' | 'moderate' | 'specialist';
 
-export const queueSlotSourceSchema = z.enum(['friend', 'bot', 'community']);
+// 'house' (D-3) — a labeled non-human house/editorial question seeded into the
+// Daily core to ease content scarcity in sparse niches. Carries a canonical
+// question_id (source='house_authored', creatorId null) and author_name='Joshing'
+// with no author_id (the house identity is never a users.id). 'community' is a
+// legacy enum value, never produced by any picker.
+export const queueSlotSourceSchema = z.enum(['friend', 'bot', 'community', 'house']);
 export const queueSlotAnswerStateSchema = z.enum(['correct', 'incorrect']);
 
 export const queueSlotSchema = z.object({
@@ -29,6 +34,16 @@ export const queueSlotSchema = z.object({
   author_name: z.string().nullish(),
   /** Optional creator note — only ever set for friend questions. */
   author_note: z.string().nullish(),
+  /**
+   * Bonus-slot answerer attribution (Daily Five +2). Set only on a +2 bonus slot —
+   * a friend-answered question surfaced because someone the viewer follows answered
+   * it correctly. The presence of these fields is what marks a slot as a bonus slot
+   * (the question itself is still a canonical friend question, so `source` stays
+   * 'friend' and `author_*` still describe the question's author).
+   */
+  answerer_id: z.string().optional(),
+  /** Display name for "X answered this correctly" — null if the answerer has no display_name. */
+  answerer_name: z.string().nullish(),
   domain: z.string(),
   /** Free-text broader topic for this slot (e.g. "Saturday morning cartoons"). Optional — populated for newly built slots. */
   broad_category: z.string().nullish(),
@@ -60,10 +75,10 @@ export const queueSlotSchema = z.object({
   reveal_breadcrumb: z.string().nullish(),
   /** LLM consolation quip for near-miss wrong answers (PRD §8.1.14). */
   reveal_quip: z.string().nullish(),
-  /** LLM-generated friends-only aside; only populated when the viewer is the creator or an active friend. */
+  /** LLM-generated aside; for authored questions only populated when the viewer is the creator or an active friend, for LLM-origin questions always populated. */
   reveal_inside_joke: z.string().nullish(),
-  /** Per-answer commentary quip from selectQuip() (PRD §8.1.14). */
-  quip: z.string().nullish(),
+  /** Provenance of the aside label: 'relational' (a person authored it) or 'editorial' (LLM-origin). */
+  reveal_inside_joke_kind: z.enum(['relational', 'editorial']).nullish(),
   /** Optional appeal state after a player asks the app to recheck a wrong grade. */
   recheck_status: z.enum(['accepted', 'rejected', 'needs_human']).optional(),
   /** Short player-facing explanation from the recheck reviewer. */
@@ -83,6 +98,32 @@ export const DAILY_SKIP_LIMIT = 5;
 
 export const PERSONAL_DAILY_SESSION_CONTEXT = 'personal_daily';
 export const DAILY_QUEUE_SIZE = 5;
+
+/**
+ * Daily Five +2 — up to this many bonus slots are appended after the core
+ * DAILY_QUEUE_SIZE, sourced from friend-answered questions (see
+ * pickBonusAnswererSlots). Total queue size is therefore 5–7. This is
+ * additive and independent of the orchestrator's N<5 generation backstop:
+ * a bonus shortfall simply appends fewer slots, never backfills.
+ */
+export const DAILY_BONUS_SLOT_MAX = 2;
+
+/** A slot the player can still act on (neither answered nor skipped). */
+export function hasPendingSlot(slots: QueueSlot[]): boolean {
+  return slots.some((slot) => !slot.answered && !slot.skipped);
+}
+
+/**
+ * A round is complete once it has slots and none of them are still pending.
+ *
+ * This is the canonical definition of "done" — the status API and the play
+ * page both derive from it so the home card and the player can't disagree
+ * (a skipped-but-unreplaced slot used to leave the round advertising "Resume"
+ * while the player bounced straight to the summary).
+ */
+export function isRoundComplete(slots: QueueSlot[]): boolean {
+  return slots.length > 0 && !hasPendingSlot(slots);
+}
 
 /**
  * Difficulty → base points for B9 personal daily. Always prefer

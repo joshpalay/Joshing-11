@@ -8,13 +8,19 @@
 import { gradeAnswerWithLLM } from '@/lib/llm';
 
 export type GradeResult = 'correct' | 'wrong';
-export type { Surface, FriendResult } from '@/server/grading/select-quip';
-export { selectQuip } from '@/server/grading/select-quip';
 
 export type GradeOutcome = {
   result: GradeResult;
   // "Snarky but Sweet" consolation for thematically-close wrong answers (null otherwise)
   consolation: string | null;
+  // 0..1 from the LLM, or 1 for exact-match. 0 when grading fell back to a
+  // deterministic 'wrong' verdict due to an LLM error.
+  confidence: number;
+  // 'exact' — exact-match fast-path; 'llm' — model verdict;
+  // 'fallback' — model couldn't be reached (timeout, parse error, no client).
+  // Consumers wanting to soften UX on LLM outages should branch on 'fallback'
+  // (e.g. auto-route to /api/daily/recheck, or hold scoring pending review).
+  gradedVia: 'exact' | 'llm' | 'fallback';
 };
 
 /**
@@ -44,14 +50,16 @@ export async function gradeAnswer(
   questionText: string,
   questionType: string = 'factual'
 ): Promise<GradeOutcome> {
-  if (!submitted.trim()) return { result: 'wrong', consolation: null };
+  if (!submitted.trim()) {
+    return { result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact' };
+  }
 
   // Fast-path: skip the LLM for obvious exact matches and accepted alternatives
   if (exactMatch(submitted, canonicalAnswer, acceptedAlternatives)) {
-    return { result: 'correct', consolation: null };
+    return { result: 'correct', consolation: null, confidence: 1, gradedVia: 'exact' };
   }
 
-  const { result, consolation } = await gradeAnswerWithLLM(
+  const llmResult = await gradeAnswerWithLLM(
     questionText,
     canonicalAnswer,
     submitted,
@@ -61,7 +69,18 @@ export async function gradeAnswer(
       name: error instanceof Error ? error.name : undefined,
       message: error instanceof Error ? error.message : String(error),
     });
-    return { result: 'wrong' as const, confidence: 0, reason: 'llm_error', consolation: null };
+    return {
+      result: 'wrong' as const,
+      confidence: 0,
+      reason: 'llm_error',
+      consolation: null,
+      fallback: true,
+    };
   });
-  return { result, consolation: consolation ?? null };
+  return {
+    result: llmResult.result,
+    consolation: llmResult.consolation ?? null,
+    confidence: llmResult.confidence,
+    gradedVia: llmResult.fallback ? 'fallback' : 'llm',
+  };
 }

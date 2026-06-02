@@ -145,6 +145,9 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
         calibratedDifficulty: asDifficulty(generated.difficultyEstimate),
         status: 'verified',
         visibility: 'public',
+        // Carry the precomputed aside through; the editorial label is applied at
+        // display time (selectInsideJokeForViewer) for these null-creator rows.
+        insideJoke: generated.insideJoke,
       })
       .onConflictDoNothing({ target: questions.generatedQuestionId })
       .returning({ id: questions.id });

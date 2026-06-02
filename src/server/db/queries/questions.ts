@@ -394,8 +394,11 @@ export async function createQuestion(params: {
   publicStatus?: 'not_scored' | 'eligible_pending' | 'rejected' | 'opted_out' | 'migrated';
   publicEligibilityScore?: number | null;
   publicEligibilityReason?: string | null;
+  visibility?: 'public' | 'friends' | 'private';
 }): Promise<{ id: string }> {
   await ensureQuestionSurfacePriorityColumn();
+
+  const visibility = params.visibility ?? 'public';
 
   const difficulty = numberToDifficulty(params.difficulty);
   const baseValues = {
@@ -416,7 +419,7 @@ export async function createQuestion(params: {
     calibratedDifficulty: difficulty,
     answerSource: params.llmSuggestedAnswer ? (params.verified ? 'llm_suggested' : 'llm_edited') : 'creator_written',
     questionType: 'factual',
-    visibility: 'public',
+    visibility,
     status: params.verified ? 'verified' : 'unverified',
     ...(params.publicStatus !== undefined ? { publicStatus: params.publicStatus } : {}),
     ...(params.publicEligibilityScore !== undefined ? { publicEligibilityScore: params.publicEligibilityScore } : {}),
@@ -475,7 +478,7 @@ export async function createQuestion(params: {
         ${difficulty}::"DifficultyEstimate",
         ${difficulty}::"DifficultyEstimate",
         ${status}::"QuestionStatus",
-        'public'::"QuestionVisibility"
+        ${visibility}::"QuestionVisibility"
       )
       RETURNING "id"
     `);

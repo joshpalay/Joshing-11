@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Caveat, Montserrat, Playfair_Display } from 'next/font/google'
+import { Caveat, Cormorant_Garamond, Inter, Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
@@ -25,10 +25,33 @@ const playfair = Playfair_Display({
   display: 'swap',
 })
 
+// Editorial serif register from the Figma design system (display/Body-Serif,
+// display/card/question|update|action). Cormorant Garamond is the project's
+// "Garamond" — used for headlines and feed-card question/answer text. Exposed
+// via --font-cormorant and surfaced to Tailwind as `font-serif` in globals.css.
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  // 700 added for the gameplay question/answer text (Figma display/game/question
+  // is Cormorant Bold 28). Without it the bold synthesizes from 600.
+  weight: ['500', '600', '700'],
+  style: ['normal', 'italic'],
+  variable: '--font-cormorant',
+  display: 'swap',
+})
+
 // Handwritten register for the Lately flourish on /activities. Used sparingly.
 const caveat = Caveat({
   subsets: ['latin'],
   variable: '--font-caveat',
+  display: 'swap',
+})
+
+// Inter — loaded for opt-in use (e.g. the login subtitle's display/heading/section
+// spec). Exposed via --font-inter and surfaced to Tailwind as `font-inter` in
+// globals.css. Montserrat remains the app-wide body font.
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
   display: 'swap',
 })
 
@@ -54,7 +77,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${playfair.variable} ${caveat.variable}`}
+      className={`font-sans ${montserrat.variable} ${playfair.variable} ${caveat.variable} ${cormorant.variable} ${inter.variable}`}
     >
       <body className={montserrat.className}>
         <Nav

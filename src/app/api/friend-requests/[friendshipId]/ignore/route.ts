@@ -28,16 +28,16 @@ export async function POST(
     )
   }
 
-  rememberIgnoredFriendRequest(friendship.requestedByUserId, session.userId)
+  rememberIgnoredFriendRequest(friendship.followerId, session.userId)
 
   logTelemetry('friend_request_ignored', {
     friendship_id: friendship.id,
-    requester_user_id: friendship.requestedByUserId,
+    requester_user_id: friendship.followerId,
     user_id: session.userId,
   })
 
   return NextResponse.json({
     ok: true,
-    friendship: { id: friendship.id, status: friendship.status },
+    friendship: { id: friendship.id, status: friendship.state },
   })
 }

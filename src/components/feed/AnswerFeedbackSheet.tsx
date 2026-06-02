@@ -1,11 +1,16 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Check, Sparkles, X } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
-import { AddToDailyFivePrompt } from './AddToDailyFivePrompt'
+import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
+import { INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types'
+
+// Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
+// card (raw --tri-amber #d9a82e is too light for small text). Used by the
+// "New territory" celebration and the "Between us friends" inside-joke card.
+const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))'
 
 type AnswerFeedbackSheetProps = {
   question: string
@@ -15,8 +20,9 @@ type AnswerFeedbackSheetProps = {
   correctAnswer: string
   submittedAnswer: string
   explanation: string | null
-  quip: string | null
+  creatorNote: string | null
   insideJoke?: string | null
+  insideJokeKind?: InsideJokeKind | null
   openedNewTerritory?: boolean
   openedTerritoryDomain?: string | null
   questionId: string
@@ -34,8 +40,9 @@ export function AnswerFeedbackSheet({
   correctAnswer,
   submittedAnswer,
   explanation,
-  quip,
+  creatorNote,
   insideJoke = null,
+  insideJokeKind = null,
   openedNewTerritory = false,
   openedTerritoryDomain = null,
   questionId,
@@ -44,7 +51,7 @@ export function AnswerFeedbackSheet({
 }: AnswerFeedbackSheetProps) {
   const visibleCategory = visibleFeedCategory(category)
   const showNewTerritory = openedNewTerritory && isCorrect
-  const showAddToDailyFive = Boolean(openedTerritoryDomain) && isCorrect
+  const showTerritoryUndo = Boolean(openedTerritoryDomain) && isCorrect
   const [bankState, setBankState] = useState<BankState>('idle')
   const hasAutoSavedRef = useRef(false)
 
@@ -100,7 +107,7 @@ export function AnswerFeedbackSheet({
   const points = typeof pointsAwarded === 'number' ? pointsAwarded : 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className="fixed inset-0 z-[55] flex items-end justify-center">
       <button
         type="button"
         className="absolute inset-0 bg-black/40"
@@ -110,20 +117,24 @@ export function AnswerFeedbackSheet({
       <div
         className={
           showNewTerritory
-            ? 'relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl ring-2 ring-amber-400/60'
-            : 'relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-3xl bg-white shadow-2xl'
+            ? 'relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-2xl ring-2'
+            : 'relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl'
         }
+        style={showNewTerritory ? { '--tw-ring-color': 'color-mix(in srgb, var(--tri-amber) 55%, transparent)' } as CSSProperties : undefined}
       >
         <div className="flex items-center justify-between px-5 pt-5 pb-2">
           {showNewTerritory ? (
-            <p className="inline-flex items-center gap-1.5 text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-amber-700">
+            <p
+              className="inline-flex items-center gap-1.5 text-[0.68rem] font-semibold tracking-[0.18em] uppercase"
+              style={{ color: GOLD_INK }}
+            >
               <Sparkles className="size-3.5" aria-hidden />
               <span>
-                New territory{visibleCategory ? <span className="text-amber-700/70"> · {visibleCategory.toUpperCase()}</span> : null}
+                New territory{visibleCategory ? <span style={{ opacity: 0.7 }}> · {visibleCategory.toUpperCase()}</span> : null}
               </span>
             </p>
           ) : visibleCategory ? (
-            <p className="text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-stone-500">
+            <p className="text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-[var(--brand-ink-400)]">
               {visibleCategory.toUpperCase()}
             </p>
           ) : (
@@ -133,7 +144,7 @@ export function AnswerFeedbackSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="inline-flex size-8 items-center justify-center rounded-full text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+            className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <X className="size-4" />
           </button>
@@ -142,56 +153,41 @@ export function AnswerFeedbackSheet({
         <div className="flex-1 overflow-y-auto px-5 pb-2">
           <div className="flex items-center gap-3 pb-3">
             <span
-              className={
-                isCorrect
-                  ? 'inline-flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700'
-                  : 'inline-flex size-9 items-center justify-center rounded-full bg-stone-100 text-stone-700'
-              }
+              className="inline-flex size-9 items-center justify-center rounded-full"
+              style={{
+                backgroundColor: isCorrect
+                  ? 'color-mix(in srgb, var(--game-correct) 15%, var(--brand-card))'
+                  : 'color-mix(in srgb, var(--game-wrong-strong) 12%, var(--brand-card))',
+                color: isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)',
+              }}
               aria-hidden
             >
               {isCorrect ? <Check className="size-5" /> : <X className="size-5" />}
             </span>
             <p
-              className={
-                isCorrect
-                  ? 'text-lg font-semibold text-emerald-700'
-                  : 'text-lg font-semibold text-stone-800'
-              }
+              className="text-lg font-semibold"
+              style={{ color: isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)' }}
             >
               {isCorrect ? 'Correct!' : 'Not quite'}
             </p>
             {isCorrect && points > 0 ? (
-              <span className="ml-auto inline-flex items-center rounded-full bg-emerald-600 px-3 py-1 text-sm font-semibold text-white">
+              <span
+                className="ml-auto inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold text-white"
+                style={{ backgroundColor: 'var(--game-correct)' }}
+              >
                 +{points} {points === 1 ? 'pt' : 'pts'}
               </span>
             ) : null}
           </div>
 
-          {showNewTerritory ? (
-            <div className="mb-3 flex items-start gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3">
-              <span
-                className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700"
-                aria-hidden
-              >
-                <Sparkles className="size-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="font-serif text-[15px] leading-snug font-semibold text-amber-900">
-                  You opened new territory
-                  {visibleCategory ? <> in {visibleCategory}</> : null}.
-                </p>
-                <p className="mt-0.5 text-[12px] text-amber-800/80">
-                  First time you&rsquo;ve gotten a question right here. It&rsquo;s on your map now.
-                </p>
-              </div>
-            </div>
+          {showTerritoryUndo && openedTerritoryDomain ? (
+            <NewTerritoryUndo
+              domain={openedTerritoryDomain}
+              category={visibleCategory}
+            />
           ) : null}
 
-          {showAddToDailyFive && openedTerritoryDomain ? (
-            <AddToDailyFivePrompt domain={openedTerritoryDomain} />
-          ) : null}
-
-          <p className="pb-3 font-serif text-lg leading-7 text-stone-950">
+          <p className="pb-3 font-serif text-lg leading-7 text-[var(--brand-ink)]">
             {question}
           </p>
 
@@ -218,37 +214,49 @@ export function AnswerFeedbackSheet({
                 Correct answer: {correctAnswer}
               </p>
             ) : null}
-            {!isCorrect && quip ? (
-              <p
-                className="text-[13px]"
-                style={{ color: 'var(--ink)', opacity: 0.6 }}
-              >
-                {quip}
-              </p>
-            ) : null}
           </div>
 
           {explanation ? (
-            <div className="rounded-2xl bg-stone-50 p-4">
-              <p className="font-serif text-[15px] leading-7 text-stone-800">
+            <div className="rounded-2xl bg-muted p-4">
+              <p className="font-serif text-[15px] leading-7 text-[var(--brand-ink-700)]">
                 {explanation}
               </p>
             </div>
           ) : null}
 
           {insideJoke ? (
-            <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
-              <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-amber-800/80">
-                Between us friends
+            <div
+              className="mt-3 rounded-2xl border p-4"
+              style={{
+                backgroundColor: 'color-mix(in srgb, var(--tri-amber) 12%, var(--brand-card))',
+                borderColor: 'color-mix(in srgb, var(--tri-amber) 40%, var(--brand-border))',
+              }}
+            >
+              <p
+                className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase"
+                style={{ color: GOLD_INK }}
+              >
+                {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
               </p>
-              <p className="mt-1.5 font-serif text-[15px] leading-7 text-amber-950">
+              <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
                 {insideJoke}
               </p>
             </div>
           ) : null}
 
+          {creatorNote ? (
+            <div className="mt-3 rounded-2xl border bg-muted p-4">
+              <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
+                Why they asked
+              </p>
+              <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
+                {creatorNote}
+              </p>
+            </div>
+          ) : null}
+
           {!isCorrect ? (
-            <div className="pt-3 text-[12px] text-stone-600">
+            <div className="pt-3 text-[12px] text-muted-foreground">
               {bankState === 'saving' ? (
                 <span>Saving to your practice bank…</span>
               ) : null}
@@ -258,7 +266,7 @@ export function AnswerFeedbackSheet({
                   <button
                     type="button"
                     onClick={() => void handleUndo()}
-                    className="font-semibold text-stone-800 underline underline-offset-2 hover:text-stone-950"
+                    className="font-semibold text-foreground underline underline-offset-2 hover:opacity-70"
                   >
                     Undo
                   </button>
@@ -266,23 +274,19 @@ export function AnswerFeedbackSheet({
               ) : null}
               {bankState === 'undoing' ? <span>Undoing…</span> : null}
               {bankState === 'undone' ? (
-                <span className="text-stone-500">Removed from your practice bank.</span>
+                <span className="text-muted-foreground">Removed from your practice bank.</span>
               ) : null}
               {bankState === 'error' ? (
-                <span className="text-red-700">Could not update your practice bank.</span>
+                <span style={{ color: 'var(--game-wrong-strong)' }}>Could not update your practice bank.</span>
               ) : null}
             </div>
           ) : null}
         </div>
 
         <div className="px-5 pt-2 pb-8">
-          <Button
-            type="button"
-            onClick={onClose}
-            className="w-full bg-stone-950 text-white hover:bg-stone-800"
-          >
+          <button type="button" onClick={onClose} className="btn-primary w-full">
             Done
-          </Button>
+          </button>
         </div>
       </div>
     </div>

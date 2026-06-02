@@ -5,13 +5,16 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
+import { EditorialBadge } from '@/components/EditorialBadge';
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
+import { NewTerritoryUndo } from '@/components/feed/NewTerritoryUndo';
 import {
   CORRECT_ANSWER_REACTIONS,
   WRONG_ANSWER_REACTIONS,
   isWrongAnswerReactionKey,
   type ReactionKey,
 } from '@/lib/reactions';
+import { isLlmAttribution, INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types';
 
 export type ReactionPromptData = {
   senderName: string;
@@ -37,11 +40,20 @@ export type ChatMessage =
       assignmentId: string;
       questionText: string;
       creatorName: string | null;
+      /**
+       * D-3: the named author is the non-human house/editorial author. Renders
+       * the persistent `Editorial` badge and suppresses all relational copy
+       * ("gave you this", "{name} carries this one"). Set explicitly by the
+       * server resolver — never inferred from the name string, so a human named
+       * "Joshing" is never mistaken for the house author.
+       */
+      creatorIsHouse?: boolean;
+      /**
+       * Daily Five +2 bonus slot: the friend who answered this correctly. When
+       * set, the card shows "{name} answered this correctly" attribution.
+       */
+      answererName?: string | null;
       isNew?: boolean;
-      onDismiss?: () => void;
-      dismissLabel?: string;
-      /** When false, the dismiss button calls onDismiss but does not flip into the "Skipped" inline state — used when the click opens a dialog instead of completing the action. Defaults to true to preserve legacy behavior. */
-      dismissImmediate?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
     }
@@ -54,12 +66,16 @@ export type ChatMessage =
       questionText: string;
       result: 'correct' | 'wrong' | 'expired' | 'gave_up';
       submitted: string;
+      /** D-3: the named author is the non-human house author (see question variant). */
+      creatorIsHouse?: boolean;
       /** Canonical answer when wrong */
       correctAnswer: string | null;
       /** Near-miss quip from LLM grader */
       consolation: string | null;
-      /** LLM-generated friends-only aside; only present when the viewer is the creator or an active friend. */
+      /** LLM-generated aside; for authored questions only present when the viewer is the creator or an active friend. */
       insideJoke?: string | null;
+      /** Provenance of the aside label: relational (a person authored it) vs editorial (LLM-origin). */
+      insideJokeKind?: InsideJokeKind | null;
       breadcrumb: string | null;
       /** 0–3 index for rotating copy phrases */
       copyVariant: number;
@@ -69,8 +85,10 @@ export type ChatMessage =
       relationalFeedbackLine?: string | null;
       /** Domain exclusion — canonical subcategory for "remove from rotation" affordance */
       canonicalSubcategory?: string | null;
-      /** Per-answer commentary quip shown below the result bubble */
-      quip?: string | null;
+      /** B-1 — domain newly opened in the KB by this correct answer; surfaces the "Added [Domain] — remove?" undo. */
+      openedTerritoryDomain?: string | null;
+      /** Author's why — commentary the question's author attached at creation, revealed on answer (correct or incorrect). */
+      authorNote?: string | null;
       /** Question's stored factual explainer. Rendered as a fallback below the verdict when no breadcrumb arrives (e.g. feed-sourced catch-up items, or when /api/breadcrumb times out). */
       explanation?: string | null;
       reactionPrompt?: ReactionPromptData | null;
@@ -120,6 +138,11 @@ const monoStyle: CSSProperties = {
   letterSpacing: '0.06em',
 };
 
+// Darkened triangle-gold so warning/inside-joke labels clear AA on the cream
+// surface (raw --tri-amber #d9a82e is too light for small text). Mirrors the
+// GOLD_INK used on the feed answer sheets.
+const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))';
+
 const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
   (name) => `${name}’s world includes this`,
   (name) => `${name} carries this one`,
@@ -132,9 +155,10 @@ function firstNameFrom(creatorName: string): string {
   return space === -1 ? trimmed : trimmed.slice(0, space);
 }
 
-function wrongNamedSubLabel(creatorName: string | null, variant: number): string | null {
+function wrongNamedSubLabel(creatorName: string | null, variant: number, isHouse = false): string | null {
   if (!creatorName) return null;
-  if (creatorName.trim().toLowerCase() === 'joshing') return null;
+  // House and LLM origins are non-relational: no "{name} carries this one".
+  if (isHouse || isLlmAttribution(creatorName)) return null;
   const firstName = firstNameFrom(creatorName);
   if (!firstName) return null;
   return WRONG_NAMED_SUBLABEL[variant % WRONG_NAMED_SUBLABEL.length]!(firstName);
@@ -164,21 +188,22 @@ function QuestionRow({
   badges = [],
   questionText,
   creatorName,
+  creatorIsHouse = false,
+  answererName = null,
   isNew = false,
-  onDismiss,
-  dismissLabel = "Skip - don't show again",
-  dismissImmediate = true,
+  onGiveUp,
+  giveUpDisabled = false,
 }: {
   subhead?: string | null;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
   creatorName: string | null;
+  creatorIsHouse?: boolean;
+  answererName?: string | null;
   isNew?: boolean;
-  onDismiss?: () => void;
-  dismissLabel?: string;
-  dismissImmediate?: boolean;
+  onGiveUp?: () => void;
+  giveUpDisabled?: boolean;
 }) {
-  const [dismissed, setDismissed] = useState(false);
   const [visible, setVisible] = useState(!isNew);
 
   useEffect(() => {
@@ -187,11 +212,6 @@ function QuestionRow({
     return () => window.clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleDismiss = useCallback(() => {
-    if (dismissImmediate) setDismissed(true);
-    onDismiss?.();
-  }, [onDismiss, dismissImmediate]);
 
   return (
     <div
@@ -227,87 +247,99 @@ function QuestionRow({
             FROM
           </span>
           <span style={{ fontWeight: 600 }}>{creatorName}</span>
-          {creatorName.trim().toLowerCase() === 'joshing' ? null : (
+          {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+          {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
             <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>gave you this</span>
           )}
+        </p>
+      ) : null}
+      {answererName ? (
+        <p
+          style={{
+            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontSize: '0.86rem',
+            color: 'var(--text)',
+            paddingLeft: '2px',
+            paddingBottom: '2px',
+            opacity: 0.82,
+            lineHeight: 1.3,
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>{firstNameFrom(answererName)}</span>
+          <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>answered this correctly</span>
         </p>
       ) : null}
       <div
         style={{
           alignSelf: 'flex-start',
           maxWidth: '88%',
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
+          background: 'var(--game-card-question)',
+          border: '1px solid var(--brand-rule)',
           borderRadius: 'var(--radius-md)',
-          padding: '12px 16px',
-          fontSize: '0.98rem',
-          color: 'var(--text)',
-          lineHeight: 1.45,
+          // effect/card/question — soft layered drop shadow.
+          boxShadow: '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
+          padding: '16px 18px',
+          fontFamily: 'var(--font-cormorant), Georgia, serif',
+          fontSize: '1.75rem',
+          fontWeight: 700,
+          letterSpacing: 0,
+          color: 'var(--brand-ink)',
+          lineHeight: 1.3,
         }}
       >
         <p style={{ margin: 0 }}>{questionText}</p>
+        {badges.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
+            {badges.map((badge) => (
+              <span
+                key={badge.label}
+                style={{
+                  // Figma display/pill/sans — Georgia, 12px, title-case (not the
+                  // mono uppercase used elsewhere).
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontSize: '0.75rem',
+                  lineHeight: 1.1,
+                  letterSpacing: '0.01em',
+                  borderRadius: '999px',
+                  border: '1px solid var(--border)',
+                  background: badge.tone === 'warning'
+                    ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
+                    : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                  color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
+                  padding: '3px 9px',
+                }}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
-      {badges.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5 pt-1 pl-0.5">
-          {badges.map((badge) => (
-            <span
-              key={badge.label}
-              style={{
-                ...monoStyle,
-                borderRadius: '999px',
-                border: '1px solid var(--border)',
-                background: badge.tone === 'warning'
-                  ? 'color-mix(in srgb, #b45309 12%, var(--surface))'
-                  : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
-                color: badge.tone === 'warning' ? '#b45309' : 'var(--text-muted)',
-                fontSize: '0.52rem',
-                padding: '2px 6px',
-              }}
-            >
-              {badge.label}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {onDismiss ? (
-        dismissed ? (
-          <p
-            style={{
-              ...monoStyle,
-              fontSize: '0.58rem',
-              color: 'var(--text-muted)',
-              paddingLeft: '2px',
-              marginTop: '2px',
-            }}
-          >
-            Skipped
-          </p>
-        ) : (
-          <button
-            type="button"
-            aria-label={dismissLabel === 'X' ? 'Dismiss question' : dismissLabel}
-            onClick={handleDismiss}
-            style={{
-              alignSelf: 'flex-start',
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.58rem',
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: 'var(--text-muted)',
-              textDecoration: 'underline',
-              textUnderlineOffset: '2px',
-              opacity: 0.7,
-              marginTop: '4px',
-              paddingLeft: '2px',
-            }}
-          >
-            {dismissLabel}
-          </button>
-        )
+      {onGiveUp ? (
+        <button
+          type="button"
+          onClick={onGiveUp}
+          disabled={giveUpDisabled}
+          style={{
+            alignSelf: 'flex-start',
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.58rem',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--text-muted)',
+            textDecoration: 'underline',
+            textUnderlineOffset: '2px',
+            opacity: 0.7,
+            marginTop: '4px',
+            paddingLeft: '2px',
+          }}
+        >
+          Show me the answer
+        </button>
       ) : null}
     </div>
   );
@@ -319,11 +351,16 @@ function UserRow({ text }: { text: string }) {
       <div
         style={{
           maxWidth: '88%',
-          background: 'var(--user-bubble)',
+          background: 'var(--brand-navy)',
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
-          padding: '10px 14px',
-          fontSize: '0.9rem',
-          color: 'var(--user-bubble-foreground)',
+          padding: '10px 16px',
+          // Figma answer bubble — Cormorant serif, not the sans body font.
+          fontFamily: 'var(--font-cormorant), Georgia, serif',
+          fontSize: '1.15rem',
+          fontWeight: 600,
+          letterSpacing: '0.01em',
+          lineHeight: 1.3,
+          color: 'var(--primary-foreground)',
         }}
       >
         {text}
@@ -332,9 +369,10 @@ function UserRow({ text }: { text: string }) {
   );
 }
 
-function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: string | null }) {
+function BreadcrumbLine({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
   const author = creatorName?.trim() ?? null;
-  const isBot = author?.toLowerCase() === 'joshing';
+  // House is non-relational like the LLM origin: no "From {firstName}." line.
+  const isBot = creatorIsHouse || isLlmAttribution(author);
   const showAuthor = author && !isBot;
   return (
     <div
@@ -543,12 +581,14 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
             disabled={status === 'sending'}
             style={{
               flex: '0 0 auto',
-              minHeight: '34px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: '44px',
               borderRadius: '999px',
               border: '1px solid var(--border)',
               background: 'var(--surface)',
               color: 'var(--text)',
-              padding: '0 10px',
+              padding: '0 14px',
               fontSize: '0.78rem',
               cursor: status === 'sending' ? 'default' : 'pointer',
             }}
@@ -564,8 +604,11 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
           aria-label="Add a custom message"
           style={{
             flex: '0 0 auto',
-            width: '34px',
-            height: '34px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '44px',
+            height: '44px',
             borderRadius: '999px',
             border: '1px solid var(--border)',
             background: 'var(--surface)',
@@ -585,26 +628,52 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   );
 }
 
-function QuipLine({ text }: { text: string }) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const t = window.setTimeout(() => setVisible(true), 150);
-    return () => window.clearTimeout(t);
-  }, []);
+function AuthorNoteCard({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
   return (
-    <p
+    <div
       style={{
-        fontSize: '0.875rem',
-        color: 'var(--text-muted)',
-        fontStyle: 'italic',
-        marginTop: '4px',
-        marginLeft: '8px',
-        opacity: visible ? 1 : 0,
-        transition: 'opacity 0.3s ease',
+        marginTop: '8px',
+        width: '100%',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface-2)',
+        padding: '10px 14px',
+        color: 'var(--text)',
       }}
     >
-      {text}
-    </p>
+      <p
+        style={{
+          ...monoStyle,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '0.55rem',
+          color: 'var(--text-muted)',
+          letterSpacing: '0.18em',
+          textTransform: 'uppercase',
+        }}
+      >
+        {/* House notes are editorial, never relational — no "Why {name} asked". */}
+        {creatorIsHouse ? (
+          <>
+            <span>Editor&rsquo;s note</span>
+            <EditorialBadge />
+          </>
+        ) : (
+          <span>{creatorName ? `Why ${creatorName} asked` : 'Why they asked'}</span>
+        )}
+      </p>
+      <p
+        style={{
+          marginTop: '4px',
+          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontSize: '0.92rem',
+          lineHeight: 1.45,
+        }}
+      >
+        {text}
+      </p>
+    </div>
   );
 }
 
@@ -640,16 +709,20 @@ function ResultRow({
   correctAnswer,
   consolation,
   insideJoke,
+  insideJokeKind,
   breadcrumb,
-  quip,
+  authorNote,
   explanation,
   copyVariant,
   creatorName,
+  creatorIsHouse = false,
   relationalFeedbackLine,
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
   recheckAction,
+  canonicalSubcategory,
+  openedTerritoryDomain,
 }: {
   result: 'correct' | 'wrong' | 'expired' | 'gave_up';
   submitted: string;
@@ -657,17 +730,20 @@ function ResultRow({
   correctAnswer: string | null;
   consolation: string | null;
   insideJoke?: string | null;
+  insideJokeKind?: InsideJokeKind | null;
   breadcrumb: string | null;
-  quip?: string | null;
+  authorNote?: string | null;
   explanation?: string | null;
   copyVariant: number;
   creatorName: string | null;
+  creatorIsHouse?: boolean;
   relationalFeedbackLine?: string | null;
   canonicalSubcategory?: string | null;
   reactionPrompt?: ReactionPromptData | null;
   pointsAwarded?: number | null;
   pointsLabel?: string | null;
   recheckAction?: RecheckAction | null;
+  openedTerritoryDomain?: string | null;
 }) {
   const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
@@ -693,24 +769,33 @@ function ResultRow({
     }
   }, [recheckAction, recheckState]);
 
+  // Color-coded left border per the Figma result cards (green "nailed it",
+  // red "not quite"); neutral for expired/gave-up.
   const resultToneStyle: CSSProperties = expired
     ? {
       background: 'var(--surface-2)',
       border: '1px solid var(--border)',
+      borderLeft: '3px solid var(--border)',
     }
     : correct
       ? {
-        background: 'color-mix(in srgb, var(--success) 9%, var(--surface-2))',
-        border: '1px solid color-mix(in srgb, var(--success) 30%, var(--border))',
+        // Figma Correct (#366045) — forest green, lighter card body than the
+        // vivid --success used elsewhere.
+        background: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
+        border: '1px solid color-mix(in srgb, var(--game-correct) 26%, var(--border))',
+        borderLeft: '3px solid var(--game-correct)',
       }
       : gaveUp
         ? {
           background: 'var(--surface-2)',
           border: '1px solid var(--border)',
+          borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
         }
         : {
-          background: 'color-mix(in srgb, #b42318 7%, var(--surface-2))',
-          border: '1px solid color-mix(in srgb, #b42318 24%, var(--border))',
+          // Figma text/wrong (#c96b4a) body + game/wrong/in-question (#c33d14) bar.
+          background: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
+          border: '1px solid color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
+          borderLeft: '3px solid var(--game-wrong-strong)',
         };
 
   return (
@@ -730,8 +815,8 @@ function ResultRow({
           <span style={{ color: 'var(--text-muted)' }}>This one wasn&apos;t recorded in time.</span>
         ) : correct ? (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif' }}>
-              <span style={{ color: '#178245', marginRight: '6px' }}>✓</span>
+            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-correct)', fontWeight: 600 }}>
+              <span style={{ color: 'var(--game-correct)', marginRight: '6px' }}>✓</span>
               {copy.headline}
             </p>
             <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
@@ -766,20 +851,30 @@ function ResultRow({
           </>
         ) : (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif' }}>
-              <span style={{ color: '#8b1f16', marginRight: '6px' }}>✕</span>
+            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-wrong-strong)', fontWeight: 600 }}>
+              <span style={{ color: 'var(--game-wrong-strong)', marginRight: '6px' }}>✕</span>
               {wrongHeadline(copyVariant)}
             </p>
             {correctAnswer ? (
-              <p style={{ marginTop: '8px', fontSize: '0.9rem', color: 'var(--text)' }}>
-                <span style={{ fontWeight: 600 }}>Answer:</span> {correctAnswer}
+              <p
+                style={{
+                  marginTop: '8px',
+                  // Figma question/game/answer — Cormorant Bold 28.
+                  fontFamily: 'var(--font-cormorant), Georgia, serif',
+                  fontSize: '1.75rem',
+                  fontWeight: 700,
+                  color: 'var(--brand-ink)',
+                  lineHeight: 1.3,
+                }}
+              >
+                {correctAnswer}
               </p>
             ) : null}
             <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
               Now it&rsquo;s in yours too
             </p>
             {(() => {
-              const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant);
+              const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant, creatorIsHouse);
               return namedSubLabel ? (
                 <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                   {namedSubLabel}
@@ -823,9 +918,9 @@ function ResultRow({
                         alignItems: 'center',
                         gap: '8px',
                         borderRadius: 'var(--radius-md)',
-                        border: '1px solid color-mix(in srgb, var(--success) 35%, var(--border))',
-                        background: 'color-mix(in srgb, var(--success) 12%, var(--surface))',
-                        color: '#065f46',
+                        border: '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
+                        background: 'color-mix(in srgb, var(--game-correct) 12%, var(--surface))',
+                        color: 'var(--game-correct)',
                         padding: '8px 12px',
                         fontSize: '0.85rem',
                         fontWeight: 500,
@@ -846,9 +941,8 @@ function ResultRow({
           </>
         )}
         {breadcrumb
-          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} />
+          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
           : explanation ? <ExplanationLine text={explanation} /> : null}
-        {quip ? <QuipLine text={quip} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
@@ -862,8 +956,8 @@ function ResultRow({
             marginTop: '8px',
             width: '100%',
             borderRadius: 'var(--radius-md)',
-            border: '1px solid color-mix(in srgb, #b58a2b 24%, var(--border))',
-            background: 'color-mix(in srgb, #f6c97a 14%, var(--surface-2))',
+            border: '1px solid color-mix(in srgb, var(--tri-amber) 40%, var(--border))',
+            background: 'color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))',
             padding: '10px 14px',
             color: 'var(--text)',
           }}
@@ -872,12 +966,12 @@ function ResultRow({
             style={{
               ...monoStyle,
               fontSize: '0.55rem',
-              color: 'color-mix(in srgb, #6b4a10 80%, var(--text-muted))',
+              color: GOLD_INK,
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
             }}
           >
-            Between us friends
+            {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
           </p>
           <p
             style={{
@@ -890,6 +984,10 @@ function ResultRow({
             {insideJoke}
           </p>
         </div>
+      ) : null}
+      {authorNote ? <AuthorNoteCard text={authorNote} creatorName={creatorName} creatorIsHouse={creatorIsHouse} /> : null}
+      {correct && openedTerritoryDomain ? (
+        <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
       {reactionPrompt ? <QuestionReactionPrompt prompt={reactionPrompt} /> : null}
     </div>
@@ -1060,9 +1158,28 @@ function BonusOfferRow({
 
 export function GameplayChatThread({
   messages,
+  onGiveUp,
+  giveUpDisabled,
 }: {
   messages: ChatMessage[];
+  onGiveUp?: () => void;
+  giveUpDisabled?: boolean;
 }) {
+  // "Show me the answer" belongs only under the active (still-unanswered)
+  // question — the last question message with no result after it. Without this
+  // gate the thread would attach onGiveUp to every historical question row.
+  const lastQuestionIndex = (() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].kind === 'question') return i;
+    }
+    return -1;
+  })();
+  const activeQuestionId =
+    lastQuestionIndex >= 0 &&
+    !messages.slice(lastQuestionIndex + 1).some((m) => m.kind === 'result')
+      ? messages[lastQuestionIndex].id
+      : null;
+
   return (
     <div className="space-y-2.5">
       {messages.map((m) => {
@@ -1075,12 +1192,13 @@ export function GameplayChatThread({
                 key={m.id}
                 questionText={m.questionText}
                 creatorName={m.creatorName}
+                creatorIsHouse={m.creatorIsHouse}
+                answererName={m.answererName}
                 isNew={m.isNew}
-                onDismiss={m.onDismiss}
-                dismissLabel={m.dismissLabel}
-                dismissImmediate={m.dismissImmediate}
                 subhead={m.subhead}
                 badges={m.badges}
+                onGiveUp={onGiveUp && m.id === activeQuestionId ? onGiveUp : undefined}
+                giveUpDisabled={giveUpDisabled}
               />
             );
           case 'user':
@@ -1097,17 +1215,20 @@ export function GameplayChatThread({
                 correctAnswer={m.correctAnswer}
                 consolation={m.consolation}
                 insideJoke={m.insideJoke}
+                insideJokeKind={m.insideJokeKind}
                 breadcrumb={m.breadcrumb}
-                quip={m.quip}
+                authorNote={m.authorNote}
                 explanation={m.explanation}
                 copyVariant={m.copyVariant}
                 creatorName={m.creatorName}
+                creatorIsHouse={m.creatorIsHouse}
                 relationalFeedbackLine={m.relationalFeedbackLine}
                 canonicalSubcategory={m.canonicalSubcategory}
                 reactionPrompt={m.reactionPrompt}
                 pointsAwarded={m.pointsAwarded}
                 pointsLabel={m.pointsLabel}
                 recheckAction={m.recheckAction}
+                openedTerritoryDomain={m.openedTerritoryDomain}
               />
             );
           case 'session_complete':

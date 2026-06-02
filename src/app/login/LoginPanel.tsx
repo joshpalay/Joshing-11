@@ -1,10 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
+
+/** Format a stored E.164 US number as (734)-277-6819 for display. */
+function formatPhoneForDisplay(e164: string): string {
+  const digits = e164.replace(/\D/g, '').replace(/^1/, '');
+  if (digits.length !== 10) return e164;
+  return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+const CARD_CLASS =
+  'w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-[46px] py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
+const INPUT_CLASS =
+  'h-11 w-full rounded-[4px] border border-[var(--tri-amber)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none ring-offset-2 ring-offset-[var(--brand-cream-card)] focus:ring-2 focus:ring-[var(--brand-navy)]';
+const SUBMIT_CLASS =
+  'h-11 w-full rounded-[4px] bg-[var(--brand-navy)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {
@@ -57,6 +71,18 @@ export default function LoginPanel() {
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Controls the bottom-card transition: the title card (in page.tsx) stays
+  // fixed; only this form card animates out, swaps content, then animates in.
+  const [entering, setEntering] = useState(true);
+
+  const swapStep = useCallback((next: 'phone' | 'code') => {
+    setEntering(false); // exit: fade + slide down
+    window.setTimeout(() => {
+      setStep(next); // swap content while hidden
+      setError(null);
+      requestAnimationFrame(() => setEntering(true)); // enter: fade + slide in
+    }, 200);
+  }, []);
 
   async function continueWithPhone(event: FormEvent) {
     event.preventDefault();
@@ -85,7 +111,7 @@ export default function LoginPanel() {
       }
 
       setPhone(normalized);
-      setStep('code');
+      swapStep('code');
     } finally {
       setLoading(false);
     }
@@ -124,81 +150,126 @@ export default function LoginPanel() {
   }
 
   return (
-    <section className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-sm">
-      <div className="mb-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {step === 'phone' ? 'Login with phone' : 'Enter code'}
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-normal">Joshing</h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Trivia you wish you were asked.
-        </p>
-      </div>
-
+    <section
+      className={CARD_CLASS}
+      style={{
+        opacity: entering ? 1 : 0,
+        transform: entering ? 'translateY(0)' : 'translateY(10px)',
+        transition: 'opacity 200ms ease, transform 200ms ease',
+      }}
+    >
       {step === 'phone' ? (
-        <form className="space-y-3" onSubmit={continueWithPhone}>
-          <label className="block text-sm font-medium" htmlFor="phone">
-            Phone number
+        <form className="space-y-[14px]" onSubmit={continueWithPhone}>
+          {/* Solid filled handset, matching the Figma black phone glyph
+              (and the filled treatment of the OTP step's bubble icon).
+              Hand-drawn as a fill-only glyph rather than a force-filled
+              lucide outline, which rendered with a muddy stroked edge. */}
+          <svg
+            className="mx-auto h-12 w-12 fill-black"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+          </svg>
+          <label
+            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
+            htmlFor="phone"
+          >
+            What is your phone number?
           </label>
           <input
             id="phone"
             type="tel"
             inputMode="tel"
             autoComplete="tel"
-            className="h-11 w-full rounded-md border bg-background px-3 text-base outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+            className={INPUT_CLASS}
             placeholder="555-123-4567"
             value={phone}
             onChange={(event) => setPhone(event.target.value.replace(/\D/g, ''))}
             disabled={loading}
           />
-          <button
-            type="submit"
-            className="h-11 w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
-            disabled={loading}
-          >
-            {loading ? 'Continuing...' : 'Continue'}
+          <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+            {loading ? 'Continuing…' : 'Continue'}
           </button>
         </form>
       ) : (
-        <form className="space-y-3" onSubmit={verifyCode}>
-          <label className="block text-sm font-medium" htmlFor="code">
-            Temporary code
+        <form className="space-y-[14px]" onSubmit={verifyCode}>
+          {/* Two overlapping oval speech bubbles — navy behind, orange in front
+              — recreating the Figma two-tone mark. The front bubble is drawn
+              twice: first as a slightly larger cream copy (the page background
+              color) so a crescent of background shows where it overlaps the
+              navy, then as the orange bubble on top. */}
+          <svg
+            className="mx-auto h-14 w-auto"
+            viewBox="-3 -3 54 44"
+            aria-hidden="true"
+          >
+            <g fill="var(--brand-navy)">
+              <ellipse cx="15" cy="15" rx="15" ry="12" />
+              <path d="M3 22 L11 26.5 L1 31 Z" />
+            </g>
+            {/* cream halo — background color showing through the overlap */}
+            <g
+              fill="var(--brand-cream-card)"
+              transform="translate(32 23) scale(1.14) translate(-32 -23)"
+            >
+              <ellipse cx="32" cy="23" rx="15" ry="12" />
+              <path d="M44 30 L36 34.5 L46.5 39 Z" />
+            </g>
+            <g fill="var(--brand-orange)">
+              <ellipse cx="32" cy="23" rx="15" ry="12" />
+              <path d="M44 30 L36 34.5 L46.5 39 Z" />
+            </g>
+          </svg>
+          <label
+            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
+            htmlFor="code"
+          >
+            Enter your code for{' '}
+            <span className="whitespace-nowrap">{formatPhoneForDisplay(phone)}</span>
           </label>
           <input
             id="code"
             type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
-            className="h-11 w-full rounded-md border bg-background px-3 text-base outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+            className={INPUT_CLASS}
             placeholder="000000"
             value={code}
             onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
             disabled={loading}
           />
-          <button
-            type="submit"
-            className="h-11 w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
-            disabled={loading}
-          >
-            {loading ? 'Verifying...' : 'Verify code'}
-          </button>
-          <button
-            type="button"
-            className="h-9 w-full text-sm text-muted-foreground"
-            onClick={() => {
-              setCode('');
-              setError(null);
-              setStep('phone');
-            }}
-            disabled={loading}
-          >
-            Change number
-          </button>
+
+          {/* Button + divider + Change number form a tight 6px cluster (Figma
+              Frame 3), separate from the 14px rhythm of the fields above. */}
+          <div className="space-y-1.5">
+            <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+              {loading ? 'Verifying…' : 'Continue'}
+            </button>
+
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+              <span className="text-[17px] font-medium text-black">or</span>
+              <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+            </div>
+
+            <button
+              type="button"
+              className="mx-auto block text-[14px] font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              onClick={() => {
+                setCode('');
+                swapStep('phone');
+              }}
+              disabled={loading}
+            >
+              Change number
+            </button>
+          </div>
         </form>
       )}
 
       {error ? (
-        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
           {error}
         </p>
       ) : null}

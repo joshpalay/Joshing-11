@@ -1,0 +1,27 @@
+# The repo source predates this Prettier config and was never normalized to it
+# (see the `format` script — it only touches files you've changed, so Prettier
+# never rewrites the whole tree). This file keeps `format`/`format:all` off
+# things that should never be auto-reformatted.
+
+# Dependencies & build output
+node_modules/
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Excluded from the project entirely (see CLAUDE.md / tsconfig.json)
+_salvaged/
+
+# Generated Drizzle artifacts — hand-editing these would corrupt migration state
+drizzle/meta/
+
+# Lockfile
+package-lock.json
+
+# Prose / specs are authored by hand; Prettier's markdown rewrites add noise
+*.md
+_docs/
+docs/
+audit/

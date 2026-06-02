@@ -1,4 +1,6 @@
 import { sql } from 'drizzle-orm';
+
+import type { QuestionSource } from '@/lib/questions-types';
 import {
   boolean,
   check,
@@ -36,6 +38,14 @@ export const categoryEnum = pgEnum('Category', [
 ]);
 
 export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends']);
+
+// D-1 Stage 3 — directional follow model.
+// `state` on a follow edge: a follow targeting an approval_required user lands
+// as `pending` (a request the followee approves); a follow targeting a public
+// user lands `approved` immediately. Invites create approved edges directly.
+export const followStateEnum = pgEnum('FollowState', ['pending', 'approved']);
+// Per-user gate on *new* followers. Default approval_required (opt into public).
+export const followPrivacyEnum = pgEnum('FollowPrivacy', ['public', 'approval_required']);
 export const publicStatusEnum = pgEnum('PublicStatus', [
   'not_scored',
   'eligible_pending',
@@ -102,6 +112,8 @@ export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'expiry_reminder',
   'incognito_round_invitation',
   'anniversary_milestone',
+  // Retired with the post-wrong-answer CreatorNote nudge (B-3). Kept as
+  // tombstones because Postgres can't cleanly drop enum values; no code emits these.
   'creator_note_prompt',
   'creator_note_received',
   'ceremony_ready',
@@ -170,6 +182,7 @@ export const users = pgTable(
     emailVerified: boolean('email_verified').notNull().default(false),
     pendingEmail: text('pending_email'),
     reminderPromptDismissedAt: timestamp('reminder_prompt_dismissed_at', { withTimezone: true }),
+    areaTopUpPromptDismissedAt: timestamp('area_top_up_prompt_dismissed_at', { withTimezone: true }),
     lastActivityBellOpenedAt: timestamp('last_activity_bell_opened_at', { withTimezone: true }),
     knowledgeCardShareToken: text('knowledge_card_share_token'),
     knowledgeCardShareExpiresAt: timestamp('knowledge_card_share_expires_at', { withTimezone: true }),
@@ -180,6 +193,13 @@ export const users = pgTable(
     avatarColor: text('avatar_color'),
     discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
+    // D-2 niche-match discovery. TEST-PHASE default ON (DEFAULT true) — deliberate
+    // for the test cohort only. The production default is an OPEN DECISION to
+    // revisit after the test; do not assume default-ON as the shipping default.
+    // See drizzle/0059_niche_match_discoverability.sql.
+    discoverableByNicheMatch: boolean('discoverable_by_niche_match').notNull().default(true),
+    // D-1 Stage 3 — gate on new followers. Default approval_required; public is opt-in.
+    followPrivacy: followPrivacyEnum('follow_privacy').notNull().default('approval_required'),
     phoneHash: text('phone_hash'),
     lastFriendDiscoveryCheckAt: timestamp('last_friend_discovery_check_at', { withTimezone: true }),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
@@ -233,7 +253,7 @@ export const questions = pgTable(
     id: id(),
     creatorId: text('creator_id').references(() => users.id),
     generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id, { onDelete: 'set null' }),
-    source: text('source').$type<'authored' | 'daily_generated'>().notNull().default('authored'),
+    source: text('source').$type<QuestionSource>().notNull().default('authored'),
     sourceQuestionId: text('source_question_id'),
     sourceCreatorId: text('source_creator_id'),
     questionText: text('question_text').notNull(),
@@ -430,28 +450,6 @@ export const questionReactions = pgTable(
   ],
 );
 
-export const creatorNotes = pgTable(
-  'CreatorNote',
-  {
-    id: id(),
-    authorUserId: text('authorUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    recipientUserId: text('recipientUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
-    contextType: text('contextType').$type<'feed' | 'joshing_game' | 'daily'>().notNull(),
-    contextId: text('contextId'),
-    noteText: text('noteText').notNull(),
-    promptedAt: timestamp('promptedAt', { withTimezone: true }).notNull().defaultNow(),
-    writtenAt: timestamp('writtenAt', { withTimezone: true }),
-    deliveredAt: timestamp('deliveredAt', { withTimezone: true }),
-    createdAt: createdAt(),
-  },
-  (table) => [
-    index('CreatorNote_authorUserId_promptedAt_idx').on(table.authorUserId, table.promptedAt),
-    index('CreatorNote_recipientUserId_questionId_idx').on(table.recipientUserId, table.questionId),
-    index('CreatorNote_questionId_idx').on(table.questionId),
-  ],
-);
-
 export const gradeDisputes = pgTable(
   'GradeDispute',
   {
@@ -528,6 +526,16 @@ export const generatedQuestions = pgTable(
     // re-wordings of the same trivia that the text-level check misses.
     // Nullable so older rows generated before this column existed remain valid.
     factKey: text('fact_key'),
+    // 1-3 short tags identifying which facets of the domain this question
+    // covers (e.g. "Septimus shell shock", "Cymbeline allusion"). Aggregated
+    // per domain and fed back to the generation prompt as positive guidance:
+    // "you've covered X, Y, Z — pick something else." See migration 0055.
+    subAngles: text('sub_angles').array().notNull().default([]),
+    // Precomputed "between us" aside, generated once at question-generation time
+    // (src/server/daily/generate-questions.ts) and copied into Question.inside_joke
+    // when the row is persisted. Nullable: older rows and any where generation
+    // failed simply have no aside.
+    insideJoke: text('inside_joke'),
     createdAt: createdAt(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedInQueue: boolean('used_in_queue').notNull().default(false),
@@ -750,6 +758,34 @@ export const friendships = pgTable(
   ],
 );
 
+// D-1 Stage 3 — directional follow edges. Two rows model a mutual ("friend")
+// relationship; one row models a one-directional follow. The follower is always
+// the requester, so there is no separate requestedByUserId. Unfollow is a hard
+// delete (no `removed` state). `friendships` is frozen and kept for rollback;
+// all relationship reads/writes go through this table.
+export const follows = pgTable(
+  'Follow',
+  {
+    id: id(),
+    followerId: text('followerId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    followeeId: text('followeeId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    state: followStateEnum('state').notNull().default('pending'),
+    // Carried from the originating request so the incoming-request card can
+    // still render a personal note and suggested interests.
+    personalNote: text('personalNote'),
+    requestContext: jsonb('requestContext').$type<{ suggestedInterests?: string[] }>(),
+    createdAt: createdAt(),
+    approvedAt: timestamp('approvedAt', { withTimezone: true }),
+  },
+  (table) => [
+    unique('Follow_followerId_followeeId_key').on(table.followerId, table.followeeId),
+    // "who I follow" + outbound pending; "my followers" + inbound pending.
+    index('Follow_followerId_state_idx').on(table.followerId, table.state),
+    index('Follow_followeeId_state_idx').on(table.followeeId, table.state),
+    check('Follow_distinct_users', sql`${table.followerId} <> ${table.followeeId}`),
+  ],
+);
+
 export const contactHashes = pgTable(
   'ContactHash',
   {
@@ -796,7 +832,6 @@ export const feedItems = pgTable(
     sourceAnswerId: text('sourceAnswerId'),
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
-    quip: text('quip'),
     catchupResolvedAt: timestamp('catchupResolvedAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -848,7 +883,6 @@ export const joshingGameResponses = pgTable(
     isPartial: boolean('isPartial').notNull().default(false),
     answerState: text('answerState'),
     pointsAwarded: doublePrecision('pointsAwarded'),
-    quip: text('quip'),
     answeredAt: timestamp('answeredAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },

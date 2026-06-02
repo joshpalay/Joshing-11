@@ -5,6 +5,7 @@ const {
   categorizeQuestionMock,
   createQuestionMock,
   dbMock,
+  generateInsideJokeMock,
   getFriendsMock,
   getQuestionMock,
   getSessionMock,
@@ -12,6 +13,7 @@ const {
   rollOffOldItemsMock,
   state,
   userHasQuestionInBlockingFeedMock,
+  vetQuestionMock,
 } = vi.hoisted(() => {
   const state = {
     dismissedRows: [] as Array<{ userId: string }>,
@@ -44,6 +46,7 @@ const {
     categorizeQuestionMock: vi.fn(),
     createQuestionMock: vi.fn(),
     dbMock,
+    generateInsideJokeMock: vi.fn(),
     getFriendsMock: vi.fn(),
     getQuestionMock: vi.fn(),
     getSessionMock: vi.fn(),
@@ -51,6 +54,7 @@ const {
     rollOffOldItemsMock: vi.fn(),
     state,
     userHasQuestionInBlockingFeedMock: vi.fn(),
+    vetQuestionMock: vi.fn(),
   }
 })
 
@@ -63,6 +67,21 @@ vi.mock('drizzle-orm', () => ({
 
 vi.mock('@/lib/llm', () => ({
   categorizeQuestion: categorizeQuestionMock,
+  generateInsideJoke: generateInsideJokeMock,
+}))
+
+vi.mock('@/server/llm/vet-question', () => ({
+  vetQuestion: vetQuestionMock,
+  verdictToPublicStatus: (verdict: { status: string; score: number | null; reason: string }) => ({
+    publicStatus:
+      verdict.status === 'approved'
+        ? 'eligible_pending'
+        : verdict.status === 'rejected'
+          ? 'rejected'
+          : 'not_scored',
+    publicEligibilityScore: verdict.score,
+    publicEligibilityReason: verdict.reason,
+  }),
 }))
 
 vi.mock('@/server/auth/session', () => ({
@@ -94,6 +113,9 @@ vi.mock('@/server/db/queries/questions', () => ({
 
 vi.mock('@/server/db/queries/friends', () => ({
   getFriends: getFriendsMock,
+  // Broadcast fan-out now reads my followers; in these tests the recipient set
+  // is the same fixture, so alias it to the existing mock.
+  getFollowers: getFriendsMock,
 }))
 
 vi.mock('@/server/db/queries/feed', () => ({
@@ -146,10 +168,12 @@ describe('POST /api/questions shareToFeed', () => {
     })
     assessQuestionDifficultyMock.mockResolvedValue({ difficulty: 3, tier: 'moderate' })
     createQuestionMock.mockResolvedValue({ id: 'question-1' })
+    generateInsideJokeMock.mockResolvedValue(null)
     getQuestionMock.mockResolvedValue({ id: 'question-1', question_text: 'Who wrote Middlemarch?' })
     openKBDomainMock.mockResolvedValue({ opened: true })
     rollOffOldItemsMock.mockResolvedValue(0)
     userHasQuestionInBlockingFeedMock.mockResolvedValue(false)
+    vetQuestionMock.mockResolvedValue({ status: 'approved', score: 0.8, reason: 'looks good' })
   })
 
   afterEach(() => {
@@ -434,5 +458,80 @@ describe('POST /api/questions shareToFeed', () => {
       skippedDismissedDomainRecipientIds: ['friend-3'],
       skippedExistingFeedRecipientIds: ['friend-2'],
     }))
+  })
+})
+
+describe('POST /api/questions category leak handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    state.dismissedRows = []
+    state.feedInsertValues = []
+    state.questionUpdateValues = []
+
+    getSessionMock.mockResolvedValue({ userId: 'creator-1' })
+    assessQuestionDifficultyMock.mockResolvedValue({ difficulty: 3, tier: 'moderate' })
+    createQuestionMock.mockResolvedValue({ id: 'question-1' })
+    generateInsideJokeMock.mockResolvedValue(null)
+    getQuestionMock.mockResolvedValue({ id: 'question-1' })
+    openKBDomainMock.mockResolvedValue({ opened: true })
+    rollOffOldItemsMock.mockResolvedValue(0)
+    userHasQuestionInBlockingFeedMock.mockResolvedValue(false)
+    vetQuestionMock.mockResolvedValue({ status: 'approved', score: 0.8, reason: 'looks good' })
+  })
+
+  it('saves a question with a leaky category instead of 422-rejecting, and marks publicStatus rejected', async () => {
+    categorizeQuestionMock.mockResolvedValue({
+      broad_category: 'Civics',
+      subcategory: "Robert's Rules of Order",
+    })
+
+    const response = await POST(questionRequest({
+      text: 'What is the name of the standard parliamentary authority used by most organizations in the United States?',
+      correctAnswer: "Robert's Rules of Order",
+      alternateAnswers: ['RONR', "Robert's Rules", 'Rules of Order'],
+    }))
+
+    expect(response.status).toBe(201)
+    expect(createQuestionMock).toHaveBeenCalledTimes(1)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as {
+      publicStatus: string
+      publicEligibilityReason: string
+    }
+    expect(createArgs.publicStatus).toBe('rejected')
+    expect(createArgs.publicEligibilityReason).toBe('category_leaks_answer')
+  })
+
+  it('saves with publicStatus eligible_pending when the category does not leak the answer', async () => {
+    categorizeQuestionMock.mockResolvedValue({
+      broad_category: 'Civics',
+      subcategory: 'Parliamentary Procedure',
+    })
+
+    const response = await POST(questionRequest({
+      text: 'What is the name of the standard parliamentary authority used by most organizations in the United States?',
+      correctAnswer: "Robert's Rules of Order",
+      alternateAnswers: ['RONR', "Robert's Rules", 'Rules of Order'],
+    }))
+
+    expect(response.status).toBe(201)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { publicStatus: string }
+    expect(createArgs.publicStatus).toBe('eligible_pending')
+  })
+
+  it('returns 500 with a friendly message when an enrichment step throws', async () => {
+    categorizeQuestionMock.mockResolvedValue({
+      broad_category: 'Arts & Literature',
+      subcategory: 'Victorian Literature',
+    })
+    assessQuestionDifficultyMock.mockRejectedValue(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const response = await POST(questionRequest({}))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body.error).toBe('server_error')
+    expect(body.message).toMatch(/something went wrong/i)
+    expect(createQuestionMock).not.toHaveBeenCalled()
   })
 })

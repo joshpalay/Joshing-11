@@ -11,14 +11,13 @@ import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay';
 import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy';
 import MasteryMoment from '@/components/review/MasteryMoment';
 import { getSession } from '@/server/auth/session';
-import { getDeliveredCreatorNotesForQuestions } from '@/server/creator-notes';
 import { db, masteryEvents, playerMastery } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { computeOverlapCells, getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
 import { resolveTier } from '@/server/mastery/tiers';
 
-const CREATOR_COLOR = '#c0392b';
-const RECIPIENT_COLOR = '#1a6b8a';
+const CREATOR_COLOR = 'var(--brand-navy)';
+const RECIPIENT_COLOR = 'var(--brand-orange)';
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -33,11 +32,11 @@ const monoStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-  fontSize: '1.05rem',
-  fontWeight: 600,
-  color: '#111111',
+  fontSize: '0.8rem',
+  fontWeight: 700,
+  color: 'var(--brand-ink)',
   textTransform: 'uppercase',
-  letterSpacing: '0.05em',
+  letterSpacing: '0.1em',
 };
 
 function domainFor(question: JoshingGameView['questions'][number]['question']) {
@@ -48,10 +47,21 @@ function resolvedDifficulty(question: JoshingGameView['questions'][number]['ques
   return question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null;
 }
 
-function difficultyPillClasses(level: string): string {
-  if (level === 'specialist') return 'border-rose-200 bg-rose-50 text-rose-700';
-  if (level === 'moderate') return 'border-amber-200 bg-amber-50 text-amber-700';
-  return 'border-sky-200 bg-sky-50 text-sky-700';
+// Difficulty pills use the triangle palette (amber/dark-yellow/dark-teal) so the
+// 3-level metadata scale reads as distinct from the green/terracotta CORRECT/WRONG
+// pill beside it. Text is mixed toward --brand-ink so the lighter tones clear AA.
+function difficultyPillStyle(level: string): CSSProperties {
+  const tone =
+    level === 'specialist'
+      ? 'var(--tri-amber)'
+      : level === 'moderate'
+        ? 'var(--tri-darkyellow)'
+        : 'var(--tri-darkteal)';
+  return {
+    borderColor: `color-mix(in srgb, ${tone} 35%, var(--border))`,
+    backgroundColor: `color-mix(in srgb, ${tone} 12%, var(--surface))`,
+    color: `color-mix(in srgb, ${tone} 55%, var(--brand-ink))`,
+  };
 }
 
 type ExplainerOutcome = 'correct' | 'wrong' | 'expired';
@@ -115,10 +125,6 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
 
   const questionCount = view.questions.length;
   const bankedById = await checkBankedQuestions(session.userId, view.questions.map((question) => question.questionId));
-  const creatorNotesByQuestionId = await getDeliveredCreatorNotesForQuestions(
-    session.userId,
-    view.questions.map((question) => question.questionId),
-  );
   const responseByUserQuestion = new Map(view.responses.map((response) => [responseKey(response.userId, response.questionId), response]));
   const viewerResponses = view.responses.filter((response) => response.userId === session.userId);
   const viewerHasPlayed = viewerResponses.length >= questionCount;
@@ -232,18 +238,8 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
           {view.game.title}
           {' / SUMMARY'}
         </p>
-        <h1
-          style={{
-            marginTop: '10px',
-            fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-            fontSize: '1.45rem',
-            fontWeight: 700,
-            color: '#111111',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}
-        >
-          How You Did
+        <h1 className="mt-2 font-serif text-[2rem] leading-tight text-[var(--brand-ink)]">
+          How you did
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">{formatGameDate(view.game.createdAt)}</p>
       </header>
@@ -256,7 +252,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         }}
       >
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>Total</p>
-        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[#111111]">+{Math.round(totalPoints)}</p>
+        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[var(--brand-ink)]">+{Math.round(totalPoints)}</p>
         <p style={{ ...monoStyle, marginTop: '12px', color: 'var(--text-muted)' }}>
           {viewerCorrect}/{questionCount} correct{viewerSkipped > 0 ? ` · ${viewerSkipped} skipped` : ''}
         </p>
@@ -288,7 +284,10 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
               const { brief, full } = explainerVariantsFor(gameQuestion.question, outcome);
               const hasDistinctFull = Boolean(full && full !== brief);
               const briefForDisplay = brief ?? full ?? null;
-              const creatorNote = creatorNotesByQuestionId.get(gameQuestion.questionId);
+              const authorNote = gameQuestion.question.creatorNote ?? null;
+              const authorName = gameQuestion.question.creatorId === view.game.creatorId
+                ? view.creator.displayName
+                : null;
 
               return (
                 <article key={gameQuestion.questionId} className="card p-4">
@@ -302,17 +301,29 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       {(() => {
                         const level = resolvedDifficulty(gameQuestion.question);
                         return level ? (
-                          <span className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${difficultyPillClasses(level)}`}>
+                          <span
+                            className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                            style={difficultyPillStyle(level)}
+                          >
                             {difficultyCopyFromEstimate(level) ?? 'Unrated'}
                           </span>
                         ) : null;
                       })()}
                       <span
-                        className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
+                        className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                        style={
                           correct
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-rose-200 bg-rose-50 text-rose-700'
-                        }`}
+                            ? {
+                                borderColor: 'color-mix(in srgb, var(--game-correct) 30%, var(--border))',
+                                backgroundColor: 'color-mix(in srgb, var(--game-correct) 10%, var(--surface))',
+                                color: 'var(--game-correct)',
+                              }
+                            : {
+                                borderColor: 'color-mix(in srgb, var(--game-wrong-strong) 30%, var(--border))',
+                                backgroundColor: 'color-mix(in srgb, var(--game-wrong-strong) 10%, var(--surface))',
+                                color: 'var(--game-wrong-strong)',
+                              }
+                        }
                       >
                         {resultLabel(response?.isCorrect)}
                       </span>
@@ -343,10 +354,10 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       )}
                     </div>
                   ) : null}
-                  {creatorNote ? (
+                  {authorNote ? (
                     <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
-                      <span className="font-medium">A note from {creatorNote.authorName}:</span>{' '}
-                      {creatorNote.noteText}
+                      <span className="font-medium">{authorName ? `Why ${authorName} asked:` : 'Why they asked:'}</span>{' '}
+                      {authorNote}
                     </p>
                   ) : null}
                   <div className="mt-4 flex flex-wrap items-center justify-end gap-2">

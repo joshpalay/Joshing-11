@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
-import { db, userDomainDifficulties, users } from '@/server/db';
+import { db, declaredInterests, playerMastery, userDomainDifficulties, users } from '@/server/db';
 
 const MIN_ADAPTIVE_LEVEL = 1.0;
 const MAX_ADAPTIVE_LEVEL = 4.0;
@@ -11,6 +11,11 @@ export type AdaptiveDifficultyHint = {
   targetCorrectRate: number;
   difficultyLabel: string;
   promptHint: string;
+  // The difficulty_estimate tier a question generated at this level targets.
+  // The generator only emits three tiers, so the two hardest adaptive bands
+  // both map to 'specialist'. Lets the bank-reuse path request a stored
+  // question whose tier matches what fresh generation would have produced.
+  estimate: 'accessible' | 'moderate' | 'specialist';
 };
 
 type RecentAnswerRow = {
@@ -122,6 +127,7 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
       targetCorrectRate: 0.78,
       difficultyLabel: 'approachable trivia',
       promptHint: 'Target roughly a 78% correct rate. Write friendly, recognizable questions a casually interested person in the domain would get — lean on well-known facts, not deep cuts.',
+      estimate: 'accessible',
     };
   }
 
@@ -130,6 +136,7 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
       targetCorrectRate: 0.62,
       difficultyLabel: 'fair and familiar',
       promptHint: 'Target roughly a 62% correct rate. Write questions a reasonably engaged fan of the domain should know without needing specialist depth.',
+      estimate: 'moderate',
     };
   }
 
@@ -138,6 +145,7 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
       targetCorrectRate: 0.35,
       difficultyLabel: 'hard for someone with depth',
       promptHint: 'Target roughly a 35% correct rate. Write questions that are hard even for someone with real depth in the domain.',
+      estimate: 'specialist',
     };
   }
 
@@ -145,6 +153,7 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
     targetCorrectRate: 0.15,
     difficultyLabel: 'expert-level deep cuts',
     promptHint: 'Target roughly a 15% correct rate. Write expert-level deep cuts with specific facts, dates, terminology, or details.',
+    estimate: 'specialist',
   };
 }
 
@@ -171,6 +180,58 @@ function seedDifficultyFromAdaptiveLevel(level: number): ServedDifficulty {
   if (normalized < 1.5) return 'accessible';
   if (normalized < 2.5) return 'moderate';
   return 'specialist';
+}
+
+/**
+ * Minimum first-contact difficulty for a domain the player explicitly opted
+ * into — either by stating it as an area of focus during onboarding or by
+ * accepting one shared by a friend. Someone who raised their hand for a topic
+ * finds "Establishing" (accessible) trivia condescendingly easy, so we floor
+ * the *seed* at "Familiar" (moderate). This only sets the starting point: the
+ * normal two-incorrect step-down can still drop a struggling player back to
+ * accessible afterwards.
+ */
+const FOCUS_DOMAIN_MIN_DIFFICULTY: ServedDifficulty = 'moderate';
+
+export function applyFocusFloor(difficulty: ServedDifficulty, isFocusDomain: boolean): ServedDifficulty {
+  if (!isFocusDomain) return difficulty;
+  return DIFFICULTY_LADDER.indexOf(difficulty) >= DIFFICULTY_LADDER.indexOf(FOCUS_DOMAIN_MIN_DIFFICULTY)
+    ? difficulty
+    : FOCUS_DOMAIN_MIN_DIFFICULTY;
+}
+
+/**
+ * Canonical subcategories the player has opted into: declared interests (stated
+ * focus areas) plus any open territory in PLAYER_MASTERY — friend-mediated
+ * acceptances and authored domains both land there. Used to decide whether a
+ * first-contact difficulty seed should be floored to "Familiar". Pass the
+ * `domains` filter to keep the lookup to the round being seeded.
+ */
+async function getFocusDomainSet(userId: string, domains: string[]): Promise<Set<string>> {
+  const focus = new Set<string>();
+  if (domains.length === 0) return focus;
+
+  const [declaredRows, masteryRows] = await Promise.all([
+    db
+      .select({ domain: declaredInterests.domain })
+      .from(declaredInterests)
+      .where(and(
+        eq(declaredInterests.userId, userId),
+        eq(declaredInterests.isActive, true),
+        inArray(declaredInterests.domain, domains),
+      )),
+    db
+      .select({ domain: playerMastery.canonicalSubcategory })
+      .from(playerMastery)
+      .where(and(
+        eq(playerMastery.userId, userId),
+        inArray(playerMastery.canonicalSubcategory, domains),
+      )),
+  ]);
+
+  for (const row of declaredRows) focus.add(row.domain);
+  for (const row of masteryRows) focus.add(row.domain);
+  return focus;
 }
 
 function stepDifficulty(current: ServedDifficulty, direction: 1 | -1): ServedDifficulty {
@@ -226,7 +287,14 @@ export async function updateDomainDifficultyOnAnswer(
     .limit(1);
 
   if (!existing) {
-    const seed = seedDifficultyFromAdaptiveLevel(await readCurrentAdaptiveLevel(userId));
+    const [level, focusDomains] = await Promise.all([
+      readCurrentAdaptiveLevel(userId),
+      getFocusDomainSet(userId, [canonicalSubcategory]),
+    ]);
+    const seed = applyFocusFloor(
+      seedDifficultyFromAdaptiveLevel(level),
+      focusDomains.has(canonicalSubcategory),
+    );
     await db.insert(userDomainDifficulties).values({
       userId,
       canonicalSubcategory,
@@ -280,12 +348,20 @@ export async function getDomainDifficultyOverrides(
     known.set(row.canonicalSubcategory, row.servedDifficulty as ServedDifficulty);
   }
 
-  const seedLevel = known.size === domains.length
-    ? null
-    : await readCurrentAdaptiveLevel(userId);
+  // Only domains without a persisted row need a first-contact seed. Pull the
+  // user's adaptive level and which of those domains are opted-in focus areas
+  // so we can floor the seed to "Familiar" for the latter.
+  const domainsNeedingSeed = domains.filter((domain) => !known.has(domain));
+  const [seedLevel, focusDomains] = domainsNeedingSeed.length === 0
+    ? [MIN_ADAPTIVE_LEVEL, new Set<string>()]
+    : await Promise.all([
+        readCurrentAdaptiveLevel(userId),
+        getFocusDomainSet(userId, domainsNeedingSeed),
+      ]);
 
   for (const domain of domains) {
-    const served = known.get(domain) ?? seedDifficultyFromAdaptiveLevel(seedLevel ?? MIN_ADAPTIVE_LEVEL);
+    const served = known.get(domain)
+      ?? applyFocusFloor(seedDifficultyFromAdaptiveLevel(seedLevel), focusDomains.has(domain));
     overrides.set(domain, SERVED_TO_PREFERENCE[served]);
   }
 

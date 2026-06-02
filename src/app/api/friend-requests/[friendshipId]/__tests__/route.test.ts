@@ -39,8 +39,8 @@ describe('friend request action routes', () => {
     getSessionMock.mockResolvedValue({ userId: 'recipient-user' })
   })
 
-  it('accept creates an active friendship through the shared helper', async () => {
-    acceptPendingFriendshipRequestMock.mockResolvedValueOnce({ id: 'friendship-1', status: 'active' })
+  it('accept approves the pending follow through the shared helper', async () => {
+    acceptPendingFriendshipRequestMock.mockResolvedValueOnce({ id: 'friendship-1', state: 'approved' })
 
     const response = await acceptRequest(request, context)
     const body = await response.json()
@@ -50,11 +50,15 @@ describe('friend request action routes', () => {
       friendshipId: 'friendship-1',
       userId: 'recipient-user',
     })
-    expect(body.friendship).toEqual({ id: 'friendship-1', status: 'active' })
+    expect(body.friendship).toEqual({ id: 'friendship-1', status: 'approved' })
   })
 
-  it('ignore does not create an active friendship', async () => {
-    ignorePendingFriendshipRequestMock.mockResolvedValueOnce({ id: 'friendship-1', status: 'declined' })
+  it('ignore deletes the pending follow', async () => {
+    ignorePendingFriendshipRequestMock.mockResolvedValueOnce({
+      id: 'friendship-1',
+      state: 'pending',
+      followerId: 'requester-user',
+    })
 
     const response = await ignoreRequest(request, context)
     const body = await response.json()
@@ -64,11 +68,11 @@ describe('friend request action routes', () => {
       friendshipId: 'friendship-1',
       userId: 'recipient-user',
     })
-    expect(body.friendship).toEqual({ id: 'friendship-1', status: 'declined' })
+    expect(body.friendship).toEqual({ id: 'friendship-1', status: 'pending' })
   })
 
-  it('cancel marks the requester’s pending request as cancelled', async () => {
-    cancelPendingFriendshipRequestMock.mockResolvedValueOnce({ id: 'friendship-1', status: 'cancelled' })
+  it('cancel deletes the requester’s pending follow', async () => {
+    cancelPendingFriendshipRequestMock.mockResolvedValueOnce({ id: 'friendship-1', state: 'pending' })
 
     const response = await cancelRequest(request, context)
     const body = await response.json()
@@ -78,7 +82,7 @@ describe('friend request action routes', () => {
       friendshipId: 'friendship-1',
       userId: 'recipient-user',
     })
-    expect(body.friendship).toEqual({ id: 'friendship-1', status: 'cancelled' })
+    expect(body.friendship).toEqual({ id: 'friendship-1', status: 'pending' })
   })
 
   it('cancel returns 404 when nothing matches', async () => {
@@ -88,8 +92,8 @@ describe('friend request action routes', () => {
     expect(response.status).toBe(404)
   })
 
-  it('remove marks an active friendship as removed', async () => {
-    removeFriendshipMock.mockResolvedValueOnce({ id: 'friendship-1', status: 'removed' })
+  it('remove (unfollow) deletes the viewer’s outbound follow edge', async () => {
+    removeFriendshipMock.mockResolvedValueOnce({ id: 'friendship-1', state: 'approved' })
 
     const response = await removeRequest(request, context)
     const body = await response.json()
@@ -99,10 +103,10 @@ describe('friend request action routes', () => {
       friendshipId: 'friendship-1',
       userId: 'recipient-user',
     })
-    expect(body.friendship).toEqual({ id: 'friendship-1', status: 'removed' })
+    expect(body.friendship).toEqual({ id: 'friendship-1', status: 'approved' })
   })
 
-  it('remove returns 404 when no active friendship matches', async () => {
+  it('remove returns 404 when no follow edge matches', async () => {
     removeFriendshipMock.mockResolvedValueOnce(null)
 
     const response = await removeRequest(request, context)

@@ -14,6 +14,7 @@ describe('OnboardingFlow invited-interest copy', () => {
       <OnboardingFlow
         inviterName="Alex Inviter"
         initialDisplayName="Returning User"
+        initialHandle="returninguser"
         preSeededInterests={[
           { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
         ]}
@@ -29,6 +30,7 @@ describe('OnboardingFlow invited-interest copy', () => {
       <OnboardingFlow
         inviterName="Josh"
         initialDisplayName="Returning User"
+        initialHandle="returninguser"
         preSeededInterests={[
           { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
           { domain: 'Jazz', broadCategory: 'Music', rationale: null },
@@ -48,6 +50,7 @@ describe('OnboardingFlow invited-interest copy', () => {
       <OnboardingFlow
         inviterName={null}
         initialDisplayName="Returning User"
+        initialHandle="returninguser"
         preSeededInterests={[
           { domain: 'Jazz', broadCategory: 'Music', rationale: null },
         ]}
@@ -59,7 +62,11 @@ describe('OnboardingFlow invited-interest copy', () => {
 
   it('still renders regular onboarding with no invite', () => {
     const html = renderToStaticMarkup(
-      <OnboardingFlow preSeededInterests={[]} initialDisplayName="Returning User" />
+      <OnboardingFlow
+        preSeededInterests={[]}
+        initialDisplayName="Returning User"
+        initialHandle="returninguser"
+      />
     )
 
     expect(html).toContain('Welcome to Joshing')
@@ -110,6 +117,7 @@ describe('OnboardingFlow display-name gate', () => {
       <OnboardingFlow
         preSeededInterests={[]}
         initialDisplayName="Existing Name"
+        initialHandle="existingname"
       />
     )
 

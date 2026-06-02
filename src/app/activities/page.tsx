@@ -1,7 +1,7 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
-import { CreatorNoteReadButton } from '@/app/activities/CreatorNoteReadButton';
 import { filterUtilityActivities } from '@/app/activities/filter-utility-activities';
 import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { MarkActivitiesRead } from '@/app/activities/MarkActivitiesRead';
@@ -19,7 +19,6 @@ import {
   UnderlineName,
   UtilityActionLink,
 } from '@/components/lately/UtilityCard';
-import { creatorNoteSubmittedAnswerText } from '@/lib/creator-note-submitted-answer';
 import { getSession } from '@/server/auth/session';
 import {
   getActivitiesForUser,
@@ -30,6 +29,26 @@ import { getUserById } from '@/server/db/queries/users';
 
 function actorName(item: ActivityItemView) {
   return item.actor?.displayName ?? 'Someone';
+}
+
+// D-2 niche-match: the discovery loop's whole point is "go connect with this
+// stranger," so the actor name must be a profile link (-> /users/{id} ->
+// ProfileFriendButton). Other activity types intentionally render the actor
+// as a plain UnderlineName; only the niche-match rows opt into the link, and
+// only when we actually have an actorUserId.
+function NicheMatchActor({ item }: { item: ActivityItemView }) {
+  const name = actorName(item);
+  if (!item.actorUserId) {
+    return <UnderlineName>{name}</UnderlineName>;
+  }
+  return (
+    <Link
+      href={`/users/${item.actorUserId}`}
+      style={{ color: 'inherit', textDecoration: 'none' }}
+    >
+      <UnderlineName>{name}</UnderlineName>
+    </Link>
+  );
 }
 
 function ActivityCopy({ item }: { item: ActivityItemView }) {
@@ -97,6 +116,39 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     );
   }
 
+  if (item.type === 'follow_request') {
+    return (
+      <>
+        <UnderlineName>{actorName(item)}</UnderlineName> wants to follow you.
+      </>
+    );
+  }
+
+  if (item.type === 'follow') {
+    return (
+      <>
+        <UnderlineName>{actorName(item)}</UnderlineName> started following you.
+      </>
+    );
+  }
+
+  if (item.type === 'follow_approved') {
+    return (
+      <>
+        <UnderlineName>{actorName(item)}</UnderlineName> accepted your follow.
+      </>
+    );
+  }
+
+  if (item.type === 'invited_friend_played_first_five') {
+    return (
+      <>
+        <UnderlineName>{actorName(item)}</UnderlineName> accepted your
+        invitation and played their first 5 questions
+      </>
+    );
+  }
+
   if (item.type === 'reaction_received') {
     return (
       <>
@@ -122,15 +174,6 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
     );
   }
 
-  if (item.type === 'creator_note_received') {
-    return (
-      <>
-        <UnderlineName>{actorName(item)}</UnderlineName> sent you a note about
-        a question you missed
-      </>
-    );
-  }
-
   if (item.type === 'authored_question_shared') {
     const shared = item.reference.authoredSharedQuestion;
     const count = shared?.recipientCount ?? 0;
@@ -151,6 +194,34 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
       <>
         <UnderlineName>{actorName(item)}</UnderlineName> answered your
         {domainText} question — couldn&apos;t get it
+      </>
+    );
+  }
+
+  if (item.type === 'niche_match_answered_your_question') {
+    const nm = item.reference.nicheMatch;
+    const domain = nm?.domain;
+    const domainText = domain ? ` ${domain}` : '';
+    return (
+      <>
+        <NicheMatchActor item={item} /> answered your{domainText} question —
+        someone out there shares this corner
+      </>
+    );
+  }
+
+  if (item.type === 'niche_match_you_answered') {
+    const nm = item.reference.nicheMatch;
+    const domain = nm?.domain;
+    return domain ? (
+      <>
+        You answered <NicheMatchActor item={item} />&apos;s {domain} question —
+        you found someone in {domain}
+      </>
+    ) : (
+      <>
+        You answered <NicheMatchActor item={item} />&apos;s question — you found
+        someone who shares this corner
       </>
     );
   }
@@ -184,32 +255,6 @@ function ActivityCopy({ item }: { item: ActivityItemView }) {
 }
 
 export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
-  if (item.type === 'creator_note_received') {
-    const note = item.reference.creatorNote;
-    if (!note) return null;
-    return (
-      <CreatorNoteReadButton noteId={note.id}>
-        <div className="bg-background rounded-md border p-3 text-sm leading-6">
-          <p>
-            <span className="text-foreground font-medium">Question:</span>{' '}
-            {note.questionText}
-          </p>
-          <p className="text-muted-foreground mt-1">
-            <span className="text-foreground font-medium">Answer:</span>{' '}
-            {note.correctAnswer}
-          </p>
-          <p className="text-muted-foreground mt-1">
-            <span className="text-foreground font-medium">You said:</span>{' '}
-            {creatorNoteSubmittedAnswerText(note.submittedAnswer, 'Your')}
-          </p>
-          <blockquote className="border-primary/40 bg-muted/50 text-foreground mt-3 border-l-4 px-3 py-2">
-            {note.noteText}
-          </blockquote>
-        </div>
-      </CreatorNoteReadButton>
-    );
-  }
-
   if (item.type === 'received_direct_question') {
     const directQuestion = item.reference.directQuestion;
     if (!directQuestion) return null;
@@ -236,7 +281,7 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
     );
   }
 
-  if (item.type === 'friend_request') {
+  if (item.type === 'friend_request' || item.type === 'follow_request') {
     const interests = item.reference.friendshipRequest?.suggestedInterests ?? [];
     if (interests.length === 0) return null;
 
@@ -277,6 +322,19 @@ export function ActivitySubcopy({ item }: { item: ActivityItemView }) {
           {disputeStatusLabel(dispute.status, dispute.acceptedAlternative)}
         </p>
       </div>
+    );
+  }
+
+  if (
+    item.type === 'niche_match_answered_your_question' ||
+    item.type === 'niche_match_you_answered'
+  ) {
+    const nm = item.reference.nicheMatch;
+    if (!nm?.questionText) return null;
+    return (
+      <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+        {nm.questionText}
+      </p>
     );
   }
 
@@ -375,7 +433,7 @@ function activityAction(item: ActivityItemView): ReactNode | null {
     return <UtilityActionLink href="/" label="Answer" />;
   }
 
-  if (item.type === 'friend_request') {
+  if (item.type === 'friend_request' || item.type === 'follow_request') {
     const request = item.reference.friendshipRequest;
     if (
       !request ||
@@ -402,7 +460,7 @@ const INCOMING_TYPES = new Set([
   'received_direct_question',
   'received_joshing_game',
   'friend_request',
-  'creator_note_received',
+  'follow_request',
 ]);
 
 function activityCaption(item: ActivityItemView): string {
@@ -419,7 +477,7 @@ function activityToFeedItem(item: ActivityItemView): LatelyFeedItem {
       : null;
 
   const anchorId =
-    item.type === 'friend_request' && item.referenceId
+    (item.type === 'friend_request' || item.type === 'follow_request') && item.referenceId
       ? `friendship-${item.referenceId}`
       : null;
 

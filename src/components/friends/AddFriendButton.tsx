@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 
-import { Button } from '@/components/ui/button'
 import { AddFriendRequestModal } from '@/components/friends/AddFriendRequestModal'
 import type { RelationshipResult } from '@/server/db/queries/friend-requests'
 
@@ -13,9 +12,8 @@ type Props = {
   // Called after a successful add / cancel / accept / ignore / remove so
   // the parent can refresh its data (router.refresh() or refetch).
   onChange?: () => void
-  // If true, confirm Unfriend via window.confirm (the existing
-  // ProfileFriendButton behavior we want to preserve when this component
-  // is used on profile pages). Defaults to true.
+  // If true, Unfriend asks for inline confirmation (a Remove/Keep step in the
+  // app's own button language) before removing. Defaults to true.
   confirmUnfriend?: boolean
 }
 
@@ -32,6 +30,7 @@ export function AddFriendButton({
   const [modalOpen, setModalOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
 
   useEffect(() => {
     if (!toast) return
@@ -79,7 +78,7 @@ export function AddFriendButton({
 
   function handleAccept() {
     if (!relationship.friendshipId) return
-    void runAction('accept', relationship.friendshipId, 'Friends.')
+    void runAction('accept', relationship.friendshipId, 'Approved.')
   }
 
   function handleIgnore() {
@@ -90,92 +89,124 @@ export function AddFriendButton({
   function handleRemove() {
     if (!relationship.friendshipId) return
     if (confirmUnfriend) {
-      const confirmed = window.confirm(`Remove ${targetDisplayName} from your friends?`)
-      if (!confirmed) return
+      // Swap the Unfollow button for an inline Unfollow/Keep confirmation rather
+      // than punching out to native window.confirm chrome.
+      setConfirmingRemove(true)
+      return
     }
-    void runAction('remove', relationship.friendshipId, 'Removed.')
+    void runAction('remove', relationship.friendshipId, 'Unfollowed.')
+  }
+
+  function confirmRemove() {
+    if (!relationship.friendshipId) return
+    setConfirmingRemove(false)
+    void runAction('remove', relationship.friendshipId, 'Unfollowed.')
   }
 
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2">
         {relationship.state === 'none' ? (
-          <Button
+          <button
             type="button"
-            size="sm"
+            className="btn-primary"
             onClick={handleAddClick}
             disabled={pendingAction !== null}
           >
-            Add friend
-          </Button>
+            Follow
+          </button>
+        ) : null}
+
+        {relationship.state === 'follows_you' ? (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleAddClick}
+            disabled={pendingAction !== null}
+          >
+            Follow back
+          </button>
         ) : null}
 
         {relationship.state === 'pending_outbound' ? (
           <>
-            <Button type="button" size="sm" variant="secondary" disabled>
-              Request sent
-            </Button>
-            <Button
+            <button type="button" className="btn-ghost" disabled>
+              Requested
+            </button>
+            <button
               type="button"
-              size="sm"
-              variant="ghost"
+              className="btn-ghost"
               onClick={handleCancel}
               disabled={pendingAction !== null}
             >
               {pendingAction === 'cancel' ? 'Cancelling…' : 'Cancel'}
-            </Button>
+            </button>
           </>
         ) : null}
 
         {relationship.state === 'pending_inbound' ? (
           <>
-            <Button
+            <button
               type="button"
-              size="sm"
+              className="btn-primary"
               onClick={handleAccept}
               disabled={pendingAction !== null}
             >
-              {pendingAction === 'accept' ? 'Joining…' : 'Accept'}
-            </Button>
-            <Button
+              {pendingAction === 'accept' ? 'Approving…' : 'Approve'}
+            </button>
+            <button
               type="button"
-              size="sm"
-              variant="ghost"
+              className="btn-ghost"
               onClick={handleIgnore}
               disabled={pendingAction !== null}
             >
               {pendingAction === 'ignore' ? 'Setting aside…' : 'Not now'}
-            </Button>
+            </button>
           </>
         ) : null}
 
-        {relationship.state === 'friends' ? (
-          <>
-            <Button type="button" size="sm" variant="secondary" disabled>
-              Friends ✓
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={handleRemove}
-              disabled={pendingAction !== null}
+        {relationship.state === 'friends' || relationship.state === 'following' ? (
+          confirmingRemove ? (
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="group"
+              aria-label={`Unfollow ${targetDisplayName}?`}
             >
-              {pendingAction === 'remove' ? 'Removing…' : 'Unfriend'}
-            </Button>
-          </>
-        ) : null}
-
-        {relationship.state === 'recently_sent' ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled
-            title="You sent a request to this person in the last 30 days."
-          >
-            Recently sent
-          </Button>
+              <span className="text-sm text-foreground">
+                Unfollow {targetDisplayName}?
+              </span>
+              <button
+                type="button"
+                className="btn-danger"
+                onClick={confirmRemove}
+                disabled={pendingAction !== null}
+              >
+                {pendingAction === 'remove' ? 'Unfollowing…' : 'Unfollow'}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setConfirmingRemove(false)}
+                disabled={pendingAction !== null}
+              >
+                Keep
+              </button>
+            </div>
+          ) : (
+            <>
+              <button type="button" className="btn-ghost" disabled>
+                {relationship.state === 'friends' ? 'Friends ✓' : 'Following ✓'}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={handleRemove}
+                disabled={pendingAction !== null}
+              >
+                Unfollow
+              </button>
+            </>
+          )
         ) : null}
       </div>
 

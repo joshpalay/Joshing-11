@@ -16,6 +16,7 @@ import { InlineHandleField } from '@/components/profile/InlineHandleField'
 import { MutualFriendsSection } from '@/components/profile/MutualFriendsSection'
 import { PreviewBanner } from '@/components/profile/PreviewBanner'
 import { ProfileFriendButton } from '@/components/profile/ProfileFriendButton'
+import { RecentlyExploringSection } from '@/components/profile/RecentlyExploringSection'
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle'
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow'
 import { SharedInterestsOverlap } from '@/components/profile/SharedInterestsOverlap'
@@ -41,6 +42,7 @@ import {
   topPointPositiveDomains,
 } from '@/server/profile/knowledge-view'
 import { resolvePreviewAs } from '@/server/profile/preview'
+import { selectRecentlyExploring } from '@/server/profile/recently-exploring'
 import {
   buildInviteUrl,
   getBaseUrl,
@@ -167,6 +169,11 @@ export default async function UserProfilePage({
   const totalPointPositiveDomains = sortedDomains.filter(
     (domain) => domain.points > 0,
   ).length
+  // Activity-based presence: which domains the user has been answering in
+  // lately (recent masteryEvents), distinct from the points-sorted knowledge
+  // map above and from declared interests. Per-domain hidden domains are
+  // already filtered out by `isHidden`.
+  const recentlyExploring = selectRecentlyExploring(pageData.allDomains)
   const mindStatement = buildMindStatement(portrait.user.displayName, topDomains)
   const tierSignature = `${new Intl.NumberFormat().format(
     Math.round(mastery.totalPoints),
@@ -302,7 +309,7 @@ export default async function UserProfilePage({
             !isOwnerView ? (
               <ProfileFriendButton
                 targetUserId={portrait.user.id}
-                friendship={portrait.friendship}
+                relationship={portrait.relationship}
                 targetDisplayName={portrait.user.displayName}
               />
             ) : null
@@ -357,12 +364,12 @@ export default async function UserProfilePage({
         mindStatement={mindStatement}
         memberSince={portrait.user.memberSince}
         editable={false}
-        friendshipFormedAt={portrait.friendship?.formedAt ?? null}
+        friendshipFormedAt={portrait.relationship?.formedAt ?? null}
         friendButton={
           !isOwnerView ? (
             <ProfileFriendButton
               targetUserId={portrait.user.id}
-              friendship={portrait.friendship}
+              relationship={portrait.relationship}
               targetDisplayName={portrait.user.displayName}
             />
           ) : null
@@ -424,6 +431,14 @@ export default async function UserProfilePage({
               : `View ${friendFirstName}’s full knowledge base →`}
           </Link>
         </section>
+      ) : null}
+
+      {portrait.sectionVisibleTo.knowledge_base &&
+      recentlyExploring.length > 0 ? (
+        <RecentlyExploringSection
+          domains={recentlyExploring}
+          friendFirstName={friendFirstName}
+        />
       ) : null}
 
       {portrait.sectionVisibleTo.authored_questions ? (
@@ -537,25 +552,30 @@ function PrivacyRow({
   visibility: 'public' | 'friends' | 'private'
 }) {
   return (
-    <div className="flex w-full items-center gap-4 px-4 py-4">
-      <span
-        className="grid size-10 flex-none place-items-center rounded-full bg-muted text-foreground/70"
-        aria-hidden="true"
-      >
-        <Icon className="size-5" />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="font-serif text-base font-semibold leading-tight">
-          {title}
+    <div className="flex w-full flex-col gap-3 px-4 py-4">
+      <div className="flex w-full items-center gap-4">
+        <span
+          className="grid size-10 flex-none place-items-center rounded-full bg-muted text-foreground/70"
+          aria-hidden="true"
+        >
+          <Icon className="size-5" />
         </span>
-        <span className="mt-0.5 text-sm text-muted-foreground">{subtitle}</span>
-      </span>
-      <SectionVisibilityToggle
-        section={section}
-        label={title.toLowerCase()}
-        initialVisibility={visibility}
-        size="compact"
-      />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="font-serif text-base font-semibold leading-tight">
+            {title}
+          </span>
+          <span className="mt-0.5 text-sm text-muted-foreground">{subtitle}</span>
+        </span>
+      </div>
+      <div className="pl-14">
+        <SectionVisibilityToggle
+          section={section}
+          label={title.toLowerCase()}
+          initialVisibility={visibility}
+          size="compact"
+          fullWidth
+        />
+      </div>
     </div>
   )
 }

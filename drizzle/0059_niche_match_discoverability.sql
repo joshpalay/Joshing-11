@@ -1,0 +1,21 @@
+-- Migration: D-2 WS1 — niche-match discoverability flag.
+--
+-- Adds the third discoverability flag, `discoverable_by_niche_match`, alongside
+-- the existing `discoverable_by_contacts` / `discoverable_by_mutual_friends`.
+-- Additive boolean with a default — the safe migration case per CLAUDE.md (no
+-- backfill pass needed; the DEFAULT applies to every existing row).
+--
+-- TEST-PHASE DEFAULT — DELIBERATE, NOT THE SHIPPING DEFAULT.
+-- The spec (PRD-D-2-NICHE-MATCH-DISCOVERY-SPEC.md §"Privacy gating") specifies
+-- DEFAULT false. For the test phase this is changed to DEFAULT true so the
+-- whole test cohort — including users who joined under the old default-OFF
+-- assumption — is enrolled. The production default for
+-- `discoverable_by_niche_match` is an OPEN DECISION to revisit after the test.
+-- Default-ON here is deliberate for the test cohort only; do not assume it as
+-- the shipping default. Flipping a privacy posture retroactively requires
+-- telling the cohort first (a non-code pre-test communication step).
+--
+-- No purge side-effect on toggle-off: niche-match stores no uploaded data to
+-- revoke (unlike the contacts flag, which purges ContactHash rows).
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "discoverable_by_niche_match" boolean NOT NULL DEFAULT true;

@@ -19,7 +19,6 @@ const ROUTE_RESERVED = [
   'api',
   'archive',
   'ceremony',
-  'creator-notes',
   'daily',
   'dev',
   'feed',

@@ -27,7 +27,10 @@ export function isCatchUpQueueDateEligible(
 
 export function isCatchUpSlotEligible(slot: QueueSlot): boolean {
   if (slot.dismissed_at) return false;
-  if (!slot.generated_question_id) return false;
+  // Bot slots carry generated_question_id; friend-authored slots carry
+  // question_id (the canonical Question.id). Either is sufficient to
+  // re-serve the slot in catch-up.
+  if (!slot.generated_question_id && !slot.question_id) return false;
   // Wrong daily-5 answers are eligible for re-attempt; correct ones are not.
   if (slot.answered) return slot.answer_state === 'incorrect';
   return true;

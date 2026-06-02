@@ -112,6 +112,8 @@ export async function middleware(request: NextRequest) {
  *  - /api/cron/* (bearer-token authenticated, runs without a session)
  *  - /api/share/* and /share/* (public share-card surfaces)
  *  - /api/telemetry (handles unauth events from public surfaces)
+ *  - /images/* (public static assets — e.g. the brand triangle background;
+ *    must be reachable pre-auth on /login, and by the next/image optimizer)
  *  - Next.js internals and common static assets
  *
  * Note: /login and /invite are intentionally NOT excluded — the proxy
@@ -122,6 +124,6 @@ export { middleware as proxy }
 
 export const config = {
   matcher: [
-    '/((?!api/auth|api/cron|api/share|api/telemetry|share|_next/static|_next/image|favicon\\.ico|__nextjs).*)',
+    '/((?!api/auth|api/cron|api/share|api/telemetry|share|images|_next/static|_next/image|favicon\\.ico|__nextjs).*)',
   ],
 }

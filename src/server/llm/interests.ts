@@ -1,10 +1,12 @@
 import {
   ANTHROPIC_MODEL,
   HAIKU_MODEL,
+  INSTRUCTION_USER_INPUT_GUIDANCE,
   extractTextContent,
   getAnthropicClient,
   loggedMessagesCreate,
   parseJsonObject,
+  wrapUserInput,
 } from '@/lib/llm';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 
@@ -28,7 +30,10 @@ export type ProposedInterest = {
 
 export type CanonicalizedInterest = {
   suggested: string;
-  broadCategory: string;
+  // null when categorization is unavailable or the model returns a catch-all.
+  // The save path (saveDeclaredInterests) re-categorizes null/catch-all values
+  // before persisting, so this helper never fabricates "General Knowledge".
+  broadCategory: string | null;
   explanation: string;
 };
 
@@ -216,16 +221,20 @@ Rules:
 - Each rationale must briefly tie the candidate to a specific warm-up answer or demographic context.
 - broadCategory is a stable top-level bucket, such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, General Knowledge. It must not be an author/work/movement-specific territory; for example, James Joyce, Irish Modernism, novels, poetry, and fiction all use Literature.
 - Never return "Other" as a broadCategory. Use "General Knowledge" only when no more precise top-level bucket applies.
-- Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}`;
+- Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
+  const warmupBody = cleanAnswers.map(({ field, answer }) => `- ${WARMUP_LABELS[field]}: ${answer}`).join('\n');
   const userMessage = `Warm-up answers:
-${cleanAnswers.map(({ field, answer }) => `- ${WARMUP_LABELS[field]}: ${answer}`).join('\n')}
+${wrapUserInput('warmup_answers', warmupBody)}
 
 Propose candidate interests. Return JSON array only.`;
 
   const client = getAnthropicClient();
   if (!client) return fallbackInterests(cleanAnswers);
 
+  // System prompt with cultural anchor lands ~1100-1400 tokens, crossing
+  // Sonnet's 1024 cache threshold; keep cache_control for the warm-path hit
+  // (onboarding bursts often process multiple users back-to-back).
   const response = await loggedMessagesCreate(client, 'interests-suggest', {
     model: ANTHROPIC_MODEL,
     max_tokens: 1600,
@@ -271,7 +280,7 @@ export async function canonicalizeInterest(rawInput: string): Promise<Canonicali
   const cleanInput = rawInput.trim().replace(/\s+/g, ' ').slice(0, 100);
   const fallback: CanonicalizedInterest = {
     suggested: cleanInput,
-    broadCategory: 'General Knowledge',
+    broadCategory: null,
     explanation: 'Kept your original wording because a suggestion was not available.',
   };
 
@@ -284,14 +293,15 @@ export async function canonicalizeInterest(rawInput: string): Promise<Canonicali
 Suggest a more hyper-specific version that would generate good trivia questions. If the input is already specific enough, return it unchanged.
 Avoid broad categories like "Music", "Literature", "History". Prefer forms like "Late Tchaikovsky", "Russian 19th-Century Novels", "Weimar-Era Cinema".
 Never return "Other" as broadCategory; use "General Knowledge" only when no precise top-level bucket applies.
-Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation": "..." }`;
+Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation": "..." }${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
+  // ~200 tokens — below Haiku's 2048 cache threshold; plain string.
   const response = await loggedMessagesCreate(client, 'interests-canonicalize', {
     model: CANONICALIZE_MODEL,
     max_tokens: 260,
     temperature: 0.2,
-    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: cleanInput }],
+    system: systemPrompt,
+    messages: [{ role: 'user', content: wrapUserInput('interest_input', cleanInput) }],
   });
 
   const text = extractTextContent(response.content);
@@ -304,9 +314,77 @@ Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation
     return fallback;
   }
 
+  const normalizedBroad = normalizeBroadCategory(broadCategory);
   return {
     suggested: suggested.slice(0, 100),
-    broadCategory: (normalizeBroadCategory(broadCategory) ?? 'General Knowledge').slice(0, 80),
+    // Don't surface the catch-all as a real suggestion; let the save path
+    // re-categorize. null normalizes and "General Knowledge" both collapse here.
+    broadCategory:
+      normalizedBroad && normalizedBroad !== 'General Knowledge'
+        ? normalizedBroad.slice(0, 80)
+        : null,
     explanation: explanation.slice(0, 180),
   };
+}
+
+/**
+ * True when a stored broad_category is the catch-all rather than a real
+ * top-level bucket. normalizeBroadCategory() folds "Other"/"General"/
+ * "Potpourri" into "General Knowledge", so a null/empty value or a value that
+ * normalizes to "General Knowledge" is exactly the set we treat as
+ * "uncategorized" — the value the portrait renders as the "Other interests"
+ * circle. Used both by the declared-interest write path (to decide whether to
+ * (re)categorize) and by the backfill script.
+ */
+export function isCatchAllBroadCategory(value: string | null | undefined): boolean {
+  if (typeof value !== 'string') return true;
+  const normalized = normalizeBroadCategory(value);
+  return normalized === null || normalized === 'General Knowledge';
+}
+
+/**
+ * Resolve a real top-level broad category for a single declared-interest
+ * domain. Unlike canonicalizeInterest (which fabricates the "General Knowledge"
+ * catch-all on failure), this returns null when the categorizer is unavailable
+ * or can't place the domain, so callers persist an honest, backfillable
+ * "uncategorized" value instead of permanently stranding the domain in the
+ * "Other interests" circle.
+ */
+export async function categorizeInterestDomain(domain: string): Promise<string | null> {
+  const cleanInput = domain.trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!cleanInput) return null;
+
+  const client = getAnthropicClient();
+  if (!client) return null;
+
+  const systemPrompt = `Assign one stable, top-level "broad category" to a user's declared trivia interest.
+Respond in JSON only: { "broadCategory": "..." }
+- broadCategory is a stable top-level bucket such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Technology, Food & Cuisine, Architecture & Design.
+- It must NOT be a person/work/movement/era-specific territory. Examples: "Romantic Era Classical symphony music" -> Music; "90's Bollywood" -> Film & Television; "Mortgage backed securities" -> Finance; "James Joyce" -> Literature.
+- If none of the listed buckets fit, name the closest real top-level field as a 1-2 word label.
+- NEVER return "General Knowledge", "Other", "General", or "Potpourri" — these are forbidden catch-alls. Always pick the closest real category.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  try {
+    // ~150 tokens — below Haiku's 2048 cache threshold; plain string.
+    const response = await loggedMessagesCreate(client, 'interests-categorize-domain', {
+      model: CANONICALIZE_MODEL,
+      max_tokens: 80,
+      temperature: 0.2,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: wrapUserInput('interest_domain', cleanInput) }],
+    });
+
+    const text = extractTextContent(response.content);
+    const parsed = parseJsonObject(text);
+    const raw = asTrimmedString(parsed?.broadCategory ?? parsed?.broad_category);
+    if (!raw) return null;
+
+    const normalized = normalizeBroadCategory(raw);
+    // The model occasionally ignores the prohibition; treat any catch-all
+    // result as a miss so we never persist it.
+    if (!normalized || normalized === 'General Knowledge') return null;
+    return normalized.slice(0, 80);
+  } catch {
+    return null;
+  }
 }

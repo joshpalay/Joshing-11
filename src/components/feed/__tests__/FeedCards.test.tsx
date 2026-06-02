@@ -5,9 +5,10 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import {
   AnsweredByYouCard,
   DirectSentCard,
+  DismissedFeedBar,
+  FeedCardShell,
   FeedOverflowMenu,
   FriendAddedCard,
-  FriendAnsweredCard,
   FriendLikedCard,
   feedCardPreviewFixtures,
   getFeedOverflowMenuLabels,
@@ -55,7 +56,6 @@ describe('Feed card preview fixtures', () => {
   it('covers every requested typed card state', () => {
     expect(Object.keys(feedCardPreviewFixtures)).toEqual([
       'directSentUnanswered',
-      'friendAnsweredRight',
       'friendAddedWroteQuestion',
       'friendLikedShared',
       'friendLikedCollapsedMultiEndorsement',
@@ -76,11 +76,6 @@ describe('Feed card preview fixtures', () => {
     expect(directSent).toContain('Food &amp; Drink')
     expect(directSent).toContain('SCOBY')
 
-    const friendAnswered = html(<FriendAnsweredCard item={fixtures.friendAnsweredRight} />)
-    expect(friendAnswered).toContain('Noah')
-    expect(friendAnswered).toContain('Science')
-    expect(friendAnswered).toContain('magnetar')
-
     const friendAdded = html(<FriendAddedCard item={fixtures.friendAddedWroteQuestion} />)
     expect(friendAdded).toContain('Ari')
     expect(friendAdded).toContain('History')
@@ -96,7 +91,6 @@ describe('Feed card preview fixtures', () => {
   it('drops the "has knowledge to share" phrasing from the unanswered question card', () => {
     const variants = [
       html(<DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />),
-      html(<FriendAnsweredCard item={feedCardPreviewFixtures.friendAnsweredRight} />),
       html(<FriendAddedCard item={feedCardPreviewFixtures.friendAddedWroteQuestion} />),
       html(<FriendLikedCard item={feedCardPreviewFixtures.friendLikedShared} />),
     ]
@@ -132,7 +126,7 @@ describe('Feed unanswered card actions', () => {
     const rendered = html(
       <DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />
     )
-    expect(rendered).not.toContain('Answer →')
+    expect(rendered).not.toContain('Answer this')
   })
 
   it('shows overflow menu when passed', () => {
@@ -154,6 +148,97 @@ describe('Feed unanswered card actions', () => {
     )
     expect(rendered).toContain('More Feed actions')
     expect(rendered).not.toContain('Send to friend')
+  })
+})
+
+describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
+  it('renders the quiet Dismiss control on the card face when onDismiss is provided', () => {
+    const rendered = html(
+      <DirectSentCard
+        item={feedCardPreviewFixtures.directSentUnanswered}
+        onAnswer={() => undefined}
+        onDismiss={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismiss')
+    expect(rendered).toContain('Answer →')
+    // The Dismiss button must never expose the mute affordance on the card face.
+    expect(rendered).not.toContain('Not into')
+  })
+
+  it('omits the Dismiss control when onDismiss is not provided', () => {
+    const rendered = html(
+      <DirectSentCard
+        item={feedCardPreviewFixtures.directSentUnanswered}
+        onAnswer={() => undefined}
+      />
+    )
+    expect(rendered).not.toContain('Dismiss')
+  })
+
+  it('shows Dismissed, Undo, and the category mute affordance in the inline bar', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category="Roman aqueducts"
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismissed')
+    expect(rendered).toContain('Undo')
+    expect(rendered).toContain('Not into Roman aqueducts?')
+  })
+
+  it('hides the mute affordance when there is no category', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category={null}
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismissed')
+    expect(rendered).toContain('Undo')
+    expect(rendered).not.toContain('Not into')
+  })
+
+  it('reveals the answer on the card back when loaded', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category="Roman aqueducts"
+        answer="Pont du Gard"
+        answerLoading={false}
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismissed')
+    expect(rendered).toContain('Pont du Gard')
+  })
+
+  it('shows a loading state while the answer is being fetched', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category={null}
+        answerLoading
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Revealing answer')
+  })
+
+  it('falls back to an unavailable message when the answer fetch errors', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category={null}
+        answerError
+        answerLoading={false}
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Answer unavailable')
   })
 })
 
@@ -234,7 +319,7 @@ describe('Feed answered states', () => {
     expect(rendered).toContain('>You<')
   })
 
-  it('uses the Joshing offset-shadow recheck button on wrong answers', () => {
+  it('uses the serif slate link recheck action on wrong answers (no boxed button)', () => {
     const recheckAction = { onSubmit: async () => ({ accepted: false, message: '' }) }
     const rendered = html(
       <AnsweredByYouCard
@@ -243,69 +328,20 @@ describe('Feed answered states', () => {
       />
     )
     expect(rendered).toContain('Recheck →')
-    expect(rendered).toContain('3px 3px 0 var(--ink)')
-  })
-})
-
-describe('FriendAnsweredCard viewer-already-answered footer', () => {
-  it('reframes the header around the viewer when both were correct and uses warm footer copy', () => {
-    const rendered = html(
-      <FriendAnsweredCard
-        item={{
-          ...feedCardPreviewFixtures.friendAnsweredRight,
-          viewerResult: 'correct',
-          friendCorrect: true,
-        }}
-        onAnswer={() => undefined}
-      />
-    )
-    expect(rendered).toContain('got your Science question')
-    expect(rendered).toContain('You both know some Science.')
-    expect(rendered).not.toContain('You both had it')
-    expect(rendered).not.toContain('Answer →')
-  })
-
-  it('renders a "missed your … question" header and "you missed it" footer when viewer was wrong and friend was right', () => {
-    const rendered = html(
-      <FriendAnsweredCard
-        item={{
-          ...feedCardPreviewFixtures.friendAnsweredRight,
-          viewerResult: 'incorrect',
-          friendCorrect: true,
-        }}
-        onAnswer={() => undefined}
-      />
-    )
-    // Friend was right, so from the viewer's perspective the friend "got" their question.
-    expect(rendered).toContain('got your Science question')
-    expect(rendered).toContain('Noah knew this')
-    expect(rendered).toContain('you missed it')
-    expect(rendered).not.toContain('Answer →')
-  })
-
-  it('omits the status footer and the reframed header when the viewer has not answered yet', () => {
-    const rendered = html(
-      <FriendAnsweredCard
-        item={feedCardPreviewFixtures.friendAnsweredRight}
-        onAnswer={() => undefined}
-      />
-    )
-    expect(rendered).toContain('Answer →')
-    expect(rendered).not.toContain('You both had it')
-    expect(rendered).not.toContain('You both know some')
-    expect(rendered).not.toContain('you missed it')
-    expect(rendered).not.toContain('got your Science question')
+    // Brand action-link treatment (matches "Answer →"): serif, slate, underlined — no offset-shadow box.
+    expect(rendered).toContain('text-[var(--brand-link)]')
+    expect(rendered).not.toContain('3px 3px 0 var(--ink)')
   })
 })
 
 describe('Authored-by-viewer card', () => {
-  it('renders a "New question" eyebrow with the italic category', () => {
+  it('renders the authored attribution and category (Figma triangle card has no eyebrow)', () => {
     const rendered = html(
       <FriendAddedCard
         item={feedCardPreviewFixtures.authoredByViewerUnanswered}
       />
     )
-    expect(rendered).toContain('New question')
+    expect(rendered).toContain('added a question')
     expect(rendered).toContain('Detroit Techno')
   })
 
@@ -327,6 +363,53 @@ describe('Authored-by-viewer card', () => {
       />
     )
     expect(rendered).not.toContain('Answer →')
+  })
+})
+
+describe('FeedCardShell (shared C7 shell)', () => {
+  it('renders a top accent bar by default', () => {
+    const rendered = html(
+      <FeedCardShell accentColor="#abc123">
+        <p>body</p>
+      </FeedCardShell>
+    )
+    expect(rendered).toContain('inset-x-0 top-0 h-[2px]')
+    expect(rendered).not.toContain('w-[2px]')
+    expect(rendered).toContain('background-color:#abc123')
+    expect(rendered).toContain('border-[var(--brand-rule)]')
+    expect(rendered).toContain('bg-[var(--brand-card)]')
+  })
+
+  it('moves the accent bar to the left edge when requested', () => {
+    const rendered = html(
+      <FeedCardShell accentColor="#abc123" accentPlacement="left">
+        <p>body</p>
+      </FeedCardShell>
+    )
+    expect(rendered).toContain('inset-y-0 left-0 w-[2px]')
+    expect(rendered).not.toContain('h-[2px]')
+  })
+
+  it('omits the accent bar entirely when no color is given', () => {
+    const rendered = html(
+      <FeedCardShell>
+        <p>body</p>
+      </FeedCardShell>
+    )
+    expect(rendered).not.toContain('h-[2px]')
+    expect(rendered).not.toContain('w-[2px]')
+  })
+
+  it('renders the triangle mat variant with an inset brand-card panel', () => {
+    const rendered = html(
+      <FeedCardShell variant="triangle">
+        <p>body</p>
+      </FeedCardShell>
+    )
+    expect(rendered).toContain('/images/Variant4.png')
+    expect(rendered).toContain('bg-[var(--brand-card)]')
+    // triangle mat has no hairline border (the mat itself is the frame)
+    expect(rendered).not.toContain('border-[var(--brand-rule)]')
   })
 })
 

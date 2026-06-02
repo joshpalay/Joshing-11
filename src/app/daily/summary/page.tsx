@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Flag, Heart, MoreHorizontal, X } from 'lucide-react'
+import LoadingScreen from '@/components/LoadingScreen'
 import {
   type CSSProperties,
   useCallback,
@@ -15,9 +16,11 @@ import {
 
 import { SendQuestionAction } from '@/components/SendQuestionAction'
 import { AddToBankAction } from '@/components/AddToBankAction'
+import { EditorialBadge } from '@/components/EditorialBadge'
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
 import MasteryMoment from '@/components/review/MasteryMoment'
 import { cn } from '@/lib/utils'
+import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types'
 import { formatNextResetTimeLocal } from '@/lib/games/timezone'
 import type {
   DailySummaryView,
@@ -56,11 +59,11 @@ const monoStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-  fontSize: '1.05rem',
-  fontWeight: 600,
-  color: '#111111',
+  fontSize: '0.8rem',
+  fontWeight: 700,
+  color: 'var(--brand-ink)',
   textTransform: 'uppercase',
-  letterSpacing: '0.05em',
+  letterSpacing: '0.1em',
 }
 
 function formatDate(value: string) {
@@ -190,13 +193,7 @@ export default function DailySummaryPage() {
   const firstTierCrossing = summary?.tierCrossings[0] ?? null
 
   if (loading) {
-    return (
-      <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
-        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          Loading summary...
-        </p>
-      </main>
-    )
+    return <LoadingScreen fullScreen label="Loading summary" />
   }
 
   if (error || !summary) {
@@ -221,18 +218,8 @@ export default function DailySummaryPage() {
           </Link>
           {' / DAILY FIVE / SUMMARY'}
         </p>
-        <h1
-          style={{
-            marginTop: '10px',
-            fontFamily: 'var(--font-neutral), system-ui, sans-serif',
-            fontSize: '1.45rem',
-            fontWeight: 700,
-            color: '#111111',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}
-        >
-          How You Did
+        <h1 className="mt-2 font-serif text-[2rem] leading-tight text-[var(--brand-ink)]">
+          How you did
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
           {formatDate(summary.date)}
@@ -428,25 +415,41 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
 
   return (
     <article
-      className={cn(
-        'card relative p-5',
+      className="card relative p-5"
+      style={
         question.isSkipped
-          ? 'border-stone-200 bg-stone-50'
+          ? { borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 30%, transparent)' }
           : question.isCorrect
-            ? 'border-emerald-200 bg-emerald-50'
-            : 'border-rose-200 bg-rose-50'
-      )}
+            ? {
+                background: 'color-mix(in srgb, var(--success) 9%, var(--brand-card))',
+                borderColor: 'color-mix(in srgb, var(--success) 30%, var(--brand-border))',
+                borderLeft: '3px solid var(--success)',
+              }
+            : {
+                background: 'color-mix(in srgb, #b42318 7%, var(--brand-card))',
+                borderColor: 'color-mix(in srgb, #b42318 24%, var(--brand-border))',
+                borderLeft: '3px solid #b42318',
+              }
+      }
     >
       <div className="flex flex-wrap items-start gap-2 pr-11">
         <span
-          className={cn(
-            'rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase',
+          className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase"
+          style={
             question.isSkipped
-              ? 'border-stone-300 bg-stone-100 text-stone-700'
+              ? { borderColor: 'var(--brand-border)', background: 'var(--secondary)', color: 'var(--brand-ink-400)' }
               : question.isCorrect
-                ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
-                : 'border-rose-300 bg-rose-100 text-rose-800'
-          )}
+                ? {
+                    borderColor: 'color-mix(in srgb, var(--success) 35%, var(--brand-border))',
+                    background: 'color-mix(in srgb, var(--success) 14%, var(--brand-card))',
+                    color: '#0f5c30',
+                  }
+                : {
+                    borderColor: 'color-mix(in srgb, #b42318 35%, var(--brand-border))',
+                    background: 'color-mix(in srgb, #b42318 12%, var(--brand-card))',
+                    color: '#8b1f16',
+                  }
+          }
         >
           {question.isSkipped
             ? 'SKIPPED'
@@ -455,9 +458,9 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
               : 'WRONG'}
         </span>
         <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          {question.creatorNote ? null : `JOSHING BOT · ${question.domainDisplayName.toUpperCase()}`}
+          {question.authorName ? null : `${LLM_QUESTION_ATTRIBUTION.toUpperCase()} · ${question.domainDisplayName.toUpperCase()}`}
         </p>
-        {question.creatorNote ? (
+        {question.authorName ? (
           <p
             className="pt-1"
             style={{
@@ -478,7 +481,8 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
             >
               FROM
             </span>
-            <span style={{ fontWeight: 600 }}>{question.creatorNote.authorName}</span>
+            <span style={{ fontWeight: 600 }}>{question.authorName}</span>
+            {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
             <span
               style={{
                 ...monoStyle,
@@ -522,12 +526,14 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
           {question.explanation}
         </p>
       ) : null}
-      {question.creatorNote ? (
+      {question.authorNote ? (
         <p className="bg-muted/40 text-foreground mt-4 rounded-xl border p-3 text-sm leading-6">
           <span className="font-medium">
-            A note from {question.creatorNote.authorName}:
+            {question.authorIsHouse
+              ? 'Editor’s note:'
+              : question.authorName ? `Why ${question.authorName} asked:` : 'Why they asked:'}
           </span>{' '}
-          {question.creatorNote.noteText}
+          {question.authorNote}
         </p>
       ) : null}
       {exclusionState.kind === 'confirmed' ? (

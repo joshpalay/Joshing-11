@@ -52,14 +52,14 @@ export function DomainRow({
             <span style={metaLabelStyle}>Add questions here to reach mastery.</span>
           ) : (
             <>
-              <span style={metaLabelStyle}>Your q's</span>
+              <span style={metaLabelStyle}>Your q’s</span>
               <div style={dotsWrapStyle} aria-hidden>
                 {Array.from({ length: CONTRIBUTION_DOT_COUNT }).map((_, index) => (
                   <span
                     key={`${domain}-dot-${index}`}
                     style={{
                       ...dotStyle,
-                      background: index < contributionDots ? '#111111' : '#ddd6c7',
+                      background: index < contributionDots ? 'var(--warm-ink)' : 'var(--warm-border-soft)',
                     }}
                   />
                 ))}
@@ -107,14 +107,14 @@ const rowStyle: CSSProperties = {
   justifyContent: 'space-between',
   gap: '0.75rem',
   padding: '0.95rem 0.2rem',
-  border: '1px solid #e8e2d6',
+  border: '1px solid var(--warm-border)',
   borderRadius: '8px',
   transition: 'background-color 300ms ease, border-color 300ms ease',
 };
 
 const highlightStyle: CSSProperties = {
-  backgroundColor: 'rgba(43, 110, 242, 0.08)',
-  borderColor: '#1a1208',
+  backgroundColor: 'color-mix(in srgb, var(--brand-navy) 8%, transparent)',
+  borderColor: 'var(--brand-ink)',
 };
 
 const contentStyle: CSSProperties = {
@@ -130,7 +130,7 @@ const titleStyle: CSSProperties = {
 
 const statusStyle: CSSProperties = {
   margin: '0.15rem 0 0',
-  color: '#696257',
+  color: 'var(--warm-ink-700)',
   fontSize: '0.88rem',
 };
 
@@ -143,7 +143,7 @@ const metaRowStyle: CSSProperties = {
 
 const metaLabelStyle: CSSProperties = {
   fontSize: '0.76rem',
-  color: '#696257',
+  color: 'var(--warm-ink-700)',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
 };
@@ -168,10 +168,10 @@ const trailingStyle: CSSProperties = {
 };
 
 const declaredBadgeStyle: CSSProperties = {
-  border: '1px solid #1a1208',
+  border: '1px solid var(--warm-ink)',
   borderRadius: '999px',
   padding: '0.16rem 0.42rem',
-  color: '#1a1208',
+  color: 'var(--warm-ink)',
   fontSize: '0.62rem',
   fontWeight: 700,
   letterSpacing: '0.06em',
@@ -181,12 +181,12 @@ const declaredBadgeStyle: CSSProperties = {
 const pointsStyle: CSSProperties = {
   minWidth: '4.2rem',
   textAlign: 'right',
-  color: '#1a1208',
+  color: 'var(--warm-ink)',
   fontSize: '0.88rem',
   fontWeight: 600,
 };
 
 const chevronStyle: CSSProperties = {
   fontSize: '1rem',
-  color: '#7d7568',
+  color: 'var(--warm-ink-500)',
 };

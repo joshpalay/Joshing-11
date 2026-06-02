@@ -1,9 +1,8 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
-import { gradeAnswer, selectQuip } from '@/server/grading';
+import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
-import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, playerMastery, questions } from '@/server/db';
 import { getBasePoints } from '@/server/mastery/scoring';
 import { awardAuthorCredit } from '@/server/mastery/author-credit';
@@ -73,7 +72,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     question.questionType,
   );
   const isCorrect = grade.result === 'correct';
-  const quip = selectQuip({ isCorrect, surface: 'feed', friendResult: null });
 
   const priorAnswers = await readPriorAnswersForQuestion(session.userId, question.id);
   const answerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
@@ -166,21 +164,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (isCorrect) {
-    void createFeedItemsForFriendsFromAnswer(
+    after(() => createFeedItemsForFriendsFromAnswer(
       session.userId,
       question.id,
       'correct',
       sourceId,
-    );
-  }
-
-  if (!isCorrect) {
-    void promptCreatorNoteAfterWrongAnswer({
-      questionId: question.id,
-      recipientUserId: session.userId,
-      contextType: 'feed',
-      contextId: sourceId,
-    });
+    ));
   }
 
   return NextResponse.json({
@@ -191,6 +180,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     breadcrumb: null,
     masteryDelta,
     correctAnswer: question.answerText,
-    quip,
+    creatorNote: question.creatorNote ?? null,
   });
 }
