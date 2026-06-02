@@ -3,7 +3,6 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessageCircle } from 'lucide-react';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
 
@@ -20,6 +19,12 @@ const INPUT_CLASS =
   'h-11 w-full rounded-[4px] border border-[var(--tri-amber)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none ring-offset-2 ring-offset-[var(--brand-cream-card)] focus:ring-2 focus:ring-[var(--brand-navy)]';
 const SUBMIT_CLASS =
   'h-11 w-full rounded-[4px] bg-[var(--brand-navy)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
+
+// A single rounded-rectangle speech bubble (28×20, 6px radius) with a tail at
+// the bottom-left. Reused for both bubbles in the OTP mark — the front bubble
+// is mirrored via an SVG transform so its tail points the other way.
+const BUBBLE_PATH =
+  'M6 0 H22 A6 6 0 0 1 28 6 V14 A6 6 0 0 1 22 20 H13 L7 27 L9 20 H6 A6 6 0 0 1 0 14 V6 A6 6 0 0 1 6 0 Z';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {
@@ -195,19 +200,26 @@ export default function LoginPanel() {
         </form>
       ) : (
         <form className="space-y-[14px]" onSubmit={verifyCode}>
-          {/* Two overlapping speech bubbles (orange in front, navy behind),
-              recreating the Figma two-tone icon. The front bubble takes a cream
-              stroke so it reads as a crescent where it crosses the navy one. */}
-          <div className="mx-auto flex w-fit flex-row-reverse items-end" aria-hidden="true">
-            <MessageCircle
-              className="h-12 w-12 -translate-x-3 -scale-x-100 fill-[var(--brand-navy)] text-[var(--brand-navy)]"
-              strokeWidth={1.5}
-            />
-            <MessageCircle
-              className="h-12 w-12 fill-[var(--brand-orange)] text-[var(--brand-cream-card)]"
+          {/* Two overlapping rounded speech bubbles — navy behind, orange in
+              front — recreating the Figma two-tone mark. The front bubble is
+              mirrored (tail to the right) and carries a cream halo stroke so it
+              reads as a distinct bubble where it crosses the navy one. */}
+          <svg
+            className="mx-auto h-14 w-auto"
+            viewBox="-2 -2 52 41"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path d={BUBBLE_PATH} fill="var(--brand-navy)" />
+            <path
+              d={BUBBLE_PATH}
+              transform="translate(47 9) scale(-1 1)"
+              fill="var(--brand-orange)"
+              stroke="var(--brand-cream-card)"
               strokeWidth={2.5}
+              strokeLinejoin="round"
             />
-          </div>
+          </svg>
           <label
             className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
             htmlFor="code"
