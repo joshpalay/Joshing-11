@@ -1,6 +1,14 @@
 import { and, desc, eq, gte, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 
-import { db, masteryEvents, questions, users } from '@/server/db';
+import {
+  collectMilestoneQuestionIds,
+  deriveLatelyMilestones,
+  type LatelyMilestone,
+  type MilestoneAnswerRow,
+} from '@/lib/lately-milestones';
+import { resolveAuthorDisplay } from '@/lib/questions-types';
+import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
+import { SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 export type LatelyDirection = 'they_got_you' | 'you_got_them';
 
@@ -124,4 +132,166 @@ export async function getLatelyMoments(userId: string): Promise<LatelyMoment[]> 
     });
   }
   return moments;
+}
+
+const MILESTONE_WINDOW_DAYS = 30;
+
+// Resolve the canonical domain a milestone groups by. Mirrors the spec's
+// "joined to the canonical question for canonicalSubcategory", falling back the
+// same way the feed write path does (broadCategory, then the coarse category
+// enum) so groups line up with how the `friend_answered` rows were created.
+// Returns null when there's no real domain — those rows can't anchor a card.
+function resolveMilestoneDomain(
+  canonical: string | null,
+  broad: string | null,
+  category: string | null,
+): string | null {
+  const c = canonical?.trim();
+  if (c) return c;
+  const b = broad?.trim();
+  if (b) return b;
+  if (category && CATEGORY_ENUM_PRETTY[category]) return CATEGORY_ENUM_PRETTY[category];
+  return null;
+}
+
+/**
+ * Lately skill milestones (D-4 §A). Read-time aggregate of `friend_answered`
+ * correct items where I'm the recipient and the answerer is someone I follow,
+ * within the 30-day Lately horizon, joined to the canonical question. The deep
+ * vs. breadth split (A-1) lives in the pure `deriveLatelyMilestones`.
+ */
+export async function getLatelyMilestones(userId: string): Promise<LatelyMilestone[]> {
+  const windowStart = new Date(Date.now() - MILESTONE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      friendId: feedItems.sourceUserId,
+      friendDisplayName: users.displayName,
+      questionId: feedItems.questionId,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+      category: questions.category,
+      answeredAt: feedItems.sourceEventAt,
+    })
+    .from(feedItems)
+    // sourceUserId ∈ {people I follow}: inner-join the approved follow edge so a
+    // friend_answered row from someone I don't follow is dropped at the DB.
+    .innerJoin(
+      follows,
+      and(
+        eq(follows.followeeId, feedItems.sourceUserId),
+        eq(follows.followerId, userId),
+        eq(follows.state, 'approved'),
+      ),
+    )
+    .innerJoin(questions, eq(questions.id, feedItems.questionId))
+    .innerJoin(users, eq(users.id, feedItems.sourceUserId))
+    .where(
+      and(
+        eq(feedItems.recipientUserId, userId),
+        eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
+        eq(feedItems.sourceResult, 'correct'),
+        isNotNull(feedItems.questionId),
+        gte(feedItems.sourceEventAt, windowStart),
+      ),
+    )
+    .orderBy(desc(feedItems.sourceEventAt))
+    .limit(500);
+
+  const answerRows: MilestoneAnswerRow[] = [];
+  for (const row of rows) {
+    if (!row.questionId || !row.answeredAt) continue;
+    const domain = resolveMilestoneDomain(
+      row.canonicalSubcategory,
+      row.broadCategory,
+      row.category,
+    );
+    if (!domain) continue;
+    const friendName = row.friendDisplayName?.trim() || 'A friend';
+    answerRows.push({
+      friendId: row.friendId,
+      friendName,
+      friendFirstName: firstName(row.friendDisplayName, friendName),
+      domain,
+      questionId: row.questionId,
+      answeredAt: row.answeredAt,
+    });
+  }
+
+  return deriveLatelyMilestones(answerRows);
+}
+
+// A friend's literal question, shaped for the seeded play session (the Lately
+// milestone click-through). Practice-only — carries everything needed to render
+// and grade, nothing about scoring.
+export type SeededPlayQuestion = {
+  questionId: string;
+  questionText: string;
+  correctAnswer: string;
+  acceptedAlternatives: string[];
+  questionType: string;
+  domain: string | null;
+  explanation: string | null;
+  authorName: string | null;
+  authorIsHouse: boolean;
+};
+
+/**
+ * Resolve the literal questions behind a milestone click-through, in the order
+ * requested. Authorization is by construction: a question only resolves if it
+ * appears in THIS viewer's own milestones, so the seeded list can't be used to
+ * play arbitrary questions. Shared by the play page and its grade route.
+ */
+export async function getSeededPlayQuestions(
+  userId: string,
+  requestedIds: string[],
+): Promise<SeededPlayQuestion[]> {
+  if (requestedIds.length === 0) return [];
+
+  const allowed = collectMilestoneQuestionIds(await getLatelyMilestones(userId));
+  const authorizedIds = requestedIds.filter((id) => allowed.has(id));
+  if (authorizedIds.length === 0) return [];
+
+  const rows = await db
+    .select({
+      id: questions.id,
+      questionText: questions.questionText,
+      answerText: questions.answerText,
+      acceptedAlternatives: questions.acceptedAlternatives,
+      questionType: questions.questionType,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+      category: questions.category,
+      factualExplanation: questions.factualExplanation,
+      explainerFull: questions.explainerFull,
+      explainerBrief: questions.explainerBrief,
+      creatorId: questions.creatorId,
+      source: questions.source,
+      deletedAt: questions.deletedAt,
+      authorDisplayName: users.displayName,
+    })
+    .from(questions)
+    .leftJoin(users, eq(users.id, questions.creatorId))
+    .where(inArray(questions.id, authorizedIds));
+
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  const resolved: SeededPlayQuestion[] = [];
+  for (const id of authorizedIds) {
+    const row = byId.get(id);
+    if (!row || row.deletedAt) continue;
+    const author = resolveAuthorDisplay(row.creatorId, row.source, row.authorDisplayName);
+    resolved.push({
+      questionId: row.id,
+      questionText: row.questionText,
+      correctAnswer: row.answerText,
+      acceptedAlternatives: row.acceptedAlternatives ?? [],
+      questionType: row.questionType,
+      domain: resolveMilestoneDomain(row.canonicalSubcategory, row.broadCategory, row.category),
+      explanation: row.factualExplanation ?? row.explainerFull ?? row.explainerBrief ?? null,
+      authorName: author.authorName,
+      authorIsHouse: author.authorIsHouse,
+    });
+  }
+  return resolved;
 }

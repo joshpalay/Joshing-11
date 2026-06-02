@@ -2,6 +2,35 @@ import type { LatelyDirection, LatelyMoment } from '@/server/db/queries/lately';
 
 export type LatelyBucketLabel = 'TODAY' | 'YESTERDAY' | 'EARLIER THIS WEEK';
 
+// Prominence tiers (D-4 §C). Lower number = higher prominence. The Lately feed
+// sorts by tier BEFORE recency, so a flood of friend-skill milestones can never
+// push a "they_got_you" (someone answered your authored question) or a
+// niche-match discovery item out of view within its day bucket.
+export const LATELY_TIER = {
+  ANSWERED_YOU: 0, // they_got_you — someone answered YOUR authored question
+  NICHE_MATCH: 1, // niche-match stranger discovery
+  MILESTONE: 2, // friend skill milestones (deep + breadth)
+  OTHER: 3, // you_got_them moments and everything else
+} as const;
+
+export type LatelyTier = (typeof LATELY_TIER)[keyof typeof LATELY_TIER];
+
+export function latelyTierForMomentDir(dir: LatelyDirection): LatelyTier {
+  return dir === 'they_got_you' ? LATELY_TIER.ANSWERED_YOU : LATELY_TIER.OTHER;
+}
+
+// Stable prominence sort: tier ascending (most prominent first), then most
+// recent first within a tier. Applied before day-bucketing, so each day bucket
+// preserves the tier ordering.
+export function sortByProminence<T extends { tier: number; sortAt: Date }>(
+  items: T[],
+): T[] {
+  return [...items].sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    return b.sortAt.getTime() - a.sortAt.getTime();
+  });
+}
+
 export type LatelyBucket = {
   label: LatelyBucketLabel;
   items: LatelyMoment[];

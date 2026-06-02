@@ -21,10 +21,10 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
     (slot.category ? categoryLabel(slot.category) : '') ||
     slot.domain;
   const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category ? [{ label: category }] : [];
-  // Daily Five +2 bonus slots (friend-answered) carry an answerer and are always
+  // Daily Five +2 bonus slots (D-4 §B) carry presence attribution and are always
   // "accessible" — surface the accessibility badge so the lighter pick reads as
   // a deliberate, easier add rather than a generation miss.
-  if (slot.answerer_name && slot.difficulty_estimate === 'accessible') {
+  if (slot.presence_source_name && slot.difficulty_estimate === 'accessible') {
     badges.push({ label: 'Accessible', tone: 'muted' });
   }
   return badges;
@@ -298,7 +298,8 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
-          answererName: slot.answerer_name ?? null,
+          presenceSourceName: slot.presence_source_name ?? null,
+          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -348,7 +349,8 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
-          answererName: slot.answerer_name ?? null,
+          presenceSourceName: slot.presence_source_name ?? null,
+          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
           isNew: true,
           badges: questionBadges(slot),
         });

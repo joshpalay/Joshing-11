@@ -4,11 +4,14 @@ import {
   assignCaption,
   bucketByDay,
   formatMomentTime,
+  sortByProminence,
   type LatelyBucketLabel,
 } from '@/lib/lately';
+import type { LatelyMilestone } from '@/lib/lately-milestones';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 
 import { DayDivider } from './DayDivider';
+import { MilestoneRow } from './MilestoneRow';
 import { MomentRow } from './MomentRow';
 import { FM, FS, INK2, INK3, RULE } from './tokens';
 import { UtilityCard } from './UtilityCard';
@@ -24,8 +27,9 @@ export type LatelyUtilityProps = {
 };
 
 export type LatelyFeedItem =
-  | { kind: 'moment'; id: string; sortAt: Date; moment: LatelyMoment }
-  | { kind: 'utility'; id: string; sortAt: Date; utility: LatelyUtilityProps };
+  | { kind: 'moment'; id: string; sortAt: Date; tier: number; moment: LatelyMoment }
+  | { kind: 'milestone'; id: string; sortAt: Date; tier: number; milestone: LatelyMilestone }
+  | { kind: 'utility'; id: string; sortAt: Date; tier: number; utility: LatelyUtilityProps };
 
 type Props = {
   items: LatelyFeedItem[];
@@ -52,9 +56,10 @@ export function LatelyFeed({ items, tz }: Props) {
     );
   }
 
-  const sorted = [...items].sort(
-    (a, b) => b.sortAt.getTime() - a.sortAt.getTime(),
-  );
+  // Prominence tiers before recency (D-4 §C): bucketByDay preserves input order
+  // within each day, so this keeps they_got_you / niche-match above a milestone
+  // flood inside every bucket.
+  const sorted = sortByProminence(items);
   const buckets = bucketByDay(sorted, (i) => i.sortAt, tz);
   const visibleItems = buckets.flatMap((b) => b.items);
 
@@ -137,6 +142,16 @@ function renderFeedItem(
         footnoteTime={formatMomentTime(moment.answeredAt, bucket, tz)}
         featured={item.id === featuredMomentId}
         defaultOpen={item.id === featuredMomentId}
+      />
+    );
+  }
+
+  if (item.kind === 'milestone') {
+    return (
+      <MilestoneRow
+        key={item.id}
+        milestone={item.milestone}
+        footnoteTime={formatMomentTime(item.sortAt, bucket, tz)}
       />
     );
   }
