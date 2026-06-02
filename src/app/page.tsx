@@ -124,7 +124,7 @@ async function CeremonyPinSection({ userId }: { userId: string }) {
 }
 
 // How many of the unified stream's home-eligible items the homepage head shows.
-const HOME_HEAD_LIMIT = 4
+const HOME_HEAD_LIMIT = 3
 
 async function RecentActivityServerSection({ userId }: { userId: string }) {
   // The homepage head is the curated top of the one unified stream (same source
