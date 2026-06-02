@@ -3,7 +3,6 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessageCircle } from 'lucide-react';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
 
@@ -195,19 +194,33 @@ export default function LoginPanel() {
         </form>
       ) : (
         <form className="space-y-[14px]" onSubmit={verifyCode}>
-          {/* Two overlapping speech bubbles (orange in front, navy behind),
-              recreating the Figma two-tone icon. The front bubble takes a cream
-              stroke so it reads as a crescent where it crosses the navy one. */}
-          <div className="mx-auto flex w-fit flex-row-reverse items-end" aria-hidden="true">
-            <MessageCircle
-              className="h-12 w-12 -translate-x-3 -scale-x-100 fill-[var(--brand-navy)] text-[var(--brand-navy)]"
-              strokeWidth={1.5}
-            />
-            <MessageCircle
-              className="h-12 w-12 fill-[var(--brand-orange)] text-[var(--brand-cream-card)]"
-              strokeWidth={2.5}
-            />
-          </div>
+          {/* Two overlapping oval speech bubbles — navy behind, orange in front
+              — recreating the Figma two-tone mark. The front bubble is drawn
+              twice: first as a slightly larger cream copy (the page background
+              color) so a crescent of background shows where it overlaps the
+              navy, then as the orange bubble on top. */}
+          <svg
+            className="mx-auto h-14 w-auto"
+            viewBox="-3 -3 54 44"
+            aria-hidden="true"
+          >
+            <g fill="var(--brand-navy)">
+              <ellipse cx="15" cy="15" rx="15" ry="12" />
+              <path d="M3 22 L11 26.5 L1 31 Z" />
+            </g>
+            {/* cream halo — background color showing through the overlap */}
+            <g
+              fill="var(--brand-cream-card)"
+              transform="translate(32 23) scale(1.14) translate(-32 -23)"
+            >
+              <ellipse cx="32" cy="23" rx="15" ry="12" />
+              <path d="M44 30 L36 34.5 L46.5 39 Z" />
+            </g>
+            <g fill="var(--brand-orange)">
+              <ellipse cx="32" cy="23" rx="15" ry="12" />
+              <path d="M44 30 L36 34.5 L46.5 39 Z" />
+            </g>
+          </svg>
           <label
             className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
             htmlFor="code"
