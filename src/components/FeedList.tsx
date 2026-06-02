@@ -58,6 +58,9 @@ type FeedApiItem = {
   state: string
   is_pinned: boolean
   question_text?: string | null
+  // B-6: provenance of the underlying question, used to pick the recipient-facing
+  // verb ("wrote you this" for human-authored vs "sent you this" for curated LLM).
+  question_source?: 'authored' | 'daily_generated' | 'curated_sent' | null
   is_in_bank: boolean
   domain_pill?: string | null
   broad_category?: string | null
@@ -230,6 +233,24 @@ function comparisonCopy(
   return 'This one is still waiting for common ground.'
 }
 
+// B-6: the recipient-facing verb. For a direct send, the verb is keyed off the
+// underlying question's provenance, NOT the send mechanism: a human-authored
+// question reads "wrote you this"; a curated LLM forward reads "sent you this".
+// Only an explicit 'authored' source yields the human-authorship verb — any other
+// or absent provenance defaults to the curated verb, so a curated/LLM send can
+// never imply a human wrote it (B-5).
+export function feedSourceVerb(
+  sourceType: string,
+  questionSource: FeedApiItem['question_source'],
+): string {
+  if (sourceType === 'direct_sent') {
+    return questionSource === 'authored' ? 'wrote you this' : 'sent you this'
+  }
+  if (sourceType === 'authored_shared') return 'wrote this'
+  if (sourceType === 'thumbs_upped') return 'liked this'
+  return 'answered this'
+}
+
 function feedMetadata(item: FeedApiItem, answered = false) {
   const time = formatEventTime(item.source_event_at)
   const source = (
@@ -238,13 +259,7 @@ function feedMetadata(item: FeedApiItem, answered = false) {
         href={item.source_profile_href ?? profileHref(item.source_user_id)}
         name={item.source_friend_display_name}
       />{' '}
-      {item.source_type === 'direct_sent'
-        ? 'sent this to you'
-        : item.source_type === 'authored_shared'
-          ? 'wrote this'
-          : item.source_type === 'thumbs_upped'
-            ? 'liked this'
-            : 'answered this'}
+      {feedSourceVerb(item.source_type, item.question_source)}
     </span>
   )
 
