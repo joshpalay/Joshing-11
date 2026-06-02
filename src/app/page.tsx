@@ -11,8 +11,8 @@ import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { RecentActivitySection } from '@/components/home/RecentActivitySection'
 import { getSession } from '@/server/auth/session'
+import { buildActivityStream } from '@/server/activity/build-stream'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
-import { getRecentActivityForHome } from '@/server/db/queries/activity'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
@@ -126,8 +126,14 @@ async function CeremonyPinSection({ userId }: { userId: string }) {
   )
 }
 
+// How many of the unified stream's home-eligible items the homepage head shows.
+const HOME_HEAD_LIMIT = 4
+
 async function RecentActivityServerSection({ userId }: { userId: string }) {
-  const items = await getRecentActivityForHome(userId, 3)
+  // The homepage head is the curated top of the one unified stream (same source
+  // as Lately): take the home-eligible items, already prominence-sorted.
+  const stream = await buildActivityStream(userId)
+  const items = stream.filter((item) => item.homeEligible).slice(0, HOME_HEAD_LIMIT)
   return <RecentActivitySection items={items} />
 }
 
