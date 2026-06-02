@@ -21,6 +21,7 @@ import {
   type FriendLikedFeedItem,
 } from '@/components/feed'
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
+import { SparkleDivider, SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
 import type { InsideJokeKind, QuestionSource } from '@/lib/questions-types'
@@ -541,39 +542,39 @@ function FeedContributeFooter() {
   }
 
   return (
-    <footer className="border-t pt-6 pb-8">
-      <div className="mx-auto flex max-w-md flex-col items-center gap-2 text-center">
-        <p className="text-muted-foreground text-[11px] font-medium tracking-[0.12em] uppercase">
-          Make the questions better
-        </p>
-        <h2 className="font-serif text-xl font-semibold">
-          What&apos;s the best question you&apos;d like to be asked?
+    <footer className="pt-6 pb-8">
+      <SparkleDivider />
+      <div className="mx-auto mt-6 flex max-w-md flex-col items-center gap-2 text-center">
+        <h2 className="text-foreground max-w-sm font-serif text-2xl font-semibold text-balance">
+          The best games start with one great question.
         </h2>
         <p className="text-muted-foreground text-sm">
-          Tell us the kind of questions you want to see — we&apos;ll take you
-          straight to the question writer.
+          Wish someone would ask about your favorite album, movie, or book? Start
+          there.
         </p>
-        <form
-          onSubmit={handleSubmit}
-          className="mt-2 flex w-full flex-col gap-2 sm:flex-row"
-        >
-          <input
+        <form onSubmit={handleSubmit} className="mt-2 flex w-full flex-col gap-2">
+          <textarea
             value={idea}
             onChange={(event) => setIdea(event.target.value)}
             placeholder="A question you'd love to be asked…"
             aria-label="What question would you like to be asked?"
-            className="h-11 flex-1 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+            rows={5}
+            className="min-h-[140px] w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
           />
-          <button type="submit" className="btn-primary h-11 shrink-0">
+          <button type="submit" className="btn-primary h-11 w-full">
             Write a question
           </button>
         </form>
-        <Link
-          href="/friends"
-          className="text-[var(--brand-link)] mt-1 text-sm font-medium underline-offset-4 hover:underline"
-        >
-          Or invite a friend
-        </Link>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Or{' '}
+          <Link
+            href="/friends"
+            className="text-[var(--brand-link)] font-medium underline-offset-4 hover:underline"
+          >
+            invite a friend
+          </Link>{' '}
+          instead.
+        </p>
       </div>
     </footer>
   )
@@ -767,9 +768,14 @@ function FeedListContent({
       return "You've focused your Feed. You can re-open domains from your Knowledge page."
     }
     if (feedMeta.total_item_count > 0)
-      return "You've answered every question your friends sent. Invite more friends and their questions will show up here."
+      return "You've answered every question your friends sent."
     return 'Quiet today. Check back when your friends have played.'
   }, [error, feedFilter, feedMeta, loadingInitial])
+
+  // Short surface label shown under the serif empty-state headline. Skipped on
+  // the error path (the headline carries the error message there instead).
+  const emptySubtitle =
+    feedFilter === 'sent-to-me' ? 'No questions sent yet.' : 'No broadcasts yet.'
 
   // The invite CTA only makes sense on the friend-sourced Broadcasts surface.
   const showInviteFriendCta =
@@ -1174,15 +1180,17 @@ function FeedListContent({
 
       {items.length === 0 ? (
         <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
-          <p
-            className={
-              error
-                ? 'text-destructive text-sm'
-                : 'text-muted-foreground text-sm'
-            }
-          >
-            {emptyCopy}
-          </p>
+          {error ? (
+            <p className="text-destructive text-sm">{emptyCopy}</p>
+          ) : (
+            <>
+              <SpeechBubbleIllustration className="mb-1 h-24 w-auto" />
+              <h2 className="text-foreground max-w-sm font-serif text-2xl font-semibold text-balance">
+                {emptyCopy}
+              </h2>
+              <p className="text-muted-foreground text-sm">{emptySubtitle}</p>
+            </>
+          )}
           {showInviteFriendCta && !showContributeFooter ? (
             <Link
               href="/friends"
