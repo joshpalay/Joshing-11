@@ -93,3 +93,5 @@ assert.deepEqual(
   dedupedCatchupItems.map((item) => item.dailyQueueItemId),
   ['queue-3:0', 'queue-1:0'],
 );
+
+console.log('daily-catchup.smoke: ok');
