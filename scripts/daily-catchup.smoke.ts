@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   dedupeCatchUpItems,
   orderCatchUpItems,
-} from '../src/server/play/catch-up-turn-sequencing.ts';
+} from '../src/server/play/catch-up-turn-sequencing';
 
 import {
   dailyQueueItemId,
@@ -11,7 +11,7 @@ import {
   isCatchupQueueDate,
   minusUtcDays,
   replaceQueueSlot,
-} from '../src/server/daily/catchup.ts';
+} from '../src/server/daily/catchup';
 
 assert.equal(minusUtcDays('2026-05-01', 7), '2026-04-24');
 
