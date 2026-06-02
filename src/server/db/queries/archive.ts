@@ -15,7 +15,7 @@ import {
   users,
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
-import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
+import { LLM_QUESTION_ATTRIBUTION, resolveAuthorDisplay } from '@/lib/questions-types';
 
 export type ArchiveSource = 'daily' | 'feed' | 'joshing_game' | 'sent_to_me' | 'written_by_me';
 export type ArchiveResultFilter = 'correct' | 'incorrect' | 'skipped';
@@ -39,6 +39,7 @@ export type ArchiveItem = {
   canUseQuestionActions: boolean;
   verified: boolean;
   askerName: string;
+  authorIsHouse: boolean;
 };
 
 export type ArchiveKind = 'all' | 'answered';
@@ -197,6 +198,13 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
         const domain = slot.domain || generated?.canonicalSubcategory || questionDomain(bankQuestion);
         const questionId = slot.question_id ?? slot.generated_question_id ?? `${queue.id}:${slot.slot_index}`;
         const askerDisplay = bankQuestion?.creatorId ? creatorById.get(bankQuestion.creatorId) ?? null : null;
+        // Route the canonical question through resolveAuthorDisplay so a house
+        // slot (creatorId null, source 'house_authored') positively resolves to
+        // 'Joshing' + authorIsHouse, instead of falling through to ''. Pure-LLM
+        // slots carry no bankQuestion, so they keep the 'Generated'/'' fallback.
+        const authored = bankQuestion
+          ? resolveAuthorDisplay(bankQuestion.creatorId, bankQuestion.source, askerDisplay)
+          : { authorName: null, authorIsHouse: false };
         return {
           id: `daily:${queue.id}:${slot.slot_index}`,
           questionId,
@@ -215,7 +223,8 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
           myRating: null,
           canUseQuestionActions: Boolean(slot.question_id),
           verified: bankQuestion?.verified ?? true,
-          askerName: askerDisplay ?? (generated ? LLM_QUESTION_ATTRIBUTION : ''),
+          askerName: authored.authorName ?? askerDisplay ?? (generated ? LLM_QUESTION_ATTRIBUTION : ''),
+          authorIsHouse: authored.authorIsHouse,
         } satisfies ArchiveItem;
       }),
   );
@@ -292,6 +301,7 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       // null creatorId here ⟹ LLM-origin (curated_sent); authored feed questions
       // resolve a real name via the creatorUser left join.
       askerName: creatorUser?.displayName ?? LLM_QUESTION_ATTRIBUTION,
+      authorIsHouse: false,
     } satisfies ArchiveItem;
   });
 }
@@ -333,6 +343,7 @@ async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
       canUseQuestionActions: true,
       verified: question.verified,
       askerName: creatorUser?.displayName ?? '',
+      authorIsHouse: false,
     } satisfies ArchiveItem;
   });
 }
@@ -387,6 +398,7 @@ async function readWrittenByMeItems(userId: string): Promise<ArchiveItem[]> {
       canUseQuestionActions: true,
       verified: question.verified,
       askerName: '',
+      authorIsHouse: false,
     } satisfies ArchiveItem;
   });
 }

@@ -48,6 +48,17 @@ export async function POST(request: NextRequest) {
 
   if (!question[0] || !recipient[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
+  // Defensive: house/editorial questions are content infrastructure, never
+  // peer-to-peer sendable (D-3). No UI path forwards one and feed fan-out would
+  // reject it (null creatorId, non-LLM origin), but reject it explicitly here so
+  // the invariant is enforced at the entry point rather than implicitly downstream.
+  if (question[0].source === 'house_authored') {
+    return NextResponse.json(
+      { error: 'invalid_question', message: 'House questions cannot be sent.' },
+      { status: 400 },
+    );
+  }
+
   const [alreadyCorrect, alreadyInFeed] = await Promise.all([
     userAnsweredQuestionCorrectly(parsed.recipientUserId, sendableQuestionId!),
     userHasQuestionInBlockingFeed(parsed.recipientUserId, sendableQuestionId!),

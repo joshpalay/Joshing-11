@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
+import { EditorialBadge } from '@/components/EditorialBadge';
 import { cn } from '@/lib/utils';
 
 type ArchiveSource = 'daily' | 'feed' | 'joshing_game' | 'sent_to_me' | 'written_by_me';
@@ -30,6 +31,8 @@ type ArchiveItem = {
   myRating: 'up' | 'down' | null;
   canUseQuestionActions?: boolean;
   verified: boolean;
+  askerName: string;
+  authorIsHouse: boolean;
 };
 
 type ArchiveFacet = {
@@ -397,6 +400,12 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
           <span className="font-mono font-semibold text-foreground">+{Math.round(item.pointsAwarded)} pts</span>
         ) : null}
         {item.answeredAt ? <span>· {formatDate(item.answeredAt)}</span> : null}
+        {item.askerName.trim() ? (
+          <span className="inline-flex items-center gap-1">
+            · Asked by {item.askerName}
+            {item.authorIsHouse ? <EditorialBadge /> : null}
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
