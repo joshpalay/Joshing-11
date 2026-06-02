@@ -1,6 +1,7 @@
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { parseQuestionSource } from '@/lib/questions-types';
 import { getSession } from '@/server/auth/session';
 import {
   db,
@@ -234,9 +235,9 @@ export async function loadFriendCoverage(
     const rows: FriendCoverageEventRow[] = [];
 
     for (const event of events) {
-      const questionPayload = event.questionId ? {
+      const questionPayload = event.questionId && event.questionSource !== null ? {
         creatorId: event.questionCreatorId,
-        source: event.questionSource as 'authored' | 'daily_generated' | 'curated_sent',
+        source: parseQuestionSource(event.questionSource),
         visibility: event.questionVisibility as 'public' | 'private',
         deletedAt: event.questionDeletedAt,
       } : null;

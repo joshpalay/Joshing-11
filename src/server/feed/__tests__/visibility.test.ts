@@ -83,6 +83,24 @@ describe('correct-answer social feed eligibility', () => {
     expect(isLlmOriginQuestion('authored')).toBe(false);
   });
 
+  it('does NOT classify house_authored as LLM-origin (D-3 §C: house is curated, not LLM, and never enters the feed)', () => {
+    expect(isLlmOriginQuestion('house_authored')).toBe(false);
+  });
+
+  it('rejects a correct answer to a house question from the feed (null creatorId, non-LLM origin)', () => {
+    expect(isCorrectAnswerFeedEligible({
+      answerIsCorrect: true,
+      answererUserId: 'answerer-1',
+      question: {
+        creatorId: null,
+        source: 'house_authored' as const,
+        visibility: 'public' as const,
+        deletedAt: null,
+      },
+      hasVisibleSocialContext: true,
+    })).toBe(false);
+  });
+
   it('rejects a correct answer by the author', () => {
     expect(isCorrectAnswerFeedEligible({
       answerIsCorrect: true,
