@@ -13,7 +13,12 @@ import type { DifficultyEstimate } from '@/types/db';
 
 type DailyDifficultyEstimate = DifficultyEstimate | 'accessible' | 'moderate' | 'specialist';
 
-export const queueSlotSourceSchema = z.enum(['friend', 'bot', 'community']);
+// 'house' (D-3) — a labeled non-human house/editorial question seeded into the
+// Daily core to ease content scarcity in sparse niches. Carries a canonical
+// question_id (source='house_authored', creatorId null) and author_name='Joshing'
+// with no author_id (the house identity is never a users.id). 'community' is a
+// legacy enum value, never produced by any picker.
+export const queueSlotSourceSchema = z.enum(['friend', 'bot', 'community', 'house']);
 export const queueSlotAnswerStateSchema = z.enum(['correct', 'incorrect']);
 
 export const queueSlotSchema = z.object({

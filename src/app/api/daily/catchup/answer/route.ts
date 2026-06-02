@@ -14,7 +14,7 @@ import {
 } from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { awardAuthorCredit } from '@/server/mastery/author-credit';
+import { awardAuthorCredit, isAuthorCreditEligible } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
@@ -156,9 +156,13 @@ async function handleDailyCatchupAnswer({
   let persistedInsideJoke: string | null = null;
   let persistedCreatorNote: string | null = null;
 
-  if (slot.source === 'friend') {
+  // Friend and house (D-3) slots both already live in the canonical `questions`
+  // table — resolve by question_id rather than promoting a GeneratedQuestion.
+  // House questions carry creatorId=null, so persistedCreatorId stays null and
+  // no author credit accrues (house is mastery-ineligible by construction).
+  if (slot.source === 'friend' || slot.source === 'house') {
     if (!slot.question_id) {
-      return catchUpErrorResponse(500, 'invalid_state', 'Friend catch-up slot missing canonical question id');
+      return catchUpErrorResponse(500, 'invalid_state', 'Canonical catch-up slot missing question id');
     }
     canonicalQuestionId = slot.question_id;
     const [canonicalRow] = await db
@@ -298,20 +302,26 @@ async function handleDailyCatchupAnswer({
 
   if (canonicalQuestionId) {
     try {
-      if (isCorrect && persistedCreatorId && persistedCreatorId !== userId && persistedDomainForCreator) {
+      const creditContext = {
+        isCorrect,
+        creatorId: persistedCreatorId,
+        answererUserId: userId,
+        domain: persistedDomainForCreator,
+      };
+      if (isAuthorCreditEligible(creditContext)) {
         void promoteDeclaredToDemonstrated({
-          userId: persistedCreatorId,
-          domain: persistedDomainForCreator,
+          userId: creditContext.creatorId,
+          domain: creditContext.domain,
           triggeringFriendId: userId,
           questionId: canonicalQuestionId,
         });
 
         // Author credit (PRD §8.32): off the user's hot path.
         void awardAuthorCredit({
-          creatorUserId: persistedCreatorId,
+          creatorUserId: creditContext.creatorId,
           answererUserId: userId,
           questionId: canonicalQuestionId,
-          domain: persistedDomainForCreator,
+          domain: creditContext.domain,
           sourceId: `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
           scope: 'daily/catchup/answer',
         });

@@ -1,5 +1,7 @@
 import { eq, or } from 'drizzle-orm';
 
+import { assertNever } from '@/lib/assert-never';
+import type { QuestionSource } from '@/lib/questions-types';
 import type { feedItems, questions } from '@/server/db';
 
 export const SOCIAL_FEED_SOURCE_TYPE = 'friend_answered' as const;
@@ -47,8 +49,23 @@ export type FeedEventEligibilityInput = {
 // curated sends ('curated_sent', written by /api/questions/send) carry a null
 // creatorId, so feed eligibility for their correct answers can't be keyed on
 // authorship — they are always eligible (subject to the checks above).
-export function isLlmOriginQuestion(source: string): boolean {
-  return source === 'daily_generated' || source === 'curated_sent';
+//
+// Exhaustive over QuestionSource so a new source value (e.g. D-3's
+// 'house_authored') cannot compile until its feed-origin status is decided here.
+// 'house_authored' is deliberately NOT LLM-origin (it is curated/editorial, and
+// per D-3 §C house content never enters the Feed) — it returns false, and
+// isCorrectAnswerFeedEligible then rejects it via the null-creatorId guard.
+export function isLlmOriginQuestion(source: QuestionSource): boolean {
+  switch (source) {
+    case 'daily_generated':
+    case 'curated_sent':
+      return true;
+    case 'authored':
+    case 'house_authored':
+      return false;
+    default:
+      return assertNever(source, 'Question.source');
+  }
 }
 
 export function isCorrectAnswerFeedEligible(input: FeedEventEligibilityInput): boolean {

@@ -26,8 +26,10 @@ export type CatchupQueueItem = {
   expiresAt: string;
   expiresSoon?: boolean;
   difficultyEstimate?: 'accessible' | 'moderate' | 'specialist' | null;
-  /** Human author's name, or null for LLM-origin questions (rendered non-relationally). */
+  /** Human author's name, the house name ('Joshing'), or null for LLM-origin questions (rendered non-relationally). */
   authorName?: string | null;
+  /** D-3: the author is the non-human house/editorial author (renders the Editorial badge, no relational copy). */
+  authorIsHouse?: boolean;
 };
 
 type CatchupAnswerResponse = {
@@ -106,6 +108,7 @@ function questionMessage(item: CatchupQueueItem): ChatMessage {
     assignmentId: item.dailyQueueItemId,
     questionText: item.questionText,
     creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
+    creatorIsHouse: item.authorIsHouse ?? false,
     subhead: formatQuestionSubhead(item),
     badges,
   };
@@ -202,6 +205,7 @@ export function useCatchupFlow() {
         breadcrumb: null,
         copyVariant: item.queueAge,
         creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
+        creatorIsHouse: item.authorIsHouse ?? false,
         canonicalSubcategory: item.domain,
       },
     ]);
@@ -287,6 +291,7 @@ export function useCatchupFlow() {
           explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
           copyVariant: item.queueAge,
           creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
+          creatorIsHouse: item.authorIsHouse ?? false,
           canonicalSubcategory: item.domain,
           pointsAwarded,
           pointsLabel: 'Catch-up - 0.25x points',

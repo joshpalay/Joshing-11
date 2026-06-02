@@ -30,6 +30,7 @@ function questionMessage(item: ReplayItem): ChatMessage {
     assignmentId: item.dailyQueueItemId,
     questionText: item.questionText,
     creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
+    creatorIsHouse: item.authorIsHouse,
     subhead: `FROM ${item.queueDate}`,
     badges: [{ label: 'practice', tone: 'muted' }],
   };
@@ -165,6 +166,7 @@ export default function ReplayPage() {
           breadcrumb: body.breadcrumb ?? null,
           copyVariant: currentIndex,
           creatorName: currentItem.authorName ?? LLM_QUESTION_ATTRIBUTION,
+          creatorIsHouse: currentItem.authorIsHouse,
           canonicalSubcategory: currentItem.domain,
           pointsAwarded: 0,
           pointsLabel: 'Replay - practice only',

@@ -4,10 +4,12 @@ import {
   createDailyQueueItem,
   createDailyQueueItemFromAnswerer,
   createDailyQueueItemFromAuthored,
+  createDailyQueueItemFromHouse,
   getKnowledgeBase,
   getTodaysDailyQueue,
   pickBonusAnswererSlots,
   pickEligibleAuthoredQuestions,
+  pickHouseQuestions,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getFollowing, getFriendAndFoFUserIds } from '@/server/db/queries/friends';
@@ -115,7 +117,17 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     allowedSubcategories,
   );
 
-  const remaining = DAILY_QUEUE_SIZE - authored.length;
+  // D-3: seed curated house/editorial questions into the core for the niches
+  // friend content didn't cover, before falling back to LLM generation. Matched
+  // by domain (the viewer's knowledge base), never the +2 friend-answer ranking.
+  // House content does not enter the Feed and never occupies a +2 bonus slot.
+  const housePicks = await pickHouseQuestions(
+    userId,
+    DAILY_QUEUE_SIZE - authored.length,
+    allowedSubcategories,
+  );
+
+  const remaining = DAILY_QUEUE_SIZE - authored.length - housePicks.length;
   const generated = remaining > 0
     ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining))
     : [];
@@ -128,6 +140,9 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const seenTexts = new Set<string>();
   const normalize = (text: string) => text.trim().toLowerCase();
   for (const pick of authored) {
+    seenTexts.add(normalize(pick.questionText));
+  }
+  for (const pick of housePicks) {
     seenTexts.add(normalize(pick.questionText));
   }
   const dedupedGenerated: typeof generated = [];
@@ -168,7 +183,7 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   // remaining time budget so the recovery can't push the request past the
   // route's maxDuration.
   const topUpGenerated: typeof dedupedGenerated = [];
-  const shortfall = DAILY_QUEUE_SIZE - (authored.length + dedupedGenerated.length);
+  const shortfall = DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length);
   if (shortfall > 0 && Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS) {
     const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(shortfall));
     for (const question of extra) {
@@ -191,7 +206,7 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   }
 
   const generatedForQueue = [...dedupedGenerated, ...topUpGenerated];
-  const achieved = authored.length + generatedForQueue.length;
+  const achieved = authored.length + housePicks.length + generatedForQueue.length;
 
   // Graceful degrade: persist whatever we have instead of failing on a short
   // queue. Some niche domains have very low generation yield — the
@@ -245,6 +260,11 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const coreQuestionIds = new Set<string>();
   for (const pick of authored) {
     await createDailyQueueItemFromAuthored(userId, pick, position);
+    coreQuestionIds.add(pick.id);
+    position += 1;
+  }
+  for (const pick of housePicks.slice(0, DAILY_QUEUE_SIZE - position)) {
+    await createDailyQueueItemFromHouse(userId, pick, position);
     coreQuestionIds.add(pick.id);
     position += 1;
   }

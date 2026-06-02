@@ -317,11 +317,14 @@ export default function DailyPage() {
           consolation: slot.reveal_quip ?? null,
           insideJoke: slot.reveal_inside_joke ?? null,
           insideJokeKind: slot.reveal_inside_joke_kind ?? null,
-          authorNote: slot.source === 'friend' ? (slot.author_note ?? null) : null,
+          authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
           breadcrumb: slot.reveal_breadcrumb ?? null,
           explanation: slot.reveal_explainer ?? null,
           copyVariant: slot.slot_index,
-          creatorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
+          // D-3: house core slots surface the 'Joshing' name + Editorial badge
+          // (creatorIsHouse), rendered non-relationally by GameplayChat.
+          creatorName: slot.source === 'friend' || slot.source === 'house' ? (slot.author_name ?? null) : null,
+          creatorIsHouse: slot.source === 'house',
           canonicalSubcategory: slot.domain,
           openedTerritoryDomain: openedTerritoryBySlot[slot.slot_index] ?? null,
           recheckAction: slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status

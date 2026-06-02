@@ -11,7 +11,7 @@ import {
   questions,
 } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { awardAuthorCredit } from '@/server/mastery/author-credit';
+import { awardAuthorCredit, isAuthorCreditEligible } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
@@ -430,10 +430,16 @@ export async function POST(request: NextRequest) {
     if (canonicalQuestionId && !parsed.gaveUp) {
       const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
       try {
-        if (isCorrect && persistedCreatorId && persistedCreatorId !== session.userId && persistedDomainForCreator) {
+        const creditContext = {
+          isCorrect,
+          creatorId: persistedCreatorId,
+          answererUserId: session.userId,
+          domain: persistedDomainForCreator,
+        };
+        if (isAuthorCreditEligible(creditContext)) {
           void promoteDeclaredToDemonstrated({
-            userId: persistedCreatorId,
-            domain: persistedDomainForCreator,
+            userId: creditContext.creatorId,
+            domain: creditContext.domain,
             triggeringFriendId: session.userId,
             questionId: canonicalQuestionId,
           });
@@ -441,10 +447,10 @@ export async function POST(request: NextRequest) {
           // Author credit (PRD §8.32): off the user's hot path — three queries
           // the answerer never sees in their response.
           void awardAuthorCredit({
-            creatorUserId: persistedCreatorId,
+            creatorUserId: creditContext.creatorId,
             answererUserId: session.userId,
             questionId: canonicalQuestionId,
-            domain: persistedDomainForCreator,
+            domain: creditContext.domain,
             sourceId: `daily:${propagationKey}:${session.userId}`,
             scope: 'daily/answer',
           });
