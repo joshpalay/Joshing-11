@@ -1165,6 +1165,21 @@ export function GameplayChatThread({
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
 }) {
+  // "Show me the answer" belongs only under the active (still-unanswered)
+  // question — the last question message with no result after it. Without this
+  // gate the thread would attach onGiveUp to every historical question row.
+  const lastQuestionIndex = (() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].kind === 'question') return i;
+    }
+    return -1;
+  })();
+  const activeQuestionId =
+    lastQuestionIndex >= 0 &&
+    !messages.slice(lastQuestionIndex + 1).some((m) => m.kind === 'result')
+      ? messages[lastQuestionIndex].id
+      : null;
+
   return (
     <div className="space-y-2.5">
       {messages.map((m) => {
@@ -1182,7 +1197,7 @@ export function GameplayChatThread({
                 isNew={m.isNew}
                 subhead={m.subhead}
                 badges={m.badges}
-                onGiveUp={onGiveUp}
+                onGiveUp={onGiveUp && m.id === activeQuestionId ? onGiveUp : undefined}
                 giveUpDisabled={giveUpDisabled}
               />
             );

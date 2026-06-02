@@ -19,6 +19,13 @@ export const QUESTION_DOMAIN_KEYS = CATEGORIES;
 
 /** After a daily assignment's `expires_at`, catch-up remains available for this many days (D3 Decision 2 / B6). */
 export const CATCH_UP_ELIGIBLE_DAYS_AFTER_EXPIRY = 7;
+
+/**
+ * Catch-up plays in rounds of this many questions, mirroring the Daily Five.
+ * After each round the player sees a summary and can choose to play the next
+ * round or stop. Kept at 5 to match `QUESTIONS_PER_DAY`.
+ */
+export const CATCH_UP_BATCH_SIZE = 5;
 export const CATCH_UP_ELIGIBLE_MS_AFTER_EXPIRY =
   CATCH_UP_ELIGIBLE_DAYS_AFTER_EXPIRY * 24 * 60 * 60 * 1000;
 
