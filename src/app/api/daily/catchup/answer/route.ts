@@ -18,6 +18,7 @@ import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
+import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
@@ -147,6 +148,13 @@ async function handleDailyCatchupAnswer({
   let canonicalQuestionId: string | null = null;
   let persistedCreatorId: string | null = null;
   let persistedDomainForCreator: string | null = null;
+  // Author commentary + aside travel with the question regardless of whether
+  // it's answered live or here in catch-up (B-7). Resolved from the same
+  // canonical row we already load for creator/domain, then gated through
+  // selectInsideJokeForViewer so catch-up neither over- nor under-exposes the
+  // aside relative to the live path.
+  let persistedInsideJoke: string | null = null;
+  let persistedCreatorNote: string | null = null;
 
   if (slot.source === 'friend') {
     if (!slot.question_id) {
@@ -159,6 +167,8 @@ async function handleDailyCatchupAnswer({
         domain: questions.canonicalSubcategory,
         broadCategory: questions.broadCategory,
         category: questions.category,
+        insideJoke: questions.insideJoke,
+        creatorNote: questions.creatorNote,
       })
       .from(questions)
       .where(eq(questions.id, slot.question_id))
@@ -166,6 +176,8 @@ async function handleDailyCatchupAnswer({
     persistedCreatorId = canonicalRow?.creatorId ?? null;
     persistedDomainForCreator =
       canonicalRow?.domain || canonicalRow?.broadCategory || canonicalRow?.category || null;
+    persistedInsideJoke = canonicalRow?.insideJoke ?? null;
+    persistedCreatorNote = canonicalRow?.creatorNote ?? null;
   } else {
     let persistAttempt = 0;
     while (persistAttempt < 2 && canonicalQuestionId === null) {
@@ -174,13 +186,15 @@ async function handleDailyCatchupAnswer({
         const persisted = await persistGeneratedQuestion(catchupItem.questionId, catchupItem.domain);
         canonicalQuestionId = persisted.questionId;
         const [persistedQuestion] = await db
-          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category, insideJoke: questions.insideJoke, creatorNote: questions.creatorNote })
           .from(questions)
           .where(eq(questions.id, persisted.questionId))
           .limit(1);
         persistedCreatorId = persistedQuestion?.creatorId ?? null;
         persistedDomainForCreator =
           persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+        persistedInsideJoke = persistedQuestion?.insideJoke ?? null;
+        persistedCreatorNote = persistedQuestion?.creatorNote ?? null;
       } catch (error) {
         const finalAttempt = persistAttempt >= 2;
         console.warn(
@@ -196,6 +210,15 @@ async function handleDailyCatchupAnswer({
       }
     }
   }
+
+  // Same provenance-calibrated gate the live path uses (B-5): relational label
+  // for authored questions shown to author/friends, editorial label for
+  // LLM-origin questions shown to everyone, hidden from strangers otherwise.
+  const insideJokeForViewer = await selectInsideJokeForViewer(
+    persistedInsideJoke,
+    persistedCreatorId,
+    userId,
+  );
 
   const priorAnswers = canonicalQuestionId
     ? await readPriorAnswersForQuestion(userId, canonicalQuestionId)
@@ -226,6 +249,8 @@ async function handleDailyCatchupAnswer({
       reveal_canonical_answer: catchupItem.correctAnswer,
       reveal_explainer: catchupItem.explanation ?? '',
       reveal_quip: grade.consolation,
+      reveal_inside_joke: insideJokeForViewer?.text ?? null,
+      reveal_inside_joke_kind: insideJokeForViewer?.kind ?? null,
       // Drop any breadcrumb persisted from the original (often wrong) live
       // answer. This slot is being re-answered in catch-up, so the old
       // breadcrumb no longer matches the submitted answer or verdict; leaving
@@ -326,6 +351,9 @@ async function handleDailyCatchupAnswer({
     explanation: catchupItem.explanation,
     explainer: catchupItem.explanation,
     consolation: grade.consolation,
+    insideJoke: insideJokeForViewer?.text ?? null,
+    insideJokeKind: insideJokeForViewer?.kind ?? null,
+    creatorNote: persistedCreatorNote,
     nextItem: nextItemPayload(nextItem),
   });
 }
@@ -376,6 +404,14 @@ async function handleFeedCatchupAnswer({
   );
   const isCorrect = grade.result === 'correct';
   const answerState = isCorrect ? 'correct' : 'incorrect';
+
+  // Carry the author's commentary + provenance-calibrated aside on the feed
+  // catch-up path too (B-7 / B-5), gated identically to the live feed answer.
+  const insideJokeForViewer = await selectInsideJokeForViewer(
+    feedRow.question.insideJoke,
+    feedRow.question.creatorId,
+    userId,
+  );
 
   const priorAnswers = await readPriorAnswersForQuestion(userId, feedRow.question.id);
   const masteryAnswerState = computeAnswerState(
@@ -475,6 +511,9 @@ async function handleFeedCatchupAnswer({
     explanation: catchupItem.explanation,
     explainer: catchupItem.explanation,
     consolation: grade.consolation,
+    insideJoke: insideJokeForViewer?.text ?? null,
+    insideJokeKind: insideJokeForViewer?.kind ?? null,
+    creatorNote: feedRow.question.creatorNote ?? null,
     nextItem: nextItemPayload(nextItem),
   });
 }
