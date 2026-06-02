@@ -24,7 +24,7 @@ import {
   getActivitiesForUser,
   type ActivityItemView,
 } from '@/server/db/queries/activity';
-import { getLatelyMoments } from '@/server/db/queries/lately';
+import { getLatelyMilestones, getLatelyMoments } from '@/server/db/queries/lately';
 import { getUserById } from '@/server/db/queries/users';
 
 function actorName(item: ActivityItemView) {
@@ -505,9 +505,10 @@ export default async function ActivitiesPage() {
   const session = await getSession();
   if (!session) redirect('/login');
 
-  const [items, moments, viewer] = await Promise.all([
+  const [items, moments, milestones, viewer] = await Promise.all([
     getActivitiesForUser(session.userId),
     getLatelyMoments(session.userId),
+    getLatelyMilestones(session.userId),
     getUserById(session.userId),
   ]);
   const tz = viewer?.timezone ?? 'America/New_York';
@@ -522,7 +523,18 @@ export default async function ActivitiesPage() {
     moment: m,
   }));
 
-  const feedItems: LatelyFeedItem[] = [...momentItems, ...utilityItems];
+  const milestoneItems: LatelyFeedItem[] = milestones.map((m) => ({
+    kind: 'milestone',
+    id: m.id,
+    sortAt: m.sortAt,
+    milestone: m,
+  }));
+
+  const feedItems: LatelyFeedItem[] = [
+    ...momentItems,
+    ...milestoneItems,
+    ...utilityItems,
+  ];
 
   return (
     <main

@@ -6,9 +6,11 @@ import {
   formatMomentTime,
   type LatelyBucketLabel,
 } from '@/lib/lately';
+import type { LatelyMilestone } from '@/lib/lately-milestones';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 
 import { DayDivider } from './DayDivider';
+import { MilestoneRow } from './MilestoneRow';
 import { MomentRow } from './MomentRow';
 import { FM, FS, INK2, INK3, RULE } from './tokens';
 import { UtilityCard } from './UtilityCard';
@@ -25,6 +27,7 @@ export type LatelyUtilityProps = {
 
 export type LatelyFeedItem =
   | { kind: 'moment'; id: string; sortAt: Date; moment: LatelyMoment }
+  | { kind: 'milestone'; id: string; sortAt: Date; milestone: LatelyMilestone }
   | { kind: 'utility'; id: string; sortAt: Date; utility: LatelyUtilityProps };
 
 type Props = {
@@ -137,6 +140,16 @@ function renderFeedItem(
         footnoteTime={formatMomentTime(moment.answeredAt, bucket, tz)}
         featured={item.id === featuredMomentId}
         defaultOpen={item.id === featuredMomentId}
+      />
+    );
+  }
+
+  if (item.kind === 'milestone') {
+    return (
+      <MilestoneRow
+        key={item.id}
+        milestone={item.milestone}
+        footnoteTime={formatMomentTime(item.sortAt, bucket, tz)}
       />
     );
   }
