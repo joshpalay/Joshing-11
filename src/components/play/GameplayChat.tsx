@@ -272,19 +272,19 @@ function QuestionRow({
       <div
         style={{
           alignSelf: 'flex-start',
-          maxWidth: '88%',
+          maxWidth: '81%',
           background: 'var(--game-card-question)',
           border: '1px solid var(--brand-rule)',
           borderRadius: 'var(--radius-md)',
           // effect/card/question — soft layered drop shadow.
           boxShadow: '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
-          padding: '16px 18px',
+          padding: '14px 18px',
           fontFamily: 'var(--font-cormorant), Georgia, serif',
-          fontSize: '1.75rem',
+          fontSize: '1.4875rem',
           fontWeight: 700,
           letterSpacing: 0,
           color: 'var(--brand-ink)',
-          lineHeight: 1.3,
+          lineHeight: 1.14,
         }}
       >
         <p style={{ margin: 0 }}>{questionText}</p>
@@ -297,7 +297,7 @@ function QuestionRow({
                   // Figma display/pill/sans — Georgia, 12px, title-case (not the
                   // mono uppercase used elsewhere).
                   fontFamily: 'Georgia, "Times New Roman", serif',
-                  fontSize: '0.75rem',
+                  fontSize: '0.675rem',
                   lineHeight: 1.1,
                   letterSpacing: '0.01em',
                   borderRadius: '999px',
@@ -306,6 +306,7 @@ function QuestionRow({
                     ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
                     : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
                   color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
+                  opacity: 0.9,
                   padding: '3px 9px',
                 }}
               >
@@ -353,13 +354,13 @@ function UserRow({ text }: { text: string }) {
           maxWidth: '88%',
           background: 'var(--brand-navy)',
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
-          padding: '10px 16px',
+          padding: '9px 15px',
           // Figma answer bubble — Cormorant serif, not the sans body font.
           fontFamily: 'var(--font-cormorant), Georgia, serif',
-          fontSize: '1.15rem',
-          fontWeight: 600,
-          letterSpacing: '0.01em',
-          lineHeight: 1.3,
+          fontSize: '1.495rem',
+          fontWeight: 700,
+          letterSpacing: '-0.01em',
+          lineHeight: 1.2,
           color: 'var(--primary-foreground)',
         }}
       >
@@ -398,10 +399,11 @@ function BreadcrumbLine({ text, creatorName, creatorIsHouse = false }: { text: s
         style={{
           marginTop: showAuthor ? '2px' : '0',
           fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.92rem',
+          fontSize: '0.782rem',
           fontStyle: 'italic',
           color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          lineHeight: 1.35,
+          opacity: 0.78,
+          lineHeight: 1.46,
         }}
       >
         &ldquo;{text}&rdquo;
@@ -422,9 +424,10 @@ function ExplanationLine({ text }: { text: string }) {
       <p
         style={{
           fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.9rem',
+          fontSize: '0.765rem',
           color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          lineHeight: 1.4,
+          opacity: 0.78,
+          lineHeight: 1.51,
         }}
       >
         {text}
@@ -805,9 +808,10 @@ function ResultRow({
           ...resultToneStyle,
           borderRadius: 'var(--radius-md)',
           padding: '10px 14px',
-          fontSize: '0.9rem',
+          fontSize: '0.81rem',
           color: 'var(--text)',
-          lineHeight: 1.45,
+          opacity: 0.92,
+          lineHeight: 1.36,
           width: '100%',
         }}
       >
@@ -859,12 +863,12 @@ function ResultRow({
               <p
                 style={{
                   marginTop: '8px',
-                  // Figma question/game/answer — Cormorant Bold 28.
+                  // Figma question/game/answer — Cormorant Bold, scaled to match question text.
                   fontFamily: 'var(--font-cormorant), Georgia, serif',
-                  fontSize: '1.75rem',
+                  fontSize: '1.4875rem',
                   fontWeight: 700,
                   color: 'var(--brand-ink)',
-                  lineHeight: 1.3,
+                  lineHeight: 1.14,
                 }}
               >
                 {correctAnswer}
