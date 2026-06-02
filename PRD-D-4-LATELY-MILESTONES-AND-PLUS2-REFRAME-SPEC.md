@@ -199,6 +199,38 @@ those decisions is warranted **after build**.
 >   separate seeded-play **session**; the seeded question-id authorization (`getSeededPlayQuestions`) is
 >   reused to re-authorize the in-place answer route.
 
+> **⚠️ Amended by CORRECTION 3 (2026-06-02) — full-width lines, multi-line splitting, quiet
+> answered-of-total counter.** Consolidates and supersedes Corrections 1 & 2's milestone *presentation*
+> (carrying forward everything still in force: the unified quiet stream, expand-in-place, and the
+> relationship-determined action). Does **not** touch §B / Stage 2.
+>
+> - **Full-width layout.** Milestone lines and their expanded questions render at the **same full width
+>   as the homepage activity stream** — the old narrow left-rule inset on the milestone expansion is
+>   gone (`src/components/activity/ActivityStreamItem.tsx`, `MilestoneExpansion`).
+> - **Multi-line splitting — no "+N others" mega-card; universal per-line 5-question cap
+>   (`MILESTONE_CARD_QUESTION_CAP = 5`).** A friend's qualifying activity splits via the A-1 deep/breadth
+>   rule into **multiple** honest lines, each surfacing **≤5** literal questions
+>   (`deriveLatelyMilestones`):
+>   - **Deep domain (≥ `MILESTONE_DEEP_MIN`):** its **own** line, capped at the **5 most-recent**
+>     questions. Surplus is **not surfaced**; a deep domain is **never** split into multiple same-domain
+>     lines (the 5-cap is universal — no overflow).
+>   - **Light domains (1–2 correct):** roll into **breadth line(s)**, packing **whole** domains
+>     most-recent-first into bins of **≤5** questions; if they exceed 5 they **spill into additional
+>     breadth lines**, each ≤5.
+>   - **Header matches contents:** each line names **only** the domains whose questions appear on **that**
+>     line (the breadth roll-up "X, Y & N others" now operates on the line's own domains, not a
+>     friend-wide list).
+> - **Quiet answered-of-total counter.** Each **milestone** line carries a subtle **"{answered} of
+>   {total}"** counter (progress-forward order, muted, consistent with the one-liner register), shown on
+>   the **collapsed** line so it's informative at a glance. It is **milestone-lines only** (never on
+>   non-answerable items like "opened a new domain"), **ticks up** as the viewer answers, and **persists**
+>   after a result pop-up closes or the line is collapsed/reopened (answered-state lifted to
+>   `ActivityStreamItem`).
+> - **Carried forward unchanged:** full-credit answering via the feed pop-ups with no double credit;
+>   send-onward and niche-match-alongside actions; the single unified homepage/Lately stream. The
+>   **full-credit rationale stays in the decision ledger** (catch-up recovers *your own* missed value at
+>   0.25×; a milestone answers a question you were *never served*, reaching you socially → full credit).
+
 ### A. Lately milestone — "Robyn showed her skills in X" (new, additive)
 
 > **⚠️ Amended by A-1 (Amendments section).** Milestones now come in **two forms** — per-domain "deep"
@@ -297,6 +329,12 @@ those decisions is warranted **after build**.
 > **home-eligible head** (`StreamItem.homeEligible`, the `HOME_TOP3_ELIGIBLE_TYPES` set plus
 > `they_got_you` moments and milestones); Lately renders the **full** day-bucketed list. The prominence
 > tiers below are the shared sort key for both.
+
+> **⚠️ Amended by CORRECTION 3.** A friend's over-cap activity now derives into **several** milestone
+> lines (deep + breadth, each ≤5 questions — see §A) rather than one card, so the "skill milestones" tier
+> can contain multiple sibling lines for one friend. They still sort within tier 3 by recency
+> (`sortByProminence`), so the per-line split changes the *count* of milestone lines, not their ranking
+> against `they_got_you` / niche-match: a flood of milestone lines still cannot bury a higher tier.
 
 Define relative prominence (Decision 4), highest first:
 
