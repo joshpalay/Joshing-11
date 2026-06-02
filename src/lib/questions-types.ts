@@ -119,6 +119,34 @@ export function resolveQuestionAuthor<U>(input: {
   }
 }
 
+// Server-side convenience for the many view-builders that carry an
+// `authorName: string | null` field to the client. Collapses the resolver into
+// the display name plus an explicit `authorIsHouse` flag, so a house question
+// yields the house name AND a robust signal the client can badge on (Invariant
+// H-2) WITHOUT the client string-matching the name (a human named "Joshing"
+// must not be mistaken for the house author). Shaped for spreading straight
+// into a view object: `{ ...resolveAuthorDisplay(creatorId, source, name) }`.
+//   - human author      → { authorName: displayName, authorIsHouse: false }
+//   - house             → { authorName: 'Joshing',   authorIsHouse: true  }
+//   - LLM-origin / null  → { authorName: null,        authorIsHouse: false } (client renders 'Generated')
+export function resolveAuthorDisplay(
+  creatorId: string | null,
+  source: QuestionSource,
+  displayName: string | null,
+): { authorName: string | null; authorIsHouse: boolean } {
+  const resolved = resolveQuestionAuthor({ creatorId, source, user: displayName });
+  switch (resolved.kind) {
+    case 'human':
+      return { authorName: resolved.user, authorIsHouse: false };
+    case 'house':
+      return { authorName: resolved.displayName, authorIsHouse: true };
+    case 'generated':
+      return { authorName: null, authorIsHouse: false };
+    default:
+      return assertNever(resolved, 'ResolvedQuestionAuthor');
+  }
+}
+
 // True when an attribution name is the LLM/non-person label, used to gate
 // person-style copy (e.g. "{name} gave you this") so it never fires for machine
 // questions. Keeps consumers decoupled from the literal value above.

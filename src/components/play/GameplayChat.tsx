@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
+import { EditorialBadge } from '@/components/EditorialBadge';
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
 import { NewTerritoryUndo } from '@/components/feed/NewTerritoryUndo';
 import {
@@ -40,6 +41,14 @@ export type ChatMessage =
       questionText: string;
       creatorName: string | null;
       /**
+       * D-3: the named author is the non-human house/editorial author. Renders
+       * the persistent `Editorial` badge and suppresses all relational copy
+       * ("gave you this", "{name} carries this one"). Set explicitly by the
+       * server resolver — never inferred from the name string, so a human named
+       * "Joshing" is never mistaken for the house author.
+       */
+      creatorIsHouse?: boolean;
+      /**
        * Daily Five +2 bonus slot: the friend who answered this correctly. When
        * set, the card shows "{name} answered this correctly" attribution.
        */
@@ -57,6 +66,8 @@ export type ChatMessage =
       questionText: string;
       result: 'correct' | 'wrong' | 'expired' | 'gave_up';
       submitted: string;
+      /** D-3: the named author is the non-human house author (see question variant). */
+      creatorIsHouse?: boolean;
       /** Canonical answer when wrong */
       correctAnswer: string | null;
       /** Near-miss quip from LLM grader */
@@ -144,9 +155,10 @@ function firstNameFrom(creatorName: string): string {
   return space === -1 ? trimmed : trimmed.slice(0, space);
 }
 
-function wrongNamedSubLabel(creatorName: string | null, variant: number): string | null {
+function wrongNamedSubLabel(creatorName: string | null, variant: number, isHouse = false): string | null {
   if (!creatorName) return null;
-  if (isLlmAttribution(creatorName)) return null;
+  // House and LLM origins are non-relational: no "{name} carries this one".
+  if (isHouse || isLlmAttribution(creatorName)) return null;
   const firstName = firstNameFrom(creatorName);
   if (!firstName) return null;
   return WRONG_NAMED_SUBLABEL[variant % WRONG_NAMED_SUBLABEL.length]!(firstName);
@@ -176,6 +188,7 @@ function QuestionRow({
   badges = [],
   questionText,
   creatorName,
+  creatorIsHouse = false,
   answererName = null,
   isNew = false,
   onGiveUp,
@@ -185,6 +198,7 @@ function QuestionRow({
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
   creatorName: string | null;
+  creatorIsHouse?: boolean;
   answererName?: string | null;
   isNew?: boolean;
   onGiveUp?: () => void;
@@ -233,7 +247,8 @@ function QuestionRow({
             FROM
           </span>
           <span style={{ fontWeight: 600 }}>{creatorName}</span>
-          {isLlmAttribution(creatorName) ? null : (
+          {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+          {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
             <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>gave you this</span>
           )}
         </p>
@@ -354,9 +369,10 @@ function UserRow({ text }: { text: string }) {
   );
 }
 
-function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: string | null }) {
+function BreadcrumbLine({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
   const author = creatorName?.trim() ?? null;
-  const isBot = isLlmAttribution(author);
+  // House is non-relational like the LLM origin: no "From {firstName}." line.
+  const isBot = creatorIsHouse || isLlmAttribution(author);
   const showAuthor = author && !isBot;
   return (
     <div
@@ -612,7 +628,7 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   );
 }
 
-function AuthorNoteCard({ text, creatorName }: { text: string; creatorName: string | null }) {
+function AuthorNoteCard({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
   return (
     <div
       style={{
@@ -628,13 +644,24 @@ function AuthorNoteCard({ text, creatorName }: { text: string; creatorName: stri
       <p
         style={{
           ...monoStyle,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
           fontSize: '0.55rem',
           color: 'var(--text-muted)',
           letterSpacing: '0.18em',
           textTransform: 'uppercase',
         }}
       >
-        {creatorName ? `Why ${creatorName} asked` : 'Why they asked'}
+        {/* House notes are editorial, never relational — no "Why {name} asked". */}
+        {creatorIsHouse ? (
+          <>
+            <span>Editor&rsquo;s note</span>
+            <EditorialBadge />
+          </>
+        ) : (
+          <span>{creatorName ? `Why ${creatorName} asked` : 'Why they asked'}</span>
+        )}
       </p>
       <p
         style={{
@@ -688,6 +715,7 @@ function ResultRow({
   explanation,
   copyVariant,
   creatorName,
+  creatorIsHouse = false,
   relationalFeedbackLine,
   reactionPrompt,
   pointsAwarded,
@@ -708,6 +736,7 @@ function ResultRow({
   explanation?: string | null;
   copyVariant: number;
   creatorName: string | null;
+  creatorIsHouse?: boolean;
   relationalFeedbackLine?: string | null;
   canonicalSubcategory?: string | null;
   reactionPrompt?: ReactionPromptData | null;
@@ -845,7 +874,7 @@ function ResultRow({
               Now it&rsquo;s in yours too
             </p>
             {(() => {
-              const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant);
+              const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant, creatorIsHouse);
               return namedSubLabel ? (
                 <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                   {namedSubLabel}
@@ -912,7 +941,7 @@ function ResultRow({
           </>
         )}
         {breadcrumb
-          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} />
+          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
           : explanation ? <ExplanationLine text={explanation} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
@@ -956,7 +985,7 @@ function ResultRow({
           </p>
         </div>
       ) : null}
-      {authorNote ? <AuthorNoteCard text={authorNote} creatorName={creatorName} /> : null}
+      {authorNote ? <AuthorNoteCard text={authorNote} creatorName={creatorName} creatorIsHouse={creatorIsHouse} /> : null}
       {correct && openedTerritoryDomain ? (
         <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
@@ -1148,6 +1177,7 @@ export function GameplayChatThread({
                 key={m.id}
                 questionText={m.questionText}
                 creatorName={m.creatorName}
+                creatorIsHouse={m.creatorIsHouse}
                 answererName={m.answererName}
                 isNew={m.isNew}
                 subhead={m.subhead}
@@ -1176,6 +1206,7 @@ export function GameplayChatThread({
                 explanation={m.explanation}
                 copyVariant={m.copyVariant}
                 creatorName={m.creatorName}
+                creatorIsHouse={m.creatorIsHouse}
                 relationalFeedbackLine={m.relationalFeedbackLine}
                 canonicalSubcategory={m.canonicalSubcategory}
                 reactionPrompt={m.reactionPrompt}

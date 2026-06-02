@@ -16,7 +16,7 @@ import {
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { pgErrorCode } from '@/server/db/pg-error';
-import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
+import { CATEGORIES, categoryLabel, resolveAuthorDisplay } from '@/lib/questions-types';
 import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import {
@@ -93,6 +93,12 @@ export type CatchupQueueItem = {
    * rather than implying a person wrote it.
    */
   authorName: string | null;
+  /**
+   * D-3: the author is the non-human house/editorial author. `authorName` is the
+   * house name ('Joshing') and the client renders the persistent Editorial badge
+   * with no relational copy. Set explicitly (not inferred from the name string).
+   */
+  authorIsHouse: boolean;
 };
 
 export type CatchupQuestion = CatchupQueueItem;
@@ -532,6 +538,7 @@ async function getDailyCatchupItems(
           submittedAnswer: slot.submitted_answer ?? null,
           wasSkipped: Boolean(slot.skipped),
           authorName: null, // daily-generated: LLM origin, no human author
+          authorIsHouse: false,
         } satisfies CatchupQuestion;
       }
 
@@ -570,7 +577,7 @@ async function getDailyCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: slot.submitted_answer ?? null,
         wasSkipped: Boolean(slot.skipped),
-        authorName: question.creatorId ? authorNameById.get(question.creatorId) ?? null : null,
+        ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })
     .filter((question): question is CatchupQuestion => Boolean(question));
@@ -648,7 +655,7 @@ async function getFeedCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: feedItem.submittedAnswer ?? null,
         wasSkipped: false,
-        authorName: question.creatorId ? authorNameById.get(question.creatorId) ?? null : null,
+        ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })
     .filter((item): item is CatchupQuestion => Boolean(item));

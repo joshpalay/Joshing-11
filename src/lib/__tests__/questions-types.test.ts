@@ -6,6 +6,7 @@ import {
   QUESTION_SOURCES,
   isHouseAttribution,
   parseQuestionSource,
+  resolveAuthorDisplay,
   resolveQuestionAuthor,
 } from '@/lib/questions-types';
 
@@ -61,6 +62,38 @@ describe('resolveQuestionAuthor', () => {
   it('never resolves a house question to the LLM Generated label', () => {
     const resolved = resolveQuestionAuthor({ creatorId: null, source: 'house_authored', user });
     expect(resolved.kind).not.toBe('generated');
+  });
+});
+
+describe('resolveAuthorDisplay (view-builder shape)', () => {
+  it('returns the human display name and isHouse=false when a creatorId is set', () => {
+    expect(resolveAuthorDisplay('user-1', 'authored', 'Ada')).toEqual({
+      authorName: 'Ada',
+      authorIsHouse: false,
+    });
+  });
+
+  it('returns the house name and isHouse=true for a house question', () => {
+    expect(resolveAuthorDisplay(null, 'house_authored', null)).toEqual({
+      authorName: HOUSE_AUTHOR.displayName,
+      authorIsHouse: true,
+    });
+  });
+
+  it('returns a null name (client renders Generated) and isHouse=false for LLM origins', () => {
+    for (const source of ['daily_generated', 'curated_sent'] as const) {
+      expect(resolveAuthorDisplay(null, source, null)).toEqual({
+        authorName: null,
+        authorIsHouse: false,
+      });
+    }
+  });
+
+  it('never marks a real human named "Joshing" as house', () => {
+    expect(resolveAuthorDisplay('user-9', 'authored', HOUSE_AUTHOR.displayName)).toEqual({
+      authorName: 'Joshing',
+      authorIsHouse: false,
+    });
   });
 });
 

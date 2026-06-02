@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
 
-import { categoryLabel } from '@/lib/questions-types';
+import { categoryLabel, resolveAuthorDisplay } from '@/lib/questions-types';
 import { asQueueSlots, dailyQueueItemId } from '@/server/daily/catchup';
 import { dailyQueues, db, generatedQuestions, questions as canonicalQuestions, users } from '@/server/db';
 import type { ReplayItem } from '@/server/replay/session';
@@ -85,6 +85,7 @@ export async function getReplayWrongQuestions(userId: string): Promise<ReplayIte
           domainDisplayName: categoryLabel(domain),
           originalSubmittedAnswer: slot.submitted_answer ?? null,
           authorName: null, // bot slot: LLM origin, no human author
+          authorIsHouse: false,
         } satisfies ReplayItem;
       }
 
@@ -109,7 +110,7 @@ export async function getReplayWrongQuestions(userId: string): Promise<ReplayIte
         domain,
         domainDisplayName: categoryLabel(domain),
         originalSubmittedAnswer: slot.submitted_answer ?? null,
-        authorName: question.creatorId ? authorNameById.get(question.creatorId) ?? null : null,
+        ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies ReplayItem;
     })
     .filter((item): item is ReplayItem => Boolean(item));

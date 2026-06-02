@@ -9,8 +9,10 @@ export type ReplayItem = {
   domain: string;
   domainDisplayName: string;
   originalSubmittedAnswer: string | null;
-  /** Human author's name, or null for LLM-origin (bot) slots. */
+  /** Human author's name, the house name ('Joshing'), or null for LLM-origin (bot) slots. */
   authorName: string | null;
+  /** D-3: the author is the non-human house/editorial author (Editorial badge, no relational copy). */
+  authorIsHouse: boolean;
 };
 
 export function selectReplaySession<T extends ReplayItem>(
