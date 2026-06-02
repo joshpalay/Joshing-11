@@ -1,5 +1,7 @@
 'use client';
 
+import { EditorialBadge } from '@/components/EditorialBadge';
+
 export type AnsweredQuestionItem = {
   id: string;
   questionId: string;
@@ -8,6 +10,7 @@ export type AnsweredQuestionItem = {
   correctAnswer: string;
   result: 'correct' | 'incorrect' | 'skipped' | null;
   askerName: string;
+  authorIsHouse: boolean;
   answeredAt: string | null;
   sourceLabel: string;
 };
@@ -84,11 +87,14 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
                   </span>
                 ) : null}
                 <p className="mt-0.5 text-xs text-muted-foreground sm:hidden">
-                  Asked by {askerDisplay(item)} · {formatDate(item.answeredAt)}
+                  Asked by {askerDisplay(item)}
+                  {item.authorIsHouse ? <EditorialBadge style={{ marginLeft: 4 }} /> : null}
+                  {' · '}{formatDate(item.answeredAt)}
                 </p>
               </div>
               <div className="hidden text-sm text-muted-foreground sm:block">
                 {askerDisplay(item)}
+                {item.authorIsHouse ? <EditorialBadge style={{ marginLeft: 4 }} /> : null}
               </div>
               <div className="hidden text-sm text-muted-foreground sm:block">
                 {formatDate(item.answeredAt)}
