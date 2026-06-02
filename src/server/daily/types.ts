@@ -35,15 +35,24 @@ export const queueSlotSchema = z.object({
   /** Optional creator note — only ever set for friend questions. */
   author_note: z.string().nullish(),
   /**
-   * Bonus-slot answerer attribution (Daily Five +2). Set only on a +2 bonus slot —
-   * a friend-answered question surfaced because someone the viewer follows answered
-   * it correctly. The presence of these fields is what marks a slot as a bonus slot
-   * (the question itself is still a canonical friend question, so `source` stays
-   * 'friend' and `author_*` still describe the question's author).
+   * Bonus-slot presence attribution (Daily Five +2, D-4 §B). Set only on a +2
+   * bonus slot — a FRESHLY GENERATED accessible question in a domain drawn from
+   * the territory ∪ activity of people the viewer follows. The presence of these
+   * fields is what marks a slot as a bonus slot. The question itself is a
+   * generated question (source='bot', generated_question_id set), so these fields
+   * describe WHERE the domain came from ("from {Name}'s world"), not who authored
+   * or answered the question — there is no literal answerer. (Replaces the retired
+   * answerer_id/answerer_name from the literal-question +2.)
    */
-  answerer_id: z.string().optional(),
-  /** Display name for "X answered this correctly" — null if the answerer has no display_name. */
-  answerer_name: z.string().nullish(),
+  presence_source_id: z.string().optional(),
+  /** Display name for "from {Name}'s world" — null if the friend has no display_name. */
+  presence_source_name: z.string().nullish(),
+  /**
+   * Count of ADDITIONAL followed friends whose world surfaces this domain (beyond
+   * the named, most-recent one). > 0 → render "{Name} and others"; 0/absent →
+   * just "{Name}".
+   */
+  presence_source_extra_count: z.number().int().optional(),
   domain: z.string(),
   /** Free-text broader topic for this slot (e.g. "Saturday morning cartoons"). Optional — populated for newly built slots. */
   broad_category: z.string().nullish(),
@@ -101,10 +110,12 @@ export const DAILY_QUEUE_SIZE = 5;
 
 /**
  * Daily Five +2 — up to this many bonus slots are appended after the core
- * DAILY_QUEUE_SIZE, sourced from friend-answered questions (see
- * pickBonusAnswererSlots). Total queue size is therefore 5–7. This is
- * additive and independent of the orchestrator's N<5 generation backstop:
- * a bonus shortfall simply appends fewer slots, never backfills.
+ * DAILY_QUEUE_SIZE, each a freshly generated accessible question in a domain
+ * drawn from the territory ∪ activity of people the viewer follows (D-4 §B; see
+ * getFriendDomainsForBonus + generateBonusQuestionsForDomains). Total queue size
+ * is therefore 5–7. This is additive and independent of the orchestrator's N<5
+ * generation backstop: a bonus shortfall simply appends fewer slots, never
+ * backfills, and never pads with the viewer's own domains.
  */
 export const DAILY_BONUS_SLOT_MAX = 2;
 

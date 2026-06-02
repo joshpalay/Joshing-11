@@ -2,18 +2,25 @@ import {
   carryForwardUntouchedDailyQueue,
   clearStaleShortTodayQueue,
   createDailyQueueItem,
-  createDailyQueueItemFromAnswerer,
   createDailyQueueItemFromAuthored,
   createDailyQueueItemFromHouse,
+  createDailyQueueItemFromPresence,
   getKnowledgeBase,
   getTodaysDailyQueue,
-  pickBonusAnswererSlots,
   pickEligibleAuthoredQuestions,
   pickHouseQuestions,
+  type BonusPresence,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
-import { getFollowing, getFriendAndFoFUserIds } from '@/server/db/queries/friends';
-import { generateDailyQuestionsFromKnowledgeBase } from '@/server/daily/generate-questions';
+import { getFriendAndFoFUserIds } from '@/server/db/queries/friends';
+import {
+  getFriendDomainsForBonus,
+  type FriendDomainCandidate,
+} from '@/server/db/queries/friend-presence-domains';
+import {
+  generateBonusQuestionsForDomains,
+  generateDailyQuestionsFromKnowledgeBase,
+} from '@/server/daily/generate-questions';
 import { DAILY_BONUS_SLOT_MAX, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
@@ -257,15 +264,12 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   }
 
   let position = 0;
-  const coreQuestionIds = new Set<string>();
   for (const pick of authored) {
     await createDailyQueueItemFromAuthored(userId, pick, position);
-    coreQuestionIds.add(pick.id);
     position += 1;
   }
   for (const pick of housePicks.slice(0, DAILY_QUEUE_SIZE - position)) {
     await createDailyQueueItemFromHouse(userId, pick, position);
-    coreQuestionIds.add(pick.id);
     position += 1;
   }
   for (const question of generatedForQueue.slice(0, DAILY_QUEUE_SIZE - position)) {
@@ -273,25 +277,41 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     position += 1;
   }
 
-  // Daily Five +2 (D-1 §D). Append up to DAILY_BONUS_SLOT_MAX bonus slots built
-  // from questions that people the viewer follows answered correctly. This is
-  // purely additive: it is NOT counted toward DAILY_QUEUE_SIZE / the achieved
-  // backstop above, never triggers the N<5 generation top-up, and never
-  // backfills a friend slot with LLM/authored content. If 0 qualify we append
-  // nothing (graceful shrink), yielding a 5–7 slot queue. coreQuestionIds keeps
-  // a friend-answered question that already landed as an authored core slot from
-  // also surfacing as a bonus slot.
-  const following = await getFollowing(userId);
-  const followingIds = new Set(following.map((user) => user.id));
-  const bonus = await pickBonusAnswererSlots(
-    userId,
-    followingIds,
-    knowledgeBase,
-    DAILY_BONUS_SLOT_MAX,
-    coreQuestionIds,
-  );
-  for (const pick of bonus) {
-    await createDailyQueueItemFromAnswerer(userId, pick, position);
-    position += 1;
+  // Daily Five +2 (D-4 §B, the territory ∪ activity reframe). Append up to
+  // DAILY_BONUS_SLOT_MAX bonus slots, each a FRESHLY GENERATED accessible
+  // question in a domain drawn from the durable territory + recent activity of
+  // the people the viewer follows, ranked Both > territory-only > activity-only.
+  // Purely additive: NOT counted toward DAILY_QUEUE_SIZE / the achieved backstop,
+  // never triggers the N<5 generation top-up, and never pads with the viewer's
+  // own domains. If no friend domains qualify (or generation misses) we append
+  // fewer slots (graceful shrink), yielding a 5–7 slot queue. The +2 serves only
+  // fresh questions — never a friend's literal answered question (those live
+  // behind the Lately milestone click-through, D-4 §A).
+  const bonusDomains = await getFriendDomainsForBonus(userId, DAILY_BONUS_SLOT_MAX);
+  if (bonusDomains.length > 0) {
+    const presenceByDomain = new Map(
+      bonusDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
+    );
+    const generatedBonus = await generateBonusQuestionsForDomains(
+      userId,
+      bonusDomains.map((candidate) => candidate.domain),
+    );
+    for (const { domain, question } of generatedBonus) {
+      const candidate = presenceByDomain.get(domain.toLowerCase());
+      await createDailyQueueItemFromPresence(userId, question.id, toBonusPresence(candidate), position);
+      position += 1;
+    }
   }
+}
+
+// Map a ranked friend-domain candidate to the slot's presence attribution: the
+// most-recent surfacing friend by name, plus a count of any others ("{Name} and
+// others").
+function toBonusPresence(candidate: FriendDomainCandidate | undefined): BonusPresence {
+  const primary = candidate?.presenceSources[0];
+  return {
+    sourceId: primary?.userId ?? '',
+    sourceName: primary?.displayName ?? null,
+    extraCount: candidate ? Math.max(0, candidate.presenceSources.length - 1) : 0,
+  };
 }

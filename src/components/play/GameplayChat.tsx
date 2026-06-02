@@ -49,10 +49,13 @@ export type ChatMessage =
        */
       creatorIsHouse?: boolean;
       /**
-       * Daily Five +2 bonus slot: the friend who answered this correctly. When
-       * set, the card shows "{name} answered this correctly" attribution.
+       * Daily Five +2 bonus slot presence attribution (D-4 §B): the followed
+       * friend whose territory/activity surfaced this domain. When set, the card
+       * shows the gentle "from {name}'s world" ("{name} and others" when more than
+       * one friend surfaces it) — there is no literal answerer.
        */
-      answererName?: string | null;
+      presenceSourceName?: string | null;
+      presenceSourceExtraCount?: number;
       isNew?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
@@ -189,7 +192,8 @@ function QuestionRow({
   questionText,
   creatorName,
   creatorIsHouse = false,
-  answererName = null,
+  presenceSourceName = null,
+  presenceSourceExtraCount = 0,
   isNew = false,
   onGiveUp,
   giveUpDisabled = false,
@@ -199,7 +203,8 @@ function QuestionRow({
   questionText: string;
   creatorName: string | null;
   creatorIsHouse?: boolean;
-  answererName?: string | null;
+  presenceSourceName?: string | null;
+  presenceSourceExtraCount?: number;
   isNew?: boolean;
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
@@ -253,7 +258,7 @@ function QuestionRow({
           )}
         </p>
       ) : null}
-      {answererName ? (
+      {presenceSourceName ? (
         <p
           style={{
             fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
@@ -265,8 +270,16 @@ function QuestionRow({
             lineHeight: 1.3,
           }}
         >
-          <span style={{ fontWeight: 600 }}>{firstNameFrom(answererName)}</span>
-          <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>answered this correctly</span>
+          <span style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginRight: '6px' }}>
+            FROM
+          </span>
+          <span style={{ fontWeight: 600 }}>
+            {firstNameFrom(presenceSourceName)}
+            {presenceSourceExtraCount > 0 ? '' : '’s'}
+          </span>
+          <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
+            {presenceSourceExtraCount > 0 ? 'and others' : 'world'}
+          </span>
         </p>
       ) : null}
       <div
@@ -1193,7 +1206,8 @@ export function GameplayChatThread({
                 questionText={m.questionText}
                 creatorName={m.creatorName}
                 creatorIsHouse={m.creatorIsHouse}
-                answererName={m.answererName}
+                presenceSourceName={m.presenceSourceName}
+                presenceSourceExtraCount={m.presenceSourceExtraCount}
                 isNew={m.isNew}
                 subhead={m.subhead}
                 badges={m.badges}

@@ -84,10 +84,10 @@ describe('buildHouseSlot (Daily core slot, never a +2 bonus, never a users row)'
     expect(slot.author_id).toBeUndefined();
   });
 
-  it('never carries answerer_* fields, so it can never be mistaken for a +2 bonus slot', () => {
+  it('never carries presence_* fields, so it can never be mistaken for a +2 bonus slot', () => {
     const slot = buildHouseSlot(pick, 0);
-    expect(slot.answerer_id).toBeUndefined();
-    expect(slot.answerer_name).toBeUndefined();
+    expect(slot.presence_source_id).toBeUndefined();
+    expect(slot.presence_source_name).toBeUndefined();
   });
 });
 

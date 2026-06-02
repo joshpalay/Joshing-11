@@ -71,8 +71,8 @@ describe('isRoundComplete — variable 5–7 slot queues (Daily Five +2)', () =>
   function bonusSlot(slot_index: number, answered: boolean): QueueSlot {
     return {
       ...slot(slot_index, { answered }),
-      answerer_id: `answerer-${slot_index}`,
-      answerer_name: 'Robyn',
+      presence_source_id: `friend-${slot_index}`,
+      presence_source_name: 'Robyn',
       difficulty_estimate: 'accessible',
     } as QueueSlot;
   }
