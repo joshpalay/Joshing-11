@@ -21,3 +21,5 @@ const smokeInsert: typeof smsLogs.$inferInsert = {
 };
 
 assert.equal(smokeInsert.messageType, 'joshing_game_received');
+
+console.log('sms-message-types.smoke: ok');
