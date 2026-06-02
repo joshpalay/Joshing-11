@@ -16,6 +16,9 @@
     "smoke:invite-first-five": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/invite-first-five.smoke.mjs",
     "smoke:area-top-up": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/area-top-up.smoke.mjs",
     "smoke:sms-message-types": "tsx scripts/sms-message-types.smoke.ts",
+    "smoke:house-authorship": "tsx scripts/house-authorship.smoke.ts",
+    "smoke:lately-milestones": "tsx scripts/lately-milestones.smoke.ts",
+    "smoke:niche-match-dedup": "tsx scripts/niche-match-dedup.smoke.ts",
     "smoke:gameplay": "tsx scripts/playtest/playtest.ts",
     "format": "node scripts/format-changed.mjs",
     "format:all": "prettier --write ."
