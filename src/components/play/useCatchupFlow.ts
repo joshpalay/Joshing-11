@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
+import { CATCH_UP_BATCH_SIZE } from '@/lib/game-constants';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { LLM_QUESTION_ATTRIBUTION, type InsideJokeKind } from '@/lib/questions-types';
 import {
@@ -66,6 +67,25 @@ export type CatchupStats = {
   correct: number;
   dismissed: number;
 };
+
+/** Per-question recap entry, used to render the round summary (Daily Five style). */
+export type CatchupBatchRecord = {
+  questionId: string;
+  questionText: string;
+  outcome: 'correct' | 'wrong' | 'revealed';
+  submittedAnswer: string | null;
+  correctAnswer: string;
+  explanation: string | null;
+  domainDisplayName: string;
+  authorName: string | null;
+  authorIsHouse: boolean;
+};
+
+/**
+ * 'playing' — the round's chat thread + answer input is live.
+ * 'summary' — the round is done; show the recap with "play next" / "return home".
+ */
+export type CatchupPhase = 'playing' | 'summary';
 
 function formatQuestionSubhead(item: CatchupQueueItem): string {
   if (item.queueAge <= 1) return 'FROM YESTERDAY';
@@ -175,12 +195,20 @@ export function useCatchupFlow() {
   const [isResolvingTurn, setIsResolvingTurn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<CatchupStats>({ answered: 0, correct: 0, dismissed: 0 });
+  const [phase, setPhase] = useState<CatchupPhase>('playing');
+  const [batchRecords, setBatchRecords] = useState<CatchupBatchRecord[]>([]);
 
   const introducedItemIdsRef = useRef<Set<string>>(new Set());
   const resultPostedItemIdsRef = useRef<Set<string>>(new Set());
+  // Number of items remaining when the current round started, so the round size
+  // is min(CATCH_UP_BATCH_SIZE, that) and we know when the round is full.
+  const batchStartRemainingRef = useRef(0);
+  const answeredInBatchRef = useRef(0);
 
   const currentItem = items[0] ?? null;
   const completed = !loading && initialTotal > 0 && items.length === 0;
+  const remainingCount = items.length;
+  const nextBatchSize = Math.min(CATCH_UP_BATCH_SIZE, remainingCount);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -199,6 +227,10 @@ export function useCatchupFlow() {
       setIntroCopy(data?.introCopy ?? '');
       setMessages([]);
       setStats({ answered: 0, correct: 0, dismissed: 0 });
+      setPhase('playing');
+      setBatchRecords([]);
+      batchStartRemainingRef.current = nextItems.length;
+      answeredInBatchRef.current = 0;
       introducedItemIdsRef.current = new Set();
       resultPostedItemIdsRef.current = new Set();
     } catch (caught) {
@@ -220,6 +252,9 @@ export function useCatchupFlow() {
   useEffect(() => {
     const id = currentItem?.dailyQueueItemId ?? null;
     if (!currentItem) return;
+    // Don't introduce the next round's first question while the summary is up;
+    // it gets introduced when startNextBatch flips the phase back to 'playing'.
+    if (phase !== 'playing') return;
     if (!shouldIntroduceCatchUpQuestion({
       currentCatchUpItemId: id,
       loading,
@@ -230,11 +265,35 @@ export function useCatchupFlow() {
 
     introducedItemIdsRef.current.add(currentItem.dailyQueueItemId);
     setMessages((existing) => [...existing, questionMessage(currentItem)]);
-  }, [currentItem, isResolvingTurn, loading]);
+  }, [currentItem, isResolvingTurn, loading, phase]);
 
   const advancePast = useCallback((dailyQueueItemId: string) => {
     setItems((existing) => existing.filter((item) => item.dailyQueueItemId !== dailyQueueItemId));
   }, []);
+
+  // Records the resolved turn and, once the round is full, flips to the summary.
+  // Called from inside the post-result timeout in both submit and give-up.
+  const finishTurn = useCallback((dailyQueueItemId: string, record: CatchupBatchRecord) => {
+    answeredInBatchRef.current += 1;
+    setBatchRecords((existing) => [...existing, record]);
+    advancePast(dailyQueueItemId);
+    setIsResolvingTurn(false);
+    const roundSize = Math.min(CATCH_UP_BATCH_SIZE, batchStartRemainingRef.current);
+    if (answeredInBatchRef.current >= roundSize) {
+      setPhase('summary');
+    }
+  }, [advancePast]);
+
+  // Begins the next round: clears the thread + recap and re-enters 'playing',
+  // which re-introduces the next current question via the effect above.
+  const startNextBatch = useCallback(() => {
+    if (items.length === 0) return;
+    batchStartRemainingRef.current = items.length;
+    answeredInBatchRef.current = 0;
+    setBatchRecords([]);
+    setMessages([]);
+    setPhase('playing');
+  }, [items.length]);
 
   const skipCurrent = useCallback(() => {
     if (!currentItem || submitting || isResolvingTurn) return;
@@ -261,10 +320,19 @@ export function useCatchupFlow() {
       },
     ]);
     window.setTimeout(() => {
-      advancePast(item.dailyQueueItemId);
-      setIsResolvingTurn(false);
+      finishTurn(item.dailyQueueItemId, {
+        questionId: item.questionId,
+        questionText: item.questionText,
+        outcome: 'revealed',
+        submittedAnswer: null,
+        correctAnswer: item.correctAnswer,
+        explanation: item.explanation,
+        domainDisplayName: item.domainDisplayName,
+        authorName: item.authorName ?? null,
+        authorIsHouse: item.authorIsHouse ?? false,
+      });
     }, 1200);
-  }, [advancePast, currentItem, isResolvingTurn, submitting]);
+  }, [currentItem, finishTurn, isResolvingTurn, submitting]);
 
   const dismissCurrent = useCallback(async (reason: 'not_interested' | 'too_old' | 'unclear' = 'not_interested') => {
     if (!currentItem || submitting) return;
@@ -349,9 +417,19 @@ export function useCatchupFlow() {
         }
       }
 
+      const revealedAnswer = data.correctAnswer ?? data.answer ?? item.correctAnswer;
       window.setTimeout(() => {
-        advancePast(item.dailyQueueItemId);
-        setIsResolvingTurn(false);
+        finishTurn(item.dailyQueueItemId, {
+          questionId: item.questionId,
+          questionText: item.questionText,
+          outcome: isCorrect ? 'correct' : 'wrong',
+          submittedAnswer: trimmedAnswer,
+          correctAnswer: revealedAnswer,
+          explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
+          domainDisplayName: item.domainDisplayName,
+          authorName: item.authorName ?? null,
+          authorIsHouse: item.authorIsHouse ?? false,
+        });
       }, 1200);
     } catch (caught) {
       setIsResolvingTurn(false);
@@ -359,7 +437,7 @@ export function useCatchupFlow() {
     } finally {
       setSubmitting(false);
     }
-  }, [advancePast, currentItem, submitting]);
+  }, [currentItem, finishTurn, submitting]);
 
   const remainingLabel = useMemo(() => {
     const total = initialTotal || items.length;
@@ -379,6 +457,11 @@ export function useCatchupFlow() {
     stats,
     completed,
     remainingLabel,
+    phase,
+    batchRecords,
+    remainingCount,
+    nextBatchSize,
+    startNextBatch,
     reload: load,
     submitCurrent,
     skipCurrent,
