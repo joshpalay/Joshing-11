@@ -12,6 +12,7 @@ import {
   minusUtcDays,
   replaceQueueSlot,
 } from '../src/server/daily/catchup';
+import type { QueueSlot } from '../src/server/daily/types';
 
 assert.equal(minusUtcDays('2026-05-01', 7), '2026-04-24');
 
@@ -22,7 +23,7 @@ assert.equal(isCatchupQueueDate('2026-04-23', '2026-05-01'), false);
 
 assert.equal(dailyQueueItemId('queue-1', 3), 'queue-1:3');
 
-const slots = [
+const slots: QueueSlot[] = [
   {
     slot_index: 3,
     source: 'bot',
