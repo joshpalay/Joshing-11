@@ -24,7 +24,7 @@ import { suggestAnswer } from '@/lib/llm';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
 import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
-import { areFriends } from '@/server/db/queries/friends';
+import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 
 export const dynamic = 'force-dynamic';
 
@@ -338,7 +338,8 @@ export async function POST(request: NextRequest) {
         awarded_points: pointsAwarded,
         reveal_canonical_answer: canonicalAnswer,
         reveal_explainer: question.explainer ?? undefined,
-        reveal_inside_joke: insideJokeForViewer,
+        reveal_inside_joke: insideJokeForViewer?.text ?? null,
+        reveal_inside_joke_kind: insideJokeForViewer?.kind ?? null,
         reveal_quip: grade.consolation,
       } satisfies QueueSlot;
     });
@@ -484,21 +485,11 @@ export async function POST(request: NextRequest) {
       explainer: question.explainer,
       awarded_points: pointsAwarded,
       mastery_delta: masteryDelta,
-      insideJoke: insideJokeForViewer,
+      insideJoke: insideJokeForViewer?.text ?? null,
+      insideJokeKind: insideJokeForViewer?.kind ?? null,
     });
   } catch (error) {
     console.error('[daily/answer] unexpected failure', error);
     return dailyAnswerErrorResponse(500, 'unexpected', 'Could not record that answer.');
   }
-}
-
-async function selectInsideJokeForViewer(
-  insideJoke: string | null,
-  creatorId: string | null,
-  viewerId: string,
-): Promise<string | null> {
-  if (!insideJoke || !creatorId) return null;
-  if (creatorId === viewerId) return insideJoke;
-  const friends = await areFriends(viewerId, creatorId);
-  return friends ? insideJoke : null;
 }

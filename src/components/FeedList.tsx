@@ -23,6 +23,7 @@ import {
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
+import type { InsideJokeKind } from '@/lib/questions-types'
 
 type FriendResult = {
   userId: string
@@ -102,6 +103,7 @@ type AnswerResponse = {
   explanation?: string | null
   creatorNote?: string | null
   insideJoke?: string | null
+  insideJokeKind?: InsideJokeKind | null
   pointsAwarded?: number | null
   masteryDelta?: unknown | null
 }
@@ -113,6 +115,7 @@ type ResultState = {
   explanation: string | null
   creatorNote: string | null
   insideJoke: string | null
+  insideJokeKind: InsideJokeKind | null
   awardedPoints: number | null
   masteryDelta: unknown | null
 }
@@ -981,6 +984,7 @@ function FeedListContent({
             explanation: body.explanation ?? null,
             creatorNote: body.creatorNote ?? null,
             insideJoke: body.insideJoke ?? null,
+            insideJokeKind: body.insideJokeKind ?? null,
             awardedPoints: body.pointsAwarded ?? null,
             masteryDelta: body.masteryDelta ?? null,
           },
@@ -1304,6 +1308,7 @@ function FeedListContent({
             explanation={result.explanation}
             creatorNote={result.creatorNote}
             insideJoke={result.insideJoke}
+            insideJokeKind={result.insideJokeKind}
             openedNewTerritory={pickOpenedNewTerritory(result.masteryDelta)}
             openedTerritoryDomain={pickOpenedTerritoryDomain(result.masteryDelta)}
             questionId={sheetItem.question_id}

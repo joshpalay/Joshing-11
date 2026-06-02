@@ -427,6 +427,20 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0060 adds the nullable GeneratedQuestion.inside_joke column,
+    // which holds the precomputed aside copied into Question.inside_joke at
+    // persist time. Apply it idempotently in case the migration is recorded
+    // without the column actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "GeneratedQuestion"
+          ADD COLUMN IF NOT EXISTS "inside_joke" text
+      `);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
     // Migration 0044 adds the nullable User.last_activity_bell_opened_at
     // timestamp used by getBellBadgeCount to compute "rolled-off + unseen"
     // counts. Apply it idempotently in case the migration is recorded

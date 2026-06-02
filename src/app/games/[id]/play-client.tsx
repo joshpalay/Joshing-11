@@ -34,6 +34,7 @@ async function fetchJoshingGameBreadcrumb(
   }
 }
 import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy';
+import type { InsideJokeKind } from '@/lib/questions-types';
 import type { JoshingGameView, QuestionRow } from '@/server/db/queries/joshing-game';
 
 function questionBadges(q: QuestionRow): Array<{ label: string; tone?: 'warning' }> | undefined {
@@ -65,6 +66,7 @@ type GradeResponse = {
   correctAnswer?: string;
   breadcrumb?: string | null;
   insideJoke?: string | null;
+  insideJokeKind?: InsideJokeKind | null;
   viewerStatus: 'not_started' | 'in_progress' | 'complete';
 };
 
@@ -206,6 +208,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
           correctAnswer: body.isCorrect ? null : body.correctAnswer ?? currentQuestion.question.answerText,
           consolation: null,
           insideJoke: body.insideJoke ?? null,
+          insideJokeKind: body.insideJokeKind ?? null,
           breadcrumb: null,
           explanation: body.explanation ?? pickExplainer(currentQuestion.question, body.isCorrect),
           copyVariant: currentQuestion.position,

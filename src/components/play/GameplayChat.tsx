@@ -13,7 +13,7 @@ import {
   isWrongAnswerReactionKey,
   type ReactionKey,
 } from '@/lib/reactions';
-import { isLlmAttribution } from '@/lib/questions-types';
+import { isLlmAttribution, INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types';
 
 export type ReactionPromptData = {
   senderName: string;
@@ -61,8 +61,10 @@ export type ChatMessage =
       correctAnswer: string | null;
       /** Near-miss quip from LLM grader */
       consolation: string | null;
-      /** LLM-generated friends-only aside; only present when the viewer is the creator or an active friend. */
+      /** LLM-generated aside; for authored questions only present when the viewer is the creator or an active friend. */
       insideJoke?: string | null;
+      /** Provenance of the aside label: relational (a person authored it) vs editorial (LLM-origin). */
+      insideJokeKind?: InsideJokeKind | null;
       breadcrumb: string | null;
       /** 0–3 index for rotating copy phrases */
       copyVariant: number;
@@ -680,6 +682,7 @@ function ResultRow({
   correctAnswer,
   consolation,
   insideJoke,
+  insideJokeKind,
   breadcrumb,
   authorNote,
   explanation,
@@ -699,6 +702,7 @@ function ResultRow({
   correctAnswer: string | null;
   consolation: string | null;
   insideJoke?: string | null;
+  insideJokeKind?: InsideJokeKind | null;
   breadcrumb: string | null;
   authorNote?: string | null;
   explanation?: string | null;
@@ -938,7 +942,7 @@ function ResultRow({
               textTransform: 'uppercase',
             }}
           >
-            Between us friends
+            {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
           </p>
           <p
             style={{
@@ -1166,6 +1170,7 @@ export function GameplayChatThread({
                 correctAnswer={m.correctAnswer}
                 consolation={m.consolation}
                 insideJoke={m.insideJoke}
+                insideJokeKind={m.insideJokeKind}
                 breadcrumb={m.breadcrumb}
                 authorNote={m.authorNote}
                 explanation={m.explanation}

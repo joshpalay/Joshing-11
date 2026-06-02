@@ -70,8 +70,10 @@ export const queueSlotSchema = z.object({
   reveal_breadcrumb: z.string().nullish(),
   /** LLM consolation quip for near-miss wrong answers (PRD §8.1.14). */
   reveal_quip: z.string().nullish(),
-  /** LLM-generated friends-only aside; only populated when the viewer is the creator or an active friend. */
+  /** LLM-generated aside; for authored questions only populated when the viewer is the creator or an active friend, for LLM-origin questions always populated. */
   reveal_inside_joke: z.string().nullish(),
+  /** Provenance of the aside label: 'relational' (a person authored it) or 'editorial' (LLM-origin). */
+  reveal_inside_joke_kind: z.enum(['relational', 'editorial']).nullish(),
   /** Optional appeal state after a player asks the app to recheck a wrong grade. */
   recheck_status: z.enum(['accepted', 'rejected', 'needs_human']).optional(),
   /** Short player-facing explanation from the recheck reviewer. */

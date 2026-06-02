@@ -41,6 +41,15 @@ export function isLlmAttribution(name: string | null | undefined): boolean {
   return name?.trim() === LLM_QUESTION_ATTRIBUTION;
 }
 
+// The aside ("inside joke") label carries provenance: a relational label means a
+// real person authored the question; the editorial label is for machine-authored
+// (LLM-origin) questions, where there is no person and no relationship to imply.
+export type InsideJokeKind = 'relational' | 'editorial';
+export const INSIDE_JOKE_LABELS: Record<InsideJokeKind, string> = {
+  relational: 'Between us friends',
+  editorial: 'Between us!', // PLACEHOLDER copy — flagged for product sign-off
+};
+
 export const CATEGORIES = [
   'music',
   'literature',
