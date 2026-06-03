@@ -109,6 +109,23 @@ export const PERSONAL_DAILY_SESSION_CONTEXT = 'personal_daily';
 export const DAILY_QUEUE_SIZE = 5;
 
 /**
+ * Minimum number of core slots a Daily Five may be SERVED with. The orchestrator
+ * tries hard to reach DAILY_QUEUE_SIZE (looping bounded top-up generation through
+ * the same strict quality gates), but some niche / nearly-exhausted knowledge
+ * bases genuinely can't yield five distinct, high-quality questions in one build.
+ *
+ * Graceful-degrade tolerates a short queue down to this floor — a real,
+ * multi-question session still beats a retryable 503. BELOW it, the build is
+ * treated as failed (DailyQueueFillError 'generation_failed' → retryable 503),
+ * so the player sees the retry UI and the daily cron rebuilds a full set later
+ * rather than being served a degenerate one- or two-question "Daily Five".
+ *
+ * We never pad to this floor by relaxing the quality/factual/dedup gates — a
+ * short queue is always the GOOD questions that survived, never filler.
+ */
+export const DAILY_QUEUE_MIN_SIZE = 3;
+
+/**
  * Daily Five +2 — up to this many bonus slots are appended after the core
  * DAILY_QUEUE_SIZE, each a freshly generated accessible question in a domain
  * drawn from the territory ∪ activity of people the viewer follows (D-4 §B; see

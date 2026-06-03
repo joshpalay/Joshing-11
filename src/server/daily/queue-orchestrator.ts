@@ -21,7 +21,7 @@ import {
   generateBonusQuestionsForDomains,
   generateDailyQuestionsFromKnowledgeBase,
 } from '@/server/daily/generate-questions';
-import { DAILY_BONUS_SLOT_MAX, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { DAILY_BONUS_SLOT_MAX, DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
@@ -37,11 +37,25 @@ function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
-// Only start a recovery top-up generation while this much of the function
-// budget is still unspent. A second generation call can take up to
-// GENERATION_TIMEOUT_MS (35s); gating it on elapsed time keeps the retry from
-// pushing the request past the route's maxDuration.
-const TOP_UP_TIME_BUDGET_MS = 30_000;
+// Quality-first completeness loop. Rather than a single recovery pass, we keep
+// generating + gating additional rounds until the core reaches DAILY_QUEUE_SIZE
+// or we run out of budget. Each round runs the SAME strict quality/factual/dedup
+// gates — we never relax them to hit the count — so a round is the honest cost of
+// trying to surface another genuinely-good question.
+//
+// Only START a new round while this much of the function budget is still unspent.
+// A round can take up to GENERATION_TIMEOUT_MS (35s); gating each round's start on
+// elapsed time, with the route's 90s maxDuration, leaves a worst-case round plus
+// slot persistence (and a degraded-but-skippable +2 bonus) comfortably inside the
+// platform ceiling. Set well below maxDuration so the request never dies mid-build.
+const TOP_UP_TIME_BUDGET_MS = 45_000;
+
+// Hard cap on top-up rounds, independent of the time budget — a backstop against
+// a pathological domain that keeps generating questions the gates fully reject.
+// Combined with the "a round that recovers nothing breaks the loop" guard below,
+// this keeps a tapped-out knowledge base from burning the whole time budget (and
+// LLM spend) on rounds that can never reach the target.
+const MAX_TOP_UP_ROUNDS = 4;
 
 // The generator's quality/factual/history-dedup gates routinely drop ~half (and
 // for some niche or deep-history domains far more) of each batch. Requesting
@@ -182,17 +196,31 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   }
 
   // If the first pass came up short — the LLM returned fewer usable questions
-  // than requested, or the quality/dedup gates dropped some — attempt a single
-  // bounded top-up for just the missing slots before failing. A transient slow
-  // or partial Anthropic response (e.g. prod request 9lssf-…, where one Sonnet
-  // call ran ~34s and the queue fell one slot short) otherwise 503s the entire
-  // Daily Five even though most slots generated fine. The top-up is gated on
-  // remaining time budget so the recovery can't push the request past the
-  // route's maxDuration.
+  // than requested, or the quality/dedup gates dropped some — keep topping up in
+  // bounded rounds until the core reaches DAILY_QUEUE_SIZE or we run out of
+  // budget/rounds. A transient slow or partial Anthropic response (e.g. prod
+  // request 9lssf-…, where one Sonnet call ran ~34s and the queue fell one slot
+  // short) otherwise 503s the entire Daily Five even though most slots generated
+  // fine. Each round is gated on the remaining time budget so the recovery can't
+  // push the request past the route's maxDuration.
+  //
+  // The loop is the "quality-first, willing-to-wait" lever: it never relaxes the
+  // gates to pad the count — it just spends more time/LLM calls to give more
+  // genuinely-good questions a chance to survive. It stops early (rather than
+  // burning the whole budget) the moment a round recovers nothing, which is the
+  // signal that this knowledge base is tapped out for today.
   const topUpGenerated: typeof dedupedGenerated = [];
-  const shortfall = DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length);
-  if (shortfall > 0 && Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS) {
-    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(shortfall));
+  let topUpRounds = 0;
+  while (
+    DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length) > 0 &&
+    topUpRounds < MAX_TOP_UP_ROUNDS &&
+    Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS
+  ) {
+    topUpRounds += 1;
+    const roundShortfall =
+      DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length);
+    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(roundShortfall));
+    let recoveredThisRound = 0;
     for (const question of extra) {
       if (isGenericSubcategory(question.canonicalSubcategory)) {
         droppedGeneric += 1;
@@ -202,35 +230,58 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       if (seenTexts.has(key)) continue;
       seenTexts.add(key);
       topUpGenerated.push(question);
+      recoveredThisRound += 1;
     }
-    if (topUpGenerated.length > 0) {
+    if (recoveredThisRound > 0) {
       console.info('[daily/queue-orchestrator] topped up short queue', {
         userId,
-        shortfall,
-        recovered: topUpGenerated.length,
+        round: topUpRounds,
+        roundShortfall,
+        recovered: recoveredThisRound,
+        topUpTotal: topUpGenerated.length,
       });
+    } else {
+      // Nothing new survived the gates this round — the domain pool is exhausted
+      // for now. Further rounds would just re-spend the budget for the same null
+      // result, so stop and let the floor/graceful-degrade below decide.
+      console.info('[daily/queue-orchestrator] top-up round recovered nothing; stopping', {
+        userId,
+        round: topUpRounds,
+        roundShortfall,
+      });
+      break;
     }
   }
 
   const generatedForQueue = [...dedupedGenerated, ...topUpGenerated];
   const achieved = authored.length + housePicks.length + generatedForQueue.length;
 
-  // Graceful degrade: persist whatever we have instead of failing on a short
-  // queue. Some niche domains have very low generation yield — the
-  // quality/factual/dedup gates correctly reject most of each batch — so even
-  // over-provisioned generation can land short. A shorter Daily Five (the good
-  // questions we did get) beats a 503; the daily cron retries for a full set on
-  // later days. The play flow and home completion are slot-driven (isRound
-  // complete + progress read the ACTUAL slot count), so an N<5 queue renders
-  // and completes correctly — no more "round ends early with blank dots".
+  // Graceful degrade WITH A FLOOR. Some niche domains have very low generation
+  // yield — the quality/factual/dedup gates correctly reject most of each batch —
+  // so even over-provisioned generation plus the top-up loop above can land short.
+  // A shorter Daily Five (the good questions we did get) beats a 503 — but only
+  // down to DAILY_QUEUE_MIN_SIZE. A one- or two-question "Daily Five" is a broken
+  // session, not a degraded one, so below the floor we fail the build instead of
+  // persisting it: /api/daily/queue surfaces a retryable 503 + the fill-error UI,
+  // and the daily cron retries for a full set on later days. The play flow and
+  // home completion are slot-driven (isRoundComplete + progress read the ACTUAL
+  // slot count), so a queue between the floor and DAILY_QUEUE_SIZE renders and
+  // completes correctly — no "round ends early with blank dots".
   //
-  // Only fail when there's nothing usable at all, so /api/daily/queue still
-  // surfaces a retryable 503 + the fill-error UI in the genuine zero case.
-  if (achieved === 0) {
-    console.warn('[daily/queue-orchestrator] generation_failed (no usable questions)', {
+  // We never relax the gates to climb to the floor: a sub-floor result means the
+  // honest, gated yield was genuinely too low, which is a retry, not filler.
+  if (achieved < DAILY_QUEUE_MIN_SIZE) {
+    console.warn('[daily/queue-orchestrator] generation_failed (below minimum usable questions)', {
       userId,
+      achieved,
+      floor: DAILY_QUEUE_MIN_SIZE,
+      authoredCount: authored.length,
+      housePicks: housePicks.length,
       knowledgeBaseDomains: knowledgeBase.length,
       generatedRaw: generated.length,
+      dedupedGenerated: dedupedGenerated.length,
+      topUpRecovered: topUpGenerated.length,
+      topUpRounds,
       droppedDuplicates,
       droppedGeneric,
       domainMode: preferences.domainMode,
@@ -250,10 +301,12 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       userId,
       achieved,
       needed: DAILY_QUEUE_SIZE,
+      floor: DAILY_QUEUE_MIN_SIZE,
       authoredCount: authored.length,
       generatedRaw: generated.length,
       dedupedGenerated: dedupedGenerated.length,
       topUpRecovered: topUpGenerated.length,
+      topUpRounds,
       droppedDuplicates,
       droppedGeneric,
       knowledgeBaseDomains: knowledgeBase.length,
