@@ -20,11 +20,24 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
     (slot.broad_category && slot.broad_category.trim()) ||
     (slot.category ? categoryLabel(slot.category) : '') ||
     slot.domain;
-  const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category ? [{ label: category }] : [];
-  // Daily Five +2 bonus slots (D-4 §B) carry presence attribution and are always
-  // "accessible" — surface the accessibility badge so the lighter pick reads as
-  // a deliberate, easier add rather than a generation miss.
-  if (slot.presence_source_name && slot.difficulty_estimate === 'accessible') {
+  const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = [];
+  // Daily Five +2 bonus slots (D-4 §B) are a freshly generated question in a
+  // domain drawn from a followed friend's knowledge/activity. Lead with an
+  // explicit "Bonus" pill so the slot unmistakably reads as an extra sourced
+  // from a friend — paired with the "from {Name}'s world" attribution line the
+  // card already renders above the question. `presence_source_id` is the slot's
+  // canonical bonus marker (set for every +2 slot, even when the friend has no
+  // display name to attribute).
+  const isBonus = Boolean(slot.presence_source_id);
+  if (isBonus) {
+    badges.push({ label: 'Bonus', tone: 'warning' });
+  }
+  if (category) {
+    badges.push({ label: category });
+  }
+  // Bonus slots are always "accessible" — surface the accessibility badge so the
+  // lighter pick reads as a deliberate, easier add rather than a generation miss.
+  if (isBonus && slot.difficulty_estimate === 'accessible') {
     badges.push({ label: 'Accessible', tone: 'muted' });
   }
   return badges;

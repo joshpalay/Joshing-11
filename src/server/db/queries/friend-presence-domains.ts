@@ -19,8 +19,13 @@
  */
 
 import { getKnowledgePageData, type DomainMastery } from '@/server/db/queries/knowledge';
-import { getFollowing } from '@/server/db/queries/friends';
+import { getFollowing, getMutualFollows } from '@/server/db/queries/friends';
 import { selectRecentlyExploring } from '@/server/profile/recently-exploring';
+import {
+  canViewSection,
+  getSectionVisibilities,
+  type EffectiveViewer,
+} from '@/server/profile/visibility';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export type FriendDomainSignal = 'both' | 'territory' | 'activity';
@@ -187,6 +192,15 @@ function activityMs(lastActivityAt: string | null): number | null {
  * pool is friend-sourced only — it never includes the viewer's own domains, so a
  * viewer who follows no one (or no one with eligible domains) gets an empty pool
  * (clean 5).
+ *
+ * Privacy: the presence signal honors the same `knowledge_base` SECTION
+ * visibility the profile enforces (`canViewSection`). Following is one-way, so
+ * the viewer is a `stranger` for section-visibility purposes unless the follow
+ * is mutual (`friend`). A followee whose `knowledge_base` is hidden from the
+ * effective viewer contributes NOTHING — neither territory nor activity, since
+ * the profile gates both surfaces behind that same section (see
+ * `users/[id]/page.tsx`). Per-domain `isHidden` is still applied on top, exactly
+ * as the profile does (see `isTerritoryDomain` / the `inActivity` check below).
  */
 export async function getFriendDomainsForBonus(
   viewerUserId: string,
@@ -197,8 +211,21 @@ export async function getFriendDomainsForBonus(
   const following = await getFollowing(viewerUserId);
   if (following.length === 0) return [];
 
+  // A followee the viewer mutually follows is a `friend` for visibility; any
+  // other followee (one-way follow) is a `stranger`. One query for the whole
+  // mutual set beats N per-friend `areFriends` round-trips.
+  const mutualIds = new Set((await getMutualFollows(viewerUserId)).map((u) => u.id));
+
   const perFriend = await Promise.all(
     following.map(async (friend) => {
+      const effectiveViewer: EffectiveViewer = mutualIds.has(friend.id)
+        ? 'friend'
+        : 'stranger';
+      const sectionSettings = await getSectionVisibilities(friend.id);
+      if (!canViewSection(sectionSettings, 'knowledge_base', effectiveViewer)) {
+        return [] as FriendDomainContribution[];
+      }
+
       const { allDomains } = await getKnowledgePageData(friend.id).catch(() => ({
         allDomains: [] as DomainMastery[],
       }));
