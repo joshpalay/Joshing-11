@@ -7,14 +7,13 @@ import { X } from 'lucide-react';
 
 import { GameplayChatThread } from '@/components/play/GameplayChat';
 import { useCatchupFlow, type CatchupBatchRecord } from '@/components/play/useCatchupFlow';
-import { CATCH_UP_EMPTY_COPY, CATCH_UP_POINTS_CAPTION } from '@/server/play/catch-up-copy';
+import { CATCH_UP_EMPTY_COPY } from '@/server/play/catch-up-copy';
 
 export default function DailyCatchupPage() {
   const router = useRouter();
   const {
     currentItem,
     initialTotal,
-    introCopy,
     messages,
     loading,
     submitting,
@@ -31,7 +30,6 @@ export default function DailyCatchupPage() {
     skipCurrent,
   } = useCatchupFlow();
   const [answer, setAnswer] = useState('');
-  const [introVisible, setIntroVisible] = useState(true);
 
   const hasItems = initialTotal > 0;
   const showSummary = phase === 'summary';
@@ -124,31 +122,6 @@ export default function DailyCatchupPage() {
           />
         ) : (
           <>
-            {introVisible ? (
-              <div
-                className="mb-4 rounded-[var(--radius-md)] border p-3"
-                style={{
-                  borderColor: 'color-mix(in srgb, var(--accent) 22%, var(--border))',
-                  background: 'color-mix(in srgb, var(--accent) 6%, var(--surface-2))',
-                }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm leading-6 text-[var(--text)]">{introCopy}</p>
-                    <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{CATCH_UP_POINTS_CAPTION}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIntroVisible(false)}
-                    aria-label="Dismiss intro"
-                    className="grid size-8 shrink-0 place-items-center rounded-md border text-sm text-[var(--text-muted)]"
-                    style={{ borderColor: 'var(--border)' }}
-                  >
-                    x
-                  </button>
-                </div>
-              </div>
-            ) : null}
             <GameplayChatThread
               messages={messages}
               onGiveUp={() => skipCurrent()}
