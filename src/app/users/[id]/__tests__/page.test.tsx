@@ -15,6 +15,7 @@ const {
   getOrCreateInviteTokenMock,
   getFriendsMock,
   resolvePreviewAsMock,
+  getCommonGroundMock,
 } = vi.hoisted(() => ({
   getFriendPortraitDataMock: vi.fn(),
   getSessionMock: vi.fn(),
@@ -30,6 +31,7 @@ const {
   getOrCreateInviteTokenMock: vi.fn(),
   getFriendsMock: vi.fn(async () => []),
   resolvePreviewAsMock: vi.fn(async () => null),
+  getCommonGroundMock: vi.fn(),
 }))
 
 vi.mock('next/link', () => ({
@@ -71,6 +73,10 @@ vi.mock('@/server/db/queries/knowledge', () => ({
 
 vi.mock('@/server/db/queries/questions', () => ({
   getAuthoredQuestionsForUser: getAuthoredQuestionsForUserMock,
+}))
+
+vi.mock('@/server/db/queries/common-ground', () => ({
+  getCommonGround: getCommonGroundMock,
 }))
 
 vi.mock('@/server/db/queries/account', () => ({
@@ -118,6 +124,32 @@ vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
       <span data-testid="friend-first-name">{friendFirstName}</span>
     </div>
   ),
+}))
+
+vi.mock('@/components/profile/CommonGround', () => ({
+  CommonGround: ({
+    data,
+    friendFirstName,
+  }: {
+    data: {
+      proven: Array<{ canonical_subcategory: string }>
+      latent: Array<{ canonical_subcategory: string }>
+      isEmpty: boolean
+    } | null
+    friendFirstName: string
+  }) =>
+    data ? (
+      <div data-testid="common-ground">
+        <span data-testid="cg-proven">
+          {data.proven.map((d) => d.canonical_subcategory).join(',')}
+        </span>
+        <span data-testid="cg-latent">
+          {data.latent.map((d) => d.canonical_subcategory).join(',')}
+        </span>
+        <span data-testid="cg-empty">{String(data.isEmpty)}</span>
+        <span data-testid="cg-friend">{friendFirstName}</span>
+      </div>
+    ) : null,
 }))
 
 vi.mock('@/components/profile/AuthoredQuestionsFeed', () => ({
@@ -207,6 +239,19 @@ describe('/users/[id] friend profile page', () => {
       expandingDomains: [],
     })
     getAuthoredQuestionsForUserMock.mockResolvedValue([])
+    getCommonGroundMock.mockResolvedValue({
+      proven: [
+        {
+          canonical_subcategory: 'Virginia Woolf',
+          broad_category: 'Literature',
+          viewer: { mastery_points: 12, current_tier: 'solid', proven: true },
+          friend: { mastery_points: 6, current_tier: 'familiar', proven: true },
+          kind: 'proven',
+        },
+      ],
+      latent: [],
+      isEmpty: false,
+    })
   })
 
   it('renders the friend profile shell and shared-interests overlap', async () => {
@@ -233,6 +278,12 @@ describe('/users/[id] friend profile page', () => {
     expect(html).toContain('Jazz piano')
     expect(html).toContain('Bauhaus design')
     expect(html).toContain('href="/friends"')
+
+    // The mastery-based common ground block renders from getCommonGround,
+    // which is called with (viewerId, profileUserId).
+    expect(getCommonGroundMock).toHaveBeenCalledWith('viewer-1', 'friend-1')
+    expect(html).toContain('common-ground')
+    expect(html).toContain('Virginia Woolf')
   })
 
   it('renders the knowledge base section with a link to the full overview', async () => {

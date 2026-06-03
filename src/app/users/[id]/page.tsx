@@ -11,6 +11,7 @@ import { notFound } from 'next/navigation'
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard'
 import { AuthoredQuestionsFeed } from '@/components/profile/AuthoredQuestionsFeed'
+import { CommonGround } from '@/components/profile/CommonGround'
 import { InlineEditableField } from '@/components/profile/InlineEditableField'
 import { InlineHandleField } from '@/components/profile/InlineHandleField'
 import { MutualFriendsSection } from '@/components/profile/MutualFriendsSection'
@@ -31,6 +32,7 @@ import {
   getReminderState,
   HANDLE_CHANGE_COOLDOWN_DAYS,
 } from '@/server/db/queries/account'
+import { getCommonGround } from '@/server/db/queries/common-ground'
 import {
   getKnowledgePageData,
   getUserMasteryOverview,
@@ -125,6 +127,7 @@ export default async function UserProfilePage({
   const [
     mastery,
     pageData,
+    commonGround,
     authoredQuestions,
     editableProfile,
     discoverability,
@@ -133,6 +136,11 @@ export default async function UserProfilePage({
   ] = await Promise.all([
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
+    // Common ground compares the viewer's full mastery base to this profile's.
+    // Never rendered on the owner's own profile, so skip the reads there.
+    isOwnerView
+      ? Promise.resolve(null)
+      : getCommonGround(session.userId, portrait.user.id),
     getAuthoredQuestionsForUser({
       userId: portrait.user.id,
       limit: 25,
@@ -380,6 +388,7 @@ export default async function UserProfilePage({
 
       {!isSelf && portrait.sectionVisibleTo.friends_list ? (
         <>
+          <CommonGround data={commonGround} friendFirstName={friendFirstName} />
           <SharedInterestsOverlap
             viewerSoloInterests={portrait.viewerSoloInterests}
             friendSoloInterests={portrait.friendSoloInterests}
