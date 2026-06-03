@@ -36,7 +36,7 @@ export default async function ActivitiesPage() {
         <div style={{ marginBottom: 6 }}>
           <h1
             style={{
-              fontSize: 52,
+              fontSize: 46,
               fontFamily: FS,
               fontWeight: 400,
               fontStyle: 'italic',
