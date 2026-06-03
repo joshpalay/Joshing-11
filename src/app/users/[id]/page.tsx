@@ -338,6 +338,8 @@ export default async function UserProfilePage({
     id: question.id,
     questionText: question.questionText,
     category: question.canonicalSubcategory ?? question.broadCategory,
+    broadCategory: question.broadCategory,
+    difficulty: question.difficulty,
     createdAt: question.createdAt,
     viewerAnswered: question.viewerAnswered,
   }))

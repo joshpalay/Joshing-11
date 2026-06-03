@@ -271,6 +271,7 @@ export type AuthoredQuestionPreview = {
   questionText: string;
   canonicalSubcategory: string | null;
   broadCategory: string | null;
+  difficulty: 'accessible' | 'moderate' | 'specialist' | null;
   createdAt: string;
   viewerAnswered: { result: 'correct' | 'incorrect' } | null;
 };
@@ -318,6 +319,9 @@ export async function getAuthoredQuestionsForUser(params: {
       questionText: questions.questionText,
       canonicalSubcategory: questions.canonicalSubcategory,
       broadCategory: questions.broadCategory,
+      calibratedDifficulty: questions.calibratedDifficulty,
+      llmDifficulty: questions.llmDifficulty,
+      difficultyEstimate: questions.difficultyEstimate,
       createdAt: questions.createdAt,
     })
     .from(questions)
@@ -359,6 +363,8 @@ export async function getAuthoredQuestionsForUser(params: {
     questionText: row.questionText,
     canonicalSubcategory: row.canonicalSubcategory,
     broadCategory: row.broadCategory,
+    difficulty:
+      row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate ?? null,
     createdAt: row.createdAt.toISOString(),
     viewerAnswered: viewerStatus.get(row.id) ?? null,
   }));
