@@ -548,7 +548,7 @@ function FeedContributeFooter() {
           asset as the home banner) clipped to the rounded card, with the
           composer prompt overlaid. The box stays an input: the reader's typed
           idea rides to the writer via ?text= (buildQuestionWriterHref). */}
-      <div className="mx-auto mt-6 max-w-md">
+      <div className="mt-6">
         <div className="relative overflow-hidden rounded-[8px] border border-[var(--brand-border)] shadow-[0_4px_12px_rgba(40,32,30,0.04)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -565,11 +565,12 @@ function FeedContributeFooter() {
             style={{ background: 'color-mix(in srgb, var(--brand-cream-page) 40%, transparent)' }}
           />
           <div className="relative flex flex-col">
-            {/* Full-bleed cream band behind the headline (Figma fill #fff8d9 at
-                80%) so the serif prompt reads cleanly over the triangles. */}
+            {/* Full-bleed cream band behind the headline (page cream
+                --brand-cream-page at 80%) so the serif prompt reads cleanly
+                over the triangles. */}
             <div
               className="mt-6 flex items-center justify-center px-10 py-6"
-              style={{ background: 'color-mix(in srgb, #fff8d9 80%, transparent)' }}
+              style={{ background: 'color-mix(in srgb, var(--brand-cream-page) 80%, transparent)' }}
             >
               <h2 className="w-[273px] max-w-full font-serif text-[32px] leading-[40px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]">
                 Sometimes the best way to show you know someone is to ask them a
