@@ -38,13 +38,21 @@ function ActorLink({ name, userId }: { name: string; userId: string | null }) {
 function Line({ parts }: { parts: StreamLinePart[] }) {
   return (
     <>
-      {parts.map((part, i) =>
-        part.t === 'actor' ? (
-          <ActorLink key={i} name={part.name} userId={part.userId} />
-        ) : (
-          <span key={i}>{part.v}</span>
-        ),
-      )}
+      {parts.map((part, i) => {
+        if (part.t === 'actor') {
+          return <ActorLink key={i} name={part.name} userId={part.userId} />;
+        }
+        if (part.t === 'category') {
+          // Same editorial serif register categories get as the homepage
+          // "What's Happening" second line, applied inline here.
+          return (
+            <span key={i} style={{ fontFamily: 'Georgia, serif', color: INK2 }}>
+              {part.v}
+            </span>
+          );
+        }
+        return <span key={i}>{part.v}</span>;
+      })}
     </>
   );
 }

@@ -32,7 +32,11 @@ import type { LatelyMilestone } from '@/lib/lately-milestones';
 // boundary and render identically on both surfaces.
 export type StreamLinePart =
   | { t: 'text'; v: string }
-  | { t: 'actor'; name: string; userId: string | null };
+  | { t: 'actor'; name: string; userId: string | null }
+  // A category/topic name embedded in a one-liner. Rendered in the editorial
+  // serif register — the SAME font treatment categories get as the `secondLine`
+  // on the homepage "What's Happening" head (see ActivityStreamItem).
+  | { t: 'category'; v: string };
 
 export type StreamQuestion = {
   questionId: string;
@@ -87,6 +91,7 @@ export type StreamItem = {
 // --- Small builders ----------------------------------------------------------
 
 const txt = (v: string): StreamLinePart => ({ t: 'text', v });
+const cat = (v: string): StreamLinePart => ({ t: 'category', v });
 const act = (name: string, userId: string | null): StreamLinePart => ({
   t: 'actor',
   name,
@@ -415,7 +420,7 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
     homeEligible: theyGotYou,
     line: theyGotYou
       ? [friend, txt(' got your question')]
-      : [txt('You got '), friend, txt(' on ' + moment.category)],
+      : [txt('You got '), friend, txt(' on '), cat(moment.category)],
     secondLine: theyGotYou ? moment.category : null,
     anchorId: null,
     action: null,
@@ -443,14 +448,14 @@ export function milestoneToStreamItem(
   const friend = act(milestone.friendName, milestone.friendId);
   const tail =
     milestone.kind === 'milestone_deep'
-      ? ` went deep on ${milestone.domain}`
+      ? [txt(' went deep on '), cat(milestone.domain)]
       : breadthTail(milestone.domains.map((d) => d.domain));
   return {
     id: milestone.id,
     sortAt: milestone.sortAt,
     tier: LATELY_TIER.MILESTONE,
     homeEligible: true,
-    line: [friend, txt(tail)],
+    line: [friend, ...tail],
     secondLine: null,
     anchorId: null,
     action: null,
@@ -464,11 +469,14 @@ export function milestoneToStreamItem(
 }
 
 // "X and Y", "X, Y and 3 others" — the breadth roll-up names ~2 domains and
-// rolls the rest into a count, instead of enumerating every domain.
-function breadthTail(domains: string[]): string {
+// rolls the rest into a count, instead of enumerating every domain. The named
+// domains are emitted as `category` parts so they pick up the serif treatment;
+// the connective copy and "N others" count stay plain text.
+function breadthTail(domains: string[]): StreamLinePart[] {
   const [first, second, ...rest] = domains;
-  if (!second) return ` has been on a streak — ${first}`;
-  if (rest.length === 0) return ` has been on a streak — ${first} and ${second}`;
+  const lead = txt(' has been on a streak — ');
+  if (!second) return [lead, cat(first)];
+  if (rest.length === 0) return [lead, cat(first), txt(' and '), cat(second)];
   const others = rest.length === 1 ? '1 other' : `${rest.length} others`;
-  return ` has been on a streak — ${first}, ${second} and ${others}`;
+  return [lead, cat(first), txt(', '), cat(second), txt(` and ${others}`)];
 }
