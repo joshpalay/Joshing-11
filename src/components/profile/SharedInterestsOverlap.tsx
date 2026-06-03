@@ -61,7 +61,7 @@ export function SharedInterestsOverlap({
       aria-label="Shared interests"
     >
       <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-        Common ground
+        Shared interests
       </p>
       <h2 className="mt-1 font-serif text-2xl font-semibold">{headline}</h2>
 
