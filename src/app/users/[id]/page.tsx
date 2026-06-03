@@ -20,7 +20,6 @@ import { ProfileFriendButton } from '@/components/profile/ProfileFriendButton'
 import { RecentlyExploringSection } from '@/components/profile/RecentlyExploringSection'
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle'
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow'
-import { SharedInterestsOverlap } from '@/components/profile/SharedInterestsOverlap'
 import { AccountActions } from '@/components/profile/settings/AccountActions'
 import { NotificationsForm } from '@/components/profile/settings/NotificationsForm'
 import { PrivacyForm } from '@/components/profile/settings/PrivacyForm'
@@ -387,12 +386,6 @@ export default async function UserProfilePage({
       {!isSelf && portrait.sectionVisibleTo.friends_list ? (
         <>
           <CommonGround data={commonGround} friendFirstName={friendFirstName} />
-          <SharedInterestsOverlap
-            viewerSoloInterests={portrait.viewerSoloInterests}
-            friendSoloInterests={portrait.friendSoloInterests}
-            sharedInterests={portrait.sharedInterests}
-            friendFirstName={friendFirstName}
-          />
           <MutualFriendsSection
             friends={portrait.mutualFriends}
             overflowCount={portrait.mutualFriendsOverflow}

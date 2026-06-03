@@ -105,27 +105,6 @@ vi.mock('next/headers', () => ({
   headers: () => Promise.resolve(new Headers()),
 }))
 
-vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
-  SharedInterestsOverlap: ({
-    sharedInterests,
-    friendSoloInterests,
-    viewerSoloInterests,
-    friendFirstName,
-  }: {
-    sharedInterests: string[]
-    friendSoloInterests: string[]
-    viewerSoloInterests: string[]
-    friendFirstName: string
-  }) => (
-    <div data-testid="shared-interests-overlap">
-      <span data-testid="shared">{sharedInterests.join(',')}</span>
-      <span data-testid="friend-solo">{friendSoloInterests.join(',')}</span>
-      <span data-testid="viewer-solo">{viewerSoloInterests.join(',')}</span>
-      <span data-testid="friend-first-name">{friendFirstName}</span>
-    </div>
-  ),
-}))
-
 vi.mock('@/components/profile/CommonGround', () => ({
   CommonGround: ({
     data,
@@ -254,7 +233,7 @@ describe('/users/[id] friend profile page', () => {
     })
   })
 
-  it('renders the friend profile shell and shared-interests overlap', async () => {
+  it('renders the friend profile shell and the common ground section', async () => {
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
       searchParams: Promise.resolve({}),
@@ -274,16 +253,15 @@ describe('/users/[id] friend profile page', () => {
       sectionVisible: true,
     })
     expect(html).toContain('Frances Friend')
-    expect(html).toContain('shared-interests-overlap')
-    expect(html).toContain('Jazz piano')
-    expect(html).toContain('Bauhaus design')
     expect(html).toContain('href="/friends"')
 
     // The mastery-based common ground block renders from getCommonGround,
-    // which is called with (viewerId, profileUserId).
+    // which is called with (viewerId, profileUserId). The declared-interest
+    // Venn has been removed, so it is the only overlap surface now.
     expect(getCommonGroundMock).toHaveBeenCalledWith('viewer-1', 'friend-1')
     expect(html).toContain('common-ground')
     expect(html).toContain('Virginia Woolf')
+    expect(html).not.toContain('shared-interests-overlap')
   })
 
   it('renders the knowledge base section with a link to the full overview', async () => {
