@@ -51,8 +51,10 @@ export type ChatMessage =
       /**
        * Daily Five +2 bonus slot presence attribution (D-4 §B): the followed
        * friend whose territory/activity surfaced this domain. When set, the card
-       * shows the gentle "from {name}'s world" ("{name} and others" when more than
-       * one friend surfaces it) — there is no literal answerer.
+       * marks the slot as a bonus drawn from that friend's knowledge —
+       * "BONUS from {name}'s knowledge" ("{name} and others’ knowledge" when more
+       * than one friend surfaces it). There is no literal answerer; the question
+       * itself is freshly generated.
        */
       presenceSourceName?: string | null;
       presenceSourceExtraCount?: number;
@@ -341,14 +343,15 @@ function QuestionRow({
           }}
         >
           <span style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginRight: '6px' }}>
-            FROM
+            BONUS
           </span>
+          <span style={{ opacity: 0.55, fontStyle: 'italic', marginRight: '4px' }}>from</span>
           <span style={{ fontWeight: 600 }}>
             {firstNameFrom(presenceSourceName)}
             {presenceSourceExtraCount > 0 ? '' : '’s'}
           </span>
           <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
-            {presenceSourceExtraCount > 0 ? 'and others' : 'world'}
+            {presenceSourceExtraCount > 0 ? 'and others’ knowledge' : 'knowledge'}
           </span>
         </p>
       ) : null}

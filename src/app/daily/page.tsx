@@ -23,8 +23,10 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
   const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category ? [{ label: category }] : [];
   // Daily Five +2 bonus slots (D-4 §B) carry presence attribution and are always
   // "accessible" — surface the accessibility badge so the lighter pick reads as
-  // a deliberate, easier add rather than a generation miss.
-  if (slot.presence_source_name && slot.difficulty_estimate === 'accessible') {
+  // a deliberate, easier add rather than a generation miss. The "bonus from a
+  // friend's knowledge" framing lives in the attribution line GameplayChat
+  // renders above the question (see presenceSourceName).
+  if (slot.presence_source_id && slot.difficulty_estimate === 'accessible') {
     badges.push({ label: 'Accessible', tone: 'muted' });
   }
   return badges;
