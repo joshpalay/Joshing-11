@@ -961,11 +961,45 @@ function FeedListContent({
     })()
   }, [])
 
+  // Persist a dismiss (or its undo) so the card stays gone — or comes back —
+  // across reloads, not just in this session's view-state. The server filters
+  // the feed to active/skipped, so a 'dismissed' row never returns; 'active'
+  // restores it. Reuses the existing /state PATCH endpoint.
+  const persistDismissState = useCallback(
+    async (itemId: string, state: 'dismissed' | 'active') => {
+      const response = await fetch(`/api/feed/${itemId}/state`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ state }),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.message ?? 'Could not update that card.')
+      }
+    },
+    [],
+  )
+
   // Shared by the left-swipe and the on-card Dismiss button — one handler, one
   // animation. Plays the collapse, then swaps to the inline "Dismissed" bar.
+  // The dismiss is optimistic: the card animates out immediately and the
+  // 'dismissed' state is persisted in the background. If the persist fails the
+  // card is restored and an error is surfaced, so a dismissed card can never
+  // silently reappear (or silently fail to stick).
   const requestDismiss = useCallback(
     (item: FeedApiItem) => {
       const itemId = item.id
+      void persistDismissState(itemId, 'dismissed').catch((caught) => {
+        setDismissPhase((current) => {
+          const next = { ...current }
+          delete next[itemId]
+          return next
+        })
+        setError(
+          caught instanceof Error ? caught.message : 'Could not dismiss that card.',
+        )
+      })
       if (reducedMotion) {
         setDismissPhase((current) => ({ ...current, [itemId]: 'dismissed' }))
         loadDismissedAnswer(item)
@@ -978,22 +1012,31 @@ function FeedListContent({
         loadDismissedAnswer(item)
       }, 200)
     },
-    [reducedMotion, loadDismissedAnswer],
+    [reducedMotion, loadDismissedAnswer, persistDismissState],
   )
 
-  // Undo fully restores the card — no side effects, nothing learned.
-  const undoDismiss = useCallback((itemId: string) => {
-    const timer = dismissTimersRef.current[itemId]
-    if (timer) {
-      window.clearTimeout(timer)
-      delete dismissTimersRef.current[itemId]
-    }
-    setDismissPhase((current) => {
-      const next = { ...current }
-      delete next[itemId]
-      return next
-    })
-  }, [])
+  // Undo fully restores the card — no learning side effects, but it does
+  // persist the card back to 'active' so the restore survives a reload.
+  const undoDismiss = useCallback(
+    (itemId: string) => {
+      const timer = dismissTimersRef.current[itemId]
+      if (timer) {
+        window.clearTimeout(timer)
+        delete dismissTimersRef.current[itemId]
+      }
+      setDismissPhase((current) => {
+        const next = { ...current }
+        delete next[itemId]
+        return next
+      })
+      void persistDismissState(itemId, 'active').catch((caught) => {
+        setError(
+          caught instanceof Error ? caught.message : 'Could not restore that card.',
+        )
+      })
+    },
+    [persistDismissState],
+  )
 
   const scheduleThumbsdownAutoDismiss = useCallback(
     (itemId: string) => {

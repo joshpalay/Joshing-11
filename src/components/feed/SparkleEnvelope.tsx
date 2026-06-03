@@ -16,6 +16,13 @@ type SparkleEnvelopeProps = {
   onDismiss?: () => void
   answerLabel?: string
   className?: string
+  /**
+   * Card chrome. 'triangle' (default) mats the question on the app triangle
+   * pattern — the "sent directly to you" treatment. 'bordered' is the plain
+   * hairline-border tile used for broadcasts ("shared a question about"). Both
+   * keep the identical inner layout (divider, dismiss, Answer link).
+   */
+  variant?: 'triangle' | 'bordered'
 }
 
 /**
@@ -33,9 +40,10 @@ export function SparkleEnvelope({
   onDismiss,
   answerLabel = 'Answer →',
   className,
+  variant = 'triangle',
 }: SparkleEnvelopeProps) {
   return (
-    <FeedCardShell variant="triangle" className={className}>
+    <FeedCardShell variant={variant} className={className}>
       <div className="flex flex-col items-center gap-5 p-[14px]">
         <div className="flex w-full items-start justify-between gap-3">
           <p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-black">
