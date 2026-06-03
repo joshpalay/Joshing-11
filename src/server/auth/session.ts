@@ -1,5 +1,5 @@
 /**
- * Session creation and validation using UserSession (Prisma).
+ * Session creation and validation using the UserSession table (Drizzle).
  * A signed JWT is stored in an httpOnly cookie; PRD: 90-day persistence.
  */
 

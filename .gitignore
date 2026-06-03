@@ -25,10 +25,9 @@ Thumbs.db
 dev-out.txt
 dev-stderr.txt
 .drizzle-tmp/
-/{
- 
-# TypeScript incremental build cache 
-*.tsbuildinfo 
+
+# TypeScript incremental build cache
+*.tsbuildinfo
 
 # Local Claude overrides & scratch
 .claude/settings.local.json
