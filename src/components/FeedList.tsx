@@ -544,37 +544,56 @@ function FeedContributeFooter() {
   return (
     <footer className="pt-6 pb-8">
       <SparkleDivider />
-      <div className="mx-auto mt-6 flex max-w-md flex-col items-center gap-2 text-center">
-        <h2 className="text-foreground max-w-sm font-serif text-2xl font-semibold text-balance">
-          The best games start with one great question.
-        </h2>
-        <p className="text-muted-foreground text-sm">
-          Wish someone would ask about your favorite album, movie, or book? Start
-          there.
-        </p>
-        <form onSubmit={handleSubmit} className="mt-2 flex w-full flex-col gap-2">
-          <textarea
-            value={idea}
-            onChange={(event) => setIdea(event.target.value)}
-            placeholder="A question you'd love to be asked…"
-            aria-label="What question would you like to be asked?"
-            rows={5}
-            className="min-h-[140px] w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+      {/* Add-a-Question card — the brand triangle pattern (the same Variant4
+          asset as the home banner) clipped to the rounded card, with the
+          composer prompt overlaid. The box stays an input: the reader's typed
+          idea rides to the writer via ?text= (buildQuestionWriterHref). */}
+      <div className="mx-auto mt-6 max-w-md">
+        <div className="relative overflow-hidden rounded-[8px] border border-[var(--brand-border)] shadow-[0_4px_12px_rgba(40,32,30,0.04)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/Variant4.png"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
           />
-          <button type="submit" className="btn-primary h-11 w-full">
-            Write a question
-          </button>
-        </form>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Or{' '}
-          <Link
-            href="/friends"
-            className="text-[var(--brand-link)] font-medium underline-offset-4 hover:underline"
-          >
-            invite a friend
-          </Link>{' '}
-          instead.
-        </p>
+          {/* Cream scrim — softens the saturated triangle tiles to the muted
+              wash in the mock. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{ background: 'color-mix(in srgb, var(--brand-cream-page) 40%, transparent)' }}
+          />
+          <div className="relative flex flex-col">
+            {/* Full-bleed cream band behind the headline (Figma fill #fff8d9 at
+                80%) so the serif prompt reads cleanly over the triangles. */}
+            <div
+              className="mt-6 flex items-center justify-center px-10 py-6"
+              style={{ background: 'color-mix(in srgb, #fff8d9 80%, transparent)' }}
+            >
+              <h2 className="w-[273px] max-w-full font-serif text-[32px] leading-[40px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]">
+                Sometimes the best way to show you know someone is to ask them a
+                question.
+              </h2>
+            </div>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-12 pt-6 pb-8">
+              <textarea
+                value={idea}
+                onChange={(event) => setIdea(event.target.value)}
+                placeholder="Who was the main character in Catch 22?"
+                aria-label="What question would you like to be asked?"
+                rows={5}
+                className="min-h-[200px] w-full resize-none rounded-[8px] border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-base text-[var(--brand-ink)] placeholder:text-[var(--brand-ink-400)] outline-none focus:border-[var(--brand-link)]"
+              />
+              <button
+                type="submit"
+                className="text-primary-foreground flex min-h-11 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] transition hover:opacity-90"
+              >
+                Write a Question
+              </button>
+            </form>
+          </div>
+        </div>
       </div>
     </footer>
   )
