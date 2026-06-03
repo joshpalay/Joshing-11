@@ -4,6 +4,7 @@ import { cache } from 'react';
 
 import { db, declaredInterests, friendInvitations, playerMastery, users } from '@/server/db';
 import { categorizeInterestDomain, isCatchAllBroadCategory } from '@/server/llm/interests';
+import { foldDomainPunctuation } from '@/lib/knowledge/domain-key';
 
 type User = InferSelectModel<typeof users>;
 
@@ -26,7 +27,12 @@ export type PreSeededInterestsForUser = {
 };
 
 function normalizeDeclaredInterest(interest: DeclaredInterestInput): DeclaredInterestInput | null {
-  const label = interest.label.trim().replace(/\s+/g, ' ');
+  // Fold curly apostrophes to ASCII so the stored declared interest and its
+  // seeded PlayerMastery row match the straight-apostrophe canonical
+  // subcategory the question pipeline emits. Without this, a label like
+  // "90's ballywood" (curly, from iOS auto-correct) and the questions answered
+  // against it split into two territories whose points never merge.
+  const label = foldDomainPunctuation(interest.label).trim().replace(/\s+/g, ' ');
   if (!label) return null;
 
   return {

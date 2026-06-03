@@ -18,6 +18,7 @@ import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { domainKey } from '@/lib/knowledge/domain-key';
 import { pgErrorCode } from '@/server/db/pg-error';
 import type { MasteryTier } from '@/types/db';
 
@@ -197,10 +198,6 @@ function displayNameForDomain(domain: string): string {
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function domainKey(domain: string): string {
-  return domain.trim().toLowerCase();
 }
 
 function percent(value: number): number {
@@ -391,6 +388,32 @@ function toDomainMasteryRow(
   };
 }
 
+// Collapse player-mastery rows whose canonical subcategories differ only by
+// typographic spelling (e.g. a curly-apostrophe declared-interest seed row and
+// the straight-apostrophe row earned by answering questions) into one entry per
+// domain key, summing their points. Building the lookup with `new Map(...)`
+// instead would keep only the last colliding row and silently drop the other
+// row's points. Rows arrive points-descending, so the first row seen wins for
+// non-additive fields (broadCategory, tier) while points accumulate.
+function buildMasteryByDomain(
+  masteryRows: Array<typeof playerMastery.$inferSelect>,
+): Map<string, typeof playerMastery.$inferSelect> {
+  const byKey = new Map<string, typeof playerMastery.$inferSelect>();
+  for (const row of masteryRows) {
+    const key = domainKey(row.canonicalSubcategory);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, row);
+    } else {
+      byKey.set(key, {
+        ...existing,
+        totalPoints: Number(existing.totalPoints ?? 0) + Number(row.totalPoints ?? 0),
+      });
+    }
+  }
+  return byKey;
+}
+
 export async function getUserMasteryOverview(userId: string): Promise<MasteryOverview> {
   const [declaredRows, masteryRows, eventRows, recentRows, hiddenDomainKeys] = await Promise.all([
     getActiveDeclaredInterests(userId),
@@ -457,7 +480,7 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
     statsByDomain.set(key, existing);
   }
 
-  const masteryByDomain = new Map(masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]));
+  const masteryByDomain = buildMasteryByDomain(masteryRows);
   const knowledgeDomainNames = new Map<string, {
     domain: string;
     broadCategory: string | null;
@@ -545,7 +568,7 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
     statsByDomain.set(key, existing);
   }
 
-  const masteryByDomain = new Map(masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]));
+  const masteryByDomain = buildMasteryByDomain(masteryRows);
   const knowledgeDomainNames = new Map<string, {
     domain: string;
     broadCategory: string | null;

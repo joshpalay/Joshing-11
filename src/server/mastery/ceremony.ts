@@ -18,6 +18,7 @@ import {
 } from '@/server/db';
 import { ANTHROPIC_MODEL, extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
+import { domainKey } from '@/lib/knowledge/domain-key';
 import { effectiveTier, resolveTier } from '@/server/mastery/tiers';
 import type { MasteryTier } from '@/types/db';
 
@@ -84,10 +85,6 @@ const TIER_RANK: Record<MasteryTier, number> = {
 
 function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
-}
-
-function domainKey(value: string): string {
-  return normalizeDomain(value).toLowerCase();
 }
 
 function maxTier(rows: Array<{ tier: MasteryTier; totalPoints: number }>): MasteryTier {
