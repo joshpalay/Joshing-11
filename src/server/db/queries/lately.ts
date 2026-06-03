@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 
 import {
   collectMilestoneQuestionIds,
@@ -193,6 +193,15 @@ export async function getLatelyMilestones(userId: string): Promise<LatelyMilesto
         eq(feedItems.sourceResult, 'correct'),
         isNotNull(feedItems.questionId),
         gte(feedItems.sourceEventAt, windowStart),
+        // Never surface the viewer's OWN authored questions here. The milestone
+        // expansion offers each question to ANSWER (full credit via
+        // /api/lately/milestone/answer), but you can't answer your own question —
+        // that route 403s on it, leaving a dead "ANSWER →" button. A friend
+        // answering your question is already surfaced as a `they_got_you` moment
+        // ("Robyn got your question" -> send it onward), so excluding it here
+        // removes the broken affordance without dropping the signal. House/LLM
+        // questions carry a null creatorId and must stay.
+        or(isNull(questions.creatorId), ne(questions.creatorId, userId)),
       ),
     )
     .orderBy(desc(feedItems.sourceEventAt))
