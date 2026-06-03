@@ -34,6 +34,13 @@ type TodaysFiveCardProps = {
   initialStatus?: DailyStatus | null
   /** When supplied, the initial /api/daily/preferences fetch is skipped. */
   initialPreferences?: DailyPreferences | null
+  /**
+   * Outstanding catch-up questions for this player. Drives the completed-state
+   * branch: >0 routes to catch-up (Branch A); 0 nudges toward sending/banking a
+   * question (Branch B). Per-card, not whole-home — the standalone Catch up card
+   * is suppressed by the home page when this is >0 in the completed state.
+   */
+  initialMissedCount?: number
 }
 
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -83,6 +90,7 @@ function normalizeSlotOutcomes(value: unknown): SlotOutcome[] {
 export default function TodaysFiveCard({
   initialStatus = null,
   initialPreferences = null,
+  initialMissedCount = 0,
 }: TodaysFiveCardProps = {}) {
   const [status, setStatus] = useState<DailyStatus | null>(initialStatus)
   const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences)
@@ -173,10 +181,14 @@ export default function TodaysFiveCard({
     : hasStartedRound
       ? 'Resume round'
       : 'Play now'
+  const missedCount = Math.max(0, initialMissedCount)
+  // The session-end forward beat — rendered as its own quiet line in both
+  // completed branches so it survives even an all-skipped (answered === 0) round.
+  const forwardBeat = resetTime
+    ? `Five new at ${resetTime} tomorrow`
+    : 'Five new tomorrow'
   const subtext = isComplete
-    ? resetTime
-      ? `Today done · Five new at ${resetTime} tomorrow`
-      : 'Today done · Five new tomorrow'
+    ? 'Today done'
     : answered > 0
       ? `${answered} of 5 answered`
       : 'Ready when you are'
@@ -281,27 +293,66 @@ export default function TodaysFiveCard({
       ) : null}
 
       {isComplete ? (
-        <>
+        <div className="mt-4 space-y-3">
+          {missedCount > 0 ? (
+            // Branch A — outstanding catch-up questions own the only button here;
+            // the home page suppresses the standalone Catch up card to match.
+            <Link
+              href="/daily/catchup"
+              className="btn-primary flex min-h-12 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+            >
+              {missedCount === 1
+                ? 'Play your 1 missed →'
+                : `Play your ${missedCount} missed →`}
+            </Link>
+          ) : (
+            // Branch B — nothing left to catch up on; turn the player outward.
+            // "Send a friend a question" routes to the existing recipient-first
+            // authoring flow (CreateChooser's "send to specific people" intent).
+            <>
+              <Link
+                href="/questions?create=1&intent=specific"
+                className="btn-primary flex min-h-12 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+              >
+                Send a friend a question →
+              </Link>
+              <Link
+                href="/questions?create=1&intent=bank"
+                className="block text-center text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
+              >
+                or add one to your bank
+              </Link>
+            </>
+          )}
+
+          {/* Recap is link-weight in both branches — never a button. */}
           <Link
-            href={playHref}
-            className="btn-ghost mt-4 min-h-12 w-full justify-center rounded-md text-base font-bold tracking-wide"
+            href="/daily/summary"
+            className="block text-center text-sm font-semibold tracking-[0.02em] text-[var(--brand-link)] underline underline-offset-4"
           >
-            {actionLabel}
+            See today&apos;s recap →
           </Link>
+
+          {/* Session-end forward beat — unconditional in both branches. */}
+          <p className="text-center text-xs leading-5 text-[var(--brand-ink-400)]">
+            {forwardBeat}
+          </p>
+
+          {/* Quiet tertiary reset link in both branches. */}
           <button
             type="button"
             onClick={() => {
               void resetForToday()
             }}
             disabled={resetting}
-            className="mt-2 w-full text-center text-xs font-medium tracking-[0.08em] text-[var(--brand-ink-400)] uppercase underline underline-offset-4 disabled:opacity-60"
+            className="w-full text-center text-xs font-medium tracking-[0.08em] text-[var(--brand-ink-400)] uppercase underline underline-offset-4 disabled:opacity-60"
           >
             {resetting ? 'Resetting…' : 'Reset game for today and play again'}
           </button>
           {resetError ? (
-            <p className="text-destructive mt-2 text-xs">{resetError}</p>
+            <p className="text-destructive text-xs">{resetError}</p>
           ) : null}
-        </>
+        </div>
       ) : (
         <Link
           href={playHref}
