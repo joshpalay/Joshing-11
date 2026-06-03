@@ -20,8 +20,8 @@ type CommonGroundProps = {
 const MIN_DIAMETER = 20
 const MAX_DIAMETER = 56
 
-// Viewer = sky, friend = rose — mirrors the SharedInterestsOverlap color
-// language so the two sections read as one visual family.
+// Viewer = sky, friend = rose — a calm two-tone split so each circle reads as
+// "you" vs the friend at a glance.
 const VIEWER_FILL = '#38bdf8' // sky-400
 const FRIEND_FILL = '#fb7185' // rose-400
 const CIRCLE_OPACITY = 0.72
