@@ -189,8 +189,13 @@ export default function TodaysFiveCard({
     : 'Five new tomorrow'
   const subtext = answered > 0 ? `${answered} of 5 answered` : 'Ready when you are'
   // Editorial serif headline (display/Body-Serif), contextual to round state.
+  // Completed splits on whether there are misses to revisit: Branch A turns the
+  // "Today, done." beat into the forward "learn from your misses" nudge that the
+  // Play Missed Questions outline button answers; Branch B keeps "Today, done."
   const headline = isComplete
-    ? 'Today, done.'
+    ? missedCount > 0
+      ? 'Nice going — now learn from your misses'
+      : 'Today, done.'
     : hasStartedRound
       ? 'Pick up where you left off'
       : 'Ready when you are!'
@@ -311,13 +316,13 @@ export default function TodaysFiveCard({
           {missedCount > 0 ? (
             // Branch A — outstanding catch-up questions own the only button here;
             // the home page suppresses the standalone Catch up card to match.
+            // Outline (orange border / link-slate text) per the Figma "Play
+            // Missed Questions" treatment — secondary to the day's primary Play.
             <Link
               href="/daily/catchup"
-              className="btn-primary flex min-h-12 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+              className="flex min-h-12 w-full items-center justify-center rounded-[4px] border border-[var(--brand-orange)] bg-transparent text-base font-bold tracking-[0.04em] text-[var(--brand-link)] transition-colors hover:bg-[color-mix(in_srgb,var(--brand-orange)_8%,transparent)]"
             >
-              {missedCount === 1
-                ? 'Play your 1 missed →'
-                : `Play your ${missedCount} missed →`}
+              Play Missed Questions
             </Link>
           ) : (
             // Branch B — nothing left to catch up on; turn the player outward.
