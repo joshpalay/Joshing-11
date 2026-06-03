@@ -13,15 +13,17 @@
 import { filterUtilityActivities } from '@/app/activities/filter-utility-activities';
 import {
   activityToStreamItem,
+  convergenceToStreamItem,
   milestoneToStreamItem,
   momentToStreamItem,
   type StreamItem,
   type StreamQuestion,
 } from '@/lib/activity-stream';
-import { sortByProminence } from '@/lib/lately';
+import { convergenceCaptionTemplate, sortByProminence } from '@/lib/lately';
 import { MILESTONE_CARD_QUESTION_CAP } from '@/lib/lately-milestones';
 import { getActivitiesForUser } from '@/server/db/queries/activity';
 import {
+  getLatelyConvergences,
   getLatelyMilestones,
   getLatelyMoments,
   getMilestoneQuestionText,
@@ -29,24 +31,29 @@ import {
 } from '@/server/db/queries/lately';
 
 export async function buildActivityStream(userId: string): Promise<StreamItem[]> {
-  const [items, moments, milestones] = await Promise.all([
+  const [items, moments, milestones, convergences] = await Promise.all([
     getActivitiesForUser(userId),
     getLatelyMoments(userId),
     getLatelyMilestones(userId),
+    getLatelyConvergences(userId),
   ]);
 
-  // Resolve every milestone's first ≤5 literal questions in one batch (text +
-  // display domain), and which of them the viewer already answered correctly.
+  // Resolve every milestone's first ≤5 literal questions and every
+  // convergence's 3 cluster questions in one batch (text + display domain), and
+  // which of them the viewer already answered correctly.
   const cappedIdsByMilestone = milestones.map((m) => ({
     id: m.id,
     ids: m.questionIds.slice(0, MILESTONE_CARD_QUESTION_CAP),
   }));
-  const allMilestoneIds = [
-    ...new Set(cappedIdsByMilestone.flatMap((m) => m.ids)),
+  const allQuestionIds = [
+    ...new Set([
+      ...cappedIdsByMilestone.flatMap((m) => m.ids),
+      ...convergences.flatMap((c) => c.questionIds),
+    ]),
   ];
   const [textById, answeredIds] = await Promise.all([
-    getMilestoneQuestionText(allMilestoneIds),
-    getViewerCorrectlyAnsweredIds(userId, allMilestoneIds),
+    getMilestoneQuestionText(allQuestionIds),
+    getViewerCorrectlyAnsweredIds(userId, allQuestionIds),
   ]);
 
   const utilityItems = filterUtilityActivities(items, moments).map(
@@ -65,6 +72,23 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
       }));
     return milestoneToStreamItem(m, questions);
   });
+  const convergenceItems = convergences.map((c) => {
+    const questions: StreamQuestion[] = c.questionIds
+      .map((id) => textById.get(id))
+      .filter((q): q is NonNullable<typeof q> => Boolean(q))
+      .map((q) => ({
+        questionId: q.questionId,
+        text: q.text,
+        domain: q.domain,
+        answered: true, // read-only reveal: both already answered correctly
+      }));
+    return convergenceToStreamItem(c, questions, convergenceCaptionTemplate(c.id));
+  });
 
-  return sortByProminence([...momentItems, ...milestoneItems, ...utilityItems]);
+  return sortByProminence([
+    ...momentItems,
+    ...milestoneItems,
+    ...convergenceItems,
+    ...utilityItems,
+  ]);
 }
