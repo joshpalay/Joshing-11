@@ -34,6 +34,13 @@ type TodaysFiveCardProps = {
   initialStatus?: DailyStatus | null
   /** When supplied, the initial /api/daily/preferences fetch is skipped. */
   initialPreferences?: DailyPreferences | null
+  /**
+   * Outstanding catch-up questions for this player. Drives the completed-state
+   * branch: >0 routes to catch-up (Branch A); 0 nudges toward sending/banking a
+   * question (Branch B). Per-card, not whole-home — the standalone Catch up card
+   * is suppressed by the home page when this is >0 in the completed state.
+   */
+  initialMissedCount?: number
 }
 
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -83,6 +90,7 @@ function normalizeSlotOutcomes(value: unknown): SlotOutcome[] {
 export default function TodaysFiveCard({
   initialStatus = null,
   initialPreferences = null,
+  initialMissedCount = 0,
 }: TodaysFiveCardProps = {}) {
   const [status, setStatus] = useState<DailyStatus | null>(initialStatus)
   const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences)
@@ -173,13 +181,13 @@ export default function TodaysFiveCard({
     : hasStartedRound
       ? 'Resume round'
       : 'Play now'
-  const subtext = isComplete
-    ? resetTime
-      ? `Today done · Five new at ${resetTime} tomorrow`
-      : 'Today done · Five new tomorrow'
-    : answered > 0
-      ? `${answered} of 5 answered`
-      : 'Ready when you are'
+  const missedCount = Math.max(0, initialMissedCount)
+  // The session-end forward beat — rendered as its own quiet line in both
+  // completed branches so it survives even an all-skipped (answered === 0) round.
+  const forwardBeat = resetTime
+    ? `Five new at ${resetTime} tomorrow`
+    : 'Five new tomorrow'
+  const subtext = answered > 0 ? `${answered} of 5 answered` : 'Ready when you are'
   // Editorial serif headline (display/Body-Serif), contextual to round state.
   const headline = isComplete
     ? 'Today, done.'
@@ -225,7 +233,13 @@ export default function TodaysFiveCard({
         </Link>
       </div>
 
-      <h2 className="mt-3 mb-2 font-serif text-[32px] leading-[40px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]">
+      <h2
+        className={
+          isComplete
+            ? 'mt-3 mb-2 font-serif text-[22px] leading-[28px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]'
+            : 'mt-3 mb-2 font-serif text-[32px] leading-[40px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]'
+        }
+      >
         {headline}
       </h2>
 
@@ -272,7 +286,11 @@ export default function TodaysFiveCard({
         })}
       </div>
 
-      {answered > 0 || preferences ? (
+      {/* Active-state context line (progress + preference summary). The
+          completed state replaces this with the forward beat below — its
+          backward-looking "Today done · prefs" is now carried by the reduced
+          "Today, done." headline, so the stack stays forward-pointing. */}
+      {!isComplete && (answered > 0 || preferences) ? (
         <p className="mt-2.5 text-xs leading-5 text-[var(--brand-ink-400)]">
           {answered > 0 ? subtext : null}
           {answered > 0 && preferences ? ' · ' : null}
@@ -280,28 +298,71 @@ export default function TodaysFiveCard({
         </p>
       ) : null}
 
+      {/* Forward beat — the always-present time anchor, sitting between the
+          result dots and the one forward action in both completed branches. */}
       {isComplete ? (
-        <>
+        <p className="mt-3 text-[13px] leading-5 text-[var(--brand-ink-700)]">
+          {forwardBeat}
+        </p>
+      ) : null}
+
+      {isComplete ? (
+        <div className="mt-3 space-y-2.5">
+          {missedCount > 0 ? (
+            // Branch A — outstanding catch-up questions own the only button here;
+            // the home page suppresses the standalone Catch up card to match.
+            <Link
+              href="/daily/catchup"
+              className="btn-primary flex min-h-12 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+            >
+              {missedCount === 1
+                ? 'Play your 1 missed →'
+                : `Play your ${missedCount} missed →`}
+            </Link>
+          ) : (
+            // Branch B — nothing left to catch up on; turn the player outward.
+            // "Send a friend a question" routes to the existing recipient-first
+            // authoring flow (CreateChooser's "send to specific people" intent).
+            <>
+              <Link
+                href="/questions?create=1&intent=specific"
+                className="btn-primary flex min-h-12 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+              >
+                Send a friend a question →
+              </Link>
+              <Link
+                href="/questions?create=1&intent=bank"
+                className="block text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
+              >
+                or add one to your bank
+              </Link>
+            </>
+          )}
+
+          {/* Recap is link-weight in both branches — never a button, and
+              backward-looking, so no forward arrow. */}
           <Link
-            href={playHref}
-            className="btn-ghost mt-4 min-h-12 w-full justify-center rounded-md text-base font-bold tracking-wide"
+            href="/daily/summary"
+            className="block text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
           >
-            {actionLabel}
+            See today&apos;s recap
           </Link>
+
+          {/* Quiet tertiary reset link in both branches. */}
           <button
             type="button"
             onClick={() => {
               void resetForToday()
             }}
             disabled={resetting}
-            className="mt-2 w-full text-center text-xs font-medium tracking-[0.08em] text-[var(--brand-ink-400)] uppercase underline underline-offset-4 disabled:opacity-60"
+            className="block text-xs font-medium tracking-[0.08em] text-[var(--brand-ink-400)] uppercase underline underline-offset-4 disabled:opacity-60"
           >
             {resetting ? 'Resetting…' : 'Reset game for today and play again'}
           </button>
           {resetError ? (
-            <p className="text-destructive mt-2 text-xs">{resetError}</p>
+            <p className="text-destructive text-xs">{resetError}</p>
           ) : null}
-        </>
+        </div>
       ) : (
         <Link
           href={playHref}

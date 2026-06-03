@@ -51,12 +51,6 @@ export default async function Home() {
 
       {session ? (
         <Suspense fallback={null}>
-          <MissedQuestionsSection userId={session.userId} />
-        </Suspense>
-      ) : null}
-
-      {session ? (
-        <Suspense fallback={null}>
           <CeremonyPinSection userId={session.userId} />
         </Suspense>
       ) : null}
@@ -81,9 +75,10 @@ export default async function Home() {
 }
 
 async function TodaysFiveSection({ userId }: { userId: string }) {
-  const [queue, preferences] = await Promise.all([
+  const [queue, preferences, catchupItems] = await Promise.all([
     getTodaysDailyQueue(userId),
     getDailyPreferences(userId),
+    getCatchupQuestions(userId),
   ])
 
   const status = buildDailyStatusSnapshot(queue)
@@ -93,20 +88,26 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
     selectedDomains: preferences.selectedDomains,
   }
 
-  return (
-    <TodaysFiveCard
-      initialStatus={status}
-      initialPreferences={cardPreferences}
-    />
-  )
-}
-
-async function MissedQuestionsSection({ userId }: { userId: string }) {
-  const catchupItems = await getCatchupQuestions(userId)
-  const count = catchupItems.length
-  if (count === 0) return null
+  const missedCount = catchupItems.length
   const expiringCount = catchupItems.filter((item) => item.expiresSoon).length
-  return <MissedQuestionsCard count={count} expiringCount={expiringCount} />
+  // Suppress the standalone Catch up card in the missed>0 completed state — the
+  // completed hero's Branch A already owns that entry point, so showing both
+  // would be a duplicate. When the round is still in progress (hero is in its
+  // play state, not Branch A), the standalone card stays.
+  const showStandaloneCatchup = missedCount > 0 && !status.isComplete
+
+  return (
+    <>
+      <TodaysFiveCard
+        initialStatus={status}
+        initialPreferences={cardPreferences}
+        initialMissedCount={missedCount}
+      />
+      {showStandaloneCatchup ? (
+        <MissedQuestionsCard count={missedCount} expiringCount={expiringCount} />
+      ) : null}
+    </>
+  )
 }
 
 async function CeremonyPinSection({ userId }: { userId: string }) {
