@@ -71,6 +71,25 @@ export function assignCaption(
   return template.replace('{NAME}', friendFirstName.toUpperCase());
 }
 
+// Convergence (B-Convergence-1) headlines are PERSON-FIRST and never name a
+// domain — naming one of a mixed-domain cluster misrepresents the rest, and
+// naming all reads as a stats list (a brand violation). Unlike the moment
+// CAPTIONS above (all-caps chips), these are sentence-case one-liners: the
+// `{Name}` token is replaced with the friend's first name AT RENDER (as an
+// actor link), so the template is returned verbatim here. Assigned
+// deterministically by moment id, the same djb2 mechanism the moments use.
+export const CONVERGENCE_CAPTIONS = [
+  'You and {Name} keep landing in the same place.',
+  'Turns out you and {Name} think alike.',
+  'You and {Name} are on the same wavelength lately.',
+  'You and {Name} both knew these.',
+  'The people who get you, getting you — you and {Name}.',
+] as const;
+
+export function convergenceCaptionTemplate(momentId: string): string {
+  return CONVERGENCE_CAPTIONS[djb2(momentId) % CONVERGENCE_CAPTIONS.length];
+}
+
 function ymdInZone(date: Date, tz: string): string {
   // en-CA gives ISO-style YYYY-MM-DD reliably.
   return new Intl.DateTimeFormat('en-CA', {

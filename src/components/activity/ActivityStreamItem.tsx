@@ -15,6 +15,7 @@ import type {
 
 import { InlineAnswerFlow } from './InlineAnswerFlow';
 import { FM, INK, INK2, INK3, RULE } from '@/components/lately/tokens';
+import { assertNever } from '@/lib/assert-never';
 
 function ActorLink({ name, userId }: { name: string; userId: string | null }) {
   if (!userId) return <b style={{ fontWeight: 600 }}>{name}</b>;
@@ -59,8 +60,20 @@ function Line({ parts }: { parts: StreamLinePart[] }) {
 
 function questionBacked(expand: StreamExpand | null): boolean {
   if (!expand) return false;
-  if (expand.kind === 'milestone') return expand.questions.length > 0;
-  return true;
+  switch (expand.kind) {
+    // Question-list reveals: only expandable when there's something to reveal.
+    case 'milestone':
+    case 'same_correct':
+      return expand.questions.length > 0;
+    // Single-question reveals are always backed by their one question.
+    case 'your_question':
+    case 'niche_match':
+      return true;
+    default:
+      // Exhaustiveness guard: a new StreamExpand kind won't compile until it's
+      // handled here (and in the expansion render below).
+      return assertNever(expand, 'StreamExpand');
+  }
 }
 
 export function ActivityStreamItem({
@@ -198,7 +211,13 @@ export function ActivityStreamItem({
           <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap' }}>{timestamp}</span>
           {expandable ? (
             <span style={{ fontFamily: FM, fontSize: 9, letterSpacing: 1.5, color: INK3 }}>
-              {open ? '− QUESTION' : '+ QUESTION'}
+              {expand?.kind === 'same_correct'
+                ? open
+                  ? '− QUESTIONS'
+                  : '+ QUESTIONS'
+                : open
+                  ? '− QUESTION'
+                  : '+ QUESTION'}
             </span>
           ) : null}
         </div>
@@ -213,6 +232,8 @@ export function ActivityStreamItem({
             answeredIds={answeredIds}
             onAnswered={markAnswered}
           />
+        ) : expand.kind === 'same_correct' ? (
+          <ConvergenceExpansion expand={expand} />
         ) : (
           <SendOnwardExpansion expand={expand} />
         )
@@ -280,6 +301,60 @@ function MilestoneExpansion({
           answered={answeredIds.has(q.questionId)}
           onAnswered={onAnswered}
         />
+      ))}
+    </div>
+  );
+}
+
+// Convergence (B-Convergence-1) reveal. READ-ONLY: both people already answered
+// these correctly, so it just lists the cluster's questions in the editorial
+// serif register — domains appear quietly as texture (never promoted to the
+// headline). No Answer, no Send Onward, no reaction affordance.
+export function ConvergenceExpansion({
+  expand,
+}: {
+  expand: Extract<StreamExpand, { kind: 'same_correct' }>;
+}) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        marginTop: 12,
+        borderLeft: `2px solid ${RULE}`,
+        paddingLeft: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}
+    >
+      {expand.questions.map((q) => (
+        <div key={q.questionId}>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: 'Georgia, serif',
+              fontStyle: 'italic',
+              fontSize: 14,
+              lineHeight: 1.55,
+              color: INK2,
+            }}
+          >
+            &ldquo;{q.text}&rdquo;
+          </p>
+          {q.domain ? (
+            <p
+              style={{
+                margin: '4px 0 0',
+                fontFamily: FM,
+                fontSize: 10,
+                letterSpacing: 1,
+                color: INK3,
+              }}
+            >
+              {q.domain.toUpperCase()}
+            </p>
+          ) : null}
+        </div>
       ))}
     </div>
   );

@@ -23,6 +23,7 @@ import type { ActivityItemView } from '@/server/db/queries/activity';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 import { LATELY_TIER, latelyTierForMomentDir } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
+import type { Convergence } from '@/lib/convergence';
 
 // --- Serializable model ------------------------------------------------------
 
@@ -66,6 +67,15 @@ export type StreamExpand =
       question: StreamQuestion;
       strangerId: string | null;
       strangerName: string;
+    }
+  // Convergence (B-Convergence-1): you and a friend independently answered the
+  // SAME shared questions correctly. READ-ONLY — both already answered, so the
+  // reveal just shows the cluster's questions (no answer, no send, no reaction).
+  | {
+      kind: 'same_correct';
+      friendId: string;
+      friendName: string;
+      questions: StreamQuestion[];
     };
 
 // A trailing, non-expanding utility action carried by some plain one-liners.
@@ -479,4 +489,42 @@ function breadthTail(domains: string[]): StreamLinePart[] {
   if (rest.length === 0) return [lead, cat(first), txt(' and '), cat(second)];
   const others = rest.length === 1 ? '1 other' : `${rest.length} others`;
   return [lead, cat(first), txt(', '), cat(second), txt(` and ${others}`)];
+}
+
+// --- Convergence -------------------------------------------------------------
+
+// A convergence is the quiet "same-correct overlap" line: you and a friend
+// independently got the same shared questions right. The headline is
+// PERSON-FIRST and names no domain — the caption template (assigned
+// deterministically by moment id) carries a `{Name}` token that becomes the
+// friend's first name as an actor link. It is Lately-ONLY (homeEligible: false,
+// the same slow-burn treatment as niche-match) and READ-ONLY: expanding reveals
+// the cluster's questions (domains may appear there as texture) with no answer,
+// send, or reaction affordance.
+export function convergenceToStreamItem(
+  convergence: Convergence,
+  questions: StreamQuestion[],
+  captionTemplate: string,
+): StreamItem {
+  const [before, after] = captionTemplate.split('{Name}');
+  const line: StreamLinePart[] = [];
+  if (before) line.push(txt(before));
+  line.push(act(convergence.friendFirstName, convergence.friendId));
+  if (after) line.push(txt(after));
+  return {
+    id: convergence.id,
+    sortAt: convergence.sortAt,
+    tier: LATELY_TIER.MILESTONE,
+    homeEligible: false,
+    line,
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    expand: {
+      kind: 'same_correct',
+      friendId: convergence.friendId,
+      friendName: convergence.friendName,
+      questions,
+    },
+  };
 }

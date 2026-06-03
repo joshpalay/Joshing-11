@@ -6,6 +6,11 @@ import {
   type LatelyMilestone,
   type MilestoneAnswerRow,
 } from '@/lib/lately-milestones';
+import {
+  deriveConvergences,
+  type Convergence,
+  type ConvergenceCoCorrectRow,
+} from '@/lib/convergence';
 import { resolveAuthorDisplay } from '@/lib/questions-types';
 import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
 import { SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
@@ -368,4 +373,138 @@ export async function getViewerCorrectlyAnsweredIds(
     if (row.questionId) out.add(row.questionId);
   }
   return out;
+}
+
+// --- Convergence (B-Convergence-1) -------------------------------------------
+
+// Bounds the answer scan. Generous vs. the 14-day cluster window so a recent
+// cluster's boundaries stay stable: a cluster only depends on the run of
+// co-correct questions since the last reset, which 60 days comfortably covers.
+const CONVERGENCE_LOOKBACK_DAYS = 60;
+
+const PAIR_SEP = '\u0000';
+
+// Read-time "same-correct overlap": questions the viewer AND a mutual friend
+// both answered correctly, excluding questions either of them authored (those
+// are already surfaced as the they_got_you / you_got_them moments). Derived
+// entirely from existing masteryEvents — no write path, no migration. The
+// firing / reset / single-owner rules live in `@/lib/convergence`.
+export async function getLatelyConvergences(
+  userId: string,
+): Promise<Convergence[]> {
+  const lookbackStart = new Date(
+    Date.now() - CONVERGENCE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+  );
+
+  // 1. The viewer's correct answers, with each question's author so we can drop
+  //    questions the viewer wrote. Keep the EARLIEST correct moment per question.
+  const viewerRows = await db
+    .select({
+      questionId: masteryEvents.questionId,
+      createdAt: masteryEvents.createdAt,
+      creatorId: questions.creatorId,
+    })
+    .from(masteryEvents)
+    .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        inArray(masteryEvents.sourceType, LIVE_SOURCE_TYPES),
+        inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
+        isNotNull(masteryEvents.questionId),
+        gte(masteryEvents.createdAt, lookbackStart),
+      ),
+    );
+
+  const viewerByQuestion = new Map<
+    string,
+    { answeredAt: Date; creatorId: string | null }
+  >();
+  for (const row of viewerRows) {
+    if (!row.questionId) continue;
+    if (row.creatorId === userId) continue; // viewer authored it -> not "shared"
+    const prev = viewerByQuestion.get(row.questionId);
+    if (!prev || row.createdAt < prev.answeredAt) {
+      viewerByQuestion.set(row.questionId, {
+        answeredAt: row.createdAt,
+        creatorId: row.creatorId,
+      });
+    }
+  }
+  const viewerQuestionIds = [...viewerByQuestion.keys()];
+  if (viewerQuestionIds.length === 0) return [];
+
+  // 2. Mutual friends (approved follows in BOTH directions).
+  const [following, followers] = await Promise.all([
+    db
+      .select({ id: follows.followeeId })
+      .from(follows)
+      .where(and(eq(follows.followerId, userId), eq(follows.state, 'approved'))),
+    db
+      .select({ id: follows.followerId })
+      .from(follows)
+      .where(and(eq(follows.followeeId, userId), eq(follows.state, 'approved'))),
+  ]);
+  const followingIds = new Set(following.map((r) => r.id));
+  const mutualIds = [...new Set(followers.map((r) => r.id))].filter((id) =>
+    followingIds.has(id),
+  );
+  if (mutualIds.length === 0) return [];
+
+  // 3. Those friends' correct answers on the viewer's shared question set.
+  const friendRows = await db
+    .select({
+      friendId: masteryEvents.userId,
+      questionId: masteryEvents.questionId,
+      createdAt: masteryEvents.createdAt,
+    })
+    .from(masteryEvents)
+    .where(
+      and(
+        inArray(masteryEvents.userId, mutualIds),
+        inArray(masteryEvents.questionId, viewerQuestionIds),
+        inArray(masteryEvents.sourceType, LIVE_SOURCE_TYPES),
+        inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
+        isNotNull(masteryEvents.questionId),
+        gte(masteryEvents.createdAt, lookbackStart),
+      ),
+    );
+
+  const friendByPair = new Map<string, Date>(); // friendId\0questionId -> earliest
+  for (const row of friendRows) {
+    if (!row.questionId || !row.friendId) continue;
+    const key = `${row.friendId}${PAIR_SEP}${row.questionId}`;
+    const prev = friendByPair.get(key);
+    if (!prev || row.createdAt < prev) friendByPair.set(key, row.createdAt);
+  }
+  if (friendByPair.size === 0) return [];
+
+  // 4. Friend display names.
+  const nameRows = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(inArray(users.id, mutualIds));
+  const nameById = new Map(nameRows.map((r) => [r.id, r.displayName]));
+
+  // 5. Build co-correct rows, excluding questions the FRIEND authored.
+  const rows: ConvergenceCoCorrectRow[] = [];
+  for (const [key, friendAnsweredAt] of friendByPair) {
+    const sep = key.indexOf(PAIR_SEP);
+    const friendId = key.slice(0, sep);
+    const questionId = key.slice(sep + 1);
+    const viewer = viewerByQuestion.get(questionId);
+    if (!viewer) continue;
+    if (viewer.creatorId === friendId) continue; // friend authored it -> not "shared"
+    const displayName = nameById.get(friendId) ?? null;
+    rows.push({
+      friendId,
+      friendName: displayName ?? 'A friend',
+      friendFirstName: firstName(displayName, 'A friend'),
+      questionId,
+      viewerAnsweredAt: viewer.answeredAt,
+      friendAnsweredAt,
+    });
+  }
+
+  return deriveConvergences(userId, rows);
 }
