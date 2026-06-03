@@ -57,9 +57,12 @@ export type ChatMessage =
       presenceSourceName?: string | null;
       presenceSourceExtraCount?: number;
       isNew?: boolean;
+      /** When true the card is shown as a dimmed, non-interactive ghost — set when the question is dismissed and the inline "Dismissed · Undo" notice takes over. */
+      faded?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
     }
+  | { id: string; kind: 'dismiss_notice'; onUndo: () => Promise<void> }
   | { id: string; kind: 'user'; text: string }
   | { id: string; kind: 'typing' }
   | {
@@ -186,6 +189,61 @@ function SystemRow({ text }: { text: string }) {
   );
 }
 
+// Inline "Dismissed · Undo" line shown after a question is dropped from
+// catch-up. Mirrors NewTerritoryUndo's self-contained optimistic state: the
+// undo is awaited, "Undoing…" shows while in flight, and a rejection surfaces
+// an inline retry hint without losing the dismissal.
+function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
+  const [state, setState] = useState<'idle' | 'undoing' | 'error'>('idle');
+
+  const handleUndo = async () => {
+    if (state === 'undoing') return;
+    setState('undoing');
+    try {
+      await onUndo();
+      // On success the hook rewinds the thread and removes this row; no further
+      // state change needed here.
+    } catch {
+      setState('error');
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-0.5 py-0.5">
+      <p style={{ ...monoStyle, fontSize: '0.58rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+        <span>Dismissed</span>
+        <span style={{ margin: '0 6px', opacity: 0.6 }}>·</span>
+        {state === 'undoing' ? (
+          <span style={{ opacity: 0.7 }}>Undoing…</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void handleUndo()}
+            style={{
+              ...monoStyle,
+              fontSize: '0.58rem',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              textDecoration: 'underline',
+              textUnderlineOffset: '2px',
+            }}
+          >
+            Undo
+          </button>
+        )}
+      </p>
+      {state === 'error' ? (
+        <p style={{ ...monoStyle, fontSize: '0.54rem', color: 'var(--danger)', textAlign: 'center' }}>
+          Could not undo. Try again.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function QuestionRow({
   subhead,
   badges = [],
@@ -195,8 +253,11 @@ function QuestionRow({
   presenceSourceName = null,
   presenceSourceExtraCount = 0,
   isNew = false,
+  faded = false,
   onGiveUp,
   giveUpDisabled = false,
+  onDismiss,
+  dismissDisabled = false,
 }: {
   subhead?: string | null;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
@@ -206,8 +267,11 @@ function QuestionRow({
   presenceSourceName?: string | null;
   presenceSourceExtraCount?: number;
   isNew?: boolean;
+  faded?: boolean;
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
+  onDismiss?: () => void;
+  dismissDisabled?: boolean;
 }) {
   const [visible, setVisible] = useState(!isNew);
 
@@ -221,7 +285,13 @@ function QuestionRow({
   return (
     <div
       className="flex flex-col gap-0.5"
-      style={isNew ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' } : undefined}
+      style={
+        faded
+          ? { opacity: 0.35, transition: 'opacity 0.4s ease', pointerEvents: 'none' }
+          : isNew
+            ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }
+            : undefined
+      }
     >
       {subhead ? (
         <div className="flex flex-wrap items-center gap-1.5 pb-1 pl-0.5">
@@ -329,35 +399,41 @@ function QuestionRow({
           </div>
         ) : null}
       </div>
-      {onGiveUp ? (
-        <button
-          type="button"
-          onClick={onGiveUp}
-          disabled={giveUpDisabled}
-          style={{
-            alignSelf: 'flex-start',
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.58rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--text-muted)',
-            textDecoration: 'underline',
-            textUnderlineOffset: '2px',
-            opacity: 0.7,
-            marginTop: '4px',
-            paddingLeft: '2px',
-          }}
-        >
-          Show me the answer
-        </button>
+      {!faded && (onGiveUp || onDismiss) ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '4px', paddingLeft: '2px' }}>
+          {onGiveUp ? (
+            <button type="button" onClick={onGiveUp} disabled={giveUpDisabled} style={questionActionLinkStyle}>
+              Show me the answer
+            </button>
+          ) : null}
+          {onDismiss ? (
+            <button type="button" onClick={onDismiss} disabled={dismissDisabled} style={questionActionLinkStyle}>
+              Dismiss
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
 }
+
+// Shared style for the muted mono action links beneath a question card
+// ("Show me the answer", "Dismiss").
+const questionActionLinkStyle: CSSProperties = {
+  alignSelf: 'flex-start',
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  cursor: 'pointer',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '0.58rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: 'var(--text-muted)',
+  textDecoration: 'underline',
+  textUnderlineOffset: '2px',
+  opacity: 0.7,
+};
 
 function UserRow({ text }: { text: string }) {
   return (
@@ -1177,14 +1253,18 @@ export function GameplayChatThread({
   messages,
   onGiveUp,
   giveUpDisabled,
+  onDismiss,
+  dismissDisabled,
 }: {
   messages: ChatMessage[];
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
+  onDismiss?: () => void;
+  dismissDisabled?: boolean;
 }) {
-  // "Show me the answer" belongs only under the active (still-unanswered)
-  // question — the last question message with no result after it. Without this
-  // gate the thread would attach onGiveUp to every historical question row.
+  // "Show me the answer" and "Dismiss" belong only under the active (still-
+  // unanswered) question — the last question message with no result after it.
+  // Without this gate the thread would attach them to every historical row.
   const lastQuestionIndex = (() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       if (messages[i].kind === 'question') return i;
@@ -1203,6 +1283,8 @@ export function GameplayChatThread({
         switch (m.kind) {
           case 'system':
             return <SystemRow key={m.id} text={m.text} />;
+          case 'dismiss_notice':
+            return <DismissNoticeRow key={m.id} onUndo={m.onUndo} />;
           case 'question':
             return (
               <QuestionRow
@@ -1213,10 +1295,13 @@ export function GameplayChatThread({
                 presenceSourceName={m.presenceSourceName}
                 presenceSourceExtraCount={m.presenceSourceExtraCount}
                 isNew={m.isNew}
+                faded={m.faded}
                 subhead={m.subhead}
                 badges={m.badges}
                 onGiveUp={onGiveUp && m.id === activeQuestionId ? onGiveUp : undefined}
                 giveUpDisabled={giveUpDisabled}
+                onDismiss={onDismiss && m.id === activeQuestionId ? onDismiss : undefined}
+                dismissDisabled={dismissDisabled}
               />
             );
           case 'user':

@@ -185,6 +185,36 @@ function questionMessage(item: CatchupQueueItem): ChatMessage {
   };
 }
 
+// Once the player engages the next turn (answers, skips, or dismisses again),
+// a lingering "Dismissed · Undo" notice is retired to a plain "Dismissed." line
+// so undo can't rewind across a resolved turn.
+function retireDismissNotices(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) =>
+    message.kind === 'dismiss_notice'
+      ? { id: message.id, kind: 'system' as const, text: 'Dismissed.' }
+      : message,
+  );
+}
+
+// Rebuilds the introduced/result-posted sequencing sets from a thread, used
+// after an undo rewinds (truncates) the thread: every shown question is
+// "introduced", and a question is "resolved" once it has a result after it or
+// is a dismissed (faded) card. Anything truncated away drops out of both sets
+// so it gets re-introduced cleanly when the queue reaches it again.
+function deriveCatchupRefs(messages: ChatMessage[]): { introduced: Set<string>; resultPosted: Set<string> } {
+  const introduced = new Set<string>();
+  const resultPosted = new Set<string>();
+  for (const message of messages) {
+    if (message.kind === 'question') {
+      introduced.add(message.assignmentId);
+      if (message.faded) resultPosted.add(message.assignmentId);
+    } else if (message.kind === 'result') {
+      resultPosted.add(message.assignmentId);
+    }
+  }
+  return { introduced, resultPosted };
+}
+
 export function useCatchupFlow() {
   const [items, setItems] = useState<CatchupQueueItem[]>([]);
   const [initialTotal, setInitialTotal] = useState(0);
@@ -301,7 +331,7 @@ export function useCatchupFlow() {
     resultPostedItemIdsRef.current.add(item.dailyQueueItemId);
     setIsResolvingTurn(true);
     setMessages((existing) => [
-      ...existing,
+      ...retireDismissNotices(existing),
       { id: newMessageId(), kind: 'user', text: 'i give up' },
       {
         id: newMessageId(),
@@ -334,9 +364,49 @@ export function useCatchupFlow() {
     }, 1200);
   }, [currentItem, finishTurn, isResolvingTurn, submitting]);
 
+  // Reverses a dismissal: un-dismisses server-side, then rewinds the thread back
+  // to the dismissed question (dropping the notice and the auto-introduced next
+  // card) so it becomes the active question again. Throws on failure so the
+  // notice row can surface a retry without losing the dismissal.
+  const undismissItem = useCallback(async (item: CatchupQueueItem) => {
+    const itemId = item.dailyQueueItemId;
+    setSubmitting(true);
+    try {
+      const response = await fetch('/api/daily/catchup/undismiss', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ dailyQueueItemId: itemId }),
+      });
+      if (!response.ok) {
+        const raw = await response.json().catch(() => null);
+        throw new Error(userFacingCatchUpSubmitMessage(parseCatchUpAnswerErrorBody(raw)));
+      }
+      setStats((existing) => ({ ...existing, dismissed: Math.max(0, existing.dismissed - 1) }));
+      setItems((existing) => [item, ...existing.filter((entry) => entry.dailyQueueItemId !== itemId)]);
+      setMessages((existing) => {
+        const questionId = `catchup-q-${itemId}`;
+        const index = existing.findIndex((message) => message.id === questionId);
+        if (index === -1) return existing;
+        const rewound = existing.slice(0, index + 1).map((message) =>
+          message.id === questionId && message.kind === 'question'
+            ? { ...message, faded: false }
+            : message,
+        );
+        const refs = deriveCatchupRefs(rewound);
+        introducedItemIdsRef.current = refs.introduced;
+        resultPostedItemIdsRef.current = refs.resultPosted;
+        return rewound;
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }, []);
+
   const dismissCurrent = useCallback(async (reason: 'not_interested' | 'too_old' | 'unclear' = 'not_interested') => {
-    if (!currentItem || submitting) return;
-    const itemId = currentItem.dailyQueueItemId;
+    if (!currentItem || submitting || isResolvingTurn) return;
+    const item = currentItem;
+    const itemId = item.dailyQueueItemId;
     setSubmitting(true);
     setError(null);
     try {
@@ -348,19 +418,27 @@ export function useCatchupFlow() {
       });
       const raw = await response.json().catch(() => null);
       if (!response.ok) throw new Error(userFacingCatchUpSubmitMessage(parseCatchUpAnswerErrorBody(raw)));
+      // Mark the prompt resolved so the next question can be introduced.
       resultPostedItemIdsRef.current.add(itemId);
       setStats((existing) => ({ ...existing, dismissed: existing.dismissed + 1 }));
-      setMessages((existing) => [
-        ...existing,
-        { id: newMessageId(), kind: 'system', text: 'Dropped from catch-up.' },
-      ]);
+      setMessages((existing) => {
+        const retired = retireDismissNotices(existing).map((message) =>
+          message.kind === 'question' && message.assignmentId === itemId
+            ? { ...message, faded: true }
+            : message,
+        );
+        return [
+          ...retired,
+          { id: newMessageId(), kind: 'dismiss_notice', onUndo: () => undismissItem(item) },
+        ];
+      });
       advancePast(itemId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not dismiss that question.');
     } finally {
       setSubmitting(false);
     }
-  }, [advancePast, currentItem, submitting]);
+  }, [advancePast, currentItem, isResolvingTurn, submitting, undismissItem]);
 
   const submitCurrent = useCallback(async (submittedAnswer: string) => {
     if (!currentItem || submitting || !submittedAnswer.trim()) return;
@@ -395,7 +473,7 @@ export function useCatchupFlow() {
         dismissed: existing.dismissed,
       }));
       setMessages((existing) => [
-        ...existing,
+        ...retireDismissNotices(existing),
         { id: newMessageId(), kind: 'user', text: trimmedAnswer },
         buildCatchupResultMessage({
           id: resultMessageId,

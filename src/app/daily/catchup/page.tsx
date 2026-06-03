@@ -28,6 +28,7 @@ export default function DailyCatchupPage() {
     reload,
     submitCurrent,
     skipCurrent,
+    dismissCurrent,
   } = useCatchupFlow();
   const [answer, setAnswer] = useState('');
 
@@ -126,6 +127,8 @@ export default function DailyCatchupPage() {
               messages={messages}
               onGiveUp={() => skipCurrent()}
               giveUpDisabled={submitting || isResolvingTurn}
+              onDismiss={() => void dismissCurrent()}
+              dismissDisabled={submitting || isResolvingTurn}
             />
           </>
         )}
