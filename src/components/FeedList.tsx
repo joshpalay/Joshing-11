@@ -791,11 +791,6 @@ function FeedListContent({
     return 'Quiet today. Check back when your friends have played.'
   }, [error, feedFilter, feedMeta, loadingInitial])
 
-  // Short surface label shown under the serif empty-state headline. Skipped on
-  // the error path (the headline carries the error message there instead).
-  const emptySubtitle =
-    feedFilter === 'sent-to-me' ? 'No questions sent yet.' : 'No broadcasts yet.'
-
   // The invite CTA only makes sense on the friend-sourced Broadcasts surface.
   const showInviteFriendCta =
     !loadingInitial && !error && Boolean(feedMeta) && feedFilter === 'from-friends'
@@ -1179,7 +1174,11 @@ function FeedListContent({
 
   return (
     <>
-      <FeedSurfaceTabs active={feedFilter} meta={feedMeta} onSelect={handleSelectTab} />
+      {/* Surface switcher is hidden while the feed is empty — the empty state
+          carries its own "Questions from friends" eyebrow as the section label. */}
+      {items.length > 0 ? (
+        <FeedSurfaceTabs active={feedFilter} meta={feedMeta} onSelect={handleSelectTab} />
+      ) : null}
 
       {hideToast ? (
         <div
@@ -1198,32 +1197,51 @@ function FeedListContent({
       ) : null}
 
       {items.length === 0 ? (
-        <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
-          {error ? (
+        loadingInitial ? (
+          <section className="flex min-h-48 flex-col items-center justify-center py-12 text-center">
+            <p className="text-muted-foreground text-sm">{emptyCopy}</p>
+          </section>
+        ) : error ? (
+          <section className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
             <p className="text-destructive text-sm">{emptyCopy}</p>
-          ) : (
-            <>
-              <SpeechBubbleIllustration className="mb-1 h-24 w-auto" />
-              <h2 className="text-foreground max-w-sm font-serif text-2xl font-semibold text-balance">
-                {emptyCopy}
-              </h2>
-              <p className="text-muted-foreground text-sm">{emptySubtitle}</p>
-            </>
-          )}
-          {showInviteFriendCta && !showContributeFooter ? (
-            <Link
-              href="/friends"
-              className="text-primary text-sm font-medium underline-offset-4 hover:underline"
-            >
-              Invite a friend
-            </Link>
-          ) : null}
-          {emptyDiagnostics ? (
-            <p className="bg-muted text-muted-foreground max-w-xl rounded px-3 py-2 font-mono text-xs break-words">
-              {emptyDiagnostics}
+            {emptyDiagnostics ? (
+              <p className="bg-muted text-muted-foreground max-w-xl rounded px-3 py-2 font-mono text-xs break-words">
+                {emptyDiagnostics}
+              </p>
+            ) : null}
+          </section>
+        ) : (
+          // Questions-from-Friends empty state — matches the Figma mock: a muted
+          // eyebrow (standing in for the hidden surface tabs), a left-aligned
+          // serif headline, the centered speech-bubble art, and a right-aligned
+          // orange "add friends" link.
+          <section className="py-8">
+            <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+              Questions from friends
             </p>
-          ) : null}
-        </section>
+            <h2 className="mt-1 font-serif text-[18px] font-medium text-[var(--brand-ink)]">
+              You are all caught up!
+            </h2>
+            <div className="my-5 flex justify-center">
+              <SpeechBubbleIllustration className="h-24 w-auto" />
+            </div>
+            {showInviteFriendCta ? (
+              <div className="flex justify-end">
+                <Link
+                  href="/friends"
+                  className="font-serif text-[18px] font-semibold tracking-[0.05em] text-[var(--brand-orange)] underline underline-offset-4"
+                >
+                  add friends →
+                </Link>
+              </div>
+            ) : null}
+            {emptyDiagnostics ? (
+              <p className="bg-muted text-muted-foreground mt-3 max-w-xl rounded px-3 py-2 font-mono text-xs break-words">
+                {emptyDiagnostics}
+              </p>
+            ) : null}
+          </section>
+        )
       ) : (
         <section className="space-y-3 pb-8">
           {groupItemsByRecency(items).map((group) => (

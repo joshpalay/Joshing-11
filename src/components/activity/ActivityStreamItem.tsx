@@ -14,17 +14,22 @@ import type {
 } from '@/lib/activity-stream';
 
 import { InlineAnswerFlow } from './InlineAnswerFlow';
+import { ActivityIcon, specForIcon } from './ActivityIcon';
 import { FM, INK, INK2, INK3, RULE } from '@/components/lately/tokens';
 import { assertNever } from '@/lib/assert-never';
 
+// Friend names render in the activity-blue from Figma (--brand-link #4a5d75),
+// linked or not, so the actor reads as the warm social anchor of the row.
+const ACTOR_BLUE = 'var(--brand-link)';
+
 function ActorLink({ name, userId }: { name: string; userId: string | null }) {
-  if (!userId) return <b style={{ fontWeight: 600 }}>{name}</b>;
+  if (!userId) return <b style={{ fontWeight: 600, color: ACTOR_BLUE }}>{name}</b>;
   return (
     <Link
       href={`/users/${userId}`}
       onClick={(e) => e.stopPropagation()}
       style={{
-        color: INK,
+        color: ACTOR_BLUE,
         fontWeight: 600,
         textDecoration: 'underline',
         textDecorationColor: RULE,
@@ -76,13 +81,7 @@ function questionBacked(expand: StreamExpand | null): boolean {
   }
 }
 
-export function ActivityStreamItem({
-  item,
-  timestamp,
-}: {
-  item: StreamItem;
-  timestamp: string;
-}) {
+export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; timestamp: string }) {
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
 
@@ -91,15 +90,9 @@ export function ActivityStreamItem({
   // and ticks up + persists as the viewer answers, even after the result pop-up
   // closes or the line is collapsed and reopened. Milestone lines only.
   const expand = item.expand;
-  const milestoneQuestions =
-    expand && expand.kind === 'milestone' ? expand.questions : null;
+  const milestoneQuestions = expand && expand.kind === 'milestone' ? expand.questions : null;
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(
-    () =>
-      new Set(
-        (milestoneQuestions ?? [])
-          .filter((q) => q.answered)
-          .map((q) => q.questionId),
-      ),
+    () => new Set((milestoneQuestions ?? []).filter((q) => q.answered).map((q) => q.questionId)),
   );
 
   function markAnswered(questionId: string) {
@@ -113,12 +106,23 @@ export function ActivityStreamItem({
   const milestoneProgress =
     milestoneQuestions && milestoneQuestions.length > 0
       ? {
-          answered: milestoneQuestions.filter((q) =>
-            answeredIds.has(q.questionId),
-          ).length,
+          answered: milestoneQuestions.filter((q) => answeredIds.has(q.questionId)).length,
           total: milestoneQuestions.length,
         }
       : null;
+
+  // The bundle mark (milestone) shares the row's live answered-state: as the
+  // viewer answers questions inline, solid triangles flip to hollow. Caps at 5
+  // triangles silently (the questions array is already ≤5); copy stays truthful.
+  const bundleCounts =
+    item.icon === 'bundle' && milestoneQuestions
+      ? (() => {
+          const total = Math.min(milestoneQuestions.length, 5);
+          const answered = Math.min(answeredIds.size, total);
+          return { total, unanswered: total - answered };
+        })()
+      : null;
+  const iconSpec = specForIcon(item.icon, bundleCounts);
 
   function toggle() {
     if (expandable) setOpen((v) => !v);
@@ -149,13 +153,13 @@ export function ActivityStreamItem({
         style={{
           display: 'flex',
           alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 12,
           cursor: expandable ? 'pointer' : 'default',
           WebkitTapHighlightColor: 'transparent',
         }}
       >
-        <div style={{ minWidth: 0, flex: 1 }}>
+        <ActivityIcon spec={iconSpec} seed={item.id} />
+
+        <div style={{ minWidth: 0, flex: 1, paddingRight: 12 }}>
           <p
             style={{
               margin: 0,
@@ -227,11 +231,7 @@ export function ActivityStreamItem({
 
       {expandable && open && expand ? (
         expand.kind === 'milestone' ? (
-          <MilestoneExpansion
-            expand={expand}
-            answeredIds={answeredIds}
-            onAnswered={markAnswered}
-          />
+          <MilestoneExpansion expand={expand} answeredIds={answeredIds} onAnswered={markAnswered} />
         ) : expand.kind === 'same_correct' ? (
           <ConvergenceExpansion expand={expand} />
         ) : (

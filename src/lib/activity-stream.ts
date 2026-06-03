@@ -84,6 +84,19 @@ export type StreamAction =
   | { kind: 'friend_request'; friendshipId: string }
   | { kind: 'reaction_got_it'; reactionId: string; replied: boolean };
 
+// The triangle event-indicator family (Figma "From Your Friends" marks). One
+// 24px-wide mark per event class, rendered in the activity row's icon column
+// (see ActivityIcon). `null` = no mark, but the column is still reserved so
+// every row's text starts at the same x.
+//   - 'bundle'    → 2–2–1 cluster: a friend's questions for you (milestone).
+//                   Solid = unanswered, hollow = already played. Live count
+//                   comes from the row's answered-state; caps at 5 silently.
+//   - 'diamond'   → tan/darkyellow rhombus: someone answered ("got") a question.
+//   - 'hourglass' → orange/teal triangles apex-to-apex: someone sends you a Q.
+//   - 'domain'    → orange/teal half-triangles split on a diagonal: a new
+//                   domain opened (expansion).
+export type StreamIconKind = 'bundle' | 'diamond' | 'hourglass' | 'domain' | null;
+
 export type StreamItem = {
   id: string;
   sortAt: Date;
@@ -96,6 +109,8 @@ export type StreamItem = {
   anchorId: string | null;
   action: StreamAction | null;
   expand: StreamExpand | null;
+  // Which triangle mark (if any) precedes this row. See StreamIconKind.
+  icon: StreamIconKind;
 };
 
 // --- Small builders ----------------------------------------------------------
@@ -125,10 +140,11 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
     tier: nicheTier(item.type),
     homeEligible: HOME_ELIGIBLE.has(item.type),
     anchorId:
-      (item.type === 'friend_request' || item.type === 'follow_request') &&
-      item.referenceId
+      (item.type === 'friend_request' || item.type === 'follow_request') && item.referenceId
         ? `friendship-${item.referenceId}`
         : null,
+    // Default: no mark, column reserved. Overridden per type below.
+    icon: null as StreamIconKind,
   };
 
   const a = act(actorName(item), item.actorUserId);
@@ -144,6 +160,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(got ? ' got your question' : ' answered your question')],
         secondLine: domain,
+        icon: 'diamond',
         action: null,
         expand:
           item.referenceId && faq?.questionText
@@ -167,6 +184,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' answered your question — someone shares this corner')],
         secondLine: domain,
+        icon: 'diamond',
         action: null,
         expand:
           item.referenceId && nm?.questionText
@@ -192,6 +210,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [txt('You answered '), a, txt("'s question — you found someone")],
         secondLine: domain,
+        icon: 'diamond',
         action: null,
         expand:
           item.referenceId && nm?.questionText
@@ -217,6 +236,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(domain ? ' opened ' + domain : ' opened a new domain')],
         secondLine: domain,
+        icon: 'domain',
         action: domain
           ? {
               kind: 'link',
@@ -274,6 +294,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [txt(`You shared a question with ${count} ${friendWord}`)],
         secondLine: shared?.domain ?? null,
+        icon: 'hourglass',
         action: null,
         expand: null,
       };
@@ -284,6 +305,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' sent you a question')],
         secondLine: item.reference.directQuestion?.questionText ?? null,
+        icon: 'hourglass',
         action: { kind: 'link', href: '/', label: 'Answer' },
         expand: null,
       };
@@ -298,9 +320,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         action: item.referenceId
           ? {
               kind: 'link',
-              href: complete
-                ? `/games/${item.referenceId}/summary`
-                : `/games/${item.referenceId}`,
+              href: complete ? `/games/${item.referenceId}/summary` : `/games/${item.referenceId}`,
               label: complete ? 'See results' : 'Play',
             }
           : null,
@@ -334,8 +354,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
       return {
         ...base,
         line: [txt('Your weekly reflection is ready')],
-        secondLine:
-          'A look at the questions, friends, and territories that defined your week.',
+        secondLine: 'A look at the questions, friends, and territories that defined your week.',
         action: item.referenceId
           ? { kind: 'link', href: `/ceremony/${item.referenceId}`, label: 'See it now' }
           : null,
@@ -346,9 +365,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
     case 'follow_request': {
       const request = item.reference.friendshipRequest;
       const pending =
-        request &&
-        request.status === 'pending' &&
-        request.requestedByUserId !== item.userId;
+        request && request.status === 'pending' && request.requestedByUserId !== item.userId;
       return {
         ...base,
         line: [a, txt(' wants to follow you')],
@@ -406,8 +423,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
 }
 
 function nicheTier(type: ActivityItemView['type']): number {
-  return type === 'niche_match_answered_your_question' ||
-    type === 'niche_match_you_answered'
+  return type === 'niche_match_answered_your_question' || type === 'niche_match_you_answered'
     ? LATELY_TIER.NICHE_MATCH
     : LATELY_TIER.OTHER;
 }
@@ -434,6 +450,7 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
     secondLine: theyGotYou ? moment.category : null,
     anchorId: null,
     action: null,
+    icon: 'diamond',
     expand: {
       kind: 'your_question',
       question: {
@@ -469,6 +486,7 @@ export function milestoneToStreamItem(
     secondLine: null,
     anchorId: null,
     action: null,
+    icon: 'bundle',
     expand: {
       kind: 'milestone',
       friendId: milestone.friendId,
@@ -520,6 +538,7 @@ export function convergenceToStreamItem(
     secondLine: null,
     anchorId: null,
     action: null,
+    icon: 'diamond',
     expand: {
       kind: 'same_correct',
       friendId: convergence.friendId,
