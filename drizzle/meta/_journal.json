@@ -484,6 +484,13 @@
       "when": 1782432000000,
       "tag": "0068_acceptable_variants",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1782518400000,
+      "tag": "0069_question_visibility_blocked",
+      "breakpoints": true
     }
   ]
 }

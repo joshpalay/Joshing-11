@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion, generateInsideJoke } from '@/lib/llm';
 import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
+// Imported from vet-verdict (not vet-question) so it resolves to the real
+// pure mapper even where vet-question is mocked.
+import { verdictToBlockedVisibility } from '@/server/llm/vet-verdict';
 import { getSession } from '@/server/auth/session';
 import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
 import {
@@ -188,6 +191,12 @@ export async function POST(request: NextRequest) {
     );
   }
   let publicScoring = verdictToPublicStatus(verdict);
+  // Safety-fail verdicts are hard-blocked from every surface: we override the
+  // saved visibility to 'blocked' (a state questionVisibilityPredicate and all
+  // bank/send/game read paths exclude) and skip ALL fan-out below. This is
+  // safety-only — factual/quality/answer-leaked rejections stay publicStatus
+  // signals and remain shareable to friends.
+  const blockedVisibility = verdictToBlockedVisibility(verdict);
   if (categoryLeaksAnswer && publicScoring.publicStatus !== 'rejected') {
     publicScoring = {
       publicStatus: 'rejected',
@@ -228,8 +237,27 @@ export async function POST(request: NextRequest) {
     publicStatus: publicScoring.publicStatus,
     publicEligibilityScore: publicScoring.publicEligibilityScore,
     publicEligibilityReason: publicScoring.publicEligibilityReason,
+    // Override any user-chosen visibility on a safety hard-block. Placed after
+    // the spread so it wins over categorizedQuestionFields.visibility.
+    ...(blockedVisibility ? { visibility: blockedVisibility } : {}),
   });
   console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: categorizedQuestionFields.verified, category: categorizedQuestionFields.category, canonicalSubcategory: categorizedQuestionFields.canonicalSubcategory, difficultyTier: difficultyAssessment.tier });
+
+  // Safety hard-block: short-circuit BEFORE any fan-out (broadcast + direct
+  // send), KB-domain opening, and the success payload. The question is saved
+  // as 'blocked' (in the author's bank, but unshareable) and must not reach any
+  // recipient feed even in this same request. We do not name the triggered
+  // category. Matches the existing creation-error response shape.
+  if (blockedVisibility) {
+    console.info('[questions/create] safety_blocked', { questionId: created.id, userId: session.userId });
+    return NextResponse.json(
+      {
+        error: 'failed_content_check',
+        message: "We couldn't publish or share that question because it didn't pass a content check.",
+      },
+      { status: 422 },
+    );
+  }
   const feedShare = {
     requested: shareToFeed,
     createdCount: 0,

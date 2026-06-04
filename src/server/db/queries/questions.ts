@@ -412,7 +412,9 @@ export async function createQuestion(params: {
   publicStatus?: 'not_scored' | 'eligible_pending' | 'rejected' | 'opted_out' | 'migrated';
   publicEligibilityScore?: number | null;
   publicEligibilityReason?: string | null;
-  visibility?: 'public' | 'friends' | 'private';
+  // 'blocked' is set by the create route on a safety-fail vet verdict; it is
+  // not user-selectable. See verdictToBlockedVisibility.
+  visibility?: 'public' | 'friends' | 'private' | 'blocked';
 }): Promise<{ id: string }> {
   await ensureQuestionSurfacePriorityColumn();
 

@@ -59,6 +59,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Safety hard-block: a question that failed the safety vet is marked
+  // visibility='blocked' and can never be sent to a recipient, even by its
+  // author. The feed render predicate would hide it anyway, but reject at the
+  // entry point so no feed row is written. Non-graphic message; category not named.
+  if (question[0].visibility === 'blocked') {
+    return NextResponse.json(
+      { error: 'invalid_question', message: "That question can't be sent because it didn't pass a content check." },
+      { status: 400 },
+    );
+  }
+
   const [alreadyCorrect, alreadyInFeed] = await Promise.all([
     userAnsweredQuestionCorrectly(parsed.recipientUserId, sendableQuestionId!),
     userHasQuestionInBlockingFeed(parsed.recipientUserId, sendableQuestionId!),

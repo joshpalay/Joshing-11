@@ -1,0 +1,17 @@
+-- Migration: QuestionVisibility 'blocked' terminal state.
+--
+-- Adds a 'blocked' value to QuestionVisibility for questions that fail the
+-- safety vet (slurs, harassment, sexual content involving minors, doxxing).
+-- Unlike 'rejected' publicStatus — which only keeps a question out of the
+-- public pool while leaving it shareable to friends — 'blocked' is a hard
+-- block: questionVisibilityPredicate and every bank/send/game read path
+-- already exclude any visibility outside ('public','friends'), so a blocked
+-- question can never reach a recipient feed, a direct send, a Joshing Game,
+-- or the daily pool, and can never be flipped back to a shareable state.
+--
+-- An idempotent guard mirroring this enum addition also lands in
+-- src/instrumentation.ts so preview/production databases that may have this
+-- migration recorded without the value actually present can still boot
+-- (Postgres forbids referencing a newly-added enum value inside the same
+-- transaction that adds it, and Drizzle wraps the migrator in a transaction).
+ALTER TYPE "public"."QuestionVisibility" ADD VALUE IF NOT EXISTS 'blocked';
