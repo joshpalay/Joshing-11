@@ -532,9 +532,28 @@ export function buildQuestionWriterHref(idea: string): string {
     : '/questions?create=1&intent=bank'
 }
 
+// Example questions the composer placeholder cycles through, one every few
+// seconds, so the prompt keeps suggesting the kind of thing worth asking.
+const CONTRIBUTE_PLACEHOLDER_EXAMPLES = [
+  'Who was the main character in Catch 22?',
+  'Who starred in the Tim Burton Batman films?',
+  'Who was the 16th president of the United States?',
+] as const
+
+const CONTRIBUTE_PLACEHOLDER_INTERVAL_MS = 4000
+
 function FeedContributeFooter() {
   const router = useRouter()
   const [idea, setIdea] = useState('')
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
+
+  // Circulate the placeholder through the example questions every few seconds.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPlaceholderIndex((index) => (index + 1) % CONTRIBUTE_PLACEHOLDER_EXAMPLES.length)
+    }, CONTRIBUTE_PLACEHOLDER_INTERVAL_MS)
+    return () => clearInterval(timer)
+  }, [])
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -581,7 +600,7 @@ function FeedContributeFooter() {
               <textarea
                 value={idea}
                 onChange={(event) => setIdea(event.target.value)}
-                placeholder="Who was the main character in Catch 22?"
+                placeholder={CONTRIBUTE_PLACEHOLDER_EXAMPLES[placeholderIndex]}
                 aria-label="What question would you like to be asked?"
                 rows={5}
                 className="min-h-[200px] w-full resize-none rounded-[8px] border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-base text-[var(--brand-ink)] placeholder:text-[var(--brand-ink-400)] outline-none focus:border-[var(--brand-link)]"
