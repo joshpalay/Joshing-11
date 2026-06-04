@@ -96,6 +96,7 @@ export function InlineAnswerFlow({
       <p
         style={{
           margin: 0,
+          paddingRight: 24,
           fontFamily: 'Georgia, serif',
           fontSize: 17,
           lineHeight: 1.5,
