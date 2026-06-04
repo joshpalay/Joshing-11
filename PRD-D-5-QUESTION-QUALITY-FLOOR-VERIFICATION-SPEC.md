@@ -76,6 +76,8 @@ Three load-bearing ideas:
 |D11|Empirical human correct-rate overrides the model’s difficulty estimate; feeds the floor                   |Locked|
 |—  |Source strategy: open web + trust layer (corroboration + reputation ranking), not a curated corpus        |Locked|
 
+> **Build status (2026-06-04).** D1–D11 are now built across build prompts B1–B5. See [§11 Build log](#11-build-log--b1b5-embedding-provider--deviations) for the per-prompt status, the embedding-provider choice, and the deviations from the spec as written (notably D9 attribution and D10 embedding gating).
+
 -----
 
 ## 5. Component specs
@@ -211,3 +213,38 @@ Dependencies: verification needs the pool’s trust tiers; retrieval feeds the p
 - [ ] Answer derived at low temp; verification fails closed for friend-facing; `acceptable_variants` honored in grading.
 - [ ] Empirical correct-rate overrides `difficulty_estimate` and feeds the floor.
 - [ ] No leaderboard, no curated corpus, no onboarding depth prompt introduced.
+
+-----
+
+## 11. Build log — B1–B5, embedding provider & deviations
+
+§§1–10 are the plan. This section is the as-built record folded back in after the B1–B5 runs (the B5 closing note: "fold all eleven decisions into the spec of record and log the embedding-provider choice and any deviations"). It is the durable answer to *what actually shipped, and where it diverged from the spec as written.*
+
+### 11.1 Build-prompt status
+
+B1–B4 are marked ✓ by the B5 build prompt (the engine pass); B5 is the surface pass in this branch. Mechanisms cited below were verified directly against the shipped code.
+
+| Prompt | Scope | Decisions | Status |
+|--------|-------|-----------|--------|
+| **B1** | Pool substrate — durable (no expiry), trust-tier/scope/perishable/`source_refs`/empirical-rate fields, unified selection layer, embedding-dedup scaffolding, human-beats-machine collision | D7, D8, D9 (scope field), D10 | Shipped |
+| **B2** | Difficulty floor + register — signal-keyed floor, enthusiast rung + partial-erosion, hint-string rewrite, year-example demotion / `year_or_date` gate, trivia-of-trivia rule | D1, D2, D3, D4 | Shipped |
+| **B3** | Retrieval-grounded generation + provenance — web search inside generation, corroboration + reputation ranking, `source_refs`, source-backed explainer; embedding dedup wired in | D6 (first cut), D10, source strategy | Shipped |
+| **B4** | Verification stack — ask-to-answer gate, human-play promotion + "nobody got it", low-temp answer, fail-by-stakes, `acceptable_variants`, tier-gated surfacing, empirical override | D5, D6, D11 | Shipped |
+| **B5** | Authoring UI (D9) — public-by-default signpost + one-tap friends-only override; relationship-aware author attribution | D9 | PR #612 (this branch) |
+
+### 11.2 Embedding provider (D10)
+
+- **Provider / model:** Voyage AI **`voyage-3.5-lite`**, **1024-dim** (`src/server/llm/embeddings.ts`; stored in the `embedding vector(1024)` columns on both pool tables — `src/server/db/schema.ts`).
+- **Why Voyage:** the rest of the pipeline is Anthropic-only and Anthropic ships no first-party embedding model; Voyage is Anthropic's recommended embeddings partner. Calls are server-side only.
+- **Gating (deviation — see 11.3c):** embedding dedup is **best-effort and OFF until `VOYAGE_API_KEY` is provisioned** (also disabled when `LLM_ENABLED=false`). With no key, `embedText`/`embedTexts` return `null` and callers fall back to the deterministic guards (fact_key + Haiku + normalized text) — this is what let B1/B3 ship with no behavior change.
+- **Insert-time path:** `embedAndResolveDuplicate` (`src/server/pool/dedup.ts`) embeds the new row, stores the vector, finds the nearest neighbour across the unified pool by cosine distance, and applies the human-beats-machine collision rule (`markPoolDuplicate`).
+
+### 11.3 Deviations from the spec as written
+
+a. **D9 scope is stored on the existing `visibility` column for human rows (B1).** The spec models `scope` as `friends_only | public`. Machine rows (`GeneratedQuestion`) got a native `scope` column; human-authored rows (`Question`) reuse the existing `QuestionVisibility` (`private | public | friends`) rather than duplicating a column, and the unified selection layer derives scope via `visibilityToScope` (`friends → friends_only`, else passthrough) in `src/server/db/queries/pool.ts`. The `QuestionScope` enum carries a third `private` value for lossless representation. Net behavior matches the spec; only the storage differs.
+
+b. **D9 attribution shipped as universal profile links, not "display-name-to-strangers" (B5).** The spec says *full identity to friends; display name to strangers.* The shipped product decision (B5 run, 2026-06-04) is **everyone gets a profile link, attribution is sender-only, and there is no friend/stranger gating.** This holds the privacy line because (i) no surface renders a per-author avatar to strangers — the only per-user "avatar" treatment is the feed's name-colour, which attributes the *in-graph sender*, never the underlying author; and (ii) the profile page is itself relationship-gated (a stranger sees only public sections). Surface specifics: the Feed and the activity Stream/Lately/Convergence already linked everyone; the **Daily Five gameplay chat stays plain text** (names are not links there, by design) while the **summary page links author names**. The personal/biographical answer-suggestion redirect remains in force as the privacy guard the spec intends.
+
+c. **Embedding dedup is opt-in via `VOYAGE_API_KEY`, not always-on (D10; B1/B3).** D10 says "build embedding dedup now"; it is built but gated (see 11.2). Until the key is provisioned the deterministic guards remain the dedup backstop.
+
+d. **B5 friends-only override reuses the existing three-way visibility control** (`Public | Followers | Private`) rather than introducing a new two-state toggle. `Followers` = `friends_only`; `Private` maps to the lossless `private` scope. No new control or visual pattern was added; the signpost reframes the existing helper text as a calm, positive statement (never a blocking warning).
