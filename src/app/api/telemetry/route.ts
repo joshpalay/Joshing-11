@@ -1,21 +1,22 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 
 import { getSession } from '@/server/auth/session'
 import { logTelemetry, type TelemetryEventName } from '@/server/telemetry'
 
 export const dynamic = 'force-dynamic'
 
-const CLIENT_TELEMETRY_EVENTS = new Set<TelemetryEventName>([
+const CLIENT_TELEMETRY_EVENTS = [
   'add_friend_started',
   'add_friend_message_copied',
   'add_friend_sms_handoff_opened',
   'friend_invite_auth_started',
-])
+] as const satisfies readonly TelemetryEventName[]
 
-type TelemetryBody = {
-  event?: unknown
-  metadata?: unknown
-}
+const bodySchema = z.object({
+  event: z.enum(CLIENT_TELEMETRY_EVENTS),
+  metadata: z.unknown().optional(),
+})
 
 function parseMetadata(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -37,10 +38,9 @@ function parseMetadata(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as TelemetryBody | null
-  const event = typeof body?.event === 'string' ? body.event : ''
+  const parsed = bodySchema.safeParse(await request.json().catch(() => null))
 
-  if (!CLIENT_TELEMETRY_EVENTS.has(event as TelemetryEventName)) {
+  if (!parsed.success) {
     return NextResponse.json(
       { error: 'invalid_event', message: 'Unsupported telemetry event.' },
       { status: 400 }
@@ -48,8 +48,8 @@ export async function POST(request: Request) {
   }
 
   const session = await getSession()
-  logTelemetry(event as TelemetryEventName, {
-    ...parseMetadata(body?.metadata),
+  logTelemetry(parsed.data.event, {
+    ...parseMetadata(parsed.data.metadata),
     user_id: session?.userId ?? null,
   })
 

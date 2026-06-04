@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { dismissDomain, reinstateDomain } from '@/server/db/queries/feed';
 
 export const dynamic = 'force-dynamic';
 
+const bodySchema = z.object({ domain: z.string().optional().catch(undefined) });
+
 function parseDomain(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const domain = (value as Record<string, unknown>).domain;
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  const domain = parsed.data.domain;
   return typeof domain === 'string' && domain.trim() ? domain.trim() : null;
 }
 
