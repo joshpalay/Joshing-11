@@ -66,7 +66,10 @@ BAD (multiple-choice phrasing — never produce these):
 
 GOOD (open recall):
 - "What does Sally Seton represent to the young Clarissa in Mrs. Dalloway?"
-- "In what year did Tchaikovsky premiere his Sixth Symphony?"
+- "What does the madeleine awaken in the narrator of In Search of Lost Time?"
+
+TRIVIA-OF-TRIVIA RULE:
+Prefer questions of substance — "what is X", "what does X mean", "why does X matter", "who did X" — over questions of mere recall — "what year", "what number", "what label". A date, a count, or a name is worth asking only when that specific fact is itself meaningful; a question that lands on substance is almost always the better question. Lead with the idea, not the index card.
 
 STYLE EXEMPLARS (match this register, specificity, and concision):
 These are gold-standard Joshing questions. Mimic their tone — literate, confident, and specific. Pull from comparable depth (named characters, named works, technical terms, specific years, named figures) rather than vague appreciation or "explain why" questions. Notice how they assume a cultured audience without condescension.
@@ -118,7 +121,7 @@ QUESTION SHAPE VARIETY:
 Trivia gets monotonous when every question follows the same template ("What is the name of X?"). Vary the shape across the batch. Choose from this catalog and emit the chosen shape on each question via the question_shape field:
 
 - "identification": asks for a name, term, title, or label (e.g. "What is the name of the dwarf who forges the ring?")
-- "year_or_date": asks for a year, date, or temporal ordering (e.g. "In what year did the Berlin Wall fall?")
+- "year_or_date": asks for a year, date, or temporal ordering. Use ONLY when the date itself is meaningful — a turning point, an anniversary, a deliberate juxtaposition — never as a default or filler in place of a substance question (e.g. "In what year did the Berlin Wall fall?")
 - "in_which_work": asks which work, scene, chapter, movement, or section something appears in
 - "who_did_what": asks which character/person performs a specific act (e.g. "Who kills Polonius?")
 - "sequence_or_order": asks for ordering of events, items, or steps
@@ -233,6 +236,8 @@ function difficultyInstruction(preference: string | undefined, adaptiveLevel?: n
 type AvoidQuestionEntry = RecentDailyQuestionEntry;
 type AvoidFactKeyEntry = RecentFactKeyEntry;
 
+type TerritoryType = 'declared' | 'demonstrated';
+
 function buildUserPrompt(
   domains: string[],
   count: number,
@@ -243,6 +248,7 @@ function buildUserPrompt(
   domainDifficultyOverrides?: ReadonlyMap<string, string>,
   adaptiveLevel?: number | null,
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
+  domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -296,6 +302,28 @@ ${lines.join('\n')}`;
     if (instruction) difficultyHint = `\n\nDifficulty instruction: ${instruction}`;
   }
 
+  // Territory register (PRD-D-5 §5.2). A DECLARED domain is one the player chose
+  // — they hold a floor at the engaged-fan rung, so questions must read for
+  // someone who actively follows it, never tourist-level recognition trivia. A
+  // DEMONSTRATED domain surfaced from play; meet a newcomer at an accessible
+  // register and let depth climb. This mirrors the floor the difficulty mapper
+  // already applies, so the prose register and the target rate stay aligned.
+  let territoryHint = '';
+  if (domainTerritoryTypes && domainTerritoryTypes.size > 0) {
+    const declaredDomains = domains.filter((d) => domainTerritoryTypes.get(d) === 'declared');
+    const introducedDomains = domains.filter((d) => domainTerritoryTypes.get(d) === 'demonstrated');
+    const lines: string[] = [];
+    if (declaredDomains.length > 0) {
+      lines.push(`- DECLARED (the player chose to learn these — write for an engaged enthusiast who actively follows the domain; assume real familiarity and never ask tourist-level "who composed it" recognition trivia): ${declaredDomains.join(', ')}`);
+    }
+    if (introducedDomains.length > 0) {
+      lines.push(`- INTRODUCED (surfaced from the player's activity — meet a curious newcomer at an accessible register and let difficulty climb with play): ${introducedDomains.join(', ')}`);
+    }
+    if (lines.length > 0) {
+      territoryHint = `\n\nDomain familiarity:\n${lines.join('\n')}`;
+    }
+  }
+
   const domainSection =
     domains.length === count && count > 1
       ? `Generate exactly one trivia question for each of the following ${count} domains:\n${domains.map((d, i) => `${i + 1}. ${d}`).join('\n')}`
@@ -316,7 +344,7 @@ ${perDomain.join('\n')}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${subAnglesHint}
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${subAnglesHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -761,6 +789,7 @@ async function callLlmOnce(
   domainDifficultyOverrides?: ReadonlyMap<string, string>,
   adaptiveLevel?: number | null,
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
+  domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
 ): Promise<LlmQuestion[]> {
   const client = getAnthropicClient();
   if (!client) return [];
@@ -787,6 +816,7 @@ async function callLlmOnce(
           domainDifficultyOverrides,
           adaptiveLevel,
           subAnglesByDomain,
+          domainTerritoryTypes,
         ),
       },
     ],
@@ -808,6 +838,7 @@ export async function generateDailyQuestions(
   adaptiveLevel?: number | null,
   previousFactKeys: AvoidFactKeyEntry[] = [],
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
+  domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
 
@@ -841,6 +872,7 @@ export async function generateDailyQuestions(
         domainDifficultyOverrides,
         adaptiveLevel,
         subAnglesByDomain,
+        domainTerritoryTypes,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -856,6 +888,7 @@ export async function generateDailyQuestions(
         domainDifficultyOverrides,
         adaptiveLevel,
         subAnglesByDomain,
+        domainTerritoryTypes,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -1204,6 +1237,14 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     ? await getDomainDifficultyOverrides(userId, domainsForRound).catch(() => undefined)
     : undefined;
 
+  // territoryType (declared | demonstrated) per selected domain — threaded into
+  // the generation prompt so its register matches the difficulty floor (PRD-D-5
+  // §5.2): declared domains read for an enthusiast, demonstrated for a newcomer.
+  const territoryByDomain = new Map<string, TerritoryType>();
+  for (const entry of knowledgeBase) {
+    territoryByDomain.set(entry.domain, entry.territoryType);
+  }
+
   const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
 
   // Try to fill slots from the cross-user bank (previously-generated questions
@@ -1239,6 +1280,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       adaptiveLevel,
       previousFactKeys,
       subAnglesByDomain,
+      territoryByDomain,
     );
   }
 
