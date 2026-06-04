@@ -1259,14 +1259,14 @@ function FeedListContent({
           // eyebrow (standing in for the hidden surface tabs), a left-aligned
           // serif headline, the centered speech-bubble art, and a right-aligned
           // orange "add friends" link.
-          <section className="py-8">
+          <section className="py-4">
             <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
               Questions from friends
             </p>
             <h2 className="mt-1 font-serif text-[18px] font-medium text-[var(--brand-ink)]">
               You are all caught up!
             </h2>
-            <div className="my-5 flex justify-center">
+            <div className="my-3 flex justify-center">
               <SpeechBubbleIllustration className="h-24 w-auto" />
             </div>
             {showInviteFriendCta ? (
