@@ -16,6 +16,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/server/db';
 import { masteryEvents, questions } from '@/server/db/schema';
+import { empiricalMinSamples, resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty';
 
 function numEnv(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -101,12 +102,25 @@ export async function evaluateQuestionTrustOnPlay(questionId: string): Promise<v
   const agg = await readPlayAggregate(questionId);
   const minCorrect = humanValidatedMinCorrect();
   const minHolders = nobodyCorrectMinHolders();
+  const minSamples = empiricalMinSamples();
 
-  // Cheap exit: nothing to do until either threshold is in reach.
-  if (agg.distinctCorrect < minCorrect && !(agg.distinctAnswerers >= minHolders)) return;
+  // Cheap exit: nothing to do until a promotion, a flag, or an empirical
+  // difficulty recompute is in reach.
+  if (
+    agg.distinctCorrect < minCorrect &&
+    agg.distinctAnswerers < minHolders &&
+    agg.distinctAnswerers < minSamples
+  ) {
+    return;
+  }
 
   const [current] = await db
-    .select({ trustTier: questions.trustTier, nobodyCorrectFlag: questions.nobodyCorrectFlag })
+    .select({
+      trustTier: questions.trustTier,
+      nobodyCorrectFlag: questions.nobodyCorrectFlag,
+      calibratedDifficulty: questions.calibratedDifficulty,
+      difficultyEstimate: questions.difficultyEstimate,
+    })
     .from(questions)
     .where(eq(questions.id, questionId))
     .limit(1);
@@ -131,5 +145,24 @@ export async function evaluateQuestionTrustOnPlay(questionId: string): Promise<v
       .update(questions)
       .set({ nobodyCorrectFlag: decision.nobodyCorrectFlag })
       .where(eq(questions.id, questionId));
+  }
+
+  // D11 (B4 Phase 5): once enough humans have played, the measured correct rate
+  // overrides the model's difficulty_estimate. Persist it to calibrated_difficulty
+  // — the value serving + base-points already read — so the floor self-corrects.
+  if (agg.distinctAnswerers >= minSamples) {
+    const empiricalRate = agg.distinctCorrect / agg.distinctAnswerers;
+    const effective = resolveEffectiveDifficulty({
+      estimate: current.difficultyEstimate,
+      empiricalRate,
+      nAnswered: agg.distinctAnswerers,
+      minSamples,
+    });
+    if (effective.source === 'empirical' && effective.difficulty !== current.calibratedDifficulty) {
+      await db
+        .update(questions)
+        .set({ calibratedDifficulty: effective.difficulty })
+        .where(eq(questions.id, questionId));
+    }
   }
 }
