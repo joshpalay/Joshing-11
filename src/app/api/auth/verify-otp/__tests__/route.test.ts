@@ -76,7 +76,6 @@ vi.mock('@/server/friends/invitations', () => ({
 }))
 
 import { POST } from '@/app/api/auth/verify-otp/route'
-import { INVITE_REQUIRED_MESSAGE } from '@/server/friends/invitations'
 
 const EXISTING_USER = {
   id: 'user-1',

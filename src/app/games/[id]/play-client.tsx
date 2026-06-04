@@ -168,6 +168,9 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
   // we just re-assert it when the field becomes editable again.
   useEffect(() => {
     if (currentQuestion && !pending) answerInputRef.current?.focus();
+    // Keyed on the stable question id, not the derived `currentQuestion` object
+    // (recomputed every render via .find(), which would re-fire focus constantly).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentQuestion?.questionId, pending]);
 
   async function submitAnswer() {
