@@ -226,6 +226,22 @@ function remainingCopy(state: State): string | null {
   return 'Last review for today';
 }
 
+// D9 (PRD-D-5 §5.1): authored questions are public by default — reach is a
+// reward, not a risk. The signpost states this plainly and positively; it is
+// never a cautionary or blocking warning. Friends-only is the calm exception.
+// `visibility` is the existing column the unified pool layer reads as `scope`
+// (public → public, friends → friends_only); no new field is written.
+export function scopeSignpost(visibility: 'public' | 'friends' | 'private'): string {
+  switch (visibility) {
+    case 'public':
+      return 'Others can play this. Your friends will see it’s from you.';
+    case 'friends':
+      return 'Kept to friends only — only people who follow you will see it.';
+    case 'private':
+      return 'Only you can see this — it won’t be shared.';
+  }
+}
+
 export function QuestionForm({
   mode = 'create',
   initialValues,
@@ -611,7 +627,7 @@ export function QuestionForm({
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">{state.visibility === 'public' ? 'Anyone can see this question.' : state.visibility === 'friends' ? 'Only people who follow you can see this.' : 'Only you can see this — it won’t be shared.'}</p>
+                <p className="mt-2 text-xs text-foreground">{scopeSignpost(state.visibility)}</p>
               </div>
               <label className="mb-2 flex cursor-default items-center gap-2 text-sm"><input type="checkbox" checked readOnly disabled className="rounded" /><span className="text-foreground">Save to bank</span></label>
               <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING' || state.visibility === 'private'} /><span className="text-foreground">Share with all friends</span></label>

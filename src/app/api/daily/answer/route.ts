@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { gradeAnswer } from '@/server/grading';
+import { gradeAnswer, type GradeOutcome } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
 import {
@@ -20,6 +20,7 @@ import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { type QueueSlot } from '@/server/daily/types';
 import { asQueueSlots } from '@/server/daily/catchup';
 import { resolveDailyBasePoints } from '@/server/daily/types';
+import { resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { computeAnswerState } from '@/server/answer-state';
@@ -150,6 +151,7 @@ export async function POST(request: NextRequest) {
       canonicalSubcategory: string;
       broadCategory: string | null;
       basePoints: number;
+      acceptedAlternatives: string[];
     };
 
     let question: DailyAnswerQuestion;
@@ -165,6 +167,19 @@ export async function POST(request: NextRequest) {
       if (!row) {
         return dailyAnswerErrorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
       }
+      // D11 (B4 Phase 5): once a bank question has real play history, its measured
+      // correct rate overrides the model's difficulty_estimate for scoring — the
+      // pool teaches the floor what is actually easy. Falls back to the stored
+      // basePoints when there isn't enough play yet.
+      const effective = resolveEffectiveDifficulty({
+        estimate: row.difficultyEstimate,
+        empiricalRate: row.empiricalCorrectRate,
+        nAnswered: row.nAnswered,
+      });
+      const basePoints =
+        effective.source === 'empirical'
+          ? resolveDailyBasePoints(effective.difficulty)
+          : Math.round(row.basePoints);
       question = {
         generatedId: row.id,
         canonicalId: null,
@@ -173,7 +188,9 @@ export async function POST(request: NextRequest) {
         explainer: row.explainer,
         canonicalSubcategory: row.canonicalSubcategory,
         broadCategory: row.broadCategory,
-        basePoints: Math.round(row.basePoints),
+        basePoints,
+        // acceptable_variants (B4 Phase 4): right-but-rephrased answers grade correct.
+        acceptedAlternatives: row.acceptableVariants ?? [],
       };
     } else {
       const [row] = await db
@@ -198,29 +215,32 @@ export async function POST(request: NextRequest) {
         canonicalSubcategory: row.canonicalSubcategory ?? slot.domain,
         broadCategory: row.broadCategory,
         basePoints: resolveDailyBasePoints(difficulty),
+        acceptedAlternatives: row.acceptedAlternatives ?? [],
       };
     }
 
     const canonicalAnswer = question.answer;
 
-    const grade = parsed.gaveUp
-      ? { result: 'wrong' as const, consolation: null, confidence: 1, gradedVia: 'exact' as const }
+    // Give-up is a deliberate, real wrong — a genuine scored verdict, not an infra
+    // failure — so it's constructed as a scored outcome and never held for retry.
+    const grade: GradeOutcome = parsed.gaveUp
+      ? { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact' }
       : await gradeAnswer(
           parsed.submittedAnswer,
           canonicalAnswer,
-          [],
+          question.acceptedAlternatives,
           question.questionText,
           'factual',
         );
-    // The LLM grader was unreachable (timeout, parse error, no client), so its
-    // 'wrong' verdict is not a real judgement of the answer — it's a deterministic
-    // placeholder. Scoring the player wrong for an Anthropic outage is the most
-    // off-brand failure mode in a product whose thesis is "wrong answers are
-    // connection events, not penalties." Instead of persisting anything, hold the
-    // answer in a non-scored retry state: leave the slot untouched (unanswered) and
-    // return a transparent, retryable error so the player can simply resubmit.
-    // Give-ups skip the grader entirely (gradedVia: 'exact'), so they're never held.
-    if (grade.gradedVia === 'fallback') {
+    // The LLM grader was unreachable (timeout, parse error, no client), so there is
+    // no verdict at all — the outcome is `unscored`, never a 'wrong'. Scoring the
+    // player wrong for an Anthropic outage is the most off-brand failure mode in a
+    // product whose thesis is "wrong answers are connection events, not penalties."
+    // Instead of persisting anything, hold the answer in a non-scored retry state:
+    // leave the slot untouched (unanswered) and return a transparent, retryable
+    // error so the player can simply resubmit. Give-ups are scored above, so they
+    // are never held here.
+    if (grade.status === 'unscored') {
       console.warn('[daily/answer] grader unavailable; holding answer for retry', {
         queueId: parsed.queueId,
         slotIndex: parsed.slotIndex,

@@ -463,6 +463,34 @@
       "when": 1782172800000,
       "tag": "0065_daily_refine_decision",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1782259200000,
+      "tag": "0066_ask_to_answer_verified",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1782345600000,
+      "tag": "0067_human_validated_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1782432000000,
+      "tag": "0068_acceptable_variants",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1782518400000,
+      "tag": "0069_question_visibility_blocked",
+      "breakpoints": true
     }
   ]
 }

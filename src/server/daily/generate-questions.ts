@@ -38,6 +38,7 @@ import { normalizeFactKey } from '@/server/questions/fact-key';
 import { textContainsAnswer } from '@/server/questions/self-answering';
 import { resolveDailyBasePoints } from './types';
 import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
+import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
 
 // Cap the recent question-text block at this many entries inside the prompt.
 // The full recent history (up to 200) is still used to derive the fact-key
@@ -70,6 +71,26 @@ GOOD (open recall):
 
 TRIVIA-OF-TRIVIA RULE:
 Prefer questions of substance — "what is X", "what does X mean", "why does X matter", "who did X" — over questions of mere recall — "what year", "what number", "what label". A date, a count, or a name is worth asking only when that specific fact is itself meaningful; a question that lands on substance is almost always the better question. Lead with the idea, not the index card.
+
+FAN-SALIENCE RULE (Rule 1 — tier-dependent):
+Do NOT default to the most nameable entity in a work — the character roster, the title, the principal location. Those are wiki-salient (easy to look up, dull to be asked). Chase fan-salient facts instead: the thing a devoted fan of THIS specific work would be delighted to be recognized for knowing — the rewatch-catch, the running joke, the exact wording of a famous line, the specific beat or object fans hold onto. Apply by difficulty tier:
+- specialist and moderate: the question MUST clear fan-salience. A generic "name the entity" question is a FAILURE at these tiers, even if factually correct.
+- accessible: fan-salience is PREFERRED but NOT required. Easy facts are allowed to stay simple — forcing delight onto a trivially easy fact produces strained, contorted questions. An accessible question need only clear Rule 2 below. Do not make accessible questions harder to satisfy this rule.
+
+STRIP-THE-DOMAIN TEST (Rule 2 — hard floor, ALL tiers including accessible):
+Before emitting, mentally remove the work's title from the question. If what remains could appear in any generic trivia app, the question is too generic — revise it. The angle, not just the subject, must be specific to the work.
+- PASSES: "In American Psycho, what color is Paul Allen's business card?" — strip the title and the angle is still specific to the work.
+- FAILS: "In Gilmore Girls, what is the name of Rory's first boyfriend?" — strip the title and it is generic teen-romance trivia.
+
+ONE CLEAN ANSWER (Rule 3 — ALL tiers):
+The answer must be a single short, checkable response — a name, a title, a word, a short phrase. NEVER a sentence or paragraph that explains the answer. If the natural answer is explanatory (e.g. "he understands the language of birds"), re-aim the question so the answer is crisp (e.g. ask what specific ability the potion grants → "birdsong"). Paragraph-length answers grade unpredictably and must not be produced. (This sharpens, but does not relax, the single-answer factual-recall and no-answer-leak rules above — a cleverer setup still must not name its own answer.)
+
+CALIBRATION PAIRS (generic → fan-salient; study these — concrete pairs calibrate harder than abstract principles):
+- BAD (generic, roster): "In Gilmore Girls, what is the name of Lorelai's dog?" → GOOD (fan-salient, same answer): "Lorelai names her dog after a Canadian crooner — a running gag, since the real musician also haunts her dreams. What's the dog called?" → "Paul Anka"
+- BAD (generic location): "In what city is the Dragonfly Inn located?" → GOOD (accessible, clears strip-the-domain): "Lorelai and Sookie's inn shares the town's quirk of naming businesses after insects. What's it called?" → "the Dragonfly Inn"
+- BAD (generic, title): "In American Psycho, what is the protagonist's name?" → GOOD (specialist, fan-salient): "In American Psycho, what color is Paul Allen's business card?" → "bone"
+- BAD (paragraph answer): "What does Siegfried gain after tasting the dragon's blood?" → "He suddenly understands the language of the birds." → GOOD (one clean answer): "After tasting Fafner's blood, Siegfried can suddenly understand the song of which creatures?" → "birds"
+- GOOD reference (already on-target, specialist): the unproduced Dungeons & Dragons animated finale that fans still trade the script of → "Requiem"
 
 STYLE EXEMPLARS (match this register, specificity, and concision):
 These are gold-standard Joshing questions. Mimic their tone — literate, confident, and specific. Pull from comparable depth (named characters, named works, technical terms, specific years, named figures) rather than vague appreciation or "explain why" questions. Notice how they assume a cultured audience without condescension.
@@ -1033,19 +1054,41 @@ export async function generateDailyQuestions(
   // aside. Mirrors the parallel/fail-open pattern of the LLM gates above.
   const toPersist = generated.slice(0, count);
   const insideJokeByQuestion = new Map<(typeof toPersist)[number], string | null>();
-  await Promise.all(
-    toPersist.map(async (question) => {
-      const aside = await generateInsideJoke({
-        questionText: question.question_text,
-        correctAnswer: question.answer,
-        broadCategory: question.broad_category,
-        canonicalSubcategory: question.canonical_subcategory,
-      }).catch(() => null);
-      insideJokeByQuestion.set(question, aside);
-    }),
-  );
+  // Ask-to-answer gate (B4 Phase 1): strip the answer and ask a separate cold
+  // solver; a question whose cold answers contradict the stored answer is dropped,
+  // one they corroborate earns machine_verified. Runs in parallel with the aside
+  // precompute; fails open (drops/verifies nothing on an LLM outage). Scoped to
+  // the rows we will actually persist rather than the full generated batch.
+  const [, askResult] = await Promise.all([
+    Promise.all(
+      toPersist.map(async (question) => {
+        const aside = await generateInsideJoke({
+          questionText: question.question_text,
+          correctAnswer: question.answer,
+          broadCategory: question.broad_category,
+          canonicalSubcategory: question.canonical_subcategory,
+        }).catch(() => null);
+        insideJokeByQuestion.set(question, aside);
+      }),
+    ),
+    askToAnswerBatch(
+      toPersist.map((q) => ({ questionText: q.question_text, answer: q.answer })),
+    ),
+  ]);
+  if (askResult.toDrop.size > 0) {
+    console.warn('[daily/generate-questions] dropping ask-to-answer failures', {
+      droppedCount: askResult.toDrop.size,
+      droppedIndices: [...askResult.toDrop].sort((a, b) => a - b),
+      reasons: askResult.reasons,
+      originalCount: toPersist.length,
+    });
+  }
 
-  for (const question of toPersist) {
+  for (let persistIndex = 0; persistIndex < toPersist.length; persistIndex += 1) {
+    const question = toPersist[persistIndex];
+    // Drop ask-to-answer failures: the cold solver contradicted the stored answer.
+    if (askResult.toDrop.has(persistIndex)) continue;
+
     const { canonicalDomain } = await reconcileProposedDomain(
       question.canonical_subcategory,
       userId,
@@ -1075,6 +1118,12 @@ export async function generateDailyQuestions(
     }
 
     const basePoints = resolveDailyBasePoints(question.difficulty_estimate);
+    // Trust tier (B4 Phase 1 / §6): ask-to-answer corroboration promotes to
+    // machine_verified. This non-grounded path has no retrieval corroboration,
+    // so the tier hinges on the ask-to-answer verdict; an unevaluated row (gate
+    // disabled or failed open) stays unverified.
+    const askToAnswerVerified = askResult.verified.has(persistIndex);
+    const trustTier = resolveMachineTrustTier({ askToAnswerVerified, corroborated: false });
     const [row] = await db
       .insert(generatedQuestions)
       .values({
@@ -1089,6 +1138,9 @@ export async function generateDailyQuestions(
         factKey,
         subAngles: question.sub_angles,
         insideJoke: insideJokeByQuestion.get(question) ?? null,
+        trustTier,
+        askToAnswerVerified,
+        acceptableVariants: askResult.variantsByIndex.get(persistIndex) ?? [],
         expiresAt,
         usedInQueue: false,
       })

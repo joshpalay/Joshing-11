@@ -161,6 +161,18 @@ export class JoshingGameValidationError extends Error {
   }
 }
 
+// Fail toward the player (B4 Phase 4 / Drift Risk 2): the LLM grader was
+// unreachable, so its 'wrong' verdict is not a real judgement. Thrown BEFORE any
+// response is persisted so the turn can be retried rather than scored wrong.
+export class JoshingGameGraderUnavailableError extends Error {
+  readonly status = 503;
+
+  constructor() {
+    super('grader unavailable; answer not scored');
+    this.name = 'JoshingGameGraderUnavailableError';
+  }
+}
+
 function assertValidCreateParams(params: {
   title: string;
   recipientIds: string[];
@@ -475,6 +487,11 @@ export async function submitJoshingGameResponse(params: {
     question.questionText,
     question.questionType,
   );
+  // Never persist an outage 'wrong' (Drift Risk 2): bail before any write so the
+  // turn is retryable. No response row, no mastery, no asked_count bump.
+  if (grade.status === 'unscored') {
+    throw new JoshingGameGraderUnavailableError();
+  }
   const isCorrect = grade.result === 'correct';
   const isPartial = false;
   const priorAnswers = await readPriorAnswers(params.userId, params.questionId);

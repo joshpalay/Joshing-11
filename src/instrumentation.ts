@@ -481,7 +481,62 @@ export async function register() {
       await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "empirical_correct_rate" double precision`);
       await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "is_duplicate" boolean NOT NULL DEFAULT false`);
       await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "suppressed_by" text`);
-      await db.execute(sql`UPDATE "GeneratedQuestion" SET "trust_tier" = 'machine_verified' WHERE "trust_tier" = 'unverified'`);
+      // Grandfather-promote the pre-existing machine backlog — but ONLY while the
+      // database is still pre-B4. Once migration 0066 adds ask_to_answer_verified,
+      // we are in the B4 world where fresh rows are promoted explicitly by the
+      // ask-to-answer gate (resolveMachineTrustTier); a blanket boot-time promotion
+      // would then wrongly bump rows the gate deliberately left 'unverified'
+      // (failed/skipped ask-to-answer). The one-time grandfather already ran in the
+      // 0062 migration SQL; this guard only re-applies it for a recovering pre-B4 DB.
+      await db.execute(sql`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'GeneratedQuestion' AND column_name = 'ask_to_answer_verified'
+          ) THEN
+            UPDATE "GeneratedQuestion" SET "trust_tier" = 'machine_verified' WHERE "trust_tier" = 'unverified';
+          END IF;
+        END $$
+      `);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
+    // Migration 0066 (B4 Phase 1) adds GeneratedQuestion.ask_to_answer_verified —
+    // the ask-to-answer corroboration record that (with B3 retrieval) earns the
+    // machine_verified tier. App code reads it via resolveMachineTrustTier, so a
+    // preview/production database that records the migration without the column
+    // present must still boot.
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "ask_to_answer_verified" boolean NOT NULL DEFAULT false`);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
+    // Migration 0067 (B4 Phase 2) adds Question.nobody_correct_flag (the "nobody
+    // got it" review smell) + its partial index. App code (the questions view,
+    // evaluateQuestionTrustOnPlay) reads the column, so a database that records
+    // the migration without it present must still boot. The one-time trust
+    // back-fills (author_confirmed correction + human_validated promotion) are
+    // applied by the migration only — not re-run here — because they are pure data
+    // back-fill (a missing promotion is safe/conservative, never a boot blocker)
+    // and re-aggregating MASTERY_EVENTS on every boot would be wasteful.
+    try {
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "nobody_correct_flag" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "Question_nobody_correct_flag_idx" ON "Question" ("nobody_correct_flag") WHERE "nobody_correct_flag" = true`);
+    } catch {
+      // Question may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
+    // Migration 0068 (B4 Phase 4) adds GeneratedQuestion.acceptable_variants —
+    // equivalent answer phrasings honored in grading. App code (generation persist
+    // + the daily/catchup answer routes) reads it, so a database that records the
+    // migration without the column present must still boot.
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "acceptable_variants" text[] NOT NULL DEFAULT '{}'`);
     } catch {
       // GeneratedQuestion may not exist yet on a fresh database — migrate()
       // creates it before this migration runs.
@@ -734,6 +789,18 @@ export async function register() {
     try {
       await db.execute(sql`
         ALTER TYPE "public"."QuestionVisibility" ADD VALUE IF NOT EXISTS 'friends'
+      `);
+    } catch {
+      // QuestionVisibility may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+    // Migration 0069 adds a 'blocked' value to QuestionVisibility for questions
+    // that fail the safety vet. Pre-applied here for the same reason as 'friends'
+    // above: code paths that read/compare 'blocked' from a preview database where
+    // 0069 is recorded-but-not-fully-applied would 22P02 without this guard.
+    try {
+      await db.execute(sql`
+        ALTER TYPE "public"."QuestionVisibility" ADD VALUE IF NOT EXISTS 'blocked'
       `);
     } catch {
       // QuestionVisibility may not exist yet on a fresh database — migrate()

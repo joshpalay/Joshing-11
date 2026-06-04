@@ -38,7 +38,10 @@ export const categoryEnum = pgEnum('Category', [
   'general_knowledge',
 ]);
 
-export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends']);
+// 'blocked' is a safety hard-block terminal state (see verdictToBlockedVisibility):
+// a question that failed the safety vet. It is NOT user-selectable and is excluded
+// by questionVisibilityPredicate and every bank/send/game read path.
+export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends', 'blocked']);
 
 // B1 pool substrate (PRD-D-5 §5.1 / §6). Trust climbs as a question earns it:
 // unverified (fresh, pre-checks) → machine_verified (retrieval + ask-to-answer,
@@ -325,6 +328,10 @@ export const questions = pgTable(
     perishable: boolean('perishable').notNull().default(false),
     // Provenance refs from retrieval-grounded generation; populated in B3.
     sourceRefs: jsonb('source_refs').$type<string[]>().notNull().default([]),
+    // "Nobody got it" smell (B4 Phase 2, §5.3 layer 3 / §7). True when ≥N distinct
+    // domain-holders have answered and NONE got it right — a hallucination smell,
+    // not a hard question. Flags for review; never auto-deletes (no decay, D8).
+    nobodyCorrectFlag: boolean('nobody_correct_flag').notNull().default(false),
     // Embedding-dedup flags (B3). Human beats machine on collision; the loser is
     // suppressed (flagged), never deleted. suppressedBy holds the surviving
     // question id (may live in either table, so not a hard FK).
@@ -350,6 +357,11 @@ export const questions = pgTable(
     // live tier-gating yet (B4 owns enforcement).
     index('Question_trust_tier_idx').on(table.trustTier),
     index('Question_is_duplicate_idx').on(table.isDuplicate),
+    // Partial index for the "nobody got it" review queue (B4 Phase 2): the flag is
+    // true for a tiny minority of rows, so a partial index keeps the scan cheap.
+    index('Question_nobody_correct_flag_idx')
+      .on(table.nobodyCorrectFlag)
+      .where(sql`${table.nobodyCorrectFlag} = true`),
   ],
 );
 
@@ -588,6 +600,15 @@ export const generatedQuestions = pgTable(
     scope: questionScopeEnum('scope').notNull().default('public'),
     perishable: boolean('perishable').notNull().default(false),
     sourceRefs: jsonb('source_refs').$type<string[]>().notNull().default([]),
+    // Ask-to-answer record (B4 Phase 1, PRD-D-5 §5.3 layer 2). True when an
+    // independent cold solver corroborated the stored answer at generation time.
+    // This + B3 corroboration is what earns the machine_verified trust tier.
+    askToAnswerVerified: boolean('ask_to_answer_verified').notNull().default(false),
+    // Acceptable answer variants (B4 Phase 4, §5.3). Equivalent phrasings the cold
+    // solver produced that the judge accepted; honored in grading so a right-but-
+    // rephrased answer is marked correct. Carried to Question.accepted_alternatives
+    // when a machine row is promoted to canonical.
+    acceptableVariants: text('acceptable_variants').array().notNull().default([]),
     // Empirical play stats (D11 / "nobody got it" smell). Back-filled from answer
     // history where a join exists; machine rows usually start 0 / null.
     nAnswered: integer('n_answered').notNull().default(0),

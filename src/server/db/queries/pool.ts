@@ -58,8 +58,13 @@ type MachineRow = typeof generatedQuestions.$inferSelect;
 type HumanRow = typeof questions.$inferSelect;
 
 /** Human Question.visibility → unified pool scope. */
-export function visibilityToScope(visibility: 'private' | 'public' | 'friends'): PoolScope {
-  return visibility === 'friends' ? 'friends_only' : visibility;
+export function visibilityToScope(visibility: 'private' | 'public' | 'friends' | 'blocked'): PoolScope {
+  if (visibility === 'friends') return 'friends_only';
+  // 'blocked' is a safety hard-block and is never poolable; collapse it to the
+  // most restrictive scope so it can never widen reach even if a future caller
+  // wires selectFromPool without an explicit scope filter.
+  if (visibility === 'blocked') return 'private';
+  return visibility;
 }
 
 /** Empirical played rate, uniform across origins: correct/asked when there is

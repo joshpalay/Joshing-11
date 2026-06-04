@@ -518,6 +518,34 @@ describe('POST /api/questions category leak handling', () => {
     expect(createArgs.publicStatus).toBe('eligible_pending')
   })
 
+  it('hard-blocks a safety-fail verdict: saves as visibility blocked, skips all fan-out, returns a non-graphic content-check error', async () => {
+    categorizeQuestionMock.mockResolvedValue({
+      broad_category: 'Arts & Literature',
+      subcategory: 'Victorian Literature',
+    })
+    // Real verdictToBlockedVisibility (vet-verdict is not mocked) keys off rejectionKind.
+    vetQuestionMock.mockResolvedValue({ status: 'rejected', score: 0.1, reason: 'safety: …', rejectionKind: 'safety' })
+    getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }])
+
+    const response = await POST(questionRequest({ shareToFeed: true, sendToFriendIds: [] }))
+    const body = await response.json()
+
+    expect(response.status).toBe(422)
+    expect(body.error).toBe('failed_content_check')
+    // Must not echo or name the triggered safety category.
+    expect(JSON.stringify(body)).not.toMatch(/slur|harass|minor|doxx|safety/i)
+
+    // Persisted as blocked so it can never be re-shared, even from the bank.
+    expect(createQuestionMock).toHaveBeenCalledTimes(1)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { visibility?: string; publicStatus: string }
+    expect(createArgs.visibility).toBe('blocked')
+    expect(createArgs.publicStatus).toBe('rejected')
+
+    // No fan-out: no broadcast or direct-send feed rows in the same request.
+    expect(state.feedInsertValues).toEqual([])
+    expect(state.questionUpdateValues).toEqual([])
+  })
+
   it('returns 500 with a friendly message when an enrichment step throws', async () => {
     categorizeQuestionMock.mockResolvedValue({
       broad_category: 'Arts & Literature',

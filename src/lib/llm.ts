@@ -23,18 +23,28 @@ import { textContainsAnswer } from '@/server/questions/self-answering';
 
 export type GradeResult = 'correct' | 'wrong';
 
-export type GradingResponse = {
+// A genuine model verdict: the answer was actually graded. Carries `result`.
+export type ScoredGradingResponse = {
+  status: 'scored';
   result: GradeResult;
   confidence: number;
   reason: string;
   // "Snarky but Sweet" — a short, warm quip when the answer is wrong but thematically close.
   // null if the answer is simply off-base or unrelated.
   consolation: string | null;
-  // Set to true when the response is a deterministic fallback (timeout, parse
-  // failure, missing client) rather than an actual model verdict. Callers that
-  // care about "wrong vs. couldn't-grade" should branch on this.
-  fallback?: boolean;
 };
+
+// An infrastructure failure — timeout, parse failure, missing client, malformed
+// result field. This is NOT a judgement of the answer, so it deliberately has no
+// `result` field: reading a verdict off an outage is a type error, by design.
+// The product thesis is "wrong answers are connection events," so a player must
+// never be scored wrong because Anthropic was unreachable.
+export type UnscoredGradingResponse = {
+  status: 'unscored';
+  reason: string;
+};
+
+export type GradingResponse = ScoredGradingResponse | UnscoredGradingResponse;
 
 export type CategoryResult = {
   subcategory: string;
@@ -474,8 +484,8 @@ export function parseJsonObject(rawText: string): Record<string, unknown> | null
   return null;
 }
 
-function fallbackGrading(reason: string = 'llm_error'): GradingResponse {
-  return { result: 'wrong', confidence: 0, reason, consolation: null, fallback: true };
+function fallbackGrading(reason: string = 'llm_error'): UnscoredGradingResponse {
+  return { status: 'unscored', reason };
 }
 
 // "General Knowledge" and "Other" must never reach the UI as a broad_category.
@@ -530,10 +540,15 @@ export async function gradeAnswerWithLLM(
   question: string,
   canonicalAnswer: string,
   submittedAnswer: string,
-  questionType: string
+  questionType: string,
+  acceptedAlternatives: string[] = []
 ): Promise<GradingResponse> {
+  const trimmedAlternatives = acceptedAlternatives.map((a) => a.trim()).filter(Boolean);
+  const alternativesLine = trimmedAlternatives.length > 0
+    ? `\n${wrapUserInput('accepted_alternatives', trimmedAlternatives.join(' | '))}`
+    : '';
   const userMessage = `${wrapUserInput('question', question)}
-${wrapUserInput('correct_answer', canonicalAnswer)}
+${wrapUserInput('correct_answer', canonicalAnswer)}${alternativesLine}
 ${wrapUserInput('submitted_answer', submittedAnswer)}
 ${wrapUserInput('answer_type', questionType)}
 Is the submitted answer correct? Return JSON only.`;
@@ -550,6 +565,7 @@ LENIENCY RULES — mark as correct if:
 - The answer includes the correct answer among other text (e.g. "I think it's Bucephalus" is correct)
 - If the canonical answer is long or explanatory (more than ~10 words), focus on whether the submitted answer captures the core concept or mechanism. Do not require matching supporting detail, background context, or explanatory sentences. A short answer that demonstrates clear understanding of the key idea should be marked correct even if it omits elaboration.
 - If the canonical answer contains a parenthetical generic descriptor (e.g. "A Ressikan flute (a small flute)", "Bucephalus (a horse)", "The Eroica (a symphony)"), the parenthetical signals that the descriptor is itself an acceptable answer. Mark as correct when the submission matches the descriptor — including a recognizable member of that category (e.g. "penny whistle" or "tin whistle" for "a small flute"; "stallion" or "warhorse" for "a horse") — even with hedging filler like "thing", "thingy", "thingamajig", or "something". Filler does not make an otherwise-correct categorical answer vague.
+- If <accepted_alternatives> is present, each entry is an author-approved correct answer with exactly the same standing as the canonical answer. Treat the canonical answer and every accepted alternative as equally valid targets: mark the submission correct if it matches the meaning of the canonical answer OR any accepted alternative. Apply the same leniency (spelling, abbreviation, phrasing, paraphrase) to the alternatives as to the canonical answer. This never overrides the STRICTNESS rules — a genuinely different person, place, or thing is still wrong.
 
 STRICTNESS RULES — mark as wrong if:
 - The answer is a different person, place, or thing entirely
@@ -602,7 +618,7 @@ Return only valid JSON with keys: result, confidence, reason, consolation. No ex
     const reason = asTrimmedString(parsed.reason) ?? 'llm_invalid_response';
     const consolation = result === 'wrong' ? asNullableString(parsed.consolation) : null;
 
-    return { result, confidence, reason, consolation };
+    return { status: 'scored', result, confidence, reason, consolation };
   } catch (error) {
     logFallback('gradeAnswerWithLLM', 'request_failed', summarizeError(error));
     return fallbackGrading('request_failed');

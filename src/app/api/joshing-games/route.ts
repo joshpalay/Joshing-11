@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -108,6 +108,11 @@ export async function POST(request: NextRequest) {
       .where(and(
         inArray(questions.id, uniqueQuestionIds),
         isNull(questions.deletedAt),
+        // Safety hard-block: a question that failed the safety vet
+        // (visibility='blocked') can never be added to a Joshing Game, even
+        // one the author owns. Excluding it here drops it from allowedQuestionIds
+        // so the size check below 400s the request.
+        ne(questions.visibility, 'blocked'),
         or(eq(questions.creatorId, session.userId), isNotNull(userQuestionBank.id)),
       )),
   ]);

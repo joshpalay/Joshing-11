@@ -58,6 +58,12 @@ export type QuestionRecap = {
   isInBank: boolean;
   /** Author display name — set for friend-authored and house questions. */
   authorName: string | null;
+  /**
+   * Author's user id — only for human (friend-authored) questions, so the recap
+   * can link the name to their profile (B5/D9). Null for house/editorial and
+   * LLM-origin questions, which have no users.id to link to.
+   */
+  authorId: string | null;
   /** Author's why — commentary attached at creation, surfaced in the recap. */
   authorNote: string | null;
   /** D-3: the author is the non-human house/editorial author (Editorial badge, non-relational copy). */
@@ -231,6 +237,8 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       domainDisplayName: displayNameForDomain(domain),
       isInBank: slot.question_id ? Boolean(bankedById[slot.question_id]) : false,
       authorName: slot.source === 'friend' || slot.source === 'house' ? (slot.author_name ?? null) : null,
+      // Only friend (human) authors have a linkable profile; house has no users.id.
+      authorId: slot.source === 'friend' ? (slot.author_id ?? null) : null,
       authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
       authorIsHouse: slot.source === 'house',
     };

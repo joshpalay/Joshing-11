@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db, masteryEvents, playerMastery } from '@/server/db';
 import { maybeNotifyInviterOfFirstFive } from '@/server/activity/invite-onboarding';
+import { evaluateQuestionTrustOnPlay } from '@/server/db/queries/trust-promotion';
 import { effectiveTier } from '@/server/mastery/tiers';
 import type { AnswerState, MasteryTier } from '@/types/db';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
@@ -184,6 +185,26 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
       previousTier,
       newTier: nextTier,
     });
+  }
+
+  // Human-play trust promotion + "nobody got it" smell (B4 Phase 2). Best-effort
+  // and fire-after-write: a freshly-recorded human answer may push the canonical
+  // question over the human_validated threshold or the nobody-correct smell.
+  // Skipped for author/curator credit (no real answer_state) and when there is no
+  // canonical question id to evaluate. Never blocks the mastery write.
+  if (
+    params.eventQuestionId &&
+    params.sourceType !== 'author_credit' &&
+    params.sourceType !== 'curator_credit'
+  ) {
+    try {
+      await evaluateQuestionTrustOnPlay(params.eventQuestionId);
+    } catch (error) {
+      console.warn('[mastery] trust-on-play evaluation failed', {
+        questionId: params.eventQuestionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   // Only the surfaces a new user actually plays count toward the invited-friend

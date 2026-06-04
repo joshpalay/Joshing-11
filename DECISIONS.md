@@ -9,7 +9,7 @@ The older specs are archived under `_docs/archive/` for history: `PRD-v11.2.md` 
 v11.3 / v11.4 / v11.5 folded in place — there is no standalone v11.3+ file), `PRD-v11.1.md`, `PRD11.md`,
 and `Joshing_PRD_v10_25 (1).md`.
 
-Last updated: 2026-06-04.
+Last updated: 2026-06-04 (B5 / D9 shipped — see the quality-floor build status below).
 
 ## Durable docs
 
@@ -33,6 +33,9 @@ Execution scaffolding (kept separate, not product spec): [`docs/build-prompts/`]
 - **Send difficulty travels with the question.** The forwarded question keeps its own `difficultyEstimate`. (`PRD-D-0` §4.1.)
 - **Broadcast rolls off after unfollow — won't fix.** Already-surfaced broadcasts are not retroactively purged on unfollow. (`PRD-D-0` §4.2.)
 - **Question quality = floor + verification, shipped together.** The register/quality and narrow-domain-volume problems share one root cause (an over-low difficulty floor), and the unguarded-correctness problem must be fixed *with* the floor change. The full D1–D11 ledger (durable unified pool, signal-keyed difficulty floor, retrieval-grounded generation, trust tiers) is locked in `PRD-D-5` §4; source strategy is open-web-plus-trust-layer, **not** a curated corpus.
+- **Quality-floor build (B1–B5) shipped; D1–D11 built.** The B1–B4 engine pass and the B5 authoring/attribution surface pass are complete (B5 in PR #612). The as-built record — per-prompt status, the embedding-provider choice, and the deviations from the spec as written — lives in `PRD-D-5` §11. Two deviations worth knowing without opening the spec:
+  - **Embedding provider = Voyage AI `voyage-3.5-lite` (1024-dim), gated on `VOYAGE_API_KEY`.** Anthropic ships no first-party embedding model, so the pool's semantic-dedup backstop uses Voyage (Anthropic's recommended partner). It is **OFF until the key is provisioned**; without it, dedup falls back to the deterministic fact_key + Haiku + normalized-text guards. (`src/server/llm/embeddings.ts`, `src/server/pool/dedup.ts`.)
+  - **D9 attribution shipped as universal profile links, not "display-name-to-strangers."** Per the B5 product decision, everyone gets a profile link, attribution is sender-only, and there is no friend/stranger gating — safe because no surface shows a per-author avatar to strangers and the profile page is itself relationship-gated. Daily Five's gameplay chat stays plain text; its summary page links author names. (`PRD-D-5` §11.3b.)
 - **Zod-validation convention applies to structured request bodies.** The CLAUDE.md rule ("Zod on every API input") was reconciled across the API surface (audit finding E, 2026-06-04): the JSON request-body handlers now validate with Zod. Four routes are a deliberate, documented carve-out and keep their existing validators because converting them is high-churn with no safety gain:
   - `GET /api/archive`, `GET /api/feed`, `GET|POST /api/feed/backfill-missing-feed-items`, `GET /api/handle/check` — these take **query params** (always `string | null`), already coerced/clamped/enum-checked inline or routed through purpose-built validators (`decodeFeedCursor`, `handle-validation`).
   - `POST /api/questions` delegates body validation to `readCreateQuestionPayload` (`src/server/questions/create-payload.ts`), a **centralized, unit-tested** validator — already the spirit of the convention, just not literally Zod.
