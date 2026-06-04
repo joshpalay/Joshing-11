@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { db, declaredInterests, playerMastery, userDomainDifficulties, users } from '@/server/db';
+import { pgErrorCode } from '@/server/db/pg-error';
 
 const MIN_ADAPTIVE_LEVEL = 1.0;
 const MAX_ADAPTIVE_LEVEL = 4.0;
@@ -12,9 +13,10 @@ export type AdaptiveDifficultyHint = {
   difficultyLabel: string;
   promptHint: string;
   // The difficulty_estimate tier a question generated at this level targets.
-  // The generator only emits three tiers, so the two hardest adaptive bands
-  // both map to 'specialist'. Lets the bank-reuse path request a stored
-  // question whose tier matches what fresh generation would have produced.
+  // The generator only emits three tiers, so the three hardest adaptive bands
+  // (enthusiast, specialist, expert) all map to 'specialist'. Lets the bank-reuse
+  // path request a stored question whose tier matches what fresh generation would
+  // have produced.
   estimate: 'accessible' | 'moderate' | 'specialist';
 };
 
@@ -126,7 +128,7 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
     return {
       targetCorrectRate: 0.78,
       difficultyLabel: 'approachable trivia',
-      promptHint: 'Target roughly a 78% correct rate. Write friendly, recognizable questions a casually interested person in the domain would get — lean on well-known facts, not deep cuts.',
+      promptHint: 'Target roughly a 78% correct rate. Write questions someone with a passing interest in the domain would recognize — lean on its well-known landmarks and the facts anyone who has encountered it would have met, not deep cuts.',
       estimate: 'accessible',
     };
   }
@@ -134,9 +136,21 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
   if (normalized < 2.5) {
     return {
       targetCorrectRate: 0.62,
-      difficultyLabel: 'fair and familiar',
-      promptHint: 'Target roughly a 62% correct rate. Write questions a reasonably engaged fan of the domain should know without needing specialist depth.',
+      difficultyLabel: 'engaged fan',
+      promptHint: 'Target roughly a 62% correct rate. Write questions someone who actively follows the domain should know — the works, figures, and moments a regular fan keeps track of, without needing specialist depth.',
       estimate: 'moderate',
+    };
+  }
+
+  // Enthusiast rung — the calibration guardrail (PRD-D-5 §5.2). This text is
+  // load-bearing: it must stay "chose to learn ... NOT scholar/archivist
+  // minutiae" so the floor does not swing back to "really REALLY hard."
+  if (normalized < 3.0) {
+    return {
+      targetCorrectRate: 0.50,
+      difficultyLabel: 'enthusiast',
+      promptHint: 'Target roughly a 50% correct rate. Write questions someone who CHOSE to learn this domain would know — its structure, its famous moments, and the second-order facts enthusiasts trade — but NOT scholar- or archivist-level minutiae.',
+      estimate: 'specialist',
     };
   }
 
@@ -184,12 +198,14 @@ function seedDifficultyFromAdaptiveLevel(level: number): ServedDifficulty {
 
 /**
  * Minimum first-contact difficulty for a domain the player explicitly opted
- * into — either by stating it as an area of focus during onboarding or by
- * accepting one shared by a friend. Someone who raised their hand for a topic
- * finds "Establishing" (accessible) trivia condescendingly easy, so we floor
- * the *seed* at "Familiar" (moderate). This only sets the starting point: the
- * normal two-incorrect step-down can still drop a struggling player back to
- * accessible afterwards.
+ * into — either by stating it as an area of focus or by accepting one shared by
+ * a friend. Someone who raised their hand for a topic finds "Establishing"
+ * (accessible) trivia condescendingly easy, so we floor the *seed* at "Familiar"
+ * (moderate) for ANY focus domain (declared or demonstrated). This sets only the
+ * starting point. What happens to the floor afterwards is signal-keyed: a
+ * DECLARED domain also holds this as a hard *erosion* floor (the two-incorrect
+ * step-down can't drop below it), while a DEMONSTRATED domain can still step
+ * down to accessible (PRD-D-5 §5.2, D3 — the erosion floor is declared-only).
  */
 const FOCUS_DOMAIN_MIN_DIFFICULTY: ServedDifficulty = 'moderate';
 
@@ -203,9 +219,10 @@ export function applyFocusFloor(difficulty: ServedDifficulty, isFocusDomain: boo
 /**
  * Canonical subcategories the player has opted into: declared interests (stated
  * focus areas) plus any open territory in PLAYER_MASTERY — friend-mediated
- * acceptances and authored domains both land there. Used to decide whether a
- * first-contact difficulty seed should be floored to "Familiar". Pass the
- * `domains` filter to keep the lookup to the round being seeded.
+ * acceptances and authored domains both land there. Used to floor the
+ * first-contact *seed* to "Familiar" for any opted-in domain (declared OR
+ * demonstrated). The declared/demonstrated split that governs the *erosion*
+ * floor lives in `getDeclaredDomainSet`. Pass `domains` to scope the lookup.
  */
 async function getFocusDomainSet(userId: string, domains: string[]): Promise<Set<string>> {
   const focus = new Set<string>();
@@ -234,6 +251,54 @@ async function getFocusDomainSet(userId: string, domains: string[]): Promise<Set
   return focus;
 }
 
+/**
+ * Canonical subcategories the player explicitly DECLARED — stated focus areas
+ * (`declaredInterests`) plus PLAYER_MASTERY rows whose `territoryType` is
+ * 'declared' (friend-mediated acceptances that came in as declared territory).
+ * This narrower set keys the hard *erosion* floor (D2/D3): a declared domain
+ * cannot erode below engaged-fan, while a demonstrated domain — though it still
+ * *seeds* at moderate (see `getFocusDomainSet`) — keeps the full range and can
+ * step down to accessible (PRD-D-5 §5.2, DRIFT RISK 2). Pass `domains` to scope.
+ */
+async function getDeclaredDomainSet(userId: string, domains: string[]): Promise<Set<string>> {
+  const declared = new Set<string>();
+  if (domains.length === 0) return declared;
+
+  const declaredRows = await db
+    .select({ domain: declaredInterests.domain })
+    .from(declaredInterests)
+    .where(and(
+      eq(declaredInterests.userId, userId),
+      eq(declaredInterests.isActive, true),
+      inArray(declaredInterests.domain, domains),
+    ));
+  for (const row of declaredRows) declared.add(row.domain);
+
+  try {
+    const masteryRows = await db
+      .select({
+        domain: playerMastery.canonicalSubcategory,
+        territoryType: playerMastery.territoryType,
+      })
+      .from(playerMastery)
+      .where(and(
+        eq(playerMastery.userId, userId),
+        inArray(playerMastery.canonicalSubcategory, domains),
+      ));
+    for (const row of masteryRows) {
+      if (row.territoryType === 'declared') declared.add(row.domain);
+    }
+  } catch (error) {
+    // territoryType is additive; on a DB where the column hasn't landed yet
+    // (42703) fall back to declaredInterests alone — the safe direction, since
+    // a missed declared mastery row only means a domain isn't floored, never
+    // that a demonstrated one is wrongly pinned.
+    if (pgErrorCode(error) !== '42703') throw error;
+  }
+
+  return declared;
+}
+
 function stepDifficulty(current: ServedDifficulty, direction: 1 | -1): ServedDifficulty {
   const idx = DIFFICULTY_LADDER.indexOf(current);
   const next = Math.min(DIFFICULTY_LADDER.length - 1, Math.max(0, idx + direction));
@@ -249,15 +314,23 @@ export type DomainDifficultyState = {
 export function computeDomainDifficultyStep(
   existing: DomainDifficultyState,
   isCorrect: boolean,
+  floor: ServedDifficulty = 'accessible',
 ): DomainDifficultyState {
   let nextCorrect = isCorrect ? existing.consecutiveCorrect + 1 : 0;
   let nextIncorrect = isCorrect ? 0 : existing.consecutiveIncorrect + 1;
   let nextDifficulty: ServedDifficulty = existing.servedDifficulty;
 
+  const floorIdx = DIFFICULTY_LADDER.indexOf(floor);
+
   if (isCorrect && nextCorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'specialist') {
     nextDifficulty = stepDifficulty(existing.servedDifficulty, 1);
     nextCorrect = 0;
-  } else if (!isCorrect && nextIncorrect >= STREAK_TO_STEP && existing.servedDifficulty !== 'accessible') {
+  } else if (!isCorrect && nextIncorrect >= STREAK_TO_STEP && DIFFICULTY_LADDER.indexOf(existing.servedDifficulty) > floorIdx) {
+    // Two-incorrect step-down — but never below the floor. For a declared
+    // domain the floor is the engaged-fan rung (moderate), so it erodes within
+    // the upper band but can't drop to accessible/tourist level (PRD-D-5 §5.2).
+    // Demonstrated domains pass the default 'accessible' floor and retain the
+    // full range, matching the prior behaviour exactly.
     nextDifficulty = stepDifficulty(existing.servedDifficulty, -1);
     nextIncorrect = 0;
   }
@@ -268,7 +341,9 @@ export function computeDomainDifficultyStep(
 /**
  * Update per-domain difficulty after a graded answer. Two consecutive correct →
  * step up; two consecutive incorrect → step down. Streak counter resets when
- * the level moves so a single wobble doesn't immediately yo-yo.
+ * the level moves so a single wobble doesn't immediately yo-yo. Declared domains
+ * are floored at the engaged-fan rung (moderate) on both seed and erosion;
+ * demonstrated domains seed low and retain the full range down to accessible.
  */
 export async function updateDomainDifficultyOnAnswer(
   userId: string,
@@ -287,6 +362,7 @@ export async function updateDomainDifficultyOnAnswer(
     .limit(1);
 
   if (!existing) {
+    // Seed floor is for any opted-in (focus) domain — declared or demonstrated.
     const [level, focusDomains] = await Promise.all([
       readCurrentAdaptiveLevel(userId),
       getFocusDomainSet(userId, [canonicalSubcategory]),
@@ -306,7 +382,13 @@ export async function updateDomainDifficultyOnAnswer(
     return;
   }
 
-  const next = computeDomainDifficultyStep(existing, isCorrect);
+  // Erosion floor is declared-only: declared domains carry the engaged-fan
+  // floor, demonstrated domains step down freely (default 'accessible' floor).
+  const declaredDomains = await getDeclaredDomainSet(userId, [canonicalSubcategory]);
+  const floor: ServedDifficulty = declaredDomains.has(canonicalSubcategory)
+    ? FOCUS_DOMAIN_MIN_DIFFICULTY
+    : 'accessible';
+  const next = computeDomainDifficultyStep(existing, isCorrect, floor);
 
   await db
     .update(userDomainDifficulties)
@@ -350,7 +432,8 @@ export async function getDomainDifficultyOverrides(
 
   // Only domains without a persisted row need a first-contact seed. Pull the
   // user's adaptive level and which of those domains are opted-in focus areas
-  // so we can floor the seed to "Familiar" for the latter.
+  // so we can floor the seed to "Familiar" for the latter (declared OR
+  // demonstrated — the erosion-floor split is applied later, on answer).
   const domainsNeedingSeed = domains.filter((domain) => !known.has(domain));
   const [seedLevel, focusDomains] = domainsNeedingSeed.length === 0
     ? [MIN_ADAPTIVE_LEVEL, new Set<string>()]
