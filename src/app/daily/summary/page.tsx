@@ -320,6 +320,36 @@ function bridgeSentence(bridge: NonNullable<DailySummaryView['recentFriendBridge
   }
 }
 
+// B5/D9: on the summary page (unlike the gameplay chat, which stays plain text)
+// author names link to the author's profile. Only human authors carry an
+// authorId; house/editorial names render as plain text.
+export function AuthorName({
+  name,
+  authorId,
+  weight,
+}: {
+  name: string
+  authorId: string | null
+  weight?: number
+}) {
+  if (!authorId) {
+    return <span style={{ fontWeight: weight }}>{name}</span>
+  }
+  return (
+    <Link
+      href={`/users/${encodeURIComponent(authorId)}`}
+      style={{
+        fontWeight: weight,
+        color: 'var(--brand-link)',
+        textDecoration: 'underline',
+        textUnderlineOffset: 2,
+      }}
+    >
+      {name}
+    </Link>
+  )
+}
+
 function InterpretiveLine({ text }: { text: string }) {
   const [visible, setVisible] = useState(false)
   useEffect(() => {
@@ -484,7 +514,7 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
             >
               FROM
             </span>
-            <span style={{ fontWeight: 600 }}>{question.authorName}</span>
+            <AuthorName name={question.authorName} authorId={question.authorId} weight={600} />
             {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
             <span
               style={{
@@ -532,9 +562,17 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
       {question.authorNote ? (
         <p className="bg-muted/40 text-foreground mt-4 rounded-xl border p-3 text-sm leading-6">
           <span className="font-medium">
-            {question.authorIsHouse
-              ? 'Editor’s note:'
-              : question.authorName ? `Why ${question.authorName} asked:` : 'Why they asked:'}
+            {question.authorIsHouse ? (
+              'Editor’s note:'
+            ) : question.authorName ? (
+              <>
+                Why{' '}
+                <AuthorName name={question.authorName} authorId={question.authorId} />{' '}
+                asked:
+              </>
+            ) : (
+              'Why they asked:'
+            )}
           </span>{' '}
           {question.authorNote}
         </p>
