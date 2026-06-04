@@ -139,12 +139,17 @@ export default function LoginPanel() {
 
       if (!response.ok) {
         setError(data?.message ?? 'Code invalid or expired.');
+        setLoading(false);
         return;
       }
 
+      // Success: navigation is async and doesn't block, so keep the button in
+      // its "Verifying…" state. Resetting loading here would flash "Continue"
+      // before the redirect lands.
       router.replace('/');
       router.refresh();
-    } finally {
+    } catch {
+      setError('Something went wrong. Please try again.');
       setLoading(false);
     }
   }
