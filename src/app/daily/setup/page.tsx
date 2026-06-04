@@ -94,6 +94,10 @@ function DailySetupContent() {
   const [adaptiveLabel, setAdaptiveLabel] = useState<string | null>(null);
   const [hasUnstartedQueue, setHasUnstartedQueue] = useState(false);
   const [roundComplete, setRoundComplete] = useState(false);
+  const [newTopic, setNewTopic] = useState('');
+  const [addingTopic, setAddingTopic] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addLimitReached, setAddLimitReached] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,6 +187,47 @@ function DailySetupContent() {
       return next;
     });
   }, []);
+
+  const addTopic = useCallback(async () => {
+    const label = newTopic.trim();
+    if (!label || addingTopic) return;
+    setAddingTopic(true);
+    setAddError(null);
+    setAddLimitReached(false);
+
+    try {
+      const response = await fetch('/api/declared-interests', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        setAddLimitReached(body?.error === 'interest_limit_reached');
+        throw new Error(body?.message ?? 'Could not add that topic.');
+      }
+
+      const row: DomainRow = {
+        domain: body.domain,
+        broadCategory: body.broadCategory ?? null,
+        totalPoints: typeof body.totalPoints === 'number' ? body.totalPoints : 0,
+        tier: body.tier ?? 'establishing',
+      };
+      const key = row.domain.toLocaleLowerCase('en-US');
+      setDomains((existing) =>
+        existing.some((entry) => entry.domain.toLocaleLowerCase('en-US') === key)
+          ? existing
+          : [...existing, row],
+      );
+      setSelectedDomains((existing) => new Set(existing).add(row.domain));
+      setNewTopic('');
+    } catch (caught) {
+      setAddError(caught instanceof Error ? caught.message : 'Could not add that topic.');
+    } finally {
+      setAddingTopic(false);
+    }
+  }, [addingTopic, newTopic]);
 
   const startRound = useCallback(async () => {
     if (!canStart) return;
@@ -339,6 +384,49 @@ function DailySetupContent() {
           </p>
         ) : (
           <div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void addTopic();
+              }}
+              className="mb-5"
+            >
+              <label
+                htmlFor="add-topic"
+                className="mb-2 block text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground"
+              >
+                Add a topic
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="add-topic"
+                  type="text"
+                  value={newTopic}
+                  onChange={(event) => setNewTopic(event.target.value)}
+                  placeholder="e.g. Byzantine Coinage"
+                  maxLength={80}
+                  autoComplete="off"
+                  className="min-h-11 flex-1 rounded-md border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+                <button type="submit" className="btn-ghost px-4" disabled={addingTopic || !newTopic.trim()}>
+                  {addingTopic ? 'Adding…' : 'Add'}
+                </button>
+              </div>
+              {addError ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {addError}
+                  {addLimitReached ? (
+                    <>
+                      {' '}
+                      <Link href="/knowledge" className="underline">
+                        Manage interests
+                      </Link>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+            </form>
+
             <div className="mb-4 inline-grid grid-cols-2 rounded-full border bg-card p-1 text-xs font-medium uppercase tracking-[0.08em]">
               {[
                 { value: 'category', label: 'By Category' },
