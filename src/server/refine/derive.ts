@@ -8,11 +8,7 @@
 
 import type { QueueSlot } from '@/server/daily/types';
 import { subdomainLabel } from './copy';
-import {
-  pruningThreshold,
-  type RefineCandidate,
-  type RefineMissTier,
-} from './types';
+import { pruningThreshold, type RefineCandidate, type RefineMissTier } from './types';
 
 /**
  * friend_expansion (priority 1): the player answered ≥1 question correctly from

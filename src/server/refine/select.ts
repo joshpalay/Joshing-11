@@ -4,12 +4,7 @@
  * Drop anything in cooldown, order by priority, keep the top three.
  */
 
-import {
-  REFINE_MAX_ITEMS,
-  REFINE_PRIORITY,
-  refineItemKey,
-  type RefineCandidate,
-} from './types';
+import { REFINE_MAX_ITEMS, REFINE_PRIORITY, refineItemKey, type RefineCandidate } from './types';
 
 export function selectRefineCandidates(
   candidates: RefineCandidate[],

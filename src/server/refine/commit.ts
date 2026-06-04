@@ -59,11 +59,13 @@ async function applyResolvedEffect(userId: string, row: DecisionRow, until: Date
         });
       await db
         .delete(userDomainExclusions)
-        .where(and(
-          eq(userDomainExclusions.userId, userId),
-          eq(userDomainExclusions.scope, 'subcategory'),
-          eq(userDomainExclusions.canonicalSubcategory, domain),
-        ));
+        .where(
+          and(
+            eq(userDomainExclusions.userId, userId),
+            eq(userDomainExclusions.scope, 'subcategory'),
+            eq(userDomainExclusions.canonicalSubcategory, domain),
+          ),
+        );
       return;
     case 'struggle_pruning':
       await db
@@ -90,11 +92,13 @@ export async function commitPendingRefineDecisions(userId: string): Promise<void
   const pending = await db
     .select()
     .from(dailyRefineDecisions)
-    .where(and(
-      eq(dailyRefineDecisions.userId, userId),
-      eq(dailyRefineDecisions.action, 'pending'),
-      isNull(dailyRefineDecisions.committedAt),
-    ));
+    .where(
+      and(
+        eq(dailyRefineDecisions.userId, userId),
+        eq(dailyRefineDecisions.action, 'pending'),
+        isNull(dailyRefineDecisions.committedAt),
+      ),
+    );
 
   for (const row of pending) {
     const cooldownUntil = new Date(now.getTime() + COOLDOWN_MS[row.itemType as RefineItemType]);
@@ -119,13 +123,15 @@ export async function commitPendingRefineDecisions(userId: string): Promise<void
   const [priorQueue] = await db
     .select({ id: dailyQueues.id, slots: dailyQueues.slots })
     .from(dailyQueues)
-    .where(and(
-      eq(dailyQueues.userId, userId),
-      sql`EXISTS (
+    .where(
+      and(
+        eq(dailyQueues.userId, userId),
+        sql`EXISTS (
         SELECT 1 FROM jsonb_array_elements(${dailyQueues.slots}) slot
         WHERE (slot->>'answered')::boolean IS TRUE
       )`,
-    ))
+      ),
+    )
     .orderBy(desc(dailyQueues.queueDate))
     .limit(1);
 

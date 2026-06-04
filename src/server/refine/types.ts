@@ -8,10 +8,7 @@
  * (src/server/refine/select.ts) depend on. Everything here is pure.
  */
 
-export type RefineItemType =
-  | 'friend_expansion'
-  | 'difficulty_escalation'
-  | 'struggle_pruning';
+export type RefineItemType = 'friend_expansion' | 'difficulty_escalation' | 'struggle_pruning';
 
 export type RefineActionVerb = 'Add' | 'Ease off' | 'Drop';
 
@@ -48,6 +45,8 @@ export interface RefineItem {
 }
 
 export interface RefineSectionView {
+  /** Queue the items belong to; the client posts it on resolve/undo. Null when no daily ran. */
+  queueId: string | null;
   items: RefineItem[];
 }
 

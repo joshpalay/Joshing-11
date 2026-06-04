@@ -245,9 +245,9 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const recentFriendBridge = await getRecentFriendBridge(userId);
   const { isFirstCompletedRound, reminderPromptState } =
     await computeReminderPromptState(userId, dateString, totalAnswered);
-  const refine = queue
+  const refine: RefineSectionView = queue
     ? await buildRefineSection(userId, queue.id, slots)
-    : { items: [] };
+    : { queueId: null, items: [] };
 
   return {
     date: dateString,

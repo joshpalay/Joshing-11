@@ -46,10 +46,12 @@ async function getServedDifficulties(
       served: userDomainDifficulties.servedDifficulty,
     })
     .from(userDomainDifficulties)
-    .where(and(
-      eq(userDomainDifficulties.userId, userId),
-      inArray(userDomainDifficulties.canonicalSubcategory, domains),
-    ));
+    .where(
+      and(
+        eq(userDomainDifficulties.userId, userId),
+        inArray(userDomainDifficulties.canonicalSubcategory, domains),
+      ),
+    );
   return new Map(rows.map((row) => [row.domain, row.served as RefineMissTier]));
 }
 
@@ -62,7 +64,9 @@ async function getServedDifficulties(
  * recent incorrect slot in this queue, falling back to the served difficulty.
  */
 export async function getMissStreaks(userId: string, slots: QueueSlot[]): Promise<MissStreak[]> {
-  const domains = [...new Set(slots.map((slot) => slot.domain).filter((d): d is string => Boolean(d)))];
+  const domains = [
+    ...new Set(slots.map((slot) => slot.domain).filter((d): d is string => Boolean(d))),
+  ];
   if (domains.length === 0) return [];
 
   // Latest-miss tier from in-queue slots (later slot_index = more recent).
@@ -82,10 +86,9 @@ export async function getMissStreaks(userId: string, slots: QueueSlot[]): Promis
         answerState: masteryEvents.answerState,
       })
       .from(masteryEvents)
-      .where(and(
-        eq(masteryEvents.userId, userId),
-        inArray(masteryEvents.canonicalSubcategory, domains),
-      ))
+      .where(
+        and(eq(masteryEvents.userId, userId), inArray(masteryEvents.canonicalSubcategory, domains)),
+      )
       .orderBy(masteryEvents.canonicalSubcategory, desc(masteryEvents.createdAt)),
   ]);
 
@@ -125,10 +128,12 @@ export async function getActiveCooldowns(userId: string): Promise<Set<string>> {
       friendId: dailyRefineDecisions.friendId,
     })
     .from(dailyRefineDecisions)
-    .where(and(
-      eq(dailyRefineDecisions.userId, userId),
-      gt(dailyRefineDecisions.cooldownUntil, new Date()),
-    ));
+    .where(
+      and(
+        eq(dailyRefineDecisions.userId, userId),
+        gt(dailyRefineDecisions.cooldownUntil, new Date()),
+      ),
+    );
   return new Set(
     rows.map((row) => refineItemKey(row.itemType as RefineItemType, row.subdomain, row.friendId)),
   );
@@ -143,12 +148,14 @@ async function getPendingDecisionKeys(userId: string, queueId: string): Promise<
       friendId: dailyRefineDecisions.friendId,
     })
     .from(dailyRefineDecisions)
-    .where(and(
-      eq(dailyRefineDecisions.userId, userId),
-      eq(dailyRefineDecisions.queueId, queueId),
-      eq(dailyRefineDecisions.action, 'pending'),
-      isNull(dailyRefineDecisions.committedAt),
-    ));
+    .where(
+      and(
+        eq(dailyRefineDecisions.userId, userId),
+        eq(dailyRefineDecisions.queueId, queueId),
+        eq(dailyRefineDecisions.action, 'pending'),
+        isNull(dailyRefineDecisions.committedAt),
+      ),
+    );
   return new Set(
     rows.map((row) => refineItemKey(row.itemType as RefineItemType, row.subdomain, row.friendId)),
   );
@@ -203,10 +210,13 @@ export async function buildRefineSection(
   queueId: string,
   slots: QueueSlot[],
 ): Promise<RefineSectionView> {
-  if (slots.length === 0) return { items: [] };
+  if (slots.length === 0) return { queueId, items: [] };
   const [selected, pendingKeys] = await Promise.all([
     deriveSelectedRefineCandidates(userId, slots),
     getPendingDecisionKeys(userId, queueId),
   ]);
-  return { items: selected.map((candidate) => candidateToItem(candidate, queueId, pendingKeys)) };
+  return {
+    queueId,
+    items: selected.map((candidate) => candidateToItem(candidate, queueId, pendingKeys)),
+  };
 }
