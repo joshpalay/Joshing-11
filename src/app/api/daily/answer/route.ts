@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { gradeAnswer } from '@/server/grading';
+import { gradeAnswer, type GradeOutcome } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
 import {
@@ -221,8 +221,10 @@ export async function POST(request: NextRequest) {
 
     const canonicalAnswer = question.answer;
 
-    const grade = parsed.gaveUp
-      ? { result: 'wrong' as const, consolation: null, confidence: 1, gradedVia: 'exact' as const }
+    // Give-up is a deliberate, real wrong — a genuine scored verdict, not an infra
+    // failure — so it's constructed as a scored outcome and never held for retry.
+    const grade: GradeOutcome = parsed.gaveUp
+      ? { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact' }
       : await gradeAnswer(
           parsed.submittedAnswer,
           canonicalAnswer,
@@ -230,15 +232,15 @@ export async function POST(request: NextRequest) {
           question.questionText,
           'factual',
         );
-    // The LLM grader was unreachable (timeout, parse error, no client), so its
-    // 'wrong' verdict is not a real judgement of the answer — it's a deterministic
-    // placeholder. Scoring the player wrong for an Anthropic outage is the most
-    // off-brand failure mode in a product whose thesis is "wrong answers are
-    // connection events, not penalties." Instead of persisting anything, hold the
-    // answer in a non-scored retry state: leave the slot untouched (unanswered) and
-    // return a transparent, retryable error so the player can simply resubmit.
-    // Give-ups skip the grader entirely (gradedVia: 'exact'), so they're never held.
-    if (grade.gradedVia === 'fallback') {
+    // The LLM grader was unreachable (timeout, parse error, no client), so there is
+    // no verdict at all — the outcome is `unscored`, never a 'wrong'. Scoring the
+    // player wrong for an Anthropic outage is the most off-brand failure mode in a
+    // product whose thesis is "wrong answers are connection events, not penalties."
+    // Instead of persisting anything, hold the answer in a non-scored retry state:
+    // leave the slot untouched (unanswered) and return a transparent, retryable
+    // error so the player can simply resubmit. Give-ups are scored above, so they
+    // are never held here.
+    if (grade.status === 'unscored') {
       console.warn('[daily/answer] grader unavailable; holding answer for retry', {
         queueId: parsed.queueId,
         slotIndex: parsed.slotIndex,

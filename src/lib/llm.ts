@@ -23,18 +23,28 @@ import { textContainsAnswer } from '@/server/questions/self-answering';
 
 export type GradeResult = 'correct' | 'wrong';
 
-export type GradingResponse = {
+// A genuine model verdict: the answer was actually graded. Carries `result`.
+export type ScoredGradingResponse = {
+  status: 'scored';
   result: GradeResult;
   confidence: number;
   reason: string;
   // "Snarky but Sweet" — a short, warm quip when the answer is wrong but thematically close.
   // null if the answer is simply off-base or unrelated.
   consolation: string | null;
-  // Set to true when the response is a deterministic fallback (timeout, parse
-  // failure, missing client) rather than an actual model verdict. Callers that
-  // care about "wrong vs. couldn't-grade" should branch on this.
-  fallback?: boolean;
 };
+
+// An infrastructure failure — timeout, parse failure, missing client, malformed
+// result field. This is NOT a judgement of the answer, so it deliberately has no
+// `result` field: reading a verdict off an outage is a type error, by design.
+// The product thesis is "wrong answers are connection events," so a player must
+// never be scored wrong because Anthropic was unreachable.
+export type UnscoredGradingResponse = {
+  status: 'unscored';
+  reason: string;
+};
+
+export type GradingResponse = ScoredGradingResponse | UnscoredGradingResponse;
 
 export type CategoryResult = {
   subcategory: string;
@@ -474,8 +484,8 @@ export function parseJsonObject(rawText: string): Record<string, unknown> | null
   return null;
 }
 
-function fallbackGrading(reason: string = 'llm_error'): GradingResponse {
-  return { result: 'wrong', confidence: 0, reason, consolation: null, fallback: true };
+function fallbackGrading(reason: string = 'llm_error'): UnscoredGradingResponse {
+  return { status: 'unscored', reason };
 }
 
 // "General Knowledge" and "Other" must never reach the UI as a broad_category.
@@ -602,7 +612,7 @@ Return only valid JSON with keys: result, confidence, reason, consolation. No ex
     const reason = asTrimmedString(parsed.reason) ?? 'llm_invalid_response';
     const consolation = result === 'wrong' ? asNullableString(parsed.consolation) : null;
 
-    return { result, confidence, reason, consolation };
+    return { status: 'scored', result, confidence, reason, consolation };
   } catch (error) {
     logFallback('gradeAnswerWithLLM', 'request_failed', summarizeError(error));
     return fallbackGrading('request_failed');

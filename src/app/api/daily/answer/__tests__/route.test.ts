@@ -370,14 +370,12 @@ describe('POST /api/daily/answer grader outage (#6 — never score wrong on LLM 
 
   it('holds the answer for retry (503) and persists nothing when the grader is unreachable', async () => {
     setupDbChain()
-    // gradeAnswer signals an unreachable LLM grader via gradedVia: 'fallback'.
-    // Its result is a deterministic 'wrong' placeholder, NOT a real verdict —
-    // the route must refuse to score it rather than penalise an infra outage.
+    // gradeAnswer signals an unreachable LLM grader via status: 'unscored'.
+    // There is NO result field — the route must refuse to score it rather than
+    // penalise an infra outage.
     gradeAnswerMock.mockResolvedValueOnce({
-      result: 'wrong',
-      consolation: null,
-      confidence: 0,
-      gradedVia: 'fallback',
+      status: 'unscored',
+      reason: 'llm_error',
     })
 
     const res = await POST(jsonRequest(VALID_BODY) as never)

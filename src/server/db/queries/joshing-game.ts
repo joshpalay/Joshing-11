@@ -489,7 +489,7 @@ export async function submitJoshingGameResponse(params: {
   );
   // Never persist an outage 'wrong' (Drift Risk 2): bail before any write so the
   // turn is retryable. No response row, no mastery, no asked_count bump.
-  if (grade.gradedVia === 'fallback') {
+  if (grade.status === 'unscored') {
     throw new JoshingGameGraderUnavailableError();
   }
   const isCorrect = grade.result === 'correct';

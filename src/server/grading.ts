@@ -2,26 +2,40 @@
  * Answer grading — LLM primary, exact-match fast-path for obvious hits.
  * PRD 8.9: answers graded immediately on submission; result shown in session UI.
  * PRD 9.3: case insensitivity, accepted_alternatives treated as correct.
- * PRD 9 / Prompt 1: lenient grader via claude-sonnet-4-6, fallback to 'wrong' on error.
+ * PRD 9 / Prompt 1: lenient grader via claude-sonnet-4-6; on infra failure the
+ * grader returns an UNSCORED outcome (no `result`), never a 'wrong' verdict.
  */
 
 import { gradeAnswerWithLLM } from '@/lib/llm';
 
 export type GradeResult = 'correct' | 'wrong';
 
-export type GradeOutcome = {
+// A genuine, scored verdict — exact-match hit/miss or a real model judgement.
+// `result` is meaningful and may be acted on: a 'wrong' here is a real wrong.
+export type ScoredGrade = {
+  status: 'scored';
   result: GradeResult;
   // "Snarky but Sweet" consolation for thematically-close wrong answers (null otherwise)
   consolation: string | null;
-  // 0..1 from the LLM, or 1 for exact-match. 0 when grading fell back to a
-  // deterministic 'wrong' verdict due to an LLM error.
+  // 0..1 from the LLM, or 1 for exact-match.
   confidence: number;
-  // 'exact' — exact-match fast-path; 'llm' — model verdict;
-  // 'fallback' — model couldn't be reached (timeout, parse error, no client).
-  // Consumers wanting to soften UX on LLM outages should branch on 'fallback'
-  // (e.g. auto-route to /api/daily/recheck, or hold scoring pending review).
-  gradedVia: 'exact' | 'llm' | 'fallback';
+  // 'exact' — exact-match fast-path; 'llm' — model verdict. Retained for
+  // analytics; it is NO LONGER the only thing standing between an outage and a
+  // wrong score (that is now the `status` discriminant below).
+  gradedVia: 'exact' | 'llm';
 };
+
+// The grader could not reach a verdict (timeout, parse error, no client). This
+// is an infrastructure event, NOT a judgement of the answer, so it carries no
+// `result` field — accessing `.result` here is a compile error. Routes MUST
+// branch on `status === 'unscored'` and hold the answer for retry rather than
+// persist a verdict the model never gave.
+export type UnscoredGrade = {
+  status: 'unscored';
+  reason: string;
+};
+
+export type GradeOutcome = ScoredGrade | UnscoredGrade;
 
 /**
  * Fast-path exact match before calling the LLM.
@@ -50,13 +64,16 @@ export async function gradeAnswer(
   questionText: string,
   questionType: string = 'factual'
 ): Promise<GradeOutcome> {
+  // An empty submission is a genuine, deliberate wrong — a real scored verdict,
+  // not an infra failure. (The daily give-up path is the analogous deliberate
+  // wrong on its own route.)
   if (!submitted.trim()) {
-    return { result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact' };
+    return { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact' };
   }
 
   // Fast-path: skip the LLM for obvious exact matches and accepted alternatives
   if (exactMatch(submitted, canonicalAnswer, acceptedAlternatives)) {
-    return { result: 'correct', consolation: null, confidence: 1, gradedVia: 'exact' };
+    return { status: 'scored', result: 'correct', consolation: null, confidence: 1, gradedVia: 'exact' };
   }
 
   const llmResult = await gradeAnswerWithLLM(
@@ -64,23 +81,24 @@ export async function gradeAnswer(
     canonicalAnswer,
     submitted,
     questionType
-  ).catch((error) => {
-    console.warn('[grading] LLM grading call failed; using deterministic fallback', {
+  ).catch((error): UnscoredGrade => {
+    console.warn('[grading] LLM grading call failed; holding answer unscored', {
       name: error instanceof Error ? error.name : undefined,
       message: error instanceof Error ? error.message : String(error),
     });
-    return {
-      result: 'wrong' as const,
-      confidence: 0,
-      reason: 'llm_error',
-      consolation: null,
-      fallback: true,
-    };
+    return { status: 'unscored', reason: 'llm_error' };
   });
+
+  // Infra failure (timeout, parse error, no client) — never a scored verdict.
+  if (llmResult.status === 'unscored') {
+    return { status: 'unscored', reason: llmResult.reason };
+  }
+
   return {
+    status: 'scored',
     result: llmResult.result,
     consolation: llmResult.consolation ?? null,
     confidence: llmResult.confidence,
-    gradedVia: llmResult.fallback ? 'fallback' : 'llm',
+    gradedVia: 'llm',
   };
 }
