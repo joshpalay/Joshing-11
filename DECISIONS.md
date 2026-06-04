@@ -31,6 +31,11 @@ Execution scaffolding (kept separate, not product spec): [`docs/build-prompts/`]
 - **Authored-vs-curated provenance is honest.** Forwarded LLM questions get `creatorId: null`, `source: 'curated_sent'`; credit never accrues to the forwarder. (Conformance audit §2.1.)
 - **Send difficulty travels with the question.** The forwarded question keeps its own `difficultyEstimate`. (`PRD-D-0` §4.1.)
 - **Broadcast rolls off after unfollow — won't fix.** Already-surfaced broadcasts are not retroactively purged on unfollow. (`PRD-D-0` §4.2.)
+- **Zod-validation convention applies to structured request bodies.** The CLAUDE.md rule ("Zod on every API input") was reconciled across the API surface (audit finding E, 2026-06-04): the JSON request-body handlers now validate with Zod. Four routes are a deliberate, documented carve-out and keep their existing validators because converting them is high-churn with no safety gain:
+  - `GET /api/archive`, `GET /api/feed`, `GET|POST /api/feed/backfill-missing-feed-items`, `GET /api/handle/check` — these take **query params** (always `string | null`), already coerced/clamped/enum-checked inline or routed through purpose-built validators (`decodeFeedCursor`, `handle-validation`).
+  - `POST /api/questions` delegates body validation to `readCreateQuestionPayload` (`src/server/questions/create-payload.ts`), a **centralized, unit-tested** validator — already the spirit of the convention, just not literally Zod.
+  - `POST /api/onboarding/propose-interests` and `POST|DELETE /api/friend-invitations` retain their hand-rolled validators: both emit several **distinct, field-specific error codes/messages** that a single Zod schema would flatten, and `validateCreateFriendInvitationBody` is exported and covered by its own test suite. Converting later is safe-but-optional; the tests would catch drift.
+  - `PATCH /api/declared-interests` retains its parser: each item is a lenient `string`-or-`object` union where **invalid items are dropped, not rejected** (1–5 must survive). Zod can only express that by wrapping the existing per-item parser, which adds ceremony without added safety.
 
 ## Open — pick these up
 
