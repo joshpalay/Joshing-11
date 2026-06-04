@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { after, NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { gradeAnswer } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
@@ -29,13 +30,17 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+const bodySchema = z.object({
+  dailyQueueItemId: z.string().min(1),
+  submittedAnswer: z.string(),
+});
+
 function parseBody(value: unknown): { dailyQueueItemId: string; submittedAnswer: string } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const dailyQueueItemId = typeof record.dailyQueueItemId === 'string' ? record.dailyQueueItemId : null;
-  const submittedAnswer = typeof record.submittedAnswer === 'string' ? record.submittedAnswer.trim() : null;
-  if (!dailyQueueItemId || !submittedAnswer) return null;
-  return { dailyQueueItemId, submittedAnswer };
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  const submittedAnswer = parsed.data.submittedAnswer.trim();
+  if (!submittedAnswer) return null;
+  return { dailyQueueItemId: parsed.data.dailyQueueItemId, submittedAnswer };
 }
 
 function nextItemPayload(item: CatchupQuestion | null) {

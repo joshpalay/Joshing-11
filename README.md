@@ -13,7 +13,7 @@ shared with friends.
 
 ## Stack
 
-Next.js 16 · TypeScript · Tailwind CSS 4 · Prisma 5 · Supabase (Postgres) · Anthropic API
+Next.js 16 · TypeScript · Tailwind CSS 4 · Drizzle ORM · Supabase (Postgres) · Anthropic API
 
 ## Local setup
 
@@ -62,5 +62,5 @@ Open [http://localhost:3000](http://localhost:3000).
 npm run build      # production build
 npm run lint       # ESLint
 npm run format     # Prettier
-npx prisma studio  # browse the database (read-only; Drizzle migrations are authoritative)
+npx drizzle-kit studio  # browse the database (Drizzle migrations are authoritative)
 ```

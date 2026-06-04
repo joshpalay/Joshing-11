@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { isUsPhoneNumber, normalizePhone, requestOtp } from '@/server/auth';
 import { db, users } from '@/server/db';
@@ -8,17 +9,19 @@ import {
   INVITE_REQUIRED_MESSAGE,
 } from '@/server/friends/invitations';
 
+const bodySchema = z.object({ phone: z.string().trim().min(1) });
+
 export async function POST(request: Request) {
   try {
-    const body = (await request.json().catch(() => null)) as { phone?: unknown } | null;
-    const rawPhone = typeof body?.phone === 'string' ? body.phone.trim() : '';
+    const parsed = bodySchema.safeParse(await request.json().catch(() => null));
 
-    if (!rawPhone) {
+    if (!parsed.success) {
       return NextResponse.json(
         { error: 'invalid_request', message: 'phone is required' },
         { status: 400 },
       );
     }
+    const rawPhone = parsed.data.phone;
 
     if (!isUsPhoneNumber(rawPhone)) {
       return NextResponse.json(

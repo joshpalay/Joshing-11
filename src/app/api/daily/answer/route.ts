@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { gradeAnswer } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
@@ -75,23 +76,30 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
   return repairedAnswer;
 }
 
-function parseBody(value: unknown): { queueId: string; slotIndex: number; submittedAnswer: string; gaveUp: boolean } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const queueId = typeof record.queue_id === 'string' ? record.queue_id : null;
-  const slotIndex = typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
-    ? record.slot_index
-    : null;
-  const gaveUp = record.gave_up === true;
-  const submittedAnswer = typeof record.submitted_answer === 'string'
-    ? record.submitted_answer.trim()
-    : typeof record.answer === 'string'
-      ? record.answer.trim()
-      : '';
+const bodySchema = z.object({
+  queue_id: z.string().min(1),
+  slot_index: z.number().int(),
+  // gave_up / submitted_answer / answer are permissive: a malformed type is
+  // coerced away (matching the prior hand-rolled parser) rather than 400-ing.
+  gave_up: z.boolean().optional().catch(undefined),
+  submitted_answer: z.string().optional().catch(undefined),
+  answer: z.string().optional().catch(undefined),
+});
 
-  if (!queueId || slotIndex === null) return null;
+function parseBody(value: unknown): { queueId: string; slotIndex: number; submittedAnswer: string; gaveUp: boolean } | null {
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  const { queue_id, slot_index, gave_up, submitted_answer, answer } = parsed.data;
+  const gaveUp = gave_up === true;
+  const submittedAnswer = (
+    typeof submitted_answer === 'string'
+      ? submitted_answer
+      : typeof answer === 'string'
+        ? answer
+        : ''
+  ).trim();
   if (!gaveUp && !submittedAnswer) return null;
-  return { queueId, slotIndex, submittedAnswer, gaveUp };
+  return { queueId: queue_id, slotIndex: slot_index, submittedAnswer, gaveUp };
 }
 
 export async function POST(request: NextRequest) {

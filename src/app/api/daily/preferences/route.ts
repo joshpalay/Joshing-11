@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { getKnowledgeBase, invalidateUntouchedDailyQueues } from '@/server/db/queries/daily';
@@ -13,23 +14,21 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+const difficultySchema = z.enum(DAILY_DIFFICULTIES);
+const domainModeSchema = z.enum(DAILY_DOMAIN_MODES);
+
 function isValidDifficulty(value: unknown): value is DailyDifficulty {
-  return DAILY_DIFFICULTIES.includes(value as DailyDifficulty);
+  return difficultySchema.safeParse(value).success;
 }
 
 function isValidDomainMode(value: unknown): value is DailyDomainMode {
-  return DAILY_DOMAIN_MODES.includes(value as DailyDomainMode);
+  return domainModeSchema.safeParse(value).success;
 }
 
 function parseStringArray(value: unknown): string[] | null {
-  if (!Array.isArray(value)) return null;
-  const result: string[] = [];
-  for (const item of value) {
-    if (typeof item !== 'string') return null;
-    const trimmed = item.trim();
-    if (trimmed) result.push(trimmed);
-  }
-  return [...new Set(result)];
+  const parsed = z.array(z.string()).safeParse(value);
+  if (!parsed.success) return null;
+  return [...new Set(parsed.data.map((item) => item.trim()).filter(Boolean))];
 }
 
 // Order-insensitive comparison; both inputs are already de-duped upstream

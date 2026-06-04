@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { dailyQueues, db, feedItems } from '@/server/db';
@@ -12,21 +13,17 @@ export const dynamic = 'force-dynamic';
 
 type DismissReason = 'not_interested' | 'too_old' | 'unclear';
 
-const DISMISS_REASONS = new Set<DismissReason>(['not_interested', 'too_old', 'unclear']);
+const bodySchema = z.object({
+  dailyQueueItemId: z.string(),
+  // An unrecognized reason is dropped to undefined rather than rejected,
+  // preserving the prior hand-rolled parser's behavior.
+  reason: z.enum(['not_interested', 'too_old', 'unclear']).optional().catch(undefined),
+});
 
 function parseBody(value: unknown): { dailyQueueItemId: string; reason?: DismissReason } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const dailyQueueItemId = record.dailyQueueItemId;
-  const reason = record.reason;
-  return typeof dailyQueueItemId === 'string'
-    ? {
-        dailyQueueItemId,
-        reason: typeof reason === 'string' && DISMISS_REASONS.has(reason as DismissReason)
-          ? reason as DismissReason
-          : undefined,
-      }
-    : null;
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  return { dailyQueueItemId: parsed.data.dailyQueueItemId, reason: parsed.data.reason };
 }
 
 export async function POST(request: NextRequest) {

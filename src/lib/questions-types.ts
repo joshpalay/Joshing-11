@@ -1,6 +1,6 @@
 import { assertNever } from '@/lib/assert-never';
 
-/** Question shape returned by /api/questions (matches Prisma Question) */
+/** Question shape returned by /api/questions (matches the Drizzle `questions` row) */
 export type QuestionRecord = {
   id: string;
   creator_id: string;

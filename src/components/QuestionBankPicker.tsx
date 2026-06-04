@@ -49,6 +49,9 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
       })
       .catch(() => setError('Could not load your question bank'))
       .finally(() => setLoading(false));
+    // Mount-only fetch: `onQuestionsLoaded` is a parent callback that may not be
+    // memoized, so depending on it would risk re-fetching on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggle = (id: string) => {

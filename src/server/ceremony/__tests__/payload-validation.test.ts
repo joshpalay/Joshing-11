@@ -75,7 +75,6 @@ describe('beatsPayloadSchema (F3.5)', () => {
   })
 
   it('rejects a payload missing cycleStart', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { cycleStart: _cycleStart, ...rest } = WELL_FORMED
     const result = beatsPayloadSchema.safeParse(rest)
     expect(result.success).toBe(false)
