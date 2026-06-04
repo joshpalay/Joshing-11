@@ -124,8 +124,14 @@ const questionViewColumns = {
 
 export const bankQuestionSelectColumns = questionViewColumns;
 
-type QuestionViewRow = Omit<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>
-  & Partial<Pick<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>>;
+// The pool-substrate fields (B1) are not part of the rendered question view, so
+// they are excluded here like the other non-view columns — partial selects
+// (e.g. bankQuestionSelectColumns) need not fetch them.
+type QuestionViewNonViewKey =
+  | 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'
+  | 'trustTier' | 'perishable' | 'sourceRefs' | 'isDuplicate' | 'suppressedBy';
+type QuestionViewRow = Omit<QuestionRow, QuestionViewNonViewKey>
+  & Partial<Pick<QuestionRow, QuestionViewNonViewKey>>;
 
 function difficultyToNumber(value: QuestionRow['difficultyEstimate']): number {
   if (value === 'accessible') return 1;

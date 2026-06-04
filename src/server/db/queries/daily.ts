@@ -1334,20 +1334,25 @@ export type BankDifficulty = 'accessible' | 'moderate' | 'specialist';
 //
 // Restrictions:
 // - fact_key must be present (predates 2026-05-24; older rows lack it)
-// - created within the last 30 days (filters out the worst pre-quality-gate
-//   historical drift)
 // - not authored by the viewer
+// - not suppressed as an embedding near-duplicate (is_duplicate; B3)
 // - fact_key not already in the viewer's recent avoid set
+//
+// Durability (B1 pool substrate / PRD-D-5 §5.1, D8): the bank no longer excludes
+// questions by age — nothing decays out, so thin domains stop drying up. Recency
+// still *ranks*: we draw a newest-first window and shuffle within it, so when a
+// domain has plenty of recent rows the result matches the prior "random among
+// recent" behavior, and only falls back to older rows when recent ones run out.
 //
 // Returns null when the bank is empty for this domain+difficulty — caller
 // falls back to fresh LLM generation, which incidentally grows the bank.
+const BANK_RECENCY_WINDOW = 50;
 export async function pickBankSource(
   userId: string,
   domain: string,
   difficulty: BankDifficulty,
   avoidFactKeys: ReadonlySet<string>,
 ): Promise<BankSource | null> {
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   let candidates: Array<typeof generatedQuestions.$inferSelect>;
   try {
     candidates = await db
@@ -1358,16 +1363,23 @@ export async function pickBankSource(
         eq(generatedQuestions.difficultyEstimate, difficulty),
         isNotNull(generatedQuestions.factKey),
         sql`${generatedQuestions.userId} <> ${userId}`,
-        gte(generatedQuestions.createdAt, since),
+        eq(generatedQuestions.isDuplicate, false),
       ))
-      .orderBy(sql`random()`)
-      .limit(8);
+      .orderBy(desc(generatedQuestions.createdAt))
+      .limit(BANK_RECENCY_WINDOW);
   } catch (error) {
-    // Tolerate the brief window where the sub_angles column is missing
-    // (migration 0055): a hard failure here would silently disable the
-    // entire bank-pick path until the migration lands.
+    // Tolerate the brief window where a newly-added column is missing
+    // (sub_angles in 0055; is_duplicate in 0062): a hard failure here would
+    // silently disable the entire bank-pick path until the migration lands.
     if (pgErrorCode(error) === '42703') return null;
     throw error;
+  }
+
+  // Shuffle the recency window (Fisher–Yates) so selection within it stays
+  // varied; recency already biases which rows land in the window.
+  for (let i = candidates.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
 
   for (const row of candidates) {
