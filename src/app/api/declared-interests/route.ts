@@ -1,9 +1,20 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { db, declaredInterests } from '@/server/db';
-import { type DeclaredInterestInput, saveDeclaredInterests } from '@/server/db/queries/users';
+import {
+  addDeclaredInterest,
+  DeclaredInterestLimitError,
+  type DeclaredInterestInput,
+  saveDeclaredInterests,
+} from '@/server/db/queries/users';
+
+const addInterestSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  broadCategory: z.string().trim().max(80).optional(),
+});
 
 type DeclaredInterestsBody = {
   interests?: unknown;
@@ -66,6 +77,44 @@ export async function GET() {
       declaredAt: interest.declaredAt.toISOString(),
     })),
   });
+}
+
+// Append a single interest without replacing the existing list (PATCH replaces).
+// Backs the "add a topic" field on the daily setup screen.
+export async function POST(request: Request) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const parsed = addInterestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'invalid_request', message: 'Enter a topic name (up to 80 characters).' },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const result = await addDeclaredInterest(session.userId, {
+      label: parsed.data.label,
+      broadCategory: parsed.data.broadCategory ?? null,
+    });
+    return NextResponse.json({
+      domain: result.domain,
+      broadCategory: result.broadCategory,
+      tier: 'establishing',
+      totalPoints: 0,
+      created: result.created,
+    });
+  } catch (error) {
+    if (error instanceof DeclaredInterestLimitError) {
+      return NextResponse.json(
+        { error: 'interest_limit_reached', message: error.message },
+        { status: 409 },
+      );
+    }
+    const message = error instanceof Error ? error.message : 'Could not add that topic.';
+    return NextResponse.json({ error: 'add_failed', message }, { status: 400 });
+  }
 }
 
 export async function PATCH(request: Request) {
