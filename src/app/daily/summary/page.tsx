@@ -248,6 +248,8 @@ export default function DailySummaryPage() {
         />
       </section>
 
+      {summary.refine ? <RefineYourGame refine={summary.refine} /> : null}
+
       {firstTierCrossing ? (
         <MasteryMoment
           subcategory={
@@ -269,8 +271,6 @@ export default function DailySummaryPage() {
           ))}
         </div>
       </section>
-
-      {summary.refine ? <RefineYourGame refine={summary.refine} /> : null}
 
       {summary.reminderPromptState === 'show' ? <RoundReminderCard /> : null}
 
