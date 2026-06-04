@@ -441,6 +441,70 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0062 (B1 pool substrate) adds the TrustTier/QuestionScope enums
+    // and the pool fields (trust_tier, scope, perishable, source_refs, empirical
+    // stats, embedding-dedup flags) to Question + GeneratedQuestion. App code
+    // (the unified selection layer, suppress-aware bank pick) reads these, so a
+    // preview/production database that records the migration without the pieces
+    // present must still boot. Enums + columns + grandfather backfill are applied
+    // idempotently; the backfills target only rows still at the 'unverified'
+    // default, so they are re-runnable no-ops once corrected.
+    try {
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."TrustTier" AS ENUM('unverified', 'machine_verified', 'human_validated', 'author_confirmed');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."QuestionScope" AS ENUM('private', 'friends_only', 'public');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "trust_tier" "public"."TrustTier" NOT NULL DEFAULT 'unverified'`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "perishable" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "source_refs" jsonb NOT NULL DEFAULT '[]'::jsonb`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "is_duplicate" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "suppressed_by" text`);
+      await db.execute(sql`UPDATE "Question" SET "trust_tier" = 'author_confirmed' WHERE "trust_tier" = 'unverified'`);
+    } catch {
+      // Question may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "trust_tier" "public"."TrustTier" NOT NULL DEFAULT 'unverified'`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "scope" "public"."QuestionScope" NOT NULL DEFAULT 'public'`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "perishable" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "source_refs" jsonb NOT NULL DEFAULT '[]'::jsonb`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "n_answered" integer NOT NULL DEFAULT 0`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "empirical_correct_rate" double precision`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "is_duplicate" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "suppressed_by" text`);
+      await db.execute(sql`UPDATE "GeneratedQuestion" SET "trust_tier" = 'machine_verified' WHERE "trust_tier" = 'unverified'`);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
+    // Migration 0063 (B1) enables pgvector and adds the nullable 1024-dim
+    // embedding column + HNSW cosine indexes to both pool tables. The dedup
+    // helpers read/write GeneratedQuestion.embedding / Question.embedding, so a
+    // database that records the migration without the pieces present must still
+    // boot. Guard the extension, columns, and indexes idempotently. If pgvector
+    // is unavailable the whole block is skipped — insert-time dedup degrades to
+    // the deterministic guards.
+    try {
+      await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "embedding" vector(1024)`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "embedding" vector(1024)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "GeneratedQuestion_embedding_hnsw_idx" ON "GeneratedQuestion" USING hnsw ("embedding" vector_cosine_ops)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "Question_embedding_hnsw_idx" ON "Question" USING hnsw ("embedding" vector_cosine_ops)`);
+    } catch {
+      // pgvector may be unavailable, or the tables may not exist yet on a fresh
+      // database — migrate() handles creation; dedup is best-effort regardless.
+    }
+
     // Migration 0044 adds the nullable User.last_activity_bell_opened_at
     // timestamp used by getBellBadgeCount to compute "rolled-off + unseen"
     // counts. Apply it idempotently in case the migration is recorded

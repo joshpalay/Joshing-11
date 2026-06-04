@@ -12,6 +12,7 @@ import {
 } from '@/server/db';
 import { broadCategoryDisplayName } from '@/lib/question-categorization';
 import { pgErrorCode } from '@/server/db/pg-error';
+import { embedAndResolveDuplicate } from '@/server/pool/dedup';
 
 export type QuestionView = {
   id: string;
@@ -124,8 +125,14 @@ const questionViewColumns = {
 
 export const bankQuestionSelectColumns = questionViewColumns;
 
-type QuestionViewRow = Omit<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>
-  & Partial<Pick<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>>;
+// The pool-substrate fields (B1) are not part of the rendered question view, so
+// they are excluded here like the other non-view columns — partial selects
+// (e.g. bankQuestionSelectColumns) need not fetch them.
+type QuestionViewNonViewKey =
+  | 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'
+  | 'trustTier' | 'perishable' | 'sourceRefs' | 'isDuplicate' | 'suppressedBy' | 'embedding';
+type QuestionViewRow = Omit<QuestionRow, QuestionViewNonViewKey>
+  & Partial<Pick<QuestionRow, QuestionViewNonViewKey>>;
 
 function difficultyToNumber(value: QuestionRow['difficultyEstimate']): number {
   if (value === 'accessible') return 1;
@@ -531,6 +538,13 @@ export async function createQuestion(params: {
     .onConflictDoNothing({
       target: [userQuestionBank.userId, userQuestionBank.questionId],
     });
+
+  // Semantic-dedup backstop (B1 pool substrate). Best-effort, no-op without a
+  // VOYAGE_API_KEY. A human-authored question that collides with an existing
+  // MACHINE pool row suppresses the *machine* row (human beats machine); a
+  // collision with another human row suppresses this new one. Always flags,
+  // never deletes.
+  await embedAndResolveDuplicate({ id: created.id, origin: 'human', questionText: params.text });
 
   return { id: created.id };
 }
