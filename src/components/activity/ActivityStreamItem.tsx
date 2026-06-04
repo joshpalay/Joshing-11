@@ -89,36 +89,48 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   // expanded), so the answered-state is held HERE — not inside the expansion —
   // and ticks up + persists as the viewer answers, even after the result pop-up
   // closes or the line is collapsed and reopened. Milestone lines only.
+  //
+  // We hold the viewer's per-question RESULT (correct / incorrect), not just a
+  // boolean: a correct answer ticks the "{k} of {n} answered" progress; a missed
+  // one locks the question (one shot) but does not count as answered.
   const expand = item.expand;
   const milestoneQuestions = expand && expand.kind === 'milestone' ? expand.questions : null;
-  const [answeredIds, setAnsweredIds] = useState<Set<string>>(
-    () => new Set((milestoneQuestions ?? []).filter((q) => q.answered).map((q) => q.questionId)),
-  );
+  const [resultById, setResultById] = useState<Map<string, 'correct' | 'incorrect'>>(() => {
+    const seed = new Map<string, 'correct' | 'incorrect'>();
+    for (const q of milestoneQuestions ?? []) {
+      if (q.answerStatus === 'correct' || q.answerStatus === 'incorrect') {
+        seed.set(q.questionId, q.answerStatus);
+      }
+    }
+    return seed;
+  });
 
-  function markAnswered(questionId: string) {
-    setAnsweredIds((prev) => {
-      const next = new Set(prev);
-      next.add(questionId);
+  function recordResult(questionId: string, result: 'correct' | 'incorrect') {
+    setResultById((prev) => {
+      const next = new Map(prev);
+      next.set(questionId, result);
       return next;
     });
   }
 
+  const correctCount = (milestoneQuestions ?? []).filter(
+    (q) => resultById.get(q.questionId) === 'correct',
+  ).length;
+
   const milestoneProgress =
     milestoneQuestions && milestoneQuestions.length > 0
-      ? {
-          answered: milestoneQuestions.filter((q) => answeredIds.has(q.questionId)).length,
-          total: milestoneQuestions.length,
-        }
+      ? { answered: correctCount, total: milestoneQuestions.length }
       : null;
 
   // The bundle mark (milestone) shares the row's live answered-state: as the
-  // viewer answers questions inline, solid triangles flip to hollow. Caps at 5
-  // triangles silently (the questions array is already ≤5); copy stays truthful.
+  // viewer answers questions correctly inline, solid triangles flip to hollow.
+  // Caps at 5 triangles silently (the questions array is already ≤5); copy stays
+  // truthful.
   const bundleCounts =
     item.icon === 'bundle' && milestoneQuestions
       ? (() => {
           const total = Math.min(milestoneQuestions.length, 5);
-          const answered = Math.min(answeredIds.size, total);
+          const answered = Math.min(correctCount, total);
           return { total, unanswered: total - answered };
         })()
       : null;
@@ -231,7 +243,7 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
 
       {expandable && open && expand ? (
         expand.kind === 'milestone' ? (
-          <MilestoneExpansion expand={expand} answeredIds={answeredIds} onAnswered={markAnswered} />
+          <MilestoneExpansion expand={expand} resultById={resultById} onResult={recordResult} />
         ) : expand.kind === 'same_correct' ? (
           <ConvergenceExpansion expand={expand} />
         ) : (
@@ -277,12 +289,12 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
 // friend's ≤5 literal questions to answer.
 function MilestoneExpansion({
   expand,
-  answeredIds,
-  onAnswered,
+  resultById,
+  onResult,
 }: {
   expand: Extract<StreamExpand, { kind: 'milestone' }>;
-  answeredIds: Set<string>;
-  onAnswered: (questionId: string) => void;
+  resultById: Map<string, 'correct' | 'incorrect'>;
+  onResult: (questionId: string, result: 'correct' | 'incorrect') => void;
 }) {
   return (
     <div
@@ -298,8 +310,8 @@ function MilestoneExpansion({
         <InlineAnswerFlow
           key={q.questionId}
           question={q}
-          answered={answeredIds.has(q.questionId)}
-          onAnswered={onAnswered}
+          status={resultById.get(q.questionId) ?? 'unanswered'}
+          onResult={onResult}
         />
       ))}
     </div>

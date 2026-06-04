@@ -6,7 +6,7 @@ import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
 import { getSession } from '@/server/auth/session';
 import { db, playerMastery, questions } from '@/server/db';
-import { getSeededPlayQuestions } from '@/server/db/queries/lately';
+import { getSeededPlayQuestions, getViewerAnswerStatusByQuestionId } from '@/server/db/queries/lately';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { gradeAnswer } from '@/server/grading';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
@@ -65,6 +65,19 @@ export async function POST(request: NextRequest) {
   // is "send it onward", not "answer", under the relationship rule.
   if (question.creatorId && question.creatorId === session.userId) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
+  // One shot: a milestone question the viewer has already attempted is LOCKED —
+  // whether they got it right (no double credit) or missed it (no retry). The UI
+  // surfaces this as a CORRECT / MISSED badge instead of an ANSWER button, but we
+  // re-enforce it here so a stale client (or a direct call) can't re-submit.
+  const priorStatus = await getViewerAnswerStatusByQuestionId(session.userId, [question.id]);
+  const already = priorStatus.get(question.id);
+  if (already) {
+    return NextResponse.json(
+      { error: 'already_answered', result: already },
+      { status: 409 },
+    );
   }
 
   const domain = question.canonicalSubcategory || question.broadCategory || question.category;

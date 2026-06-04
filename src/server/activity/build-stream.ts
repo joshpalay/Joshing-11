@@ -27,7 +27,7 @@ import {
   getLatelyMilestones,
   getLatelyMoments,
   getMilestoneQuestionText,
-  getViewerCorrectlyAnsweredIds,
+  getViewerAnswerStatusByQuestionId,
 } from '@/server/db/queries/lately';
 
 export async function buildActivityStream(userId: string): Promise<StreamItem[]> {
@@ -40,7 +40,7 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
 
   // Resolve every milestone's first ≤5 literal questions and every
   // convergence's 3 cluster questions in one batch (text + display domain), and
-  // which of them the viewer already answered correctly.
+  // the viewer's own standing on each (answered correctly, missed, or untouched).
   const cappedIdsByMilestone = milestones.map((m) => ({
     id: m.id,
     ids: m.questionIds.slice(0, MILESTONE_CARD_QUESTION_CAP),
@@ -51,9 +51,9 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
       ...convergences.flatMap((c) => c.questionIds),
     ]),
   ];
-  const [textById, answeredIds] = await Promise.all([
+  const [textById, statusById] = await Promise.all([
     getMilestoneQuestionText(allQuestionIds),
-    getViewerCorrectlyAnsweredIds(userId, allQuestionIds),
+    getViewerAnswerStatusByQuestionId(userId, allQuestionIds),
   ]);
 
   const utilityItems = filterUtilityActivities(items, moments).map(
@@ -68,7 +68,7 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
         questionId: q.questionId,
         text: q.text,
         domain: q.domain,
-        answered: answeredIds.has(q.questionId),
+        answerStatus: statusById.get(q.questionId) ?? 'unanswered',
       }));
     return milestoneToStreamItem(m, questions);
   });
@@ -80,7 +80,7 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
         questionId: q.questionId,
         text: q.text,
         domain: q.domain,
-        answered: true, // read-only reveal: both already answered correctly
+        answerStatus: 'correct' as const, // read-only reveal: both already answered correctly
       }));
     return convergenceToStreamItem(c, questions, convergenceCaptionTemplate(c.id));
   });

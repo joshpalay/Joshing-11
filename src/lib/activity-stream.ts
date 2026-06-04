@@ -39,13 +39,18 @@ export type StreamLinePart =
   // on the homepage "What's Happening" head (see ActivityStreamItem).
   | { t: 'category'; v: string };
 
+// The viewer's standing on a question, from their own answer history:
+//   - 'unanswered' → never attempted; still answerable (shows ANSWER →).
+//   - 'correct'    → answered correctly; counts toward the milestone
+//                    "{k} of {n} answered" progress and the no-double-credit story.
+//   - 'incorrect'  → attempted and missed; LOCKED (one shot — no re-answer).
+export type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
+
 export type StreamQuestion = {
   questionId: string;
   text: string;
   domain: string | null;
-  // True when the viewer has already answered this question correctly. Drives
-  // the milestone "{k} of {n} answered" progress and the no-double-credit story.
-  answered: boolean;
+  answerStatus: AnswerStatus;
 };
 
 // The action an expanded, question-backed item offers — determined by the
@@ -170,7 +175,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   questionId: item.referenceId,
                   text: faq.questionText,
                   domain,
-                  answered: false,
+                  answerStatus: 'unanswered',
                 },
               }
             : null,
@@ -194,7 +199,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   questionId: item.referenceId,
                   text: nm.questionText,
                   domain,
-                  answered: false,
+                  answerStatus: 'unanswered',
                 },
                 strangerId: item.actorUserId,
                 strangerName: actorName(item),
@@ -220,7 +225,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   questionId: item.referenceId,
                   text: nm.questionText,
                   domain,
-                  answered: true,
+                  answerStatus: 'correct',
                 },
                 strangerId: item.actorUserId,
                 strangerName: actorName(item),
@@ -457,7 +462,7 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
         questionId: moment.questionId,
         text: moment.questionText,
         domain: moment.category,
-        answered: true,
+        answerStatus: 'correct',
       },
     },
   };

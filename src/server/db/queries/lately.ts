@@ -349,28 +349,43 @@ export async function getMilestoneQuestionText(
   return out;
 }
 
-// Which of the given questions the viewer has ALREADY answered correctly. Drives
-// the milestone expansion's "{k} of {n} answered" progress on first render and
-// makes the no-double-credit reality visible (a question already in the viewer's
-// mastery history won't earn new credit on re-answer — it becomes repeat_correct).
-export async function getViewerCorrectlyAnsweredIds(
+export type ViewerAnswerStatus = 'correct' | 'incorrect';
+
+// The viewer's own standing on each of the given questions, from their answer
+// history. A question the viewer answered correctly counts toward the milestone
+// "{k} of {n} answered" progress and makes the no-double-credit reality visible
+// (re-answering becomes repeat_correct, 0 points). A question they MISSED is
+// surfaced as 'incorrect' so the expansion can lock it — one shot, no re-answer.
+//
+// Scoped to the viewer's OWN attempts (answeredByUserId = userId) and to rows
+// that actually carry an answer_state, which excludes author/curator credit
+// (those store a null answer_state). Any correct attempt wins; otherwise the
+// question is reported as the incorrect attempt we saw.
+export async function getViewerAnswerStatusByQuestionId(
   userId: string,
   ids: string[],
-): Promise<Set<string>> {
-  const out = new Set<string>();
+): Promise<Map<string, ViewerAnswerStatus>> {
+  const out = new Map<string, ViewerAnswerStatus>();
   if (ids.length === 0) return out;
   const rows = await db
-    .select({ questionId: masteryEvents.questionId })
+    .select({ questionId: masteryEvents.questionId, answerState: masteryEvents.answerState })
     .from(masteryEvents)
     .where(
       and(
         eq(masteryEvents.userId, userId),
+        eq(masteryEvents.answeredByUserId, userId),
         inArray(masteryEvents.questionId, ids),
-        inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
+        isNotNull(masteryEvents.answerState),
       ),
     );
   for (const row of rows) {
-    if (row.questionId) out.add(row.questionId);
+    if (!row.questionId) continue;
+    const correct = row.answerState !== 'incorrect';
+    if (correct) {
+      out.set(row.questionId, 'correct');
+    } else if (!out.has(row.questionId)) {
+      out.set(row.questionId, 'incorrect');
+    }
   }
   return out;
 }
