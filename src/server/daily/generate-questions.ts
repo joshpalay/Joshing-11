@@ -1120,6 +1120,7 @@ export async function generateDailyQuestions(
         insideJoke: insideJokeByQuestion.get(question) ?? null,
         trustTier,
         askToAnswerVerified,
+        acceptableVariants: askResult.variantsByIndex.get(persistIndex) ?? [],
         expiresAt,
         usedInQueue: false,
       })

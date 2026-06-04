@@ -102,6 +102,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     question.questionText,
     question.questionType,
   );
+  // Fail toward the player (B4 Phase 4 / Drift Risk 2): a grader outage is not a
+  // real verdict — never mark a friend's question wrong. Return a retryable 503.
+  if (grade.gradedVia === 'fallback') {
+    return NextResponse.json(
+      {
+        error: 'grader_unavailable',
+        message:
+          "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+      },
+      { status: 503 },
+    );
+  }
   const isCorrect = grade.result === 'correct';
 
   // F2.3: compute answer_state against the user's prior history on this

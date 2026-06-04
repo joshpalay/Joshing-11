@@ -231,6 +231,7 @@ async function refillDomain(
           sourceRefs: q.source_refs,
           trustTier,
           askToAnswerVerified,
+          acceptableVariants: askResult.variantsByIndex.get(i) ?? [],
           expiresAt: DURABLE_EXPIRY,
           usedInQueue: false,
         })

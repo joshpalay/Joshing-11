@@ -70,6 +70,11 @@ export interface AskToAnswerResult {
   /** Indices that affirmatively passed — cold attempts agreed with each other
    *  and matched the stored answer. These earn `machine_verified`. */
   verified: Set<number>;
+  /** Distinct cold answers per verified index, normalized and minus the stored
+   *  answer — acceptable_variant seeds (B4 Phase 4). The judge already deemed
+   *  these equivalent to the stored answer, so they are safe to honor in grading.
+   *  Only populated for verified indices. */
+  variantsByIndex: Map<number, string[]>;
   reasons: Record<number, string>;
 }
 
@@ -163,7 +168,12 @@ export async function askToAnswerBatch(
   items: AskToAnswerItem[],
   config: AskToAnswerConfig = getAskToAnswerConfig(),
 ): Promise<AskToAnswerResult> {
-  const empty: AskToAnswerResult = { toDrop: new Set(), verified: new Set(), reasons: {} };
+  const empty: AskToAnswerResult = {
+    toDrop: new Set(),
+    verified: new Set(),
+    variantsByIndex: new Map(),
+    reasons: {},
+  };
   if (!config.enabled || items.length === 0) return empty;
   const client = getAnthropicClient();
   if (!client) return empty;
@@ -205,7 +215,11 @@ export async function askToAnswerBatch(
       },
       { timeoutMs: HAIKU_GATE_TIMEOUT_MS },
     );
-    return parseJudgeResponse(extractTextContent(response.content), items.length);
+    const parsed = parseJudgeResponse(extractTextContent(response.content), items.length);
+    return {
+      ...parsed,
+      variantsByIndex: extractVariants(parsed.verified, items, coldByItem),
+    };
   } catch (err) {
     // Fail open: a judge outage must not drop questions. They stay unverified.
     console.warn('[daily/ask-to-answer] judge call failed', {
@@ -213,6 +227,37 @@ export async function askToAnswerBatch(
     });
     return empty;
   }
+}
+
+const MAX_VARIANTS = 4;
+
+/**
+ * For each verified item, the distinct cold answers minus the stored answer form
+ * acceptable_variant seeds (the judge already deemed them equivalent). Normalized
+ * (trimmed), case-insensitively deduped, UNSURE/empty dropped, capped.
+ */
+export function extractVariants(
+  verified: Set<number>,
+  items: AskToAnswerItem[],
+  coldByItem: (string | null)[][],
+): Map<number, string[]> {
+  const out = new Map<number, string[]>();
+  for (const i of verified) {
+    const stored = items[i].answer.trim().toLowerCase();
+    const seen = new Set<string>([stored]);
+    const variants: string[] = [];
+    for (const raw of coldByItem[i] ?? []) {
+      if (!raw) continue;
+      const trimmed = raw.trim();
+      const key = trimmed.toLowerCase();
+      if (!trimmed || key === 'unsure' || seen.has(key)) continue;
+      seen.add(key);
+      variants.push(trimmed);
+      if (variants.length >= MAX_VARIANTS) break;
+    }
+    if (variants.length > 0) out.set(i, variants);
+  }
+  return out;
 }
 
 /**

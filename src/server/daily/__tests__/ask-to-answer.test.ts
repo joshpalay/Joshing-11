@@ -28,6 +28,7 @@ vi.mock('@/lib/llm', () => ({
 
 const {
   askToAnswerBatch,
+  extractVariants,
   parseJudgeResponse,
   resolveMachineTrustTier,
 } = await import('@/server/daily/ask-to-answer');
@@ -71,6 +72,35 @@ describe('parseJudgeResponse', () => {
       expect(r.verified.size).toBe(0);
       expect(r.toDrop.size).toBe(0);
     }
+  });
+});
+
+describe('extractVariants (B4 Phase 4)', () => {
+  const items = [
+    { questionText: 'q0', answer: 'Johann Sebastian Bach' },
+    { questionText: 'q1', answer: 'Paris' },
+  ];
+
+  it('collects distinct cold answers minus the stored answer, for verified items only', () => {
+    const cold = [
+      ['J.S. Bach', 'Johann Sebastian Bach', 'Bach'], // index 0 (verified)
+      ['Lyon', 'Lyon', 'Lyon'], // index 1 (NOT verified — excluded)
+    ];
+    const variants = extractVariants(new Set([0]), items, cold);
+    expect(variants.get(0)).toEqual(['J.S. Bach', 'Bach']); // stored form dropped, deduped
+    expect(variants.has(1)).toBe(false);
+  });
+
+  it('drops UNSURE, empties, and case-dupes; never emits an empty list', () => {
+    const cold = [['UNSURE', '', 'bach', 'BACH']];
+    const variants = extractVariants(new Set([0]), items, cold);
+    expect(variants.get(0)).toEqual(['bach']);
+  });
+
+  it('omits an index entirely when no usable variant remains', () => {
+    const cold = [['Johann Sebastian Bach', 'UNSURE']];
+    const variants = extractVariants(new Set([0]), items, cold);
+    expect(variants.has(0)).toBe(false);
   });
 });
 

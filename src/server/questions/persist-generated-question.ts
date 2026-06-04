@@ -133,7 +133,9 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
         questionText: generated.questionText,
         answerText: generated.answer,
         factualExplanation: generated.explainer,
-        acceptedAlternatives: [],
+        // Carry the machine row's acceptable_variants (B4 Phase 4) onto the
+        // canonical row so grading honors right-but-rephrased answers everywhere.
+        acceptedAlternatives: generated.acceptableVariants ?? [],
         answerSource: 'llm_suggested',
         questionType: 'factual',
         category: 'general_knowledge',

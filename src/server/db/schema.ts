@@ -601,6 +601,11 @@ export const generatedQuestions = pgTable(
     // independent cold solver corroborated the stored answer at generation time.
     // This + B3 corroboration is what earns the machine_verified trust tier.
     askToAnswerVerified: boolean('ask_to_answer_verified').notNull().default(false),
+    // Acceptable answer variants (B4 Phase 4, §5.3). Equivalent phrasings the cold
+    // solver produced that the judge accepted; honored in grading so a right-but-
+    // rephrased answer is marked correct. Carried to Question.accepted_alternatives
+    // when a machine row is promoted to canonical.
+    acceptableVariants: text('acceptable_variants').array().notNull().default([]),
     // Empirical play stats (D11 / "nobody got it" smell). Back-filled from answer
     // history where a join exists; machine rows usually start 0 / null.
     nAnswered: integer('n_answered').notNull().default(0),

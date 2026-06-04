@@ -531,6 +531,17 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0068 (B4 Phase 4) adds GeneratedQuestion.acceptable_variants —
+    // equivalent answer phrasings honored in grading. App code (generation persist
+    // + the daily/catchup answer routes) reads it, so a database that records the
+    // migration without the column present must still boot.
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "acceptable_variants" text[] NOT NULL DEFAULT '{}'`);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
     // Migration 0063 (B1) enables pgvector and adds the nullable 1024-dim
     // embedding column + HNSW cosine indexes to both pool tables. The dedup
     // helpers read/write GeneratedQuestion.embedding / Question.embedding, so a

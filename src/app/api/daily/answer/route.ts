@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
       canonicalSubcategory: string;
       broadCategory: string | null;
       basePoints: number;
+      acceptedAlternatives: string[];
     };
 
     let question: DailyAnswerQuestion;
@@ -174,6 +175,8 @@ export async function POST(request: NextRequest) {
         canonicalSubcategory: row.canonicalSubcategory,
         broadCategory: row.broadCategory,
         basePoints: Math.round(row.basePoints),
+        // acceptable_variants (B4 Phase 4): right-but-rephrased answers grade correct.
+        acceptedAlternatives: row.acceptableVariants ?? [],
       };
     } else {
       const [row] = await db
@@ -198,6 +201,7 @@ export async function POST(request: NextRequest) {
         canonicalSubcategory: row.canonicalSubcategory ?? slot.domain,
         broadCategory: row.broadCategory,
         basePoints: resolveDailyBasePoints(difficulty),
+        acceptedAlternatives: row.acceptedAlternatives ?? [],
       };
     }
 
@@ -208,7 +212,7 @@ export async function POST(request: NextRequest) {
       : await gradeAnswer(
           parsed.submittedAnswer,
           canonicalAnswer,
-          [],
+          question.acceptedAlternatives,
           question.questionText,
           'factual',
         );

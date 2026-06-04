@@ -7,6 +7,7 @@ import { db, feedItems, users } from '@/server/db';
 import {
   checkJoshingGameCompletion,
   getJoshingGame,
+  JoshingGameGraderUnavailableError,
   JoshingGameValidationError,
   submitJoshingGameResponse,
 } from '@/server/db/queries/joshing-game';
@@ -178,6 +179,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
       insideJokeKind: insideJoke?.kind ?? null,
     });
   } catch (error) {
+    if (error instanceof JoshingGameGraderUnavailableError) {
+      return NextResponse.json(
+        {
+          error: 'grader_unavailable',
+          message:
+            "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+        },
+        { status: error.status },
+      );
+    }
     if (error instanceof JoshingGameValidationError) {
       const status = error.message === 'userId is not a recipient or creator of this game' ? 403 : error.status;
       return NextResponse.json({ error: 'validation', message: error.message }, { status });
