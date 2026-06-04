@@ -197,31 +197,68 @@ function seedDifficultyFromAdaptiveLevel(level: number): ServedDifficulty {
 }
 
 /**
- * The "engaged-fan" rung, expressed on the per-domain served-difficulty ladder
- * (moderate). It is the hard floor for a domain the player explicitly DECLARED:
- * someone who raised their hand for a topic finds accessible ("tourist") trivia
- * condescendingly easy, so a declared domain both *seeds* here and *cannot erode
- * below* here (PRD-D-5 §5.2, D3). Demonstrated domains are NOT floored — they
- * start low and retain the full adaptive range down to accessible.
+ * Minimum first-contact difficulty for a domain the player explicitly opted
+ * into — either by stating it as an area of focus or by accepting one shared by
+ * a friend. Someone who raised their hand for a topic finds "Establishing"
+ * (accessible) trivia condescendingly easy, so we floor the *seed* at "Familiar"
+ * (moderate) for ANY focus domain (declared or demonstrated). This sets only the
+ * starting point. What happens to the floor afterwards is signal-keyed: a
+ * DECLARED domain also holds this as a hard *erosion* floor (the two-incorrect
+ * step-down can't drop below it), while a DEMONSTRATED domain can still step
+ * down to accessible (PRD-D-5 §5.2, D3 — the erosion floor is declared-only).
  */
 const FOCUS_DOMAIN_MIN_DIFFICULTY: ServedDifficulty = 'moderate';
 
-export function applyFocusFloor(difficulty: ServedDifficulty, isDeclaredDomain: boolean): ServedDifficulty {
-  if (!isDeclaredDomain) return difficulty;
+export function applyFocusFloor(difficulty: ServedDifficulty, isFocusDomain: boolean): ServedDifficulty {
+  if (!isFocusDomain) return difficulty;
   return DIFFICULTY_LADDER.indexOf(difficulty) >= DIFFICULTY_LADDER.indexOf(FOCUS_DOMAIN_MIN_DIFFICULTY)
     ? difficulty
     : FOCUS_DOMAIN_MIN_DIFFICULTY;
 }
 
 /**
+ * Canonical subcategories the player has opted into: declared interests (stated
+ * focus areas) plus any open territory in PLAYER_MASTERY — friend-mediated
+ * acceptances and authored domains both land there. Used to floor the
+ * first-contact *seed* to "Familiar" for any opted-in domain (declared OR
+ * demonstrated). The declared/demonstrated split that governs the *erosion*
+ * floor lives in `getDeclaredDomainSet`. Pass `domains` to scope the lookup.
+ */
+async function getFocusDomainSet(userId: string, domains: string[]): Promise<Set<string>> {
+  const focus = new Set<string>();
+  if (domains.length === 0) return focus;
+
+  const [declaredRows, masteryRows] = await Promise.all([
+    db
+      .select({ domain: declaredInterests.domain })
+      .from(declaredInterests)
+      .where(and(
+        eq(declaredInterests.userId, userId),
+        eq(declaredInterests.isActive, true),
+        inArray(declaredInterests.domain, domains),
+      )),
+    db
+      .select({ domain: playerMastery.canonicalSubcategory })
+      .from(playerMastery)
+      .where(and(
+        eq(playerMastery.userId, userId),
+        inArray(playerMastery.canonicalSubcategory, domains),
+      )),
+  ]);
+
+  for (const row of declaredRows) focus.add(row.domain);
+  for (const row of masteryRows) focus.add(row.domain);
+  return focus;
+}
+
+/**
  * Canonical subcategories the player explicitly DECLARED — stated focus areas
  * (`declaredInterests`) plus PLAYER_MASTERY rows whose `territoryType` is
  * 'declared' (friend-mediated acceptances that came in as declared territory).
- * This is the signal that keys the difficulty floor (D2/D3): declared domains
- * seed at engaged-fan and cannot erode to accessible; demonstrated domains (the
- * rest) get the full adaptive range. Splitting declared from demonstrated here
- * is what stops the floor from pinning newcomer/demonstrated domains too high
- * (PRD-D-5 §5.2, DRIFT RISK 2). Pass `domains` to scope the lookup to the round.
+ * This narrower set keys the hard *erosion* floor (D2/D3): a declared domain
+ * cannot erode below engaged-fan, while a demonstrated domain — though it still
+ * *seeds* at moderate (see `getFocusDomainSet`) — keeps the full range and can
+ * step down to accessible (PRD-D-5 §5.2, DRIFT RISK 2). Pass `domains` to scope.
  */
 async function getDeclaredDomainSet(userId: string, domains: string[]): Promise<Set<string>> {
   const declared = new Set<string>();
@@ -325,13 +362,14 @@ export async function updateDomainDifficultyOnAnswer(
     .limit(1);
 
   if (!existing) {
-    const [level, declaredDomains] = await Promise.all([
+    // Seed floor is for any opted-in (focus) domain — declared or demonstrated.
+    const [level, focusDomains] = await Promise.all([
       readCurrentAdaptiveLevel(userId),
-      getDeclaredDomainSet(userId, [canonicalSubcategory]),
+      getFocusDomainSet(userId, [canonicalSubcategory]),
     ]);
     const seed = applyFocusFloor(
       seedDifficultyFromAdaptiveLevel(level),
-      declaredDomains.has(canonicalSubcategory),
+      focusDomains.has(canonicalSubcategory),
     );
     await db.insert(userDomainDifficulties).values({
       userId,
@@ -344,8 +382,8 @@ export async function updateDomainDifficultyOnAnswer(
     return;
   }
 
-  // Declared domains carry the engaged-fan erosion floor; demonstrated domains
-  // step down freely (default 'accessible' floor).
+  // Erosion floor is declared-only: declared domains carry the engaged-fan
+  // floor, demonstrated domains step down freely (default 'accessible' floor).
   const declaredDomains = await getDeclaredDomainSet(userId, [canonicalSubcategory]);
   const floor: ServedDifficulty = declaredDomains.has(canonicalSubcategory)
     ? FOCUS_DOMAIN_MIN_DIFFICULTY
@@ -393,20 +431,20 @@ export async function getDomainDifficultyOverrides(
   }
 
   // Only domains without a persisted row need a first-contact seed. Pull the
-  // user's adaptive level and which of those domains are declared so we can
-  // floor the seed to the engaged-fan rung for the latter (demonstrated domains
-  // seed straight off the adaptive level and may start at accessible).
+  // user's adaptive level and which of those domains are opted-in focus areas
+  // so we can floor the seed to "Familiar" for the latter (declared OR
+  // demonstrated — the erosion-floor split is applied later, on answer).
   const domainsNeedingSeed = domains.filter((domain) => !known.has(domain));
-  const [seedLevel, declaredDomains] = domainsNeedingSeed.length === 0
+  const [seedLevel, focusDomains] = domainsNeedingSeed.length === 0
     ? [MIN_ADAPTIVE_LEVEL, new Set<string>()]
     : await Promise.all([
         readCurrentAdaptiveLevel(userId),
-        getDeclaredDomainSet(userId, domainsNeedingSeed),
+        getFocusDomainSet(userId, domainsNeedingSeed),
       ]);
 
   for (const domain of domains) {
     const served = known.get(domain)
-      ?? applyFocusFloor(seedDifficultyFromAdaptiveLevel(seedLevel), declaredDomains.has(domain));
+      ?? applyFocusFloor(seedDifficultyFromAdaptiveLevel(seedLevel), focusDomains.has(domain));
     overrides.set(domain, SERVED_TO_PREFERENCE[served]);
   }
 
