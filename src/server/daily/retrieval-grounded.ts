@@ -23,6 +23,7 @@ import {
   getThinActiveDomains,
 } from '@/server/db/queries/retrieval-demand';
 import {
+  USD_PER_WEB_SEARCH,
   estimateCallUsd,
   getRetrievalConfig,
   type RetrievalConfig,
@@ -53,6 +54,9 @@ export type DomainRefillResult = {
 
 export type PoolRefillReport = {
   enabled: boolean;
+  // True when this was a preview: demand derived + spend projected, but no
+  // searches issued and nothing persisted. usdSpent/webSearches are projections.
+  dryRun: boolean;
   ranAt: string;
   reason?: string;
   usdCeiling: number;
@@ -234,10 +238,12 @@ async function refillDomain(
 // Drive a single capped pool-refill run. Derives demand (thin + active domains),
 // spends up to the USD ceiling generating corroborated questions into the shared
 // pool, and returns a structured report. Never throws on per-domain failure.
-export async function runPoolRefill(): Promise<PoolRefillReport> {
+export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<PoolRefillReport> {
+  const dryRun = opts.dryRun ?? false;
   const config = getRetrievalConfig();
   const report: PoolRefillReport = {
     enabled: config.enabled,
+    dryRun,
     ranAt: new Date().toISOString(),
     usdCeiling: config.dailyUsdCeiling,
     usdSpent: 0,
@@ -250,18 +256,19 @@ export async function runPoolRefill(): Promise<PoolRefillReport> {
     perDomain: [],
   };
 
-  if (!config.enabled) {
-    report.reason = 'RETRIEVAL_GROUNDING_ENABLED is not set';
-    return report;
-  }
   const client = getAnthropicClient();
-  if (!client) {
-    report.reason = 'Anthropic client unavailable (missing/invalid ANTHROPIC_API_KEY or LLM disabled)';
-    return report;
-  }
-  if (!config.systemUserId) {
-    report.reason = 'RETRIEVAL_SYSTEM_USER_ID is not set — no owning user for pool rows';
-    return report;
+
+  // A real run requires all three preconditions; a dry run previews regardless
+  // (that's its purpose — sanity-check demand BEFORE flipping the switches) and
+  // just records which precondition would block the real run.
+  const blockers: string[] = [];
+  if (!config.enabled) blockers.push('RETRIEVAL_GROUNDING_ENABLED is not set');
+  if (!client) blockers.push('Anthropic client unavailable (missing/invalid ANTHROPIC_API_KEY or LLM disabled)');
+  if (!config.systemUserId) blockers.push('RETRIEVAL_SYSTEM_USER_ID is not set — no owning user for pool rows');
+
+  if (blockers.length > 0) {
+    report.reason = blockers.join('; ');
+    if (!dryRun) return report;
   }
 
   const domains = await getThinActiveDomains({
@@ -271,11 +278,12 @@ export async function runPoolRefill(): Promise<PoolRefillReport> {
   });
   report.domainsConsidered = domains.length;
 
-  // Worst-case cost of one call (all searches used) — used to stop BEFORE a call
-  // that could cross the ceiling rather than after, so the cap never overshoots
-  // by more than rounding. Token cost is added from the actual usage afterwards.
-  const perCallWorstCaseUsd =
-    config.maxSearchesPerQuestion * config.questionsPerDomain * 0.01;
+  // Worst-case search cost of one call (all max_uses searches) — used to stop
+  // BEFORE a call that could cross the ceiling rather than after, so the cap
+  // never overshoots by more than rounding. Token cost is added from actual
+  // usage afterwards (and is NOT projected in a dry run — flagged in the route).
+  const maxSearchesPerCall = config.maxSearchesPerQuestion * config.questionsPerDomain;
+  const perCallWorstCaseUsd = maxSearchesPerCall * USD_PER_WEB_SEARCH;
 
   for (let i = 0; i < domains.length; i += 1) {
     if (report.usdSpent + perCallWorstCaseUsd > config.dailyUsdCeiling) {
@@ -285,6 +293,28 @@ export async function runPoolRefill(): Promise<PoolRefillReport> {
     }
 
     const { domain } = domains[i];
+
+    if (dryRun) {
+      // Preview only: project this call's worst-case search spend, issue nothing.
+      report.perDomain.push({
+        domain,
+        persisted: 0,
+        webSearches: maxSearchesPerCall,
+        usd: perCallWorstCaseUsd,
+        generated: 0,
+        droppedUncorroborated: 0,
+        droppedQualityGate: 0,
+        droppedDuplicateFact: 0,
+      });
+      report.domainsProcessed += 1;
+      report.usdSpent += perCallWorstCaseUsd;
+      report.webSearches += maxSearchesPerCall;
+      continue;
+    }
+
+    // Preconditions are guaranteed by the early return above on a real run;
+    // narrow them for the type checker (and stay defensive).
+    if (!client || !config.systemUserId) continue;
     try {
       const domainResult = await refillDomain(client, domain, config, config.systemUserId);
       report.perDomain.push(domainResult);

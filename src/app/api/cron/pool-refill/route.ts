@@ -23,13 +23,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const report = await runPoolRefill();
+  // ?dryRun=1 (or ?dry_run / ?preview) derives demand and PROJECTS worst-case
+  // search spend without issuing any searches or persisting anything — for
+  // sanity-checking which domains would be refilled and the cost before turning
+  // the feature on. Projected usdSpent/webSearches cover search cost only; actual
+  // runs also incur token deltas.
+  const params = request.nextUrl.searchParams;
+  const dryRun = ['dryRun', 'dry_run', 'preview'].some((key) => {
+    const value = params.get(key);
+    return value !== null && value !== 'false' && value !== '0';
+  });
+
+  const report = await runPoolRefill({ dryRun });
 
   // The report IS the "what's happening" deliverable: structured log line +
   // returned JSON. Spend vs. ceiling and backlogRemaining are the two numbers to
   // watch — a persistent backlog means the ceiling is below demand.
   console.info('[cron/pool-refill] run complete', {
     enabled: report.enabled,
+    dryRun: report.dryRun,
     reason: report.reason,
     usdSpent: Number(report.usdSpent.toFixed(4)),
     usdCeiling: report.usdCeiling,
