@@ -708,6 +708,10 @@ export const userDomainDifficulties = pgTable(
     consecutiveCorrect: integer('consecutive_correct').notNull().default(0),
     consecutiveIncorrect: integer('consecutive_incorrect').notNull().default(0),
     lastUpdated: timestamp('last_updated', { withTimezone: true }).notNull().defaultNow(),
+    // Refine Your Game "Ease off": while this is in the future the served
+    // difficulty is pinned — updateDomainDifficultyOnAnswer() skips the step.
+    // NULL means no freeze (normal adaptive behavior).
+    freezeUntil: timestamp('freeze_until', { withTimezone: true }),
   },
   (table) => [
     unique('USER_DOMAIN_DIFFICULTY_user_id_canonical_subcategory_key').on(
@@ -733,6 +737,42 @@ export const userDomainExclusions = pgTable(
       table.scope,
       table.canonicalSubcategory,
     ),
+  ],
+);
+
+// Decision + cooldown ledger for the Refine Your Game section on the daily
+// summary. One row per refine item the player acted on (or that was shown and
+// defaulted). `action` moves pending -> committed | defaulted; staged changes
+// apply at next-daily build (src/server/refine/commit.ts), which is also when
+// `cooldownUntil` is stamped. See drizzle/0063_daily_refine_decision.sql.
+export const dailyRefineDecisions = pgTable(
+  'DAILY_REFINE_DECISION',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    queueId: text('queue_id').notNull().references(() => dailyQueues.id, { onDelete: 'cascade' }),
+    // 'friend_expansion' | 'difficulty_escalation' | 'struggle_pruning'
+    itemType: text('item_type').notNull(),
+    canonicalSubcategory: text('canonical_subcategory').notNull(),
+    // Set only for friend_expansion (the bonus source friend).
+    friendId: text('friend_id'),
+    // 'pending' | 'committed' | 'defaulted'
+    action: text('action').notNull().default('pending'),
+    committedAt: timestamp('committed_at', { withTimezone: true }),
+    cooldownUntil: timestamp('cooldown_until', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // COALESCE(friend_id,'') in the unique index keeps the upsert key stable
+    // for non-expansion rows; expressed in SQL (drizzle/0063), not modeled here.
+    index('DAILY_REFINE_DECISION_cooldown_idx').on(
+      table.userId,
+      table.itemType,
+      table.canonicalSubcategory,
+      table.cooldownUntil,
+    ),
+    index('DAILY_REFINE_DECISION_uncommitted_idx').on(table.userId, table.committedAt),
   ],
 );
 

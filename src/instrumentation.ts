@@ -993,6 +993,94 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0064 (Refine Your Game) adds USER_DOMAIN_DIFFICULTY.freeze_until.
+    // adaptive-difficulty.ts reads it on every answer to decide whether the
+    // served difficulty is pinned, so a preview/production database with the
+    // migration recorded but the column missing would error before migrate()
+    // could repair it. Additive nullable column — pre-apply it idempotently.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "USER_DOMAIN_DIFFICULTY"
+          ADD COLUMN IF NOT EXISTS "freeze_until" timestamp with time zone
+      `);
+    } catch {
+      // USER_DOMAIN_DIFFICULTY may not exist yet on a fresh database —
+      // migrate() creates it before this migration runs.
+    }
+
+    // Migration 0065 (Refine Your Game) creates DAILY_REFINE_DECISION, the
+    // decision + cooldown ledger behind the daily-summary refine section. The
+    // summary builder, the resolve/undo route, and the next-daily commit hook
+    // all read this table, so a preview/production database with the migration
+    // recorded but the table missing would 42P01 before migrate() could repair
+    // it. Pre-create the table, FKs, and indexes idempotently.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "DAILY_REFINE_DECISION" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL,
+          "queue_id" text NOT NULL,
+          "item_type" text NOT NULL,
+          "canonical_subcategory" text NOT NULL,
+          "friend_id" text,
+          "action" text NOT NULL DEFAULT 'pending',
+          "committed_at" timestamp with time zone,
+          "cooldown_until" timestamp with time zone,
+          "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+          "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+        )
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          decision_table regclass := to_regclass('public."DAILY_REFINE_DECISION"');
+          user_table regclass := to_regclass('public."User"');
+          queue_table regclass := to_regclass('public."DailyQueue"');
+        BEGIN
+          IF decision_table IS NOT NULL
+            AND user_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'DAILY_REFINE_DECISION_user_id_User_id_fk'
+                AND conrelid = decision_table
+            )
+          THEN
+            ALTER TABLE "DAILY_REFINE_DECISION"
+              ADD CONSTRAINT "DAILY_REFINE_DECISION_user_id_User_id_fk"
+              FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE;
+          END IF;
+
+          IF decision_table IS NOT NULL
+            AND queue_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'DAILY_REFINE_DECISION_queue_id_DailyQueue_id_fk'
+                AND conrelid = decision_table
+            )
+          THEN
+            ALTER TABLE "DAILY_REFINE_DECISION"
+              ADD CONSTRAINT "DAILY_REFINE_DECISION_queue_id_DailyQueue_id_fk"
+              FOREIGN KEY ("queue_id") REFERENCES "DailyQueue"("id") ON DELETE CASCADE;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "DAILY_REFINE_DECISION_unique_item"
+          ON "DAILY_REFINE_DECISION" ("user_id", "queue_id", "item_type", "canonical_subcategory", COALESCE("friend_id", ''))
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "DAILY_REFINE_DECISION_cooldown_idx"
+          ON "DAILY_REFINE_DECISION" ("user_id", "item_type", "canonical_subcategory", "cooldown_until")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "DAILY_REFINE_DECISION_uncommitted_idx"
+          ON "DAILY_REFINE_DECISION" ("user_id", "committed_at")
+      `);
+    } catch {
+      // User or DailyQueue may not exist yet on a fresh database — migrate()
+      // creates them before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
