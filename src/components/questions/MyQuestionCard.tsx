@@ -88,6 +88,17 @@ export function MyQuestionCard({
           >
             {question.timesAnswered} answers · {question.correctRate}% correct · {question.usedInGamesCount} games
           </p>
+          {question.nobody_correct_flag ? (
+            // "Nobody got it" review smell (B4 Phase 2): a QA signal that enough
+            // players have tried with none correct — likely a bad answer, not a
+            // hard question. Flagged for review, never auto-removed.
+            <p
+              className="mt-1 inline-flex items-center gap-1 text-[12px] font-medium leading-snug"
+              style={{ color: 'var(--ink)', opacity: 0.8 }}
+            >
+              ⚠ Nobody&apos;s gotten this right — flagged for review
+            </p>
+          ) : null}
           {answerersLine ? (
             <p
               className="mt-1 text-[13px] leading-snug"

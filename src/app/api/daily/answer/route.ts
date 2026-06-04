@@ -20,6 +20,7 @@ import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { type QueueSlot } from '@/server/daily/types';
 import { asQueueSlots } from '@/server/daily/catchup';
 import { resolveDailyBasePoints } from '@/server/daily/types';
+import { resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { computeAnswerState } from '@/server/answer-state';
@@ -150,6 +151,7 @@ export async function POST(request: NextRequest) {
       canonicalSubcategory: string;
       broadCategory: string | null;
       basePoints: number;
+      acceptedAlternatives: string[];
     };
 
     let question: DailyAnswerQuestion;
@@ -165,6 +167,19 @@ export async function POST(request: NextRequest) {
       if (!row) {
         return dailyAnswerErrorResponse(404, 'question_not_found', 'We could not find that Daily Five question.');
       }
+      // D11 (B4 Phase 5): once a bank question has real play history, its measured
+      // correct rate overrides the model's difficulty_estimate for scoring — the
+      // pool teaches the floor what is actually easy. Falls back to the stored
+      // basePoints when there isn't enough play yet.
+      const effective = resolveEffectiveDifficulty({
+        estimate: row.difficultyEstimate,
+        empiricalRate: row.empiricalCorrectRate,
+        nAnswered: row.nAnswered,
+      });
+      const basePoints =
+        effective.source === 'empirical'
+          ? resolveDailyBasePoints(effective.difficulty)
+          : Math.round(row.basePoints);
       question = {
         generatedId: row.id,
         canonicalId: null,
@@ -173,7 +188,9 @@ export async function POST(request: NextRequest) {
         explainer: row.explainer,
         canonicalSubcategory: row.canonicalSubcategory,
         broadCategory: row.broadCategory,
-        basePoints: Math.round(row.basePoints),
+        basePoints,
+        // acceptable_variants (B4 Phase 4): right-but-rephrased answers grade correct.
+        acceptedAlternatives: row.acceptableVariants ?? [],
       };
     } else {
       const [row] = await db
@@ -198,6 +215,7 @@ export async function POST(request: NextRequest) {
         canonicalSubcategory: row.canonicalSubcategory ?? slot.domain,
         broadCategory: row.broadCategory,
         basePoints: resolveDailyBasePoints(difficulty),
+        acceptedAlternatives: row.acceptedAlternatives ?? [],
       };
     }
 
@@ -208,7 +226,7 @@ export async function POST(request: NextRequest) {
       : await gradeAnswer(
           parsed.submittedAnswer,
           canonicalAnswer,
-          [],
+          question.acceptedAlternatives,
           question.questionText,
           'factual',
         );

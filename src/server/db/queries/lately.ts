@@ -12,6 +12,11 @@ import {
   type ConvergenceCoCorrectRow,
 } from '@/lib/convergence';
 import { resolveAuthorDisplay } from '@/lib/questions-types';
+import {
+  FRIEND_FACING_TIERS,
+  applyTierGate,
+  type TrustTier,
+} from '@/server/daily/verification-gating';
 import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
 import { SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
@@ -398,11 +403,12 @@ export async function getLatelyConvergences(
 
   // 1. The viewer's correct answers, with each question's author so we can drop
   //    questions the viewer wrote. Keep the EARLIEST correct moment per question.
-  const viewerRows = await db
+  const viewerRowsRaw = await db
     .select({
       questionId: masteryEvents.questionId,
       createdAt: masteryEvents.createdAt,
       creatorId: questions.creatorId,
+      trustTier: questions.trustTier,
     })
     .from(masteryEvents)
     .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
@@ -415,6 +421,15 @@ export async function getLatelyConvergences(
         gte(masteryEvents.createdAt, lookbackStart),
       ),
     );
+
+  // Tier-gate (B4 Phase 3): a Convergence moment only forms from human_validated|
+  // author_confirmed questions. Off by default — shadow-logs and keeps today's set.
+  const viewerRows = applyTierGate(
+    'convergence',
+    viewerRowsRaw,
+    (row) => row.trustTier as TrustTier,
+    FRIEND_FACING_TIERS,
+  ).rows;
 
   const viewerByQuestion = new Map<
     string,

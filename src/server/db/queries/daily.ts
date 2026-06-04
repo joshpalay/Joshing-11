@@ -20,6 +20,12 @@ import { CATEGORIES, categoryLabel, HOUSE_AUTHOR, resolveAuthorDisplay } from '@
 import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import {
+  FRIEND_FACING_TIERS,
+  SELF_PRACTICE_TIERS,
+  applyTierGate,
+  type TrustTier,
+} from '@/server/daily/verification-gating';
+import {
   catchUpExpiresAt,
   expiresWithin24Hours,
   isCatchUpQueueDateEligible,
@@ -952,6 +958,7 @@ export async function pickEligibleAuthoredQuestions(
       difficultyEstimate: canonicalQuestions.difficultyEstimate,
       creatorNote: canonicalQuestions.creatorNote,
       publicEligibilityScore: canonicalQuestions.publicEligibilityScore,
+      trustTier: canonicalQuestions.trustTier,
       createdAt: canonicalQuestions.createdAt,
     })
     .from(canonicalQuestions)
@@ -969,6 +976,15 @@ export async function pickEligibleAuthoredQuestions(
     )
     .limit(overFetch);
 
+  // Tier-gate (B4 Phase 3): friend-facing requires human_validated|author_confirmed.
+  // Off by default — shadow-logs and serves today's set until the flag is flipped.
+  const tierGated = applyTierGate(
+    'friend-facing/authored',
+    candidates,
+    (row) => row.trustTier as TrustTier,
+    FRIEND_FACING_TIERS,
+  ).rows;
+
   const tierOf = (creatorId: string | null): number => {
     if (!creatorId) return 3;
     if (socialGraph.direct.has(creatorId)) return 0;
@@ -976,7 +992,7 @@ export async function pickEligibleAuthoredQuestions(
     return 2;
   };
 
-  const filtered = candidates
+  const filtered = tierGated
     .filter((row) => row.creatorId && row.creatorId !== viewerUserId)
     .filter((row) => !seenQuestionIds.has(row.id))
     .filter((row) => row.canonicalSubcategory && !isGenericSubcategory(row.canonicalSubcategory))
@@ -1184,6 +1200,7 @@ export async function pickHouseQuestions(
       category: canonicalQuestions.category,
       difficultyEstimate: canonicalQuestions.difficultyEstimate,
       creatorNote: canonicalQuestions.creatorNote,
+      trustTier: canonicalQuestions.trustTier,
       createdAt: canonicalQuestions.createdAt,
     })
     .from(canonicalQuestions)
@@ -1198,7 +1215,16 @@ export async function pickHouseQuestions(
     .orderBy(desc(canonicalQuestions.createdAt))
     .limit(Math.max(limit * 4, 20));
 
-  return selectHousePicks(candidates, seenQuestionIds, limit);
+  // Tier-gate (B4 Phase 3): house editorial is the friend-facing bucket
+  // (author-asserted, public per D9). Off by default — shadow-logs only.
+  const gatedCandidates = applyTierGate(
+    'house/editorial',
+    candidates,
+    (row) => row.trustTier as TrustTier,
+    FRIEND_FACING_TIERS,
+  ).rows;
+
+  return selectHousePicks(gatedCandidates, seenQuestionIds, limit);
 }
 
 /**
@@ -1374,6 +1400,16 @@ export async function pickBankSource(
     if (pgErrorCode(error) === '42703') return null;
     throw error;
   }
+
+  // Tier-gate (B4 Phase 3): self-practice may only serve tier ≥ machine_verified.
+  // Off by default — shadow-logs the would-filter count and serves today's set
+  // until the enforcement flag is flipped.
+  candidates = applyTierGate(
+    'self-practice/bank',
+    candidates,
+    (row) => row.trustTier as TrustTier,
+    SELF_PRACTICE_TIERS,
+  ).rows;
 
   // Shuffle the recency window (Fisher–Yates) so selection within it stays
   // varied; recency already biases which rows land in the window.

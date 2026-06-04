@@ -38,6 +38,7 @@ import { normalizeFactKey } from '@/server/questions/fact-key';
 import { textContainsAnswer } from '@/server/questions/self-answering';
 import { resolveDailyBasePoints } from './types';
 import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
+import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
 
 // Cap the recent question-text block at this many entries inside the prompt.
 // The full recent history (up to 200) is still used to derive the fact-key
@@ -1033,19 +1034,41 @@ export async function generateDailyQuestions(
   // aside. Mirrors the parallel/fail-open pattern of the LLM gates above.
   const toPersist = generated.slice(0, count);
   const insideJokeByQuestion = new Map<(typeof toPersist)[number], string | null>();
-  await Promise.all(
-    toPersist.map(async (question) => {
-      const aside = await generateInsideJoke({
-        questionText: question.question_text,
-        correctAnswer: question.answer,
-        broadCategory: question.broad_category,
-        canonicalSubcategory: question.canonical_subcategory,
-      }).catch(() => null);
-      insideJokeByQuestion.set(question, aside);
-    }),
-  );
+  // Ask-to-answer gate (B4 Phase 1): strip the answer and ask a separate cold
+  // solver; a question whose cold answers contradict the stored answer is dropped,
+  // one they corroborate earns machine_verified. Runs in parallel with the aside
+  // precompute; fails open (drops/verifies nothing on an LLM outage). Scoped to
+  // the rows we will actually persist rather than the full generated batch.
+  const [, askResult] = await Promise.all([
+    Promise.all(
+      toPersist.map(async (question) => {
+        const aside = await generateInsideJoke({
+          questionText: question.question_text,
+          correctAnswer: question.answer,
+          broadCategory: question.broad_category,
+          canonicalSubcategory: question.canonical_subcategory,
+        }).catch(() => null);
+        insideJokeByQuestion.set(question, aside);
+      }),
+    ),
+    askToAnswerBatch(
+      toPersist.map((q) => ({ questionText: q.question_text, answer: q.answer })),
+    ),
+  ]);
+  if (askResult.toDrop.size > 0) {
+    console.warn('[daily/generate-questions] dropping ask-to-answer failures', {
+      droppedCount: askResult.toDrop.size,
+      droppedIndices: [...askResult.toDrop].sort((a, b) => a - b),
+      reasons: askResult.reasons,
+      originalCount: toPersist.length,
+    });
+  }
 
-  for (const question of toPersist) {
+  for (let persistIndex = 0; persistIndex < toPersist.length; persistIndex += 1) {
+    const question = toPersist[persistIndex];
+    // Drop ask-to-answer failures: the cold solver contradicted the stored answer.
+    if (askResult.toDrop.has(persistIndex)) continue;
+
     const { canonicalDomain } = await reconcileProposedDomain(
       question.canonical_subcategory,
       userId,
@@ -1075,6 +1098,12 @@ export async function generateDailyQuestions(
     }
 
     const basePoints = resolveDailyBasePoints(question.difficulty_estimate);
+    // Trust tier (B4 Phase 1 / §6): ask-to-answer corroboration promotes to
+    // machine_verified. This non-grounded path has no retrieval corroboration,
+    // so the tier hinges on the ask-to-answer verdict; an unevaluated row (gate
+    // disabled or failed open) stays unverified.
+    const askToAnswerVerified = askResult.verified.has(persistIndex);
+    const trustTier = resolveMachineTrustTier({ askToAnswerVerified, corroborated: false });
     const [row] = await db
       .insert(generatedQuestions)
       .values({
@@ -1089,6 +1118,9 @@ export async function generateDailyQuestions(
         factKey,
         subAngles: question.sub_angles,
         insideJoke: insideJokeByQuestion.get(question) ?? null,
+        trustTier,
+        askToAnswerVerified,
+        acceptableVariants: askResult.variantsByIndex.get(persistIndex) ?? [],
         expiresAt,
         usedInQueue: false,
       })

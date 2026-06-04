@@ -75,6 +75,17 @@ export async function POST(request: NextRequest) {
     question.questionText,
     question.questionType,
   );
+  // Fail toward the player (B4 Phase 4 / Drift Risk 2): hold a grader outage for retry.
+  if (grade.gradedVia === 'fallback') {
+    return NextResponse.json(
+      {
+        error: 'grader_unavailable',
+        message:
+          "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+      },
+      { status: 503 },
+    );
+  }
   const isCorrect = grade.result === 'correct';
 
   // F2.3 parity with the feed route: state-adjusted credit against prior history

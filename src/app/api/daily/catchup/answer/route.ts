@@ -142,6 +142,16 @@ async function handleDailyCatchupAnswer({
     catchupItem.questionText,
     'factual',
   );
+  // Fail toward the player (B4 Phase 4 / Drift Risk 2): a grader outage is not a
+  // real verdict — never persist 'wrong'. Hold for retry.
+  if (grade.gradedVia === 'fallback') {
+    return catchUpErrorResponse(
+      503,
+      'grader_unavailable',
+      "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+      { refresh_required: false, next_action: 'retry' },
+    );
+  }
   const isCorrect = grade.result === 'correct';
   const answerState = isCorrect ? 'correct' : 'incorrect';
 
@@ -417,6 +427,15 @@ async function handleFeedCatchupAnswer({
     catchupItem.questionText,
     feedRow.question.questionType,
   );
+  // Fail toward the player (B4 Phase 4 / Drift Risk 2): hold a grader outage for retry.
+  if (grade.gradedVia === 'fallback') {
+    return catchUpErrorResponse(
+      503,
+      'grader_unavailable',
+      "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+      { refresh_required: false, next_action: 'retry' },
+    );
+  }
   const isCorrect = grade.result === 'correct';
   const answerState = isCorrect ? 'correct' : 'incorrect';
 
