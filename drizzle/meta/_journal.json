@@ -442,6 +442,13 @@
       "when": 1781913600000,
       "tag": "0062_pool_substrate_trust_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0063_pool_embeddings",
+      "breakpoints": true
     }
   ]
 }

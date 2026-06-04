@@ -487,6 +487,24 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0063 (B1) enables pgvector and adds the nullable 1024-dim
+    // embedding column + HNSW cosine indexes to both pool tables. The dedup
+    // helpers read/write GeneratedQuestion.embedding / Question.embedding, so a
+    // database that records the migration without the pieces present must still
+    // boot. Guard the extension, columns, and indexes idempotently. If pgvector
+    // is unavailable the whole block is skipped — insert-time dedup degrades to
+    // the deterministic guards.
+    try {
+      await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "embedding" vector(1024)`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "embedding" vector(1024)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "GeneratedQuestion_embedding_hnsw_idx" ON "GeneratedQuestion" USING hnsw ("embedding" vector_cosine_ops)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "Question_embedding_hnsw_idx" ON "Question" USING hnsw ("embedding" vector_cosine_ops)`);
+    } catch {
+      // pgvector may be unavailable, or the tables may not exist yet on a fresh
+      // database — migrate() handles creation; dedup is best-effort regardless.
+    }
+
     // Migration 0044 adds the nullable User.last_activity_bell_opened_at
     // timestamp used by getBellBadgeCount to compute "rolled-off + unseen"
     // counts. Apply it idempotently in case the migration is recorded

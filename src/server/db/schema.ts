@@ -17,6 +17,7 @@ import {
   unique,
   uniqueIndex,
   uuid,
+  vector,
 } from 'drizzle-orm/pg-core';
 
 const id = (name = 'id') => text(name).primaryKey().default(sql`gen_random_uuid()::text`);
@@ -329,6 +330,9 @@ export const questions = pgTable(
     // question id (may live in either table, so not a hard FK).
     isDuplicate: boolean('is_duplicate').notNull().default(false),
     suppressedBy: text('suppressed_by'),
+    // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
+    // Nullable: populated at insert and by the batched backfill (B3).
+    embedding: vector('embedding', { dimensions: 1024 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -592,6 +596,8 @@ export const generatedQuestions = pgTable(
     // row is the loser: is_duplicate=true, suppressed_by=<human id>. Never deleted.
     isDuplicate: boolean('is_duplicate').notNull().default(false),
     suppressedBy: text('suppressed_by'),
+    // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
+    embedding: vector('embedding', { dimensions: 1024 }),
   },
   (table) => [
     index('GeneratedQuestion_user_id_idx').on(table.userId),

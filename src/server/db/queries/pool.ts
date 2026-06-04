@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, cosineDistance, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/server/db';
 import { generatedQuestions, questions } from '@/server/db/schema';
@@ -198,3 +198,94 @@ function buildHumanWhere(filter: PoolFilter) {
 }
 
 type HumanDifficulty = NonNullable<HumanRow['difficultyEstimate']>;
+
+// ─── Embedding dedup helpers (B3) ───────────────────────────────────────────
+
+export interface NearestPoolMatch {
+  id: string;
+  origin: PoolOrigin;
+  /** Cosine similarity in [0,1]; 1 = identical. */
+  similarity: number;
+}
+
+/**
+ * Nearest non-suppressed neighbour across BOTH tables by cosine similarity,
+ * excluding the given id. Returns null when nothing has an embedding yet.
+ */
+export async function findNearestInPool(
+  embedding: number[],
+  excludeId: string,
+): Promise<NearestPoolMatch | null> {
+  // cosineDistance returns 1 - similarity; ORDER BY it ascending for nearest.
+  const machineDistance = cosineDistance(generatedQuestions.embedding, embedding);
+  const humanDistance = cosineDistance(questions.embedding, embedding);
+
+  const [machineNearest, humanNearest] = await Promise.all([
+    db
+      .select({ id: generatedQuestions.id, distance: machineDistance })
+      .from(generatedQuestions)
+      .where(and(
+        isNotNull(generatedQuestions.embedding),
+        eq(generatedQuestions.isDuplicate, false),
+        sql`${generatedQuestions.id} <> ${excludeId}`,
+      ))
+      .orderBy(machineDistance)
+      .limit(1),
+    db
+      .select({ id: questions.id, distance: humanDistance })
+      .from(questions)
+      .where(and(
+        isNotNull(questions.embedding),
+        eq(questions.isDuplicate, false),
+        isNull(questions.deletedAt),
+        sql`${questions.id} <> ${excludeId}`,
+      ))
+      .orderBy(humanDistance)
+      .limit(1),
+  ]);
+
+  const candidates: NearestPoolMatch[] = [];
+  if (machineNearest[0]) {
+    candidates.push({ id: machineNearest[0].id, origin: 'machine', similarity: 1 - Number(machineNearest[0].distance) });
+  }
+  if (humanNearest[0]) {
+    candidates.push({ id: humanNearest[0].id, origin: 'human', similarity: 1 - Number(humanNearest[0].distance) });
+  }
+  if (!candidates.length) return null;
+  return candidates.reduce((best, c) => (c.similarity > best.similarity ? c : best));
+}
+
+/** Persist an embedding onto a pool row in the table indicated by origin. */
+export async function storePoolEmbedding(
+  origin: PoolOrigin,
+  id: string,
+  embedding: number[],
+): Promise<void> {
+  if (origin === 'machine') {
+    await db.update(generatedQuestions).set({ embedding }).where(eq(generatedQuestions.id, id));
+  } else {
+    await db.update(questions).set({ embedding }).where(eq(questions.id, id));
+  }
+}
+
+/**
+ * Flag a row as a suppressed near-duplicate (never delete). suppressedBy points
+ * at the surviving question, which may live in either table.
+ */
+export async function markPoolDuplicate(
+  origin: PoolOrigin,
+  id: string,
+  survivorId: string,
+): Promise<void> {
+  if (origin === 'machine') {
+    await db
+      .update(generatedQuestions)
+      .set({ isDuplicate: true, suppressedBy: survivorId })
+      .where(eq(generatedQuestions.id, id));
+  } else {
+    await db
+      .update(questions)
+      .set({ isDuplicate: true, suppressedBy: survivorId })
+      .where(eq(questions.id, id));
+  }
+}
