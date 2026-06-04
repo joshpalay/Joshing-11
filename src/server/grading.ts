@@ -63,7 +63,8 @@ export async function gradeAnswer(
     questionText,
     canonicalAnswer,
     submitted,
-    questionType
+    questionType,
+    acceptedAlternatives
   ).catch((error) => {
     console.warn('[grading] LLM grading call failed; using deterministic fallback', {
       name: error instanceof Error ? error.name : undefined,
