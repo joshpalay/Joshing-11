@@ -80,7 +80,8 @@ export async function gradeAnswer(
     questionText,
     canonicalAnswer,
     submitted,
-    questionType
+    questionType,
+    acceptedAlternatives
   ).catch((error): UnscoredGrade => {
     console.warn('[grading] LLM grading call failed; holding answer unscored', {
       name: error instanceof Error ? error.name : undefined,

@@ -540,10 +540,15 @@ export async function gradeAnswerWithLLM(
   question: string,
   canonicalAnswer: string,
   submittedAnswer: string,
-  questionType: string
+  questionType: string,
+  acceptedAlternatives: string[] = []
 ): Promise<GradingResponse> {
+  const trimmedAlternatives = acceptedAlternatives.map((a) => a.trim()).filter(Boolean);
+  const alternativesLine = trimmedAlternatives.length > 0
+    ? `\n${wrapUserInput('accepted_alternatives', trimmedAlternatives.join(' | '))}`
+    : '';
   const userMessage = `${wrapUserInput('question', question)}
-${wrapUserInput('correct_answer', canonicalAnswer)}
+${wrapUserInput('correct_answer', canonicalAnswer)}${alternativesLine}
 ${wrapUserInput('submitted_answer', submittedAnswer)}
 ${wrapUserInput('answer_type', questionType)}
 Is the submitted answer correct? Return JSON only.`;
@@ -560,6 +565,7 @@ LENIENCY RULES — mark as correct if:
 - The answer includes the correct answer among other text (e.g. "I think it's Bucephalus" is correct)
 - If the canonical answer is long or explanatory (more than ~10 words), focus on whether the submitted answer captures the core concept or mechanism. Do not require matching supporting detail, background context, or explanatory sentences. A short answer that demonstrates clear understanding of the key idea should be marked correct even if it omits elaboration.
 - If the canonical answer contains a parenthetical generic descriptor (e.g. "A Ressikan flute (a small flute)", "Bucephalus (a horse)", "The Eroica (a symphony)"), the parenthetical signals that the descriptor is itself an acceptable answer. Mark as correct when the submission matches the descriptor — including a recognizable member of that category (e.g. "penny whistle" or "tin whistle" for "a small flute"; "stallion" or "warhorse" for "a horse") — even with hedging filler like "thing", "thingy", "thingamajig", or "something". Filler does not make an otherwise-correct categorical answer vague.
+- If <accepted_alternatives> is present, each entry is an author-approved correct answer with exactly the same standing as the canonical answer. Treat the canonical answer and every accepted alternative as equally valid targets: mark the submission correct if it matches the meaning of the canonical answer OR any accepted alternative. Apply the same leniency (spelling, abbreviation, phrasing, paraphrase) to the alternatives as to the canonical answer. This never overrides the STRICTNESS rules — a genuinely different person, place, or thing is still wrong.
 
 STRICTNESS RULES — mark as wrong if:
 - The answer is a different person, place, or thing entirely
