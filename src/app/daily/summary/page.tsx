@@ -19,6 +19,7 @@ import { AddToBankAction } from '@/components/AddToBankAction'
 import { EditorialBadge } from '@/components/EditorialBadge'
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
 import MasteryMoment from '@/components/review/MasteryMoment'
+import { RefineYourGame } from '@/components/review/RefineYourGame'
 import { cn } from '@/lib/utils'
 import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types'
 import { formatNextResetTimeLocal } from '@/lib/games/timezone'
@@ -268,6 +269,8 @@ export default function DailySummaryPage() {
           ))}
         </div>
       </section>
+
+      {summary.refine ? <RefineYourGame refine={summary.refine} /> : null}
 
       {summary.reminderPromptState === 'show' ? <RoundReminderCard /> : null}
 
