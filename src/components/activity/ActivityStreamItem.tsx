@@ -243,17 +243,6 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
           }}
         >
           <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap' }}>{timestamp}</span>
-          {expandable ? (
-            <span style={{ fontFamily: FM, fontSize: 9, letterSpacing: 1.5, color: INK3 }}>
-              {expand?.kind === 'same_correct'
-                ? open
-                  ? '− QUESTIONS'
-                  : '+ QUESTIONS'
-                : open
-                  ? '− QUESTION'
-                  : '+ QUESTION'}
-            </span>
-          ) : null}
         </div>
       </div>
 
@@ -381,9 +370,12 @@ function AnsweredHistory({
         {questions.map((q) => {
           const r = resolutions.get(q.questionId);
           // No in-session resolution means the server already had it on load as
-          // a correct answer; we lack the original text, so we stay calm and
-          // drop the "You answered:" clause rather than invent one.
+          // a correct answer; we lack the original text, so we show a calm
+          // "Correct" without the answer clause rather than invent one.
           const isCorrect = r ? r.isCorrect : true;
+          // Result reads in the app's semantic answer colors: green for correct,
+          // red for "not quite" — same tokens the AnswerFeedbackSheet uses.
+          const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)';
           return (
             <div key={q.questionId}>
               <p
@@ -393,11 +385,12 @@ function AnsweredHistory({
                   fontSize: 12.5,
                   lineHeight: 1.45,
                   letterSpacing: 0.2,
-                  color: INK2,
+                  fontWeight: 600,
+                  color: resultColor,
                 }}
               >
-                <span style={{ fontWeight: 600 }}>{isCorrect ? 'Correct' : 'Not quite'}</span>
-                {r ? ` · You answered: ${r.submitted}` : null}
+                {isCorrect ? 'Correct' : 'Not quite'}
+                {r ? ` - ${r.submitted}` : null}
               </p>
               <p
                 style={{
