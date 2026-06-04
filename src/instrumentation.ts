@@ -515,6 +515,22 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0067 (B4 Phase 2) adds Question.nobody_correct_flag (the "nobody
+    // got it" review smell) + its partial index. App code (the questions view,
+    // evaluateQuestionTrustOnPlay) reads the column, so a database that records
+    // the migration without it present must still boot. The one-time trust
+    // back-fills (author_confirmed correction + human_validated promotion) are
+    // applied by the migration only — not re-run here — because they are pure data
+    // back-fill (a missing promotion is safe/conservative, never a boot blocker)
+    // and re-aggregating MASTERY_EVENTS on every boot would be wasteful.
+    try {
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "nobody_correct_flag" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "Question_nobody_correct_flag_idx" ON "Question" ("nobody_correct_flag") WHERE "nobody_correct_flag" = true`);
+    } catch {
+      // Question may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     // Migration 0063 (B1) enables pgvector and adds the nullable 1024-dim
     // embedding column + HNSW cosine indexes to both pool tables. The dedup
     // helpers read/write GeneratedQuestion.embedding / Question.embedding, so a

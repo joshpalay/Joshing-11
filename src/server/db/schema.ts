@@ -325,6 +325,10 @@ export const questions = pgTable(
     perishable: boolean('perishable').notNull().default(false),
     // Provenance refs from retrieval-grounded generation; populated in B3.
     sourceRefs: jsonb('source_refs').$type<string[]>().notNull().default([]),
+    // "Nobody got it" smell (B4 Phase 2, §5.3 layer 3 / §7). True when ≥N distinct
+    // domain-holders have answered and NONE got it right — a hallucination smell,
+    // not a hard question. Flags for review; never auto-deletes (no decay, D8).
+    nobodyCorrectFlag: boolean('nobody_correct_flag').notNull().default(false),
     // Embedding-dedup flags (B3). Human beats machine on collision; the loser is
     // suppressed (flagged), never deleted. suppressedBy holds the surviving
     // question id (may live in either table, so not a hard FK).
@@ -350,6 +354,11 @@ export const questions = pgTable(
     // live tier-gating yet (B4 owns enforcement).
     index('Question_trust_tier_idx').on(table.trustTier),
     index('Question_is_duplicate_idx').on(table.isDuplicate),
+    // Partial index for the "nobody got it" review queue (B4 Phase 2): the flag is
+    // true for a tiny minority of rows, so a partial index keeps the scan cheap.
+    index('Question_nobody_correct_flag_idx')
+      .on(table.nobodyCorrectFlag)
+      .where(sql`${table.nobodyCorrectFlag} = true`),
   ],
 );
 

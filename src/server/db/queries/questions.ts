@@ -51,6 +51,8 @@ export type QuestionView = {
   tags: string[];
   asked_count: number;
   correct_count: number;
+  // "Nobody got it" QA signal (B4 Phase 2): ≥N holders tried, none correct.
+  nobody_correct_flag: boolean;
   isInBank?: boolean;
   isOwnAuthored?: boolean;
   authorName?: string;
@@ -118,6 +120,8 @@ const questionViewColumns = {
   sharedToFriendsFeed: questionTableColumns.sharedToFriendsFeed,
   askedCount: questionTableColumns.askedCount,
   correctCount: questionTableColumns.correctCount,
+  // "Nobody got it" review smell (B4 Phase 2) — surfaced as a QA signal.
+  nobodyCorrectFlag: questionTableColumns.nobodyCorrectFlag,
   createdAt: questionTableColumns.createdAt,
   updatedAt: questionTableColumns.updatedAt,
   deletedAt: questionTableColumns.deletedAt,
@@ -253,6 +257,7 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
     tags: [],
     asked_count: row.askedCount,
     correct_count: row.correctCount,
+    nobody_correct_flag: row.nobodyCorrectFlag ?? false,
     verified: row.verified ?? true,
     llmSuggestedAnswer: row.llmSuggestedAnswer ?? null,
     critiqueIterations: row.critiqueIterations ?? 0,
