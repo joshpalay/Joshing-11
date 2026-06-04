@@ -441,6 +441,70 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0062 (B1 pool substrate) adds the TrustTier/QuestionScope enums
+    // and the pool fields (trust_tier, scope, perishable, source_refs, empirical
+    // stats, embedding-dedup flags) to Question + GeneratedQuestion. App code
+    // (the unified selection layer, suppress-aware bank pick) reads these, so a
+    // preview/production database that records the migration without the pieces
+    // present must still boot. Enums + columns + grandfather backfill are applied
+    // idempotently; the backfills target only rows still at the 'unverified'
+    // default, so they are re-runnable no-ops once corrected.
+    try {
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."TrustTier" AS ENUM('unverified', 'machine_verified', 'human_validated', 'author_confirmed');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."QuestionScope" AS ENUM('private', 'friends_only', 'public');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "trust_tier" "public"."TrustTier" NOT NULL DEFAULT 'unverified'`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "perishable" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "source_refs" jsonb NOT NULL DEFAULT '[]'::jsonb`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "is_duplicate" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "suppressed_by" text`);
+      await db.execute(sql`UPDATE "Question" SET "trust_tier" = 'author_confirmed' WHERE "trust_tier" = 'unverified'`);
+    } catch {
+      // Question may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "trust_tier" "public"."TrustTier" NOT NULL DEFAULT 'unverified'`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "scope" "public"."QuestionScope" NOT NULL DEFAULT 'public'`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "perishable" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "source_refs" jsonb NOT NULL DEFAULT '[]'::jsonb`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "n_answered" integer NOT NULL DEFAULT 0`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "empirical_correct_rate" double precision`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "is_duplicate" boolean NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "suppressed_by" text`);
+      await db.execute(sql`UPDATE "GeneratedQuestion" SET "trust_tier" = 'machine_verified' WHERE "trust_tier" = 'unverified'`);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
+    // Migration 0063 (B1) enables pgvector and adds the nullable 1024-dim
+    // embedding column + HNSW cosine indexes to both pool tables. The dedup
+    // helpers read/write GeneratedQuestion.embedding / Question.embedding, so a
+    // database that records the migration without the pieces present must still
+    // boot. Guard the extension, columns, and indexes idempotently. If pgvector
+    // is unavailable the whole block is skipped — insert-time dedup degrades to
+    // the deterministic guards.
+    try {
+      await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "embedding" vector(1024)`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "embedding" vector(1024)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "GeneratedQuestion_embedding_hnsw_idx" ON "GeneratedQuestion" USING hnsw ("embedding" vector_cosine_ops)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "Question_embedding_hnsw_idx" ON "Question" USING hnsw ("embedding" vector_cosine_ops)`);
+    } catch {
+      // pgvector may be unavailable, or the tables may not exist yet on a fresh
+      // database — migrate() handles creation; dedup is best-effort regardless.
+    }
+
     // Migration 0044 adds the nullable User.last_activity_bell_opened_at
     // timestamp used by getBellBadgeCount to compute "rolled-off + unseen"
     // counts. Apply it idempotently in case the migration is recorded
@@ -927,6 +991,94 @@ export async function register() {
     } catch {
       // User may not exist yet on a fresh database — migrate() creates it
       // before this migration runs.
+    }
+
+    // Migration 0064 (Refine Your Game) adds USER_DOMAIN_DIFFICULTY.freeze_until.
+    // adaptive-difficulty.ts reads it on every answer to decide whether the
+    // served difficulty is pinned, so a preview/production database with the
+    // migration recorded but the column missing would error before migrate()
+    // could repair it. Additive nullable column — pre-apply it idempotently.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "USER_DOMAIN_DIFFICULTY"
+          ADD COLUMN IF NOT EXISTS "freeze_until" timestamp with time zone
+      `);
+    } catch {
+      // USER_DOMAIN_DIFFICULTY may not exist yet on a fresh database —
+      // migrate() creates it before this migration runs.
+    }
+
+    // Migration 0065 (Refine Your Game) creates DAILY_REFINE_DECISION, the
+    // decision + cooldown ledger behind the daily-summary refine section. The
+    // summary builder, the resolve/undo route, and the next-daily commit hook
+    // all read this table, so a preview/production database with the migration
+    // recorded but the table missing would 42P01 before migrate() could repair
+    // it. Pre-create the table, FKs, and indexes idempotently.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "DAILY_REFINE_DECISION" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL,
+          "queue_id" text NOT NULL,
+          "item_type" text NOT NULL,
+          "canonical_subcategory" text NOT NULL,
+          "friend_id" text,
+          "action" text NOT NULL DEFAULT 'pending',
+          "committed_at" timestamp with time zone,
+          "cooldown_until" timestamp with time zone,
+          "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+          "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+        )
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          decision_table regclass := to_regclass('public."DAILY_REFINE_DECISION"');
+          user_table regclass := to_regclass('public."User"');
+          queue_table regclass := to_regclass('public."DailyQueue"');
+        BEGIN
+          IF decision_table IS NOT NULL
+            AND user_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'DAILY_REFINE_DECISION_user_id_User_id_fk'
+                AND conrelid = decision_table
+            )
+          THEN
+            ALTER TABLE "DAILY_REFINE_DECISION"
+              ADD CONSTRAINT "DAILY_REFINE_DECISION_user_id_User_id_fk"
+              FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE;
+          END IF;
+
+          IF decision_table IS NOT NULL
+            AND queue_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'DAILY_REFINE_DECISION_queue_id_DailyQueue_id_fk'
+                AND conrelid = decision_table
+            )
+          THEN
+            ALTER TABLE "DAILY_REFINE_DECISION"
+              ADD CONSTRAINT "DAILY_REFINE_DECISION_queue_id_DailyQueue_id_fk"
+              FOREIGN KEY ("queue_id") REFERENCES "DailyQueue"("id") ON DELETE CASCADE;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "DAILY_REFINE_DECISION_unique_item"
+          ON "DAILY_REFINE_DECISION" ("user_id", "queue_id", "item_type", "canonical_subcategory", COALESCE("friend_id", ''))
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "DAILY_REFINE_DECISION_cooldown_idx"
+          ON "DAILY_REFINE_DECISION" ("user_id", "item_type", "canonical_subcategory", "cooldown_until")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "DAILY_REFINE_DECISION_uncommitted_idx"
+          ON "DAILY_REFINE_DECISION" ("user_id", "committed_at")
+      `);
+    } catch {
+      // User or DailyQueue may not exist yet on a fresh database — migrate()
+      // creates them before this migration runs.
     }
 
     try {

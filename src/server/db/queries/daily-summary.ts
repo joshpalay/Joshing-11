@@ -12,8 +12,10 @@ import {
 import { resolveTier } from '@/server/mastery/tiers';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { buildRefineSection } from '@/server/db/queries/refine';
 import { getFeedPagePayload } from '@/server/feed/get-feed-page';
 import type { QueueSlot } from '@/server/daily/types';
+import type { RefineSectionView } from '@/server/refine/types';
 import type { MasteryTier } from '@/types/db';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -32,6 +34,8 @@ export type DailySummaryView = {
   recentFriendBridge: RecentFriendBridge | null;
   isFirstCompletedRound: boolean;
   reminderPromptState: 'show' | 'hidden';
+  /** Contextual "Refine Your Game" offers derived from this daily (empty → reassurance state). */
+  refine: RefineSectionView;
 };
 
 export type RecentFriendBridge = {
@@ -241,6 +245,9 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const recentFriendBridge = await getRecentFriendBridge(userId);
   const { isFirstCompletedRound, reminderPromptState } =
     await computeReminderPromptState(userId, dateString, totalAnswered);
+  const refine: RefineSectionView = queue
+    ? await buildRefineSection(userId, queue.id, slots)
+    : { queueId: null, items: [] };
 
   return {
     date: dateString,
@@ -266,6 +273,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     recentFriendBridge,
     isFirstCompletedRound,
     reminderPromptState,
+    refine,
   };
 }
 

@@ -17,6 +17,7 @@ import {
   unique,
   uniqueIndex,
   uuid,
+  vector,
 } from 'drizzle-orm/pg-core';
 
 const id = (name = 'id') => text(name).primaryKey().default(sql`gen_random_uuid()::text`);
@@ -38,6 +39,24 @@ export const categoryEnum = pgEnum('Category', [
 ]);
 
 export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends']);
+
+// B1 pool substrate (PRD-D-5 §5.1 / §6). Trust climbs as a question earns it:
+// unverified (fresh, pre-checks) → machine_verified (retrieval + ask-to-answer,
+// B3/B4) → human_validated (N humans correct in play) → author_confirmed
+// (human-authored, answer asserted by author). B1 only adds the field + the
+// grandfather backfill; live tier-gating stays OFF until B4.
+export const trustTierEnum = pgEnum('TrustTier', [
+  'unverified',
+  'machine_verified',
+  'human_validated',
+  'author_confirmed',
+]);
+// Pool scope (PRD-D-5 §5.1 / D9). The spec models scope as friends_only | public
+// (machine default public; human authored public with a one-tap friends_only
+// override). We carry a third `private` value so the unified selection layer can
+// represent the human Question.visibility 'private' losslessly; machine rows only
+// ever use friends_only | public.
+export const questionScopeEnum = pgEnum('QuestionScope', ['private', 'friends_only', 'public']);
 
 // D-1 Stage 3 — directional follow model.
 // `state` on a follow edge: a follow targeting an approval_required user lands
@@ -296,6 +315,24 @@ export const questions = pgTable(
     askedCount: integer('asked_count').notNull().default(0),
     correctCount: integer('correct_count').notNull().default(0),
     surfacePriorityScore: doublePrecision('surface_priority_score').notNull().default(0),
+    // B1 pool substrate (PRD-D-5 §5.1). Human-authored rows grandfather to
+    // author_confirmed. Scope, n_answered and empirical_correct_rate are NOT
+    // duplicated here — the unified selection layer reuses visibility, askedCount
+    // and correctRate (see src/server/db/queries/pool.ts).
+    trustTier: trustTierEnum('trust_tier').notNull().default('unverified'),
+    // Perishable = time-relative facts ("the latest…", "who currently…") flagged
+    // for re-grounding (B3); evergreen by default (no decay — D8).
+    perishable: boolean('perishable').notNull().default(false),
+    // Provenance refs from retrieval-grounded generation; populated in B3.
+    sourceRefs: jsonb('source_refs').$type<string[]>().notNull().default([]),
+    // Embedding-dedup flags (B3). Human beats machine on collision; the loser is
+    // suppressed (flagged), never deleted. suppressedBy holds the surviving
+    // question id (may live in either table, so not a hard FK).
+    isDuplicate: boolean('is_duplicate').notNull().default(false),
+    suppressedBy: text('suppressed_by'),
+    // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
+    // Nullable: populated at insert and by the batched backfill (B3).
+    embedding: vector('embedding', { dimensions: 1024 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -309,6 +346,10 @@ export const questions = pgTable(
     index('Question_source_question_id_idx').on(table.sourceQuestionId),
     index('Question_source_creator_id_idx').on(table.sourceCreatorId),
     uniqueIndex('Question_generated_question_id_key').on(table.generatedQuestionId),
+    // Selection-layer filters (B1 pool substrate). Filter capability only — no
+    // live tier-gating yet (B4 owns enforcement).
+    index('Question_trust_tier_idx').on(table.trustTier),
+    index('Question_is_duplicate_idx').on(table.isDuplicate),
   ],
 );
 
@@ -539,11 +580,33 @@ export const generatedQuestions = pgTable(
     createdAt: createdAt(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedInQueue: boolean('used_in_queue').notNull().default(false),
+    // B1 pool substrate (PRD-D-5 §5.1). Machine rows grandfather to
+    // machine_verified; scope defaults public. Unlike the human table, the
+    // machine bank has no native scope/answered/correct-rate columns, so these
+    // are added here (the selection layer reads them directly).
+    trustTier: trustTierEnum('trust_tier').notNull().default('unverified'),
+    scope: questionScopeEnum('scope').notNull().default('public'),
+    perishable: boolean('perishable').notNull().default(false),
+    sourceRefs: jsonb('source_refs').$type<string[]>().notNull().default([]),
+    // Empirical play stats (D11 / "nobody got it" smell). Back-filled from answer
+    // history where a join exists; machine rows usually start 0 / null.
+    nAnswered: integer('n_answered').notNull().default(0),
+    empiricalCorrectRate: doublePrecision('empirical_correct_rate'),
+    // Embedding-dedup flags (B3). On a human-beats-machine collision, the machine
+    // row is the loser: is_duplicate=true, suppressed_by=<human id>. Never deleted.
+    isDuplicate: boolean('is_duplicate').notNull().default(false),
+    suppressedBy: text('suppressed_by'),
+    // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
+    embedding: vector('embedding', { dimensions: 1024 }),
   },
   (table) => [
     index('GeneratedQuestion_user_id_idx').on(table.userId),
     index('GeneratedQuestion_user_id_used_in_queue_idx').on(table.userId, table.usedInQueue),
     index('GeneratedQuestion_user_id_fact_key_idx').on(table.userId, table.factKey),
+    // Selection-layer filters (B1): tier/scope filter capability + suppress-aware
+    // bank pick. Not gated on any live surface yet (B4 owns enforcement).
+    index('GeneratedQuestion_trust_tier_idx').on(table.trustTier),
+    index('GeneratedQuestion_is_duplicate_idx').on(table.isDuplicate),
   ],
 );
 
@@ -645,6 +708,10 @@ export const userDomainDifficulties = pgTable(
     consecutiveCorrect: integer('consecutive_correct').notNull().default(0),
     consecutiveIncorrect: integer('consecutive_incorrect').notNull().default(0),
     lastUpdated: timestamp('last_updated', { withTimezone: true }).notNull().defaultNow(),
+    // Refine Your Game "Ease off": while this is in the future the served
+    // difficulty is pinned — updateDomainDifficultyOnAnswer() skips the step.
+    // NULL means no freeze (normal adaptive behavior).
+    freezeUntil: timestamp('freeze_until', { withTimezone: true }),
   },
   (table) => [
     unique('USER_DOMAIN_DIFFICULTY_user_id_canonical_subcategory_key').on(
@@ -670,6 +737,42 @@ export const userDomainExclusions = pgTable(
       table.scope,
       table.canonicalSubcategory,
     ),
+  ],
+);
+
+// Decision + cooldown ledger for the Refine Your Game section on the daily
+// summary. One row per refine item the player acted on (or that was shown and
+// defaulted). `action` moves pending -> committed | defaulted; staged changes
+// apply at next-daily build (src/server/refine/commit.ts), which is also when
+// `cooldownUntil` is stamped. See drizzle/0063_daily_refine_decision.sql.
+export const dailyRefineDecisions = pgTable(
+  'DAILY_REFINE_DECISION',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    queueId: text('queue_id').notNull().references(() => dailyQueues.id, { onDelete: 'cascade' }),
+    // 'friend_expansion' | 'difficulty_escalation' | 'struggle_pruning'
+    itemType: text('item_type').notNull(),
+    canonicalSubcategory: text('canonical_subcategory').notNull(),
+    // Set only for friend_expansion (the bonus source friend).
+    friendId: text('friend_id'),
+    // 'pending' | 'committed' | 'defaulted'
+    action: text('action').notNull().default('pending'),
+    committedAt: timestamp('committed_at', { withTimezone: true }),
+    cooldownUntil: timestamp('cooldown_until', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // COALESCE(friend_id,'') in the unique index keeps the upsert key stable
+    // for non-expansion rows; expressed in SQL (drizzle/0063), not modeled here.
+    index('DAILY_REFINE_DECISION_cooldown_idx').on(
+      table.userId,
+      table.itemType,
+      table.canonicalSubcategory,
+      table.cooldownUntil,
+    ),
+    index('DAILY_REFINE_DECISION_uncommitted_idx').on(table.userId, table.committedAt),
   ],
 );
 

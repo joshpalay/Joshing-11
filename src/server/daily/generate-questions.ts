@@ -13,6 +13,7 @@ import {
 } from '@/lib/llm';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
+import { embedAndResolveDuplicate } from '@/server/pool/dedup';
 import {
   getDomainDifficultyOverrides,
   mapAdaptiveLevelToDifficultyHint,
@@ -48,7 +49,7 @@ const RECENT_FACT_KEY_LIMIT = 200;
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
 
-const SYSTEM_PROMPT = `You are generating trivia questions for Joshing, a social trivia game played among friends.
+export const SYSTEM_PROMPT = `You are generating trivia questions for Joshing, a social trivia game played among friends.
 Questions must be:
 - Factual with a single objectively correct answer, or — for the "name_multiple" shape only — a small fixed set of correct answers (typically 2–4)
 - Drawn from the intellectual and cultural world of the domain, not biographical trivia
@@ -65,7 +66,10 @@ BAD (multiple-choice phrasing — never produce these):
 
 GOOD (open recall):
 - "What does Sally Seton represent to the young Clarissa in Mrs. Dalloway?"
-- "In what year did Tchaikovsky premiere his Sixth Symphony?"
+- "What does the madeleine awaken in the narrator of In Search of Lost Time?"
+
+TRIVIA-OF-TRIVIA RULE:
+Prefer questions of substance — "what is X", "what does X mean", "why does X matter", "who did X" — over questions of mere recall — "what year", "what number", "what label". A date, a count, or a name is worth asking only when that specific fact is itself meaningful; a question that lands on substance is almost always the better question. Lead with the idea, not the index card.
 
 STYLE EXEMPLARS (match this register, specificity, and concision):
 These are gold-standard Joshing questions. Mimic their tone — literate, confident, and specific. Pull from comparable depth (named characters, named works, technical terms, specific years, named figures) rather than vague appreciation or "explain why" questions. Notice how they assume a cultured audience without condescension.
@@ -117,7 +121,7 @@ QUESTION SHAPE VARIETY:
 Trivia gets monotonous when every question follows the same template ("What is the name of X?"). Vary the shape across the batch. Choose from this catalog and emit the chosen shape on each question via the question_shape field:
 
 - "identification": asks for a name, term, title, or label (e.g. "What is the name of the dwarf who forges the ring?")
-- "year_or_date": asks for a year, date, or temporal ordering (e.g. "In what year did the Berlin Wall fall?")
+- "year_or_date": asks for a year, date, or temporal ordering. Use ONLY when the date itself is meaningful — a turning point, an anniversary, a deliberate juxtaposition — never as a default or filler in place of a substance question (e.g. "In what year did the Berlin Wall fall?")
 - "in_which_work": asks which work, scene, chapter, movement, or section something appears in
 - "who_did_what": asks which character/person performs a specific act (e.g. "Who kills Polonius?")
 - "sequence_or_order": asks for ordering of events, items, or steps
@@ -178,7 +182,7 @@ function asQuestionShape(value: unknown): QuestionShape | null {
     : null;
 }
 
-type LlmQuestion = {
+export type LlmQuestion = {
   canonical_subcategory: string;
   broad_category: string;
   question_text: string;
@@ -232,7 +236,9 @@ function difficultyInstruction(preference: string | undefined, adaptiveLevel?: n
 type AvoidQuestionEntry = RecentDailyQuestionEntry;
 type AvoidFactKeyEntry = RecentFactKeyEntry;
 
-function buildUserPrompt(
+type TerritoryType = 'declared' | 'demonstrated';
+
+export function buildUserPrompt(
   domains: string[],
   count: number,
   prev: AvoidQuestionEntry[],
@@ -242,6 +248,7 @@ function buildUserPrompt(
   domainDifficultyOverrides?: ReadonlyMap<string, string>,
   adaptiveLevel?: number | null,
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
+  domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -295,6 +302,28 @@ ${lines.join('\n')}`;
     if (instruction) difficultyHint = `\n\nDifficulty instruction: ${instruction}`;
   }
 
+  // Territory register (PRD-D-5 §5.2). A DECLARED domain is one the player chose
+  // — they hold a floor at the engaged-fan rung, so questions must read for
+  // someone who actively follows it, never tourist-level recognition trivia. A
+  // DEMONSTRATED domain surfaced from play; meet a newcomer at an accessible
+  // register and let depth climb. This mirrors the floor the difficulty mapper
+  // already applies, so the prose register and the target rate stay aligned.
+  let territoryHint = '';
+  if (domainTerritoryTypes && domainTerritoryTypes.size > 0) {
+    const declaredDomains = domains.filter((d) => domainTerritoryTypes.get(d) === 'declared');
+    const introducedDomains = domains.filter((d) => domainTerritoryTypes.get(d) === 'demonstrated');
+    const lines: string[] = [];
+    if (declaredDomains.length > 0) {
+      lines.push(`- DECLARED (the player chose to learn these — write for an engaged enthusiast who actively follows the domain; assume real familiarity and never ask tourist-level "who composed it" recognition trivia): ${declaredDomains.join(', ')}`);
+    }
+    if (introducedDomains.length > 0) {
+      lines.push(`- INTRODUCED (surfaced from the player's activity — meet a curious newcomer at an accessible register and let difficulty climb with play): ${introducedDomains.join(', ')}`);
+    }
+    if (lines.length > 0) {
+      territoryHint = `\n\nDomain familiarity:\n${lines.join('\n')}`;
+    }
+  }
+
   const domainSection =
     domains.length === count && count > 1
       ? `Generate exactly one trivia question for each of the following ${count} domains:\n${domains.map((d, i) => `${i + 1}. ${d}`).join('\n')}`
@@ -315,7 +344,7 @@ ${perDomain.join('\n')}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${subAnglesHint}
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${subAnglesHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -337,6 +366,63 @@ function asDifficulty(value: unknown): LlmQuestion['difficulty_estimate'] | null
   return null;
 }
 
+// Parse a single question object from the model's JSON array into the validated
+// LlmQuestion shape, or null if it fails the structural / generic-label guards.
+// Shared by parseQuestions (per-user path) and parseGroundedQuestions (the B3
+// retrieval batch path) so both honour exactly the same field contract.
+function parseBaseQuestion(item: unknown): LlmQuestion | null {
+  if (!item || typeof item !== 'object') return null;
+  const rec = item as Record<string, unknown>;
+  const canonical = asString(rec.canonical_subcategory);
+  const broad = asString(rec.broad_category);
+  const questionText = asString(rec.question_text);
+  const answer = asString(rec.answer);
+  const explainer = asString(rec.explainer);
+  const difficulty = asDifficulty(rec.difficulty_estimate);
+  if (!canonical || !broad || !questionText || !answer || !explainer || !difficulty) {
+    return null;
+  }
+  if (isGenericCanonicalAnswer(answer)) {
+    return null;
+  }
+  // Reject LLM responses that pick a bucket-level subcategory ("general",
+  // "general knowledge", "trivia", etc.) — those questions are not tied
+  // to any of the user's declared/demonstrated domains and must not be
+  // served. This is the upstream guard on the generated_questions write
+  // boundary; the LLM is told to use the exact domain it was given, so
+  // anything generic here is a prompt violation we discard.
+  if (isGenericSubcategory(canonical)) {
+    return null;
+  }
+  const factKeyRaw = rec.fact_key;
+  const factKeyStr = asString(factKeyRaw);
+  const factKey = normalizeFactKey(factKeyStr);
+  if (!factKey) {
+    // The fact-key dedup pipeline (avoid list + persist-time guard) is
+    // load-bearing for question variety; a null fact_key silently disables
+    // it for this row. Log enough detail to tell whether the LLM omitted
+    // the field, returned a non-string, or emitted a string that
+    // normalizeFactKey rejected.
+    console.warn('[daily/generate-questions] fact_key missing or unnormalizable', {
+      domain: canonical,
+      rawType: factKeyRaw === undefined ? 'undefined' : factKeyRaw === null ? 'null' : typeof factKeyRaw,
+      rawValue: typeof factKeyRaw === 'string' ? factKeyRaw.slice(0, 120) : null,
+      questionPreview: questionText.slice(0, 80),
+    });
+  }
+  return {
+    canonical_subcategory: canonical,
+    broad_category: broad,
+    question_text: questionText,
+    answer: normalizeCanonicalAnswerLabel(answer),
+    explainer,
+    difficulty_estimate: difficulty,
+    fact_key: factKey,
+    sub_angles: normalizeSubAngles(rec.sub_angles),
+    question_shape: asQuestionShape(rec.question_shape),
+  };
+}
+
 function parseQuestions(raw: string): LlmQuestion[] {
   const parsed = parseJsonObject(raw);
   if (!parsed) return [];
@@ -345,56 +431,8 @@ function parseQuestions(raw: string): LlmQuestion[] {
 
   const result: LlmQuestion[] = [];
   for (const item of rawList) {
-    if (!item || typeof item !== 'object') continue;
-    const rec = item as Record<string, unknown>;
-    const canonical = asString(rec.canonical_subcategory);
-    const broad = asString(rec.broad_category);
-    const questionText = asString(rec.question_text);
-    const answer = asString(rec.answer);
-    const explainer = asString(rec.explainer);
-    const difficulty = asDifficulty(rec.difficulty_estimate);
-    if (!canonical || !broad || !questionText || !answer || !explainer || !difficulty) {
-      continue;
-    }
-    if (isGenericCanonicalAnswer(answer)) {
-      continue;
-    }
-    // Reject LLM responses that pick a bucket-level subcategory ("general",
-    // "general knowledge", "trivia", etc.) — those questions are not tied
-    // to any of the user's declared/demonstrated domains and must not be
-    // served. This is the upstream guard on the generated_questions write
-    // boundary; the LLM is told to use the exact domain it was given, so
-    // anything generic here is a prompt violation we discard.
-    if (isGenericSubcategory(canonical)) {
-      continue;
-    }
-    const factKeyRaw = rec.fact_key;
-    const factKeyStr = asString(factKeyRaw);
-    const factKey = normalizeFactKey(factKeyStr);
-    if (!factKey) {
-      // The fact-key dedup pipeline (avoid list + persist-time guard) is
-      // load-bearing for question variety; a null fact_key silently disables
-      // it for this row. Log enough detail to tell whether the LLM omitted
-      // the field, returned a non-string, or emitted a string that
-      // normalizeFactKey rejected.
-      console.warn('[daily/generate-questions] fact_key missing or unnormalizable', {
-        domain: canonical,
-        rawType: factKeyRaw === undefined ? 'undefined' : factKeyRaw === null ? 'null' : typeof factKeyRaw,
-        rawValue: typeof factKeyRaw === 'string' ? factKeyRaw.slice(0, 120) : null,
-        questionPreview: questionText.slice(0, 80),
-      });
-    }
-    result.push({
-      canonical_subcategory: canonical,
-      broad_category: broad,
-      question_text: questionText,
-      answer: normalizeCanonicalAnswerLabel(answer),
-      explainer,
-      difficulty_estimate: difficulty,
-      fact_key: factKey,
-      sub_angles: normalizeSubAngles(rec.sub_angles),
-      question_shape: asQuestionShape(rec.question_shape),
-    });
+    const question = parseBaseQuestion(item);
+    if (question) result.push(question);
   }
   return result;
 }
@@ -760,6 +798,7 @@ async function callLlmOnce(
   domainDifficultyOverrides?: ReadonlyMap<string, string>,
   adaptiveLevel?: number | null,
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
+  domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
 ): Promise<LlmQuestion[]> {
   const client = getAnthropicClient();
   if (!client) return [];
@@ -786,6 +825,7 @@ async function callLlmOnce(
           domainDifficultyOverrides,
           adaptiveLevel,
           subAnglesByDomain,
+          domainTerritoryTypes,
         ),
       },
     ],
@@ -807,6 +847,7 @@ export async function generateDailyQuestions(
   adaptiveLevel?: number | null,
   previousFactKeys: AvoidFactKeyEntry[] = [],
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
+  domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
 
@@ -840,6 +881,7 @@ export async function generateDailyQuestions(
         domainDifficultyOverrides,
         adaptiveLevel,
         subAnglesByDomain,
+        domainTerritoryTypes,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -855,6 +897,7 @@ export async function generateDailyQuestions(
         domainDifficultyOverrides,
         adaptiveLevel,
         subAnglesByDomain,
+        domainTerritoryTypes,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -1051,6 +1094,13 @@ export async function generateDailyQuestions(
       })
       .returning();
     persisted.push(row);
+
+    // Semantic-dedup backstop (B1 pool substrate). Best-effort and no-op without
+    // VOYAGE_API_KEY, so it never blocks generation; the fact_key/Haiku/text
+    // guards above remain the cheap first pass. A new machine row that collides
+    // with an existing pool question is flagged is_duplicate (never deleted), so
+    // pickBankSource stops serving it.
+    await embedAndResolveDuplicate({ id: row.id, origin: 'machine', questionText: row.questionText });
   }
 
   return persisted;
@@ -1196,6 +1246,14 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     ? await getDomainDifficultyOverrides(userId, domainsForRound).catch(() => undefined)
     : undefined;
 
+  // territoryType (declared | demonstrated) per selected domain — threaded into
+  // the generation prompt so its register matches the difficulty floor (PRD-D-5
+  // §5.2): declared domains read for an enthusiast, demonstrated for a newcomer.
+  const territoryByDomain = new Map<string, TerritoryType>();
+  for (const entry of knowledgeBase) {
+    territoryByDomain.set(entry.domain, entry.territoryType);
+  }
+
   const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
 
   // Try to fill slots from the cross-user bank (previously-generated questions
@@ -1231,6 +1289,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       adaptiveLevel,
       previousFactKeys,
       subAnglesByDomain,
+      territoryByDomain,
     );
   }
 
@@ -1398,4 +1457,126 @@ async function pickBankPicksForDomains(
     }
   }
   return picks;
+}
+
+// ─── B3: Retrieval-grounded generation (batch path) ─────────────────────────
+//
+// The pieces below are consumed by the pool-refill batch (src/server/daily/
+// retrieval-grounded.ts + the /api/cron/pool-refill route). They layer ON TOP of
+// the B2 SYSTEM_PROMPT / buildUserPrompt above — same exemplars, difficulty and
+// register rules — and only ADD the requirement that every question be written
+// FROM retrieved web sources, with the supporting URLs returned as provenance.
+// Nothing here runs on the per-user critical path.
+
+// Appended to SYSTEM_PROMPT for the retrieval-grounded call. Keeps the base
+// prompt's return schema and adds the source_refs field + the retrieve-first
+// contract (Drift Risk 1: never write from memory and search to justify).
+export const GROUNDING_SYSTEM_ADDENDUM = `
+
+RETRIEVAL-GROUNDED MODE (this call only):
+You have a web_search tool. You MUST use it BEFORE writing each question. The question and its answer must be drawn FROM what you retrieve — never from memory. If you cannot find the answer in retrieved sources, do not invent the question; produce fewer questions instead.
+
+- Search first, then write the question and answer out of the retrieved text.
+- Anchor the answer to the sources, not to your prior knowledge. If retrieval contradicts what you "remember", trust the sources or drop the question.
+- The explainer must be consistent with the retrieved sources and written IN YOUR OWN WORDS — paraphrase, never copy passages verbatim.
+- Corroboration: only keep a question whose answer is supported by AT LEAST TWO independent, reputable sources on DIFFERENT domains (e.g. an encyclopedia plus a university or institutional page). Two pages that copy the same text are NOT independent.
+- Prefer editorially-accountable sources: encyclopedias (Wikipedia with citations, Britannica), university/.edu and government/.gov/.mil pages, museums, primary institutional sources, and established reference works. AVOID forums, Q&A/homework sites, social media, wikis-of-fandom, content farms, and AI-generated content mills — these do not count as corroboration.
+
+Add ONE extra field to each question object in the return JSON:
+  "source_refs": ["https://full-url-of-supporting-source-1", "https://full-url-of-supporting-source-2", ...]
+List the actual URLs you retrieved that support THIS question's answer — at least two, on distinct sites. Do not fabricate URLs; only list pages you actually retrieved.`;
+
+export type SourceRef = string;
+
+export type GroundedLlmQuestion = LlmQuestion & {
+  // Provenance URLs (B1 source_refs is typed string[]). Persisted onto
+  // generatedQuestions.sourceRefs. The supporting sources for THIS answer.
+  source_refs: SourceRef[];
+};
+
+// Normalize a raw source_refs value into a deduped list of http(s) URL strings.
+// Accepts either an array of URL strings or an array of { url, name } objects
+// (the model occasionally emits the richer form even when asked for strings).
+export function normalizeSourceRefs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    let url: string | null = null;
+    if (typeof item === 'string') {
+      url = item.trim();
+    } else if (item && typeof item === 'object') {
+      const rec = item as Record<string, unknown>;
+      url = asString(rec.url) ?? asString(rec.href) ?? asString(rec.link);
+    }
+    if (!url) continue;
+    if (!/^https?:\/\//i.test(url)) continue;
+    const key = url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(url);
+  }
+  return out;
+}
+
+// Registrable-ish host for a URL, lowercased, www stripped. Used to count
+// DISTINCT source domains for the corroboration check. Phase 2 replaces this
+// with the reputation allow/deny list + true mirror detection; for Phase 1 it
+// is the minimal "≥2 independent sites" guard so we never persist an
+// uncorroborated fresh question into the shared pool (Drift Risk 3).
+export function sourceHost(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+export function distinctSourceHostCount(refs: readonly string[]): number {
+  const hosts = new Set<string>();
+  for (const ref of refs) {
+    const host = sourceHost(ref);
+    if (host) hosts.add(host);
+  }
+  return hosts.size;
+}
+
+// Parse a retrieval-grounded generation reply. Same base contract as
+// parseQuestions, plus the source_refs provenance array.
+export function parseGroundedQuestions(raw: string): GroundedLlmQuestion[] {
+  const parsed = parseJsonObject(raw);
+  if (!parsed) return [];
+  const rawList = parsed.questions;
+  if (!Array.isArray(rawList)) return [];
+
+  const result: GroundedLlmQuestion[] = [];
+  for (const item of rawList) {
+    const base = parseBaseQuestion(item);
+    if (!base) continue;
+    const rec = item as Record<string, unknown>;
+    result.push({ ...base, source_refs: normalizeSourceRefs(rec.source_refs) });
+  }
+  return result;
+}
+
+// Run the existing quality gates over a batch and return the union of indices to
+// drop. Reuses the SAME gates the per-user path applies (intra-batch dupes,
+// LLM quality, factual-correctness, deterministic answer-leak) so grounded
+// questions are held to the same bar — without modifying the hot per-user path.
+// Fails open per gate (each catch returns an empty set internally), matching the
+// per-user behaviour.
+export async function screenGroundedBatch(questions: LlmQuestion[]): Promise<Set<number>> {
+  if (questions.length === 0) return new Set();
+  const [batchDuplicates, qualityResult, factualResult] = await Promise.all([
+    findBatchDuplicates(questions),
+    findQualityFailures(questions),
+    findFactualFailures(questions),
+  ]);
+  const answerLeaks = findAnswerLeaks(questions);
+  return new Set<number>([
+    ...batchDuplicates,
+    ...qualityResult.toDrop,
+    ...factualResult.toDrop,
+    ...answerLeaks.toDrop,
+  ]);
 }
