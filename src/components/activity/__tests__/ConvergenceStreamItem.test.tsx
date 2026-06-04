@@ -94,15 +94,16 @@ describe('convergenceToStreamItem — person-first, Lately-only, read-only', () 
 });
 
 describe('ActivityStreamItem — collapsed convergence one-liner', () => {
-  it('renders the person-first line and a QUESTIONS expand affordance, questions hidden', () => {
+  it('renders the person-first line, no expand label, questions hidden', () => {
     const html = renderToStaticMarkup(
       <ActivityStreamItem item={build()} timestamp="2:00 PM" />,
     );
     expect(html).toContain('You and');
     expect(html).toContain('Robyn');
     expect(html).toContain('keep landing in the same place');
-    // Expandable, plural affordance.
-    expect(html).toContain('+ QUESTIONS');
+    // The "+ QUESTIONS" affordance was removed from the row; the line stays
+    // clickable to expand but carries no textual toggle under the timestamp.
+    expect(html).not.toContain('+ QUESTIONS');
     // Collapsed: the cluster questions are NOT shown yet.
     expect(html).not.toContain('Who painted Guernica');
     // No domain leaks into the collapsed headline.
