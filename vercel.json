@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/expire-friend-requests",
       "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/pool-refill",
+      "schedule": "0 9 * * *"
     }
   ]
 }

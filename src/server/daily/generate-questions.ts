@@ -49,7 +49,7 @@ const RECENT_FACT_KEY_LIMIT = 200;
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
 
-const SYSTEM_PROMPT = `You are generating trivia questions for Joshing, a social trivia game played among friends.
+export const SYSTEM_PROMPT = `You are generating trivia questions for Joshing, a social trivia game played among friends.
 Questions must be:
 - Factual with a single objectively correct answer, or — for the "name_multiple" shape only — a small fixed set of correct answers (typically 2–4)
 - Drawn from the intellectual and cultural world of the domain, not biographical trivia
@@ -182,7 +182,7 @@ function asQuestionShape(value: unknown): QuestionShape | null {
     : null;
 }
 
-type LlmQuestion = {
+export type LlmQuestion = {
   canonical_subcategory: string;
   broad_category: string;
   question_text: string;
@@ -238,7 +238,7 @@ type AvoidFactKeyEntry = RecentFactKeyEntry;
 
 type TerritoryType = 'declared' | 'demonstrated';
 
-function buildUserPrompt(
+export function buildUserPrompt(
   domains: string[],
   count: number,
   prev: AvoidQuestionEntry[],
@@ -366,6 +366,63 @@ function asDifficulty(value: unknown): LlmQuestion['difficulty_estimate'] | null
   return null;
 }
 
+// Parse a single question object from the model's JSON array into the validated
+// LlmQuestion shape, or null if it fails the structural / generic-label guards.
+// Shared by parseQuestions (per-user path) and parseGroundedQuestions (the B3
+// retrieval batch path) so both honour exactly the same field contract.
+function parseBaseQuestion(item: unknown): LlmQuestion | null {
+  if (!item || typeof item !== 'object') return null;
+  const rec = item as Record<string, unknown>;
+  const canonical = asString(rec.canonical_subcategory);
+  const broad = asString(rec.broad_category);
+  const questionText = asString(rec.question_text);
+  const answer = asString(rec.answer);
+  const explainer = asString(rec.explainer);
+  const difficulty = asDifficulty(rec.difficulty_estimate);
+  if (!canonical || !broad || !questionText || !answer || !explainer || !difficulty) {
+    return null;
+  }
+  if (isGenericCanonicalAnswer(answer)) {
+    return null;
+  }
+  // Reject LLM responses that pick a bucket-level subcategory ("general",
+  // "general knowledge", "trivia", etc.) — those questions are not tied
+  // to any of the user's declared/demonstrated domains and must not be
+  // served. This is the upstream guard on the generated_questions write
+  // boundary; the LLM is told to use the exact domain it was given, so
+  // anything generic here is a prompt violation we discard.
+  if (isGenericSubcategory(canonical)) {
+    return null;
+  }
+  const factKeyRaw = rec.fact_key;
+  const factKeyStr = asString(factKeyRaw);
+  const factKey = normalizeFactKey(factKeyStr);
+  if (!factKey) {
+    // The fact-key dedup pipeline (avoid list + persist-time guard) is
+    // load-bearing for question variety; a null fact_key silently disables
+    // it for this row. Log enough detail to tell whether the LLM omitted
+    // the field, returned a non-string, or emitted a string that
+    // normalizeFactKey rejected.
+    console.warn('[daily/generate-questions] fact_key missing or unnormalizable', {
+      domain: canonical,
+      rawType: factKeyRaw === undefined ? 'undefined' : factKeyRaw === null ? 'null' : typeof factKeyRaw,
+      rawValue: typeof factKeyRaw === 'string' ? factKeyRaw.slice(0, 120) : null,
+      questionPreview: questionText.slice(0, 80),
+    });
+  }
+  return {
+    canonical_subcategory: canonical,
+    broad_category: broad,
+    question_text: questionText,
+    answer: normalizeCanonicalAnswerLabel(answer),
+    explainer,
+    difficulty_estimate: difficulty,
+    fact_key: factKey,
+    sub_angles: normalizeSubAngles(rec.sub_angles),
+    question_shape: asQuestionShape(rec.question_shape),
+  };
+}
+
 function parseQuestions(raw: string): LlmQuestion[] {
   const parsed = parseJsonObject(raw);
   if (!parsed) return [];
@@ -374,56 +431,8 @@ function parseQuestions(raw: string): LlmQuestion[] {
 
   const result: LlmQuestion[] = [];
   for (const item of rawList) {
-    if (!item || typeof item !== 'object') continue;
-    const rec = item as Record<string, unknown>;
-    const canonical = asString(rec.canonical_subcategory);
-    const broad = asString(rec.broad_category);
-    const questionText = asString(rec.question_text);
-    const answer = asString(rec.answer);
-    const explainer = asString(rec.explainer);
-    const difficulty = asDifficulty(rec.difficulty_estimate);
-    if (!canonical || !broad || !questionText || !answer || !explainer || !difficulty) {
-      continue;
-    }
-    if (isGenericCanonicalAnswer(answer)) {
-      continue;
-    }
-    // Reject LLM responses that pick a bucket-level subcategory ("general",
-    // "general knowledge", "trivia", etc.) — those questions are not tied
-    // to any of the user's declared/demonstrated domains and must not be
-    // served. This is the upstream guard on the generated_questions write
-    // boundary; the LLM is told to use the exact domain it was given, so
-    // anything generic here is a prompt violation we discard.
-    if (isGenericSubcategory(canonical)) {
-      continue;
-    }
-    const factKeyRaw = rec.fact_key;
-    const factKeyStr = asString(factKeyRaw);
-    const factKey = normalizeFactKey(factKeyStr);
-    if (!factKey) {
-      // The fact-key dedup pipeline (avoid list + persist-time guard) is
-      // load-bearing for question variety; a null fact_key silently disables
-      // it for this row. Log enough detail to tell whether the LLM omitted
-      // the field, returned a non-string, or emitted a string that
-      // normalizeFactKey rejected.
-      console.warn('[daily/generate-questions] fact_key missing or unnormalizable', {
-        domain: canonical,
-        rawType: factKeyRaw === undefined ? 'undefined' : factKeyRaw === null ? 'null' : typeof factKeyRaw,
-        rawValue: typeof factKeyRaw === 'string' ? factKeyRaw.slice(0, 120) : null,
-        questionPreview: questionText.slice(0, 80),
-      });
-    }
-    result.push({
-      canonical_subcategory: canonical,
-      broad_category: broad,
-      question_text: questionText,
-      answer: normalizeCanonicalAnswerLabel(answer),
-      explainer,
-      difficulty_estimate: difficulty,
-      fact_key: factKey,
-      sub_angles: normalizeSubAngles(rec.sub_angles),
-      question_shape: asQuestionShape(rec.question_shape),
-    });
+    const question = parseBaseQuestion(item);
+    if (question) result.push(question);
   }
   return result;
 }
@@ -1448,4 +1457,126 @@ async function pickBankPicksForDomains(
     }
   }
   return picks;
+}
+
+// ─── B3: Retrieval-grounded generation (batch path) ─────────────────────────
+//
+// The pieces below are consumed by the pool-refill batch (src/server/daily/
+// retrieval-grounded.ts + the /api/cron/pool-refill route). They layer ON TOP of
+// the B2 SYSTEM_PROMPT / buildUserPrompt above — same exemplars, difficulty and
+// register rules — and only ADD the requirement that every question be written
+// FROM retrieved web sources, with the supporting URLs returned as provenance.
+// Nothing here runs on the per-user critical path.
+
+// Appended to SYSTEM_PROMPT for the retrieval-grounded call. Keeps the base
+// prompt's return schema and adds the source_refs field + the retrieve-first
+// contract (Drift Risk 1: never write from memory and search to justify).
+export const GROUNDING_SYSTEM_ADDENDUM = `
+
+RETRIEVAL-GROUNDED MODE (this call only):
+You have a web_search tool. You MUST use it BEFORE writing each question. The question and its answer must be drawn FROM what you retrieve — never from memory. If you cannot find the answer in retrieved sources, do not invent the question; produce fewer questions instead.
+
+- Search first, then write the question and answer out of the retrieved text.
+- Anchor the answer to the sources, not to your prior knowledge. If retrieval contradicts what you "remember", trust the sources or drop the question.
+- The explainer must be consistent with the retrieved sources and written IN YOUR OWN WORDS — paraphrase, never copy passages verbatim.
+- Corroboration: only keep a question whose answer is supported by AT LEAST TWO independent, reputable sources on DIFFERENT domains (e.g. an encyclopedia plus a university or institutional page). Two pages that copy the same text are NOT independent.
+- Prefer editorially-accountable sources: encyclopedias (Wikipedia with citations, Britannica), university/.edu and government/.gov/.mil pages, museums, primary institutional sources, and established reference works. AVOID forums, Q&A/homework sites, social media, wikis-of-fandom, content farms, and AI-generated content mills — these do not count as corroboration.
+
+Add ONE extra field to each question object in the return JSON:
+  "source_refs": ["https://full-url-of-supporting-source-1", "https://full-url-of-supporting-source-2", ...]
+List the actual URLs you retrieved that support THIS question's answer — at least two, on distinct sites. Do not fabricate URLs; only list pages you actually retrieved.`;
+
+export type SourceRef = string;
+
+export type GroundedLlmQuestion = LlmQuestion & {
+  // Provenance URLs (B1 source_refs is typed string[]). Persisted onto
+  // generatedQuestions.sourceRefs. The supporting sources for THIS answer.
+  source_refs: SourceRef[];
+};
+
+// Normalize a raw source_refs value into a deduped list of http(s) URL strings.
+// Accepts either an array of URL strings or an array of { url, name } objects
+// (the model occasionally emits the richer form even when asked for strings).
+export function normalizeSourceRefs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    let url: string | null = null;
+    if (typeof item === 'string') {
+      url = item.trim();
+    } else if (item && typeof item === 'object') {
+      const rec = item as Record<string, unknown>;
+      url = asString(rec.url) ?? asString(rec.href) ?? asString(rec.link);
+    }
+    if (!url) continue;
+    if (!/^https?:\/\//i.test(url)) continue;
+    const key = url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(url);
+  }
+  return out;
+}
+
+// Registrable-ish host for a URL, lowercased, www stripped. Used to count
+// DISTINCT source domains for the corroboration check. Phase 2 replaces this
+// with the reputation allow/deny list + true mirror detection; for Phase 1 it
+// is the minimal "≥2 independent sites" guard so we never persist an
+// uncorroborated fresh question into the shared pool (Drift Risk 3).
+export function sourceHost(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+export function distinctSourceHostCount(refs: readonly string[]): number {
+  const hosts = new Set<string>();
+  for (const ref of refs) {
+    const host = sourceHost(ref);
+    if (host) hosts.add(host);
+  }
+  return hosts.size;
+}
+
+// Parse a retrieval-grounded generation reply. Same base contract as
+// parseQuestions, plus the source_refs provenance array.
+export function parseGroundedQuestions(raw: string): GroundedLlmQuestion[] {
+  const parsed = parseJsonObject(raw);
+  if (!parsed) return [];
+  const rawList = parsed.questions;
+  if (!Array.isArray(rawList)) return [];
+
+  const result: GroundedLlmQuestion[] = [];
+  for (const item of rawList) {
+    const base = parseBaseQuestion(item);
+    if (!base) continue;
+    const rec = item as Record<string, unknown>;
+    result.push({ ...base, source_refs: normalizeSourceRefs(rec.source_refs) });
+  }
+  return result;
+}
+
+// Run the existing quality gates over a batch and return the union of indices to
+// drop. Reuses the SAME gates the per-user path applies (intra-batch dupes,
+// LLM quality, factual-correctness, deterministic answer-leak) so grounded
+// questions are held to the same bar — without modifying the hot per-user path.
+// Fails open per gate (each catch returns an empty set internally), matching the
+// per-user behaviour.
+export async function screenGroundedBatch(questions: LlmQuestion[]): Promise<Set<number>> {
+  if (questions.length === 0) return new Set();
+  const [batchDuplicates, qualityResult, factualResult] = await Promise.all([
+    findBatchDuplicates(questions),
+    findQualityFailures(questions),
+    findFactualFailures(questions),
+  ]);
+  const answerLeaks = findAnswerLeaks(questions);
+  return new Set<number>([
+    ...batchDuplicates,
+    ...qualityResult.toDrop,
+    ...factualResult.toDrop,
+    ...answerLeaks.toDrop,
+  ]);
 }
