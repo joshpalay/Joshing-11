@@ -382,6 +382,13 @@ export async function updateDomainDifficultyOnAnswer(
     return;
   }
 
+  if (isFrozen(existing.freezeUntil, new Date())) {
+    // Refine Your Game "Ease off": the served difficulty is pinned for the
+    // freeze window. Hold the level AND the streak counters so the domain
+    // resumes exactly where it left off once the freeze lapses.
+    return;
+  }
+
   // Erosion floor is declared-only: declared domains carry the engaged-fan
   // floor, demonstrated domains step down freely (default 'accessible' floor).
   const declaredDomains = await getDeclaredDomainSet(userId, [canonicalSubcategory]);
@@ -399,6 +406,66 @@ export async function updateDomainDifficultyOnAnswer(
       lastUpdated: new Date(),
     })
     .where(eq(userDomainDifficulties.id, existing.id));
+}
+
+/** True while an "Ease off" freeze is in effect for a domain. */
+export function isFrozen(freezeUntil: Date | null | undefined, now: Date): boolean {
+  return Boolean(freezeUntil && freezeUntil.getTime() > now.getTime());
+}
+
+/**
+ * Pin a domain's served difficulty until `until` (Refine Your Game "Ease off").
+ * While frozen, updateDomainDifficultyOnAnswer() leaves the level and streaks
+ * untouched. Escalation normally means a row already exists; the insert branch
+ * is a guard that seeds a served level the same way a first answer would.
+ */
+export async function freezeDomainDifficulty(
+  userId: string,
+  canonicalSubcategory: string,
+  until: Date,
+): Promise<void> {
+  if (!canonicalSubcategory) return;
+
+  const [existing] = await db
+    .select({ id: userDomainDifficulties.id })
+    .from(userDomainDifficulties)
+    .where(and(
+      eq(userDomainDifficulties.userId, userId),
+      eq(userDomainDifficulties.canonicalSubcategory, canonicalSubcategory),
+    ))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(userDomainDifficulties)
+      .set({ freezeUntil: until })
+      .where(eq(userDomainDifficulties.id, existing.id));
+    return;
+  }
+
+  const [level, focusDomains] = await Promise.all([
+    readCurrentAdaptiveLevel(userId),
+    getFocusDomainSet(userId, [canonicalSubcategory]),
+  ]);
+  const seed = applyFocusFloor(
+    seedDifficultyFromAdaptiveLevel(level),
+    focusDomains.has(canonicalSubcategory),
+  );
+  await db
+    .insert(userDomainDifficulties)
+    .values({
+      userId,
+      canonicalSubcategory,
+      servedDifficulty: seed,
+      consecutiveCorrect: 0,
+      consecutiveIncorrect: 0,
+      lastUpdated: new Date(),
+      freezeUntil: until,
+    })
+    .onConflictDoUpdate({
+      target: [userDomainDifficulties.userId, userDomainDifficulties.canonicalSubcategory],
+      set: { freezeUntil: until },
+    });
 }
 
 /**

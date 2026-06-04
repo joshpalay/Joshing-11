@@ -23,6 +23,7 @@ import {
 } from '@/server/daily/generate-questions';
 import { DAILY_BONUS_SLOT_MAX, DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
+import { commitPendingRefineDecisions } from '@/server/refine/commit';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
 
@@ -74,6 +75,17 @@ const overRequest = (needed: number) =>
 
 export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const startedAt = Date.now();
+
+  // Commit point for Refine Your Game: staged decisions from the prior daily's
+  // summary become permanent when the player builds their next daily. Must run
+  // before the early returns below so it isn't skipped on a carry-forward day.
+  // Never let a refine-commit failure block queue building.
+  try {
+    await commitPendingRefineDecisions(userId);
+  } catch (error) {
+    console.warn('[daily] commitPendingRefineDecisions failed', error);
+  }
+
   const existing = await getTodaysDailyQueue(userId);
   if (existing && asQueueSlots(existing.slots).length > 0) {
     // A populated today-queue normally stands. The exception is a SHORT,
