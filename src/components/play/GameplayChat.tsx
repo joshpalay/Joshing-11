@@ -287,6 +287,9 @@ function QuestionRow({
   dismissDisabled?: boolean;
 }) {
   const [visible, setVisible] = useState(!isNew);
+  // A bonus slot is one drawn from a followed friend's knowledge (D-4 §B). It
+  // gets a distinct gold treatment so it reads as a gift, not just another card.
+  const isBonus = Boolean(presenceSourceName);
 
   useEffect(() => {
     if (!isNew) return;
@@ -342,39 +345,77 @@ function QuestionRow({
         </p>
       ) : null}
       {presenceSourceName ? (
-        <p
+        <div
           style={{
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-            fontSize: '0.86rem',
-            color: 'var(--text)',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '8px',
             paddingLeft: '2px',
-            paddingBottom: '2px',
-            opacity: 0.82,
-            lineHeight: 1.3,
+            paddingBottom: '4px',
           }}
         >
-          <span style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginRight: '6px' }}>
-            BONUS
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.55rem',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.18em',
+              color: GOLD_INK,
+              border: '1px solid color-mix(in srgb, var(--tri-amber) 55%, var(--border))',
+              background: 'color-mix(in srgb, var(--tri-amber) 16%, var(--surface))',
+              borderRadius: '999px',
+              padding: '3px 10px',
+              lineHeight: 1.4,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span aria-hidden style={{ fontSize: '0.72rem', lineHeight: 1 }}>
+              ✦
+            </span>
+            Bonus
           </span>
-          <span style={{ opacity: 0.55, fontStyle: 'italic', marginRight: '4px' }}>from</span>
-          <span style={{ fontWeight: 600 }}>
-            {firstNameFrom(presenceSourceName)}
-            {presenceSourceExtraCount > 0 ? '' : '’s'}
+          <span
+            style={{
+              fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+              fontSize: '0.88rem',
+              color: 'var(--text)',
+              opacity: 0.85,
+              lineHeight: 1.3,
+            }}
+          >
+            <span style={{ opacity: 0.6, fontStyle: 'italic', marginRight: '4px' }}>from</span>
+            <span style={{ fontWeight: 600 }}>
+              {firstNameFrom(presenceSourceName)}
+              {presenceSourceExtraCount > 0 ? '' : '’s'}
+            </span>
+            <span style={{ marginLeft: '5px', opacity: 0.6, fontStyle: 'italic' }}>
+              {presenceSourceExtraCount > 0 ? 'and others’ knowledge' : 'knowledge'}
+            </span>
           </span>
-          <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
-            {presenceSourceExtraCount > 0 ? 'and others’ knowledge' : 'knowledge'}
-          </span>
-        </p>
+        </div>
       ) : null}
       <div
         style={{
           alignSelf: 'flex-start',
           maxWidth: '81%',
-          background: 'var(--game-card-question)',
-          border: '1px solid var(--brand-rule)',
+          // Bonus questions get a warm amber tint + gold left-edge accent so the
+          // gifted-from-a-friend card reads as distinct from an ordinary prompt.
+          background: isBonus
+            ? 'color-mix(in srgb, var(--tri-amber) 8%, var(--game-card-question))'
+            : 'var(--game-card-question)',
+          border: isBonus
+            ? '1px solid color-mix(in srgb, var(--tri-amber) 45%, var(--brand-rule))'
+            : '1px solid var(--brand-rule)',
           borderRadius: 'var(--radius-md)',
-          // effect/card/question — soft layered drop shadow.
-          boxShadow: '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
+          // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
+          boxShadow: isBonus
+            ? '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06), inset 3px 0 0 color-mix(in srgb, var(--tri-amber) 65%, transparent)'
+            : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
           padding: '14px 18px',
           fontFamily: 'var(--font-cormorant), Georgia, serif',
           fontSize: '1.4875rem',
