@@ -588,6 +588,10 @@ export const generatedQuestions = pgTable(
     scope: questionScopeEnum('scope').notNull().default('public'),
     perishable: boolean('perishable').notNull().default(false),
     sourceRefs: jsonb('source_refs').$type<string[]>().notNull().default([]),
+    // Ask-to-answer record (B4 Phase 1, PRD-D-5 §5.3 layer 2). True when an
+    // independent cold solver corroborated the stored answer at generation time.
+    // This + B3 corroboration is what earns the machine_verified trust tier.
+    askToAnswerVerified: boolean('ask_to_answer_verified').notNull().default(false),
     // Empirical play stats (D11 / "nobody got it" smell). Back-filled from answer
     // history where a join exists; machine rows usually start 0 / null.
     nAnswered: integer('n_answered').notNull().default(0),

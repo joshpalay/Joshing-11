@@ -16,6 +16,7 @@ import {
   screenGroundedBatch,
   type GroundedLlmQuestion,
 } from '@/server/daily/generate-questions';
+import { askToAnswerBatch, resolveMachineTrustTier } from '@/server/daily/ask-to-answer';
 import { assessCorroboration, getReputationLists } from '@/server/daily/source-reputation';
 import { resolveDailyBasePoints } from '@/server/daily/types';
 import {
@@ -187,8 +188,19 @@ async function refillDomain(
   result.droppedQualityGate = corroborated.length - screened.length;
   if (screened.length === 0) return result;
 
+  // Ask-to-answer secondary net (B4 Phase 1 / §5.3 layer 2): even corroborated
+  // grounded questions get the cold-solver check — its job is to catch the model
+  // MISREADING its own retrieved source. A clear contradiction drops the row;
+  // otherwise the row keeps its corroborated → machine_verified entry tier.
+  const askResult = await askToAnswerBatch(
+    screened.map((q) => ({ questionText: q.question_text, answer: q.answer })),
+  );
+  result.droppedQualityGate += askResult.toDrop.size;
+
   const seenFactKeys = new Set<string>();
-  for (const q of screened) {
+  for (let i = 0; i < screened.length; i += 1) {
+    const q = screened[i];
+    if (askResult.toDrop.has(i)) continue;
     if (q.fact_key) {
       if (seenFactKeys.has(q.fact_key)) {
         result.droppedDuplicateFact += 1;
@@ -197,6 +209,11 @@ async function refillDomain(
       seenFactKeys.add(q.fact_key);
     }
 
+    // Corroborated by construction (passed the corroboration gate above), so the
+    // row enters machine_verified regardless of the ask-to-answer outcome; the
+    // ask-to-answer flag is still recorded for provenance.
+    const askToAnswerVerified = askResult.verified.has(i);
+    const trustTier = resolveMachineTrustTier({ askToAnswerVerified, corroborated: true });
     try {
       const [row] = await db
         .insert(generatedQuestions)
@@ -212,6 +229,8 @@ async function refillDomain(
           factKey: q.fact_key,
           subAngles: q.sub_angles,
           sourceRefs: q.source_refs,
+          trustTier,
+          askToAnswerVerified,
           expiresAt: DURABLE_EXPIRY,
           usedInQueue: false,
         })

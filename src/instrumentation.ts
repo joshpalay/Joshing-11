@@ -481,7 +481,35 @@ export async function register() {
       await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "empirical_correct_rate" double precision`);
       await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "is_duplicate" boolean NOT NULL DEFAULT false`);
       await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "suppressed_by" text`);
-      await db.execute(sql`UPDATE "GeneratedQuestion" SET "trust_tier" = 'machine_verified' WHERE "trust_tier" = 'unverified'`);
+      // Grandfather-promote the pre-existing machine backlog — but ONLY while the
+      // database is still pre-B4. Once migration 0066 adds ask_to_answer_verified,
+      // we are in the B4 world where fresh rows are promoted explicitly by the
+      // ask-to-answer gate (resolveMachineTrustTier); a blanket boot-time promotion
+      // would then wrongly bump rows the gate deliberately left 'unverified'
+      // (failed/skipped ask-to-answer). The one-time grandfather already ran in the
+      // 0062 migration SQL; this guard only re-applies it for a recovering pre-B4 DB.
+      await db.execute(sql`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'GeneratedQuestion' AND column_name = 'ask_to_answer_verified'
+          ) THEN
+            UPDATE "GeneratedQuestion" SET "trust_tier" = 'machine_verified' WHERE "trust_tier" = 'unverified';
+          END IF;
+        END $$
+      `);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
+    // Migration 0066 (B4 Phase 1) adds GeneratedQuestion.ask_to_answer_verified —
+    // the ask-to-answer corroboration record that (with B3 retrieval) earns the
+    // machine_verified tier. App code reads it via resolveMachineTrustTier, so a
+    // preview/production database that records the migration without the column
+    // present must still boot.
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "ask_to_answer_verified" boolean NOT NULL DEFAULT false`);
     } catch {
       // GeneratedQuestion may not exist yet on a fresh database — migrate()
       // creates it before this migration runs.
