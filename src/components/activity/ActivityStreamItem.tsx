@@ -15,7 +15,7 @@ import type {
 
 import { InlineAnswerFlow } from './InlineAnswerFlow';
 import { ActivityIcon, specForIcon } from './ActivityIcon';
-import { FM, INK, INK2, INK3, RULE } from '@/components/lately/tokens';
+import { FF, FM, INK, INK2, INK3, PAPER, RULE } from '@/components/lately/tokens';
 import { assertNever } from '@/lib/assert-never';
 
 // Friend names render in the activity-blue from Figma (--brand-link #4a5d75),
@@ -81,34 +81,49 @@ function questionBacked(expand: StreamExpand | null): boolean {
   }
 }
 
+// One in-session answer to a milestone question: what the viewer typed and
+// whether it was scored correct. Drives the calm "Answered" history copy.
+type Resolution = { submitted: string; isCorrect: boolean };
+
 export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; timestamp: string }) {
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
 
-  // CORRECTION 3: the answered-of-total counter lives on the LINE (collapsed and
-  // expanded), so the answered-state is held HERE — not inside the expansion —
-  // and ticks up + persists as the viewer answers, even after the result pop-up
-  // closes or the line is collapsed and reopened. Milestone lines only.
+  // CORRECTION 3 (revised): the answered-of-total counter lives on the LINE
+  // (collapsed and expanded), so the answered-state is held HERE — not inside
+  // the expansion — and ticks up + persists as the viewer answers, even after
+  // the result pop-up closes or the line is collapsed and reopened. We also keep
+  // each in-session resolution (submitted answer + correctness) here so the
+  // expanded "Answered" history can read it back. Milestone lines only.
   const expand = item.expand;
   const milestoneQuestions = expand && expand.kind === 'milestone' ? expand.questions : null;
-  const [answeredIds, setAnsweredIds] = useState<Set<string>>(
+  // Questions the server already records as answered (correctly) on load. We
+  // don't have the original submitted text for these, so the history shows a
+  // calm "Correct" without the "You answered:" clause for them.
+  const [serverAnswered] = useState<Set<string>>(
     () => new Set((milestoneQuestions ?? []).filter((q) => q.answered).map((q) => q.questionId)),
   );
+  // Resolutions captured this session — both correct and "not quite" — keyed by
+  // questionId, carrying what the viewer typed so the history can echo it.
+  const [resolutions, setResolutions] = useState<Map<string, Resolution>>(() => new Map());
 
-  function markAnswered(questionId: string) {
-    setAnsweredIds((prev) => {
-      const next = new Set(prev);
-      next.add(questionId);
+  function isResolved(questionId: string): boolean {
+    return serverAnswered.has(questionId) || resolutions.has(questionId);
+  }
+
+  function resolve(questionId: string, submitted: string, isCorrect: boolean) {
+    setResolutions((prev) => {
+      const next = new Map(prev);
+      next.set(questionId, { submitted, isCorrect });
       return next;
     });
   }
 
+  const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;
+
   const milestoneProgress =
     milestoneQuestions && milestoneQuestions.length > 0
-      ? {
-          answered: milestoneQuestions.filter((q) => answeredIds.has(q.questionId)).length,
-          total: milestoneQuestions.length,
-        }
+      ? { answered: answeredCount, total: milestoneQuestions.length }
       : null;
 
   // The bundle mark (milestone) shares the row's live answered-state: as the
@@ -118,7 +133,7 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
     item.icon === 'bundle' && milestoneQuestions
       ? (() => {
           const total = Math.min(milestoneQuestions.length, 5);
-          const answered = Math.min(answeredIds.size, total);
+          const answered = Math.min(answeredCount, total);
           return { total, unanswered: total - answered };
         })()
       : null;
@@ -136,13 +151,28 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
     }
   }
 
+  // Opened milestone clusters read as a distinct, quiet "opened" state: a touch
+  // more vertical room, a faint inset (slightly lifted paper + a gentle inset of
+  // the side padding) and top/bottom hairlines — never a heavy card shadow or
+  // loud fill, so the item still sits inside the feed.
+  const opened = expandable && open;
+
   return (
     <div
       id={item.anchorId ?? undefined}
-      style={{
-        borderBottom: `1px solid ${RULE}`,
-        padding: '12px 2px',
-      }}
+      style={
+        opened
+          ? {
+              borderTop: `1px solid ${RULE}`,
+              borderBottom: `1px solid ${RULE}`,
+              padding: '18px 10px',
+              background: PAPER,
+            }
+          : {
+              borderBottom: `1px solid ${RULE}`,
+              padding: '12px 2px',
+            }
+      }
     >
       <div
         role={expandable ? 'button' : undefined}
@@ -198,7 +228,7 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
                 color: INK3,
               }}
             >
-              {milestoneProgress.answered} of {milestoneProgress.total}
+              {milestoneProgress.answered} of {milestoneProgress.total} questions
             </p>
           ) : null}
         </div>
@@ -231,7 +261,12 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
 
       {expandable && open && expand ? (
         expand.kind === 'milestone' ? (
-          <MilestoneExpansion expand={expand} answeredIds={answeredIds} onAnswered={markAnswered} />
+          <MilestoneExpansion
+            expand={expand}
+            isResolved={isResolved}
+            resolutions={resolutions}
+            onResolved={resolve}
+          />
         ) : expand.kind === 'same_correct' ? (
           <ConvergenceExpansion expand={expand} />
         ) : (
@@ -270,38 +305,116 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
   );
 }
 
-// CORRECTION 3: the expanded milestone questions render at the homepage's FULL
-// width — no narrow inset (the old left-rule/indent is gone) — matching the
-// one-liner register. The answered-state is owned by the parent so the line's
-// quiet "{answered} of {total}" counter ticks up here; this only lists the
-// friend's ≤5 literal questions to answer.
+// CORRECTION 3 (revised): the opened milestone reads as a cluster with ONE
+// playable question. The active (first still-unanswered) question leads —
+// directly under the header — as the single focal point and single action.
+// Everything already answered drops into a quiet "Answered" history below it,
+// so the viewer never scans past settled questions to find the thing they can
+// do now. The answered-state is owned by the parent so the line's quiet
+// "{answered} of {total}" counter and the triangle mark stay in lockstep.
 function MilestoneExpansion({
   expand,
-  answeredIds,
-  onAnswered,
+  isResolved,
+  resolutions,
+  onResolved,
 }: {
   expand: Extract<StreamExpand, { kind: 'milestone' }>;
-  answeredIds: Set<string>;
-  onAnswered: (questionId: string) => void;
+  isResolved: (questionId: string) => boolean;
+  resolutions: Map<string, Resolution>;
+  onResolved: (questionId: string, submitted: string, isCorrect: boolean) => void;
 }) {
+  const active = expand.questions.find((q) => !isResolved(q.questionId)) ?? null;
+  const answered = expand.questions.filter((q) => isResolved(q.questionId));
+
   return (
     <div
       onClick={(e) => e.stopPropagation()}
       style={{
-        marginTop: 12,
+        marginTop: 14,
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
+        gap: 20,
       }}
     >
-      {expand.questions.map((q) => (
-        <InlineAnswerFlow
-          key={q.questionId}
-          question={q}
-          answered={answeredIds.has(q.questionId)}
-          onAnswered={onAnswered}
-        />
-      ))}
+      {active ? (
+        <InlineAnswerFlow key={active.questionId} question={active} onResolved={onResolved} />
+      ) : null}
+      {answered.length > 0 ? (
+        <AnsweredHistory questions={answered} resolutions={resolutions} />
+      ) : null}
+    </div>
+  );
+}
+
+// The quiet history beneath the active question: each settled question shows a
+// calm, descriptive result ("Correct" / "Not quite") with what the viewer
+// typed, then the original question in a lighter, smaller serif. No bright
+// success/failure colors, no punitive "wrong" — it's available but secondary.
+function AnsweredHistory({
+  questions,
+  resolutions,
+}: {
+  questions: StreamQuestion[];
+  resolutions: Map<string, Resolution>;
+}) {
+  return (
+    <div>
+      <p
+        style={{
+          margin: 0,
+          fontFamily: FM,
+          fontSize: 10,
+          letterSpacing: 1.5,
+          color: INK3,
+        }}
+      >
+        ANSWERED
+      </p>
+      <div
+        style={{
+          marginTop: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+        }}
+      >
+        {questions.map((q) => {
+          const r = resolutions.get(q.questionId);
+          // No in-session resolution means the server already had it on load as
+          // a correct answer; we lack the original text, so we stay calm and
+          // drop the "You answered:" clause rather than invent one.
+          const isCorrect = r ? r.isCorrect : true;
+          return (
+            <div key={q.questionId}>
+              <p
+                style={{
+                  margin: 0,
+                  fontFamily: FF,
+                  fontSize: 12.5,
+                  lineHeight: 1.45,
+                  letterSpacing: 0.2,
+                  color: INK2,
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>{isCorrect ? 'Correct' : 'Not quite'}</span>
+                {r ? ` · You answered: ${r.submitted}` : null}
+              </p>
+              <p
+                style={{
+                  margin: '3px 0 0',
+                  fontFamily: 'Georgia, serif',
+                  fontStyle: 'italic',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  color: INK3,
+                }}
+              >
+                &ldquo;{q.text}&rdquo;
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
