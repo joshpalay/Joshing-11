@@ -1,5 +1,6 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
@@ -20,15 +21,24 @@ type RouteContext = {
 
 type MasteryTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 
-function parseBody(value: unknown): { submittedAnswer: string } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const submittedAnswer = typeof record.submitted_answer === 'string'
-    ? record.submitted_answer.trim()
-    : typeof record.answer === 'string'
-      ? record.answer.trim()
-      : null;
+const bodySchema = z.object({
+  // Permissive: a malformed type is coerced away (matching the prior parser)
+  // rather than 400-ing; the required-non-empty check happens below.
+  submitted_answer: z.string().optional().catch(undefined),
+  answer: z.string().optional().catch(undefined),
+});
 
+function parseBody(value: unknown): { submittedAnswer: string } | null {
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  const { submitted_answer, answer } = parsed.data;
+  const submittedAnswer = (
+    typeof submitted_answer === 'string'
+      ? submitted_answer
+      : typeof answer === 'string'
+        ? answer
+        : ''
+  ).trim();
   return submittedAnswer ? { submittedAnswer } : null;
 }
 
