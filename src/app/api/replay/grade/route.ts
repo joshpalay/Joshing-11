@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/server/daily/catchup';
@@ -12,17 +13,24 @@ import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 
 export const dynamic = 'force-dynamic';
 
+const bodySchema = z.object({
+  dailyQueueItemId: z.string().optional().catch(undefined),
+  assignmentId: z.string().optional().catch(undefined),
+  submittedAnswer: z.string().optional().catch(undefined),
+});
+
 function parseBody(value: unknown): { dailyQueueItemId: string; submittedAnswer: string } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const dailyQueueItemId = typeof record.dailyQueueItemId === 'string'
-    ? record.dailyQueueItemId
-    : typeof record.assignmentId === 'string'
-      ? record.assignmentId
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  const { dailyQueueItemId, assignmentId, submittedAnswer } = parsed.data;
+  const id = typeof dailyQueueItemId === 'string'
+    ? dailyQueueItemId
+    : typeof assignmentId === 'string'
+      ? assignmentId
       : null;
-  const submittedAnswer = typeof record.submittedAnswer === 'string' ? record.submittedAnswer.trim() : null;
-  if (!dailyQueueItemId || !submittedAnswer) return null;
-  return { dailyQueueItemId, submittedAnswer };
+  const answer = typeof submittedAnswer === 'string' ? submittedAnswer.trim() : null;
+  if (!id || !answer) return null;
+  return { dailyQueueItemId: id, submittedAnswer: answer };
 }
 
 export async function POST(request: NextRequest) {
