@@ -43,9 +43,13 @@ export type RetrievalConfig = {
   /** Cap on domains processed in a single run (belt-and-braces alongside the
    *  USD ceiling). */
   maxDomainsPerRun: number;
-  /** Minimum distinct source hosts required to keep a grounded question
-   *  (corroboration floor; Drift Risk 2). */
+  /** Minimum distinct non-denied source hosts required to keep a grounded
+   *  question (corroboration floor; Drift Risk 2). */
   minCorroboratingSources: number;
+  /** Of the corroborating sources, how many must be editorially-accountable
+   *  (allow-listed / .edu / .gov / .mil / .ac.*). Default 1 — set equal to
+   *  minCorroboratingSources for the strict "all reputable" reading. */
+  minReputableSources: number;
 };
 
 // Anthropic server-side web search billing: ~$10 / 1,000 searches.
@@ -68,6 +72,7 @@ export function getRetrievalConfig(): RetrievalConfig {
     activeLookbackDays: Math.max(1, Math.round(numEnv('RETRIEVAL_ACTIVE_LOOKBACK_DAYS', 14))),
     maxDomainsPerRun: Math.max(1, Math.round(numEnv('RETRIEVAL_MAX_DOMAINS_PER_RUN', 50))),
     minCorroboratingSources: Math.max(1, Math.round(numEnv('RETRIEVAL_MIN_CORROBORATING_SOURCES', 2))),
+    minReputableSources: Math.max(1, Math.round(numEnv('RETRIEVAL_MIN_REPUTABLE_SOURCES', 1))),
   };
 }
 

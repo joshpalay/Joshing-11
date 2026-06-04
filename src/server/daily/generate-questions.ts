@@ -1480,6 +1480,7 @@ You have a web_search tool. You MUST use it BEFORE writing each question. The qu
 - Anchor the answer to the sources, not to your prior knowledge. If retrieval contradicts what you "remember", trust the sources or drop the question.
 - The explainer must be consistent with the retrieved sources and written IN YOUR OWN WORDS — paraphrase, never copy passages verbatim.
 - Corroboration: only keep a question whose answer is supported by AT LEAST TWO independent, reputable sources on DIFFERENT domains (e.g. an encyclopedia plus a university or institutional page). Two pages that copy the same text are NOT independent.
+- Prefer editorially-accountable sources: encyclopedias (Wikipedia with citations, Britannica), university/.edu and government/.gov/.mil pages, museums, primary institutional sources, and established reference works. AVOID forums, Q&A/homework sites, social media, wikis-of-fandom, content farms, and AI-generated content mills — these do not count as corroboration.
 
 Add ONE extra field to each question object in the return JSON:
   "source_refs": ["https://full-url-of-supporting-source-1", "https://full-url-of-supporting-source-2", ...]

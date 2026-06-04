@@ -12,11 +12,11 @@ import {
   GROUNDING_SYSTEM_ADDENDUM,
   SYSTEM_PROMPT,
   buildUserPrompt,
-  distinctSourceHostCount,
   parseGroundedQuestions,
   screenGroundedBatch,
   type GroundedLlmQuestion,
 } from '@/server/daily/generate-questions';
+import { assessCorroboration, getReputationLists } from '@/server/daily/source-reputation';
 import { resolveDailyBasePoints } from '@/server/daily/types';
 import {
   getDomainPoolAvoidLists,
@@ -154,14 +154,22 @@ async function refillDomain(
   result.generated = questions.length;
   if (questions.length === 0) return result;
 
-  // Corroboration floor (Drift Risk 2/3): drop anything below the distinct-host
-  // threshold BEFORE the quality gates so we never persist — or even spend gate
-  // calls on — an uncorroborated fresh question. Phase 2 layers reputation
-  // ranking + true mirror detection on top of this minimal "≥2 distinct sites".
+  // Corroboration + reputation gate (Phase 2; DR2/DR3): drop anything not backed
+  // by ≥minCorroboratingSources independent non-denied hosts with
+  // ≥minReputableSources editorially-accountable anchors, BEFORE the quality
+  // gates — so we never persist (or spend gate calls on) an uncorroborated fresh
+  // question, and circular/junk sources can't fake corroboration. Surviving
+  // questions keep only their non-denied refs, reputable-first.
+  const lists = getReputationLists();
   const corroborated: GroundedLlmQuestion[] = [];
   for (const q of questions) {
-    if (distinctSourceHostCount(q.source_refs) >= config.minCorroboratingSources) {
-      corroborated.push(q);
+    const assessment = assessCorroboration(q.source_refs, {
+      minTotal: config.minCorroboratingSources,
+      minReputable: config.minReputableSources,
+      lists,
+    });
+    if (assessment.corroborated) {
+      corroborated.push({ ...q, source_refs: assessment.orderedRefs });
     } else {
       result.droppedUncorroborated += 1;
     }
