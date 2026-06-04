@@ -32,10 +32,8 @@ type Tri = {
   points: string;
   colorA: string;
   colorB: string;
-  breatheDelay: number;
-  breatheDuration: number;
-  swapDelay: number;
-  swapDuration: number;
+  cycleDelay: number;
+  cycleDuration: number;
   opacityLow: number;
   opacityHigh: number;
 };
@@ -64,27 +62,25 @@ function buildTriangles(): Tri[] {
       const r2 = rand(idx * 13 + 29);
       const r3 = rand(idx * 17 + 53);
       const r4 = rand(idx * 23 + 71);
-      const r5 = rand(idx * 29 + 97);
 
       const colorAIdx = Math.floor(r1 * PALETTE.length);
       let colorBIdx = Math.floor(r4 * PALETTE.length);
       if (colorBIdx === colorAIdx) colorBIdx = (colorBIdx + 1) % PALETTE.length;
 
-      const breatheDuration = 5 + r2 * 4;
-      const breatheDelay = -r3 * breatheDuration;
-      const swapDuration = 10 + r5 * 6;
-      const swapDelay = -r1 * swapDuration;
-      const opacityLow = 0.55 + r1 * 0.2;
-      const opacityHigh = 0.95 + r2 * 0.05;
+      // One shared cycle drives both the fade and the color swap so each
+      // triangle changes colour while it is faded out — a soft cross-fade
+      // rather than a hard cut.
+      const cycleDuration = 7 + r2 * 5;
+      const cycleDelay = -r3 * cycleDuration;
+      const opacityLow = 0.14 + r1 * 0.18;
+      const opacityHigh = 0.9 + r2 * 0.1;
 
       tris.push({
         points,
         colorA: PALETTE[colorAIdx],
         colorB: PALETTE[colorBIdx],
-        breatheDelay,
-        breatheDuration,
-        swapDelay,
-        swapDuration,
+        cycleDelay,
+        cycleDuration,
         opacityLow,
         opacityHigh,
       });
@@ -94,65 +90,12 @@ function buildTriangles(): Tri[] {
   return tris;
 }
 
-type FloatTri = {
-  points: string;
-  color: string;
-  cx: number;
-  cy: number;
-  dx: number;
-  dy: number;
-  dr: number;
-  ds: number;
-  duration: number;
-  delay: number;
-  opacity: number;
-};
-
-function buildFloaters(): FloatTri[] {
-  const specs: Array<[number, number, number, string, number]> = [
-    [80, 180, 110, "#D15E36", 0.5],
-    [310, 240, 140, "#6D837F", 0.45],
-    [60, 540, 130, "#DEAE5C", 0.45],
-    [340, 650, 100, "#ADB19E", 0.5],
-    [200, 380, 160, "#6D837F", 0.35],
-    [160, 780, 90, "#D15E36", 0.45],
-    [40, 80, 120, "#ADB19E", 0.4],
-    [360, 420, 110, "#DEAE5C", 0.5],
-    [220, 120, 80, "#D15E36", 0.5],
-    [120, 320, 100, "#6D837F", 0.4],
-    [280, 560, 130, "#D15E36", 0.35],
-    [80, 720, 110, "#ADB19E", 0.4],
-  ];
-
-  return specs.map(([cx, cy, size, color, opacity], i) => {
-    const h = size * 0.8660254;
-    // Rotated 90° to match the tessellation: base on the left, apex on the right.
-    const points = [
-      [cx - h / 2, cy - size / 2],
-      [cx - h / 2, cy + size / 2],
-      [cx + h / 2, cy],
-    ]
-      .map(([x, y]) => `${x},${y}`)
-      .join(" ");
-    const seed = i + 1;
-    const dx = (rand(seed * 31) - 0.5) * 100;
-    const dy = (rand(seed * 47) - 0.5) * 100;
-    const dr = (rand(seed * 59) - 0.5) * 40;
-    const ds = 1 + rand(seed * 67) * 0.1;
-    const duration = 16 + rand(seed * 71) * 10;
-    const delay = -rand(seed * 89) * duration;
-
-    return { points, color, cx, cy, dx, dy, dr, ds, duration, delay, opacity };
-  });
-}
-
 export default function LoadingScreen({
   label = "Loading",
   className,
   fullScreen = false,
 }: LoadingScreenProps) {
   const triangles = React.useMemo(() => buildTriangles(), []);
-  const floaters = React.useMemo(() => buildFloaters(), []);
 
   const wrapperClass = [
     "isolate flex items-center justify-center overflow-hidden bg-[#E8DCC0]",
@@ -187,7 +130,7 @@ export default function LoadingScreen({
               style={
                 {
                   fill: "var(--tri-color-a)",
-                  animation: `triangle-breathe ${t.breatheDuration}s ease-in-out ${t.breatheDelay}s infinite, triangle-color-swap ${t.swapDuration}s steps(1, end) ${t.swapDelay}s infinite`,
+                  animation: `triangle-fade ${t.cycleDuration}s ease-in-out ${t.cycleDelay}s infinite, triangle-color-swap ${t.cycleDuration}s linear ${t.cycleDelay}s infinite`,
                   ["--tri-color-a" as string]: t.colorA,
                   ["--tri-color-b" as string]: t.colorB,
                   ["--tri-opacity-low" as string]: String(t.opacityLow),
@@ -195,28 +138,6 @@ export default function LoadingScreen({
                 } as React.CSSProperties
               }
             />
-          ))}
-        </g>
-
-        <g style={{ mixBlendMode: "multiply" }}>
-          {floaters.map((f, i) => (
-            <g
-              key={i}
-              className="triangle-loader-float"
-              style={
-                {
-                  transformBox: "fill-box",
-                  transformOrigin: `${f.cx}px ${f.cy}px`,
-                  animation: `triangle-drift ${f.duration}s ease-in-out ${f.delay}s infinite`,
-                  ["--tri-dx" as string]: `${f.dx}px`,
-                  ["--tri-dy" as string]: `${f.dy}px`,
-                  ["--tri-dr" as string]: `${f.dr}deg`,
-                  ["--tri-ds" as string]: String(f.ds),
-                } as React.CSSProperties
-              }
-            >
-              <polygon points={f.points} fill={f.color} opacity={f.opacity} />
-            </g>
           ))}
         </g>
       </svg>
