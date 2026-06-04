@@ -146,6 +146,17 @@ const monoStyle: CSSProperties = {
   letterSpacing: '0.06em',
 };
 
+// The answer, repeated as a prominent serif headline on the result card —
+// mirrors the feed reveal treatment ("eyebrow → answer as headline →
+// explanation"). Shared by the correct and wrong cards so the two stay in
+// sync; bumped up from the previous 1.4875rem so the answer reads clearly.
+const answerHeadingStyle: CSSProperties = {
+  fontFamily: 'var(--font-cormorant), Georgia, serif',
+  fontSize: '1.65rem',
+  fontWeight: 700,
+  lineHeight: 1.14,
+};
+
 // Darkened triangle-gold so warning/inside-joke labels clear AA on the cream
 // surface (raw --tri-amber #d9a82e is too light for small text). Mirrors the
 // GOLD_INK used on the feed answer sheets.
@@ -915,6 +926,11 @@ function ResultRow({
               <span style={{ color: 'var(--game-correct)', marginRight: '6px' }}>✓</span>
               {copy.headline}
             </p>
+            {correctAnswer ? (
+              <p style={{ ...answerHeadingStyle, marginTop: '8px', color: 'var(--game-correct)' }}>
+                {correctAnswer}
+              </p>
+            ) : null}
             <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
               {copy.subLabel}
             </p>
@@ -954,13 +970,10 @@ function ResultRow({
             {correctAnswer ? (
               <p
                 style={{
+                  ...answerHeadingStyle,
                   marginTop: '8px',
                   // Figma question/game/answer — Cormorant Bold, scaled to match question text.
-                  fontFamily: 'var(--font-cormorant), Georgia, serif',
-                  fontSize: '1.4875rem',
-                  fontWeight: 700,
                   color: 'var(--brand-ink)',
-                  lineHeight: 1.14,
                 }}
               >
                 {correctAnswer}
