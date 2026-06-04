@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, questions } from '@/server/db';
 import { runWithConcurrency } from '@/server/lib/concurrency';
 import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
+import { verdictToBlockedVisibility } from '@/server/llm/vet-verdict';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -69,6 +70,12 @@ export async function GET(request: NextRequest) {
         canonicalSubcategory: row.canonicalSubcategory,
       });
       const scoring = verdictToPublicStatus(verdict);
+      // This sweep only scans visibility='public' rows (see query above), so it
+      // never re-vets an already-blocked question and can never flip one back to
+      // shareable. But it CAN be the first place a safety-fail is detected (when
+      // the inline create vet returned needs_review on a Haiku error/unknown).
+      // In that case apply the same hard-block the create route does.
+      const blockedVisibility = verdictToBlockedVisibility(verdict);
 
       // Skip the update when we'd just re-write 'not_scored' with the same
       // null score — the row was already in that state and nothing changed.
@@ -82,6 +89,7 @@ export async function GET(request: NextRequest) {
             publicStatus: scoring.publicStatus,
             publicEligibilityScore: scoring.publicEligibilityScore,
             publicEligibilityReason: scoring.publicEligibilityReason,
+            ...(blockedVisibility ? { visibility: blockedVisibility } : {}),
             updatedAt: new Date(),
           })
           .where(eq(questions.id, row.id));

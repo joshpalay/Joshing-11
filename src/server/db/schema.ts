@@ -38,7 +38,10 @@ export const categoryEnum = pgEnum('Category', [
   'general_knowledge',
 ]);
 
-export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends']);
+// 'blocked' is a safety hard-block terminal state (see verdictToBlockedVisibility):
+// a question that failed the safety vet. It is NOT user-selectable and is excluded
+// by questionVisibilityPredicate and every bank/send/game read path.
+export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends', 'blocked']);
 
 // B1 pool substrate (PRD-D-5 §5.1 / §6). Trust climbs as a question earns it:
 // unverified (fresh, pre-checks) → machine_verified (retrieval + ask-to-answer,

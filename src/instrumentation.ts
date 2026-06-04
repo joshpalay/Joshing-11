@@ -794,6 +794,18 @@ export async function register() {
       // QuestionVisibility may not exist yet on a fresh database — migrate()
       // creates it before this migration runs.
     }
+    // Migration 0069 adds a 'blocked' value to QuestionVisibility for questions
+    // that fail the safety vet. Pre-applied here for the same reason as 'friends'
+    // above: code paths that read/compare 'blocked' from a preview database where
+    // 0069 is recorded-but-not-fully-applied would 22P02 without this guard.
+    try {
+      await db.execute(sql`
+        ALTER TYPE "public"."QuestionVisibility" ADD VALUE IF NOT EXISTS 'blocked'
+      `);
+    } catch {
+      // QuestionVisibility may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
     try {
       await db.execute(sql`
         DO $$
