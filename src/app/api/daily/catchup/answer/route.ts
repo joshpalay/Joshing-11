@@ -144,7 +144,7 @@ async function handleDailyCatchupAnswer({
   );
   // Fail toward the player (B4 Phase 4 / Drift Risk 2): a grader outage is not a
   // real verdict — never persist 'wrong'. Hold for retry.
-  if (grade.gradedVia === 'fallback') {
+  if (grade.status === 'unscored') {
     return catchUpErrorResponse(
       503,
       'grader_unavailable',
@@ -428,7 +428,7 @@ async function handleFeedCatchupAnswer({
     feedRow.question.questionType,
   );
   // Fail toward the player (B4 Phase 4 / Drift Risk 2): hold a grader outage for retry.
-  if (grade.gradedVia === 'fallback') {
+  if (grade.status === 'unscored') {
     return catchUpErrorResponse(
       503,
       'grader_unavailable',

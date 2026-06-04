@@ -104,7 +104,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   );
   // Fail toward the player (B4 Phase 4 / Drift Risk 2): a grader outage is not a
   // real verdict — never mark a friend's question wrong. Return a retryable 503.
-  if (grade.gradedVia === 'fallback') {
+  if (grade.status === 'unscored') {
     return NextResponse.json(
       {
         error: 'grader_unavailable',

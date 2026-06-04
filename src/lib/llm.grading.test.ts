@@ -62,6 +62,8 @@ describe('gradeAnswerWithLLM', () => {
       'factual',
     )
 
+    expect(outcome.status).toBe('scored')
+    if (outcome.status !== 'scored') throw new Error('expected scored')
     expect(outcome.result).toBe('correct')
     expect(outcome.consolation).toBeNull()
   })

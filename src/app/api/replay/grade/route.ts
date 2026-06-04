@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     'factual',
   );
   // Fail toward the player (B4 Phase 4 / Drift Risk 2): hold a grader outage for retry.
-  if (grade.gradedVia === 'fallback') {
+  if (grade.status === 'unscored') {
     return NextResponse.json(
       {
         error: 'grader_unavailable',
