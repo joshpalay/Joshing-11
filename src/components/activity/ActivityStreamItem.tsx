@@ -103,10 +103,16 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   const [serverAnswered] = useState<Set<string>>(
     () => new Set((milestoneQuestions ?? []).filter((q) => q.answered).map((q) => q.questionId)),
   );
-  // Resolutions captured this session — both correct and "not quite" — keyed by
-  // questionId, carrying what the viewer typed so the history can echo it.
+  // Resolutions captured this session — both correct and "not this time" — keyed
+  // by questionId, carrying what the viewer typed so the history can echo it. A
+  // question goes in here on the FIRST answer regardless of correctness, which is
+  // what locks it: see isResolved.
   const [resolutions, setResolutions] = useState<Map<string, Resolution>>(() => new Map());
 
+  // A resolved question is settled and NO LONGER answerable for the rest of this
+  // session — answering it wrong once retires it the same way a correct answer
+  // does (it drops out of the active slot below and into the Answered history),
+  // so the viewer can't take a second swing at it here.
   function isResolved(questionId: string): boolean {
     return serverAnswered.has(questionId) || resolutions.has(questionId);
   }
@@ -336,9 +342,11 @@ function MilestoneExpansion({
 }
 
 // The quiet history beneath the active question: each settled question shows a
-// calm, descriptive result ("Correct" / "Not quite") with what the viewer
-// typed, then the original question in a lighter, smaller serif. No bright
-// success/failure colors, no punitive "wrong" — it's available but secondary.
+// descriptive result with what the viewer typed — "Correct - {answer}" in green
+// or "Not this time - {answer}" in red — then the original question in a
+// lighter, smaller serif. A settled question (right OR wrong) lives here and is
+// no longer answerable; the result colors come from the same semantic answer
+// tokens the AnswerFeedbackSheet uses.
 function AnsweredHistory({
   questions,
   resolutions,
@@ -374,7 +382,7 @@ function AnsweredHistory({
           // "Correct" without the answer clause rather than invent one.
           const isCorrect = r ? r.isCorrect : true;
           // Result reads in the app's semantic answer colors: green for correct,
-          // red for "not quite" — same tokens the AnswerFeedbackSheet uses.
+          // red for "not this time" — same tokens the AnswerFeedbackSheet uses.
           const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)';
           return (
             <div key={q.questionId}>
@@ -389,12 +397,13 @@ function AnsweredHistory({
                   color: resultColor,
                 }}
               >
-                {isCorrect ? 'Correct' : 'Not quite'}
+                {isCorrect ? 'Correct' : 'Not this time'}
                 {r ? ` - ${r.submitted}` : null}
               </p>
               <p
                 style={{
                   margin: '3px 0 0',
+                  paddingRight: 24,
                   fontFamily: 'Georgia, serif',
                   fontStyle: 'italic',
                   fontSize: 13,
