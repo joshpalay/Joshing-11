@@ -129,9 +129,17 @@ const HOME_HEAD_LIMIT = 3
 
 async function RecentActivityServerSection({ userId }: { userId: string }) {
   // The homepage head is the curated top of the one unified stream (same source
-  // as Lately): take the home-eligible items, already prominence-sorted.
+  // as Lately): take the home-eligible items. Lately's prominence sort puts
+  // higher tiers before recency, which let older "got your question" moments
+  // outrank genuinely newer home-eligible items (e.g. a recent milestone) and
+  // hide them below the head's slice. The homepage is a "what's happening NOW"
+  // surface, so re-sort the home-eligible items by recency before taking the
+  // head — Lately keeps its prominence ordering.
   const stream = await buildActivityStream(userId)
-  const items = stream.filter((item) => item.homeEligible).slice(0, HOME_HEAD_LIMIT)
+  const items = stream
+    .filter((item) => item.homeEligible)
+    .sort((a, b) => b.sortAt.getTime() - a.sortAt.getTime())
+    .slice(0, HOME_HEAD_LIMIT)
   return <RecentActivitySection items={items} />
 }
 
