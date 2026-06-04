@@ -5,13 +5,16 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
+import { EditorialBadge } from '@/components/EditorialBadge';
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
+import { NewTerritoryUndo } from '@/components/feed/NewTerritoryUndo';
 import {
   CORRECT_ANSWER_REACTIONS,
   WRONG_ANSWER_REACTIONS,
   isWrongAnswerReactionKey,
   type ReactionKey,
 } from '@/lib/reactions';
+import { isLlmAttribution, INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types';
 
 export type ReactionPromptData = {
   senderName: string;
@@ -37,10 +40,31 @@ export type ChatMessage =
       assignmentId: string;
       questionText: string;
       creatorName: string | null;
+      /**
+       * D-3: the named author is the non-human house/editorial author. Renders
+       * the persistent `Editorial` badge and suppresses all relational copy
+       * ("gave you this", "{name} carries this one"). Set explicitly by the
+       * server resolver — never inferred from the name string, so a human named
+       * "Joshing" is never mistaken for the house author.
+       */
+      creatorIsHouse?: boolean;
+      /**
+       * Daily Five +2 bonus slot presence attribution (D-4 §B): the followed
+       * friend whose territory/activity surfaced this domain. When set, the card
+       * marks the slot as a bonus drawn from that friend's knowledge —
+       * "BONUS from {name}'s knowledge" ("{name} and others’ knowledge" when more
+       * than one friend surfaces it). There is no literal answerer; the question
+       * itself is freshly generated.
+       */
+      presenceSourceName?: string | null;
+      presenceSourceExtraCount?: number;
       isNew?: boolean;
+      /** When true the card is shown as a dimmed, non-interactive ghost — set when the question is dismissed and the inline "Dismissed · Undo" notice takes over. */
+      faded?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
     }
+  | { id: string; kind: 'dismiss_notice'; onUndo: () => Promise<void> }
   | { id: string; kind: 'user'; text: string }
   | { id: string; kind: 'typing' }
   | {
@@ -50,12 +74,16 @@ export type ChatMessage =
       questionText: string;
       result: 'correct' | 'wrong' | 'expired' | 'gave_up';
       submitted: string;
+      /** D-3: the named author is the non-human house author (see question variant). */
+      creatorIsHouse?: boolean;
       /** Canonical answer when wrong */
       correctAnswer: string | null;
       /** Near-miss quip from LLM grader */
       consolation: string | null;
-      /** LLM-generated friends-only aside; only present when the viewer is the creator or an active friend. */
+      /** LLM-generated aside; for authored questions only present when the viewer is the creator or an active friend. */
       insideJoke?: string | null;
+      /** Provenance of the aside label: relational (a person authored it) vs editorial (LLM-origin). */
+      insideJokeKind?: InsideJokeKind | null;
       breadcrumb: string | null;
       /** 0–3 index for rotating copy phrases */
       copyVariant: number;
@@ -65,8 +93,10 @@ export type ChatMessage =
       relationalFeedbackLine?: string | null;
       /** Domain exclusion — canonical subcategory for "remove from rotation" affordance */
       canonicalSubcategory?: string | null;
-      /** Per-answer commentary quip shown below the result bubble */
-      quip?: string | null;
+      /** B-1 — domain newly opened in the KB by this correct answer; surfaces the "Added [Domain] — remove?" undo. */
+      openedTerritoryDomain?: string | null;
+      /** Author's why — commentary the question's author attached at creation, revealed on answer (correct or incorrect). */
+      authorNote?: string | null;
       /** Question's stored factual explainer. Rendered as a fallback below the verdict when no breadcrumb arrives (e.g. feed-sourced catch-up items, or when /api/breadcrumb times out). */
       explanation?: string | null;
       reactionPrompt?: ReactionPromptData | null;
@@ -133,9 +163,10 @@ function firstNameFrom(creatorName: string): string {
   return space === -1 ? trimmed : trimmed.slice(0, space);
 }
 
-function wrongNamedSubLabel(creatorName: string | null, variant: number): string | null {
+function wrongNamedSubLabel(creatorName: string | null, variant: number, isHouse = false): string | null {
   if (!creatorName) return null;
-  if (creatorName.trim().toLowerCase() === 'joshing') return null;
+  // House and LLM origins are non-relational: no "{name} carries this one".
+  if (isHouse || isLlmAttribution(creatorName)) return null;
   const firstName = firstNameFrom(creatorName);
   if (!firstName) return null;
   return WRONG_NAMED_SUBLABEL[variant % WRONG_NAMED_SUBLABEL.length]!(firstName);
@@ -160,22 +191,89 @@ function SystemRow({ text }: { text: string }) {
   );
 }
 
+// Inline "Dismissed · Undo" line shown after a question is dropped from
+// catch-up. Mirrors NewTerritoryUndo's self-contained optimistic state: the
+// undo is awaited, "Undoing…" shows while in flight, and a rejection surfaces
+// an inline retry hint without losing the dismissal.
+function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
+  const [state, setState] = useState<'idle' | 'undoing' | 'error'>('idle');
+
+  const handleUndo = async () => {
+    if (state === 'undoing') return;
+    setState('undoing');
+    try {
+      await onUndo();
+      // On success the hook rewinds the thread and removes this row; no further
+      // state change needed here.
+    } catch {
+      setState('error');
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-0.5 py-0.5">
+      <p style={{ ...monoStyle, fontSize: '0.58rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+        <span>Dismissed</span>
+        <span style={{ margin: '0 6px', opacity: 0.6 }}>·</span>
+        {state === 'undoing' ? (
+          <span style={{ opacity: 0.7 }}>Undoing…</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void handleUndo()}
+            style={{
+              ...monoStyle,
+              fontSize: '0.58rem',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              textDecoration: 'underline',
+              textUnderlineOffset: '2px',
+            }}
+          >
+            Undo
+          </button>
+        )}
+      </p>
+      {state === 'error' ? (
+        <p style={{ ...monoStyle, fontSize: '0.54rem', color: 'var(--danger)', textAlign: 'center' }}>
+          Could not undo. Try again.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function QuestionRow({
   subhead,
   badges = [],
   questionText,
   creatorName,
+  creatorIsHouse = false,
+  presenceSourceName = null,
+  presenceSourceExtraCount = 0,
   isNew = false,
+  faded = false,
   onGiveUp,
   giveUpDisabled = false,
+  onDismiss,
+  dismissDisabled = false,
 }: {
   subhead?: string | null;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
   creatorName: string | null;
+  creatorIsHouse?: boolean;
+  presenceSourceName?: string | null;
+  presenceSourceExtraCount?: number;
   isNew?: boolean;
+  faded?: boolean;
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
+  onDismiss?: () => void;
+  dismissDisabled?: boolean;
 }) {
   const [visible, setVisible] = useState(!isNew);
 
@@ -189,7 +287,13 @@ function QuestionRow({
   return (
     <div
       className="flex flex-col gap-0.5"
-      style={isNew ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' } : undefined}
+      style={
+        faded
+          ? { opacity: 0.35, transition: 'opacity 0.4s ease', pointerEvents: 'none' }
+          : isNew
+            ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }
+            : undefined
+      }
     >
       {subhead ? (
         <div className="flex flex-wrap items-center gap-1.5 pb-1 pl-0.5">
@@ -220,27 +324,53 @@ function QuestionRow({
             FROM
           </span>
           <span style={{ fontWeight: 600 }}>{creatorName}</span>
-          {creatorName.trim().toLowerCase() === 'joshing' ? null : (
+          {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+          {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
             <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>gave you this</span>
           )}
+        </p>
+      ) : null}
+      {presenceSourceName ? (
+        <p
+          style={{
+            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontSize: '0.86rem',
+            color: 'var(--text)',
+            paddingLeft: '2px',
+            paddingBottom: '2px',
+            opacity: 0.82,
+            lineHeight: 1.3,
+          }}
+        >
+          <span style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginRight: '6px' }}>
+            BONUS
+          </span>
+          <span style={{ opacity: 0.55, fontStyle: 'italic', marginRight: '4px' }}>from</span>
+          <span style={{ fontWeight: 600 }}>
+            {firstNameFrom(presenceSourceName)}
+            {presenceSourceExtraCount > 0 ? '' : '’s'}
+          </span>
+          <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
+            {presenceSourceExtraCount > 0 ? 'and others’ knowledge' : 'knowledge'}
+          </span>
         </p>
       ) : null}
       <div
         style={{
           alignSelf: 'flex-start',
-          maxWidth: '88%',
+          maxWidth: '81%',
           background: 'var(--game-card-question)',
           border: '1px solid var(--brand-rule)',
           borderRadius: 'var(--radius-md)',
           // effect/card/question — soft layered drop shadow.
           boxShadow: '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
-          padding: '16px 18px',
+          padding: '14px 18px',
           fontFamily: 'var(--font-cormorant), Georgia, serif',
-          fontSize: '1.75rem',
+          fontSize: '1.4875rem',
           fontWeight: 700,
           letterSpacing: 0,
           color: 'var(--brand-ink)',
-          lineHeight: 1.3,
+          lineHeight: 1.14,
         }}
       >
         <p style={{ margin: 0 }}>{questionText}</p>
@@ -253,7 +383,7 @@ function QuestionRow({
                   // Figma display/pill/sans — Georgia, 12px, title-case (not the
                   // mono uppercase used elsewhere).
                   fontFamily: 'Georgia, "Times New Roman", serif',
-                  fontSize: '0.75rem',
+                  fontSize: '0.675rem',
                   lineHeight: 1.1,
                   letterSpacing: '0.01em',
                   borderRadius: '999px',
@@ -262,6 +392,7 @@ function QuestionRow({
                     ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
                     : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
                   color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
+                  opacity: 0.9,
                   padding: '3px 9px',
                 }}
               >
@@ -271,35 +402,41 @@ function QuestionRow({
           </div>
         ) : null}
       </div>
-      {onGiveUp ? (
-        <button
-          type="button"
-          onClick={onGiveUp}
-          disabled={giveUpDisabled}
-          style={{
-            alignSelf: 'flex-start',
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.58rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--text-muted)',
-            textDecoration: 'underline',
-            textUnderlineOffset: '2px',
-            opacity: 0.7,
-            marginTop: '4px',
-            paddingLeft: '2px',
-          }}
-        >
-          Show me the answer
-        </button>
+      {!faded && (onGiveUp || onDismiss) ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '4px', paddingLeft: '2px' }}>
+          {onGiveUp ? (
+            <button type="button" onClick={onGiveUp} disabled={giveUpDisabled} style={questionActionLinkStyle}>
+              Show me the answer
+            </button>
+          ) : null}
+          {onDismiss ? (
+            <button type="button" onClick={onDismiss} disabled={dismissDisabled} style={questionActionLinkStyle}>
+              Dismiss
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
 }
+
+// Shared style for the muted mono action links beneath a question card
+// ("Show me the answer", "Dismiss").
+const questionActionLinkStyle: CSSProperties = {
+  alignSelf: 'flex-start',
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  cursor: 'pointer',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '0.58rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: 'var(--text-muted)',
+  textDecoration: 'underline',
+  textUnderlineOffset: '2px',
+  opacity: 0.7,
+};
 
 function UserRow({ text }: { text: string }) {
   return (
@@ -309,13 +446,13 @@ function UserRow({ text }: { text: string }) {
           maxWidth: '88%',
           background: 'var(--brand-navy)',
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
-          padding: '10px 16px',
+          padding: '9px 15px',
           // Figma answer bubble — Cormorant serif, not the sans body font.
           fontFamily: 'var(--font-cormorant), Georgia, serif',
-          fontSize: '1.15rem',
-          fontWeight: 600,
-          letterSpacing: '0.01em',
-          lineHeight: 1.3,
+          fontSize: '1.495rem',
+          fontWeight: 700,
+          letterSpacing: '-0.01em',
+          lineHeight: 1.2,
           color: 'var(--primary-foreground)',
         }}
       >
@@ -325,9 +462,10 @@ function UserRow({ text }: { text: string }) {
   );
 }
 
-function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: string | null }) {
+function BreadcrumbLine({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
   const author = creatorName?.trim() ?? null;
-  const isBot = author?.toLowerCase() === 'joshing';
+  // House is non-relational like the LLM origin: no "From {firstName}." line.
+  const isBot = creatorIsHouse || isLlmAttribution(author);
   const showAuthor = author && !isBot;
   return (
     <div
@@ -353,10 +491,11 @@ function BreadcrumbLine({ text, creatorName }: { text: string; creatorName: stri
         style={{
           marginTop: showAuthor ? '2px' : '0',
           fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.92rem',
+          fontSize: '0.782rem',
           fontStyle: 'italic',
           color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          lineHeight: 1.35,
+          opacity: 0.78,
+          lineHeight: 1.46,
         }}
       >
         &ldquo;{text}&rdquo;
@@ -377,9 +516,10 @@ function ExplanationLine({ text }: { text: string }) {
       <p
         style={{
           fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.9rem',
+          fontSize: '0.765rem',
           color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          lineHeight: 1.4,
+          opacity: 0.78,
+          lineHeight: 1.51,
         }}
       >
         {text}
@@ -583,26 +723,52 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   );
 }
 
-function QuipLine({ text }: { text: string }) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const t = window.setTimeout(() => setVisible(true), 150);
-    return () => window.clearTimeout(t);
-  }, []);
+function AuthorNoteCard({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
   return (
-    <p
+    <div
       style={{
-        fontSize: '0.875rem',
-        color: 'var(--text-muted)',
-        fontStyle: 'italic',
-        marginTop: '4px',
-        marginLeft: '8px',
-        opacity: visible ? 1 : 0,
-        transition: 'opacity 0.3s ease',
+        marginTop: '8px',
+        width: '100%',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface-2)',
+        padding: '10px 14px',
+        color: 'var(--text)',
       }}
     >
-      {text}
-    </p>
+      <p
+        style={{
+          ...monoStyle,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '0.55rem',
+          color: 'var(--text-muted)',
+          letterSpacing: '0.18em',
+          textTransform: 'uppercase',
+        }}
+      >
+        {/* House notes are editorial, never relational — no "Why {name} asked". */}
+        {creatorIsHouse ? (
+          <>
+            <span>Editor&rsquo;s note</span>
+            <EditorialBadge />
+          </>
+        ) : (
+          <span>{creatorName ? `Why ${creatorName} asked` : 'Why they asked'}</span>
+        )}
+      </p>
+      <p
+        style={{
+          marginTop: '4px',
+          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontSize: '0.92rem',
+          lineHeight: 1.45,
+        }}
+      >
+        {text}
+      </p>
+    </div>
   );
 }
 
@@ -638,16 +804,20 @@ function ResultRow({
   correctAnswer,
   consolation,
   insideJoke,
+  insideJokeKind,
   breadcrumb,
-  quip,
+  authorNote,
   explanation,
   copyVariant,
   creatorName,
+  creatorIsHouse = false,
   relationalFeedbackLine,
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
   recheckAction,
+  canonicalSubcategory,
+  openedTerritoryDomain,
 }: {
   result: 'correct' | 'wrong' | 'expired' | 'gave_up';
   submitted: string;
@@ -655,17 +825,20 @@ function ResultRow({
   correctAnswer: string | null;
   consolation: string | null;
   insideJoke?: string | null;
+  insideJokeKind?: InsideJokeKind | null;
   breadcrumb: string | null;
-  quip?: string | null;
+  authorNote?: string | null;
   explanation?: string | null;
   copyVariant: number;
   creatorName: string | null;
+  creatorIsHouse?: boolean;
   relationalFeedbackLine?: string | null;
   canonicalSubcategory?: string | null;
   reactionPrompt?: ReactionPromptData | null;
   pointsAwarded?: number | null;
   pointsLabel?: string | null;
   recheckAction?: RecheckAction | null;
+  openedTerritoryDomain?: string | null;
 }) {
   const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
@@ -727,9 +900,10 @@ function ResultRow({
           ...resultToneStyle,
           borderRadius: 'var(--radius-md)',
           padding: '10px 14px',
-          fontSize: '0.9rem',
+          fontSize: '0.81rem',
           color: 'var(--text)',
-          lineHeight: 1.45,
+          opacity: 0.92,
+          lineHeight: 1.36,
           width: '100%',
         }}
       >
@@ -781,12 +955,12 @@ function ResultRow({
               <p
                 style={{
                   marginTop: '8px',
-                  // Figma question/game/answer — Cormorant Bold 28.
+                  // Figma question/game/answer — Cormorant Bold, scaled to match question text.
                   fontFamily: 'var(--font-cormorant), Georgia, serif',
-                  fontSize: '1.75rem',
+                  fontSize: '1.4875rem',
                   fontWeight: 700,
                   color: 'var(--brand-ink)',
-                  lineHeight: 1.3,
+                  lineHeight: 1.14,
                 }}
               >
                 {correctAnswer}
@@ -796,7 +970,7 @@ function ResultRow({
               Now it&rsquo;s in yours too
             </p>
             {(() => {
-              const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant);
+              const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant, creatorIsHouse);
               return namedSubLabel ? (
                 <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                   {namedSubLabel}
@@ -863,9 +1037,8 @@ function ResultRow({
           </>
         )}
         {breadcrumb
-          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} />
+          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
           : explanation ? <ExplanationLine text={explanation} /> : null}
-        {quip ? <QuipLine text={quip} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
@@ -894,7 +1067,7 @@ function ResultRow({
               textTransform: 'uppercase',
             }}
           >
-            Between us friends
+            {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
           </p>
           <p
             style={{
@@ -907,6 +1080,10 @@ function ResultRow({
             {insideJoke}
           </p>
         </div>
+      ) : null}
+      {authorNote ? <AuthorNoteCard text={authorNote} creatorName={creatorName} creatorIsHouse={creatorIsHouse} /> : null}
+      {correct && openedTerritoryDomain ? (
+        <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
       {reactionPrompt ? <QuestionReactionPrompt prompt={reactionPrompt} /> : null}
     </div>
@@ -1079,28 +1256,55 @@ export function GameplayChatThread({
   messages,
   onGiveUp,
   giveUpDisabled,
+  onDismiss,
+  dismissDisabled,
 }: {
   messages: ChatMessage[];
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
+  onDismiss?: () => void;
+  dismissDisabled?: boolean;
 }) {
+  // "Show me the answer" and "Dismiss" belong only under the active (still-
+  // unanswered) question — the last question message with no result after it.
+  // Without this gate the thread would attach them to every historical row.
+  const lastQuestionIndex = (() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].kind === 'question') return i;
+    }
+    return -1;
+  })();
+  const activeQuestionId =
+    lastQuestionIndex >= 0 &&
+    !messages.slice(lastQuestionIndex + 1).some((m) => m.kind === 'result')
+      ? messages[lastQuestionIndex].id
+      : null;
+
   return (
     <div className="space-y-2.5">
       {messages.map((m) => {
         switch (m.kind) {
           case 'system':
             return <SystemRow key={m.id} text={m.text} />;
+          case 'dismiss_notice':
+            return <DismissNoticeRow key={m.id} onUndo={m.onUndo} />;
           case 'question':
             return (
               <QuestionRow
                 key={m.id}
                 questionText={m.questionText}
                 creatorName={m.creatorName}
+                creatorIsHouse={m.creatorIsHouse}
+                presenceSourceName={m.presenceSourceName}
+                presenceSourceExtraCount={m.presenceSourceExtraCount}
                 isNew={m.isNew}
+                faded={m.faded}
                 subhead={m.subhead}
                 badges={m.badges}
-                onGiveUp={onGiveUp}
+                onGiveUp={onGiveUp && m.id === activeQuestionId ? onGiveUp : undefined}
                 giveUpDisabled={giveUpDisabled}
+                onDismiss={onDismiss && m.id === activeQuestionId ? onDismiss : undefined}
+                dismissDisabled={dismissDisabled}
               />
             );
           case 'user':
@@ -1117,17 +1321,20 @@ export function GameplayChatThread({
                 correctAnswer={m.correctAnswer}
                 consolation={m.consolation}
                 insideJoke={m.insideJoke}
+                insideJokeKind={m.insideJokeKind}
                 breadcrumb={m.breadcrumb}
-                quip={m.quip}
+                authorNote={m.authorNote}
                 explanation={m.explanation}
                 copyVariant={m.copyVariant}
                 creatorName={m.creatorName}
+                creatorIsHouse={m.creatorIsHouse}
                 relationalFeedbackLine={m.relationalFeedbackLine}
                 canonicalSubcategory={m.canonicalSubcategory}
                 reactionPrompt={m.reactionPrompt}
                 pointsAwarded={m.pointsAwarded}
                 pointsLabel={m.pointsLabel}
                 recheckAction={m.recheckAction}
+                openedTerritoryDomain={m.openedTerritoryDomain}
               />
             );
           case 'session_complete':

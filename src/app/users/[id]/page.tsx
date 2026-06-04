@@ -11,14 +11,15 @@ import { notFound } from 'next/navigation'
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard'
 import { AuthoredQuestionsFeed } from '@/components/profile/AuthoredQuestionsFeed'
+import { CommonGround } from '@/components/profile/CommonGround'
 import { InlineEditableField } from '@/components/profile/InlineEditableField'
 import { InlineHandleField } from '@/components/profile/InlineHandleField'
 import { MutualFriendsSection } from '@/components/profile/MutualFriendsSection'
 import { PreviewBanner } from '@/components/profile/PreviewBanner'
 import { ProfileFriendButton } from '@/components/profile/ProfileFriendButton'
+import { RecentlyExploringSection } from '@/components/profile/RecentlyExploringSection'
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle'
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow'
-import { SharedInterestsOverlap } from '@/components/profile/SharedInterestsOverlap'
 import { AccountActions } from '@/components/profile/settings/AccountActions'
 import { NotificationsForm } from '@/components/profile/settings/NotificationsForm'
 import { PrivacyForm } from '@/components/profile/settings/PrivacyForm'
@@ -30,6 +31,7 @@ import {
   getReminderState,
   HANDLE_CHANGE_COOLDOWN_DAYS,
 } from '@/server/db/queries/account'
+import { getCommonGround } from '@/server/db/queries/common-ground'
 import {
   getKnowledgePageData,
   getUserMasteryOverview,
@@ -41,6 +43,7 @@ import {
   topPointPositiveDomains,
 } from '@/server/profile/knowledge-view'
 import { resolvePreviewAs } from '@/server/profile/preview'
+import { selectRecentlyExploring } from '@/server/profile/recently-exploring'
 import {
   buildInviteUrl,
   getBaseUrl,
@@ -123,6 +126,7 @@ export default async function UserProfilePage({
   const [
     mastery,
     pageData,
+    commonGround,
     authoredQuestions,
     editableProfile,
     discoverability,
@@ -131,6 +135,11 @@ export default async function UserProfilePage({
   ] = await Promise.all([
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
+    // Common ground compares the viewer's full mastery base to this profile's.
+    // Never rendered on the owner's own profile, so skip the reads there.
+    isOwnerView
+      ? Promise.resolve(null)
+      : getCommonGround(session.userId, portrait.user.id),
     getAuthoredQuestionsForUser({
       userId: portrait.user.id,
       limit: 25,
@@ -167,6 +176,11 @@ export default async function UserProfilePage({
   const totalPointPositiveDomains = sortedDomains.filter(
     (domain) => domain.points > 0,
   ).length
+  // Activity-based presence: which domains the user has been answering in
+  // lately (recent masteryEvents), distinct from the points-sorted knowledge
+  // map above and from declared interests. Per-domain hidden domains are
+  // already filtered out by `isHidden`.
+  const recentlyExploring = selectRecentlyExploring(pageData.allDomains)
   const mindStatement = buildMindStatement(portrait.user.displayName, topDomains)
   const tierSignature = `${new Intl.NumberFormat().format(
     Math.round(mastery.totalPoints),
@@ -302,7 +316,7 @@ export default async function UserProfilePage({
             !isOwnerView ? (
               <ProfileFriendButton
                 targetUserId={portrait.user.id}
-                friendship={portrait.friendship}
+                relationship={portrait.relationship}
                 targetDisplayName={portrait.user.displayName}
               />
             ) : null
@@ -331,6 +345,8 @@ export default async function UserProfilePage({
     id: question.id,
     questionText: question.questionText,
     category: question.canonicalSubcategory ?? question.broadCategory,
+    broadCategory: question.broadCategory,
+    difficulty: question.difficulty,
     createdAt: question.createdAt,
     viewerAnswered: question.viewerAnswered,
   }))
@@ -357,12 +373,12 @@ export default async function UserProfilePage({
         mindStatement={mindStatement}
         memberSince={portrait.user.memberSince}
         editable={false}
-        friendshipFormedAt={portrait.friendship?.formedAt ?? null}
+        friendshipFormedAt={portrait.relationship?.formedAt ?? null}
         friendButton={
           !isOwnerView ? (
             <ProfileFriendButton
               targetUserId={portrait.user.id}
-              friendship={portrait.friendship}
+              relationship={portrait.relationship}
               targetDisplayName={portrait.user.displayName}
             />
           ) : null
@@ -371,12 +387,7 @@ export default async function UserProfilePage({
 
       {!isSelf && portrait.sectionVisibleTo.friends_list ? (
         <>
-          <SharedInterestsOverlap
-            viewerSoloInterests={portrait.viewerSoloInterests}
-            friendSoloInterests={portrait.friendSoloInterests}
-            sharedInterests={portrait.sharedInterests}
-            friendFirstName={friendFirstName}
-          />
+          <CommonGround data={commonGround} friendFirstName={friendFirstName} />
           <MutualFriendsSection
             friends={portrait.mutualFriends}
             overflowCount={portrait.mutualFriendsOverflow}
@@ -424,6 +435,14 @@ export default async function UserProfilePage({
               : `View ${friendFirstName}’s full knowledge base →`}
           </Link>
         </section>
+      ) : null}
+
+      {portrait.sectionVisibleTo.knowledge_base &&
+      recentlyExploring.length > 0 ? (
+        <RecentlyExploringSection
+          domains={recentlyExploring}
+          friendFirstName={friendFirstName}
+        />
       ) : null}
 
       {portrait.sectionVisibleTo.authored_questions ? (

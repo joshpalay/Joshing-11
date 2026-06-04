@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
@@ -24,15 +25,15 @@ function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
+const bodySchema = z.object({
+  queue_id: z.string().min(1),
+  slot_index: z.number().int(),
+});
+
 function parseBody(value: unknown): { queueId: string; slotIndex: number } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const queueId = typeof record.queue_id === 'string' ? record.queue_id : null;
-  const slotIndex = typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
-    ? record.slot_index
-    : null;
-  if (!queueId || slotIndex === null) return null;
-  return { queueId, slotIndex };
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  return { queueId: parsed.data.queue_id, slotIndex: parsed.data.slot_index };
 }
 
 async function resolveCanonicalAnswer(question: typeof generatedQuestions.$inferSelect): Promise<string> {

@@ -271,6 +271,7 @@ export type AuthoredQuestionPreview = {
   questionText: string;
   canonicalSubcategory: string | null;
   broadCategory: string | null;
+  difficulty: 'accessible' | 'moderate' | 'specialist' | null;
   createdAt: string;
   viewerAnswered: { result: 'correct' | 'incorrect' } | null;
 };
@@ -318,6 +319,9 @@ export async function getAuthoredQuestionsForUser(params: {
       questionText: questions.questionText,
       canonicalSubcategory: questions.canonicalSubcategory,
       broadCategory: questions.broadCategory,
+      calibratedDifficulty: questions.calibratedDifficulty,
+      llmDifficulty: questions.llmDifficulty,
+      difficultyEstimate: questions.difficultyEstimate,
       createdAt: questions.createdAt,
     })
     .from(questions)
@@ -359,6 +363,8 @@ export async function getAuthoredQuestionsForUser(params: {
     questionText: row.questionText,
     canonicalSubcategory: row.canonicalSubcategory,
     broadCategory: row.broadCategory,
+    difficulty:
+      row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate ?? null,
     createdAt: row.createdAt.toISOString(),
     viewerAnswered: viewerStatus.get(row.id) ?? null,
   }));
@@ -394,8 +400,11 @@ export async function createQuestion(params: {
   publicStatus?: 'not_scored' | 'eligible_pending' | 'rejected' | 'opted_out' | 'migrated';
   publicEligibilityScore?: number | null;
   publicEligibilityReason?: string | null;
+  visibility?: 'public' | 'friends' | 'private';
 }): Promise<{ id: string }> {
   await ensureQuestionSurfacePriorityColumn();
+
+  const visibility = params.visibility ?? 'public';
 
   const difficulty = numberToDifficulty(params.difficulty);
   const baseValues = {
@@ -416,7 +425,7 @@ export async function createQuestion(params: {
     calibratedDifficulty: difficulty,
     answerSource: params.llmSuggestedAnswer ? (params.verified ? 'llm_suggested' : 'llm_edited') : 'creator_written',
     questionType: 'factual',
-    visibility: 'public',
+    visibility,
     status: params.verified ? 'verified' : 'unverified',
     ...(params.publicStatus !== undefined ? { publicStatus: params.publicStatus } : {}),
     ...(params.publicEligibilityScore !== undefined ? { publicEligibilityScore: params.publicEligibilityScore } : {}),
@@ -475,7 +484,7 @@ export async function createQuestion(params: {
         ${difficulty}::"DifficultyEstimate",
         ${difficulty}::"DifficultyEstimate",
         ${status}::"QuestionStatus",
-        'public'::"QuestionVisibility"
+        ${visibility}::"QuestionVisibility"
       )
       RETURNING "id"
     `);

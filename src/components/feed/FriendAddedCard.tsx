@@ -54,6 +54,9 @@ export function FriendAddedCard({
 
   return (
     <SparkleEnvelope
+      // Broadcasts render on the plain hairline-bordered tile (Figma Frame 2),
+      // not the triangle mat — that motif is reserved for direct sends.
+      variant="bordered"
       signal={signal}
       question={item.question}
       overflow={overflow}

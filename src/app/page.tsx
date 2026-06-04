@@ -10,8 +10,8 @@ import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { RecentActivitySection } from '@/components/home/RecentActivitySection'
 import { getSession } from '@/server/auth/session'
+import { buildActivityStream } from '@/server/activity/build-stream'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
-import { getRecentActivityForHome } from '@/server/db/queries/activity'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
@@ -51,12 +51,6 @@ export default async function Home() {
 
       {session ? (
         <Suspense fallback={null}>
-          <MissedQuestionsSection userId={session.userId} />
-        </Suspense>
-      ) : null}
-
-      {session ? (
-        <Suspense fallback={null}>
           <CeremonyPinSection userId={session.userId} />
         </Suspense>
       ) : null}
@@ -81,9 +75,10 @@ export default async function Home() {
 }
 
 async function TodaysFiveSection({ userId }: { userId: string }) {
-  const [queue, preferences] = await Promise.all([
+  const [queue, preferences, catchupItems] = await Promise.all([
     getTodaysDailyQueue(userId),
     getDailyPreferences(userId),
+    getCatchupQuestions(userId),
   ])
 
   const status = buildDailyStatusSnapshot(queue)
@@ -93,20 +88,26 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
     selectedDomains: preferences.selectedDomains,
   }
 
-  return (
-    <TodaysFiveCard
-      initialStatus={status}
-      initialPreferences={cardPreferences}
-    />
-  )
-}
-
-async function MissedQuestionsSection({ userId }: { userId: string }) {
-  const catchupItems = await getCatchupQuestions(userId)
-  const count = catchupItems.length
-  if (count === 0) return null
+  const missedCount = catchupItems.length
   const expiringCount = catchupItems.filter((item) => item.expiresSoon).length
-  return <MissedQuestionsCard count={count} expiringCount={expiringCount} />
+  // Suppress the standalone Catch up card in the missed>0 completed state — the
+  // completed hero's Branch A already owns that entry point, so showing both
+  // would be a duplicate. When the round is still in progress (hero is in its
+  // play state, not Branch A), the standalone card stays.
+  const showStandaloneCatchup = missedCount > 0 && !status.isComplete
+
+  return (
+    <>
+      <TodaysFiveCard
+        initialStatus={status}
+        initialPreferences={cardPreferences}
+        initialMissedCount={missedCount}
+      />
+      {showStandaloneCatchup ? (
+        <MissedQuestionsCard count={missedCount} expiringCount={expiringCount} />
+      ) : null}
+    </>
+  )
 }
 
 async function CeremonyPinSection({ userId }: { userId: string }) {
@@ -123,22 +124,31 @@ async function CeremonyPinSection({ userId }: { userId: string }) {
   )
 }
 
+// How many of the unified stream's home-eligible items the homepage head shows.
+const HOME_HEAD_LIMIT = 3
+
 async function RecentActivityServerSection({ userId }: { userId: string }) {
-  const items = await getRecentActivityForHome(userId, 3)
+  // The homepage head is the curated top of the one unified stream (same source
+  // as Lately): take the home-eligible items, already prominence-sorted.
+  const stream = await buildActivityStream(userId)
+  const items = stream.filter((item) => item.homeEligible).slice(0, HOME_HEAD_LIMIT)
   return <RecentActivitySection items={items} />
 }
 
 async function FromYourFriendsSection({ userId }: { userId: string }) {
+  // D-1 Stage 5: Broadcasts ('from-friends') is the default feed surface, so the
+  // server pre-fetch must match it for FeedList's no-round-trip first paint.
   const feedPage = await getFeedPagePayload(userId, {
     limit: FEED_PAGE_SIZE,
     cursor: null,
-    filter: 'all',
+    filter: 'from-friends',
   })
   return (
     <FeedList
       pageSize={FEED_PAGE_SIZE}
       infinite
       initialPage={feedPage}
+      showContributeFooter
     />
   )
 }

@@ -1,20 +1,16 @@
-import { and, count, desc, eq, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, exists, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
 
-import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
-import { isVisibleFriendAnsweredSource, visibleFeedSourcePredicate } from '@/server/feed/visibility';
+import { db, feedDismissedDomains, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
+import { visibleFeedSourcePredicate } from '@/server/feed/visibility';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
 export type NewFeedItem = typeof feedItems.$inferInsert;
 export type FeedItemState = 'active' | 'answered' | 'skipped' | 'dismissed' | 'rolled_off' | 'played';
 
-export type FriendResult = { userId: string; displayName: string; result: 'correct' | 'incorrect' | null };
-
 export type ViewerAnswerStatus = { result: 'correct' | 'incorrect' };
 
 export type CollapsedFeedItem = FeedItem & {
-  // friend_answered collapse: all friends who answered this question
-  friendResults?: FriendResult[];
   // legacy thumbs_upped collapse
   thumbsUpCount?: number;
   additionalEndorsers?: Array<{ userId: string; displayName: string }>;
@@ -50,7 +46,6 @@ const feedItemCompatibilityColumns = {
   sourceAnswerId: sql<string | null>`NULL`.as('sourceAnswerId'),
   state: feedItems.state,
   isPinned: feedItems.isPinned,
-  quip: feedItems.quip,
   createdAt: feedItems.createdAt,
 };
 
@@ -61,72 +56,6 @@ function isMissingOptionalFeedColumn(error: unknown): boolean {
   return ['answerResult', 'pointsAwarded', 'masteryDelta', 'sourceAnswerId'].some((column) =>
     message.includes(column),
   );
-}
-
-async function collapseFriendAnsweredItems(items: FeedItem[]): Promise<CollapsedFeedItem[]> {
-  const friendAnsweredByQuestion = new Map<string, FeedItem[]>();
-
-  for (const item of items) {
-    if (isVisibleFriendAnsweredSource(item.sourceType, item.sourceResult) && item.questionId) {
-      const group = friendAnsweredByQuestion.get(item.questionId) ?? [];
-      group.push(item);
-      friendAnsweredByQuestion.set(item.questionId, group);
-    }
-  }
-
-  // Collect all source user IDs we need display names for
-  const sourceUserIds = new Set<string>();
-  friendAnsweredByQuestion.forEach((group) => {
-    group.forEach((item) => sourceUserIds.add(item.sourceUserId));
-  });
-
-  const nameById = new Map<string, string>();
-  if (sourceUserIds.size > 0) {
-    const userRows = await db
-      .select({ id: users.id, displayName: users.displayName })
-      .from(users)
-      .where(inArray(users.id, [...sourceUserIds]));
-    for (const row of userRows) {
-      nameById.set(row.id, row.displayName?.trim() || 'A friend');
-    }
-  }
-
-  // Build the hidden IDs set and the representative items
-  const hiddenIds = new Set<string>();
-  const collapsedById = new Map<string, CollapsedFeedItem>();
-
-  friendAnsweredByQuestion.forEach((group) => {
-    if (group.length <= 1) return;
-    const sorted = [...group].sort((a, b) => b.sourceEventAt.getTime() - a.sourceEventAt.getTime());
-    const [mostRecent, ...older] = sorted;
-    older.forEach((item) => hiddenIds.add(item.id));
-
-    const friendResults: FriendResult[] = sorted.map((item) => ({
-      userId: item.sourceUserId,
-      displayName: nameById.get(item.sourceUserId) ?? 'A friend',
-      result: (item.sourceResult as 'correct' | 'incorrect' | null) ?? null,
-    }));
-
-    collapsedById.set(mostRecent.id, { ...mostRecent, friendResults });
-  });
-
-  return items
-    .filter((item) => !hiddenIds.has(item.id))
-    .map((item) => {
-      if (collapsedById.has(item.id)) return collapsedById.get(item.id)!;
-      // Single friend_answered item — wrap in friendResults for consistent display
-      if (isVisibleFriendAnsweredSource(item.sourceType, item.sourceResult)) {
-        return {
-          ...item,
-          friendResults: [{
-            userId: item.sourceUserId,
-            displayName: nameById.get(item.sourceUserId) ?? 'A friend',
-            result: (item.sourceResult as 'correct' | 'incorrect' | null) ?? null,
-          }],
-        } satisfies CollapsedFeedItem;
-      }
-      return item;
-    });
 }
 
 // Legacy thumbs_upped collapsing (for items already in the DB)
@@ -266,7 +195,9 @@ function normalizeFeedLimit(limit: number | undefined): number {
 function feedFilterPredicate(filter: FeedFilter | undefined) {
   if (filter === 'sent-to-me') return eq(feedItems.sourceType, 'direct_sent');
   if (filter === 'from-friends') {
-    return inArray(feedItems.sourceType, ['friend_answered', 'authored_shared', 'thumbs_upped']);
+    // D-1 Stage 5: friend_answered no longer renders. Broadcasts = authored_shared
+    // (friend_added envelope) + legacy thumbs_upped.
+    return inArray(feedItems.sourceType, ['authored_shared', 'thumbs_upped']);
   }
   return undefined;
 }
@@ -311,9 +242,36 @@ function feedCursorPredicate(cursor: FeedCursor | null | undefined) {
   );
 }
 
-function visibleQuestionPredicate(dismissedDomains: string[]) {
-  const predicates = [
+// Render-time question visibility (D-1 Stage 4). 'public' renders for anyone;
+// 'friends' is followers-only and renders only when the viewer follows the
+// author (an approved follow edge viewer -> author); 'private' is author-only
+// and never reaches another viewer's feed (the author is also excluded by
+// viewerNotAuthorPredicate). Under the directional follow model, "the author's
+// followers" == users with an approved follow edge pointing at the author.
+// Exported so the empty-state diagnostic counts in get-feed-page.ts apply the
+// identical rule and stay in sync with what actually renders.
+export function questionVisibilityPredicate(viewerUserId: string) {
+  return or(
     eq(questions.visibility, 'public'),
+    and(
+      eq(questions.visibility, 'friends'),
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(follows)
+          .where(and(
+            eq(follows.followerId, viewerUserId),
+            eq(follows.followeeId, questions.creatorId),
+            eq(follows.state, 'approved'),
+          )),
+      ),
+    ),
+  )!;
+}
+
+function visibleQuestionPredicate(viewerUserId: string, dismissedDomains: string[]) {
+  const predicates = [
+    questionVisibilityPredicate(viewerUserId),
     isNull(questions.deletedAt),
   ];
 
@@ -352,7 +310,7 @@ async function fetchVisibleFeedItems(
       visibleSourcePredicate,
       feedFilterPredicate(options.filter),
       inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-      visibleQuestionPredicate(dismissedDomains),
+      visibleQuestionPredicate(userId, dismissedDomains),
       viewerNotAuthorPredicate(userId),
       viewerNotAlreadyAnsweredPredicate(userId),
       cursorPredicate,
@@ -380,7 +338,7 @@ async function fetchVisibleFeedItems(
         visibleSourcePredicate,
         feedFilterPredicate(options.filter),
         inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-        visibleQuestionPredicate(dismissedDomains),
+        visibleQuestionPredicate(userId, dismissedDomains),
         viewerNotAuthorPredicate(userId),
         viewerNotAlreadyAnsweredPredicate(userId),
         cursorPredicate,
@@ -418,7 +376,7 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
             visibleSourcePredicate,
             feedFilterPredicate(filter),
             inArray(feedItems.state, ACTIONABLE_FEED_STATES),
-            visibleQuestionPredicate(dismissedDomains),
+            visibleQuestionPredicate(userId, dismissedDomains),
             viewerNotAuthorPredicate(userId),
             viewerNotAlreadyAnsweredPredicate(userId),
           ))
@@ -427,8 +385,7 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
 
   const nonPinnedPage = nonPinnedRaw.slice(0, limit);
   const pageItems = [...pinned, ...nonPinnedPage];
-  const afterThumbsUp = await collapseThumbsUpItems(pageItems);
-  const collapsed = await collapseFriendAnsweredItems(afterThumbsUp);
+  const collapsed = await collapseThumbsUpItems(pageItems);
   const lastNonPinned = nonPinnedPage.at(-1) ?? null;
 
   const collapsedQuestionIds = collapsed

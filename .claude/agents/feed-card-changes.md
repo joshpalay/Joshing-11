@@ -25,7 +25,7 @@ These files churn together — commits `0e0dc13`, `950bc0d`, `94a803f`, `1ebd4b1
 
 3. **No new inline styles.** This project uses Tailwind tokens. Flag any new `style={{...}}`, `text-[#hex]`, `bg-[#hex]`, or arbitrary spacing/sizing (`p-[Npx]`, `w-[Npx]`) introduced in the diff. Existing instances aren't your problem unless they were just edited.
 
-4. **Test parity.** If a new card variant or new prop was added, look for a corresponding test under `src/tests/`. If none exists, ask the user whether to add one before declaring the change complete.
+4. **Test parity.** If a new card variant or new prop was added, look for a corresponding test under `src/**/__tests__/` (e.g. `src/components/feed/__tests__/`). If none exists, ask the user whether to add one before declaring the change complete.
 
 5. **Hoist opportunities.** If a layout pattern (wrapper, header row, action bar, footer) now appears in 3+ cards, name it and suggest a shared component. Don't just suggest it abstractly — name the file and propose the component signature.
 

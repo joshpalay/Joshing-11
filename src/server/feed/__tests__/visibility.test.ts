@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   QUESTION_SHARING_FEED_SOURCE_VISIBILITY,
   isCorrectAnswerFeedEligible,
+  isLlmOriginQuestion,
   isMainFeedSourceVisible,
   socialFeedDomainLabel,
 } from '@/server/feed/visibility';
@@ -16,20 +17,22 @@ const publicQuestion = {
 
 describe('correct-answer social feed eligibility', () => {
   it('allows authored and direct-sent sharing but rejects game-publication sources from the main feed', () => {
-    expect(isMainFeedSourceVisible('authored_shared', null)).toBe(true);
-    expect(isMainFeedSourceVisible('authored_shared', 'incorrect')).toBe(true);
-    expect(isMainFeedSourceVisible('joshing_game', null)).toBe(false);
-    expect(isMainFeedSourceVisible('direct_sent', null)).toBe(true);
+    expect(isMainFeedSourceVisible('authored_shared')).toBe(true);
+    expect(isMainFeedSourceVisible('joshing_game')).toBe(false);
+    expect(isMainFeedSourceVisible('direct_sent')).toBe(true);
+    expect(isMainFeedSourceVisible('thumbs_upped')).toBe(true);
   });
 
-  it('allows a correct answer by someone other than the author in a visible social context', () => {
+  it('still flags a correct non-author answer as feed-eligible (the type-3 WRITE survives Stage 5) but no longer renders it', () => {
+    // The write path (Daily +2, presence) still depends on this eligibility check.
     expect(isCorrectAnswerFeedEligible({
       answerIsCorrect: true,
       answererUserId: 'answerer-1',
       question: publicQuestion,
       hasVisibleSocialContext: true,
     })).toBe(true);
-    expect(isMainFeedSourceVisible('friend_answered', 'correct')).toBe(true);
+    // D-1 Stage 5: friend_answered is no longer rendered in the feed.
+    expect(isMainFeedSourceVisible('friend_answered')).toBe(false);
   });
 
   it('allows public daily-generated questions without an author to propagate correct friend answers', () => {
@@ -44,6 +47,58 @@ describe('correct-answer social feed eligibility', () => {
       },
       hasVisibleSocialContext: true,
     })).toBe(true);
+  });
+
+  it('allows public curated-sent (forwarded LLM) questions without an author to propagate correct friend answers', () => {
+    expect(isCorrectAnswerFeedEligible({
+      answerIsCorrect: true,
+      answererUserId: 'answerer-1',
+      question: {
+        creatorId: null,
+        source: 'curated_sent' as const,
+        visibility: 'public' as const,
+        deletedAt: null,
+      },
+      hasVisibleSocialContext: true,
+    })).toBe(true);
+  });
+
+  it('rejects wrong answers to curated-sent questions', () => {
+    expect(isCorrectAnswerFeedEligible({
+      answerIsCorrect: false,
+      answererUserId: 'answerer-1',
+      question: {
+        creatorId: null,
+        source: 'curated_sent' as const,
+        visibility: 'public' as const,
+        deletedAt: null,
+      },
+      hasVisibleSocialContext: true,
+    })).toBe(false);
+  });
+
+  it('classifies LLM-origin sources', () => {
+    expect(isLlmOriginQuestion('daily_generated')).toBe(true);
+    expect(isLlmOriginQuestion('curated_sent')).toBe(true);
+    expect(isLlmOriginQuestion('authored')).toBe(false);
+  });
+
+  it('does NOT classify house_authored as LLM-origin (D-3 §C: house is curated, not LLM, and never enters the feed)', () => {
+    expect(isLlmOriginQuestion('house_authored')).toBe(false);
+  });
+
+  it('rejects a correct answer to a house question from the feed (null creatorId, non-LLM origin)', () => {
+    expect(isCorrectAnswerFeedEligible({
+      answerIsCorrect: true,
+      answererUserId: 'answerer-1',
+      question: {
+        creatorId: null,
+        source: 'house_authored' as const,
+        visibility: 'public' as const,
+        deletedAt: null,
+      },
+      hasVisibleSocialContext: true,
+    })).toBe(false);
   });
 
   it('rejects a correct answer by the author', () => {
@@ -62,7 +117,7 @@ describe('correct-answer social feed eligibility', () => {
       question: publicQuestion,
       hasVisibleSocialContext: true,
     })).toBe(false);
-    expect(isMainFeedSourceVisible('friend_answered', 'incorrect')).toBe(false);
+    expect(isMainFeedSourceVisible('friend_answered')).toBe(false);
   });
 
   it('rejects private or non-visible questions for unauthorized viewers', () => {
@@ -80,15 +135,19 @@ describe('correct-answer social feed eligibility', () => {
     })).toBe(false);
   });
 
-  it('documents visibility for every source type created by question-sharing routes', () => {
+  it('documents visibility for every source type still rendered in the feed', () => {
+    // D-1 Stage 5: friend_answered is intentionally absent — it is written but
+    // not rendered. Broadcasts/Sent surfaces render authored_shared + direct_sent.
     expect(QUESTION_SHARING_FEED_SOURCE_VISIBILITY).toEqual(expect.arrayContaining([
       expect.objectContaining({ sourceType: 'authored_shared' }),
       expect.objectContaining({ sourceType: 'direct_sent' }),
-      expect.objectContaining({ sourceType: 'friend_answered' }),
     ]));
+    expect(
+      QUESTION_SHARING_FEED_SOURCE_VISIBILITY.some((entry) => entry.sourceType === 'friend_answered'),
+    ).toBe(false);
 
-    for (const { sourceType, sourceResult, visible, reason } of QUESTION_SHARING_FEED_SOURCE_VISIBILITY) {
-      expect(isMainFeedSourceVisible(sourceType, sourceResult)).toBe(visible);
+    for (const { sourceType, visible, reason } of QUESTION_SHARING_FEED_SOURCE_VISIBILITY) {
+      expect(isMainFeedSourceVisible(sourceType)).toBe(visible);
       if (visible) {
         expect(reason).toBeNull();
       } else {

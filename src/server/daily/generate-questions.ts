@@ -5,6 +5,7 @@ import {
   HAIKU_MODEL,
   INSTRUCTION_USER_INPUT_GUIDANCE,
   extractTextContent,
+  generateInsideJoke,
   getAnthropicClient,
   loggedMessagesCreate,
   parseJsonObject,
@@ -983,7 +984,25 @@ export async function generateDailyQuestions(
   const persisted: GeneratedQuestionRow[] = [];
   const seenFactKeysThisBatch = new Set<string>();
 
-  for (const question of generated.slice(0, count)) {
+  // Precompute the "between us" aside once per question, in parallel, before the
+  // sequential persist loop. generateInsideJoke fails open (returns null), so a
+  // slow/failed aside never blocks question generation — it just lands with no
+  // aside. Mirrors the parallel/fail-open pattern of the LLM gates above.
+  const toPersist = generated.slice(0, count);
+  const insideJokeByQuestion = new Map<(typeof toPersist)[number], string | null>();
+  await Promise.all(
+    toPersist.map(async (question) => {
+      const aside = await generateInsideJoke({
+        questionText: question.question_text,
+        correctAnswer: question.answer,
+        broadCategory: question.broad_category,
+        canonicalSubcategory: question.canonical_subcategory,
+      }).catch(() => null);
+      insideJokeByQuestion.set(question, aside);
+    }),
+  );
+
+  for (const question of toPersist) {
     const { canonicalDomain } = await reconcileProposedDomain(
       question.canonical_subcategory,
       userId,
@@ -1026,6 +1045,7 @@ export async function generateDailyQuestions(
         basePoints,
         factKey,
         subAngles: question.sub_angles,
+        insideJoke: insideJokeByQuestion.get(question) ?? null,
         expiresAt,
         usedInQueue: false,
       })
@@ -1215,6 +1235,85 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   }
 
   return [...bankPicks, ...llmGenerated];
+}
+
+/**
+ * Daily Five +2 (D-4 §B): generate ONE freshly-generated accessible question per
+ * requested domain, bank-first (pickBankPicksForDomains) then Sonnet
+ * (generateDailyQuestions), targeting difficultyEstimate='accessible' via
+ * difficultyPreference='normal'.
+ *
+ * Accessibility is a GENERATION TARGET, not a post-filter (the old calibrated/llm
+ * accessibility filter on the literal +2 is retired). The one exception is a bank
+ * pick: the bank is constrained to the accessible tier, so a bank pick that comes
+ * back non-accessible is treated as not-qualifying and that slot SHRINKS rather
+ * than downgrading to a harder question.
+ *
+ * Returns at most one entry per input domain, tagged with its domain so the
+ * orchestrator can re-attach the presence attribution. A generation miss for a
+ * domain simply yields fewer entries (graceful shrink) — domains are never
+ * swapped and this never routes through the orchestrator's N<5 core backstop.
+ */
+export async function generateBonusQuestionsForDomains(
+  userId: string,
+  domains: string[],
+): Promise<Array<{ domain: string; question: GeneratedQuestionRow }>> {
+  const results: Array<{ domain: string; question: GeneratedQuestionRow }> = [];
+  if (domains.length === 0) return results;
+
+  const [previousQuestionTexts, previousFactKeys] = await Promise.all([
+    getRecentDailyQuestionTexts(userId),
+    getRecentFactKeys(userId),
+  ]);
+
+  for (const domain of domains) {
+    // Bank-first. resolveDomainDifficulty maps 'normal' → accessible, so the
+    // bank source is already accessible-constrained; the guard below is a
+    // belt-and-braces "shrink, don't downgrade".
+    const bankPicks = await pickBankPicksForDomains(
+      userId,
+      [domain],
+      'normal',
+      undefined,
+      null,
+      previousFactKeys,
+    ).catch(() => [] as GeneratedQuestionRow[]);
+
+    let row: GeneratedQuestionRow | null = bankPicks[0] ?? null;
+    if (row && row.difficultyEstimate !== 'accessible') {
+      // Non-accessible bank pick: not-qualifying. Shrink this slot rather than
+      // downgrade — and do NOT fall through to Sonnet (the bank answered).
+      row = null;
+    } else if (!row) {
+      // Bank miss → Sonnet, accessible target.
+      const generated = await generateDailyQuestions(
+        [domain],
+        1,
+        userId,
+        previousQuestionTexts,
+        [],
+        undefined,
+        'normal',
+        undefined,
+        null,
+        previousFactKeys,
+        undefined,
+      ).catch(() => [] as GeneratedQuestionRow[]);
+      row = generated[0] ?? null;
+    }
+
+    if (row) {
+      results.push({ domain, question: row });
+      // Feed the just-picked question back into the avoid lists so a second
+      // bonus domain can't echo it.
+      previousQuestionTexts.unshift({ domain: row.canonicalSubcategory, text: row.questionText });
+      if (row.factKey) {
+        previousFactKeys.unshift({ domain: row.canonicalSubcategory, factKey: row.factKey });
+      }
+    }
+  }
+
+  return results;
 }
 
 // Resolve the difficulty *tier* a freshly-generated question for this domain

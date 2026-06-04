@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { db, critiqueUsageDaily } from '@/server/db';
@@ -8,6 +9,8 @@ import { critiqueQuestion } from '@/server/llm/critique';
 export const dynamic = 'force-dynamic';
 
 const DAILY_LIMIT = 5;
+
+const bodySchema = z.object({ questionText: z.string().optional().catch(undefined) });
 
 type CritiqueResponse = {
   ok: boolean;
@@ -30,8 +33,10 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   try {
-    const body = await request.json().catch(() => null) as { questionText?: unknown } | null;
-    const questionText = typeof body?.questionText === 'string' ? body.questionText.trim() : '';
+    const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+    const questionText = parsed.success && typeof parsed.data.questionText === 'string'
+      ? parsed.data.questionText.trim()
+      : '';
     if (!questionText) return NextResponse.json(passResponse({ remaining: null }));
 
     const usageDate = utcDateString();

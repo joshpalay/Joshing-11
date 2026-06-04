@@ -3,7 +3,6 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessageCircle, Phone } from 'lucide-react';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
 
@@ -162,8 +161,16 @@ export default function LoginPanel() {
       {step === 'phone' ? (
         <form className="space-y-[14px]" onSubmit={continueWithPhone}>
           {/* Solid filled handset, matching the Figma black phone glyph
-              (and the filled treatment of the OTP step's bubble icon). */}
-          <Phone className="mx-auto h-12 w-12 fill-black text-black" strokeWidth={1.5} aria-hidden="true" />
+              (and the filled treatment of the OTP step's bubble icon).
+              Hand-drawn as a fill-only glyph rather than a force-filled
+              lucide outline, which rendered with a muddy stroked edge. */}
+          <svg
+            className="mx-auto h-12 w-12 fill-black"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+          </svg>
           <label
             className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
             htmlFor="phone"
@@ -187,19 +194,33 @@ export default function LoginPanel() {
         </form>
       ) : (
         <form className="space-y-[14px]" onSubmit={verifyCode}>
-          {/* Two overlapping speech bubbles (orange in front, navy behind),
-              recreating the Figma two-tone icon. The front bubble takes a cream
-              stroke so it reads as a crescent where it crosses the navy one. */}
-          <div className="mx-auto flex w-fit flex-row-reverse items-end" aria-hidden="true">
-            <MessageCircle
-              className="h-12 w-12 -translate-x-3 -scale-x-100 fill-[var(--brand-navy)] text-[var(--brand-navy)]"
-              strokeWidth={1.5}
-            />
-            <MessageCircle
-              className="h-12 w-12 fill-[var(--brand-orange)] text-[var(--brand-cream-card)]"
-              strokeWidth={2.5}
-            />
-          </div>
+          {/* Two overlapping oval speech bubbles — navy behind, orange in front
+              — recreating the Figma two-tone mark. The front bubble is drawn
+              twice: first as a slightly larger cream copy (the page background
+              color) so a crescent of background shows where it overlaps the
+              navy, then as the orange bubble on top. */}
+          <svg
+            className="mx-auto h-14 w-auto"
+            viewBox="-3 -3 54 44"
+            aria-hidden="true"
+          >
+            <g fill="var(--brand-navy)">
+              <ellipse cx="15" cy="15" rx="15" ry="12" />
+              <path d="M3 22 L11 26.5 L1 31 Z" />
+            </g>
+            {/* cream halo — background color showing through the overlap */}
+            <g
+              fill="var(--brand-cream-card)"
+              transform="translate(32 23) scale(1.14) translate(-32 -23)"
+            >
+              <ellipse cx="32" cy="23" rx="15" ry="12" />
+              <path d="M44 30 L36 34.5 L46.5 39 Z" />
+            </g>
+            <g fill="var(--brand-orange)">
+              <ellipse cx="32" cy="23" rx="15" ry="12" />
+              <path d="M44 30 L36 34.5 L46.5 39 Z" />
+            </g>
+          </svg>
           <label
             className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
             htmlFor="code"

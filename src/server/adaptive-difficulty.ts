@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
-import { db, userDomainDifficulties, users } from '@/server/db';
+import { db, declaredInterests, playerMastery, userDomainDifficulties, users } from '@/server/db';
 
 const MIN_ADAPTIVE_LEVEL = 1.0;
 const MAX_ADAPTIVE_LEVEL = 4.0;
@@ -182,6 +182,58 @@ function seedDifficultyFromAdaptiveLevel(level: number): ServedDifficulty {
   return 'specialist';
 }
 
+/**
+ * Minimum first-contact difficulty for a domain the player explicitly opted
+ * into — either by stating it as an area of focus during onboarding or by
+ * accepting one shared by a friend. Someone who raised their hand for a topic
+ * finds "Establishing" (accessible) trivia condescendingly easy, so we floor
+ * the *seed* at "Familiar" (moderate). This only sets the starting point: the
+ * normal two-incorrect step-down can still drop a struggling player back to
+ * accessible afterwards.
+ */
+const FOCUS_DOMAIN_MIN_DIFFICULTY: ServedDifficulty = 'moderate';
+
+export function applyFocusFloor(difficulty: ServedDifficulty, isFocusDomain: boolean): ServedDifficulty {
+  if (!isFocusDomain) return difficulty;
+  return DIFFICULTY_LADDER.indexOf(difficulty) >= DIFFICULTY_LADDER.indexOf(FOCUS_DOMAIN_MIN_DIFFICULTY)
+    ? difficulty
+    : FOCUS_DOMAIN_MIN_DIFFICULTY;
+}
+
+/**
+ * Canonical subcategories the player has opted into: declared interests (stated
+ * focus areas) plus any open territory in PLAYER_MASTERY — friend-mediated
+ * acceptances and authored domains both land there. Used to decide whether a
+ * first-contact difficulty seed should be floored to "Familiar". Pass the
+ * `domains` filter to keep the lookup to the round being seeded.
+ */
+async function getFocusDomainSet(userId: string, domains: string[]): Promise<Set<string>> {
+  const focus = new Set<string>();
+  if (domains.length === 0) return focus;
+
+  const [declaredRows, masteryRows] = await Promise.all([
+    db
+      .select({ domain: declaredInterests.domain })
+      .from(declaredInterests)
+      .where(and(
+        eq(declaredInterests.userId, userId),
+        eq(declaredInterests.isActive, true),
+        inArray(declaredInterests.domain, domains),
+      )),
+    db
+      .select({ domain: playerMastery.canonicalSubcategory })
+      .from(playerMastery)
+      .where(and(
+        eq(playerMastery.userId, userId),
+        inArray(playerMastery.canonicalSubcategory, domains),
+      )),
+  ]);
+
+  for (const row of declaredRows) focus.add(row.domain);
+  for (const row of masteryRows) focus.add(row.domain);
+  return focus;
+}
+
 function stepDifficulty(current: ServedDifficulty, direction: 1 | -1): ServedDifficulty {
   const idx = DIFFICULTY_LADDER.indexOf(current);
   const next = Math.min(DIFFICULTY_LADDER.length - 1, Math.max(0, idx + direction));
@@ -235,7 +287,14 @@ export async function updateDomainDifficultyOnAnswer(
     .limit(1);
 
   if (!existing) {
-    const seed = seedDifficultyFromAdaptiveLevel(await readCurrentAdaptiveLevel(userId));
+    const [level, focusDomains] = await Promise.all([
+      readCurrentAdaptiveLevel(userId),
+      getFocusDomainSet(userId, [canonicalSubcategory]),
+    ]);
+    const seed = applyFocusFloor(
+      seedDifficultyFromAdaptiveLevel(level),
+      focusDomains.has(canonicalSubcategory),
+    );
     await db.insert(userDomainDifficulties).values({
       userId,
       canonicalSubcategory,
@@ -289,12 +348,20 @@ export async function getDomainDifficultyOverrides(
     known.set(row.canonicalSubcategory, row.servedDifficulty as ServedDifficulty);
   }
 
-  const seedLevel = known.size === domains.length
-    ? null
-    : await readCurrentAdaptiveLevel(userId);
+  // Only domains without a persisted row need a first-contact seed. Pull the
+  // user's adaptive level and which of those domains are opted-in focus areas
+  // so we can floor the seed to "Familiar" for the latter.
+  const domainsNeedingSeed = domains.filter((domain) => !known.has(domain));
+  const [seedLevel, focusDomains] = domainsNeedingSeed.length === 0
+    ? [MIN_ADAPTIVE_LEVEL, new Set<string>()]
+    : await Promise.all([
+        readCurrentAdaptiveLevel(userId),
+        getFocusDomainSet(userId, domainsNeedingSeed),
+      ]);
 
   for (const domain of domains) {
-    const served = known.get(domain) ?? seedDifficultyFromAdaptiveLevel(seedLevel ?? MIN_ADAPTIVE_LEVEL);
+    const served = known.get(domain)
+      ?? applyFocusFloor(seedDifficultyFromAdaptiveLevel(seedLevel), focusDomains.has(domain));
     overrides.set(domain, SERVED_TO_PREFERENCE[served]);
   }
 

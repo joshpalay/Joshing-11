@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { isReactionKey, isWrongAnswerReactionKey, type ReactionKey } from '@/lib/reactions';
 import { getSession } from '@/server/auth/session';
@@ -22,21 +23,32 @@ type ReactionBody = {
   includeSubmittedAnswer: boolean;
 };
 
+// Raw shape only; unrecognized types are coerced away (matching the prior
+// hand-rolled parser). The business rules (trim, isReactionKey, the §8.22
+// wrong-answer gate) are applied after parsing.
+const bodySchema = z.object({
+  questionId: z.string().optional().catch(undefined),
+  contextType: z.enum(['feed', 'joshing_game']).optional().catch(undefined),
+  contextId: z.string().optional().catch(undefined),
+  reactionType: z.string().optional().catch(undefined),
+  customMessage: z.string().optional().catch(undefined),
+  includeSubmittedAnswer: z.boolean().optional().catch(undefined),
+});
+
 function parseBody(value: unknown): ReactionBody | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const questionId = typeof record.questionId === 'string' ? record.questionId.trim() : '';
-  const contextType = record.contextType === 'feed' || record.contextType === 'joshing_game'
-    ? record.contextType
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  const data = parsed.data;
+  const questionId = typeof data.questionId === 'string' ? data.questionId.trim() : '';
+  const contextType = data.contextType ?? null;
+  const contextId = typeof data.contextId === 'string' && data.contextId.trim()
+    ? data.contextId.trim()
     : null;
-  const contextId = typeof record.contextId === 'string' && record.contextId.trim()
-    ? record.contextId.trim()
-    : null;
-  const reactionType = typeof record.reactionType === 'string' ? record.reactionType.trim() : '';
-  const customMessage = typeof record.customMessage === 'string' ? record.customMessage.trim().slice(0, 160) : null;
+  const reactionType = typeof data.reactionType === 'string' ? data.reactionType.trim() : '';
+  const customMessage = typeof data.customMessage === 'string' ? data.customMessage.trim().slice(0, 160) : null;
   // §8.22: only wrong-answer reactions are eligible to attach submitted text.
   // For any other reactionType we coerce to false even if the client asks.
-  const includeSubmittedAnswerRequested = record.includeSubmittedAnswer === true;
+  const includeSubmittedAnswerRequested = data.includeSubmittedAnswer === true;
   const includeSubmittedAnswer = includeSubmittedAnswerRequested && isWrongAnswerReactionKey(reactionType);
 
   if (!questionId || !contextType || !isReactionKey(reactionType)) return null;

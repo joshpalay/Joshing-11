@@ -1,9 +1,8 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
 
-import { gradeAnswer, selectQuip } from '@/server/grading';
+import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
-import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, feedItems, playerMastery, questions, users } from '@/server/db';
 import { getBasePoints } from '@/server/mastery/scoring';
 import { awardAuthorCredit } from '@/server/mastery/author-credit';
@@ -12,7 +11,7 @@ import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-i
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
-import { areFriends } from '@/server/db/queries/friends';
+import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { getFeedItemAnswerForRecipient } from '@/server/db/queries/feed';
 
 export const dynamic = 'force-dynamic';
@@ -104,10 +103,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     question.questionType,
   );
   const isCorrect = grade.result === 'correct';
-  const rawSource = row.feedItem.sourceResult;
-  const friendResult = (rawSource === 'correct' || rawSource === 'incorrect') ? rawSource : null;
-  const friendName = row.sourceDisplayName ?? undefined;
-  const quip = selectQuip({ isCorrect, surface: 'feed', friendResult, friendName });
 
   // F2.3: compute answer_state against the user's prior history on this
   // canonical question so first_correct_after_wrong (recovery) is detected
@@ -184,7 +179,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
         answerResult: isCorrect ? 'correct' : 'incorrect',
         pointsAwarded: pointsAwarded,
         masteryDelta: masteryDelta as Record<string, unknown>,
-        quip,
       })
       .where(eq(feedItems.id, feedItemId));
   });
@@ -231,15 +225,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     ));
   }
 
-  if (!isCorrect) {
-    void promptCreatorNoteAfterWrongAnswer({
-      questionId: question.id,
-      recipientUserId: session.userId,
-      contextType: 'feed',
-      contextId: feedItemId,
-    });
-  }
-
   const explanation = isCorrect
     ? (question.explainerFullCorrect ?? question.explainerFull ?? question.explainerBrief ?? question.factualExplanation)
     : (question.explainerFullWrong ?? question.explainerFull ?? question.explainerBrief ?? question.factualExplanation);
@@ -254,18 +239,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     breadcrumb: null,
     masteryDelta,
     correctAnswer: question.answerText,
-    quip,
-    insideJoke,
+    creatorNote: question.creatorNote ?? null,
+    insideJoke: insideJoke?.text ?? null,
+    insideJokeKind: insideJoke?.kind ?? null,
   });
-}
-
-async function selectInsideJokeForViewer(
-  insideJoke: string | null,
-  creatorId: string | null,
-  viewerId: string,
-): Promise<string | null> {
-  if (!insideJoke || !creatorId) return null;
-  if (creatorId === viewerId) return insideJoke;
-  const friends = await areFriends(viewerId, creatorId);
-  return friends ? insideJoke : null;
 }

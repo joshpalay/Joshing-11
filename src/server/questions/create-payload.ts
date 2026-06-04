@@ -57,7 +57,17 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
     || readBoolean(body?.share_to_feed)
     || readBoolean(body?.sharedToFriendsFeed);
 
+  // Question visibility (D-1 Stage 4). 'friends' == followers-only under the
+  // directional follow model; 'private' == author-only. Defaults to 'public'
+  // when omitted, preserving prior behavior.
+  const rawVisibility = typeof body?.visibility === 'string' ? body.visibility.trim().toLowerCase() : '';
+  const visibility: 'public' | 'friends' | 'private' =
+    rawVisibility === 'friends' || rawVisibility === 'private' ? rawVisibility : 'public';
+
   const errors: string[] = [];
+  if (rawVisibility && rawVisibility !== 'public' && rawVisibility !== 'friends' && rawVisibility !== 'private') {
+    errors.push('visibility');
+  }
   if (!text || text.length > 300) errors.push('text');
   if (!correctAnswer || correctAnswer.length > 200) errors.push('correctAnswer');
   if (alternateAnswers.length > 5 || alternateAnswers.some((answer) => answer.length > 200)) errors.push('alternateAnswers');
@@ -82,6 +92,7 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
       critiqueIterations: Number.isInteger(critiqueIterations) ? critiqueIterations : 0,
       sendToFriendIds: rawSendToFriendIds,
       shareToFeed,
+      visibility,
     },
     errors,
   };

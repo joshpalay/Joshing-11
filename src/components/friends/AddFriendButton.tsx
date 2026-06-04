@@ -78,7 +78,7 @@ export function AddFriendButton({
 
   function handleAccept() {
     if (!relationship.friendshipId) return
-    void runAction('accept', relationship.friendshipId, 'Friends.')
+    void runAction('accept', relationship.friendshipId, 'Approved.')
   }
 
   function handleIgnore() {
@@ -89,18 +89,18 @@ export function AddFriendButton({
   function handleRemove() {
     if (!relationship.friendshipId) return
     if (confirmUnfriend) {
-      // Swap the Unfriend button for an inline Remove/Keep confirmation rather
+      // Swap the Unfollow button for an inline Unfollow/Keep confirmation rather
       // than punching out to native window.confirm chrome.
       setConfirmingRemove(true)
       return
     }
-    void runAction('remove', relationship.friendshipId, 'Removed.')
+    void runAction('remove', relationship.friendshipId, 'Unfollowed.')
   }
 
   function confirmRemove() {
     if (!relationship.friendshipId) return
     setConfirmingRemove(false)
-    void runAction('remove', relationship.friendshipId, 'Removed.')
+    void runAction('remove', relationship.friendshipId, 'Unfollowed.')
   }
 
   return (
@@ -113,14 +113,25 @@ export function AddFriendButton({
             onClick={handleAddClick}
             disabled={pendingAction !== null}
           >
-            Add friend
+            Follow
+          </button>
+        ) : null}
+
+        {relationship.state === 'follows_you' ? (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleAddClick}
+            disabled={pendingAction !== null}
+          >
+            Follow back
           </button>
         ) : null}
 
         {relationship.state === 'pending_outbound' ? (
           <>
             <button type="button" className="btn-ghost" disabled>
-              Request sent
+              Requested
             </button>
             <button
               type="button"
@@ -141,7 +152,7 @@ export function AddFriendButton({
               onClick={handleAccept}
               disabled={pendingAction !== null}
             >
-              {pendingAction === 'accept' ? 'Joining…' : 'Accept'}
+              {pendingAction === 'accept' ? 'Approving…' : 'Approve'}
             </button>
             <button
               type="button"
@@ -154,15 +165,15 @@ export function AddFriendButton({
           </>
         ) : null}
 
-        {relationship.state === 'friends' ? (
+        {relationship.state === 'friends' || relationship.state === 'following' ? (
           confirmingRemove ? (
             <div
               className="flex flex-wrap items-center gap-2"
               role="group"
-              aria-label={`Remove ${targetDisplayName} from your friends?`}
+              aria-label={`Unfollow ${targetDisplayName}?`}
             >
               <span className="text-sm text-foreground">
-                Remove {targetDisplayName}?
+                Unfollow {targetDisplayName}?
               </span>
               <button
                 type="button"
@@ -170,7 +181,7 @@ export function AddFriendButton({
                 onClick={confirmRemove}
                 disabled={pendingAction !== null}
               >
-                {pendingAction === 'remove' ? 'Removing…' : 'Remove'}
+                {pendingAction === 'remove' ? 'Unfollowing…' : 'Unfollow'}
               </button>
               <button
                 type="button"
@@ -184,7 +195,7 @@ export function AddFriendButton({
           ) : (
             <>
               <button type="button" className="btn-ghost" disabled>
-                Friends ✓
+                {relationship.state === 'friends' ? 'Friends ✓' : 'Following ✓'}
               </button>
               <button
                 type="button"
@@ -192,21 +203,10 @@ export function AddFriendButton({
                 onClick={handleRemove}
                 disabled={pendingAction !== null}
               >
-                Unfriend
+                Unfollow
               </button>
             </>
           )
-        ) : null}
-
-        {relationship.state === 'recently_sent' ? (
-          <button
-            type="button"
-            className="btn-ghost"
-            disabled
-            title="You sent a request to this person in the last 30 days."
-          >
-            Recently sent
-          </button>
         ) : null}
       </div>
 

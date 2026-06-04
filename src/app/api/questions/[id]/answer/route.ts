@@ -1,9 +1,9 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
-import { gradeAnswer, selectQuip } from '@/server/grading';
+import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
-import { promptCreatorNoteAfterWrongAnswer } from '@/server/creator-notes';
 import { db, playerMastery, questions } from '@/server/db';
 import { getBasePoints } from '@/server/mastery/scoring';
 import { awardAuthorCredit } from '@/server/mastery/author-credit';
@@ -21,15 +21,24 @@ type RouteContext = {
 
 type MasteryTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 
-function parseBody(value: unknown): { submittedAnswer: string } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const submittedAnswer = typeof record.submitted_answer === 'string'
-    ? record.submitted_answer.trim()
-    : typeof record.answer === 'string'
-      ? record.answer.trim()
-      : null;
+const bodySchema = z.object({
+  // Permissive: a malformed type is coerced away (matching the prior parser)
+  // rather than 400-ing; the required-non-empty check happens below.
+  submitted_answer: z.string().optional().catch(undefined),
+  answer: z.string().optional().catch(undefined),
+});
 
+function parseBody(value: unknown): { submittedAnswer: string } | null {
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  const { submitted_answer, answer } = parsed.data;
+  const submittedAnswer = (
+    typeof submitted_answer === 'string'
+      ? submitted_answer
+      : typeof answer === 'string'
+        ? answer
+        : ''
+  ).trim();
   return submittedAnswer ? { submittedAnswer } : null;
 }
 
@@ -73,7 +82,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     question.questionType,
   );
   const isCorrect = grade.result === 'correct';
-  const quip = selectQuip({ isCorrect, surface: 'feed', friendResult: null });
 
   const priorAnswers = await readPriorAnswersForQuestion(session.userId, question.id);
   const answerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
@@ -174,15 +182,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     ));
   }
 
-  if (!isCorrect) {
-    void promptCreatorNoteAfterWrongAnswer({
-      questionId: question.id,
-      recipientUserId: session.userId,
-      contextType: 'feed',
-      contextId: sourceId,
-    });
-  }
-
   return NextResponse.json({
     isCorrect,
     explanation: question.explainerFull ?? question.explainerBrief ?? question.factualExplanation,
@@ -191,6 +190,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     breadcrumb: null,
     masteryDelta,
     correctAnswer: question.answerText,
-    quip,
+    creatorNote: question.creatorNote ?? null,
   });
 }

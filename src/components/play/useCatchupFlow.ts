@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
+import { CATCH_UP_BATCH_SIZE } from '@/lib/game-constants';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
+import { LLM_QUESTION_ATTRIBUTION, type InsideJokeKind } from '@/lib/questions-types';
 import {
   parseCatchUpAnswerErrorBody,
   userFacingCatchUpSubmitMessage,
@@ -25,9 +27,13 @@ export type CatchupQueueItem = {
   expiresAt: string;
   expiresSoon?: boolean;
   difficultyEstimate?: 'accessible' | 'moderate' | 'specialist' | null;
+  /** Human author's name, the house name ('Joshing'), or null for LLM-origin questions (rendered non-relationally). */
+  authorName?: string | null;
+  /** D-3: the author is the non-human house/editorial author (renders the Editorial badge, no relational copy). */
+  authorIsHouse?: boolean;
 };
 
-type CatchupAnswerResponse = {
+export type CatchupAnswerResponse = {
   result?: 'correct' | 'wrong';
   isCorrect?: boolean;
   correct?: boolean;
@@ -38,8 +44,15 @@ type CatchupAnswerResponse = {
   explanation?: string | null;
   explainer?: string | null;
   consolation?: string | null;
-  quip?: string | null;
   breadcrumb?: string | null;
+  // B-7/B-9: author commentary + aside travel with the question into catch-up,
+  // gated server-side by selectInsideJokeForViewer (same provenance-calibrated
+  // label and display gate as the live path). The server emits `creatorNote`,
+  // which maps to the message's `authorNote` (matching the live path field name
+  // so GameplayChat renders it with no special-casing).
+  creatorNote?: string | null;
+  insideJoke?: string | null;
+  insideJokeKind?: InsideJokeKind | null;
   nextItem?: CatchupQueueItem | null;
 };
 
@@ -54,6 +67,25 @@ export type CatchupStats = {
   correct: number;
   dismissed: number;
 };
+
+/** Per-question recap entry, used to render the round summary (Daily Five style). */
+export type CatchupBatchRecord = {
+  questionId: string;
+  questionText: string;
+  outcome: 'correct' | 'wrong' | 'revealed';
+  submittedAnswer: string | null;
+  correctAnswer: string;
+  explanation: string | null;
+  domainDisplayName: string;
+  authorName: string | null;
+  authorIsHouse: boolean;
+};
+
+/**
+ * 'playing' — the round's chat thread + answer input is live.
+ * 'summary' — the round is done; show the recap with "play next" / "return home".
+ */
+export type CatchupPhase = 'playing' | 'summary';
 
 function formatQuestionSubhead(item: CatchupQueueItem): string {
   if (item.queueAge <= 1) return 'FROM YESTERDAY';
@@ -91,6 +123,49 @@ async function fetchBreadcrumbForCatchupMessage(
   }
 }
 
+// Builds the result-turn message a catch-up answer produces, mapping the
+// server's provenance-resolved commentary + aside onto the exact field names
+// GameplayChat renders (B-9). Extracted as a pure function so a test can assert
+// these values reach the render layer — the B-7 regression was that the inline
+// builder set creatorName/creatorIsHouse but silently dropped the note/aside,
+// and a green route test never caught it because it asserted on the route JSON
+// the player never sees, not the message the hook builds.
+export function buildCatchupResultMessage(params: {
+  id: string;
+  item: CatchupQueueItem;
+  data: CatchupAnswerResponse;
+  isCorrect: boolean;
+  submittedAnswer: string;
+  pointsAwarded: number;
+}): Extract<ChatMessage, { kind: 'result' }> {
+  const { id, item, data, isCorrect, submittedAnswer, pointsAwarded } = params;
+  return {
+    id,
+    kind: 'result',
+    assignmentId: item.dailyQueueItemId,
+    questionText: item.questionText,
+    result: isCorrect ? 'correct' : 'wrong',
+    submitted: submittedAnswer,
+    correctAnswer: isCorrect ? null : data.correctAnswer ?? data.answer ?? item.correctAnswer,
+    consolation: data.consolation ?? null,
+    breadcrumb: null,
+    explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
+    copyVariant: item.queueAge,
+    creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
+    creatorIsHouse: item.authorIsHouse ?? false,
+    // B-9: surface the server's provenance-resolved commentary + aside.
+    // GameplayChat renders `authorNote` (live path maps server `creatorNote`
+    // to this name) and gates the aside via insideJoke/insideJokeKind, which
+    // the route already calibrated through selectInsideJokeForViewer.
+    authorNote: data.creatorNote ?? null,
+    insideJoke: data.insideJoke ?? null,
+    insideJokeKind: data.insideJokeKind ?? null,
+    canonicalSubcategory: item.domain,
+    pointsAwarded,
+    pointsLabel: 'Catch-up - 0.25x points',
+  };
+}
+
 function questionMessage(item: CatchupQueueItem): ChatMessage {
   const badges: NonNullable<Extract<ChatMessage, { kind: 'question' }>['badges']> = [];
   const tier = difficultyEstimateToTierLabel(item.difficultyEstimate);
@@ -103,10 +178,41 @@ function questionMessage(item: CatchupQueueItem): ChatMessage {
     kind: 'question',
     assignmentId: item.dailyQueueItemId,
     questionText: item.questionText,
-    creatorName: null,
+    creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
+    creatorIsHouse: item.authorIsHouse ?? false,
     subhead: formatQuestionSubhead(item),
     badges,
   };
+}
+
+// Once the player engages the next turn (answers, skips, or dismisses again),
+// a lingering "Dismissed · Undo" notice is retired to a plain "Dismissed." line
+// so undo can't rewind across a resolved turn.
+function retireDismissNotices(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) =>
+    message.kind === 'dismiss_notice'
+      ? { id: message.id, kind: 'system' as const, text: 'Dismissed.' }
+      : message,
+  );
+}
+
+// Rebuilds the introduced/result-posted sequencing sets from a thread, used
+// after an undo rewinds (truncates) the thread: every shown question is
+// "introduced", and a question is "resolved" once it has a result after it or
+// is a dismissed (faded) card. Anything truncated away drops out of both sets
+// so it gets re-introduced cleanly when the queue reaches it again.
+function deriveCatchupRefs(messages: ChatMessage[]): { introduced: Set<string>; resultPosted: Set<string> } {
+  const introduced = new Set<string>();
+  const resultPosted = new Set<string>();
+  for (const message of messages) {
+    if (message.kind === 'question') {
+      introduced.add(message.assignmentId);
+      if (message.faded) resultPosted.add(message.assignmentId);
+    } else if (message.kind === 'result') {
+      resultPosted.add(message.assignmentId);
+    }
+  }
+  return { introduced, resultPosted };
 }
 
 export function useCatchupFlow() {
@@ -119,12 +225,20 @@ export function useCatchupFlow() {
   const [isResolvingTurn, setIsResolvingTurn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<CatchupStats>({ answered: 0, correct: 0, dismissed: 0 });
+  const [phase, setPhase] = useState<CatchupPhase>('playing');
+  const [batchRecords, setBatchRecords] = useState<CatchupBatchRecord[]>([]);
 
   const introducedItemIdsRef = useRef<Set<string>>(new Set());
   const resultPostedItemIdsRef = useRef<Set<string>>(new Set());
+  // Number of items remaining when the current round started, so the round size
+  // is min(CATCH_UP_BATCH_SIZE, that) and we know when the round is full.
+  const batchStartRemainingRef = useRef(0);
+  const answeredInBatchRef = useRef(0);
 
   const currentItem = items[0] ?? null;
   const completed = !loading && initialTotal > 0 && items.length === 0;
+  const remainingCount = items.length;
+  const nextBatchSize = Math.min(CATCH_UP_BATCH_SIZE, remainingCount);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,6 +257,10 @@ export function useCatchupFlow() {
       setIntroCopy(data?.introCopy ?? '');
       setMessages([]);
       setStats({ answered: 0, correct: 0, dismissed: 0 });
+      setPhase('playing');
+      setBatchRecords([]);
+      batchStartRemainingRef.current = nextItems.length;
+      answeredInBatchRef.current = 0;
       introducedItemIdsRef.current = new Set();
       resultPostedItemIdsRef.current = new Set();
     } catch (caught) {
@@ -164,6 +282,9 @@ export function useCatchupFlow() {
   useEffect(() => {
     const id = currentItem?.dailyQueueItemId ?? null;
     if (!currentItem) return;
+    // Don't introduce the next round's first question while the summary is up;
+    // it gets introduced when startNextBatch flips the phase back to 'playing'.
+    if (phase !== 'playing') return;
     if (!shouldIntroduceCatchUpQuestion({
       currentCatchUpItemId: id,
       loading,
@@ -174,11 +295,35 @@ export function useCatchupFlow() {
 
     introducedItemIdsRef.current.add(currentItem.dailyQueueItemId);
     setMessages((existing) => [...existing, questionMessage(currentItem)]);
-  }, [currentItem, isResolvingTurn, loading]);
+  }, [currentItem, isResolvingTurn, loading, phase]);
 
   const advancePast = useCallback((dailyQueueItemId: string) => {
     setItems((existing) => existing.filter((item) => item.dailyQueueItemId !== dailyQueueItemId));
   }, []);
+
+  // Records the resolved turn and, once the round is full, flips to the summary.
+  // Called from inside the post-result timeout in both submit and give-up.
+  const finishTurn = useCallback((dailyQueueItemId: string, record: CatchupBatchRecord) => {
+    answeredInBatchRef.current += 1;
+    setBatchRecords((existing) => [...existing, record]);
+    advancePast(dailyQueueItemId);
+    setIsResolvingTurn(false);
+    const roundSize = Math.min(CATCH_UP_BATCH_SIZE, batchStartRemainingRef.current);
+    if (answeredInBatchRef.current >= roundSize) {
+      setPhase('summary');
+    }
+  }, [advancePast]);
+
+  // Begins the next round: clears the thread + recap and re-enters 'playing',
+  // which re-introduces the next current question via the effect above.
+  const startNextBatch = useCallback(() => {
+    if (items.length === 0) return;
+    batchStartRemainingRef.current = items.length;
+    answeredInBatchRef.current = 0;
+    setBatchRecords([]);
+    setMessages([]);
+    setPhase('playing');
+  }, [items.length]);
 
   const skipCurrent = useCallback(() => {
     if (!currentItem || submitting || isResolvingTurn) return;
@@ -186,7 +331,7 @@ export function useCatchupFlow() {
     resultPostedItemIdsRef.current.add(item.dailyQueueItemId);
     setIsResolvingTurn(true);
     setMessages((existing) => [
-      ...existing,
+      ...retireDismissNotices(existing),
       { id: newMessageId(), kind: 'user', text: 'i give up' },
       {
         id: newMessageId(),
@@ -199,19 +344,69 @@ export function useCatchupFlow() {
         consolation: null,
         breadcrumb: null,
         copyVariant: item.queueAge,
-        creatorName: 'Joshing',
+        creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
+        creatorIsHouse: item.authorIsHouse ?? false,
         canonicalSubcategory: item.domain,
       },
     ]);
     window.setTimeout(() => {
-      advancePast(item.dailyQueueItemId);
-      setIsResolvingTurn(false);
+      finishTurn(item.dailyQueueItemId, {
+        questionId: item.questionId,
+        questionText: item.questionText,
+        outcome: 'revealed',
+        submittedAnswer: null,
+        correctAnswer: item.correctAnswer,
+        explanation: item.explanation,
+        domainDisplayName: item.domainDisplayName,
+        authorName: item.authorName ?? null,
+        authorIsHouse: item.authorIsHouse ?? false,
+      });
     }, 1200);
-  }, [advancePast, currentItem, isResolvingTurn, submitting]);
+  }, [currentItem, finishTurn, isResolvingTurn, submitting]);
+
+  // Reverses a dismissal: un-dismisses server-side, then rewinds the thread back
+  // to the dismissed question (dropping the notice and the auto-introduced next
+  // card) so it becomes the active question again. Throws on failure so the
+  // notice row can surface a retry without losing the dismissal.
+  const undismissItem = useCallback(async (item: CatchupQueueItem) => {
+    const itemId = item.dailyQueueItemId;
+    setSubmitting(true);
+    try {
+      const response = await fetch('/api/daily/catchup/undismiss', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ dailyQueueItemId: itemId }),
+      });
+      if (!response.ok) {
+        const raw = await response.json().catch(() => null);
+        throw new Error(userFacingCatchUpSubmitMessage(parseCatchUpAnswerErrorBody(raw)));
+      }
+      setStats((existing) => ({ ...existing, dismissed: Math.max(0, existing.dismissed - 1) }));
+      setItems((existing) => [item, ...existing.filter((entry) => entry.dailyQueueItemId !== itemId)]);
+      setMessages((existing) => {
+        const questionId = `catchup-q-${itemId}`;
+        const index = existing.findIndex((message) => message.id === questionId);
+        if (index === -1) return existing;
+        const rewound = existing.slice(0, index + 1).map((message) =>
+          message.id === questionId && message.kind === 'question'
+            ? { ...message, faded: false }
+            : message,
+        );
+        const refs = deriveCatchupRefs(rewound);
+        introducedItemIdsRef.current = refs.introduced;
+        resultPostedItemIdsRef.current = refs.resultPosted;
+        return rewound;
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }, []);
 
   const dismissCurrent = useCallback(async (reason: 'not_interested' | 'too_old' | 'unclear' = 'not_interested') => {
-    if (!currentItem || submitting) return;
-    const itemId = currentItem.dailyQueueItemId;
+    if (!currentItem || submitting || isResolvingTurn) return;
+    const item = currentItem;
+    const itemId = item.dailyQueueItemId;
     setSubmitting(true);
     setError(null);
     try {
@@ -223,19 +418,27 @@ export function useCatchupFlow() {
       });
       const raw = await response.json().catch(() => null);
       if (!response.ok) throw new Error(userFacingCatchUpSubmitMessage(parseCatchUpAnswerErrorBody(raw)));
+      // Mark the prompt resolved so the next question can be introduced.
       resultPostedItemIdsRef.current.add(itemId);
       setStats((existing) => ({ ...existing, dismissed: existing.dismissed + 1 }));
-      setMessages((existing) => [
-        ...existing,
-        { id: newMessageId(), kind: 'system', text: 'Dropped from catch-up.' },
-      ]);
+      setMessages((existing) => {
+        const retired = retireDismissNotices(existing).map((message) =>
+          message.kind === 'question' && message.assignmentId === itemId
+            ? { ...message, faded: true }
+            : message,
+        );
+        return [
+          ...retired,
+          { id: newMessageId(), kind: 'dismiss_notice', onUndo: () => undismissItem(item) },
+        ];
+      });
       advancePast(itemId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not dismiss that question.');
     } finally {
       setSubmitting(false);
     }
-  }, [advancePast, currentItem, submitting]);
+  }, [advancePast, currentItem, isResolvingTurn, submitting, undismissItem]);
 
   const submitCurrent = useCallback(async (submittedAnswer: string) => {
     if (!currentItem || submitting || !submittedAnswer.trim()) return;
@@ -270,25 +473,16 @@ export function useCatchupFlow() {
         dismissed: existing.dismissed,
       }));
       setMessages((existing) => [
-        ...existing,
+        ...retireDismissNotices(existing),
         { id: newMessageId(), kind: 'user', text: trimmedAnswer },
-        {
+        buildCatchupResultMessage({
           id: resultMessageId,
-          kind: 'result',
-          assignmentId: item.dailyQueueItemId,
-          questionText: item.questionText,
-          result: isCorrect ? 'correct' : 'wrong',
-          submitted: trimmedAnswer,
-          correctAnswer: isCorrect ? null : data.correctAnswer ?? data.answer ?? item.correctAnswer,
-          consolation: data.consolation ?? data.quip ?? null,
-          breadcrumb: null,
-          explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
-          copyVariant: item.queueAge,
-          creatorName: 'Joshing',
-          canonicalSubcategory: item.domain,
+          item,
+          data,
+          isCorrect,
+          submittedAnswer: trimmedAnswer,
           pointsAwarded,
-          pointsLabel: 'Catch-up - 0.25x points',
-        },
+        }),
       ]);
 
       // Breadcrumbs are computed from daily-queue slots only; feed-sourced
@@ -301,9 +495,19 @@ export function useCatchupFlow() {
         }
       }
 
+      const revealedAnswer = data.correctAnswer ?? data.answer ?? item.correctAnswer;
       window.setTimeout(() => {
-        advancePast(item.dailyQueueItemId);
-        setIsResolvingTurn(false);
+        finishTurn(item.dailyQueueItemId, {
+          questionId: item.questionId,
+          questionText: item.questionText,
+          outcome: isCorrect ? 'correct' : 'wrong',
+          submittedAnswer: trimmedAnswer,
+          correctAnswer: revealedAnswer,
+          explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
+          domainDisplayName: item.domainDisplayName,
+          authorName: item.authorName ?? null,
+          authorIsHouse: item.authorIsHouse ?? false,
+        });
       }, 1200);
     } catch (caught) {
       setIsResolvingTurn(false);
@@ -311,7 +515,7 @@ export function useCatchupFlow() {
     } finally {
       setSubmitting(false);
     }
-  }, [advancePast, currentItem, submitting]);
+  }, [currentItem, finishTurn, submitting]);
 
   const remainingLabel = useMemo(() => {
     const total = initialTotal || items.length;
@@ -331,6 +535,11 @@ export function useCatchupFlow() {
     stats,
     completed,
     remainingLabel,
+    phase,
+    batchRecords,
+    remainingCount,
+    nextBatchSize,
+    startNextBatch,
     reload: load,
     submitCurrent,
     skipCurrent,

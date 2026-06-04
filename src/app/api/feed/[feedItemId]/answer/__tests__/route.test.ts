@@ -6,9 +6,7 @@ const {
   getSessionMock,
   gradeAnswerMock,
   promoteDeclaredToDemonstratedMock,
-  promptCreatorNoteAfterWrongAnswerMock,
   readPriorAnswersForQuestionMock,
-  selectQuipMock,
   writeMasteryEventMock,
   dbMock,
   selectCallChain,
@@ -37,9 +35,7 @@ const {
     getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
     gradeAnswerMock: vi.fn(),
     promoteDeclaredToDemonstratedMock: vi.fn(),
-    promptCreatorNoteAfterWrongAnswerMock: vi.fn(),
     readPriorAnswersForQuestionMock: vi.fn(async () => []),
-    selectQuipMock: vi.fn(() => 'quip'),
     writeMasteryEventMock: vi.fn(async () => ({
       domain: 'history',
       points: 0,
@@ -95,15 +91,10 @@ const FEED_ROW = {
 
 vi.mock('@/server/grading', () => ({
   gradeAnswer: gradeAnswerMock,
-  selectQuip: selectQuipMock,
 }))
 
 vi.mock('@/server/auth/session', () => ({
   getSession: getSessionMock,
-}))
-
-vi.mock('@/server/creator-notes', () => ({
-  promptCreatorNoteAfterWrongAnswer: promptCreatorNoteAfterWrongAnswerMock,
 }))
 
 vi.mock('@/server/db', () => ({

@@ -74,6 +74,27 @@ function friendAnsweredActivity(
   };
 }
 
+function nicheMatchActivity(
+  id: string,
+  type: 'niche_match_answered_your_question' | 'niche_match_you_answered',
+  questionId: string,
+): ActivityItemView {
+  return {
+    id,
+    userId: 'viewer-1',
+    type,
+    actorUserId: 'stranger-1',
+    referenceId: questionId,
+    referenceType: 'question',
+    read: false,
+    createdAt: new Date('2026-05-24T12:00:00.000Z'),
+    actor: { displayName: 'A stranger' },
+    reference: {
+      nicheMatch: { domain: 'Stephen Sondheim musicals', questionText: 'q' },
+    },
+  };
+}
+
 function declaredPromotedActivity(id: string): ActivityItemView {
   return {
     id,
@@ -128,5 +149,31 @@ describe('filterUtilityActivities', () => {
 
     const kept = filterUtilityActivities(items, []);
     expect(kept.map((i) => i.id)).toEqual(['a-2']);
+  });
+
+  // D-2 dedup non-collision: niche-match is stranger-scoped and Lately moments
+  // are friend-scoped, so the two never overlap. These assert filterUtilityActivities
+  // keeps both niche-match types — and keeps them even when (defensively) a
+  // same-questionId moment is present — so a future edit can't silently route
+  // the discovery loop's only surface into the dedup set.
+  it('keeps both niche_match_* types (not part of the dedup set)', () => {
+    const items = [
+      nicheMatchActivity('nm-1', 'niche_match_answered_your_question', 'q-sondheim'),
+      nicheMatchActivity('nm-2', 'niche_match_you_answered', 'q-sondheim'),
+    ];
+
+    const kept = filterUtilityActivities(items, []);
+    expect(kept.map((i) => i.id)).toEqual(['nm-1', 'nm-2']);
+  });
+
+  it('keeps niche_match_* even when a same-questionId Lately moment exists (defensive — they are disjoint by construction)', () => {
+    const items = [
+      nicheMatchActivity('nm-1', 'niche_match_answered_your_question', 'q-sondheim'),
+      nicheMatchActivity('nm-2', 'niche_match_you_answered', 'q-sondheim'),
+    ];
+    const moments = [youGotThemMoment('q-sondheim'), theyGotYouMoment('q-sondheim')];
+
+    const kept = filterUtilityActivities(items, moments);
+    expect(kept.map((i) => i.id)).toEqual(['nm-1', 'nm-2']);
   });
 });

@@ -1,145 +1,112 @@
-import { and, eq, ne, or } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 
 import { writeActivity } from '@/server/activity/write-activity'
-import { db, friendships } from '@/server/db'
+import { db, follows, users } from '@/server/db'
 
+export type Follow = typeof follows.$inferSelect
+
+// Outcome of a follow attempt. (Kept the historical export name so the API
+// routes that destructure `state` don't need to change.)
 export type FriendshipRequestState =
-  | 'created'
-  | 'already_friends'
-  | 'pending_existing'
-  | 'reverse_pending'
-  | 'reopened'
+  | 'created' // new pending request — target requires approval
+  | 'auto_approved' // new approved follow — target is public
+  | 'already_following' // an approved edge already exists
+  | 'pending_existing' // a pending request already exists
 
 export type FriendshipRequestContext = {
   suggestedInterests?: string[]
 }
 
-type FriendshipWriter = {
-  insert: (table: typeof friendships) => {
-    values: (values: typeof friendships.$inferInsert) => {
+// Structural type for a Drizzle transaction/db handle that can upsert a follow.
+type FollowWriter = {
+  insert: (table: typeof follows) => {
+    values: (values: typeof follows.$inferInsert) => {
       onConflictDoUpdate: (config: {
-        target: [typeof friendships.userAId, typeof friendships.userBId]
-        set: Partial<typeof friendships.$inferInsert>
+        target: [typeof follows.followerId, typeof follows.followeeId]
+        set: Partial<typeof follows.$inferInsert>
       }) => Promise<unknown>
     }
   }
 }
 
-export function friendshipPair(a: string, b: string) {
-  return a < b ? { userAId: a, userBId: b } : { userAId: b, userBId: a }
-}
-
-
 function requestContextForSuggestedInterests(suggestedInterests: string[]): FriendshipRequestContext | null {
   return suggestedInterests.length > 0 ? { suggestedInterests } : null
 }
 
-const DIRECT_REQUEST_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000
-
+/**
+ * Follow `inviteeUserId`. If the target's followPrivacy is `public` the edge is
+ * approved immediately; otherwise it lands `pending` for the target to approve.
+ * Reuses an existing edge (approved -> already_following, pending ->
+ * pending_existing). The follower is always the requester, so there is no
+ * separate requestedByUserId.
+ */
 export async function createOrReusePendingFriendshipRequest({
   inviterUserId,
   inviteeUserId,
   suggestedInterests = [],
   personalNote,
-  expiresAt,
   now = new Date(),
 }: {
   inviterUserId: string
   inviteeUserId: string
   suggestedInterests?: string[]
   personalNote?: string
-  // Defaults to NOW() + 30 days when undefined. Pass null to opt out
-  // (the SMS-invite caller does this — those invitations don't expire).
-  expiresAt?: Date | null
   now?: Date
-}): Promise<{ friendship: typeof friendships.$inferSelect; state: FriendshipRequestState }> {
-  const pair = friendshipPair(inviterUserId, inviteeUserId)
+}): Promise<{ friendship: Follow; state: FriendshipRequestState }> {
+  const followerId = inviterUserId
+  const followeeId = inviteeUserId
   const requestContext = requestContextForSuggestedInterests(suggestedInterests)
   const trimmedNote = personalNote?.trim() || null
-  const resolvedExpiresAt =
-    expiresAt === undefined ? new Date(now.getTime() + DIRECT_REQUEST_EXPIRY_MS) : expiresAt
 
-  const [existingFriendship] = await db
+  const [existing] = await db
     .select()
-    .from(friendships)
-    .where(and(eq(friendships.userAId, pair.userAId), eq(friendships.userBId, pair.userBId)))
+    .from(follows)
+    .where(and(eq(follows.followerId, followerId), eq(follows.followeeId, followeeId)))
     .limit(1)
 
-  if (existingFriendship?.status === 'active') {
-    return { friendship: existingFriendship, state: 'already_friends' }
+  if (existing?.state === 'approved') {
+    return { friendship: existing, state: 'already_following' }
+  }
+  if (existing?.state === 'pending') {
+    return { friendship: existing, state: 'pending_existing' }
   }
 
-  if (existingFriendship?.status === 'pending') {
-    // Reuse — caller must Cancel first to overwrite the note or expiry.
-    return {
-      friendship: existingFriendship,
-      state: existingFriendship.requestedByUserId === inviterUserId ? 'pending_existing' : 'reverse_pending',
-    }
-  }
+  const [target] = await db
+    .select({ followPrivacy: users.followPrivacy })
+    .from(users)
+    .where(eq(users.id, followeeId))
+    .limit(1)
+  const autoApprove = target?.followPrivacy === 'public'
 
-  if (existingFriendship) {
-    const [reopenedFriendship] = await db
-      .update(friendships)
-      .set({
-        status: 'pending',
-        requestedByUserId: inviterUserId,
-        formedVia: 'direct_request',
-        formedAt: null,
-        removedAt: null,
-        removedByUserId: null,
-        requestContext,
-        // Reopen: clear resolvedAt, refresh expiry, overwrite note only if
-        // the caller provided one (existing value wins otherwise).
-        resolvedAt: null,
-        expiresAt: resolvedExpiresAt,
-        ...(trimmedNote !== null ? { personalNote: trimmedNote } : {}),
-      })
-      .where(eq(friendships.id, existingFriendship.id))
-      .returning()
-
-    if (!reopenedFriendship) throw new Error('Friendship request could not be reopened')
-
-    await writeActivity({
-      userId: inviteeUserId,
-      type: 'friend_request',
-      actorUserId: inviterUserId,
-      referenceId: reopenedFriendship.id,
-      referenceType: 'friendship',
-    })
-
-    return { friendship: reopenedFriendship, state: 'reopened' }
-  }
-
-  const [friendship] = await db
-    .insert(friendships)
+  const [edge] = await db
+    .insert(follows)
     .values({
-      ...pair,
-      status: 'pending',
-      requestedByUserId: inviterUserId,
-      formedVia: 'direct_request',
-      formedAt: null,
-      removedAt: null,
-      removedByUserId: null,
-      requestContext,
+      followerId,
+      followeeId,
+      state: autoApprove ? 'approved' : 'pending',
+      approvedAt: autoApprove ? now : null,
       personalNote: trimmedNote,
-      expiresAt: resolvedExpiresAt,
-      resolvedAt: null,
+      requestContext,
     })
     .returning()
 
-  if (!friendship) throw new Error('Friendship request could not be created')
+  if (!edge) throw new Error('Follow could not be created')
 
   await writeActivity({
-    userId: inviteeUserId,
-    type: 'friend_request',
-    actorUserId: inviterUserId,
-    referenceId: friendship.id,
-    referenceType: 'friendship',
+    userId: followeeId,
+    type: autoApprove ? 'follow' : 'follow_request',
+    actorUserId: followerId,
+    referenceId: edge.id,
+    referenceType: 'follow',
   })
 
-  return { friendship, state: 'created' }
+  return { friendship: edge, state: autoApprove ? 'auto_approved' : 'created' }
 }
 
+/**
+ * Approve a pending follow request targeting `userId`. `friendshipId` is the
+ * pending follow edge id.
+ */
 export async function acceptPendingFriendshipRequest({
   friendshipId,
   userId,
@@ -148,129 +115,109 @@ export async function acceptPendingFriendshipRequest({
   friendshipId: string
   userId: string
   now?: Date
-}): Promise<typeof friendships.$inferSelect | null> {
-  const [friendship] = await db
-    .update(friendships)
-    .set({
-      status: 'active',
-      formedAt: now,
-      removedAt: null,
-      removedByUserId: null,
-      resolvedAt: now,
-    })
+}): Promise<Follow | null> {
+  const [edge] = await db
+    .update(follows)
+    .set({ state: 'approved', approvedAt: now })
     .where(
       and(
-        eq(friendships.id, friendshipId),
-        eq(friendships.status, 'pending'),
-        ne(friendships.requestedByUserId, userId),
-        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
-      )
+        eq(follows.id, friendshipId),
+        eq(follows.state, 'pending'),
+        eq(follows.followeeId, userId),
+      ),
     )
     .returning()
 
-  if (!friendship) return null
+  if (!edge) return null
 
   await writeActivity({
-    userId: friendship.requestedByUserId,
-    type: 'friend_request_accepted',
+    userId: edge.followerId,
+    type: 'follow_approved',
     actorUserId: userId,
-    referenceId: friendship.id,
-    referenceType: 'friendship',
+    referenceId: edge.id,
+    referenceType: 'follow',
   })
 
-  return friendship
+  return edge
 }
 
+/**
+ * Decline a pending follow request targeting `userId` — hard-deletes the edge
+ * (no terminal state). `friendshipId` is the pending follow edge id.
+ */
 export async function ignorePendingFriendshipRequest({
   friendshipId,
   userId,
-  now = new Date(),
 }: {
   friendshipId: string
   userId: string
-  now?: Date
-}): Promise<typeof friendships.$inferSelect | null> {
-  const [friendship] = await db
-    .update(friendships)
-    .set({
-      status: 'declined',
-      removedAt: now,
-      removedByUserId: userId,
-      resolvedAt: now,
-    })
+}): Promise<Follow | null> {
+  const [edge] = await db
+    .delete(follows)
     .where(
       and(
-        eq(friendships.id, friendshipId),
-        eq(friendships.status, 'pending'),
-        ne(friendships.requestedByUserId, userId),
-        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
-      )
+        eq(follows.id, friendshipId),
+        eq(follows.state, 'pending'),
+        eq(follows.followeeId, userId),
+      ),
     )
     .returning()
 
-  return friendship ?? null
+  return edge ?? null
 }
 
+/**
+ * Cancel a pending follow request the viewer sent. `friendshipId` is the
+ * pending follow edge id (`followerId = userId`).
+ */
 export async function cancelPendingFriendshipRequest({
   friendshipId,
   userId,
-  now = new Date(),
 }: {
   friendshipId: string
   userId: string
-  now?: Date
-}): Promise<typeof friendships.$inferSelect | null> {
-  const [friendship] = await db
-    .update(friendships)
-    .set({
-      status: 'cancelled',
-      removedAt: now,
-      removedByUserId: userId,
-      resolvedAt: now,
-    })
+}): Promise<Follow | null> {
+  const [edge] = await db
+    .delete(follows)
     .where(
       and(
-        eq(friendships.id, friendshipId),
-        eq(friendships.status, 'pending'),
-        eq(friendships.requestedByUserId, userId),
-        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
-      )
+        eq(follows.id, friendshipId),
+        eq(follows.state, 'pending'),
+        eq(follows.followerId, userId),
+      ),
     )
     .returning()
 
-  return friendship ?? null
+  return edge ?? null
 }
 
+/**
+ * Unfollow: delete the viewer's outbound follow edge. This is directional — it
+ * only removes my follow of them; their follow of me (if any) is untouched.
+ * `friendshipId` is my outbound edge id.
+ */
 export async function removeFriendship({
   friendshipId,
   userId,
-  now = new Date(),
 }: {
   friendshipId: string
   userId: string
-  now?: Date
-}): Promise<typeof friendships.$inferSelect | null> {
-  const [friendship] = await db
-    .update(friendships)
-    .set({
-      status: 'removed',
-      removedAt: now,
-      removedByUserId: userId,
-    })
-    .where(
-      and(
-        eq(friendships.id, friendshipId),
-        eq(friendships.status, 'active'),
-        or(eq(friendships.userAId, userId), eq(friendships.userBId, userId))
-      )
-    )
+}): Promise<Follow | null> {
+  const [edge] = await db
+    .delete(follows)
+    .where(and(eq(follows.id, friendshipId), eq(follows.followerId, userId)))
     .returning()
 
-  return friendship ?? null
+  return edge ?? null
 }
 
+/**
+ * Invitation acceptance auto-creates a mutual follow: two approved edges in
+ * both directions, bypassing approval (the invite is the consent). Idempotent
+ * via ON CONFLICT, so re-accepting an invitation just refreshes the edges.
+ */
 export async function upsertInvitationFriendship(
-  writer: FriendshipWriter,
+  writer: FollowWriter,
   {
     inviterUserId,
     inviteeUserId,
@@ -279,32 +226,28 @@ export async function upsertInvitationFriendship(
     inviterUserId: string
     inviteeUserId: string
     formedAt: Date
-  }
+  },
 ) {
-  const pair = friendshipPair(inviterUserId, inviteeUserId)
-
-  await writer
-    .insert(friendships)
-    .values({
-      ...pair,
-      status: 'active',
-      requestedByUserId: inviterUserId,
-      formedVia: 'invitation',
-      formedAt,
-      removedAt: null,
-      removedByUserId: null,
-      requestContext: null,
-    })
-    .onConflictDoUpdate({
-      target: [friendships.userAId, friendships.userBId],
-      set: {
-        status: 'active',
-        requestedByUserId: inviterUserId,
-        formedVia: 'invitation',
-        formedAt,
-        removedAt: null,
-        removedByUserId: null,
+  for (const [followerId, followeeId] of [
+    [inviterUserId, inviteeUserId],
+    [inviteeUserId, inviterUserId],
+  ] as const) {
+    await writer
+      .insert(follows)
+      .values({
+        followerId,
+        followeeId,
+        state: 'approved',
+        approvedAt: formedAt,
+        personalNote: null,
         requestContext: null,
-      },
-    })
+      })
+      .onConflictDoUpdate({
+        target: [follows.followerId, follows.followeeId],
+        set: {
+          state: 'approved',
+          approvedAt: formedAt,
+        },
+      })
+  }
 }

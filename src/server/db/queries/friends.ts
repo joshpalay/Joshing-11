@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
 import {
   db,
   declaredInterests,
   feedItems,
-  friendships,
+  follows,
   joshingGameResponses,
   masteryEvents,
   users,
@@ -12,17 +13,23 @@ import {
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 export type User = typeof users.$inferSelect;
-export type Friendship = typeof friendships.$inferSelect;
+export type Follow = typeof follows.$inferSelect;
 
-export type FriendHubFriend = {
+// A person row in the friends hub. `youFollow` / `followsYou` let the UI label
+// each row (Following / Follows you / Follow back) and `youFollow && followsYou`
+// is the mutual ("friend") case.
+export type HubPerson = {
   id: string
   displayName: string
   declaredInterests: string[]
   sharedInterests: string[]
   lastActiveAt: Date | null
+  youFollow: boolean
+  followsYou: boolean
 }
 
-export type IncomingFriendRequest = {
+export type IncomingFollowRequest = {
+  // The pending follow edge id — drives approve/ignore.
   id: string
   requesterId: string
   requesterName: string
@@ -31,7 +38,8 @@ export type IncomingFriendRequest = {
   createdAt: Date
 }
 
-export type OutboundFriendRequest = {
+export type OutboundFollowRequest = {
+  // The pending follow edge id — drives cancel.
   id: string
   recipientId: string
   recipientName: string
@@ -40,9 +48,16 @@ export type OutboundFriendRequest = {
 }
 
 export type FriendsHub = {
-  friends: FriendHubFriend[]
-  incomingRequests: IncomingFriendRequest[]
-  outboundRequests: OutboundFriendRequest[]
+  // People I follow (approved outbound).
+  following: HubPerson[]
+  // People who follow me (approved inbound).
+  followers: HubPerson[]
+  // Follow requests awaiting my approval (pending inbound).
+  incomingRequests: IncomingFollowRequest[]
+  // My follow requests awaiting the other person's approval (pending outbound).
+  outboundRequests: OutboundFollowRequest[]
+  // My own gate on new followers.
+  followPrivacy: 'public' | 'approval_required'
 }
 
 function displayName(name: string | null, fallback: string): string {
@@ -61,24 +76,83 @@ function normalizeSuggestedInterests(value: unknown): string[] {
     .filter(Boolean)
 }
 
-export async function getFriends(userId: string): Promise<User[]> {
+/**
+ * Returns the set of users `userId` follows (approved outbound edges). This is
+ * the directional "people I follow" set — NOT necessarily reciprocal.
+ */
+export async function getFollowing(userId: string): Promise<User[]> {
   const rows = await db
-    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
-    .from(friendships)
-    .where(and(
-      eq(friendships.status, 'active'),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ));
-  const friendIds = rows.map((friendship) => (
-    friendship.userAId === userId ? friendship.userBId : friendship.userAId
-  ));
-  if (friendIds.length === 0) return [];
+    .select({ user: users })
+    .from(follows)
+    .innerJoin(users, eq(users.id, follows.followeeId))
+    .where(and(eq(follows.followerId, userId), eq(follows.state, 'approved')))
+    .orderBy(asc(users.displayName), asc(users.phoneNumber))
+  return rows.map((row) => row.user)
+}
 
-  return db
-    .select()
-    .from(users)
-    .where(inArray(users.id, friendIds))
-    .orderBy(asc(users.displayName), asc(users.phoneNumber));
+/**
+ * Returns the set of users who follow `userId` (approved inbound edges) — "my
+ * followers", the broadcast / friend_answered fan-out audience.
+ */
+export async function getFollowers(userId: string): Promise<User[]> {
+  const rows = await db
+    .select({ user: users })
+    .from(follows)
+    .innerJoin(users, eq(users.id, follows.followerId))
+    .where(and(eq(follows.followeeId, userId), eq(follows.state, 'approved')))
+    .orderBy(asc(users.displayName), asc(users.phoneNumber))
+  return rows.map((row) => row.user)
+}
+
+/**
+ * Returns users in a mutual follow with `userId` (both directions approved).
+ * This is the canonical "friend" relationship that the symmetric `getFriends`
+ * delegated to before the follow model — reciprocal features (inside jokes,
+ * shared interests, ceremony) read this.
+ */
+export async function getMutualFollows(userId: string): Promise<User[]> {
+  const back = alias(follows, 'follows_back')
+  const rows = await db
+    .select({ user: users })
+    .from(follows)
+    .innerJoin(
+      back,
+      and(
+        eq(back.followerId, follows.followeeId),
+        eq(back.followeeId, userId),
+        eq(back.state, 'approved'),
+      ),
+    )
+    .innerJoin(users, eq(users.id, follows.followeeId))
+    .where(and(eq(follows.followerId, userId), eq(follows.state, 'approved')))
+    .orderBy(asc(users.displayName), asc(users.phoneNumber))
+  return rows.map((row) => row.user)
+}
+
+/**
+ * Mutual-follow shim. Pre-follow-model `getFriends` meant "active symmetric
+ * friendship"; under the directional model that is exactly a mutual follow.
+ * The ~18 reciprocal call-sites keep calling `getFriends` unchanged.
+ */
+export async function getFriends(userId: string): Promise<User[]> {
+  return getMutualFollows(userId)
+}
+
+export async function areFriends(userAId: string, userBId: string): Promise<boolean> {
+  if (userAId === userBId) return false
+  const rows = await db
+    .select({ followerId: follows.followerId, followeeId: follows.followeeId })
+    .from(follows)
+    .where(
+      and(
+        eq(follows.state, 'approved'),
+        or(
+          and(eq(follows.followerId, userAId), eq(follows.followeeId, userBId)),
+          and(eq(follows.followerId, userBId), eq(follows.followeeId, userAId)),
+        ),
+      ),
+    )
+  return rows.length === 2
 }
 
 export async function getRecentDirectSendRecipients(userId: string, limit = 3): Promise<User[]> {
@@ -157,38 +231,68 @@ async function getLastActiveByUserId(userIds: string[]): Promise<Map<string, Dat
 }
 
 export async function getFriendsHub(userId: string): Promise<FriendsHub> {
-  const activeFriendships = await db
-    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
-    .from(friendships)
-    .where(and(
-      eq(friendships.status, 'active'),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ))
+  // All follow edges touching me, in either direction.
+  const edges = await db
+    .select({
+      id: follows.id,
+      followerId: follows.followerId,
+      followeeId: follows.followeeId,
+      state: follows.state,
+      personalNote: follows.personalNote,
+      requestContext: follows.requestContext,
+      createdAt: follows.createdAt,
+    })
+    .from(follows)
+    .where(or(eq(follows.followerId, userId), eq(follows.followeeId, userId)))
 
-  const friendIds = activeFriendships.map((friendship) => (
-    friendship.userAId === userId ? friendship.userBId : friendship.userAId
-  ))
+  const followingIds = new Set<string>()
+  const followerIds = new Set<string>()
+  const incoming: Array<{ id: string; requesterId: string; suggestedInterests: string[]; personalNote: string | null; createdAt: Date }> = []
+  const outbound: Array<{ id: string; recipientId: string; personalNote: string | null; createdAt: Date }> = []
 
-  const friendRows = friendIds.length === 0
+  for (const edge of edges) {
+    const outboundEdge = edge.followerId === userId
+    const other = outboundEdge ? edge.followeeId : edge.followerId
+    if (edge.state === 'approved') {
+      if (outboundEdge) followingIds.add(other)
+      else followerIds.add(other)
+    } else {
+      // pending
+      if (outboundEdge) {
+        outbound.push({ id: edge.id, recipientId: other, personalNote: edge.personalNote, createdAt: edge.createdAt })
+      } else {
+        incoming.push({
+          id: edge.id,
+          requesterId: other,
+          suggestedInterests: normalizeSuggestedInterests(edge.requestContext),
+          personalNote: edge.personalNote,
+          createdAt: edge.createdAt,
+        })
+      }
+    }
+  }
+
+  const personIds = Array.from(new Set<string>([...followingIds, ...followerIds]))
+  const requesterIds = incoming.map((r) => r.requesterId)
+  const recipientIds = outbound.map((r) => r.recipientId)
+  const allIds = Array.from(new Set<string>([...personIds, ...requesterIds, ...recipientIds]))
+
+  const userRows = allIds.length === 0
     ? []
     : await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        phoneNumber: users.phoneNumber,
-      })
+      .select({ id: users.id, displayName: users.displayName, phoneNumber: users.phoneNumber })
       .from(users)
-      .where(inArray(users.id, friendIds))
-      .orderBy(asc(users.displayName), asc(users.phoneNumber))
+      .where(inArray(users.id, allIds))
+  const usersById = new Map(userRows.map((row) => [row.id, row] as const))
 
-  const interestRows = friendIds.length === 0
+  const interestRows = allIds.length === 0
     ? []
     : await db
       .select({ userId: declaredInterests.userId, domain: declaredInterests.domain })
       .from(declaredInterests)
       .where(and(
         eq(declaredInterests.isActive, true),
-        inArray(declaredInterests.userId, [userId, ...friendIds]),
+        inArray(declaredInterests.userId, [userId, ...allIds]),
       ))
       .orderBy(asc(declaredInterests.domain))
 
@@ -198,175 +302,110 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
     current.push(row.domain)
     interestsByUser.set(row.userId, current)
   }
-
   const viewerInterests = new Set(interestsByUser.get(userId) ?? [])
 
-  const lastActiveByUser = friendIds.length === 0
+  const lastActiveByUser = personIds.length === 0
     ? new Map<string, Date>()
-    : await getLastActiveByUserId(friendIds)
+    : await getLastActiveByUserId(personIds)
 
-  const incomingRows = await db
-    .select({
-      id: friendships.id,
-      requesterId: users.id,
-      requesterDisplayName: users.displayName,
-      requesterPhoneNumber: users.phoneNumber,
-      requestContext: friendships.requestContext,
-      personalNote: friendships.personalNote,
-      createdAt: friendships.createdAt,
-    })
-    .from(friendships)
-    .innerJoin(users, eq(users.id, friendships.requestedByUserId))
-    .where(and(
-      eq(friendships.status, 'pending'),
-      ne(friendships.requestedByUserId, userId),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ))
-    .orderBy(asc(friendships.createdAt))
+  const [me] = await db
+    .select({ followPrivacy: users.followPrivacy })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
 
-  const outboundRows = await db
-    .select({
-      id: friendships.id,
-      recipientUserAId: friendships.userAId,
-      recipientUserBId: friendships.userBId,
-      personalNote: friendships.personalNote,
-      createdAt: friendships.createdAt,
-    })
-    .from(friendships)
-    .where(and(
-      eq(friendships.status, 'pending'),
-      eq(friendships.requestedByUserId, userId),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ))
-    .orderBy(desc(friendships.createdAt))
+  function toPerson(id: string): HubPerson {
+    const user = usersById.get(id)
+    const name = displayName(user?.displayName ?? null, user?.phoneNumber ?? '')
+    const personInterests = interestsByUser.get(id) ?? []
+    return {
+      id,
+      displayName: name,
+      declaredInterests: personInterests,
+      sharedInterests: personInterests.filter((interest) => viewerInterests.has(interest)),
+      lastActiveAt: lastActiveByUser.get(id) ?? null,
+      youFollow: followingIds.has(id),
+      followsYou: followerIds.has(id),
+    }
+  }
 
-  const outboundRecipientIds = outboundRows.map((row) => (
-    row.recipientUserAId === userId ? row.recipientUserBId : row.recipientUserAId
-  ))
-
-  const outboundRecipients = outboundRecipientIds.length === 0
-    ? []
-    : await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        phoneNumber: users.phoneNumber,
-      })
-      .from(users)
-      .where(inArray(users.id, outboundRecipientIds))
-
-  const outboundRecipientById = new Map(outboundRecipients.map((row) => [row.id, row] as const))
+  const byName = (a: HubPerson, b: HubPerson) => a.displayName.localeCompare(b.displayName)
 
   return {
-    friends: friendRows.map((friend) => {
-      const friendInterests = interestsByUser.get(friend.id) ?? []
-      return {
-        id: friend.id,
-        displayName: displayName(friend.displayName, friend.phoneNumber),
-        declaredInterests: friendInterests,
-        sharedInterests: friendInterests.filter((interest) => viewerInterests.has(interest)),
-        lastActiveAt: lastActiveByUser.get(friend.id) ?? null,
-      }
-    }),
-    incomingRequests: incomingRows.map((request) => ({
-      id: request.id,
-      requesterId: request.requesterId,
-      requesterName: displayName(request.requesterDisplayName, request.requesterPhoneNumber),
-      suggestedInterests: normalizeSuggestedInterests(request.requestContext),
-      personalNote: request.personalNote,
-      createdAt: request.createdAt,
-    })),
-    outboundRequests: outboundRows
-      .map((row) => {
-        const recipientId = row.recipientUserAId === userId ? row.recipientUserBId : row.recipientUserAId
-        const recipient = outboundRecipientById.get(recipientId)
-        if (!recipient) return null
+    following: Array.from(followingIds).map(toPerson).sort(byName),
+    followers: Array.from(followerIds).map(toPerson).sort(byName),
+    incomingRequests: incoming
+      .map((request) => {
+        const user = usersById.get(request.requesterId)
         return {
-          id: row.id,
-          recipientId,
-          recipientName: displayName(recipient.displayName, recipient.phoneNumber),
-          personalNote: row.personalNote,
-          createdAt: row.createdAt,
+          id: request.id,
+          requesterId: request.requesterId,
+          requesterName: displayName(user?.displayName ?? null, user?.phoneNumber ?? ''),
+          suggestedInterests: request.suggestedInterests,
+          personalNote: request.personalNote,
+          createdAt: request.createdAt,
         }
       })
-      .filter((row): row is OutboundFriendRequest => row !== null),
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+    outboundRequests: outbound
+      .map((request) => {
+        const user = usersById.get(request.recipientId)
+        return {
+          id: request.id,
+          recipientId: request.recipientId,
+          recipientName: displayName(user?.displayName ?? null, user?.phoneNumber ?? ''),
+          personalNote: request.personalNote,
+          createdAt: request.createdAt,
+        }
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+    followPrivacy: me?.followPrivacy ?? 'approval_required',
   }
 }
 
-export async function getFriendship(userAId: string, userBId: string): Promise<Friendship | null> {
-  const [friendship] = await db
-    .select()
-    .from(friendships)
-    .where(or(
-      and(eq(friendships.userAId, userAId), eq(friendships.userBId, userBId)),
-      and(eq(friendships.userAId, userBId), eq(friendships.userBId, userAId)),
-    ))
-    .limit(1);
-
-  return friendship ?? null;
-}
-
-export async function areFriends(userAId: string, userBId: string): Promise<boolean> {
-  if (userAId === userBId) return false;
-  const friendship = await getFriendship(userAId, userBId);
-  return friendship?.status === 'active';
-}
-
 /**
- * Returns the viewer's 1st-degree friend ids and 2nd-degree (friends of
- * friends) ids, with FoF de-duplicated against direct friends and the
- * viewer themselves. Used by the Daily 5 picker to rank eligible
- * user-authored questions: direct friends first, then FoF, then everyone
- * else.
+ * Returns the viewer's 1st-degree mutual-follow ids and 2nd-degree
+ * (mutual-follows of mutual-follows) ids, with the extended set de-duplicated
+ * against direct mutuals and the viewer. Used by the Daily 5 picker to rank
+ * eligible user-authored questions: direct first, then extended, then everyone.
  *
- * The friend graph is small and uncached, so we run two normal queries
- * rather than a recursive CTE — the second pass is bounded by
- * `directIds.length` which is itself indexed via the existing
- * Friendship_userAId_status_idx / Friendship_userBId_status_idx pair.
+ * "Direct" stays mutual-follow (the migrated symmetric friendship), preserving
+ * the picker's ranking semantics under the follow model.
  */
 export async function getFriendAndFoFUserIds(userId: string): Promise<{
   direct: Set<string>;
   extended: Set<string>;
 }> {
-  const directRows = await db
-    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
-    .from(friendships)
-    .where(and(
-      eq(friendships.status, 'active'),
-      or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)),
-    ));
-
-  const direct = new Set<string>();
-  for (const row of directRows) {
-    const friendId = row.userAId === userId ? row.userBId : row.userAId;
-    direct.add(friendId);
-  }
+  const directUsers = await getMutualFollows(userId)
+  const direct = new Set<string>(directUsers.map((user) => user.id))
 
   if (direct.size === 0) {
-    return { direct, extended: new Set<string>() };
+    return { direct, extended: new Set<string>() }
   }
 
-  const directList = [...direct];
+  const directList = [...direct]
+  const extended = new Set<string>()
+  const seen = new Set<string>([userId, ...directList])
+
+  // Mutual follows of each direct mutual, in a single bounded query: an edge
+  // direct→candidate that has an approved reverse edge candidate→direct.
+  const back = alias(follows, 'fof_back')
   const fofRows = await db
-    .select({ userAId: friendships.userAId, userBId: friendships.userBId })
-    .from(friendships)
-    .where(and(
-      eq(friendships.status, 'active'),
-      or(
-        inArray(friendships.userAId, directList),
-        inArray(friendships.userBId, directList),
+    .select({ candidate: follows.followeeId })
+    .from(follows)
+    .innerJoin(
+      back,
+      and(
+        eq(back.followerId, follows.followeeId),
+        eq(back.followeeId, follows.followerId),
+        eq(back.state, 'approved'),
       ),
-    ));
+    )
+    .where(and(eq(follows.state, 'approved'), inArray(follows.followerId, directList)))
 
-  const extended = new Set<string>();
   for (const row of fofRows) {
-    if (directList.includes(row.userAId) && row.userBId !== userId && !direct.has(row.userBId)) {
-      extended.add(row.userBId);
-    }
-    if (directList.includes(row.userBId) && row.userAId !== userId && !direct.has(row.userAId)) {
-      extended.add(row.userAId);
-    }
+    if (!seen.has(row.candidate)) extended.add(row.candidate)
   }
 
-  return { direct, extended };
+  return { direct, extended }
 }

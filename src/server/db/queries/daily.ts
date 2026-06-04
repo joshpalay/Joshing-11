@@ -16,7 +16,7 @@ import {
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { pgErrorCode } from '@/server/db/pg-error';
-import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
+import { CATEGORIES, categoryLabel, HOUSE_AUTHOR, resolveAuthorDisplay } from '@/lib/questions-types';
 import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import {
@@ -43,7 +43,7 @@ function asQueueSlotDifficulty(
 export type KnowledgeBaseDomain = {
   domain: string;
   broadCategory: string | null;
-  source: 'declared' | 'friend_mediated' | 'authorship';
+  source: 'declared' | 'demonstrated';
   territoryType: 'declared' | 'demonstrated';
   totalPoints: number;
   tier: 'establishing' | 'familiar' | 'solid' | 'mastery';
@@ -85,6 +85,19 @@ export type CatchupQueueItem = {
   difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   submittedAnswer: string | null;
   wasSkipped: boolean;
+  /**
+   * Display name of the human author, when one exists. Null for LLM-origin
+   * questions (daily-generated, or curated_sent feed items with no creator) —
+   * the client renders the non-person LLM_QUESTION_ATTRIBUTION label for those
+   * rather than implying a person wrote it.
+   */
+  authorName: string | null;
+  /**
+   * D-3: the author is the non-human house/editorial author. `authorName` is the
+   * house name ('Joshing') and the client renders the persistent Editorial badge
+   * with no relational copy. Set explicitly (not inferred from the name string).
+   */
+  authorIsHouse: boolean;
 };
 
 export type CatchupQuestion = CatchupQueueItem;
@@ -217,7 +230,7 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
     domainsByKey.set(key, {
       domain,
       broadCategory: row.broadCategory,
-      source: row.territoryType === 'declared' ? 'declared' : 'friend_mediated',
+      source: row.territoryType === 'declared' ? 'declared' : 'demonstrated',
       territoryType: row.territoryType,
       totalPoints: row.totalPoints,
       tier: row.tier,
@@ -410,6 +423,19 @@ export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
     .where(inArray(generatedQuestions.id, generatedIds));
 }
 
+// Resolve creator display names for a set of (possibly null/duplicate) creator
+// ids, returning a id→name map. Null/absent ids are skipped — their questions
+// are LLM-origin and the client labels them non-relationally.
+async function resolveCreatorNames(creatorIds: Array<string | null>): Promise<Map<string, string | null>> {
+  const ids = [...new Set(creatorIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return new Map();
+  const nameRows = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(inArray(users.id, ids));
+  return new Map(nameRows.map((row) => [row.id, row.displayName]));
+}
+
 export async function getCatchupQuestions(userId: string): Promise<CatchupQuestion[]> {
   const { assignmentDateStr } = getDailyAssignmentBounds();
 
@@ -470,6 +496,10 @@ async function getDailyCatchupItems(
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
   const canonicalById = new Map(canonicalRows.map((question) => [question.id, question]));
 
+  // Resolve human author names for canonical (friend-authored) slots so the
+  // client shows the real person; generated slots have no creator and stay null.
+  const authorNameById = await resolveCreatorNames(canonicalRows.map((q) => q.creatorId));
+
   return candidateSlots
     .map(({ queue, slot }): CatchupQuestion | null => {
       const queueDate = String(queue.queueDate);
@@ -506,6 +536,8 @@ async function getDailyCatchupItems(
           difficultyEstimate: asQueueSlotDifficulty(question.difficultyEstimate) ?? null,
           submittedAnswer: slot.submitted_answer ?? null,
           wasSkipped: Boolean(slot.skipped),
+          authorName: null, // daily-generated: LLM origin, no human author
+          authorIsHouse: false,
         } satisfies CatchupQuestion;
       }
 
@@ -544,6 +576,7 @@ async function getDailyCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: slot.submitted_answer ?? null,
         wasSkipped: Boolean(slot.skipped),
+        ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })
     .filter((question): question is CatchupQuestion => Boolean(question));
@@ -579,6 +612,10 @@ async function getFeedCatchupItems(
     if (pgErrorCode(error) === '42703') return [];
     throw error;
   }
+
+  // Feed catch-up items can be friend-authored (authored_shared) or LLM
+  // (curated_sent, null creator) — resolve the real author for the former.
+  const authorNameById = await resolveCreatorNames(rows.map(({ question }) => question.creatorId));
 
   return rows
     .map(({ feedItem, question }): CatchupQuestion | null => {
@@ -617,6 +654,7 @@ async function getFeedCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: feedItem.submittedAnswer ?? null,
         wasSkipped: false,
+        ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })
     .filter((item): item is CatchupQuestion => Boolean(item));
@@ -697,6 +735,91 @@ export async function createDailyQueueItem(
   });
 }
 
+/** Presence attribution for a Daily Five +2 bonus slot (D-4 §B). */
+export type BonusPresence = {
+  sourceId: string;
+  sourceName: string | null;
+  /** Additional followed friends (beyond the named one) whose world surfaces this domain. */
+  extraCount: number;
+};
+
+/**
+ * Persists a Daily Five +2 bonus slot (D-4 §B): a freshly generated accessible
+ * question, sourced like a bot slot (source='bot', generated_question_id) but
+ * carrying presence_* attribution ("from {Name}'s world") instead of a literal
+ * answerer. Replaces createDailyQueueItemFromAnswerer.
+ */
+export async function createDailyQueueItemFromPresence(
+  userId: string,
+  generatedQuestionId: string,
+  presence: BonusPresence,
+  position: number,
+): Promise<DailyQueueRow> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+  const [question] = await db
+    .select()
+    .from(generatedQuestions)
+    .where(and(
+      eq(generatedQuestions.id, generatedQuestionId),
+      eq(generatedQuestions.userId, userId),
+      isNotNull(generatedQuestions.id),
+    ))
+    .limit(1);
+
+  if (!question) {
+    throw new Error('Generated bonus question not found for user.');
+  }
+
+  const slot: QueueSlot = {
+    slot_index: position,
+    source: 'bot',
+    generated_question_id: question.id,
+    domain: question.canonicalSubcategory,
+    broad_category: question.broadCategory,
+    category: null,
+    question_text: question.questionText,
+    difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate),
+    presence_source_id: presence.sourceId,
+    presence_source_name: presence.sourceName,
+    presence_source_extra_count: presence.extraCount > 0 ? presence.extraCount : undefined,
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(dailyQueues)
+      .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
+      .limit(1);
+
+    if (!existing) {
+      const [created] = await tx
+        .insert(dailyQueues)
+        .values({ userId, queueDate: assignmentDateStr, slots: [slot] })
+        .returning();
+      await tx
+        .update(generatedQuestions)
+        .set({ usedInQueue: true })
+        .where(eq(generatedQuestions.id, generatedQuestionId));
+      return created;
+    }
+
+    const slots = asQueueSlots(existing.slots).filter((item) => item.slot_index !== position);
+    const nextSlots = [...slots, slot].sort((a, b) => a.slot_index - b.slot_index);
+    const [updated] = await tx
+      .update(dailyQueues)
+      .set({ slots: nextSlots })
+      .where(eq(dailyQueues.id, existing.id))
+      .returning();
+    await tx
+      .update(generatedQuestions)
+      .set({ usedInQueue: true })
+      .where(eq(generatedQuestions.id, generatedQuestionId));
+    return updated;
+  });
+}
+
 export type AuthoredPick = {
   id: string;
   creatorId: string | null;
@@ -709,6 +832,26 @@ export type AuthoredPick = {
   category: string;
   difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   authorName: string | null;
+  authorNote: string | null;
+};
+
+/**
+ * D-3: a labeled non-human house/editorial question selected for the Daily core.
+ * Mirrors AuthoredPick minus the human-author fields — the house identity is
+ * fixed (resolved from HOUSE_AUTHOR at slot-build time), never a users row, so
+ * there is no creatorId / authorName here. `authorNote` carries an optional
+ * editorial aside (populated in Stage 5).
+ */
+export type HousePick = {
+  id: string;
+  questionText: string;
+  answerText: string;
+  alternateAnswers: string[];
+  factualExplanation: string | null;
+  canonicalSubcategory: string;
+  broadCategory: string | null;
+  category: string;
+  difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   authorNote: string | null;
 };
 
@@ -904,6 +1047,194 @@ export async function createDailyQueueItemFromAuthored(
     answered: false,
     difficulty_stepped_up: false,
   };
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(dailyQueues)
+      .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
+      .limit(1);
+
+    if (!existing) {
+      const [created] = await tx
+        .insert(dailyQueues)
+        .values({
+          userId,
+          queueDate: assignmentDateStr,
+          slots: [slot],
+        })
+        .returning();
+      return created;
+    }
+
+    const slots = asQueueSlots(existing.slots).filter((item) => item.slot_index !== position);
+    const nextSlots = [...slots, slot].sort((a, b) => a.slot_index - b.slot_index);
+    const [updated] = await tx
+      .update(dailyQueues)
+      .set({ slots: nextSlots })
+      .where(eq(dailyQueues.id, existing.id))
+      .returning();
+    return updated;
+  });
+}
+
+/** Candidate row shape for the pure house selector (subset of canonical columns). */
+export type HouseCandidateRow = {
+  id: string;
+  questionText: string;
+  answerText: string;
+  alternateAnswers: string[] | null;
+  factualExplanation: string | null;
+  canonicalSubcategory: string | null;
+  broadCategory: string | null;
+  category: string | null;
+  difficultyEstimate: string | null;
+  creatorNote: string | null;
+  createdAt: Date | null;
+};
+
+/**
+ * Pure selection step for house questions (extracted for testing). Drops
+ * anything the viewer has already seen and anything in a generic bucket domain,
+ * prefers newest curated content, and caps at `limit`. Domain matching to the
+ * viewer's niches happens in the SQL filter (allowedSubcategories); this step is
+ * the in-memory dedup + ordering.
+ */
+export function selectHousePicks(
+  rows: HouseCandidateRow[],
+  seenQuestionIds: ReadonlySet<string>,
+  limit: number,
+): HousePick[] {
+  if (limit <= 0) return [];
+  return rows
+    .filter((row) => !seenQuestionIds.has(row.id))
+    .filter((row) => row.canonicalSubcategory && !isGenericSubcategory(row.canonicalSubcategory))
+    .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+    .slice(0, limit)
+    .map((row) => ({
+      id: row.id,
+      questionText: row.questionText,
+      answerText: row.answerText,
+      alternateAnswers: row.alternateAnswers ?? [],
+      factualExplanation: row.factualExplanation,
+      canonicalSubcategory: row.canonicalSubcategory ?? '',
+      broadCategory: row.broadCategory,
+      category: String(row.category ?? ''),
+      difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
+      authorNote: row.creatorNote ?? null,
+    } satisfies HousePick));
+}
+
+/**
+ * D-3 — selects up to `limit` house/editorial questions (canonical rows with
+ * source='house_authored', creatorId null) matched to the viewer's niches by
+ * domain. This is the bank/domain matching path (NOT the +2 relevance ranking):
+ * candidates are constrained to `allowedSubcategories` (the viewer's knowledge
+ * base) exactly like the bot/bank pool, and deduped against questions the viewer
+ * has already seen on a past daily or answered. House questions never enter the
+ * Feed and never occupy a +2 bonus slot (see createDailyQueueItemFromHouse /
+ * isCorrectAnswerFeedEligible).
+ *
+ * House content is editorially curated, so it is NOT gated on the public-vetting
+ * status the authored picker requires — only visibility='public' and not deleted.
+ */
+export async function pickHouseQuestions(
+  viewerUserId: string,
+  limit: number,
+  allowedSubcategories: ReadonlySet<string>,
+): Promise<HousePick[]> {
+  if (limit <= 0) return [];
+  if (allowedSubcategories.size === 0) return [];
+
+  // House questions never reach the viewer's feed (Invariant — house is not
+  // feed-eligible), so dedup only needs past daily queues + answered questions.
+  const [pastQueues, answeredRows] = await Promise.all([
+    db
+      .select({ slots: dailyQueues.slots })
+      .from(dailyQueues)
+      .where(eq(dailyQueues.userId, viewerUserId)),
+    db
+      .select({ questionId: masteryEvents.questionId })
+      .from(masteryEvents)
+      .where(and(
+        eq(masteryEvents.userId, viewerUserId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        isNotNull(masteryEvents.questionId),
+      )),
+  ]);
+  const seenQuestionIds = new Set<string>();
+  for (const row of pastQueues) {
+    for (const slot of asQueueSlots(row.slots)) {
+      if (slot.question_id) seenQuestionIds.add(slot.question_id);
+    }
+  }
+  for (const row of answeredRows) {
+    if (row.questionId) seenQuestionIds.add(row.questionId);
+  }
+
+  const candidates = await db
+    .select({
+      id: canonicalQuestions.id,
+      questionText: canonicalQuestions.questionText,
+      answerText: canonicalQuestions.answerText,
+      alternateAnswers: canonicalQuestions.acceptedAlternatives,
+      factualExplanation: canonicalQuestions.factualExplanation,
+      canonicalSubcategory: canonicalQuestions.canonicalSubcategory,
+      broadCategory: canonicalQuestions.broadCategory,
+      category: canonicalQuestions.category,
+      difficultyEstimate: canonicalQuestions.difficultyEstimate,
+      creatorNote: canonicalQuestions.creatorNote,
+      createdAt: canonicalQuestions.createdAt,
+    })
+    .from(canonicalQuestions)
+    .where(and(
+      eq(canonicalQuestions.source, 'house_authored'),
+      isNull(canonicalQuestions.creatorId),
+      eq(canonicalQuestions.visibility, 'public'),
+      isNotNull(canonicalQuestions.canonicalSubcategory),
+      inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
+      isNull(canonicalQuestions.deletedAt),
+    ))
+    .orderBy(desc(canonicalQuestions.createdAt))
+    .limit(Math.max(limit * 4, 20));
+
+  return selectHousePicks(candidates, seenQuestionIds, limit);
+}
+
+/**
+ * Builds the QueueSlot for a house core slot (pure; extracted for testing).
+ * source='house', a canonical question_id, author_name='Joshing' — and crucially
+ * NO author_id (the house identity is never a users.id; Invariant H-1) and NO
+ * answerer_* fields (so it is unmistakably a core slot, never a +2 bonus slot).
+ */
+export function buildHouseSlot(pick: HousePick, position: number): QueueSlot {
+  return {
+    slot_index: position,
+    source: 'house',
+    question_id: pick.id,
+    author_name: HOUSE_AUTHOR.displayName,
+    author_note: pick.authorNote ?? undefined,
+    domain: pick.canonicalSubcategory,
+    broad_category: pick.broadCategory,
+    category: pick.category || null,
+    question_text: pick.questionText,
+    difficulty_estimate: pick.difficultyEstimate ?? undefined,
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+}
+
+/**
+ * Inserts a house/editorial question into the viewer's daily queue as a
+ * `source: 'house'` core slot. Counterpart to createDailyQueueItemFromAuthored.
+ */
+export async function createDailyQueueItemFromHouse(
+  userId: string,
+  pick: HousePick,
+  position: number,
+): Promise<DailyQueueRow> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+  const slot = buildHouseSlot(pick, position);
 
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -1181,21 +1512,6 @@ export async function getRecentFactKeys(
 
 export async function getAnsweredDailyCount(queue: DailyQueueRow): Promise<number> {
   return asQueueSlots(queue.slots).filter((slot) => slot.answered).length;
-}
-
-export async function userHasFriendMediatedDomain(userId: string, domain: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: masteryEvents.id })
-    .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.canonicalSubcategory, domain),
-      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-      isNotNull(masteryEvents.questionId),
-    ))
-    .limit(1);
-
-  return Boolean(row);
 }
 
 export async function getKBDomainEntry(userId: string, domain: string) {

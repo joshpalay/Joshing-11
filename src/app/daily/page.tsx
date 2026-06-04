@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
+import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { TopUpAreasModal, type TopUpInterest } from '@/components/daily/TopUpAreasModal';
 import LoadingScreen from '@/components/LoadingScreen';
-import { categoryLabel } from '@/lib/questions-types';
+import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
 
@@ -19,7 +20,16 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
     (slot.broad_category && slot.broad_category.trim()) ||
     (slot.category ? categoryLabel(slot.category) : '') ||
     slot.domain;
-  return category ? [{ label: category }] : [];
+  const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category ? [{ label: category }] : [];
+  // Daily Five +2 bonus slots (D-4 §B) carry presence attribution and are always
+  // "accessible" — surface the accessibility badge so the lighter pick reads as
+  // a deliberate, easier add rather than a generation miss. The "bonus from a
+  // friend's knowledge" framing lives in the attribution line GameplayChat
+  // renders above the question (see presenceSourceName).
+  if (slot.presence_source_id && slot.difficulty_estimate === 'accessible') {
+    badges.push({ label: 'Accessible', tone: 'muted' });
+  }
+  return badges;
 }
 
 type QueueResponse = {
@@ -39,8 +49,8 @@ type AnswerResponse = {
   correctAnswer?: string;
   answer?: string;
   consolation?: string | null;
-  quip?: string | null;
   insideJoke?: string | null;
+  insideJokeKind?: InsideJokeKind | null;
   breadcrumb?: string | null;
   masteryDelta?: unknown | null;
   mastery_delta?: unknown | null;
@@ -65,6 +75,8 @@ const ANSWER_ERROR_MESSAGES: Record<string, string> = {
   not_found: 'We could not find that Daily Five queue.',
   invalid_state: 'That question is already closed.',
   question_not_found: 'We could not find that Daily Five question.',
+  grader_unavailable:
+    "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
   unexpected: 'Could not record that answer.',
 };
 
@@ -109,6 +121,7 @@ export default function DailyPage() {
   const [error, setError] = useState<string | null>(null);
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
+  const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
   const [areaTopUp, setAreaTopUp] = useState<{ existing: TopUpInterest[]; maxNew: number } | null>(null);
 
   const loadQueue = useCallback(async () => {
@@ -287,6 +300,8 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
+          presenceSourceName: slot.presence_source_name ?? null,
+          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -304,11 +319,17 @@ export default function DailyPage() {
           correctAnswer: slot.answer_state === 'correct' ? null : slot.reveal_canonical_answer ?? null,
           consolation: slot.reveal_quip ?? null,
           insideJoke: slot.reveal_inside_joke ?? null,
+          insideJokeKind: slot.reveal_inside_joke_kind ?? null,
+          authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
           breadcrumb: slot.reveal_breadcrumb ?? null,
           explanation: slot.reveal_explainer ?? null,
           copyVariant: slot.slot_index,
-          creatorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
+          // D-3: house core slots surface the 'Joshing' name + Editorial badge
+          // (creatorIsHouse), rendered non-relationally by GameplayChat.
+          creatorName: slot.source === 'friend' || slot.source === 'house' ? (slot.author_name ?? null) : null,
+          creatorIsHouse: slot.source === 'house',
           canonicalSubcategory: slot.domain,
+          openedTerritoryDomain: openedTerritoryBySlot[slot.slot_index] ?? null,
           recheckAction: slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
             ? { onSubmit: () => requestRecheck(slot.slot_index) }
             : null,
@@ -330,6 +351,8 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
+          presenceSourceName: slot.presence_source_name ?? null,
+          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
           isNew: true,
           badges: questionBadges(slot),
         });
@@ -358,7 +381,7 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer, pendingGiveUp]);
+  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer, pendingGiveUp, openedTerritoryBySlot]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -425,6 +448,15 @@ export default function DailyPage() {
       }
 
       const isCorrect = Boolean(body.isCorrect ?? body.correct);
+      // A correct answer in an unfamiliar domain default-adds it to the KB
+      // (B-1). The server reports the freshly-opened domain on masteryDelta;
+      // stash it per-slot so the reveal can surface the "Added — remove?" undo.
+      // Client-only — deliberately not persisted into the QueueSlot schema.
+      const masteryDelta = body.masteryDelta ?? body.mastery_delta;
+      const openedDomain = isCorrect ? pickOpenedTerritoryDomain(masteryDelta) : null;
+      if (openedDomain) {
+        setOpenedTerritoryBySlot((existing) => ({ ...existing, [currentSlot.slot_index]: openedDomain }));
+      }
       setQueue((existing) => existing
         ? {
             ...existing,
@@ -439,8 +471,9 @@ export default function DailyPage() {
                     reveal_canonical_answer: body.correctAnswer ?? body.answer,
                     reveal_explainer: body.explanation ?? body.explainer,
                     reveal_breadcrumb: null,
-                    reveal_quip: opts.gaveUp ? null : body.consolation ?? body.quip ?? null,
+                    reveal_quip: opts.gaveUp ? null : body.consolation ?? null,
                     reveal_inside_joke: body.insideJoke ?? null,
+                    reveal_inside_joke_kind: body.insideJokeKind ?? null,
                   }
                 : slot
             ),

@@ -1,15 +1,15 @@
 import Link from 'next/link'
 
-import { NewsRow } from '@/components/home/NewsRow'
-import type { ActivityItemView } from '@/server/db/queries/activity'
+import { ActivityStream } from '@/components/activity/ActivityStream'
+import type { StreamItem } from '@/lib/activity-stream'
 
-export function RecentActivitySection({
-  items,
-}: {
-  items: ActivityItemView[]
-}) {
+// Homepage "What's Happening" — the curated HEAD of the one unified activity
+// stream (D-4 CORRECTION 2). Same items, same source, same one-liner rendering
+// as Lately / /activities; this surface just shows the top few and links to the
+// full list. See buildActivityStream + ActivityStream.
+export function RecentActivitySection({ items }: { items: StreamItem[] }) {
   return (
-    <section>
+    <section className="px-3">
       <p className="text-muted-foreground mb-2 text-xs font-medium tracking-[0.1em] uppercase">
         What&rsquo;s happening
       </p>
@@ -22,11 +22,7 @@ export function RecentActivitySection({
         </p>
       ) : (
         <>
-          <div className="flex flex-col gap-4">
-            {items.map((item) => (
-              <NewsRow key={item.id} item={item} />
-            ))}
-          </div>
+          <ActivityStream items={items} variant="home" />
           <div className="mt-4 flex justify-end">
             <Link
               href="/activities"

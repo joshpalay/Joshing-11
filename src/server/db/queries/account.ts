@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import {
   contactHashes,
@@ -305,6 +305,7 @@ export async function assignInitialHandle(params: {
 export type DiscoverabilityState = {
   discoverableByContacts: boolean;
   discoverableByMutualFriends: boolean;
+  discoverableByNicheMatch: boolean;
 };
 
 export async function getDiscoverability(
@@ -314,6 +315,7 @@ export async function getDiscoverability(
     .select({
       discoverableByContacts: users.discoverableByContacts,
       discoverableByMutualFriends: users.discoverableByMutualFriends,
+      discoverableByNicheMatch: users.discoverableByNicheMatch,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -326,6 +328,7 @@ export async function getDiscoverability(
 export type DiscoverabilityPatch = {
   contacts?: boolean;
   mutualFriends?: boolean;
+  nicheMatch?: boolean;
 };
 
 // Updates one or both discoverability flags. Wraps both writes (and the
@@ -345,6 +348,7 @@ export async function updateDiscoverability(
       .select({
         discoverableByContacts: users.discoverableByContacts,
         discoverableByMutualFriends: users.discoverableByMutualFriends,
+        discoverableByNicheMatch: users.discoverableByNicheMatch,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -355,6 +359,8 @@ export async function updateDiscoverability(
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (patch.contacts !== undefined) set.discoverableByContacts = patch.contacts;
     if (patch.mutualFriends !== undefined) set.discoverableByMutualFriends = patch.mutualFriends;
+    // No purge side-effect for niche-match: it stores no uploaded data to revoke.
+    if (patch.nicheMatch !== undefined) set.discoverableByNicheMatch = patch.nicheMatch;
 
     await tx.update(users).set(set).where(eq(users.id, userId));
 
@@ -368,8 +374,28 @@ export async function updateDiscoverability(
       discoverableByContacts: patch.contacts ?? current.discoverableByContacts,
       discoverableByMutualFriends:
         patch.mutualFriends ?? current.discoverableByMutualFriends,
+      discoverableByNicheMatch: patch.nicheMatch ?? current.discoverableByNicheMatch,
     };
   });
+}
+
+// Batched lookup of the niche-match opt-in flag for the niche-match write-point
+// (D-2 WS3). Returns the subset of the supplied ids whose
+// discoverableByNicheMatch is currently true. Used to resolve the asymmetric
+// two-flag gate in notifyNicheMatch with a single query rather than a
+// per-user getDiscoverability round-trip.
+export async function getNicheMatchDiscoverable(
+  userIds: string[],
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(
+      inArray(users.id, userIds),
+      eq(users.discoverableByNicheMatch, true),
+    ));
+  return new Set(rows.map((r) => r.id));
 }
 
 export async function deleteUserAccount(userId: string): Promise<void> {
@@ -402,19 +428,6 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     ) {
       await tx.execute(sql`delete from "QuestionReaction" where "answerer_id" = ${userId} or "creator_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
     }
-    const creatorNoteTableResult = await tx.execute<{ exists: boolean }>(sql`
-      select exists (
-        select 1
-        from information_schema.tables
-        where table_schema = 'public'
-          and table_name = 'CreatorNote'
-      ) as "exists"
-    `);
-
-    if (creatorNoteTableResult.rows[0]?.exists) {
-      await tx.execute(sql`delete from "CreatorNote" where "authorUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
-    }
-
     await tx.execute(sql`delete from "GradeDispute" where "creator_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
 
     await tx.execute(sql`delete from "JoshingGameResponse" where "userId" = ${userId} or "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);

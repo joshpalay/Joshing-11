@@ -11,10 +11,41 @@ import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
 type Tab = 'authored' | 'answered';
+// Capability 8 (B-4 Stage A): the CreateChooser passes a three-way intent that
+// pre-selects the composer's destinations. 'followers' maps to D-1 Stage 4's
+// 'friends' visibility (followers-only) — not a hardcoded 'public'.
+type CreateIntent = 'bank' | 'followers' | 'specific';
 type DrawerState =
   | { mode: 'closed' }
-  | { mode: 'create' }
+  // intent is null for the page's own "Write a question" buttons (and the
+  // legacy `?create=1` link), which keep the form's existing defaults. Only the
+  // CreateChooser supplies an explicit intent.
+  | { mode: 'create'; intent: CreateIntent | null; prefillText?: string }
   | { mode: 'edit'; question: QuestionView };
+
+function parseIntent(raw: string | null): CreateIntent | null {
+  return raw === 'bank' || raw === 'followers' || raw === 'specific' ? raw : null;
+}
+
+// Translate the create intent into the QuestionForm's initial destination
+// state. The form still surfaces every control, so these are starting points
+// the author can adjust — not a locked mode. A null intent returns no
+// overrides, preserving the form's pre-existing default destinations.
+function createFormProps(intent: CreateIntent | null): {
+  initialValues?: Partial<QuestionFormValues>;
+  initialSpecificMode?: boolean;
+} {
+  switch (intent) {
+    case 'followers':
+      return { initialValues: { shareToFeed: true, visibility: 'friends' } };
+    case 'specific':
+      return { initialSpecificMode: true };
+    case 'bank':
+      return { initialValues: { shareToFeed: false } };
+    default:
+      return {};
+  }
+}
 
 type AnsweredApiResponse = {
   items?: AnsweredQuestionItem[];
@@ -103,9 +134,13 @@ function QuestionsPageContent() {
   const [domainFilter, setDomainFilter] = useState('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
-  const [drawer, setDrawer] = useState<DrawerState>(() => (
-    searchParams.get('create') === '1' ? { mode: 'create' } : { mode: 'closed' }
-  ));
+  const [drawer, setDrawer] = useState<DrawerState>(() => {
+    if (searchParams.get('create') !== '1') return { mode: 'closed' };
+    // The feed's "what would you like to be asked?" prompt rides the idea in
+    // via ?text= so the composer opens pre-filled with the reader's words.
+    const prefillText = searchParams.get('text')?.trim() || undefined;
+    return { mode: 'create', intent: parseIntent(searchParams.get('intent')), prefillText };
+  });
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [cardError, setCardError] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -305,7 +340,7 @@ function QuestionsPageContent() {
               <h1 className="font-serif text-3xl font-semibold">Your Questions</h1>
               <p className="mt-1 text-sm text-muted-foreground">{questions.length} questions</p>
             </div>
-            <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={() => setDrawer({ mode: 'create' })}>
+            <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={() => setDrawer({ mode: 'create', intent: null })}>
               <Plus className="size-4" />
               Write a question
             </button>
@@ -351,7 +386,7 @@ function QuestionsPageContent() {
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
                 You haven&apos;t written any questions yet. Write one to get started.
               </p>
-              <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create' })}>
+              <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create', intent: null })}>
                 Write a question
               </button>
             </section>
@@ -424,7 +459,10 @@ function QuestionsPageContent() {
             </div>
             <QuestionForm
               mode={drawer.mode}
-              initialValues={drawer.mode === 'edit' ? initialValues(drawer.question) : undefined}
+              initialValues={drawer.mode === 'edit'
+                ? initialValues(drawer.question)
+                : { ...createFormProps(drawer.intent).initialValues, ...(drawer.prefillText ? { text: drawer.prefillText } : {}) }}
+              initialSpecificMode={drawer.mode === 'create' ? createFormProps(drawer.intent).initialSpecificMode : undefined}
               onSubmit={drawer.mode === 'edit' ? (values) => saveEdit(drawer.question.id, values) : saveCreate}
               onCancel={() => setDrawer({ mode: 'closed' })}
             />

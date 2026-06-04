@@ -30,6 +30,8 @@ export async function GET() {
       expiresAt: item.expiresAt,
       expiresSoon: item.expiresSoon,
       difficultyEstimate: item.difficultyEstimate,
+      authorName: item.authorName,
+      authorIsHouse: item.authorIsHouse,
     })),
     introCopy: first
       ? formatCatchUpSessionThreadIntro(items.length, first.queueDate, last?.queueDate)

@@ -1,6 +1,6 @@
 import { extractTextContent, getAnthropicClient, loggedMessagesCreate } from '@/lib/llm';
 
-const BREADCRUMB_MODEL = 'claude-haiku-4-5';
+const BREADCRUMB_MODEL = 'claude-haiku-4-5-20251001';
 const BREADCRUMB_TIMEOUT_MS = 3000;
 
 type GenerateBreadcrumbParams = {

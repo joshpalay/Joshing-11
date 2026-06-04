@@ -11,7 +11,7 @@ import {
   getQuestion,
   getQuestionsForUser,
 } from '@/server/db/queries/questions';
-import { getFriends } from '@/server/db/queries/friends';
+import { getFollowers, getFriends } from '@/server/db/queries/friends';
 import {
   rollOffOldItems,
   userHasQuestionInBlockingFeed,
@@ -240,7 +240,9 @@ export async function POST(request: NextRequest) {
   };
 
   if (shareToFeed) {
-    const friends = await getFriends(session.userId);
+    // Broadcast fan-out reaches my followers (people who follow me), not just
+    // mutuals — directional follow model (D-1 Stage 3).
+    const friends = await getFollowers(session.userId);
     const friendIds = friends.map((friend) => friend.id);
     const dismissedRecipientIds = new Set<string>();
 

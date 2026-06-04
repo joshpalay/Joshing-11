@@ -44,20 +44,22 @@ type Tri = {
 
 function buildTriangles(): Tri[] {
   const tris: Tri[] = [];
-  const rows = Math.ceil(VIEWBOX_H / TRI_H) + 2;
-  const trisPerRow = Math.ceil((VIEWBOX_W * 2) / SIZE) + 4;
+  const cols = Math.ceil(VIEWBOX_W / TRI_H) + 2;
+  const trisPerCol = Math.ceil((VIEWBOX_H * 2) / SIZE) + 4;
 
   let idx = 0;
-  for (let row = -1; row < rows; row++) {
-    for (let i = -2; i < trisPerRow; i++) {
-      const y = row * TRI_H;
-      const xBase = (i * SIZE) / 2;
+  for (let col = -1; col < cols; col++) {
+    for (let i = -2; i < trisPerCol; i++) {
+      // Triangles point left/right (the up/down pattern rotated 90°): columns of
+      // width TRI_H, with triangles offset by SIZE/2 down each column.
+      const x = col * TRI_H;
+      const yBase = (i * SIZE) / 2;
       let points: string;
 
       if (((i % 2) + 2) % 2 === 0) {
-        points = `${xBase},${y + TRI_H} ${xBase + SIZE},${y + TRI_H} ${xBase + SIZE / 2},${y}`;
+        points = `${x + TRI_H},${yBase} ${x + TRI_H},${yBase + SIZE} ${x},${yBase + SIZE / 2}`;
       } else {
-        points = `${xBase},${y} ${xBase + SIZE},${y} ${xBase + SIZE / 2},${y + TRI_H}`;
+        points = `${x},${yBase} ${x},${yBase + SIZE} ${x + TRI_H},${yBase + SIZE / 2}`;
       }
 
       const r1 = rand(idx * 7 + 11);
@@ -126,10 +128,11 @@ function buildFloaters(): FloatTri[] {
 
   return specs.map(([cx, cy, size, color, opacity], i) => {
     const h = size * 0.8660254;
+    // Rotated 90° to match the tessellation: base on the left, apex on the right.
     const points = [
-      [cx - size / 2, cy + h / 2],
-      [cx + size / 2, cy + h / 2],
-      [cx, cy - h / 2],
+      [cx - h / 2, cy - size / 2],
+      [cx - h / 2, cy + size / 2],
+      [cx + h / 2, cy],
     ]
       .map(([x, y]) => `${x},${y}`)
       .join(" ");

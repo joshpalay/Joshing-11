@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Switch } from '@/components/ui/Switch';
 import type { ReminderState } from '@/server/db/queries/account';
@@ -10,9 +10,12 @@ type Props = {
   maskedPhone: string;
 };
 
+const RESEND_COOLDOWN_SECONDS = 60;
+
 async function patchReminders(body: Record<string, unknown>): Promise<{
   ok: boolean;
   state: ReminderState | null;
+  verificationEmailSent: boolean;
   errorMessage: string | null;
 }> {
   const response = await fetch('/api/account/reminders', {
@@ -23,12 +26,46 @@ async function patchReminders(body: Record<string, unknown>): Promise<{
   });
   const json = (await response.json().catch(() => null)) as {
     state?: ReminderState;
+    verificationEmailSent?: boolean;
     message?: string;
   } | null;
   if (!response.ok) {
-    return { ok: false, state: null, errorMessage: json?.message ?? 'Could not save.' };
+    return {
+      ok: false,
+      state: null,
+      verificationEmailSent: false,
+      errorMessage: json?.message ?? 'Could not save.',
+    };
   }
-  return { ok: true, state: json?.state ?? null, errorMessage: null };
+  return {
+    ok: true,
+    state: json?.state ?? null,
+    verificationEmailSent: json?.verificationEmailSent === true,
+    errorMessage: null,
+  };
+}
+
+async function resendVerification(): Promise<{
+  ok: boolean;
+  errorMessage: string | null;
+  retryAfterMs: number | null;
+}> {
+  const response = await fetch('/api/account/email/verify/send', {
+    method: 'POST',
+    credentials: 'include',
+  });
+  const json = (await response.json().catch(() => null)) as {
+    message?: string;
+    retryAfterMs?: number;
+  } | null;
+  if (!response.ok) {
+    return {
+      ok: false,
+      errorMessage: json?.message ?? 'Could not resend.',
+      retryAfterMs: typeof json?.retryAfterMs === 'number' ? json.retryAfterMs : null,
+    };
+  }
+  return { ok: true, errorMessage: null, retryAfterMs: null };
 }
 
 export function NotificationsForm({ initialState, maskedPhone }: Props) {
@@ -37,11 +74,20 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
   const [savingEmail, setSavingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [savingEmailToggle, setSavingEmailToggle] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const smsOn = state.smsOptIn === 'opted_in';
   const emailOn = state.emailOptIn === 'opted_in';
   const hasPendingEmail = Boolean(state.pendingEmail);
   const hasVerifiedEmail = state.emailVerified && Boolean(state.email);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const handle = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(handle);
+  }, [resendCooldown]);
 
   async function saveEmail() {
     const trimmed = emailDraft.trim();
@@ -51,6 +97,7 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
     }
     setSavingEmail(true);
     setEmailError(null);
+    setResendNotice(null);
     const result = await patchReminders({ pendingEmail: trimmed });
     setSavingEmail(false);
     if (!result.ok || !result.state) {
@@ -58,6 +105,10 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
       return;
     }
     setState(result.state);
+    if (result.verificationEmailSent) {
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      setResendNotice('Confirmation email sent.');
+    }
   }
 
   async function toggleEmail() {
@@ -71,6 +122,23 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
       return;
     }
     setState(result.state);
+  }
+
+  async function resendEmail() {
+    setResending(true);
+    setEmailError(null);
+    setResendNotice(null);
+    const result = await resendVerification();
+    setResending(false);
+    if (!result.ok) {
+      if (result.retryAfterMs && result.retryAfterMs > 0) {
+        setResendCooldown(Math.ceil(result.retryAfterMs / 1000));
+      }
+      setEmailError(result.errorMessage ?? 'Could not resend.');
+      return;
+    }
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    setResendNotice('Confirmation email sent.');
   }
 
   return (
@@ -147,15 +215,31 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
         ) : null}
 
         {hasPendingEmail && !hasVerifiedEmail ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Awaiting verification (coming soon). We saved {state.pendingEmail} and
-            will email a confirmation link once email reminders launch.
-          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              Check {state.pendingEmail} for a confirmation link. It expires in 24 hours.
+            </p>
+            <button
+              type="button"
+              className="text-xs font-medium underline-offset-2 hover:underline disabled:opacity-50"
+              onClick={() => void resendEmail()}
+              disabled={resending || resendCooldown > 0}
+            >
+              {resending
+                ? 'Sending…'
+                : resendCooldown > 0
+                  ? `Resend in ${resendCooldown}s`
+                  : 'Resend confirmation'}
+            </button>
+          </div>
         ) : null}
         {hasVerifiedEmail && emailOn ? (
           <p className="mt-3 text-xs text-muted-foreground">
             Saved. Emails will start when reminders launch.
           </p>
+        ) : null}
+        {resendNotice ? (
+          <p className="mt-2 text-xs text-emerald-700">{resendNotice}</p>
         ) : null}
         {emailError ? (
           <p className="mt-2 text-xs text-rose-700">{emailError}</p>
@@ -163,8 +247,8 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
       </section>
 
       <p className="text-xs text-muted-foreground">
-        Reminders aren&apos;t sending yet — we&apos;re collecting preferences while
-        we finish setting up message delivery.
+        Daily reminders aren&apos;t sending yet — we&apos;re still wiring up message delivery.
+        Verifying your email now means you&apos;ll be ready as soon as they launch.
       </p>
     </div>
   );

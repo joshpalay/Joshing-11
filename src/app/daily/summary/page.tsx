@@ -16,9 +16,11 @@ import {
 
 import { SendQuestionAction } from '@/components/SendQuestionAction'
 import { AddToBankAction } from '@/components/AddToBankAction'
+import { EditorialBadge } from '@/components/EditorialBadge'
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
 import MasteryMoment from '@/components/review/MasteryMoment'
 import { cn } from '@/lib/utils'
+import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types'
 import { formatNextResetTimeLocal } from '@/lib/games/timezone'
 import type {
   DailySummaryView,
@@ -456,9 +458,9 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
               : 'WRONG'}
         </span>
         <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          {question.creatorNote ? null : `JOSHING BOT · ${question.domainDisplayName.toUpperCase()}`}
+          {question.authorName ? null : `${LLM_QUESTION_ATTRIBUTION.toUpperCase()} · ${question.domainDisplayName.toUpperCase()}`}
         </p>
-        {question.creatorNote ? (
+        {question.authorName ? (
           <p
             className="pt-1"
             style={{
@@ -479,7 +481,8 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
             >
               FROM
             </span>
-            <span style={{ fontWeight: 600 }}>{question.creatorNote.authorName}</span>
+            <span style={{ fontWeight: 600 }}>{question.authorName}</span>
+            {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
             <span
               style={{
                 ...monoStyle,
@@ -523,12 +526,14 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
           {question.explanation}
         </p>
       ) : null}
-      {question.creatorNote ? (
+      {question.authorNote ? (
         <p className="bg-muted/40 text-foreground mt-4 rounded-xl border p-3 text-sm leading-6">
           <span className="font-medium">
-            A note from {question.creatorNote.authorName}:
+            {question.authorIsHouse
+              ? 'Editor’s note:'
+              : question.authorName ? `Why ${question.authorName} asked:` : 'Why they asked:'}
           </span>{' '}
-          {question.creatorNote.noteText}
+          {question.authorNote}
         </p>
       ) : null}
       {exclusionState.kind === 'confirmed' ? (

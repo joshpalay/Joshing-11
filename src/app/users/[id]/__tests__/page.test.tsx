@@ -15,6 +15,7 @@ const {
   getOrCreateInviteTokenMock,
   getFriendsMock,
   resolvePreviewAsMock,
+  getCommonGroundMock,
 } = vi.hoisted(() => ({
   getFriendPortraitDataMock: vi.fn(),
   getSessionMock: vi.fn(),
@@ -30,6 +31,7 @@ const {
   getOrCreateInviteTokenMock: vi.fn(),
   getFriendsMock: vi.fn(async () => []),
   resolvePreviewAsMock: vi.fn(async () => null),
+  getCommonGroundMock: vi.fn(),
 }))
 
 vi.mock('next/link', () => ({
@@ -73,6 +75,10 @@ vi.mock('@/server/db/queries/questions', () => ({
   getAuthoredQuestionsForUser: getAuthoredQuestionsForUserMock,
 }))
 
+vi.mock('@/server/db/queries/common-ground', () => ({
+  getCommonGround: getCommonGroundMock,
+}))
+
 vi.mock('@/server/db/queries/account', () => ({
   getEditableProfile: getEditableProfileMock,
   getDiscoverability: getDiscoverabilityMock,
@@ -99,25 +105,30 @@ vi.mock('next/headers', () => ({
   headers: () => Promise.resolve(new Headers()),
 }))
 
-vi.mock('@/components/profile/SharedInterestsOverlap', () => ({
-  SharedInterestsOverlap: ({
-    sharedInterests,
-    friendSoloInterests,
-    viewerSoloInterests,
+vi.mock('@/components/profile/CommonGround', () => ({
+  CommonGround: ({
+    data,
     friendFirstName,
   }: {
-    sharedInterests: string[]
-    friendSoloInterests: string[]
-    viewerSoloInterests: string[]
+    data: {
+      proven: Array<{ canonical_subcategory: string }>
+      latent: Array<{ canonical_subcategory: string }>
+      isEmpty: boolean
+    } | null
     friendFirstName: string
-  }) => (
-    <div data-testid="shared-interests-overlap">
-      <span data-testid="shared">{sharedInterests.join(',')}</span>
-      <span data-testid="friend-solo">{friendSoloInterests.join(',')}</span>
-      <span data-testid="viewer-solo">{viewerSoloInterests.join(',')}</span>
-      <span data-testid="friend-first-name">{friendFirstName}</span>
-    </div>
-  ),
+  }) =>
+    data ? (
+      <div data-testid="common-ground">
+        <span data-testid="cg-proven">
+          {data.proven.map((d) => d.canonical_subcategory).join(',')}
+        </span>
+        <span data-testid="cg-latent">
+          {data.latent.map((d) => d.canonical_subcategory).join(',')}
+        </span>
+        <span data-testid="cg-empty">{String(data.isEmpty)}</span>
+        <span data-testid="cg-friend">{friendFirstName}</span>
+      </div>
+    ) : null,
 }))
 
 vi.mock('@/components/profile/AuthoredQuestionsFeed', () => ({
@@ -207,9 +218,22 @@ describe('/users/[id] friend profile page', () => {
       expandingDomains: [],
     })
     getAuthoredQuestionsForUserMock.mockResolvedValue([])
+    getCommonGroundMock.mockResolvedValue({
+      proven: [
+        {
+          canonical_subcategory: 'Virginia Woolf',
+          broad_category: 'Literature',
+          viewer: { mastery_points: 12, current_tier: 'solid', proven: true },
+          friend: { mastery_points: 6, current_tier: 'familiar', proven: true },
+          kind: 'proven',
+        },
+      ],
+      latent: [],
+      isEmpty: false,
+    })
   })
 
-  it('renders the friend profile shell and shared-interests overlap', async () => {
+  it('renders the friend profile shell and the common ground section', async () => {
     const element = await UserProfilePage({
       params: Promise.resolve({ id: 'friend-1' }),
       searchParams: Promise.resolve({}),
@@ -229,10 +253,15 @@ describe('/users/[id] friend profile page', () => {
       sectionVisible: true,
     })
     expect(html).toContain('Frances Friend')
-    expect(html).toContain('shared-interests-overlap')
-    expect(html).toContain('Jazz piano')
-    expect(html).toContain('Bauhaus design')
     expect(html).toContain('href="/friends"')
+
+    // The mastery-based common ground block renders from getCommonGround,
+    // which is called with (viewerId, profileUserId). The declared-interest
+    // Venn has been removed, so it is the only overlap surface now.
+    expect(getCommonGroundMock).toHaveBeenCalledWith('viewer-1', 'friend-1')
+    expect(html).toContain('common-ground')
+    expect(html).toContain('Virginia Woolf')
+    expect(html).not.toContain('shared-interests-overlap')
   })
 
   it('renders the knowledge base section with a link to the full overview', async () => {
@@ -446,5 +475,191 @@ describe('/users/[id] friend profile page', () => {
       null,
     )
     expect(html).not.toContain('Previewing your profile')
+  })
+
+  describe('Recently exploring section', () => {
+    const daysAgo = (days: number) =>
+      new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+    // Domain names also appear in the knowledge map / mind statement, so scope
+    // assertions to just the "Recently exploring" section markup.
+    const recentlyExploringMarkup = (html: string): string => {
+      const start = html.indexOf('aria-label="Recently exploring"')
+      if (start === -1) return ''
+      const end = html.indexOf('<section', start + 1)
+      return end === -1 ? html.slice(start) : html.slice(start, end)
+    }
+
+    const makeDomain = (
+      overrides: Partial<{
+        domain: string
+        displayName: string
+        lastActivityAt: string | null
+        isHidden: boolean
+      }>,
+    ) => ({
+      domain: 'french-cinema',
+      displayName: 'French Cinema',
+      points: 10,
+      tier: 'familiar',
+      tierProgress: 0.5,
+      questionsAnswered: 4,
+      questionsCorrect: 3,
+      correctRate: 0.75,
+      lastActivityAt: daysAgo(2),
+      broadCategory: 'Film',
+      iconKey: 'film',
+      isDeclared: false,
+      isDeclaredInterest: false,
+      isDemonstrated: true,
+      territoryType: 'demonstrated' as const,
+      isHidden: false,
+      ...overrides,
+    })
+
+    it('renders recent, visible domains ordered most-recent-first', async () => {
+      getKnowledgePageDataMock.mockResolvedValueOnce({
+        allDomains: [
+          makeDomain({
+            domain: 'norse-myth',
+            displayName: 'Norse Mythology',
+            lastActivityAt: daysAgo(5),
+          }),
+          makeDomain({
+            domain: 'french-cinema',
+            displayName: 'French Cinema',
+            lastActivityAt: daysAgo(1),
+          }),
+        ],
+        declaredInterests: [],
+        expandingDomains: [],
+      })
+
+      const element = await UserProfilePage({
+        params: Promise.resolve({ id: 'friend-1' }),
+        searchParams: Promise.resolve({}),
+      })
+      const html = renderToStaticMarkup(element)
+
+      const section = recentlyExploringMarkup(html)
+      expect(section).toContain('French Cinema')
+      expect(section).toContain('Norse Mythology')
+      // Most recent (French Cinema, 1d) appears before Norse Mythology (5d).
+      expect(section.indexOf('French Cinema')).toBeLessThan(
+        section.indexOf('Norse Mythology'),
+      )
+    })
+
+    it('excludes hidden and out-of-window domains', async () => {
+      getKnowledgePageDataMock.mockResolvedValueOnce({
+        allDomains: [
+          makeDomain({
+            domain: 'visible-recent',
+            displayName: 'Visible Recent',
+            lastActivityAt: daysAgo(3),
+          }),
+          makeDomain({
+            domain: 'hidden-domain',
+            displayName: 'Hidden Domain',
+            lastActivityAt: daysAgo(1),
+            isHidden: true,
+          }),
+          makeDomain({
+            domain: 'stale-domain',
+            displayName: 'Stale Domain',
+            lastActivityAt: daysAgo(90),
+          }),
+        ],
+        declaredInterests: [],
+        expandingDomains: [],
+      })
+
+      const element = await UserProfilePage({
+        params: Promise.resolve({ id: 'friend-1' }),
+        searchParams: Promise.resolve({}),
+      })
+      const html = renderToStaticMarkup(element)
+
+      const section = recentlyExploringMarkup(html)
+      expect(section).toContain('Visible Recent')
+      expect(section).not.toContain('Hidden Domain')
+      expect(section).not.toContain('Stale Domain')
+    })
+
+    it('omits the section when there is no recent activity', async () => {
+      getKnowledgePageDataMock.mockResolvedValueOnce({
+        allDomains: [
+          makeDomain({
+            domain: 'stale-domain',
+            displayName: 'Stale Domain',
+            lastActivityAt: daysAgo(120),
+          }),
+          makeDomain({
+            domain: 'declared-no-activity',
+            displayName: 'Declared No Activity',
+            lastActivityAt: null,
+          }),
+        ],
+        declaredInterests: [],
+        expandingDomains: [],
+      })
+
+      const element = await UserProfilePage({
+        params: Promise.resolve({ id: 'friend-1' }),
+        searchParams: Promise.resolve({}),
+      })
+      const html = renderToStaticMarkup(element)
+
+      expect(html).not.toContain('Recently exploring')
+    })
+
+    it('omits the section when the knowledge_base gate is off', async () => {
+      getFriendPortraitDataMock.mockResolvedValueOnce({
+        user: {
+          id: 'friend-1',
+          displayName: 'Frances Friend',
+          handle: null,
+          memberSince: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        visibility: 'friend',
+        friendship: {
+          id: 'friendship-1',
+          formedAt: new Date('2026-02-01T00:00:00.000Z'),
+        },
+        interests: [],
+        sharedInterests: [],
+        viewerSoloInterests: [],
+        friendSoloInterests: [],
+        mutualFriends: [],
+        mutualFriendsOverflow: 0,
+        isOwnerView: false,
+        sectionSettings: null,
+        sectionVisibleTo: {
+          knowledge_base: false,
+          friends_list: true,
+          authored_questions: true,
+        },
+        previewedAs: null,
+      })
+      getKnowledgePageDataMock.mockResolvedValueOnce({
+        allDomains: [
+          makeDomain({
+            domain: 'french-cinema',
+            displayName: 'French Cinema',
+            lastActivityAt: daysAgo(1),
+          }),
+        ],
+        declaredInterests: [],
+        expandingDomains: [],
+      })
+
+      const element = await UserProfilePage({
+        params: Promise.resolve({ id: 'friend-1' }),
+        searchParams: Promise.resolve({}),
+      })
+      const html = renderToStaticMarkup(element)
+
+      expect(html).not.toContain('Recently exploring')
+    })
   })
 })

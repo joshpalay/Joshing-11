@@ -27,6 +27,39 @@ export async function countAuthorCreditEvents(questionId: string, authorId: stri
   return row?.value ?? 0;
 }
 
+export type AuthorCreditContext = {
+  isCorrect: boolean;
+  creatorId: string | null;
+  answererUserId: string;
+  domain: string | null;
+};
+
+/**
+ * The single gate for author/curator mastery accrual on a correct answer.
+ * Author credit is awarded ONLY to a real human creator who is not the answerer.
+ *
+ * This is what keeps every non-human origin mastery-ineligible by construction:
+ * D-3 house questions (creatorId null, source 'house_authored') and the LLM
+ * origins (daily_generated / curated_sent, also creatorId null) all fail the
+ * `creatorId !== null` check, so no `author_credit` mastery event is ever
+ * written for them. Because the "written by me" archive (keyed on
+ * `creatorId = me`) and the knowledge "recently expanding" saved-questions
+ * signal (keyed on `author_credit` events) both derive from that, a house
+ * question also produces no "written by me" entry and no knowledge-domain author
+ * signal — there is no author to credit. (Invariant: D-3 §D / Verified fact #10.)
+ */
+export function isAuthorCreditEligible(
+  ctx: AuthorCreditContext,
+): ctx is AuthorCreditContext & { creatorId: string; domain: string } {
+  return (
+    ctx.isCorrect
+    && ctx.creatorId !== null
+    && ctx.creatorId !== ctx.answererUserId
+    && ctx.domain !== null
+    && ctx.domain !== ''
+  );
+}
+
 type QuestionStats = {
   correctCount: number;
   askedCount: number;

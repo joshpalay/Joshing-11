@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Check, Sparkles, X } from 'lucide-react'
 
-import { AddToDailyFivePrompt } from './AddToDailyFivePrompt'
+import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
+import { INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
 // card (raw --tri-amber #d9a82e is too light for small text). Used by the
@@ -19,8 +20,9 @@ type AnswerFeedbackSheetProps = {
   correctAnswer: string
   submittedAnswer: string
   explanation: string | null
-  quip: string | null
+  creatorNote: string | null
   insideJoke?: string | null
+  insideJokeKind?: InsideJokeKind | null
   openedNewTerritory?: boolean
   openedTerritoryDomain?: string | null
   questionId: string
@@ -38,8 +40,9 @@ export function AnswerFeedbackSheet({
   correctAnswer,
   submittedAnswer,
   explanation,
-  quip,
+  creatorNote,
   insideJoke = null,
+  insideJokeKind = null,
   openedNewTerritory = false,
   openedTerritoryDomain = null,
   questionId,
@@ -48,7 +51,7 @@ export function AnswerFeedbackSheet({
 }: AnswerFeedbackSheetProps) {
   const visibleCategory = visibleFeedCategory(category)
   const showNewTerritory = openedNewTerritory && isCorrect
-  const showAddToDailyFive = Boolean(openedTerritoryDomain) && isCorrect
+  const showTerritoryUndo = Boolean(openedTerritoryDomain) && isCorrect
   const [bankState, setBankState] = useState<BankState>('idle')
   const hasAutoSavedRef = useRef(false)
 
@@ -177,8 +180,8 @@ export function AnswerFeedbackSheet({
             ) : null}
           </div>
 
-          {showAddToDailyFive && openedTerritoryDomain ? (
-            <AddToDailyFivePrompt
+          {showTerritoryUndo && openedTerritoryDomain ? (
+            <NewTerritoryUndo
               domain={openedTerritoryDomain}
               category={visibleCategory}
             />
@@ -211,14 +214,6 @@ export function AnswerFeedbackSheet({
                 Correct answer: {correctAnswer}
               </p>
             ) : null}
-            {!isCorrect && quip ? (
-              <p
-                className="text-[13px]"
-                style={{ color: 'var(--ink)', opacity: 0.6 }}
-              >
-                {quip}
-              </p>
-            ) : null}
           </div>
 
           {explanation ? (
@@ -241,10 +236,21 @@ export function AnswerFeedbackSheet({
                 className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase"
                 style={{ color: GOLD_INK }}
               >
-                Between us friends
+                {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
               </p>
               <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
                 {insideJoke}
+              </p>
+            </div>
+          ) : null}
+
+          {creatorNote ? (
+            <div className="mt-3 rounded-2xl border bg-muted p-4">
+              <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
+                Why they asked
+              </p>
+              <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
+                {creatorNote}
               </p>
             </div>
           ) : null}

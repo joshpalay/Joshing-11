@@ -13,7 +13,12 @@ import type { DifficultyEstimate } from '@/types/db';
 
 type DailyDifficultyEstimate = DifficultyEstimate | 'accessible' | 'moderate' | 'specialist';
 
-export const queueSlotSourceSchema = z.enum(['friend', 'bot', 'community']);
+// 'house' (D-3) — a labeled non-human house/editorial question seeded into the
+// Daily core to ease content scarcity in sparse niches. Carries a canonical
+// question_id (source='house_authored', creatorId null) and author_name='Joshing'
+// with no author_id (the house identity is never a users.id). 'community' is a
+// legacy enum value, never produced by any picker.
+export const queueSlotSourceSchema = z.enum(['friend', 'bot', 'community', 'house']);
 export const queueSlotAnswerStateSchema = z.enum(['correct', 'incorrect']);
 
 export const queueSlotSchema = z.object({
@@ -29,6 +34,25 @@ export const queueSlotSchema = z.object({
   author_name: z.string().nullish(),
   /** Optional creator note — only ever set for friend questions. */
   author_note: z.string().nullish(),
+  /**
+   * Bonus-slot presence attribution (Daily Five +2, D-4 §B). Set only on a +2
+   * bonus slot — a FRESHLY GENERATED accessible question in a domain drawn from
+   * the territory ∪ activity of people the viewer follows. The presence of these
+   * fields is what marks a slot as a bonus slot. The question itself is a
+   * generated question (source='bot', generated_question_id set), so these fields
+   * describe WHERE the domain came from ("from {Name}'s world"), not who authored
+   * or answered the question — there is no literal answerer. (Replaces the retired
+   * answerer_id/answerer_name from the literal-question +2.)
+   */
+  presence_source_id: z.string().optional(),
+  /** Display name for "from {Name}'s world" — null if the friend has no display_name. */
+  presence_source_name: z.string().nullish(),
+  /**
+   * Count of ADDITIONAL followed friends whose world surfaces this domain (beyond
+   * the named, most-recent one). > 0 → render "{Name} and others"; 0/absent →
+   * just "{Name}".
+   */
+  presence_source_extra_count: z.number().int().optional(),
   domain: z.string(),
   /** Free-text broader topic for this slot (e.g. "Saturday morning cartoons"). Optional — populated for newly built slots. */
   broad_category: z.string().nullish(),
@@ -60,10 +84,10 @@ export const queueSlotSchema = z.object({
   reveal_breadcrumb: z.string().nullish(),
   /** LLM consolation quip for near-miss wrong answers (PRD §8.1.14). */
   reveal_quip: z.string().nullish(),
-  /** LLM-generated friends-only aside; only populated when the viewer is the creator or an active friend. */
+  /** LLM-generated aside; for authored questions only populated when the viewer is the creator or an active friend, for LLM-origin questions always populated. */
   reveal_inside_joke: z.string().nullish(),
-  /** Per-answer commentary quip from selectQuip() (PRD §8.1.14). */
-  quip: z.string().nullish(),
+  /** Provenance of the aside label: 'relational' (a person authored it) or 'editorial' (LLM-origin). */
+  reveal_inside_joke_kind: z.enum(['relational', 'editorial']).nullish(),
   /** Optional appeal state after a player asks the app to recheck a wrong grade. */
   recheck_status: z.enum(['accepted', 'rejected', 'needs_human']).optional(),
   /** Short player-facing explanation from the recheck reviewer. */
@@ -83,6 +107,34 @@ export const DAILY_SKIP_LIMIT = 5;
 
 export const PERSONAL_DAILY_SESSION_CONTEXT = 'personal_daily';
 export const DAILY_QUEUE_SIZE = 5;
+
+/**
+ * Minimum number of core slots a Daily Five may be SERVED with. The orchestrator
+ * tries hard to reach DAILY_QUEUE_SIZE (looping bounded top-up generation through
+ * the same strict quality gates), but some niche / nearly-exhausted knowledge
+ * bases genuinely can't yield five distinct, high-quality questions in one build.
+ *
+ * Graceful-degrade tolerates a short queue down to this floor — a real,
+ * multi-question session still beats a retryable 503. BELOW it, the build is
+ * treated as failed (DailyQueueFillError 'generation_failed' → retryable 503),
+ * so the player sees the retry UI and the daily cron rebuilds a full set later
+ * rather than being served a degenerate one- or two-question "Daily Five".
+ *
+ * We never pad to this floor by relaxing the quality/factual/dedup gates — a
+ * short queue is always the GOOD questions that survived, never filler.
+ */
+export const DAILY_QUEUE_MIN_SIZE = 3;
+
+/**
+ * Daily Five +2 — up to this many bonus slots are appended after the core
+ * DAILY_QUEUE_SIZE, each a freshly generated accessible question in a domain
+ * drawn from the territory ∪ activity of people the viewer follows (D-4 §B; see
+ * getFriendDomainsForBonus + generateBonusQuestionsForDomains). Total queue size
+ * is therefore 5–7. This is additive and independent of the orchestrator's N<5
+ * generation backstop: a bonus shortfall simply appends fewer slots, never
+ * backfills, and never pads with the viewer's own domains.
+ */
+export const DAILY_BONUS_SLOT_MAX = 2;
 
 /** A slot the player can still act on (neither answered nor skipped). */
 export function hasPendingSlot(slots: QueueSlot[]): boolean {

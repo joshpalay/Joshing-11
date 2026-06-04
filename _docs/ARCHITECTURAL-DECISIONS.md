@@ -10,8 +10,8 @@ Every Claude Code session should reference this to stay consistent.
 - **Database:** Postgres 15+, hosted on Supabase
   - Used as Postgres-only — NOT using Supabase Auth, Storage, Realtime, or RLS
   - Connection: pooled (port 6543) for app, direct (port 5432) for migrations
-- **ORM:** Prisma 5.x
-- **Migrations:** Prisma Migrate
+- **ORM:** Drizzle ORM (`drizzle-orm` + `drizzle-kit`)
+- **Migrations:** Drizzle Kit — `npm run db:migrate`; also auto-applied at boot via `src/instrumentation.ts`
 - **Styling:** Tailwind CSS 4 with @tailwindcss/postcss
 - **Components:** shadcn/ui (CLI-installed; source in src/components/ui/)
 - **Auth (dev):** Hardcoded sign-in (no SMS, no OTP) — see SMS section below
@@ -66,8 +66,8 @@ written normally from Phase 1 onward** — only the implementations change later
 ## Environment Variables
 
 Required for local + production:
-- `DATABASE_URL` — Supabase pooled connection (Prisma runtime)
-- `DIRECT_URL` — Supabase direct connection (Prisma Migrate)
+- `DATABASE_URL` — Supabase pooled connection (app runtime + drizzle-kit migrations)
+- `DIRECT_URL` — Supabase direct connection (port 5432; retained for tooling/tests)
 - `ANTHROPIC_API_KEY`
 - `JWT_SECRET` — 32+ random bytes, base64
 - `NEXT_PUBLIC_APP_URL` — base URL for invitation links

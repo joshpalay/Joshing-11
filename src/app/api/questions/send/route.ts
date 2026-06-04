@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Recipient is not a friend.' }, { status: 403 });
   }
 
-  const sendableQuestionId = await resolveQuestionIdForSend(parsed.questionId, session.userId);
+  const sendableQuestionId = await resolveQuestionIdForSend(parsed.questionId);
 
   const [question, recipient, senderNameRow] = await Promise.all([
     sendableQuestionId
@@ -47,6 +47,17 @@ export async function POST(request: NextRequest) {
   ]);
 
   if (!question[0] || !recipient[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+  // Defensive: house/editorial questions are content infrastructure, never
+  // peer-to-peer sendable (D-3). No UI path forwards one and feed fan-out would
+  // reject it (null creatorId, non-LLM origin), but reject it explicitly here so
+  // the invariant is enforced at the entry point rather than implicitly downstream.
+  if (question[0].source === 'house_authored') {
+    return NextResponse.json(
+      { error: 'invalid_question', message: 'House questions cannot be sent.' },
+      { status: 400 },
+    );
+  }
 
   const [alreadyCorrect, alreadyInFeed] = await Promise.all([
     userAnsweredQuestionCorrectly(parsed.recipientUserId, sendableQuestionId!),
@@ -147,7 +158,7 @@ function lastTwentyFourHours(date = new Date()) {
   return new Date(date.getTime() - 24 * 60 * 60 * 1000);
 }
 
-async function resolveQuestionIdForSend(questionId: string, senderUserId: string): Promise<string | null> {
+export async function resolveQuestionIdForSend(questionId: string): Promise<string | null> {
   const [question] = await db.select({ id: questions.id }).from(questions).where(eq(questions.id, questionId)).limit(1);
   if (question) return question.id;
 
@@ -159,12 +170,17 @@ async function resolveQuestionIdForSend(questionId: string, senderUserId: string
 
   if (!generated) return null;
 
+  // A sent LLM question keeps its LLM/curated provenance: no author is recorded
+  // (creatorId stays null so author/curator credit never accrues to the
+  // forwarder), and source is 'curated_sent' so it is queryably distinct from
+  // both authored questions and daily-generated ones. Who sent it is preserved
+  // separately on the FeedItem (sourceUserId) written by the caller.
   const [created] = await db
     .insert(questions)
     .values({
-      creatorId: senderUserId,
+      creatorId: null,
       sourceQuestionId: generated.id,
-      source: 'authored',
+      source: 'curated_sent',
       questionText: generated.questionText,
       answerText: generated.answer,
       factualExplanation: generated.explainer,

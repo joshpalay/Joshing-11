@@ -23,6 +23,7 @@ export async function GET() {
     correctAnswer: item.correctAnswer,
     result: item.result,
     askerName: item.askerName,
+    authorIsHouse: item.authorIsHouse,
     answeredAt: item.answeredAt,
     sourceLabel: item.sourceLabel,
   }));

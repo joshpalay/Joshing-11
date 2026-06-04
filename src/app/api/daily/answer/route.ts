@@ -1,18 +1,18 @@
 import { and, eq } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
-import { gradeAnswer, selectQuip } from '@/server/grading';
+import { gradeAnswer } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
 import {
   dailyQueues,
   db,
   generatedQuestions,
-  playerMastery,
   questions,
 } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { awardAuthorCredit } from '@/server/mastery/author-credit';
+import { awardAuthorCredit, isAuthorCreditEligible } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
@@ -25,7 +25,7 @@ import { suggestAnswer } from '@/lib/llm';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
 import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
-import { areFriends } from '@/server/db/queries/friends';
+import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +36,7 @@ type DailyAnswerErrorCode =
   | 'invalid_state'
   | 'question_not_found'
   | 'forbidden'
+  | 'grader_unavailable'
   | 'unexpected';
 
 function dailyAnswerErrorResponse(status: number, error: DailyAnswerErrorCode, message: string) {
@@ -75,23 +76,30 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
   return repairedAnswer;
 }
 
-function parseBody(value: unknown): { queueId: string; slotIndex: number; submittedAnswer: string; gaveUp: boolean } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const queueId = typeof record.queue_id === 'string' ? record.queue_id : null;
-  const slotIndex = typeof record.slot_index === 'number' && Number.isInteger(record.slot_index)
-    ? record.slot_index
-    : null;
-  const gaveUp = record.gave_up === true;
-  const submittedAnswer = typeof record.submitted_answer === 'string'
-    ? record.submitted_answer.trim()
-    : typeof record.answer === 'string'
-      ? record.answer.trim()
-      : '';
+const bodySchema = z.object({
+  queue_id: z.string().min(1),
+  slot_index: z.number().int(),
+  // gave_up / submitted_answer / answer are permissive: a malformed type is
+  // coerced away (matching the prior hand-rolled parser) rather than 400-ing.
+  gave_up: z.boolean().optional().catch(undefined),
+  submitted_answer: z.string().optional().catch(undefined),
+  answer: z.string().optional().catch(undefined),
+});
 
-  if (!queueId || slotIndex === null) return null;
+function parseBody(value: unknown): { queueId: string; slotIndex: number; submittedAnswer: string; gaveUp: boolean } | null {
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  const { queue_id, slot_index, gave_up, submitted_answer, answer } = parsed.data;
+  const gaveUp = gave_up === true;
+  const submittedAnswer = (
+    typeof submitted_answer === 'string'
+      ? submitted_answer
+      : typeof answer === 'string'
+        ? answer
+        : ''
+  ).trim();
   if (!gaveUp && !submittedAnswer) return null;
-  return { queueId, slotIndex, submittedAnswer, gaveUp };
+  return { queueId: queue_id, slotIndex: slot_index, submittedAnswer, gaveUp };
 }
 
 export async function POST(request: NextRequest) {
@@ -204,20 +212,28 @@ export async function POST(request: NextRequest) {
           question.questionText,
           'factual',
         );
-    // TODO: when grade.gradedVia === 'fallback', the LLM grader was unreachable
-    // and the slot is being marked wrong as a deterministic safeguard. Wire this
-    // to /api/daily/recheck or surface an "answer pending review" UI so users
-    // aren't silently penalised for an Anthropic outage.
+    // The LLM grader was unreachable (timeout, parse error, no client), so its
+    // 'wrong' verdict is not a real judgement of the answer — it's a deterministic
+    // placeholder. Scoring the player wrong for an Anthropic outage is the most
+    // off-brand failure mode in a product whose thesis is "wrong answers are
+    // connection events, not penalties." Instead of persisting anything, hold the
+    // answer in a non-scored retry state: leave the slot untouched (unanswered) and
+    // return a transparent, retryable error so the player can simply resubmit.
+    // Give-ups skip the grader entirely (gradedVia: 'exact'), so they're never held.
     if (grade.gradedVia === 'fallback') {
-      console.warn('[daily/answer] grading fell back to deterministic wrong', {
+      console.warn('[daily/answer] grader unavailable; holding answer for retry', {
         queueId: parsed.queueId,
         slotIndex: parsed.slotIndex,
         userId: session.userId,
       });
+      return dailyAnswerErrorResponse(
+        503,
+        'grader_unavailable',
+        "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+      );
     }
     const isCorrect = grade.result === 'correct';
     const answerState = isCorrect ? 'correct' : 'incorrect';
-    const quip = parsed.gaveUp ? null : selectQuip({ isCorrect, surface: 'daily', friendResult: null });
 
     // For bot slots: promote the generated question to a canonical row
     // BEFORE writing the mastery event so cross-surface dedup can key on
@@ -307,38 +323,18 @@ export async function POST(request: NextRequest) {
       priorAnswers,
     );
     const basePoints = question.basePoints;
-    const uncheckedPointsAwarded =
+    // A correct answer in an unfamiliar domain default-adds it to the player's
+    // Knowledge base — including bot-generated Daily Five questions, which now
+    // match the authored path. The old PRD §8.4.3 gate (bot questions could only
+    // deepen existing domains) has been removed in favour of default-add with an
+    // easy undo; writeMasteryEvent's ON CONFLICT DO UPDATE opens the domain the
+    // same way the authored flow does (src/app/api/questions/[id]/answer).
+    const pointsAwarded =
       masteryAnswerState === 'first_correct'
         ? basePoints
         : masteryAnswerState === 'first_correct_after_wrong'
           ? Math.round(basePoints * RECOVERY_STATE_WEIGHT)
           : 0;
-
-    // PRD §8.4.3 — LLM-generated Daily Five questions can only deepen mastery
-    // in existing Knowledge base domains; they cannot open new ones. For a
-    // bot-source question whose domain isn't in the player's playerMastery,
-    // skip the mastery event and award 0 points rather than letting
-    // ON CONFLICT DO UPDATE silently insert a ghost domain row.
-    let skipMasteryForUnknownDomain = false;
-    if (slot.source === 'bot' && uncheckedPointsAwarded > 0) {
-      const [existingDomain] = await db
-        .select({ canonicalSubcategory: playerMastery.canonicalSubcategory })
-        .from(playerMastery)
-        .where(and(
-          eq(playerMastery.userId, session.userId),
-          eq(playerMastery.canonicalSubcategory, question.canonicalSubcategory),
-        ))
-        .limit(1);
-      if (!existingDomain) {
-        skipMasteryForUnknownDomain = true;
-        console.warn('[daily/answer] bot question domain not in player KB; skipping mastery write', {
-          userId: session.userId,
-          domain: question.canonicalSubcategory,
-          generatedQuestionId: question.generatedId,
-        });
-      }
-    }
-    const pointsAwarded = skipMasteryForUnknownDomain ? 0 : uncheckedPointsAwarded;
 
     const nextSlots = slots.map((item) => {
       if (item.slot_index !== parsed.slotIndex) return item;
@@ -350,9 +346,9 @@ export async function POST(request: NextRequest) {
         awarded_points: pointsAwarded,
         reveal_canonical_answer: canonicalAnswer,
         reveal_explainer: question.explainer ?? undefined,
-        reveal_inside_joke: insideJokeForViewer,
+        reveal_inside_joke: insideJokeForViewer?.text ?? null,
+        reveal_inside_joke_kind: insideJokeForViewer?.kind ?? null,
         reveal_quip: grade.consolation,
-        quip,
       } satisfies QueueSlot;
     });
 
@@ -362,24 +358,22 @@ export async function POST(request: NextRequest) {
       .where(eq(dailyQueues.id, queue.id));
 
     let masteryDelta = null;
-    if (!skipMasteryForUnknownDomain) {
-      try {
-        masteryDelta = await writeMasteryEvent({
-          userId: session.userId,
-          questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,
-          domain: question.canonicalSubcategory,
-          answerState: masteryAnswerState,
-          pointsAwarded,
-          sourceType: 'daily',
-          sourceId: `${queue.id}:${parsed.slotIndex}`,
-          broadCategory: question.broadCategory,
-          eventQuestionId: canonicalQuestionId,
-          basePoints,
-          weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
-        });
-      } catch (error) {
-        console.warn('[daily/answer] writeMasteryEvent failed', error);
-      }
+    try {
+      masteryDelta = await writeMasteryEvent({
+        userId: session.userId,
+        questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,
+        domain: question.canonicalSubcategory,
+        answerState: masteryAnswerState,
+        pointsAwarded,
+        sourceType: 'daily',
+        sourceId: `${queue.id}:${parsed.slotIndex}`,
+        broadCategory: question.broadCategory,
+        eventQuestionId: canonicalQuestionId,
+        basePoints,
+        weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
+      });
+    } catch (error) {
+      console.warn('[daily/answer] writeMasteryEvent failed', error);
     }
 
     // Adaptive-difficulty bookkeeping is not consumed by the response; let it
@@ -444,10 +438,16 @@ export async function POST(request: NextRequest) {
     if (canonicalQuestionId && !parsed.gaveUp) {
       const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
       try {
-        if (isCorrect && persistedCreatorId && persistedCreatorId !== session.userId && persistedDomainForCreator) {
+        const creditContext = {
+          isCorrect,
+          creatorId: persistedCreatorId,
+          answererUserId: session.userId,
+          domain: persistedDomainForCreator,
+        };
+        if (isAuthorCreditEligible(creditContext)) {
           void promoteDeclaredToDemonstrated({
-            userId: persistedCreatorId,
-            domain: persistedDomainForCreator,
+            userId: creditContext.creatorId,
+            domain: creditContext.domain,
             triggeringFriendId: session.userId,
             questionId: canonicalQuestionId,
           });
@@ -455,10 +455,10 @@ export async function POST(request: NextRequest) {
           // Author credit (PRD §8.32): off the user's hot path — three queries
           // the answerer never sees in their response.
           void awardAuthorCredit({
-            creatorUserId: persistedCreatorId,
+            creatorUserId: creditContext.creatorId,
             answererUserId: session.userId,
             questionId: canonicalQuestionId,
-            domain: persistedDomainForCreator,
+            domain: creditContext.domain,
             sourceId: `daily:${propagationKey}:${session.userId}`,
             scope: 'daily/answer',
           });
@@ -499,22 +499,11 @@ export async function POST(request: NextRequest) {
       explainer: question.explainer,
       awarded_points: pointsAwarded,
       mastery_delta: masteryDelta,
-      quip,
-      insideJoke: insideJokeForViewer,
+      insideJoke: insideJokeForViewer?.text ?? null,
+      insideJokeKind: insideJokeForViewer?.kind ?? null,
     });
   } catch (error) {
     console.error('[daily/answer] unexpected failure', error);
     return dailyAnswerErrorResponse(500, 'unexpected', 'Could not record that answer.');
   }
-}
-
-async function selectInsideJokeForViewer(
-  insideJoke: string | null,
-  creatorId: string | null,
-  viewerId: string,
-): Promise<string | null> {
-  if (!insideJoke || !creatorId) return null;
-  if (creatorId === viewerId) return insideJoke;
-  const friends = await areFriends(viewerId, creatorId);
-  return friends ? insideJoke : null;
 }

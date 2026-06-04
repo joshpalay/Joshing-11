@@ -1,100 +1,91 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// The follow helpers issue joined queries (select(...).from(follows)
+// [.innerJoin(...)]* .where(...) [.orderBy(...)]). The mock returns a single
+// chainable, awaitable object whose methods all return itself and which
+// resolves to `state.rows` when awaited or after .orderBy(). Each test sets
+// `state.rows` to the rows the query under test should yield.
 const { dbMock, state } = vi.hoisted(() => {
-  const state = {
-    friendshipRows: [] as Array<{ userAId: string; userBId: string }>,
-    userRows: [] as Array<{
-      id: string
-      phoneNumber: string
-      displayName: string | null
-    }>,
-    selectCount: 0,
-  }
+  const state = { rows: [] as unknown[] }
 
-  function makeWhereBuilder(rows: unknown[]) {
-    return {
-      // where() must be BOTH awaitable (the friendships query awaits it
-      // directly) AND chainable into orderBy/limit (the users query does
-      // .where().orderBy(...)). Return a promise with the chain methods
-      // attached so both call shapes resolve to the same rows.
-      where: vi.fn(() => {
-        const p = Promise.resolve(rows) as Promise<unknown[]> & {
-          orderBy: () => Promise<unknown[]>
-          limit: () => Promise<unknown[]>
-        }
-        p.orderBy = vi.fn(async () => rows)
-        p.limit = vi.fn(async () => rows)
-        return p
-      }),
+  function makeChain() {
+    const chain: Record<string, unknown> = {}
+    for (const method of ['from', 'innerJoin', 'leftJoin', 'where', 'orderBy', 'limit', 'groupBy']) {
+      chain[method] = vi.fn(() => chain)
     }
+    chain.then = (resolve: (rows: unknown[]) => unknown) => resolve(state.rows)
+    return chain
   }
 
-  const dbMock = {
-    select: vi.fn(() => {
-      state.selectCount += 1
-      const rows =
-        state.selectCount === 1 ? state.friendshipRows : state.userRows
-      return {
-        from: vi.fn(() => makeWhereBuilder(rows)),
-      }
-    }),
-  }
-
+  const dbMock = { select: vi.fn(() => makeChain()) }
   return { dbMock, state }
 })
 
 vi.mock('@/server/db', () => ({
   db: dbMock,
-  declaredInterests: {
-    userId: 'declaredInterests.userId',
-    domain: 'declaredInterests.domain',
-    isActive: 'declaredInterests.isActive',
+  declaredInterests: { userId: 'di.userId', domain: 'di.domain', isActive: 'di.isActive' },
+  feedItems: {},
+  follows: {
+    id: 'follows.id',
+    followerId: 'follows.followerId',
+    followeeId: 'follows.followeeId',
+    state: 'follows.state',
+    approvedAt: 'follows.approvedAt',
   },
-  friendships: {
-    id: 'friendships.id',
-    userAId: 'friendships.userAId',
-    userBId: 'friendships.userBId',
-    status: 'friendships.status',
-    requestedByUserId: 'friendships.requestedByUserId',
-    requestContext: 'friendships.requestContext',
-    createdAt: 'friendships.createdAt',
-  },
-  users: {
-    id: 'users.id',
-    phoneNumber: 'users.phoneNumber',
-    displayName: 'users.displayName',
-  },
+  joshingGameResponses: {},
+  masteryEvents: {},
+  users: { id: 'users.id', phoneNumber: 'users.phoneNumber', displayName: 'users.displayName' },
 }))
 
-import { getFriends } from '@/server/db/queries/friends'
+vi.mock('@/server/feed/visibility', () => ({ DIRECT_SENT_FEED_SOURCE_TYPE: 'direct_sent' }))
 
-describe('getFriends invitation friendship symmetry', () => {
+import { areFriends, getFollowers, getFollowing, getFriends, getMutualFollows } from '@/server/db/queries/friends'
+
+describe('follow query helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    state.friendshipRows = []
-    state.userRows = []
-    state.selectCount = 0
+    state.rows = []
   })
 
-  it('getFriends(Jaime) includes Josh after an active invitation friendship', async () => {
-    state.friendshipRows = [{ userAId: 'user-jaime', userBId: 'user-josh' }]
-    state.userRows = [
-      { id: 'user-josh', displayName: 'Josh', phoneNumber: '+17345550001' },
-    ]
-
-    await expect(getFriends('user-jaime')).resolves.toEqual([
+  it('getFollowing returns the users I follow (approved outbound)', async () => {
+    state.rows = [{ user: { id: 'user-josh', displayName: 'Josh', phoneNumber: '+1734' } }]
+    await expect(getFollowing('user-jaime')).resolves.toEqual([
       expect.objectContaining({ id: 'user-josh', displayName: 'Josh' }),
     ])
   })
 
-  it('getFriends(Josh) includes Jaime from the same active invitation friendship', async () => {
-    state.friendshipRows = [{ userAId: 'user-jaime', userBId: 'user-josh' }]
-    state.userRows = [
-      { id: 'user-jaime', displayName: 'Jaime', phoneNumber: '+17345550002' },
-    ]
-
-    await expect(getFriends('user-josh')).resolves.toEqual([
-      expect.objectContaining({ id: 'user-jaime', displayName: 'Jaime' }),
+  it('getFollowers returns the users who follow me (approved inbound)', async () => {
+    state.rows = [{ user: { id: 'user-robyn', displayName: 'Robyn', phoneNumber: '+1313' } }]
+    await expect(getFollowers('user-jaime')).resolves.toEqual([
+      expect.objectContaining({ id: 'user-robyn', displayName: 'Robyn' }),
     ])
+  })
+
+  it('getMutualFollows / getFriends return the mutual (both-approved) set', async () => {
+    state.rows = [{ user: { id: 'user-josh', displayName: 'Josh', phoneNumber: '+1734' } }]
+    await expect(getMutualFollows('user-jaime')).resolves.toEqual([
+      expect.objectContaining({ id: 'user-josh' }),
+    ])
+
+    state.rows = [{ user: { id: 'user-josh', displayName: 'Josh', phoneNumber: '+1734' } }]
+    await expect(getFriends('user-jaime')).resolves.toEqual([
+      expect.objectContaining({ id: 'user-josh' }),
+    ])
+  })
+
+  it('areFriends is true only when both directional approved edges exist', async () => {
+    state.rows = [
+      { followerId: 'a', followeeId: 'b' },
+      { followerId: 'b', followeeId: 'a' },
+    ]
+    await expect(areFriends('a', 'b')).resolves.toBe(true)
+
+    state.rows = [{ followerId: 'a', followeeId: 'b' }]
+    await expect(areFriends('a', 'b')).resolves.toBe(false)
+  })
+
+  it('areFriends is false for self', async () => {
+    await expect(areFriends('a', 'a')).resolves.toBe(false)
+    expect(dbMock.select).not.toHaveBeenCalled()
   })
 })

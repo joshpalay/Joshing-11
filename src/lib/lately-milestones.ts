@@ -1,0 +1,267 @@
+/**
+ * Lately skill milestones (D-4 §A, A-1 dual-form split).
+ *
+ * Read-derived, additive surface: it aggregates the `friend_answered` correct
+ * items a viewer already receives (people they follow getting questions right)
+ * into two milestone forms, the same way `getLatelyMoments` derives moments
+ * from rows. No write path, no migration — the derivation here is a pure
+ * transform so it can be unit-tested without a DB (mirrors `@/lib/lately`).
+ *
+ * The two forms (A-1 split rule):
+ *  - DEEP: a (friend, domain) group with ≥ MILESTONE_DEEP_MIN correct answers
+ *    becomes its own line. Deep domains are EXCLUDED from the breadth roll-up so
+ *    no answer is double-counted.
+ *  - BREADTH: a friend's remaining *light* domains (≥ MILESTONE_MIN_CORRECT and
+ *    below the deep threshold) aggregate into a breadth line — but only when there
+ *    are ≥ 2 light domains. A lone light domain produces no line (neither form).
+ *
+ * D-4 CORRECTION 3 — universal per-line 5-question cap + multi-line splitting.
+ * No milestone line ever surfaces more than MILESTONE_CARD_QUESTION_CAP (=5)
+ * literal questions, and a friend's over-cap activity SPLITS into several honest
+ * lines instead of collapsing into one "+N others" mega-card:
+ *  - A deep line caps at 5 (most-recent kept; the surplus is not surfaced and the
+ *    deep domain is NOT split into multiple same-domain lines).
+ *  - The light domains pack into breadth line(s) of ≤5 questions each (most-recent
+ *    first, whole domains kept together); if they exceed 5 they spill into
+ *    additional breadth lines. Each line's header therefore names exactly the
+ *    domains whose questions appear in that line ("header matches contents").
+ */
+
+// Tunable thresholds. Kept explicit (not inlined) so product can move the line
+// between "deep" and "light" without hunting through the derivation.
+export const MILESTONE_MIN_CORRECT = 1;
+export const MILESTONE_DEEP_MIN = 3;
+
+// D-4 CORRECTION 2: an expanded milestone reveals at most this many of the
+// friend's literal questions, each answerable via the feed answer pop-up. The
+// collapsed one-liner still names the breadth roll-up ("X, Y and N others"); the
+// cap only bounds what the expansion asks the viewer to actually answer.
+export const MILESTONE_CARD_QUESTION_CAP = 5;
+
+// One correct `friend_answered` row, already resolved to a display-ready domain.
+export type MilestoneAnswerRow = {
+  friendId: string;
+  friendName: string;
+  friendFirstName: string;
+  domain: string;
+  questionId: string;
+  answeredAt: Date;
+};
+
+export type MilestoneDeep = {
+  kind: 'milestone_deep';
+  id: string;
+  friendId: string;
+  friendName: string;
+  friendFirstName: string;
+  domain: string;
+  // The friend's LITERAL questions in this domain — the seed for click-through.
+  questionIds: string[];
+  correctCount: number;
+  sortAt: Date;
+};
+
+export type MilestoneBreadthDomain = {
+  domain: string;
+  questionIds: string[];
+  correctCount: number;
+};
+
+export type MilestoneBreadth = {
+  kind: 'milestone_breadth';
+  id: string;
+  friendId: string;
+  friendName: string;
+  friendFirstName: string;
+  // ≥ 2 light domains, most-recent first.
+  domains: MilestoneBreadthDomain[];
+  // Union of every light domain's questionIds (convenience for authorization).
+  questionIds: string[];
+  sortAt: Date;
+};
+
+export type LatelyMilestone = MilestoneDeep | MilestoneBreadth;
+
+type Group = {
+  friendId: string;
+  friendName: string;
+  friendFirstName: string;
+  domain: string;
+  // questionId -> latest answeredAt, so a deep line can keep the 5 MOST-RECENT
+  // questions when it overflows the per-line cap.
+  questions: Map<string, Date>;
+  sortAt: Date;
+};
+
+const GROUP_SEP = '\u0000';
+
+/**
+ * Derive deep + breadth milestones from a flat list of correct-answer rows.
+ * Pure: deterministic ordering (sortAt desc, then id) so tests can assert the
+ * exact shape.
+ */
+export function deriveLatelyMilestones(
+  rows: MilestoneAnswerRow[],
+  opts: { deepMin?: number; minCorrect?: number; cardCap?: number } = {},
+): LatelyMilestone[] {
+  const deepMin = opts.deepMin ?? MILESTONE_DEEP_MIN;
+  const minCorrect = opts.minCorrect ?? MILESTONE_MIN_CORRECT;
+
+  // 1. Group by (friend, domain), deduping questionIds so the same canonical
+  //    question answered twice can't inflate a count toward the deep threshold.
+  const groups = new Map<string, Group>();
+  for (const row of rows) {
+    const key = `${row.friendId}${GROUP_SEP}${row.domain}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        friendId: row.friendId,
+        friendName: row.friendName,
+        friendFirstName: row.friendFirstName,
+        domain: row.domain,
+        questions: new Map(),
+        sortAt: row.answeredAt,
+      };
+      groups.set(key, group);
+    }
+    const prev = group.questions.get(row.questionId);
+    if (!prev || row.answeredAt > prev) group.questions.set(row.questionId, row.answeredAt);
+    if (row.answeredAt > group.sortAt) group.sortAt = row.answeredAt;
+  }
+
+  // 2. Split each friend's groups into deep vs light. A group is exactly one of
+  //    the two — never both — which is what guarantees no double-counting.
+  type FriendBuckets = {
+    friendId: string;
+    friendName: string;
+    friendFirstName: string;
+    deep: Group[];
+    light: Group[];
+  };
+  const byFriend = new Map<string, FriendBuckets>();
+  for (const group of groups.values()) {
+    const count = group.questions.size;
+    if (count < minCorrect) continue; // below the floor: not a milestone signal
+    let buckets = byFriend.get(group.friendId);
+    if (!buckets) {
+      buckets = {
+        friendId: group.friendId,
+        friendName: group.friendName,
+        friendFirstName: group.friendFirstName,
+        deep: [],
+        light: [],
+      };
+      byFriend.set(group.friendId, buckets);
+    }
+    if (count >= deepMin) buckets.deep.push(group);
+    else buckets.light.push(group);
+  }
+
+  // 3. Emit lines (CORRECTION 3: universal ≤5-question cap, multi-line split).
+  const cap = opts.cardCap ?? MILESTONE_CARD_QUESTION_CAP;
+  const milestones: LatelyMilestone[] = [];
+  for (const buckets of byFriend.values()) {
+    // A deep domain is its OWN line, capped at the 5 most-recent questions. The
+    // surplus is not surfaced and the domain is never split across lines.
+    for (const group of buckets.deep) {
+      milestones.push({
+        kind: 'milestone_deep',
+        id: `deep:${group.friendId}:${group.domain}`,
+        friendId: group.friendId,
+        friendName: group.friendName,
+        friendFirstName: group.friendFirstName,
+        domain: group.domain,
+        questionIds: recentIds(group.questions, cap),
+        correctCount: group.questions.size,
+        sortAt: group.sortAt,
+      });
+    }
+
+    // Breadth fires ONLY with ≥ 2 light domains. A single light domain is
+    // intentionally silent (no deep line, no breadth line).
+    if (buckets.light.length >= 2) {
+      const lightByRecency = [...buckets.light].sort(
+        (a, b) => b.sortAt.getTime() - a.sortAt.getTime(),
+      );
+      // Pack whole light domains (each ≤ deepMin-1 questions) into bins of ≤ cap
+      // questions, most-recent first. Each bin becomes one breadth line whose
+      // header names exactly the domains it carries — no "+N others" mega-line.
+      const bins: Group[][] = [];
+      let bin: Group[] = [];
+      let binCount = 0;
+      for (const group of lightByRecency) {
+        const size = group.questions.size;
+        if (bin.length > 0 && binCount + size > cap) {
+          bins.push(bin);
+          bin = [];
+          binCount = 0;
+        }
+        bin.push(group);
+        binCount += size;
+      }
+      if (bin.length > 0) bins.push(bin);
+
+      bins.forEach((binGroups, index) => {
+        const domains: MilestoneBreadthDomain[] = binGroups.map((group) => ({
+          domain: group.domain,
+          questionIds: recentIds(group.questions, cap),
+          correctCount: group.questions.size,
+        }));
+        milestones.push({
+          kind: 'milestone_breadth',
+          // Distinct per line so each renders as its own stream item.
+          id: `breadth:${buckets.friendId}:${index}`,
+          friendId: buckets.friendId,
+          friendName: buckets.friendName,
+          friendFirstName: buckets.friendFirstName,
+          domains,
+          questionIds: domains.flatMap((d) => d.questionIds),
+          sortAt: binGroups[0].sortAt,
+        });
+      });
+    }
+  }
+
+  return milestones.sort((a, b) => {
+    const delta = b.sortAt.getTime() - a.sortAt.getTime();
+    return delta !== 0 ? delta : a.id.localeCompare(b.id);
+  });
+}
+
+// Most-recent questionIds first (answeredAt desc, id as a stable tie-break),
+// optionally capped. Used to keep the 5 most-recent on an over-cap line.
+function recentIds(questions: Map<string, Date>, cap?: number): string[] {
+  const ids = [...questions.entries()]
+    .sort((a, b) => {
+      const delta = b[1].getTime() - a[1].getTime();
+      return delta !== 0 ? delta : a[0].localeCompare(b[0]);
+    })
+    .map(([id]) => id);
+  return cap != null ? ids.slice(0, cap) : ids;
+}
+
+/** Every questionId a viewer is allowed to play through a milestone card. */
+export function collectMilestoneQuestionIds(
+  milestones: LatelyMilestone[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const milestone of milestones) {
+    for (const id of milestone.questionIds) ids.add(id);
+  }
+  return ids;
+}
+
+// --- Copy (PLACEHOLDER — flagged for product sign-off, D-4 §A) ---------------
+// Deliberately avoids "mastery"/"mastered" per the spec's soft-copy rule.
+
+export function deepMilestoneCopy(milestone: MilestoneDeep): string {
+  return `${milestone.friendFirstName} went deep on ${milestone.domain}`;
+}
+
+export function breadthMilestoneCopy(milestone: MilestoneBreadth): string {
+  const labels = milestone.domains.map((d) => d.domain);
+  const [first, second, ...rest] = labels;
+  const lead = `${milestone.friendFirstName}'s been killing it — `;
+  if (rest.length === 0) return `${lead}${first} and ${second}`;
+  return `${lead}${first}, ${second}, and ${rest.length} more`;
+}

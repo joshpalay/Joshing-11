@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { destroySession, getSession } from '@/server/auth/session';
 import { deleteUserAccount, getUserProfile, updateDisplayName } from '@/server/db/queries/account';
 
 const DISPLAY_NAME_ERROR = 'Display name must be 2-30 characters.';
+
+const patchBodySchema = z.object({ displayName: z.string() });
 
 export async function GET() {
   const session = await getSession();
@@ -28,8 +31,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => null) as { displayName?: unknown } | null;
-  const displayName = typeof body?.displayName === 'string' ? body.displayName.trim() : '';
+  const parsed = patchBodySchema.safeParse(await request.json().catch(() => null));
+  const displayName = parsed.success ? parsed.data.displayName.trim() : '';
 
   if (displayName.length < 2 || displayName.length > 30) {
     return NextResponse.json({ error: DISPLAY_NAME_ERROR }, { status: 400 });

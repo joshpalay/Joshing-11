@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { Search } from 'lucide-react'
 
 import {
   AnsweredByYouCard,
@@ -9,21 +10,34 @@ import {
   type AnsweredByYouFeedItem,
   type DirectSentFeedItem,
 } from '@/components/feed'
+import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy'
+
+export type AuthoredQuestionDifficulty = 'accessible' | 'moderate' | 'specialist'
 
 export type AuthoredQuestionItem = {
   id: string
   questionText: string
   category: string | null
+  broadCategory: string | null
+  difficulty: AuthoredQuestionDifficulty | null
   createdAt: string
   viewerAnswered: { result: 'correct' | 'incorrect' } | null
 }
+
+// Ordered so the difficulty dropdown reads easiest → hardest regardless of
+// the order questions happen to arrive in.
+const DIFFICULTY_ORDER: AuthoredQuestionDifficulty[] = [
+  'accessible',
+  'moderate',
+  'specialist',
+]
 
 type AnswerResult = {
   isCorrect: boolean
   correctAnswer: string
   explanation: string | null
   awardedPoints: number | null
-  quip: string | null
+  creatorNote: string | null
   submittedAnswer: string
 }
 
@@ -83,6 +97,44 @@ export function AuthoredQuestionsFeed({
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [selectedDifficulty, setSelectedDifficulty] = useState('')
+
+  const categoryOptions = useMemo(() => {
+    const seen = new Set<string>()
+    for (const question of questions) {
+      if (question.broadCategory) seen.add(question.broadCategory)
+    }
+    return Array.from(seen).sort((a, b) => a.localeCompare(b))
+  }, [questions])
+
+  const difficultyOptions = useMemo(() => {
+    const present = new Set<AuthoredQuestionDifficulty>()
+    for (const question of questions) {
+      if (question.difficulty) present.add(question.difficulty)
+    }
+    return DIFFICULTY_ORDER.filter((value) => present.has(value)).map((value) => ({
+      value,
+      label: difficultyCopyFromEstimate(value) ?? value,
+    }))
+  }, [questions])
+
+  const visibleQuestions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return questions.filter((question) => {
+      if (query && !question.questionText.toLowerCase().includes(query)) {
+        return false
+      }
+      if (selectedCategory && question.broadCategory !== selectedCategory) {
+        return false
+      }
+      if (selectedDifficulty && question.difficulty !== selectedDifficulty) {
+        return false
+      }
+      return true
+    })
+  }, [questions, searchQuery, selectedCategory, selectedDifficulty])
 
   const submitAnswer = useCallback(
     async (item: AuthoredQuestionItem, submittedAnswer: string) => {
@@ -101,7 +153,7 @@ export function AuthoredQuestionsFeed({
               correctAnswer?: string
               explanation?: string | null
               pointsAwarded?: number | null
-              quip?: string | null
+              creatorNote?: string | null
               message?: string
             }
           | null
@@ -113,7 +165,7 @@ export function AuthoredQuestionsFeed({
           correctAnswer: body.correctAnswer ?? '',
           explanation: body.explanation ?? null,
           awardedPoints: body.pointsAwarded ?? null,
-          quip: body.quip ?? null,
+          creatorNote: body.creatorNote ?? null,
           submittedAnswer,
         }
         setResults((current) => ({ ...current, [item.id]: result }))
@@ -161,7 +213,60 @@ export function AuthoredQuestionsFeed({
         </p>
       ) : (
         <div className="space-y-3">
-          {questions.map((item) => {
+          <div className="space-y-2">
+            <label className="relative block">
+              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+              <input
+                className="bg-background focus:border-primary h-11 w-full rounded-md border pr-3 pl-10 text-sm outline-none"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search questions..."
+                aria-label="Search questions"
+              />
+            </label>
+            {categoryOptions.length > 1 || difficultyOptions.length > 1 ? (
+              <div className="flex flex-wrap gap-2">
+                {categoryOptions.length > 1 ? (
+                  <select
+                    className="bg-background text-foreground h-10 flex-1 rounded-md border px-3 text-sm"
+                    value={selectedCategory}
+                    onChange={(event) => setSelectedCategory(event.target.value)}
+                    aria-label="Filter by category"
+                  >
+                    <option value="">All categories</option>
+                    {categoryOptions.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                {difficultyOptions.length > 1 ? (
+                  <select
+                    className="bg-background text-foreground h-10 flex-1 rounded-md border px-3 text-sm"
+                    value={selectedDifficulty}
+                    onChange={(event) => setSelectedDifficulty(event.target.value)}
+                    aria-label="Filter by difficulty"
+                  >
+                    <option value="">All difficulties</option>
+                    {difficultyOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {visibleQuestions.length === 0 ? (
+            <p className="text-muted-foreground bg-muted rounded-xl px-3 py-2 text-sm">
+              No questions match your filters.
+            </p>
+          ) : null}
+
+          {visibleQuestions.map((item) => {
             const localResult = results[item.id]
             const persistedAnswered = item.viewerAnswered !== null
             const isAnswered = Boolean(localResult) || persistedAnswered
@@ -185,7 +290,7 @@ export function AuthoredQuestionsFeed({
                 isCorrect,
                 awardedPoints: localResult?.awardedPoints ?? null,
                 explanation: localResult?.explanation ?? null,
-                quip: localResult?.quip ?? null,
+                creatorNote: localResult?.creatorNote ?? null,
                 unverifiedAnswer: false,
               }
 

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { GameplayChatThread, newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
 import { ReplaySummary, type ReplaySessionResult } from '@/components/replay/ReplaySummary';
 import type { ReplayItem } from '@/server/replay/session';
+import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 
 type ReplayResponse = {
   items: ReplayItem[];
@@ -28,7 +29,8 @@ function questionMessage(item: ReplayItem): ChatMessage {
     kind: 'question',
     assignmentId: item.dailyQueueItemId,
     questionText: item.questionText,
-    creatorName: null,
+    creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
+    creatorIsHouse: item.authorIsHouse,
     subhead: `FROM ${item.queueDate}`,
     badges: [{ label: 'practice', tone: 'muted' }],
   };
@@ -163,7 +165,8 @@ export default function ReplayPage() {
           consolation: body.consolation ?? null,
           breadcrumb: body.breadcrumb ?? null,
           copyVariant: currentIndex,
-          creatorName: 'Joshing',
+          creatorName: currentItem.authorName ?? LLM_QUESTION_ATTRIBUTION,
+          creatorIsHouse: currentItem.authorIsHouse,
           canonicalSubcategory: currentItem.domain,
           pointsAwarded: 0,
           pointsLabel: 'Replay - practice only',

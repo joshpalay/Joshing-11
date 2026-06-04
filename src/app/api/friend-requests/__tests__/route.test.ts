@@ -46,14 +46,14 @@ describe('POST /api/friend-requests', () => {
     vi.clearAllMocks()
     getSessionMock.mockResolvedValue({ userId: 'viewer-user' })
     getUserByIdMock.mockResolvedValue({ id: 'invitee-user' })
-    getRelationshipMock.mockResolvedValue({ state: 'none', isBlocked: false })
+    getRelationshipMock.mockResolvedValue({ state: 'none', friendshipId: null, isBlocked: false })
     createOrReusePendingFriendshipRequestMock.mockResolvedValue({
-      friendship: { id: 'friendship-1', status: 'pending' },
+      friendship: { id: 'friendship-1', state: 'pending' },
       state: 'created',
     })
   })
 
-  it('creates a friendship request via the shared helper', async () => {
+  it('creates a follow request via the shared helper', async () => {
     const response = await createFriendRequest(
       buildRequest({ inviteeUserId: 'invitee-user' })
     )
@@ -73,6 +73,20 @@ describe('POST /api/friend-requests', () => {
       state: 'created',
       friendship: { id: 'friendship-1', status: 'pending' },
     })
+  })
+
+  it('blocks a follow when already following', async () => {
+    getRelationshipMock.mockResolvedValueOnce({ state: 'following', friendshipId: 'f1', isBlocked: false })
+    const response = await createFriendRequest(buildRequest({ inviteeUserId: 'invitee-user' }))
+    expect(response.status).toBe(409)
+    expect(createOrReusePendingFriendshipRequestMock).not.toHaveBeenCalled()
+  })
+
+  it('allows a follow-back when they already follow me', async () => {
+    getRelationshipMock.mockResolvedValueOnce({ state: 'follows_you', friendshipId: null, isBlocked: false })
+    const response = await createFriendRequest(buildRequest({ inviteeUserId: 'invitee-user' }))
+    expect(response.status).toBe(200)
+    expect(createOrReusePendingFriendshipRequestMock).toHaveBeenCalled()
   })
 
   it('rejects unauthenticated callers', async () => {

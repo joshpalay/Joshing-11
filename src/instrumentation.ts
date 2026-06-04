@@ -191,108 +191,6 @@ export async function register() {
       // initial creation and the 0018 migration will add these schema pieces.
     }
 
-    // Migration 0017 adds the 'creator_note_received' SmsMessageType enum value
-    // and creates the CreatorNote table with its FKs and indexes. If a preview/
-    // production database has this migration recorded without the table actually
-    // present, the daily summary query (and every creator-notes route) fails with
-    // Postgres 42P01 before migrate() can repair it. Pre-apply each piece
-    // idempotently outside the migrator transaction.
-    try {
-      await db.execute(sql`
-        ALTER TYPE "public"."SmsMessageType" ADD VALUE IF NOT EXISTS 'creator_note_received'
-      `);
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS "CreatorNote" (
-          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
-          "authorUserId" text NOT NULL,
-          "recipientUserId" text NOT NULL,
-          "questionId" text NOT NULL,
-          "contextType" text NOT NULL,
-          "contextId" text,
-          "noteText" text NOT NULL,
-          "promptedAt" timestamp with time zone DEFAULT now() NOT NULL,
-          "writtenAt" timestamp with time zone,
-          "deliveredAt" timestamp with time zone,
-          "created_at" timestamp with time zone DEFAULT now() NOT NULL
-        )
-      `);
-      await db.execute(sql`
-        DO $$
-        DECLARE
-          note_table regclass := to_regclass('public."CreatorNote"');
-          user_table regclass := to_regclass('public."User"');
-        BEGIN
-          IF note_table IS NOT NULL
-            AND user_table IS NOT NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM pg_constraint
-              WHERE conname = 'CreatorNote_authorUserId_User_id_fk'
-                AND conrelid = note_table
-            )
-          THEN
-            ALTER TABLE "CreatorNote"
-              ADD CONSTRAINT "CreatorNote_authorUserId_User_id_fk"
-              FOREIGN KEY ("authorUserId") REFERENCES "User"("id") ON DELETE cascade;
-          END IF;
-        END $$
-      `);
-      await db.execute(sql`
-        DO $$
-        DECLARE
-          note_table regclass := to_regclass('public."CreatorNote"');
-          user_table regclass := to_regclass('public."User"');
-        BEGIN
-          IF note_table IS NOT NULL
-            AND user_table IS NOT NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM pg_constraint
-              WHERE conname = 'CreatorNote_recipientUserId_User_id_fk'
-                AND conrelid = note_table
-            )
-          THEN
-            ALTER TABLE "CreatorNote"
-              ADD CONSTRAINT "CreatorNote_recipientUserId_User_id_fk"
-              FOREIGN KEY ("recipientUserId") REFERENCES "User"("id") ON DELETE cascade;
-          END IF;
-        END $$
-      `);
-      await db.execute(sql`
-        DO $$
-        DECLARE
-          note_table regclass := to_regclass('public."CreatorNote"');
-          question_table regclass := to_regclass('public."Question"');
-        BEGIN
-          IF note_table IS NOT NULL
-            AND question_table IS NOT NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM pg_constraint
-              WHERE conname = 'CreatorNote_questionId_Question_id_fk'
-                AND conrelid = note_table
-            )
-          THEN
-            ALTER TABLE "CreatorNote"
-              ADD CONSTRAINT "CreatorNote_questionId_Question_id_fk"
-              FOREIGN KEY ("questionId") REFERENCES "Question"("id") ON DELETE cascade;
-          END IF;
-        END $$
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS "CreatorNote_authorUserId_promptedAt_idx"
-        ON "CreatorNote" USING btree ("authorUserId","promptedAt")
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS "CreatorNote_recipientUserId_questionId_idx"
-        ON "CreatorNote" USING btree ("recipientUserId","questionId")
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS "CreatorNote_questionId_idx"
-        ON "CreatorNote" USING btree ("questionId")
-      `);
-    } catch {
-      // SmsMessageType, User, or Question may not exist yet on a fresh database
-      // — migrate() creates them before 0017 runs.
-    }
-
     // Several FeedItem columns were introduced after the original table. In preview
     // databases with partially-recorded migrations, Drizzle can believe these
     // migrations already ran while the nullable columns are still absent, causing
@@ -304,25 +202,10 @@ export async function register() {
           ADD COLUMN IF NOT EXISTS "personalMessage" text,
           ADD COLUMN IF NOT EXISTS "sourceResult" text,
           ADD COLUMN IF NOT EXISTS "submittedAnswer" text,
-          ADD COLUMN IF NOT EXISTS "quip" text,
           ADD COLUMN IF NOT EXISTS "catchupResolvedAt" timestamptz
       `);
     } catch {
       // FeedItem table may not exist yet — migrate() handles initial creation.
-    }
-
-    // Migration 0016 also adds the nullable "quip" column to JoshingGameResponse
-    // alongside the FeedItem.quip add above. If a preview/production database has
-    // 0016 recorded with only one of the two ALTERs applied, Drizzle selects
-    // joining JoshingGameResponse fail with Postgres 42703 (e.g. the knowledge
-    // domain detail query) before migrate() gets a chance to repair it.
-    try {
-      await db.execute(sql`
-        ALTER TABLE "JoshingGameResponse"
-          ADD COLUMN IF NOT EXISTS "quip" text
-      `);
-    } catch {
-      // JoshingGameResponse may not exist yet — migrate() handles initial creation.
     }
 
     // Migration 0028 adds the Category.general_knowledge enum value and migration
@@ -542,6 +425,20 @@ export async function register() {
     } catch {
       // Question may not exist yet on a fresh database — migrate() creates it
       // before this migration runs.
+    }
+
+    // Migration 0060 adds the nullable GeneratedQuestion.inside_joke column,
+    // which holds the precomputed aside copied into Question.inside_joke at
+    // persist time. Apply it idempotently in case the migration is recorded
+    // without the column actually present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "GeneratedQuestion"
+          ADD COLUMN IF NOT EXISTS "inside_joke" text
+      `);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
     }
 
     // Migration 0044 adds the nullable User.last_activity_bell_opened_at
@@ -843,6 +740,57 @@ export async function register() {
       // both User and PROFILE_SECTION_VISIBILITY before this migration runs.
     }
 
+    // Migration 0061 creates the EmailVerificationToken table that backs the
+    // /verify-email confirm-link flow. The send + confirm routes hit this
+    // table on every email-verification request, so a preview/production
+    // database with the migration recorded but the table missing would 42P01
+    // before migrate() could repair it. Pre-create the table, FK, and
+    // indexes idempotently outside the migrator transaction.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "EmailVerificationToken" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL,
+          "email" text NOT NULL,
+          "token_hash" text NOT NULL,
+          "expires_at" timestamp with time zone NOT NULL,
+          "consumed_at" timestamp with time zone,
+          "created_at" timestamp with time zone DEFAULT now() NOT NULL
+        )
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          token_table regclass := to_regclass('public."EmailVerificationToken"');
+          user_table regclass := to_regclass('public."User"');
+        BEGIN
+          IF token_table IS NOT NULL
+            AND user_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'EmailVerificationToken_user_id_User_id_fk'
+                AND conrelid = token_table
+            )
+          THEN
+            ALTER TABLE "EmailVerificationToken"
+              ADD CONSTRAINT "EmailVerificationToken_user_id_User_id_fk"
+              FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE;
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "EmailVerificationToken_token_hash_key"
+          ON "EmailVerificationToken" ("token_hash")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "EmailVerificationToken_user_id_idx"
+          ON "EmailVerificationToken" ("user_id")
+      `);
+    } catch {
+      // User table may not exist yet on a fresh database — migrate() creates
+      // it before this migration runs.
+    }
+
     // Migration 0054 adds a 'knowledge_base' value to ProfileSection (which
     // collapses the legacy 'knowledge_map' and 'mind_expanding' sections into
     // one) and drops User.bio / .tagline / .location plus their CHECKs. The
@@ -885,6 +833,96 @@ export async function register() {
       await db.execute(sql`
         ALTER TABLE "User"
           ADD COLUMN IF NOT EXISTS "area_top_up_prompt_dismissed_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
+    // Migration 0058 (D-1 Stage 3) introduces the directional Follow model:
+    // the FollowState/FollowPrivacy enums, the User.follow_privacy column, the
+    // Follow table, and a backfill from the frozen Friendship table. Guard for
+    // preview/production databases that may have the migration recorded without
+    // the objects present — relationship reads now go through Follow and would
+    // 42P01/42703/42704 before app code can recover. Backfills are
+    // ON CONFLICT DO NOTHING, so this whole block is safe to re-run.
+    try {
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."FollowState" AS ENUM('pending', 'approved');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."FollowPrivacy" AS ENUM('public', 'approval_required');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "follow_privacy" "public"."FollowPrivacy" NOT NULL DEFAULT 'approval_required'
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "Follow" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "followerId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "followeeId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "state" "public"."FollowState" NOT NULL DEFAULT 'pending',
+          "personalNote" text,
+          "requestContext" jsonb,
+          "created_at" timestamptz NOT NULL DEFAULT now(),
+          "approvedAt" timestamptz,
+          CONSTRAINT "Follow_followerId_followeeId_key" UNIQUE ("followerId", "followeeId"),
+          CONSTRAINT "Follow_distinct_users" CHECK ("followerId" <> "followeeId")
+        )
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Follow_followerId_state_idx" ON "Follow" ("followerId", "state")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Follow_followeeId_state_idx" ON "Follow" ("followeeId", "state")
+      `);
+      await db.execute(sql`
+        INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "approvedAt", "created_at")
+        SELECT gen_random_uuid()::text, "userAId", "userBId", 'approved'::"public"."FollowState",
+               COALESCE("formedAt", now()), "createdAt"
+        FROM "Friendship" WHERE "status" = 'active'
+        ON CONFLICT ("followerId", "followeeId") DO NOTHING
+      `);
+      await db.execute(sql`
+        INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "approvedAt", "created_at")
+        SELECT gen_random_uuid()::text, "userBId", "userAId", 'approved'::"public"."FollowState",
+               COALESCE("formedAt", now()), "createdAt"
+        FROM "Friendship" WHERE "status" = 'active'
+        ON CONFLICT ("followerId", "followeeId") DO NOTHING
+      `);
+      await db.execute(sql`
+        INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "personalNote", "requestContext", "created_at")
+        SELECT gen_random_uuid()::text,
+               "requestedByUserId",
+               CASE WHEN "requestedByUserId" = "userAId" THEN "userBId" ELSE "userAId" END,
+               'pending'::"public"."FollowState",
+               "personalNote", "requestContext", "createdAt"
+        FROM "Friendship" WHERE "status" = 'pending'
+        ON CONFLICT ("followerId", "followeeId") DO NOTHING
+      `);
+    } catch {
+      // User or Friendship may not exist yet on a fresh database — migrate()
+      // creates them and applies 0058 in normal order.
+    }
+
+    // Migration 0059 (D-2 WS1) adds User.discoverable_by_niche_match, the third
+    // discoverability flag. Additive boolean with a default — the safe case.
+    // TEST-PHASE default is ON (DEFAULT true): the whole cohort, including
+    // pre-existing users, is enrolled in the niche-match test. The production
+    // default is an OPEN DECISION to revisit after the test; default-ON here is
+    // deliberate for the test cohort only. Guard for preview/production
+    // databases that may have the migration recorded without the column present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "discoverable_by_niche_match" boolean NOT NULL DEFAULT true
       `);
     } catch {
       // User may not exist yet on a fresh database — migrate() creates it

@@ -1,9 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/server/db', () => ({ db: {}, users: {}, userDomainDifficulties: {} }));
+vi.mock('@/server/db', () => ({
+  db: {},
+  users: {},
+  userDomainDifficulties: {},
+  declaredInterests: {},
+  playerMastery: {},
+}));
 
 import {
   applyAdaptiveLevelAdjustment,
+  applyFocusFloor,
   computeDomainDifficultyStep,
   type DomainDifficultyState,
 } from '@/server/adaptive-difficulty';
@@ -31,6 +38,23 @@ describe('applyAdaptiveLevelAdjustment — global adaptive level', () => {
 
   it('clamps at MAX_ADAPTIVE_LEVEL (4.0) — cannot exceed ceiling', () => {
     expect(applyAdaptiveLevelAdjustment(4.0, 1.0)).toBe(4.0);
+  });
+});
+
+describe('applyFocusFloor — opted-in domains start at least Familiar', () => {
+  it('raises an accessible seed to moderate for a focus domain', () => {
+    // A player who stated this area of focus (or accepted it from a friend)
+    // should never open on "Establishing" trivia.
+    expect(applyFocusFloor('accessible', true)).toBe('moderate');
+  });
+
+  it('leaves accessible alone when the domain is not a focus area', () => {
+    expect(applyFocusFloor('accessible', false)).toBe('accessible');
+  });
+
+  it('never lowers a seed that already sits above the floor', () => {
+    expect(applyFocusFloor('moderate', true)).toBe('moderate');
+    expect(applyFocusFloor('specialist', true)).toBe('specialist');
   });
 });
 

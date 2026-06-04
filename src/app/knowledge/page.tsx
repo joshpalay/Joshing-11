@@ -12,6 +12,7 @@ import { RecentlyExpanding, type ExpandingDomain } from '@/components/knowledge/
 import { AskFriendForDomain } from '@/components/knowledge/AskFriendForDomain';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { domainKey } from '@/lib/knowledge/domain-key';
 import type { MasteryTier } from '@/types/db';
 
 type DomainMastery = {
@@ -84,10 +85,6 @@ function asTier(value: string): MasteryTier {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(Math.round(value));
-}
-
-function domainKey(value: string): string {
-  return value.trim().toLowerCase();
 }
 
 function displayMind(domains: DomainMastery[], declaredInterests: string[]): string {
