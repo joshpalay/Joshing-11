@@ -256,20 +256,20 @@
   }
 }
 
-@keyframes triangle-breathe {
-  0%, 100% { opacity: var(--tri-opacity-low, 0.75); }
-  50%      { opacity: var(--tri-opacity-high, 1); }
+/* Each triangle fades out to its low opacity and back twice per cycle; the
+   colour swap (below) lands on those troughs so the change is hidden behind
+   the fade — a soft cross-fade instead of a hard cut. */
+@keyframes triangle-fade {
+  0%   { opacity: var(--tri-opacity-low, 0.2); }
+  25%  { opacity: var(--tri-opacity-high, 1); }
+  50%  { opacity: var(--tri-opacity-low, 0.2); }
+  75%  { opacity: var(--tri-opacity-high, 1); }
+  100% { opacity: var(--tri-opacity-low, 0.2); }
 }
 
 @keyframes triangle-color-swap {
-  0%, 49%   { fill: var(--tri-color-a, currentColor); }
-  50%, 100% { fill: var(--tri-color-b, currentColor); }
-}
-
-@keyframes triangle-drift {
-  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
-  50%  { transform: translate(var(--tri-dx, 0), var(--tri-dy, 0)) rotate(var(--tri-dr, 0deg)) scale(var(--tri-ds, 1)); }
-  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  0%, 50%      { fill: var(--tri-color-a, currentColor); }
+  50.01%, 100% { fill: var(--tri-color-b, currentColor); }
 }
 
 @keyframes triangle-sweep {
@@ -309,7 +309,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .triangle-loader-tri,
-  .triangle-loader-float,
   .triangle-loader-sweep,
   .triangle-loader-dot {
     animation: none !important;
