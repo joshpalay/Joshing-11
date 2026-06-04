@@ -7,7 +7,7 @@ import { AnswerSheet } from '@/components/feed/AnswerSheet';
 import type { StreamQuestion } from '@/lib/activity-stream';
 import type { InsideJokeKind } from '@/lib/questions-types';
 
-import { FM, INK, INK2, INK3 } from '@/components/lately/tokens';
+import { FM, INK, INK2 } from '@/components/lately/tokens';
 
 type Feedback = {
   isCorrect: boolean;
@@ -21,18 +21,20 @@ type Feedback = {
   openedTerritoryDomain: string | null;
 };
 
-// D-4 CORRECTION 2: one milestone question, answered IN PLACE via the existing
-// feed answer pop-ups (AnswerSheet -> AnswerFeedbackSheet). Full credit is
-// written by /api/lately/milestone/answer; this component only drives the UI and
-// reports a correct answer up so the milestone can track "{k} of {n} answered".
+// D-4 CORRECTION 2 (revised): this drives the ONE active (still-unanswered)
+// milestone question — the expanded item's single focal point and single
+// action. The question reads as the live, playable one (upright navy serif,
+// slightly larger, behind a thin left rule); the action is an inline text
+// affordance, not a boxed button. The result is reported up only AFTER the
+// feedback pop-up closes, so the parent can retire the question into the quiet
+// "Answered" history (carrying the submitted answer + correctness) and promote
+// the next unanswered question — keeping exactly one active question on screen.
 export function InlineAnswerFlow({
   question,
-  answered,
-  onAnswered,
+  onResolved,
 }: {
   question: StreamQuestion;
-  answered: boolean;
-  onAnswered: (questionId: string) => void;
+  onResolved: (questionId: string, submitted: string, isCorrect: boolean) => void;
 }) {
   const [phase, setPhase] = useState<'closed' | 'input' | 'result'>('closed');
   const [loading, setLoading] = useState(false);
@@ -69,7 +71,6 @@ export function InlineAnswerFlow({
           : null,
       });
       setPhase('result');
-      if (body.isCorrect) onAnswered(question.questionId);
     } catch {
       // Leave the input sheet open so the viewer can retry.
     } finally {
@@ -77,54 +78,53 @@ export function InlineAnswerFlow({
     }
   }
 
+  // Hand the resolution up only once the viewer dismisses the result pop-up, so
+  // this block stays mounted (and the sheet visible) through the reveal, then
+  // the parent moves the question into the answered history.
+  function finish() {
+    setPhase('closed');
+    if (feedback) onResolved(question.questionId, submitted, feedback.isCorrect);
+  }
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+    <div
+      style={{
+        borderLeft: `2px solid ${INK2}`,
+        paddingLeft: 14,
+      }}
+    >
       <p
         style={{
-          flex: 1,
-          minWidth: 0,
           margin: 0,
           fontFamily: 'Georgia, serif',
-          fontStyle: 'italic',
-          fontSize: 14,
+          fontSize: 17,
           lineHeight: 1.5,
-          color: answered ? INK3 : INK2,
+          color: INK,
         }}
       >
         &ldquo;{question.text}&rdquo;
       </p>
 
-      {answered ? (
-        <span
-          style={{
-            flexShrink: 0,
-            fontFamily: FM,
-            fontSize: 10,
-            letterSpacing: 1.5,
-            color: INK3,
-          }}
-        >
-          ✓ ANSWERED
-        </span>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setPhase('input')}
-          style={{
-            flexShrink: 0,
-            background: 'transparent',
-            border: `1.5px solid ${INK}`,
-            color: INK,
-            fontFamily: FM,
-            fontSize: 10,
-            letterSpacing: 2,
-            padding: '6px 12px',
-            cursor: 'pointer',
-          }}
-        >
-          ANSWER →
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => setPhase('input')}
+        style={{
+          marginTop: 10,
+          display: 'inline-flex',
+          alignItems: 'center',
+          background: 'transparent',
+          border: 'none',
+          borderBottom: `1px solid ${INK}`,
+          color: INK,
+          fontFamily: FM,
+          fontSize: 11,
+          letterSpacing: 1.5,
+          padding: '0 0 2px',
+          cursor: 'pointer',
+        }}
+      >
+        ANSWER THIS ONE →
+      </button>
 
       {phase === 'input' ? (
         <AnswerSheet
@@ -152,7 +152,7 @@ export function InlineAnswerFlow({
           openedTerritoryDomain={feedback.openedTerritoryDomain}
           questionId={question.questionId}
           feedItemId={`milestone:${question.questionId}`}
-          onClose={() => setPhase('closed')}
+          onClose={finish}
         />
       ) : null}
     </div>
