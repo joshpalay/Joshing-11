@@ -182,6 +182,10 @@ export const DEFAULT_LLM_TIMEOUT_MS = 20_000;
 // Aggressive timeout on the live grading path — answer endpoint is a
 // user-blocking request and any wait above ~8s feels broken.
 export const GRADE_TIMEOUT_MS = 8_000;
+// One retry on a malformed/failed grade before conceding to the deterministic
+// fallback. Each attempt is bounded by GRADE_TIMEOUT_MS, so worst case stays
+// within the user-blocking budget. Bumping this trades latency for resilience.
+const MAX_GRADE_ATTEMPTS = 2;
 // Generation batches are 2000-token Sonnet replies and tolerate more latency.
 export const GENERATION_TIMEOUT_MS = 35_000;
 // Single-purpose Haiku gates over a small batch — fast in the happy case.
@@ -488,6 +492,30 @@ function fallbackGrading(reason: string = 'llm_error'): UnscoredGradingResponse 
   return { status: 'unscored', reason };
 }
 
+// Haiku is asked to return result: "correct" | "wrong", but it intermittently
+// answers in a non-canonical form — "Correct", "incorrect", "yes", "true", a
+// JSON boolean, etc. Treating only the two exact literals as valid threw away
+// these perfectly good verdicts as invalid_result_field, which then surfaced the
+// user-facing "answer-checker is taking a quick breather" 503 (see
+// src/app/api/daily/answer/route.ts) on a successfully graded answer. Coerce the
+// common variants to the canonical binary instead of discarding the verdict.
+const CORRECT_RESULT_TOKENS = new Set([
+  'correct', 'right', 'yes', 'true', 'accept', 'accepted', 'pass', 'passed', 'valid',
+]);
+const WRONG_RESULT_TOKENS = new Set([
+  'wrong', 'incorrect', 'false', 'no', 'reject', 'rejected', 'fail', 'failed', 'invalid',
+]);
+
+function normalizeGradeResult(value: unknown): GradeResult | null {
+  if (typeof value === 'boolean') return value ? 'correct' : 'wrong';
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (CORRECT_RESULT_TOKENS.has(normalized)) return 'correct';
+  if (WRONG_RESULT_TOKENS.has(normalized)) return 'wrong';
+  return null;
+}
+
 // "General Knowledge" and "Other" must never reach the UI as a broad_category.
 // The prompt forbids them, but this is a last-line guard if the LLM still
 // returns one. Remaps to the closest thematic bucket; "Pop Culture" is the
@@ -584,45 +612,70 @@ CONSOLATION RULES (for wrong answers only):
 
 Return only valid JSON with keys: result, confidence, reason, consolation. No explanation outside the JSON object.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
-  try {
-    const client = getAnthropicClient();
-    if (!client) {
-      return fallbackGrading('no_client');
-    }
-
-    // Grading system prompt is ~800 tokens — below Haiku's 2048 cacheable
-    // threshold, so cache_control would be a silent no-op. Pass the prompt
-    // as a plain string for clarity.
-    const response = await loggedMessagesCreate(client, 'grade', {
-      model: GRADING_MODEL,
-      max_tokens: 300,
-      temperature: 0,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    }, { timeoutMs: GRADE_TIMEOUT_MS });
-
-    const text = extractTextContent(response.content);
-    const parsed = parseJsonObject(text);
-    if (!parsed) {
-      logFallback('gradeAnswerWithLLM', 'invalid_json', { responseLength: text.length });
-      return fallbackGrading('invalid_json');
-    }
-
-    const result = parsed.result === 'correct' || parsed.result === 'wrong' ? parsed.result : null;
-    if (!result) {
-      logFallback('gradeAnswerWithLLM', 'invalid_result_field');
-      return fallbackGrading('invalid_result_field');
-    }
-
-    const confidence = clampConfidence(parsed.confidence, 0);
-    const reason = asTrimmedString(parsed.reason) ?? 'llm_invalid_response';
-    const consolation = result === 'wrong' ? asNullableString(parsed.consolation) : null;
-
-    return { status: 'scored', result, confidence, reason, consolation };
-  } catch (error) {
-    logFallback('gradeAnswerWithLLM', 'request_failed', summarizeError(error));
-    return fallbackGrading('request_failed');
+  const client = getAnthropicClient();
+  if (!client) {
+    // A missing/invalid key is a config problem, not a transient blip — retrying
+    // can't help, so fail fast.
+    return fallbackGrading('no_client');
   }
+
+  // Grading is the user-blocking answer path, so a single hiccup (a malformed
+  // reply, a truncated socket) shouldn't surface the "answer-checker is taking a
+  // breather" 503 — the caller treats any `unscored` result as an outage and
+  // refuses to score. Give the model one clean retry before conceding; only a
+  // genuinely unusable result twice in a row falls back.
+  let lastReason = 'request_failed';
+  for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt += 1) {
+    try {
+      // Grading system prompt is ~800 tokens — below Haiku's 2048 cacheable
+      // threshold, so cache_control would be a silent no-op. Pass the prompt
+      // as a plain string for clarity. max_tokens is generous (the reply is a
+      // tiny JSON object, ~120 tokens in practice) purely so a verbose reason or
+      // consolation can never truncate the JSON mid-object — you only pay for
+      // tokens actually produced.
+      const response = await loggedMessagesCreate(client, 'grade', {
+        model: GRADING_MODEL,
+        max_tokens: 1024,
+        temperature: 0,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+      }, { timeoutMs: GRADE_TIMEOUT_MS });
+
+      const text = extractTextContent(response.content);
+      const parsed = parseJsonObject(text);
+      if (!parsed) {
+        lastReason = 'invalid_json';
+        logFallback('gradeAnswerWithLLM', 'invalid_json', {
+          attempt,
+          responseLength: text.length,
+          stopReason: response.stop_reason,
+        });
+        continue;
+      }
+
+      const result = normalizeGradeResult(parsed.result);
+      if (!result) {
+        lastReason = 'invalid_result_field';
+        logFallback('gradeAnswerWithLLM', 'invalid_result_field', {
+          attempt,
+          rawResultType: typeof parsed.result,
+          rawResult: typeof parsed.result === 'string' ? parsed.result.slice(0, 40) : undefined,
+        });
+        continue;
+      }
+
+      const confidence = clampConfidence(parsed.confidence, 0);
+      const reason = asTrimmedString(parsed.reason) ?? 'llm_invalid_response';
+      const consolation = result === 'wrong' ? asNullableString(parsed.consolation) : null;
+
+      return { status: 'scored', result, confidence, reason, consolation };
+    } catch (error) {
+      lastReason = 'request_failed';
+      logFallback('gradeAnswerWithLLM', 'request_failed', { attempt, ...summarizeError(error) });
+    }
+  }
+
+  return fallbackGrading(lastReason);
 }
 
 // ─── Prompt 2: Question Categorization ────────────────────────────────────────

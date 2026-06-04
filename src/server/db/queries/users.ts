@@ -131,31 +131,97 @@ export function setFollowPrivacy(id: string, followPrivacy: 'public' | 'approval
     .then(([row]) => row);
 }
 
+export const MAX_ACTIVE_DECLARED_INTERESTS = 5;
+
+// Thrown when an incremental add would push the user past the declared-interest
+// cap. Callers (API routes) detect this to return a 409 rather than a generic
+// 400 so the client can offer a "manage interests" path instead of a dead end.
+export class DeclaredInterestLimitError extends Error {
+  constructor(
+    message = `A player can have at most ${MAX_ACTIVE_DECLARED_INTERESTS} active declared interests.`,
+  ) {
+    super(message);
+    this.name = 'DeclaredInterestLimitError';
+  }
+}
+
+type DeclaredInterestTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Insert (or reactivate) a single declared interest and seed its zero-point
+// PlayerMastery territory. Shared by the full-replace path (saveDeclaredInterests)
+// and the incremental path (addDeclaredInterest) so the mastery-seeding
+// invariant below lives in exactly one place — see CLAUDE.md "single chokepoint
+// for every declared-interest write".
+async function upsertDeclaredInterestRow(
+  tx: DeclaredInterestTx,
+  userId: string,
+  interest: DeclaredInterestInput,
+) {
+  await tx
+    .insert(declaredInterests)
+    .values({
+      userId,
+      domain: interest.label,
+      broadCategory: interest.broadCategory ?? null,
+      declaredAt: new Date(),
+      isActive: true,
+    })
+    .onConflictDoUpdate({
+      target: [declaredInterests.userId, declaredInterests.domain],
+      set: {
+        broadCategory: interest.broadCategory ?? null,
+        declaredAt: new Date(),
+        isActive: true,
+      },
+    });
+
+  // Seed a zero-point PlayerMastery row for the declared domain. Without
+  // this, the daily-answer route's "bot questions can only deepen existing
+  // territories" guard (src/app/api/daily/answer/route.ts) fires for the
+  // user's very first daily, so correct answers in a freshly-declared
+  // domain award 0 points and silently never open the territory.
+  await tx
+    .insert(playerMastery)
+    .values({
+      userId,
+      canonicalSubcategory: interest.label,
+      broadCategory: interest.broadCategory ?? null,
+      totalPoints: 0,
+      tier: 'establishing',
+      lifetimePointsBaseline: 0,
+      territoryType: 'declared',
+    })
+    .onConflictDoNothing({
+      target: [playerMastery.userId, playerMastery.canonicalSubcategory],
+    });
+}
+
+// Backstop categorization for a single interest. Re-runs the domain categorizer
+// for any interest that arrived uncategorized (null/empty or a catch-all) and
+// degrades to null — honest and backfillable — when categorization is
+// unavailable, since categorizeInterestDomain never throws.
+async function categorizeIfNeeded(interest: DeclaredInterestInput): Promise<DeclaredInterestInput> {
+  if (!isCatchAllBroadCategory(interest.broadCategory)) return interest;
+  const broadCategory = await categorizeInterestDomain(interest.label);
+  return { ...interest, broadCategory };
+}
+
 export async function saveDeclaredInterests(userId: string, interests: DeclaredInterestInput[]) {
   const normalized = normalizeDeclaredInterests(interests);
 
-  if (normalized.length > 5) {
-    throw new Error('A player can have at most 5 active declared interests.');
+  if (normalized.length > MAX_ACTIVE_DECLARED_INTERESTS) {
+    throw new DeclaredInterestLimitError();
   }
 
-  // Backstop categorization. This is the single chokepoint for every declared-
-  // interest write (onboarding + manual edits). The upstream categorizer
-  // (canonicalizeInterest) falls back to the "General Knowledge" catch-all
-  // whenever the Haiku call is unavailable or returns malformed JSON, and that
-  // fabricated value used to be persisted verbatim — permanently stranding the
-  // domain in the "Other interests" circle, since only later gameplay
-  // re-categorizes. Re-run the domain categorizer for any interest that arrived
-  // uncategorized (null/empty or a catch-all) and persist null — honest and
-  // backfillable — only when categorization is genuinely unavailable.
-  // categorizeInterestDomain never throws, so a transient LLM blip degrades to
-  // null rather than failing the save.
-  const categorized = await Promise.all(
-    normalized.map(async (interest) => {
-      if (!isCatchAllBroadCategory(interest.broadCategory)) return interest;
-      const broadCategory = await categorizeInterestDomain(interest.label);
-      return { ...interest, broadCategory };
-    }),
-  );
+  // Backstop categorization. saveDeclaredInterests + addDeclaredInterest are the
+  // single chokepoint for every declared-interest write (onboarding + manual
+  // edits + incremental adds). The upstream categorizer (canonicalizeInterest)
+  // falls back to the "General Knowledge" catch-all whenever the Haiku call is
+  // unavailable or returns malformed JSON, and that fabricated value used to be
+  // persisted verbatim — permanently stranding the domain in the "Other
+  // interests" circle, since only later gameplay re-categorizes. categorizeIfNeeded
+  // re-runs the domain categorizer for any interest that arrived uncategorized.
+  const categorized = await Promise.all(normalized.map(categorizeIfNeeded));
 
   await db.transaction(async (tx) => {
     await tx
@@ -164,47 +230,50 @@ export async function saveDeclaredInterests(userId: string, interests: DeclaredI
       .where(eq(declaredInterests.userId, userId));
 
     for (const interest of categorized) {
-      await tx
-        .insert(declaredInterests)
-        .values({
-          userId,
-          domain: interest.label,
-          broadCategory: interest.broadCategory ?? null,
-          declaredAt: new Date(),
-          isActive: true,
-        })
-        .onConflictDoUpdate({
-          target: [declaredInterests.userId, declaredInterests.domain],
-          set: {
-            broadCategory: interest.broadCategory ?? null,
-            declaredAt: new Date(),
-            isActive: true,
-          },
-        });
-
-      // Seed a zero-point PlayerMastery row for the declared domain. Without
-      // this, the daily-answer route's "bot questions can only deepen existing
-      // territories" guard (src/app/api/daily/answer/route.ts) fires for the
-      // user's very first daily, so correct answers in a freshly-declared
-      // domain award 0 points and silently never open the territory.
-      await tx
-        .insert(playerMastery)
-        .values({
-          userId,
-          canonicalSubcategory: interest.label,
-          broadCategory: interest.broadCategory ?? null,
-          totalPoints: 0,
-          tier: 'establishing',
-          lifetimePointsBaseline: 0,
-          territoryType: 'declared',
-        })
-        .onConflictDoNothing({
-          target: [playerMastery.userId, playerMastery.canonicalSubcategory],
-        });
+      await upsertDeclaredInterestRow(tx, userId, interest);
     }
   });
 
   return categorized;
+}
+
+// Incrementally add one declared interest without clobbering the existing list
+// (saveDeclaredInterests does a full replace). Powers the "add a topic" affordance
+// on the daily setup screen. Idempotent on an already-active label, and enforces
+// the same cap as the full-replace path.
+export async function addDeclaredInterest(
+  userId: string,
+  input: DeclaredInterestInput,
+): Promise<{ created: boolean; domain: string; broadCategory: string | null }> {
+  const clean = normalizeDeclaredInterest(input);
+  if (!clean) {
+    throw new Error('Enter a topic name.');
+  }
+
+  const active = await db
+    .select({ domain: declaredInterests.domain, broadCategory: declaredInterests.broadCategory })
+    .from(declaredInterests)
+    .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
+
+  const key = clean.label.toLowerCase();
+  const existing = active.find((row) => row.domain.toLowerCase() === key);
+  if (existing) {
+    return { created: false, domain: existing.domain, broadCategory: existing.broadCategory };
+  }
+
+  if (active.length >= MAX_ACTIVE_DECLARED_INTERESTS) {
+    throw new DeclaredInterestLimitError(
+      `You can track up to ${MAX_ACTIVE_DECLARED_INTERESTS} interests. Remove one on your Knowledge page to add another.`,
+    );
+  }
+
+  const interest = await categorizeIfNeeded(clean);
+
+  await db.transaction(async (tx) => {
+    await upsertDeclaredInterestRow(tx, userId, interest);
+  });
+
+  return { created: true, domain: interest.label, broadCategory: interest.broadCategory ?? null };
 }
 
 export async function markOnboardingComplete(userId: string) {
