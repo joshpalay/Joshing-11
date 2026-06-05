@@ -12,9 +12,9 @@ import { and, count, eq, inArray, isNull, ne, notExists, or } from 'drizzle-orm'
 import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import {
+  feedItemVisibilityPredicate,
   getDismissedDomains,
   getFeedForUser,
-  questionVisibilityPredicate,
   type CollapsedFeedItem,
   type FeedCursor,
   type FeedFilter,
@@ -147,7 +147,7 @@ function surfaceActionableCount(viewerUserId: string, filter: FeedFilter): Promi
       visibleSourcePredicate,
       feedFilterSourcePredicate(filter),
       inArray(feedItems.state, ['active', 'skipped']),
-      questionVisibilityPredicate(viewerUserId),
+      feedItemVisibilityPredicate(viewerUserId),
       or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
       or(
         eq(feedItems.sourceType, 'direct_sent'),
@@ -201,7 +201,7 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         eq(feedItems.recipientUserId, viewerUserId),
         visibleSourcePredicate,
         feedFilterSourcePredicate(filter),
-        questionVisibilityPredicate(viewerUserId),
+        feedItemVisibilityPredicate(viewerUserId),
         or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
       ))
       .then((rows) => rows[0]?.value ?? 0),

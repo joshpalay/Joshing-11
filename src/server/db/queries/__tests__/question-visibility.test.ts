@@ -44,7 +44,28 @@ vi.mock('@/server/db', () => ({
   users: { id: 'users.id' },
 }));
 
-import { questionVisibilityPredicate } from '@/server/db/queries/feed';
+import { feedItemVisibilityPredicate, questionVisibilityPredicate } from '@/server/db/queries/feed';
+
+describe('feedItemVisibilityPredicate (direct_sent exemption)', () => {
+  it('admits a feed item when it is direct_sent OR the question visibility gate passes', () => {
+    const predicate = feedItemVisibilityPredicate('viewer-1') as { op: string; parts: unknown[] };
+
+    expect(predicate.op).toBe('or');
+
+    // A question addressed directly to the viewer renders regardless of the
+    // question's visibility — otherwise a 'friends' send to a non-follower is
+    // silently filtered out of the recipient's feed.
+    expect(predicate.parts).toContainEqual({ op: 'eq', column: 'feedItems.sourceType', value: 'direct_sent' });
+
+    // The broadcast/feed visibility gate is still the other branch.
+    const visibilityBranch = predicate.parts.find(
+      (p): p is { op: string; parts: unknown[] } =>
+        typeof p === 'object' && p !== null && (p as { op?: string }).op === 'or',
+    );
+    expect(visibilityBranch).toBeDefined();
+    expect(visibilityBranch!.parts).toContainEqual({ op: 'eq', column: 'questions.visibility', value: 'public' });
+  });
+});
 
 describe('questionVisibilityPredicate (D-1 Stage 4)', () => {
   it('admits public questions unconditionally and gates friends on an approved viewer→author follow', () => {
