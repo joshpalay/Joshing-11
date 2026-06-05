@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Search, X } from 'lucide-react';
+import { ChevronDown, Plus, Search, X } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -383,29 +383,35 @@ function QuestionsPageContent() {
             </button>
           </header>
 
-          <section className="mb-5 grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3 sm:p-3">
-            <select
-              value={domainFilter}
-              onChange={(event) => setDomainFilter(event.target.value)}
-              className="h-11 rounded-md border bg-background px-3 text-sm"
-              aria-label="Filter by domain"
-            >
-              <option value="all">All domains</option>
-              {availableDomains.map((item) => (
-                <option key={item.domain} value={item.domain}>{item.label}</option>
-              ))}
-            </select>
-            <select
-              value={sortMode}
-              onChange={(event) => setSortMode(event.target.value as SortMode)}
-              className="h-11 rounded-md border bg-background px-3 text-sm"
-              aria-label="Sort by"
-            >
-              <option value="newest">Newest</option>
-              <option value="most_answered">Most answered</option>
-              <option value="hardest">Hardest</option>
-              <option value="easiest">Easiest</option>
-            </select>
+          <section className="mb-5 grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.75fr)_minmax(0,1.5fr)] sm:gap-3 sm:p-3">
+            <div className="relative">
+              <select
+                value={domainFilter}
+                onChange={(event) => setDomainFilter(event.target.value)}
+                className="h-11 w-full appearance-none rounded-md border bg-background pl-3 pr-9 text-sm"
+                aria-label="Filter by domain"
+              >
+                <option value="all">All domains</option>
+                {availableDomains.map((item) => (
+                  <option key={item.domain} value={item.domain}>{item.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            </div>
+            <div className="relative">
+              <select
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value as SortMode)}
+                className="h-11 w-full appearance-none rounded-md border bg-background pl-3 pr-9 text-sm"
+                aria-label="Sort by"
+              >
+                <option value="newest">Newest</option>
+                <option value="most_answered">Most answered</option>
+                <option value="hardest">Hardest</option>
+                <option value="easiest">Easiest</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            </div>
             <label className="relative col-span-2 sm:col-span-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
