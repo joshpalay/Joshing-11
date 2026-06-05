@@ -106,6 +106,7 @@ export function TerritorySetupClient() {
     resting: null,
   });
   const newTopicInputRef = useRef<HTMLInputElement | null>(null);
+  const dragPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -360,6 +361,7 @@ export function TerritorySetupClient() {
     (event: ReactPointerEvent, domain: string) => {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
+      dragPointerRef.current = { x: event.clientX, y: event.clientY };
       setDragState({ domain, x: event.clientX, y: event.clientY });
       setHoveredZone(zoneAtPoint(event.clientX, event.clientY));
     },
@@ -369,11 +371,41 @@ export function TerritorySetupClient() {
   const handleDragMove = useCallback(
     (event: ReactPointerEvent) => {
       if (!dragState) return;
+      dragPointerRef.current = { x: event.clientX, y: event.clientY };
       setDragState({ domain: dragState.domain, x: event.clientX, y: event.clientY });
       setHoveredZone(zoneAtPoint(event.clientX, event.clientY));
     },
     [dragState, zoneAtPoint],
   );
+
+  // While a territory is held near the top/bottom edge, scroll the page so the
+  // user can reach zones that are off-screen. A rAF loop (not pointermove)
+  // keeps scrolling even when the finger is held still at the edge.
+  const isDragging = dragState !== null;
+  useEffect(() => {
+    if (!isDragging) return;
+    const EDGE = 96; // px from each edge that triggers auto-scroll
+    const MAX_SPEED = 20; // px per frame at the very edge
+    let frame = 0;
+    const step = () => {
+      const { x, y } = dragPointerRef.current;
+      const viewportHeight = window.innerHeight;
+      let delta = 0;
+      if (y < EDGE) {
+        delta = -Math.ceil(((EDGE - y) / EDGE) * MAX_SPEED);
+      } else if (y > viewportHeight - EDGE) {
+        delta = Math.ceil(((y - (viewportHeight - EDGE)) / EDGE) * MAX_SPEED);
+      }
+      if (delta !== 0) {
+        window.scrollBy(0, delta);
+        // Content shifted under a stationary pointer — re-resolve the hovered zone.
+        setHoveredZone(zoneAtPoint(x, y));
+      }
+      frame = window.requestAnimationFrame(step);
+    };
+    frame = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(frame);
+  }, [isDragging, zoneAtPoint]);
 
   const handleDragEnd = useCallback(
     (event: ReactPointerEvent) => {
