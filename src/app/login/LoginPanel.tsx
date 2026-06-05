@@ -101,7 +101,10 @@ export default function LoginPanel() {
       const response = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalized }),
+        // Forward the per-user invite link so request-otp can satisfy the
+        // invite gate for a brand-new phone that arrived via /u/<handle>/<token>
+        // (the invitation isn't phone-targeted, so the gate can't infer it).
+        body: JSON.stringify({ phone: normalized, userInvite }),
       });
       const data = await response.json().catch(() => ({}));
 
