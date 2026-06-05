@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/server/auth/session';
 import { db, friendInvitations } from '@/server/db';
 import { getPreSeededInterestsForUser, getUserOnboardingProfile } from '@/server/db/queries/users';
+import { hasInviteLinkFriendship } from '@/server/friends/user-invite-token';
 
 import OnboardingFlow, { type PreSeededInterest } from './OnboardingFlow';
 
@@ -27,6 +28,12 @@ export default async function OnboardingPage() {
   // but this protects the onboarding route against any future session path
   // that bypasses the general gate (e.g. a pre-fix legacy session that was
   // grandfathered through re-login).
+  //
+  // Two valid provenances: an accepted FriendInvitation (SMS-style) OR a
+  // per-user invite-link friendship (/u/<handle>/<token>), which leaves an
+  // approved follow edge but NO FriendInvitation row. Without the second check
+  // invite-link signups fall through to redirect('/login'), which the proxy
+  // bounces back into the onboarding-claim refresh → ERR_TOO_MANY_REDIRECTS.
   const hasInvitation = await db
     .select({ id: friendInvitations.id })
     .from(friendInvitations)
@@ -36,7 +43,7 @@ export default async function OnboardingPage() {
     ))
     .limit(1);
 
-  if (hasInvitation.length === 0) {
+  if (hasInvitation.length === 0 && !(await hasInviteLinkFriendship(session.userId))) {
     redirect('/login');
   }
 

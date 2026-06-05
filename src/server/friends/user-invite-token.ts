@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto'
 
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
-import { db, users } from '@/server/db'
+import { db, follows, users } from '@/server/db'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
 
 // Match the prior-art token primitive used for FriendInvitation tokens at
@@ -120,6 +120,23 @@ export async function resolveInviteLink(handle: string, token: string): Promise<
     inviterDisplayName: row.displayName,
     inviterAvatarColor: row.avatarColor,
   }
+}
+
+// True when someone follows `userId` on an approved edge — the footprint left
+// by upsertInvitationFriendship when a per-user invite link is accepted (it
+// creates a mutual approved follow but NO FriendInvitation row). The onboarding
+// route uses this as a second invite-provenance signal so users who arrived via
+// /u/<handle>/<token> aren't bounced back to /login (which loops through the
+// onboarding-claim refresh). A brand-new user reaching onboarding can only have
+// an approved follower through an accepted invitation, so this is a safe gate.
+export async function hasInviteLinkFriendship(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ followerId: follows.followerId })
+    .from(follows)
+    .where(and(eq(follows.followeeId, userId), eq(follows.state, 'approved')))
+    .limit(1)
+
+  return Boolean(row)
 }
 
 // Called from verify-otp when the user arrives via /u/<handle>/<token>.
