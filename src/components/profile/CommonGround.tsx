@@ -20,10 +20,11 @@ type CommonGroundProps = {
 const MIN_DIAMETER = 20
 const MAX_DIAMETER = 56
 
-// Viewer = sky, friend = rose — a calm two-tone split so each circle reads as
-// "you" vs the friend at a glance.
-const VIEWER_FILL = '#38bdf8' // sky-400
-const FRIEND_FILL = '#fb7185' // rose-400
+// Viewer = brand navy, friend = brand orange — the app's two signature accents
+// (--brand-navy / --brand-orange) form a calm, on-brand two-tone split so each
+// circle reads as "you" vs the friend at a glance against the cream surface.
+const VIEWER_FILL = '#1f3a5a' // --brand-navy
+const FRIEND_FILL = '#d15e36' // --brand-orange
 const CIRCLE_OPACITY = 0.72
 
 const TIER_INDEX: Record<MasteryTier, number> = {
