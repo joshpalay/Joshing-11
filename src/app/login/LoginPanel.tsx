@@ -76,6 +76,10 @@ export default function LoginPanel() {
   const [entering, setEntering] = useState(true);
 
   const swapStep = useCallback((next: 'phone' | 'code') => {
+    // Return to the top so the title card is back in view after the button
+    // press — on mobile the focused input scrolls the page down, and landing
+    // mid-page on the next step looks unpolished.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setEntering(false); // exit: fade + slide down
     window.setTimeout(() => {
       setStep(next); // swap content while hidden
@@ -146,6 +150,7 @@ export default function LoginPanel() {
       // Success: navigation is async and doesn't block, so keep the button in
       // its "Verifying…" state. Resetting loading here would flash "Continue"
       // before the redirect lands.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       router.replace('/');
       router.refresh();
     } catch {
