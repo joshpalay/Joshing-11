@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Edit3, Loader2, Plus, X } from 'lucide-react'
+import { Edit3, Loader2, Plus, X } from 'lucide-react'
 import { COUNTRIES } from '@/lib/onboarding/countries'
 import { US_STATES } from '@/lib/onboarding/us-regions'
 
