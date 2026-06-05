@@ -10,7 +10,7 @@
 
 export type RefineItemType = 'friend_expansion' | 'difficulty_escalation' | 'struggle_pruning';
 
-export type RefineActionVerb = 'Add' | 'Ease off' | 'Drop';
+export type RefineActionVerb = 'Add' | 'Ease off' | 'Rest';
 
 export type RefineItemState = 'open' | 'resolved';
 
@@ -63,7 +63,7 @@ export const REFINE_PRIORITY: Record<RefineItemType, number> = {
 export const REFINE_VERB: Record<RefineItemType, RefineActionVerb> = {
   friend_expansion: 'Add',
   difficulty_escalation: 'Ease off',
-  struggle_pruning: 'Drop',
+  struggle_pruning: 'Rest',
 };
 
 /** Max items shown at once. */
