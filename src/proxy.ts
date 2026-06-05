@@ -32,7 +32,14 @@ export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
   const isApi = pathname.startsWith('/api/')
   const isLoginPage = pathname === '/login'
-  const isInvitePage = pathname.startsWith('/invite/')
+  // Both invite landing surfaces must be reachable logged-out so the invitee
+  // can carry their invite into /login: /invite/<token> (FriendInvitation,
+  // SMS-style) and /u/<handle>/<token> (per-user evergreen invite link,
+  // B-Friends-3). Without /u/ here the proxy bounces the invitee to /login
+  // and drops the invite params, so brand-new accounts hit the invite-only
+  // gate at verify-otp and can never sign up.
+  const isInvitePage =
+    pathname.startsWith('/invite/') || pathname.startsWith('/u/')
 
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value
   const claims = await readSessionClaims(token)
