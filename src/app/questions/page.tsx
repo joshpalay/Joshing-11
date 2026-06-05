@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, Search, X } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
@@ -124,6 +124,8 @@ export default function QuestionsPage() {
 
 function QuestionsPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [tab, setTab] = useState<Tab>('authored');
   const [questions, setQuestions] = useState<QuestionView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,13 +136,23 @@ function QuestionsPageContent() {
   const [domainFilter, setDomainFilter] = useState('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
-  const [drawer, setDrawer] = useState<DrawerState>(() => {
-    if (searchParams.get('create') !== '1') return { mode: 'closed' };
-    // The feed's "what would you like to be asked?" prompt rides the idea in
-    // via ?text= so the composer opens pre-filled with the reader's words.
-    const prefillText = searchParams.get('text')?.trim() || undefined;
-    return { mode: 'create', intent: parseIntent(searchParams.get('intent')), prefillText };
-  });
+  // The composer (create) drawer is driven by the URL so the global Nav FAB,
+  // the CreateChooser, and the feed footer can all open it by navigating to
+  // ?create=1 — including when we're already on /questions, where the page
+  // doesn't remount. The editor (edit) drawer is local, opened by a card.
+  const [editingQuestion, setEditingQuestion] = useState<QuestionView | null>(null);
+  const createRequested = searchParams.get('create') === '1';
+  const drawer: DrawerState = editingQuestion
+    ? { mode: 'edit', question: editingQuestion }
+    : createRequested
+      ? {
+          mode: 'create',
+          intent: parseIntent(searchParams.get('intent')),
+          // The feed's "what would you like to be asked?" prompt rides the idea
+          // in via ?text= so the composer opens pre-filled with the reader's words.
+          prefillText: searchParams.get('text')?.trim() || undefined,
+        }
+      : { mode: 'closed' };
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [cardError, setCardError] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -198,6 +210,31 @@ function QuestionsPageContent() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  // Strip the composer params from the URL (no-op if none are present). Keeping
+  // this separate lets the FAB reopen the composer with a fresh ?create=1 push —
+  // a same-URL push would otherwise be a no-op and leave the drawer closed.
+  const clearComposerParams = useCallback(() => {
+    if (searchParams.has('create') || searchParams.has('intent') || searchParams.has('text')) {
+      router.replace(pathname, { scroll: false });
+    }
+  }, [pathname, router, searchParams]);
+
+  const openComposer = useCallback(() => {
+    router.push('/questions?create=1', { scroll: false });
+  }, [router]);
+
+  const openEditor = useCallback((question: QuestionView) => {
+    setEditingQuestion(question);
+    // The editor takes precedence over a URL-driven composer; clear the params
+    // so closing the editor returns to the list instead of reopening it.
+    clearComposerParams();
+  }, [clearComposerParams]);
+
+  const closeDrawer = useCallback(() => {
+    setEditingQuestion(null);
+    clearComposerParams();
+  }, [clearComposerParams]);
+
   const availableDomains = useMemo(() => (
     [...new Map(questions.map((question) => [question.domain, question.domainDisplayName] as const)).entries()]
       .map(([domain, label]) => ({ domain, label }))
@@ -234,7 +271,7 @@ function QuestionsPageContent() {
     const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
     if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not save that question.');
     setQuestions((current) => [body.question!, ...current]);
-    setDrawer({ mode: 'closed' });
+    closeDrawer();
     if (values.sendToFriendIds.length > 0) {
       const n = values.sendToFriendIds.length;
       setToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
@@ -258,7 +295,7 @@ function QuestionsPageContent() {
     const body = await response.json().catch(() => null) as { question?: QuestionView; error?: string; message?: string } | null;
     if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not update that question.');
     setQuestions((current) => current.map((question) => question.id === questionId ? body.question! : question));
-    setDrawer({ mode: 'closed' });
+    closeDrawer();
     setToast('Question updated.');
   }
 
@@ -340,7 +377,7 @@ function QuestionsPageContent() {
               <h1 className="font-serif text-3xl font-semibold">Your Questions</h1>
               <p className="mt-1 text-sm text-muted-foreground">{questions.length} questions</p>
             </div>
-            <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={() => setDrawer({ mode: 'create', intent: null })}>
+            <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={openComposer}>
               <Plus className="size-4" />
               Write a question
             </button>
@@ -386,7 +423,7 @@ function QuestionsPageContent() {
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
                 You haven&apos;t written any questions yet. Write one to get started.
               </p>
-              <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create', intent: null })}>
+              <button className="btn-primary mt-5" type="button" onClick={openComposer}>
                 Write a question
               </button>
             </section>
@@ -406,7 +443,7 @@ function QuestionsPageContent() {
                   confirming={confirmingId === question.id}
                   cardError={cardError[question.id]}
                   deleting={removingId === question.id}
-                  onEdit={() => setDrawer({ mode: 'edit', question })}
+                  onEdit={() => openEditor(question)}
                   onDeleteRequest={() => setConfirmingId(question.id)}
                   onConfirmDelete={() => void confirmDelete(question)}
                   onCancelConfirm={() => setConfirmingId(null)}
@@ -446,14 +483,14 @@ function QuestionsPageContent() {
 
       {drawer.mode !== 'closed' ? (
         <div className="fixed inset-0 z-[60] flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
-          <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={() => setDrawer({ mode: 'closed' })} />
+          <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={closeDrawer} />
           <aside className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-background px-5 pt-5 shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{drawer.mode === 'edit' ? 'Edit' : 'Create'}</p>
                 <h2 className="font-serif text-2xl font-semibold">{drawer.mode === 'edit' ? 'Edit question' : 'Write a question'}</h2>
               </div>
-              <button className="rounded-md border p-2 hover:bg-muted" type="button" onClick={() => setDrawer({ mode: 'closed' })} title="Close">
+              <button className="rounded-md border p-2 hover:bg-muted" type="button" onClick={closeDrawer} title="Close">
                 <X className="size-4" />
               </button>
             </div>
@@ -464,7 +501,7 @@ function QuestionsPageContent() {
                 : { ...createFormProps(drawer.intent).initialValues, ...(drawer.prefillText ? { text: drawer.prefillText } : {}) }}
               initialSpecificMode={drawer.mode === 'create' ? createFormProps(drawer.intent).initialSpecificMode : undefined}
               onSubmit={drawer.mode === 'edit' ? (values) => saveEdit(drawer.question.id, values) : saveCreate}
-              onCancel={() => setDrawer({ mode: 'closed' })}
+              onCancel={closeDrawer}
             />
           </aside>
         </div>
