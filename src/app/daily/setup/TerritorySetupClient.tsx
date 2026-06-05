@@ -16,6 +16,7 @@ import { Plus } from 'lucide-react';
 import LoadingScreen from '@/components/LoadingScreen';
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { getPortraitCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
 import {
   buildInitialFrequencyMap,
@@ -58,6 +59,43 @@ const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> =
     copy: 'These are part of your map, but won’t be asked for now.',
   },
 ];
+
+// "General Knowledge" is the categorizer's catch-all bucket; show it under a
+// softer label, matching the Knowledge portrait sections.
+const CATEGORY_LABEL_OVERRIDES: Record<string, string> = {
+  'General Knowledge': 'Other interests',
+};
+
+function categorySectionLabel(category: string): string {
+  return CATEGORY_LABEL_OVERRIDES[category] ?? category;
+}
+
+const GENERAL_KNOWLEDGE = 'General Knowledge';
+
+type CategoryGroup = { category: string; domains: TerritoryDomain[] };
+
+function groupByCategory(domains: TerritoryDomain[]): CategoryGroup[] {
+  const byCategory = new Map<string, TerritoryDomain[]>();
+  for (const domain of domains) {
+    const category = normalizeBroadCategory(domain.broadCategory) ?? GENERAL_KNOWLEDGE;
+    const list = byCategory.get(category) ?? [];
+    list.push(domain);
+    byCategory.set(category, list);
+  }
+  return [...byCategory.entries()]
+    .map(([category, items]) => ({
+      category,
+      domains: items,
+      totalPoints: items.reduce((sum, item) => sum + item.totalPoints, 0),
+    }))
+    .sort((a, b) => {
+      // Keep the catch-all bucket last; otherwise heaviest category first.
+      if (a.category === GENERAL_KNOWLEDGE) return 1;
+      if (b.category === GENERAL_KNOWLEDGE) return -1;
+      return b.totalPoints - a.totalPoints || a.category.localeCompare(b.category);
+    })
+    .map(({ category, domains: items }) => ({ category, domains: items }));
+}
 
 export function TerritorySetupClient() {
   const router = useRouter();
@@ -587,6 +625,8 @@ function TerritoryZone({
   setRef: (element: HTMLElement | null) => void;
   settling: boolean;
 }) {
+  const categoryGroups = useMemo(() => groupByCategory(domains), [domains]);
+
   return (
     <section
       ref={setRef}
@@ -596,22 +636,36 @@ function TerritoryZone({
         <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">{zone.title}</h2>
         <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">{zone.copy}</p>
       </div>
-      <div className="grid min-h-28 grid-cols-3 items-start gap-3 rounded-[1.5rem] border border-dashed border-[var(--border-light)] bg-[var(--cream)]/50 p-3">
-        {domains.length > 0 ? (
-          domains.map((domain) => (
-            <TerritoryCircle
-              key={domain.domain}
-              domain={domain}
-              maxPointsForTier={maxPointsByTier[domain.tier] ?? 1}
-              dragging={dragState?.domain === domain.domain}
-              onDragStart={onDragStart}
-              onDragMove={onDragMove}
-              onDragEnd={onDragEnd}
-              settling={settling}
-            />
+      <div className="min-h-28 space-y-4 rounded-[1.5rem] border border-dashed border-[var(--border-light)] bg-[var(--cream)]/50 p-3">
+        {categoryGroups.length > 0 ? (
+          categoryGroups.map(({ category, domains: groupDomains }) => (
+            <div key={category}>
+              {categoryGroups.length > 1 ? (
+                <p
+                  className="mb-2 px-1 text-[0.7rem] font-semibold tracking-[0.14em] uppercase"
+                  style={{ color: getPortraitDomainColor(category).text }}
+                >
+                  {categorySectionLabel(category)}
+                </p>
+              ) : null}
+              <div className="grid grid-cols-3 items-start gap-3">
+                {groupDomains.map((domain) => (
+                  <TerritoryCircle
+                    key={domain.domain}
+                    domain={domain}
+                    maxPointsForTier={maxPointsByTier[domain.tier] ?? 1}
+                    dragging={dragState?.domain === domain.domain}
+                    onDragStart={onDragStart}
+                    onDragMove={onDragMove}
+                    onDragEnd={onDragEnd}
+                    settling={settling}
+                  />
+                ))}
+              </div>
+            </div>
           ))
         ) : (
-          <p className="col-span-3 self-center px-2 text-sm text-[var(--text-muted-warm)] italic">
+          <p className="px-2 text-sm text-[var(--text-muted-warm)] italic">
             Drop a territory here.
           </p>
         )}
