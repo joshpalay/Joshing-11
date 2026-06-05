@@ -397,27 +397,7 @@ export function TerritorySetupClient({
           </section>
         ) : null}
 
-        <section className="space-y-5" aria-label="Round territory frequency zones">
-          {ZONES.map((zone) => (
-            <TerritoryZone
-              key={zone.value}
-              zone={zone}
-              domains={domainsByZone[zone.value]}
-              maxPointsByTier={maxPointsByTier}
-              highlighted={hoveredZone === zone.value}
-              dragState={dragState}
-              onDragStart={handleDragStart}
-              onDragMove={handleDragMove}
-              onDragEnd={handleDragEnd}
-              setRef={(element) => {
-                zoneRefs.current[zone.value] = element;
-              }}
-              settling={settling}
-            />
-          ))}
-        </section>
-
-        <section className="mt-8 rounded-[2rem] border border-[var(--border-light)] bg-white/35 p-5">
+        <section className="mb-8 rounded-[2rem] border border-[var(--border-light)] bg-white/35 p-5">
           <div className="mb-4">
             <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">Add a Territory</h2>
             <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">
@@ -437,6 +417,26 @@ export function TerritorySetupClient({
             ))}
             <CreateYourOwnCircle disabled={addingTopic} onClick={focusCreateTopic} />
           </div>
+        </section>
+
+        <section className="space-y-5" aria-label="Round territory frequency zones">
+          {ZONES.map((zone) => (
+            <TerritoryZone
+              key={zone.value}
+              zone={zone}
+              domains={domainsByZone[zone.value]}
+              maxPointsByTier={maxPointsByTier}
+              highlighted={hoveredZone === zone.value}
+              dragState={dragState}
+              onDragStart={handleDragStart}
+              onDragMove={handleDragMove}
+              onDragEnd={handleDragEnd}
+              setRef={(element) => {
+                zoneRefs.current[zone.value] = element;
+              }}
+              settling={settling}
+            />
+          ))}
         </section>
 
         <section className="mt-8 rounded-[2rem] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-5">
