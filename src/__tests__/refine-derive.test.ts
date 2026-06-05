@@ -163,9 +163,9 @@ describe('copy', () => {
       missCount: 4,
     };
     expect(openText(pruning)).toBe(
-      "You've missed the last 4 subprime mortgage questions. Drop them from your daily five?",
+      "You've missed the last 4 subprime mortgage questions. Rest them for now?",
     );
-    expect(resolvedText(pruning)).toBe('Dropped subprime mortgage from your daily five.');
+    expect(resolvedText(pruning)).toBe("Resting subprime mortgage for now — it won't be asked.");
 
     const escalation: RefineCandidate = {
       type: 'difficulty_escalation',

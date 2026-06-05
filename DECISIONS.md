@@ -4,7 +4,7 @@ A short index of the durable restructure (D-1 / D-2 / D-3 / D-4 / D-5) documenta
 pointer to what is **settled** vs. **still open**, so the next reader doesn't re-litigate closed
 decisions or miss the live thread.
 
-The `PRD-D-*` series **is the current product canon** (the "v12 line") and supersedes the v11.x PRDs.
+The `PRD-D-*` series **is the current product canon** (the "v12 line") and supersedes the 10.25/v11.x PRDs.
 The older specs are archived under `_docs/archive/` for history: `PRD-v11.2.md` (the last v11 diff, with
 v11.3 / v11.4 / v11.5 folded in place — there is no standalone v11.3+ file), `PRD-v11.1.md`, `PRD11.md`,
 and `Joshing_PRD_v10_25 (1).md`.

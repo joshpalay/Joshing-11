@@ -27,7 +27,7 @@ export function RefineYourGame({ refine }: { refine: RefineSectionView }) {
 
       {isEmpty ? (
         <p className="text-muted-foreground mt-3 text-sm leading-6">
-          You&apos;re looking good. If you want to make changes or add a category, you can do that
+          You&apos;re looking good. If you want to make changes or add a territory, you can do that
           here.
         </p>
       ) : (
@@ -41,10 +41,10 @@ export function RefineYourGame({ refine }: { refine: RefineSectionView }) {
       )}
 
       <Link
-        href="/knowledge"
+        href="/daily/setup"
         className="text-muted-foreground mt-4 inline-block text-sm underline-offset-4 hover:underline"
       >
-        Manage all domains in Settings →
+        Manage your territories in Settings →
       </Link>
     </section>
   );

@@ -1287,11 +1287,37 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       preferences.selectedDomains.filter((domain) => allDomains.includes(domain)),
       recentDomainCounts,
     );
-    domainsForRound = ordered.length > 0 ? ordered : allDomains;
+    const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
+    // Order most-wanted first so generation (which walks this list) favors them:
+    // 'often' leads, 'sometimes' (and unset) in the middle, 'blue_moon' trails so
+    // those domains are drawn least. 'resting' never reaches here — it's filtered
+    // out of selectedDomains upstream.
+    const frequencyRank = (domain: string) => {
+      const frequency = frequencyByDomain[domain];
+      if (frequency === 'often') return 0;
+      if (frequency === 'blue_moon') return 2;
+      return 1;
+    };
+    const weightedOrder = [...ordered].sort((a, b) => frequencyRank(a) - frequencyRank(b));
+    domainsForRound = weightedOrder.length > 0 ? weightedOrder : allDomains;
   } else {
     // Random mode: pick one domain per category for cross-category variety,
     // with a soft per-domain frequency cap applied via recentDomainCounts.
-    domainsForRound = selectDiverseDomains(knowledgeBase, count, recentDomainCounts);
+    // 'resting' domains are honored here too (custom mode filters them out of
+    // selectedDomains upstream) so "Resting" means "won't be asked" in both
+    // modes; fall back to the full base if everything has been rested.
+    const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
+    const resting = new Set(
+      Object.entries(frequencyByDomain)
+        .filter(([, frequency]) => frequency === 'resting')
+        .map(([domain]) => domain.toLowerCase()),
+    );
+    const eligible = knowledgeBase.filter((domain) => !resting.has(domain.domain.toLowerCase()));
+    domainsForRound = selectDiverseDomains(
+      eligible.length > 0 ? eligible : knowledgeBase,
+      count,
+      recentDomainCounts,
+    );
   }
 
   const domainDifficultyOverrides = preferences.difficulty === 'adaptive'

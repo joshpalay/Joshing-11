@@ -53,6 +53,7 @@ export type KnowledgeBaseDomain = {
   territoryType: 'declared' | 'demonstrated';
   totalPoints: number;
   tier: 'establishing' | 'familiar' | 'solid' | 'mastery';
+  correctAnswerCount: number;
 };
 
 export type DailyPreferenceRow = typeof dailyPreferences.$inferSelect;
@@ -182,6 +183,19 @@ async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclus
   return { subcategories, broadCategories };
 }
 
+async function getCorrectAnswerCountsByDomain(userId: string): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      domain: masteryEvents.canonicalSubcategory,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(masteryEvents)
+    .where(and(eq(masteryEvents.userId, userId), inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct'])))
+    .groupBy(masteryEvents.canonicalSubcategory);
+
+  return new Map(rows.map((row) => [normalizeDomain(row.domain).toLowerCase(), Number(row.count ?? 0)]));
+}
+
 async function getPlayerMasteryKnowledgeRows(userId: string) {
   try {
     return await db
@@ -214,10 +228,11 @@ async function getPlayerMasteryKnowledgeRows(userId: string) {
 }
 
 export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
-  const [masteryRows, declaredRows, excludedDomains] = await Promise.all([
+  const [masteryRows, declaredRows, excludedDomains, correctCountsByDomain] = await Promise.all([
     getPlayerMasteryKnowledgeRows(userId),
     getActiveDeclaredInterests(userId),
     getExcludedKnowledgeDomains(userId),
+    getCorrectAnswerCountsByDomain(userId),
   ]);
 
   const isExcluded = (domain: string, broadCategory: string | null): boolean => {
@@ -240,6 +255,7 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
       territoryType: row.territoryType,
       totalPoints: row.totalPoints,
       tier: row.tier,
+      correctAnswerCount: correctCountsByDomain.get(key) ?? 0,
     });
   }
 
@@ -256,6 +272,7 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
       territoryType: existing?.territoryType ?? row.territoryType,
       totalPoints: existing?.totalPoints ?? 0,
       tier: existing?.tier ?? 'establishing',
+      correctAnswerCount: existing?.correctAnswerCount ?? correctCountsByDomain.get(key) ?? 0,
     });
   }
 

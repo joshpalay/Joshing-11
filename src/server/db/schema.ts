@@ -691,6 +691,10 @@ export const dailyPreferences = pgTable(
     difficulty: text('difficulty').notNull().default('adaptive'),
     domainMode: text('domain_mode').notNull().default('random'),
     selectedDomains: jsonb('selected_domains').$type<string[]>().notNull().default([]),
+    domainPreferenceFrequency: jsonb('domain_preference_frequency')
+      .$type<Record<string, 'often' | 'sometimes' | 'blue_moon' | 'resting'>>()
+      .notNull()
+      .default({}),
     difficultyPreference: text('difficulty_preference').notNull().default('normal'),
     updatedAt: updatedAt(),
   },

@@ -1,4 +1,4 @@
-# Joshing v11
+# Joshing
 
 A daily knowledge game. Five questions a day drawn from your declared interests,
 shared with friends.
@@ -9,7 +9,7 @@ shared with friends.
 - [Product direction (v12 line)](./PRD-D-0-PRODUCT-DIRECTION-AND-DECISIONS.md) — the `PRD-D-*` series is current canon
 - [Architectural decisions](./_docs/ARCHITECTURAL-DECISIONS.md)
 - [Database schema](./src/server/db/schema.ts) — Drizzle schema (migrations under [`drizzle/`](./drizzle))
-- Superseded v11.x PRDs and audits: [`_docs/archive/`](./_docs/archive)
+- Superseded 10.25/v11.x PRDs and audits: [`_docs/archive/`](./_docs/archive)
 
 ## Stack
 

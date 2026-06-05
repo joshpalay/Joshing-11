@@ -20,6 +20,10 @@ import {
   userDomainExclusions,
 } from '@/server/db';
 import { freezeDomainDifficulty } from '@/server/adaptive-difficulty';
+import {
+  getDailyPreferences,
+  updateDailyPreferences,
+} from '@/server/db/queries/daily-preferences';
 import { deriveSelectedRefineCandidates } from '@/server/db/queries/refine';
 import type { QueueSlot } from '@/server/daily/types';
 import type { RefineItemType } from '@/server/refine/types';
@@ -67,18 +71,23 @@ async function applyResolvedEffect(userId: string, row: DecisionRow, until: Date
           ),
         );
       return;
-    case 'struggle_pruning':
-      await db
-        .insert(userDomainExclusions)
-        .values({ userId, canonicalSubcategory: domain, scope: 'subcategory' })
-        .onConflictDoNothing({
-          target: [
-            userDomainExclusions.userId,
-            userDomainExclusions.scope,
-            userDomainExclusions.canonicalSubcategory,
-          ],
-        });
+    case 'struggle_pruning': {
+      // Move the struggling domain into the Resting bucket rather than hiding it
+      // behind an exclusion: it stays on the player's map (visible + draggable in
+      // /daily/setup), so resting it here mirrors what they'd do in settings.
+      // domainMode is left untouched on purpose — we only rest this one domain and
+      // don't want to re-infer custom/random mode from a possibly-partial map.
+      const prefs = await getDailyPreferences(userId);
+      const nextFreq = { ...prefs.domainPreferenceFrequency, [domain]: 'resting' as const };
+      const nextSelected = prefs.selectedDomains.filter(
+        (selected) => selected.toLowerCase() !== domain.toLowerCase(),
+      );
+      await updateDailyPreferences(userId, {
+        domainPreferenceFrequency: nextFreq,
+        selectedDomains: nextSelected,
+      });
       return;
+    }
     case 'difficulty_escalation':
       await freezeDomainDifficulty(userId, domain, until);
       return;

@@ -1148,6 +1148,22 @@ export async function register() {
       // creates them before this migration runs.
     }
 
+    // Migration 0070 adds DailyPreference.domain_preference_frequency (jsonb,
+    // NOT NULL default '{}'). getDailyPreferences() selects it from the home
+    // server component and the whole daily flow, so a database that records the
+    // migration without the column present would 42703 before migrate() could
+    // repair it (see digest 1273321541). Additive column with a default —
+    // pre-apply it idempotently.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "DailyPreference"
+          ADD COLUMN IF NOT EXISTS "domain_preference_frequency" jsonb NOT NULL DEFAULT '{}'::jsonb
+      `);
+    } catch {
+      // DailyPreference may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
