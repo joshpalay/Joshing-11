@@ -332,7 +332,10 @@ export default function FriendsList() {
 
       {!loading && pendingInvites.length > 0 ? (
         <section aria-labelledby="waiting-for-response" className="space-y-3">
-          <h2 id="waiting-for-response" className="font-serif text-2xl font-semibold">
+          <h2
+            id="waiting-for-response"
+            className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
+          >
             Waiting for Response
           </h2>
           <div className="space-y-3">
@@ -352,7 +355,10 @@ export default function FriendsList() {
 
       {!loading ? (
         <section aria-labelledby="friends-section" className="space-y-3">
-          <h2 id="friends-section" className="font-serif text-2xl font-semibold">
+          <h2
+            id="friends-section"
+            className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
+          >
             Friends
           </h2>
           {friends.length > 0 ? (
