@@ -316,11 +316,12 @@ export default function TodaysFiveCard({
           {missedCount > 0 ? (
             // Branch A — outstanding catch-up questions own the only button here;
             // the home page suppresses the standalone Catch up card to match.
-            // Outline (orange border / link-slate text) per the Figma "Play
-            // Missed Questions" treatment — secondary to the day's primary Play.
+            // Light-teal treatment (teal border + soft teal fill / teal text)
+            // from the triangle palette — secondary to the day's primary Play,
+            // and distinct from the orange accent used for links.
             <Link
               href="/daily/catchup"
-              className="flex min-h-12 w-full items-center justify-center rounded-[4px] border border-[var(--brand-orange)] bg-transparent text-base font-bold tracking-[0.04em] text-[var(--brand-link)] transition-colors hover:bg-[color-mix(in_srgb,var(--brand-orange)_8%,transparent)]"
+              className="flex min-h-12 w-full items-center justify-center rounded-[4px] border border-[var(--tri-darkteal)] bg-[color-mix(in_srgb,var(--tri-darkteal)_10%,transparent)] text-base font-bold tracking-[0.04em] text-[color-mix(in_srgb,var(--tri-darkteal)_55%,var(--brand-ink))] transition-colors hover:bg-[color-mix(in_srgb,var(--tri-darkteal)_18%,transparent)]"
             >
               Play Missed Questions
             </Link>
