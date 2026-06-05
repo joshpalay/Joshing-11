@@ -8,10 +8,9 @@ import { CreateChooser } from '@/components/CreateChooser';
 
 const navItems = [
   { href: '/', label: 'Home', Icon: Home },
-  { href: '/friends', label: 'Friends', Icon: Users },
   { href: '/questions', label: 'Questions', Icon: Pencil },
   { href: '/knowledge', label: 'Knowledge', Icon: Brain },
-  { href: '/users/me', label: 'Profile', Icon: User },
+  { href: '/friends', label: 'Friends', Icon: Users },
 ];
 
 function initialsFor(name: string): string {
@@ -24,6 +23,30 @@ function initialsFor(name: string): string {
 function formatBadgeCount(count: number): string {
   if (count > 99) return '99+';
   return String(count);
+}
+
+function AccountIcon({
+  active,
+  initials,
+}: {
+  active: boolean;
+  initials: string | null;
+}) {
+  if (!initials) {
+    return <User className="size-5" strokeWidth={active ? 2.4 : 1.8} />;
+  }
+
+  return (
+    <span
+      className={[
+        'grid size-5 place-items-center rounded-full text-[10px] font-semibold',
+        active ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground',
+      ].join(' ')}
+      aria-hidden="true"
+    >
+      {initials}
+    </span>
+  );
 }
 
 export function Nav({
@@ -81,23 +104,6 @@ export function Nav({
     return null;
   }
 
-  function AccountIcon({ active }: { active: boolean }) {
-    if (!accountInitials) {
-      return <User className="size-5" strokeWidth={active ? 2.4 : 1.8} />;
-    }
-
-    return (
-      <span
-        className={[
-          'grid size-5 place-items-center rounded-full text-[10px] font-semibold',
-          active ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground',
-        ].join(' ')}
-        aria-hidden="true"
-      >
-        {accountInitials}
-      </span>
-    );
-  }
 
   // The Profile tab is active for both the canonical /users/<self-id>
   // route and the /users/me alias before it redirects.
@@ -126,24 +132,34 @@ export function Nav({
           >
             Joshing
           </Link>
-          <Link
-            href="/activities"
-            aria-label={
-              showBadge ? `Activity, ${bellBadgeCount} unread` : 'Activity'
-            }
-            className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            <Bell className="size-5" strokeWidth={1.9} />
-            {showBadge ? (
-              <span
-                className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
-                style={{ backgroundColor: 'var(--destructive)' }}
-                aria-hidden="true"
-              >
-                {badgeText}
-              </span>
-            ) : null}
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/activities"
+              aria-label={
+                showBadge ? `Activity, ${bellBadgeCount} unread` : 'Activity'
+              }
+              className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <Bell className="size-5" strokeWidth={1.9} />
+              {showBadge ? (
+                <span
+                  className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
+                  style={{ backgroundColor: 'var(--destructive)' }}
+                  aria-hidden="true"
+                >
+                  {badgeText}
+                </span>
+              ) : null}
+            </Link>
+            <Link
+              href="/users/me"
+              aria-label="Account and settings"
+              aria-current={isProfileTabActive('/users/me') ? 'page' : undefined}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <AccountIcon active={isProfileTabActive('/users/me')} initials={accountInitials} />
+            </Link>
+          </div>
         </div>
       </header>
       {showNewGameShortcut ? (
@@ -199,7 +215,7 @@ export function Nav({
               >
                 <span aria-hidden="true" className="relative grid place-items-center">
                   {isProfile ? (
-                    <AccountIcon active={active} />
+                    <AccountIcon active={active} initials={accountInitials} />
                   ) : (
                     <Icon
                       className="size-5"
