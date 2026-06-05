@@ -22,7 +22,10 @@ const MAX_SUGGESTED_INTEREST_LENGTH = 60
 const INVITES_PER_USER_WINDOW = 12
 const INVITES_PER_PHONE_WINDOW = 4
 const INVITE_WINDOW_MS = 1000 * 60 * 60
-const SAME_PHONE_COOLDOWN_MS = 1000 * 60 * 10
+// Resend prohibition temporarily lifted: this same-phone cooldown previously
+// blocked re-inviting the same person for 10 minutes. Restore `1000 * 60 * 10`
+// to bring the resend prohibition back.
+const SAME_PHONE_COOLDOWN_MS = 0
 const CANCELLED_PHONE_COOLDOWN_MS = 1000 * 60 * 20
 const IGNORED_PHONE_COOLDOWN_MS = 1000 * 60 * 60 * 24
 
