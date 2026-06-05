@@ -1338,10 +1338,10 @@ export default function OnboardingFlow({
                   </span>
                   <span className="text-muted-foreground">
                     {selectedInterests.length === 0
-                      ? 'Pick at least 1 to continue'
+                      ? 'Pick up to 5 to continue'
                       : null}
                     {selectedInterests.length === 5
-                      ? '5 max - deselect one to add another'
+                      ? '5 max - deselect one to swap'
                       : null}
                   </span>
                 </div>
