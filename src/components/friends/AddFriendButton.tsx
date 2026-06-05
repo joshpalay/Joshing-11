@@ -86,21 +86,36 @@ export function AddFriendButton({
     void runAction('ignore', relationship.friendshipId, 'Set aside.')
   }
 
+  const removeCopy =
+    relationship.state === 'friends'
+      ? {
+          action: 'Unfriend',
+          confirming: 'Unfriending…',
+          prompt: `Unfriend ${targetDisplayName}?`,
+          toast: 'Unfriended.',
+        }
+      : {
+          action: 'Unfollow',
+          confirming: 'Unfollowing…',
+          prompt: `Unfollow ${targetDisplayName}?`,
+          toast: 'Unfollowed.',
+        }
+
   function handleRemove() {
     if (!relationship.friendshipId) return
     if (confirmUnfriend) {
-      // Swap the Unfollow button for an inline Unfollow/Keep confirmation rather
-      // than punching out to native window.confirm chrome.
+      // Swap the remove button for an inline confirmation rather than punching
+      // out to native window.confirm chrome.
       setConfirmingRemove(true)
       return
     }
-    void runAction('remove', relationship.friendshipId, 'Unfollowed.')
+    void runAction('remove', relationship.friendshipId, removeCopy.toast)
   }
 
   function confirmRemove() {
     if (!relationship.friendshipId) return
     setConfirmingRemove(false)
-    void runAction('remove', relationship.friendshipId, 'Unfollowed.')
+    void runAction('remove', relationship.friendshipId, removeCopy.toast)
   }
 
   return (
@@ -170,18 +185,16 @@ export function AddFriendButton({
             <div
               className="flex flex-wrap items-center gap-2"
               role="group"
-              aria-label={`Unfollow ${targetDisplayName}?`}
+              aria-label={removeCopy.prompt}
             >
-              <span className="text-sm text-foreground">
-                Unfollow {targetDisplayName}?
-              </span>
+              <span className="text-sm text-foreground">{removeCopy.prompt}</span>
               <button
                 type="button"
                 className="btn-danger"
                 onClick={confirmRemove}
                 disabled={pendingAction !== null}
               >
-                {pendingAction === 'remove' ? 'Unfollowing…' : 'Unfollow'}
+                {pendingAction === 'remove' ? removeCopy.confirming : removeCopy.action}
               </button>
               <button
                 type="button"
@@ -203,7 +216,7 @@ export function AddFriendButton({
                 onClick={handleRemove}
                 disabled={pendingAction !== null}
               >
-                Unfollow
+                {removeCopy.action}
               </button>
             </>
           )
