@@ -23,12 +23,12 @@ export function openText(candidate: RefineCandidate): string {
   switch (candidate.type) {
     case 'friend_expansion': {
       const friend = candidate.friendName?.trim() || 'a friend';
-      return `You got a ${label} question from ${friend}'s world right. Add it to your daily five?`;
+      return `You got a ${label} question from ${friend}'s world right. Add it to your rotation?`;
     }
     case 'difficulty_escalation':
       return `You're mastering ${label}, so its questions are getting harder. Ease off?`;
     case 'struggle_pruning':
-      return `You've missed the last ${candidate.missCount ?? 0} ${label} questions. Drop them from your daily five?`;
+      return `You've missed the last ${candidate.missCount ?? 0} ${label} questions. Rest them for now?`;
   }
 }
 
@@ -37,10 +37,10 @@ export function resolvedText(candidate: RefineCandidate): string {
   const label = candidate.subdomainLabel;
   switch (candidate.type) {
     case 'friend_expansion':
-      return `Added ${label} to your daily five.`;
+      return `Added ${label} to your rotation.`;
     case 'difficulty_escalation':
       return `We'll keep ${label} at this level for the next month.`;
     case 'struggle_pruning':
-      return `Dropped ${label} from your daily five.`;
+      return `Resting ${label} for now — it won't be asked.`;
   }
 }

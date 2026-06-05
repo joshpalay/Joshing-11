@@ -1303,7 +1303,21 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   } else {
     // Random mode: pick one domain per category for cross-category variety,
     // with a soft per-domain frequency cap applied via recentDomainCounts.
-    domainsForRound = selectDiverseDomains(knowledgeBase, count, recentDomainCounts);
+    // 'resting' domains are honored here too (custom mode filters them out of
+    // selectedDomains upstream) so "Resting" means "won't be asked" in both
+    // modes; fall back to the full base if everything has been rested.
+    const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
+    const resting = new Set(
+      Object.entries(frequencyByDomain)
+        .filter(([, frequency]) => frequency === 'resting')
+        .map(([domain]) => domain.toLowerCase()),
+    );
+    const eligible = knowledgeBase.filter((domain) => !resting.has(domain.domain.toLowerCase()));
+    domainsForRound = selectDiverseDomains(
+      eligible.length > 0 ? eligible : knowledgeBase,
+      count,
+      recentDomainCounts,
+    );
   }
 
   const domainDifficultyOverrides = preferences.difficulty === 'adaptive'
