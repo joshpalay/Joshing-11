@@ -4,11 +4,18 @@ const {
   getSessionMock,
   getUserOnboardingProfileMock,
   getPreSeededInterestsForUserMock,
+  hasInviteLinkFriendshipMock,
+  friendInvitationRowsMock,
   redirectMock,
 } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   getUserOnboardingProfileMock: vi.fn(),
   getPreSeededInterestsForUserMock: vi.fn(),
+  hasInviteLinkFriendshipMock: vi.fn(async () => false),
+  // Drives the FriendInvitation grandfather-guard query result.
+  friendInvitationRowsMock: vi.fn(
+    async () => [{ id: 'inv-1' }] as Array<{ id: string }>,
+  ),
   redirectMock: vi.fn((target: string) => {
     // Mirror Next.js: redirect() throws to short-circuit rendering.
     throw new Error(`__REDIRECT__:${target}`)
@@ -31,15 +38,15 @@ vi.mock('@/server/db/queries/users', () => ({
 // The page runs a grandfather-guard query (select FriendInvitation … limit 1)
 // directly against db. Stub the chain so it resolves without a real connection;
 // the result is discarded by the page (void hasInvitation), so [] is fine.
+// The page runs a grandfather-guard query (select FriendInvitation … limit 1)
+// directly against db. The limit() result is driven by friendInvitationRowsMock
+// so individual tests can simulate "no FriendInvitation row" (invite-link path).
 vi.mock('@/server/db', () => ({
   db: {
     select: () => ({
       from: () => ({
         where: () => ({
-          // Non-empty: the grandfather guard treats a row as "has accepted
-          // invitation" so the not-yet-onboarded case renders instead of
-          // redirecting. The redirect cases bail before reaching this query.
-          limit: async () => [{ id: 'inv-1' }],
+          limit: () => friendInvitationRowsMock(),
         }),
       }),
     }),
@@ -49,6 +56,10 @@ vi.mock('@/server/db', () => ({
     inviteeUserId: 'friendInvitations.inviteeUserId',
     acceptedAt: 'friendInvitations.acceptedAt',
   },
+}))
+
+vi.mock('@/server/friends/user-invite-token', () => ({
+  hasInviteLinkFriendship: hasInviteLinkFriendshipMock,
 }))
 
 // Stub the client component import so this test stays server-side.
@@ -80,6 +91,10 @@ describe('OnboardingPage guard', () => {
       inviterName: 'Someone',
       interests: [],
     })
+    hasInviteLinkFriendshipMock.mockReset()
+    hasInviteLinkFriendshipMock.mockResolvedValue(false)
+    friendInvitationRowsMock.mockReset()
+    friendInvitationRowsMock.mockResolvedValue([{ id: 'inv-1' }])
   })
 
   it('redirects to /login when there is no session', async () => {
@@ -114,5 +129,29 @@ describe('OnboardingPage guard', () => {
     const result = await callPage()
     expect(result).toEqual({ redirected: false })
     expect(getPreSeededInterestsForUserMock).toHaveBeenCalledWith('u1')
+  })
+
+  it('renders OnboardingFlow for an invite-link signup (no FriendInvitation row, but an invite-link friendship)', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'u1', id: 's1' })
+    getUserOnboardingProfileMock.mockResolvedValueOnce({
+      id: 'u1',
+      onboardingComplete: false,
+    })
+    friendInvitationRowsMock.mockResolvedValueOnce([]) // no SMS-style invitation
+    hasInviteLinkFriendshipMock.mockResolvedValueOnce(true) // arrived via /u/<handle>/<token>
+    const result = await callPage()
+    expect(result).toEqual({ redirected: false })
+  })
+
+  it('redirects to /login when there is neither a FriendInvitation nor an invite-link friendship', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'u1', id: 's1' })
+    getUserOnboardingProfileMock.mockResolvedValueOnce({
+      id: 'u1',
+      onboardingComplete: false,
+    })
+    friendInvitationRowsMock.mockResolvedValueOnce([])
+    hasInviteLinkFriendshipMock.mockResolvedValueOnce(false)
+    const result = await callPage()
+    expect(result).toEqual({ redirected: true, target: '/login' })
   })
 })
