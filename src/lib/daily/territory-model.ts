@@ -1,4 +1,4 @@
-export type TerritoryFrequency = 'often' | 'sometimes' | 'resting';
+export type TerritoryFrequency = 'often' | 'sometimes' | 'blue_moon' | 'resting';
 
 export type TerritoryDomain = {
   domain: string;
@@ -10,10 +10,12 @@ export type TerritoryDomain = {
 
 export type DomainPreferenceFrequency = Record<string, TerritoryFrequency>;
 
-export const TERRITORY_FREQUENCIES = ['often', 'sometimes', 'resting'] as const;
+export const TERRITORY_FREQUENCIES = ['often', 'sometimes', 'blue_moon', 'resting'] as const;
 
 export function isTerritoryFrequency(value: unknown): value is TerritoryFrequency {
-  return value === 'often' || value === 'sometimes' || value === 'resting';
+  return (
+    value === 'often' || value === 'sometimes' || value === 'blue_moon' || value === 'resting'
+  );
 }
 
 function normalizeDomainKey(domain: string): string {
