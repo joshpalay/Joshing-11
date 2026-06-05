@@ -57,6 +57,18 @@ export const STYLE_EXEMPLARS: readonly StyleExemplar[] = [
   { q: "Which famous piano work by Debussy quotes and mocks a theme from Wagner's Tristan und Isolde?", a: "Golliwogg's Cakewalk", shape: 'in_which_work' },
   { q: "Kitty O'Shea had an affair with what famous Irish statesman?", a: "Charles Stewart Parnell", shape: 'identification' },
   { q: "What is the name of the rope that raises or lowers a sail on a sailboat?", a: "halyard", shape: 'identification' },
+  // Calibration additions (Section 20, questions 35–63) — broaden domain and
+  // shape range beyond the founding literary/classical set.
+  { q: "In what song does Weird Al churn butter once or twice?", a: "Amish Paradise", shape: 'in_which_work' },
+  { q: "In Star Trek: The Next Generation, who was not a Merry Man?", a: "Worf", shape: 'who_did_what' },
+  { q: "In Frigaliment Importing Co. v. B.N.S. International Sales Corp. (1960), Judge Henry Friendly opened his ruling with what famous question?", a: "What is chicken?", shape: 'complete_the_quote' },
+  { q: "What is the name of the opera singer who was supposed to sing the National Anthem in The Naked Gun?", a: "Enrico Pallazzo", shape: 'identification' },
+  { q: "If I wanted to talk to Galadriel in her native language, what would it be?", a: "Quenya", shape: 'identification' },
+  { q: "If you have a date in Constantinople, where will she be waiting?", a: "Istanbul", shape: 'complete_the_quote' },
+  { q: "Which architect designed a building in Berlin that has a gigantic fish sculpture inside it?", a: "Frank Gehry", shape: 'identification' },
+  { q: "What was the name of the evil business tycoon in the animated series Gargoyles?", a: "David Xanatos", shape: 'identification' },
+  { q: "What chords make up a plagal cadence?", a: "IV to I", shape: 'technique_or_term' },
+  { q: "What is the main character's name in the Metroid video game series?", a: "Samus Aran", shape: 'identification' },
 ];
 
 export const STYLE_EXEMPLAR_BLOCK: string = STYLE_EXEMPLARS
