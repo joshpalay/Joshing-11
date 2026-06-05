@@ -855,10 +855,10 @@ function QuickMoveTargets({
           key={target.value}
           ref={(element) => setQuickTargetRef(target.value, element)}
           type="button"
-          className={`grid size-14 place-items-center rounded-full border bg-[var(--cream)] px-1 text-center text-[0.62rem] leading-[0.72rem] font-semibold text-[var(--ink)] shadow-sm transition ${
+          className={`grid size-14 place-items-center rounded-full border px-1 text-center text-[0.62rem] leading-[0.72rem] font-semibold shadow-sm transition ${
             hoveredTarget === target.value
-              ? 'scale-110 border-[var(--ink)]'
-              : 'border-[var(--border-warm)]'
+              ? 'scale-110 border-[var(--ink)] bg-[var(--ink)] text-[var(--cream)] shadow-[0_10px_24px_rgba(26,18,8,0.24)]'
+              : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--ink)]'
           }`}
           onClick={() => onQuickMove(domain, target.value)}
           title={`Move to ${target.title}`}
