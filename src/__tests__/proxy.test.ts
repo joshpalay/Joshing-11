@@ -31,6 +31,16 @@ describe('proxy unauthenticated route preservation', () => {
     expect(response.headers.get('location')).toBeNull()
   })
 
+  it('passes the per-user invite landing (/u/<handle>/<token>) through logged-out so the invite params survive to /login', async () => {
+    readSessionClaimsMock.mockResolvedValueOnce(null)
+
+    const response = await proxy(makeRequest('/u/josh/keep-this-token'))
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('x-middleware-next')).toBe('1')
+    expect(response.headers.get('location')).toBeNull()
+  })
+
   it('redirects other unauthenticated pages to login, preserving the original path via next', async () => {
     readSessionClaimsMock.mockResolvedValueOnce(null)
 

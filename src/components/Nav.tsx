@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Brain, Home, Pencil, Plus, User, Users } from 'lucide-react';
 import { CreateChooser } from '@/components/CreateChooser';
 
@@ -38,9 +38,16 @@ export function Nav({
   friendsDotVisible?: boolean;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const accountInitials = initialDisplayName ? initialsFor(initialDisplayName) || null : null;
   const currentUserId = initialUserId;
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
+  // On Home and the Questions page the FAB is a dedicated "add a question"
+  // shortcut: it drops straight into the composer (?create=1) rather than the
+  // generic three-way Create chooser. The composer still surfaces every
+  // destination control, so nothing is lost by skipping the chooser here. The
+  // chooser stays as the FAB action on the other surfaces.
+  const isQuestionComposerShortcut = pathname === '/' || pathname.startsWith('/questions');
   const isOtherUserProfilePath = (() => {
     if (!pathname.startsWith('/users/')) return false;
     const rest = pathname.slice('/users/'.length);
@@ -142,9 +149,18 @@ export function Nav({
       {showNewGameShortcut ? (
         <button
           type="button"
-          className="fixed bottom-24 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg md:hidden"
-          aria-label="Create"
-          onClick={() => setCreateChooserOpen(true)}
+          className={[
+            'fixed bottom-24 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg',
+            // The dedicated add-a-question FAB shows on every viewport; the
+            // generic Create chooser FAB stays mobile-only as before.
+            isQuestionComposerShortcut ? '' : 'md:hidden',
+          ].join(' ')}
+          aria-label={isQuestionComposerShortcut ? 'Add a question' : 'Create'}
+          onClick={() =>
+            isQuestionComposerShortcut
+              ? router.push('/questions?create=1')
+              : setCreateChooserOpen(true)
+          }
         >
           <Plus className="size-6" />
         </button>
