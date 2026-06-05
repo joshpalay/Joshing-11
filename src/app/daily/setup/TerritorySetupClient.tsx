@@ -59,12 +59,6 @@ const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> =
   },
 ];
 
-const ZONE_TITLES: Record<TerritoryFrequency, string> = {
-  often: 'Often',
-  sometimes: 'Sometimes',
-  resting: 'Resting',
-};
-
 export function TerritorySetupClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -73,6 +67,7 @@ export function TerritorySetupClient() {
     sometimes: null,
     resting: null,
   });
+  const newTopicInputRef = useRef<HTMLInputElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -267,6 +262,13 @@ export function TerritorySetupClient() {
     [addDomainRow],
   );
 
+  const focusCreateTopic = useCallback(() => {
+    const input = newTopicInputRef.current;
+    if (!input) return;
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input.focus({ preventScroll: true });
+  }, []);
+
   const addTopic = useCallback(async () => {
     const label = newTopic.trim();
     if (!label || addingTopic) return;
@@ -438,7 +440,6 @@ export function TerritorySetupClient() {
               maxPointsByTier={maxPointsByTier}
               highlighted={hoveredZone === zone.value}
               dragState={dragState}
-              onMove={moveDomain}
               onDragStart={handleDragStart}
               onDragMove={handleDragMove}
               onDragEnd={handleDragEnd}
@@ -450,32 +451,27 @@ export function TerritorySetupClient() {
           ))}
         </section>
 
-        {nearbyTerritories.length > 0 ? (
-          <section className="mt-8 rounded-[2rem] border border-[var(--border-light)] bg-white/35 p-5">
-            <div className="mb-4">
-              <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">
-                Nearby Territory
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">
-                Suggestions based on the shape of your map.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-4">
-              {nearbyTerritories.map((territory) => (
-                <GhostTerritoryCircle
-                  key={territory.domain}
-                  territory={territory}
-                  disabled={addingTopic}
-                  onAdd={() => void addNearbyTerritory(territory)}
-                />
-              ))}
-            </div>
-          </section>
-        ) : domains.length > 0 ? (
-          <p className="mt-8 rounded-2xl border border-[var(--border-light)] bg-white/30 p-4 text-sm text-[var(--text-muted-warm)]">
-            More suggestions will appear as your map grows.
-          </p>
-        ) : null}
+        <section className="mt-8 rounded-[2rem] border border-[var(--border-light)] bg-white/35 p-5">
+          <div className="mb-4">
+            <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">Add a Territory</h2>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">
+              {nearbyTerritories.length > 0
+                ? 'Suggestions based on the shape of your map — or create your own.'
+                : 'Create your own, and more suggestions will appear as your map grows.'}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {nearbyTerritories.map((territory) => (
+              <GhostTerritoryCircle
+                key={territory.domain}
+                territory={territory}
+                disabled={addingTopic}
+                onAdd={() => void addNearbyTerritory(territory)}
+              />
+            ))}
+            <CreateYourOwnCircle disabled={addingTopic} onClick={focusCreateTopic} />
+          </div>
+        </section>
 
         <section className="mt-8 rounded-[2rem] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-5">
           <form
@@ -492,6 +488,7 @@ export function TerritorySetupClient() {
             </label>
             <div className="mt-4 flex gap-2">
               <input
+                ref={newTopicInputRef}
                 id="add-topic"
                 type="text"
                 value={newTopic}
@@ -532,7 +529,7 @@ export function TerritorySetupClient() {
         ) : null}
       </div>
 
-      <div className="fixed inset-x-0 bottom-16 z-50 border-t border-[var(--border-warm)] bg-[var(--cream)]/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:bottom-0 md:pb-3">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-warm)] bg-[var(--cream)]/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           <Link href="/" className="btn-ghost min-h-11 px-5">
             Home
@@ -568,7 +565,6 @@ function TerritoryZone({
   maxPointsByTier,
   highlighted,
   dragState,
-  onMove,
   onDragStart,
   onDragMove,
   onDragEnd,
@@ -580,7 +576,6 @@ function TerritoryZone({
   maxPointsByTier: Record<TerritoryDomain['tier'], number>;
   highlighted: boolean;
   dragState: DragState;
-  onMove: (domain: string, frequency: TerritoryFrequency) => void;
   onDragStart: (event: ReactPointerEvent, domain: string) => void;
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
@@ -596,15 +591,13 @@ function TerritoryZone({
         <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">{zone.title}</h2>
         <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">{zone.copy}</p>
       </div>
-      <div className="flex min-h-28 flex-wrap items-start gap-4 rounded-[1.5rem] border border-dashed border-[var(--border-light)] bg-[var(--cream)]/50 p-3">
+      <div className="grid min-h-28 grid-cols-3 items-start gap-3 rounded-[1.5rem] border border-dashed border-[var(--border-light)] bg-[var(--cream)]/50 p-3">
         {domains.length > 0 ? (
           domains.map((domain) => (
             <TerritoryCircle
               key={domain.domain}
               domain={domain}
-              currentZone={zone.value}
               maxPointsForTier={maxPointsByTier[domain.tier] ?? 1}
-              onMove={onMove}
               dragging={dragState?.domain === domain.domain}
               onDragStart={onDragStart}
               onDragMove={onDragMove}
@@ -613,7 +606,7 @@ function TerritoryZone({
             />
           ))
         ) : (
-          <p className="self-center px-2 text-sm text-[var(--text-muted-warm)] italic">
+          <p className="col-span-3 self-center px-2 text-sm text-[var(--text-muted-warm)] italic">
             Drop a territory here.
           </p>
         )}
@@ -624,9 +617,7 @@ function TerritoryZone({
 
 function TerritoryCircle({
   domain,
-  currentZone,
   maxPointsForTier,
-  onMove,
   dragging,
   onDragStart,
   onDragMove,
@@ -634,9 +625,7 @@ function TerritoryCircle({
   settling,
 }: {
   domain: TerritoryDomain;
-  currentZone: TerritoryFrequency;
   maxPointsForTier: number;
-  onMove: (domain: string, frequency: TerritoryFrequency) => void;
   dragging: boolean;
   onDragStart: (event: ReactPointerEvent, domain: string) => void;
   onDragMove: (event: ReactPointerEvent) => void;
@@ -646,9 +635,9 @@ function TerritoryCircle({
   const broadCategory = domain.broadCategory ?? 'General Knowledge';
   const color = getPortraitDomainColor(broadCategory);
   const size = Math.min(
-    112,
+    84,
     Math.max(
-      54,
+      48,
       Math.round(
         getPortraitCircleSize(
           domain.tier as CircleSizingTier,
@@ -665,7 +654,7 @@ function TerritoryCircle({
 
   return (
     <div
-      className={`group relative flex w-[104px] touch-none flex-col items-center gap-2 rounded-[1.5rem] p-2 text-center transition duration-300 select-none ${dragging ? 'scale-95 opacity-40' : 'opacity-100'} ${settling ? 'motion-safe:animate-[territory-settle_850ms_ease-out]' : ''}`}
+      className={`group relative flex w-full touch-none flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center transition duration-300 select-none ${dragging ? 'scale-95 opacity-40' : 'opacity-100'} ${settling ? 'motion-safe:animate-[territory-settle_850ms_ease-out]' : ''}`}
       onPointerDown={(event) => onDragStart(event, domain.domain)}
       onPointerMove={onDragMove}
       onPointerUp={onDragEnd}
@@ -677,38 +666,26 @@ function TerritoryCircle({
         border={`1px solid ${color.primary}44`}
         style={{ boxShadow: '0 8px 22px rgba(26,18,8,0.08)' }}
       >
-        <span
-          style={{
-            fontSize: countFontSize,
-            color: color.primary,
-            fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
-            fontWeight: 700,
-            lineHeight: 1,
-          }}
-        >
-          {correctCount}
-        </span>
+        {correctCount > 0 ? (
+          <span
+            style={{
+              fontSize: countFontSize,
+              color: color.primary,
+              fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+              fontWeight: 700,
+              lineHeight: 1,
+            }}
+          >
+            {correctCount}
+          </span>
+        ) : null}
       </KnowledgeBubble>
       <span
-        className="max-w-[96px] font-serif text-[13px] leading-tight break-words"
+        className="max-w-full px-1 font-serif text-[13px] leading-tight break-words"
         style={{ color: color.text }}
       >
         {domain.domain}
       </span>
-      <div className="flex flex-col gap-1 opacity-100 sm:absolute sm:top-full sm:left-1/2 sm:z-20 sm:w-36 sm:-translate-x-1/2 sm:rounded-2xl sm:border sm:border-[var(--border-warm)] sm:bg-[var(--cream)] sm:p-2 sm:opacity-0 sm:shadow-lg sm:transition sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-        {ZONES.map((zone) => (
-          <button
-            key={zone.value}
-            type="button"
-            className="rounded-full px-2 py-1 text-xs text-[var(--ink)] transition hover:bg-[var(--cream-accent)] disabled:opacity-40"
-            disabled={currentZone === zone.value}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => onMove(domain.domain, zone.value)}
-          >
-            Move to {ZONE_TITLES[zone.value]}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -731,7 +708,7 @@ function GhostTerritoryCircle({
   return (
     <button
       type="button"
-      className="flex w-[104px] flex-col items-center gap-2 rounded-[1.5rem] p-2 text-center opacity-70 transition hover:opacity-100 disabled:opacity-40"
+      className="flex w-full flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center opacity-70 transition hover:opacity-100 disabled:opacity-40"
       style={style}
       disabled={disabled}
       onClick={onAdd}
@@ -739,11 +716,35 @@ function GhostTerritoryCircle({
       <div className="grid size-16 place-items-center rounded-full border border-dashed border-[var(--territory-border)] bg-white/35 text-[var(--territory-text)]">
         <Plus className="size-5" aria-hidden="true" />
       </div>
-      <span className="max-w-[96px] font-serif text-[13px] leading-tight break-words text-[var(--territory-text)]">
+      <span className="max-w-full px-1 font-serif text-[13px] leading-tight break-words text-[var(--territory-text)]">
         {territory.domain}
       </span>
       <span className="text-[10px] tracking-[0.14em] text-[var(--text-muted-warm)] uppercase">
         Add
+      </span>
+    </button>
+  );
+}
+
+function CreateYourOwnCircle({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center opacity-80 transition hover:opacity-100 disabled:opacity-40"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <div className="grid size-16 place-items-center rounded-full border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] text-[var(--ink)]">
+        <Plus className="size-5" aria-hidden="true" />
+      </div>
+      <span className="max-w-full px-1 font-serif text-[13px] leading-tight break-words text-[var(--ink)]">
+        Create your own
       </span>
     </button>
   );
