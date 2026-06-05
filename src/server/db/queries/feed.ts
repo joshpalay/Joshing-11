@@ -269,9 +269,25 @@ export function questionVisibilityPredicate(viewerUserId: string) {
   )!;
 }
 
+// A question's visibility ('public'/'friends'/'private') gates broadcast/feed
+// items, but NOT items addressed directly to the viewer: a direct_sent question
+// always renders for its recipient regardless of the question's visibility.
+// Without this exemption a 'friends'-visibility question sent straight to a
+// recipient who doesn't (yet) follow the author is silently filtered out of
+// their feed even though a feed row was written. Mirrors the direct_sent
+// special-case in viewerNotAlreadyAnsweredPredicate. Exported so get-feed-page's
+// diagnostic/badge counts apply the identical rule and stay in sync with what
+// actually renders.
+export function feedItemVisibilityPredicate(viewerUserId: string) {
+  return or(
+    eq(feedItems.sourceType, 'direct_sent'),
+    questionVisibilityPredicate(viewerUserId),
+  )!;
+}
+
 function visibleQuestionPredicate(viewerUserId: string, dismissedDomains: string[]) {
   const predicates = [
-    questionVisibilityPredicate(viewerUserId),
+    feedItemVisibilityPredicate(viewerUserId),
     isNull(questions.deletedAt),
   ];
 
