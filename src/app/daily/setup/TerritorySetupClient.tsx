@@ -10,16 +10,14 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 
-import LoadingScreen from '@/components/LoadingScreen';
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { getPortraitCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
 import {
-  buildInitialFrequencyMap,
   buildSavePayload,
   getNearbyTerritories,
   type DomainPreferenceFrequency,
@@ -29,20 +27,6 @@ import {
 } from '@/lib/daily/territory-model';
 
 type Difficulty = 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive';
-type DomainMode = 'random' | 'custom';
-
-type PreferencesResponse = {
-  preferences: {
-    difficulty: Difficulty;
-    domainMode: DomainMode;
-    selectedDomains: string[];
-    domainPreferenceFrequency?: DomainPreferenceFrequency;
-    domain_preference_frequency?: DomainPreferenceFrequency;
-  };
-  domains: Array<
-    TerritoryDomain & { canonical_subcategory?: string; correct_answer_count?: number }
-  >;
-};
 
 type DragState = {
   domain: string;
@@ -97,9 +81,20 @@ function groupByCategory(domains: TerritoryDomain[]): CategoryGroup[] {
     .map(({ category, domains: items }) => ({ category, domains: items }));
 }
 
-export function TerritorySetupClient() {
+export function TerritorySetupClient({
+  initialDomains,
+  initialDifficulty,
+  initialFrequencyByDomain,
+  hasUnstartedQueue,
+  roundComplete,
+}: {
+  initialDomains: TerritoryDomain[];
+  initialDifficulty: Difficulty;
+  initialFrequencyByDomain: DomainPreferenceFrequency;
+  hasUnstartedQueue: boolean;
+  roundComplete: boolean;
+}) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const zoneRefs = useRef<Record<TerritoryFrequency, HTMLElement | null>>({
     often: null,
     sometimes: null,
@@ -107,126 +102,26 @@ export function TerritorySetupClient() {
   });
   const newTopicInputRef = useRef<HTMLInputElement | null>(null);
   const dragPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [loading, setLoading] = useState(true);
+  const difficulty = initialDifficulty;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [domains, setDomains] = useState<TerritoryDomain[]>([]);
-  const [difficulty, setDifficulty] = useState<Difficulty>('adaptive');
-  const [frequencyByDomain, setFrequencyByDomain] = useState<DomainPreferenceFrequency>({});
-  const [hasUnstartedQueue, setHasUnstartedQueue] = useState(false);
-  const [roundComplete, setRoundComplete] = useState(false);
+  const [domains, setDomains] = useState<TerritoryDomain[]>(initialDomains);
+  const [frequencyByDomain, setFrequencyByDomain] =
+    useState<DomainPreferenceFrequency>(initialFrequencyByDomain);
   const [newTopic, setNewTopic] = useState('');
   const [addingTopic, setAddingTopic] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addLimitReached, setAddLimitReached] = useState(false);
   const [dragState, setDragState] = useState<DragState>(null);
   const [hoveredZone, setHoveredZone] = useState<TerritoryFrequency | null>(null);
-  const [settling, setSettling] = useState(false);
+  const [settling, setSettling] = useState(true);
 
-  // Run the settle-in animation when the territories first render, not on mount:
-  // the data fetch can outlast a mount-anchored timer, which would close the
-  // animation window before the circles ever appear.
+  // Data arrives from the server, so the territories render on first paint —
+  // run the settle-in animation immediately on mount.
   useEffect(() => {
-    if (loading) return;
-    setSettling(true);
     const timer = window.setTimeout(() => setSettling(false), 900);
     return () => window.clearTimeout(timer);
-  }, [loading]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const [statusResponse, preferencesResponse] = await Promise.all([
-          fetch('/api/daily/status', { credentials: 'include', cache: 'no-store' }),
-          fetch('/api/daily/preferences', { credentials: 'include', cache: 'no-store' }),
-        ]);
-
-        if (statusResponse.status === 401 || preferencesResponse.status === 401) {
-          router.replace('/login');
-          return;
-        }
-
-        if (!statusResponse.ok || !preferencesResponse.ok) {
-          throw new Error('Could not load setup.');
-        }
-
-        const status = await statusResponse.json();
-        const questionsAnswered =
-          typeof status.questionsAnswered === 'number'
-            ? status.questionsAnswered
-            : typeof status.answered === 'number'
-              ? status.answered
-              : 0;
-        const isComplete = Boolean(status.complete || status.isComplete);
-        const inProgress = Boolean(status.queue_id) && !isComplete && questionsAnswered > 0;
-        if (inProgress) {
-          router.replace('/daily');
-          return;
-        }
-        setRoundComplete(isComplete);
-
-        const body = (await preferencesResponse.json()) as PreferencesResponse;
-        if (cancelled) return;
-
-        const availableDomains = (body.domains ?? []).map((domain) => ({
-          domain: domain.domain,
-          broadCategory: domain.broadCategory ?? null,
-          totalPoints: domain.totalPoints,
-          tier: domain.tier,
-          correctAnswerCount:
-            typeof domain.correctAnswerCount === 'number'
-              ? domain.correctAnswerCount
-              : typeof domain.correct_answer_count === 'number'
-                ? domain.correct_answer_count
-                : 0,
-        }));
-        const requestedDomain = searchParams.get('domain')?.trim();
-        const requestedCustom = searchParams.get('domainMode') === 'custom' && requestedDomain;
-        if (
-          requestedCustom &&
-          !availableDomains.some(
-            (domain) =>
-              domain.domain.toLocaleLowerCase('en-US') ===
-              requestedDomain.toLocaleLowerCase('en-US'),
-          )
-        ) {
-          router.replace(`/knowledge?emptyDomain=${encodeURIComponent(requestedDomain)}`);
-          return;
-        }
-
-        const selectedDomains = requestedCustom
-          ? [requestedDomain]
-          : (body.preferences?.selectedDomains ?? []);
-        setHasUnstartedQueue(Boolean(status.queue_id));
-        setDomains(availableDomains);
-        setDifficulty(body.preferences?.difficulty ?? 'adaptive');
-        setFrequencyByDomain(
-          buildInitialFrequencyMap({
-            domains: availableDomains,
-            savedFrequency: requestedCustom
-              ? null
-              : (body.preferences?.domainPreferenceFrequency ??
-                body.preferences?.domain_preference_frequency ??
-                null),
-            selectedDomains,
-            domainMode: requestedCustom ? 'custom' : (body.preferences?.domainMode ?? 'random'),
-          }),
-        );
-      } catch (caught) {
-        if (!cancelled)
-          setError(caught instanceof Error ? caught.message : 'Could not load setup.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [router, searchParams]);
+  }, []);
 
   const maxPointsByTier = useMemo(() => {
     const result: Record<TerritoryDomain['tier'], number> = {
@@ -468,10 +363,6 @@ export function TerritorySetupClient() {
       setSubmitting(false);
     }
   }, [canSave, difficulty, frequencyByDomain, hasUnstartedQueue, roundComplete, router]);
-
-  if (loading) {
-    return <LoadingScreen fullScreen />;
-  }
 
   return (
     <main className="min-h-dvh bg-[var(--cream)] px-4 py-8 pb-36 text-[var(--ink)]">
