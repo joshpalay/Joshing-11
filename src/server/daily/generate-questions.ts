@@ -1288,7 +1288,16 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       recentDomainCounts,
     );
     const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
-    const frequencyRank = (domain: string) => (frequencyByDomain[domain] === 'often' ? 0 : 1);
+    // Order most-wanted first so generation (which walks this list) favors them:
+    // 'often' leads, 'sometimes' (and unset) in the middle, 'blue_moon' trails so
+    // those domains are drawn least. 'resting' never reaches here — it's filtered
+    // out of selectedDomains upstream.
+    const frequencyRank = (domain: string) => {
+      const frequency = frequencyByDomain[domain];
+      if (frequency === 'often') return 0;
+      if (frequency === 'blue_moon') return 2;
+      return 1;
+    };
     const weightedOrder = [...ordered].sort((a, b) => frequencyRank(a) - frequencyRank(b));
     domainsForRound = weightedOrder.length > 0 ? weightedOrder : allDomains;
   } else {

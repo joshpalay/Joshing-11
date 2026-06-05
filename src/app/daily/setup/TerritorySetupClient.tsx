@@ -10,15 +10,14 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 
-import LoadingScreen from '@/components/LoadingScreen';
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { getPortraitCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
 import {
-  buildInitialFrequencyMap,
   buildSavePayload,
   getNearbyTerritories,
   type DomainPreferenceFrequency,
@@ -28,20 +27,6 @@ import {
 } from '@/lib/daily/territory-model';
 
 type Difficulty = 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive';
-type DomainMode = 'random' | 'custom';
-
-type PreferencesResponse = {
-  preferences: {
-    difficulty: Difficulty;
-    domainMode: DomainMode;
-    selectedDomains: string[];
-    domainPreferenceFrequency?: DomainPreferenceFrequency;
-    domain_preference_frequency?: DomainPreferenceFrequency;
-  };
-  domains: Array<
-    TerritoryDomain & { canonical_subcategory?: string; correct_answer_count?: number }
-  >;
-};
 
 type DragState = {
   domain: string;
@@ -53,34 +38,82 @@ const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> =
   { value: 'often', title: 'Asked Often', copy: 'These show up most in your rounds.' },
   { value: 'sometimes', title: 'Asked Sometimes', copy: 'These stay in rotation, but less often.' },
   {
+    value: 'blue_moon',
+    title: 'Once in a Blue Moon',
+    copy: 'Still on your map, but only surface every so often.',
+  },
+  {
     value: 'resting',
     title: 'Resting',
     copy: 'These are part of your map, but won’t be asked for now.',
   },
 ];
 
-const ZONE_TITLES: Record<TerritoryFrequency, string> = {
-  often: 'Often',
-  sometimes: 'Sometimes',
-  resting: 'Resting',
+// "General Knowledge" is the categorizer's catch-all bucket; show it under a
+// softer label, matching the Knowledge portrait sections.
+const CATEGORY_LABEL_OVERRIDES: Record<string, string> = {
+  'General Knowledge': 'Other interests',
 };
 
-export function TerritorySetupClient() {
+function categorySectionLabel(category: string): string {
+  return CATEGORY_LABEL_OVERRIDES[category] ?? category;
+}
+
+const GENERAL_KNOWLEDGE = 'General Knowledge';
+
+type CategoryGroup = { category: string; domains: TerritoryDomain[] };
+
+function groupByCategory(domains: TerritoryDomain[]): CategoryGroup[] {
+  const byCategory = new Map<string, TerritoryDomain[]>();
+  for (const domain of domains) {
+    const category = normalizeBroadCategory(domain.broadCategory) ?? GENERAL_KNOWLEDGE;
+    const list = byCategory.get(category) ?? [];
+    list.push(domain);
+    byCategory.set(category, list);
+  }
+  return [...byCategory.entries()]
+    .map(([category, items]) => ({
+      category,
+      domains: items,
+      totalPoints: items.reduce((sum, item) => sum + item.totalPoints, 0),
+    }))
+    .sort((a, b) => {
+      // Keep the catch-all bucket last; otherwise heaviest category first.
+      if (a.category === GENERAL_KNOWLEDGE) return 1;
+      if (b.category === GENERAL_KNOWLEDGE) return -1;
+      return b.totalPoints - a.totalPoints || a.category.localeCompare(b.category);
+    })
+    .map(({ category, domains: items }) => ({ category, domains: items }));
+}
+
+export function TerritorySetupClient({
+  initialDomains,
+  initialDifficulty,
+  initialFrequencyByDomain,
+  hasUnstartedQueue,
+  roundComplete,
+}: {
+  initialDomains: TerritoryDomain[];
+  initialDifficulty: Difficulty;
+  initialFrequencyByDomain: DomainPreferenceFrequency;
+  hasUnstartedQueue: boolean;
+  roundComplete: boolean;
+}) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const zoneRefs = useRef<Record<TerritoryFrequency, HTMLElement | null>>({
     often: null,
     sometimes: null,
+    blue_moon: null,
     resting: null,
   });
-  const [loading, setLoading] = useState(true);
+  const newTopicInputRef = useRef<HTMLInputElement | null>(null);
+  const dragPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const difficulty = initialDifficulty;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [domains, setDomains] = useState<TerritoryDomain[]>([]);
-  const [difficulty, setDifficulty] = useState<Difficulty>('adaptive');
-  const [frequencyByDomain, setFrequencyByDomain] = useState<DomainPreferenceFrequency>({});
-  const [hasUnstartedQueue, setHasUnstartedQueue] = useState(false);
-  const [roundComplete, setRoundComplete] = useState(false);
+  const [domains, setDomains] = useState<TerritoryDomain[]>(initialDomains);
+  const [frequencyByDomain, setFrequencyByDomain] =
+    useState<DomainPreferenceFrequency>(initialFrequencyByDomain);
   const [newTopic, setNewTopic] = useState('');
   const [addingTopic, setAddingTopic] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -89,105 +122,12 @@ export function TerritorySetupClient() {
   const [hoveredZone, setHoveredZone] = useState<TerritoryFrequency | null>(null);
   const [settling, setSettling] = useState(true);
 
+  // Data arrives from the server, so the territories render on first paint —
+  // run the settle-in animation immediately on mount.
   useEffect(() => {
     const timer = window.setTimeout(() => setSettling(false), 900);
     return () => window.clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const [statusResponse, preferencesResponse] = await Promise.all([
-          fetch('/api/daily/status', { credentials: 'include', cache: 'no-store' }),
-          fetch('/api/daily/preferences', { credentials: 'include', cache: 'no-store' }),
-        ]);
-
-        if (statusResponse.status === 401 || preferencesResponse.status === 401) {
-          router.replace('/login');
-          return;
-        }
-
-        if (!statusResponse.ok || !preferencesResponse.ok) {
-          throw new Error('Could not load setup.');
-        }
-
-        const status = await statusResponse.json();
-        const questionsAnswered =
-          typeof status.questionsAnswered === 'number'
-            ? status.questionsAnswered
-            : typeof status.answered === 'number'
-              ? status.answered
-              : 0;
-        const isComplete = Boolean(status.complete || status.isComplete);
-        const inProgress = Boolean(status.queue_id) && !isComplete && questionsAnswered > 0;
-        if (inProgress) {
-          router.replace('/daily');
-          return;
-        }
-        setRoundComplete(isComplete);
-
-        const body = (await preferencesResponse.json()) as PreferencesResponse;
-        if (cancelled) return;
-
-        const availableDomains = (body.domains ?? []).map((domain) => ({
-          domain: domain.domain,
-          broadCategory: domain.broadCategory ?? null,
-          totalPoints: domain.totalPoints,
-          tier: domain.tier,
-          correctAnswerCount:
-            typeof domain.correctAnswerCount === 'number'
-              ? domain.correctAnswerCount
-              : typeof domain.correct_answer_count === 'number'
-                ? domain.correct_answer_count
-                : 0,
-        }));
-        const requestedDomain = searchParams.get('domain')?.trim();
-        const requestedCustom = searchParams.get('domainMode') === 'custom' && requestedDomain;
-        if (
-          requestedCustom &&
-          !availableDomains.some(
-            (domain) =>
-              domain.domain.toLocaleLowerCase('en-US') ===
-              requestedDomain.toLocaleLowerCase('en-US'),
-          )
-        ) {
-          router.replace(`/knowledge?emptyDomain=${encodeURIComponent(requestedDomain)}`);
-          return;
-        }
-
-        const selectedDomains = requestedCustom
-          ? [requestedDomain]
-          : (body.preferences?.selectedDomains ?? []);
-        setHasUnstartedQueue(Boolean(status.queue_id));
-        setDomains(availableDomains);
-        setDifficulty(body.preferences?.difficulty ?? 'adaptive');
-        setFrequencyByDomain(
-          buildInitialFrequencyMap({
-            domains: availableDomains,
-            savedFrequency: requestedCustom
-              ? null
-              : (body.preferences?.domainPreferenceFrequency ??
-                body.preferences?.domain_preference_frequency ??
-                null),
-            selectedDomains,
-            domainMode: requestedCustom ? 'custom' : (body.preferences?.domainMode ?? 'random'),
-          }),
-        );
-      } catch (caught) {
-        if (!cancelled)
-          setError(caught instanceof Error ? caught.message : 'Could not load setup.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [router, searchParams]);
 
   const maxPointsByTier = useMemo(() => {
     const result: Record<TerritoryDomain['tier'], number> = {
@@ -206,6 +146,7 @@ export function TerritorySetupClient() {
     const result: Record<TerritoryFrequency, TerritoryDomain[]> = {
       often: [],
       sometimes: [],
+      blue_moon: [],
       resting: [],
     };
     for (const domain of domains) {
@@ -267,6 +208,13 @@ export function TerritorySetupClient() {
     [addDomainRow],
   );
 
+  const focusCreateTopic = useCallback(() => {
+    const input = newTopicInputRef.current;
+    if (!input) return;
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input.focus({ preventScroll: true });
+  }, []);
+
   const addTopic = useCallback(async () => {
     const label = newTopic.trim();
     if (!label || addingTopic) return;
@@ -315,6 +263,7 @@ export function TerritorySetupClient() {
     (event: ReactPointerEvent, domain: string) => {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
+      dragPointerRef.current = { x: event.clientX, y: event.clientY };
       setDragState({ domain, x: event.clientX, y: event.clientY });
       setHoveredZone(zoneAtPoint(event.clientX, event.clientY));
     },
@@ -324,11 +273,41 @@ export function TerritorySetupClient() {
   const handleDragMove = useCallback(
     (event: ReactPointerEvent) => {
       if (!dragState) return;
+      dragPointerRef.current = { x: event.clientX, y: event.clientY };
       setDragState({ domain: dragState.domain, x: event.clientX, y: event.clientY });
       setHoveredZone(zoneAtPoint(event.clientX, event.clientY));
     },
     [dragState, zoneAtPoint],
   );
+
+  // While a territory is held near the top/bottom edge, scroll the page so the
+  // user can reach zones that are off-screen. A rAF loop (not pointermove)
+  // keeps scrolling even when the finger is held still at the edge.
+  const isDragging = dragState !== null;
+  useEffect(() => {
+    if (!isDragging) return;
+    const EDGE = 96; // px from each edge that triggers auto-scroll
+    const MAX_SPEED = 20; // px per frame at the very edge
+    let frame = 0;
+    const step = () => {
+      const { x, y } = dragPointerRef.current;
+      const viewportHeight = window.innerHeight;
+      let delta = 0;
+      if (y < EDGE) {
+        delta = -Math.ceil(((EDGE - y) / EDGE) * MAX_SPEED);
+      } else if (y > viewportHeight - EDGE) {
+        delta = Math.ceil(((y - (viewportHeight - EDGE)) / EDGE) * MAX_SPEED);
+      }
+      if (delta !== 0) {
+        window.scrollBy(0, delta);
+        // Content shifted under a stationary pointer — re-resolve the hovered zone.
+        setHoveredZone(zoneAtPoint(x, y));
+      }
+      frame = window.requestAnimationFrame(step);
+    };
+    frame = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(frame);
+  }, [isDragging, zoneAtPoint]);
 
   const handleDragEnd = useCallback(
     (event: ReactPointerEvent) => {
@@ -392,10 +371,6 @@ export function TerritorySetupClient() {
     }
   }, [canSave, difficulty, frequencyByDomain, hasUnstartedQueue, roundComplete, router]);
 
-  if (loading) {
-    return <LoadingScreen fullScreen />;
-  }
-
   return (
     <main className="min-h-dvh bg-[var(--cream)] px-4 py-8 pb-36 text-[var(--ink)]">
       <div className="mx-auto max-w-3xl">
@@ -429,6 +404,28 @@ export function TerritorySetupClient() {
           </section>
         ) : null}
 
+        <section className="mb-8 rounded-[2rem] border border-[var(--border-light)] bg-white/35 p-5">
+          <div className="mb-4">
+            <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">Add a Territory</h2>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">
+              {nearbyTerritories.length > 0
+                ? 'Suggestions based on the shape of your map — or create your own.'
+                : 'Create your own, and more suggestions will appear as your map grows.'}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {nearbyTerritories.map((territory) => (
+              <GhostTerritoryCircle
+                key={territory.domain}
+                territory={territory}
+                disabled={addingTopic}
+                onAdd={() => void addNearbyTerritory(territory)}
+              />
+            ))}
+            <CreateYourOwnCircle disabled={addingTopic} onClick={focusCreateTopic} />
+          </div>
+        </section>
+
         <section className="space-y-5" aria-label="Round territory frequency zones">
           {ZONES.map((zone) => (
             <TerritoryZone
@@ -438,7 +435,6 @@ export function TerritorySetupClient() {
               maxPointsByTier={maxPointsByTier}
               highlighted={hoveredZone === zone.value}
               dragState={dragState}
-              onMove={moveDomain}
               onDragStart={handleDragStart}
               onDragMove={handleDragMove}
               onDragEnd={handleDragEnd}
@@ -449,33 +445,6 @@ export function TerritorySetupClient() {
             />
           ))}
         </section>
-
-        {nearbyTerritories.length > 0 ? (
-          <section className="mt-8 rounded-[2rem] border border-[var(--border-light)] bg-white/35 p-5">
-            <div className="mb-4">
-              <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">
-                Nearby Territory
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">
-                Suggestions based on the shape of your map.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-4">
-              {nearbyTerritories.map((territory) => (
-                <GhostTerritoryCircle
-                  key={territory.domain}
-                  territory={territory}
-                  disabled={addingTopic}
-                  onAdd={() => void addNearbyTerritory(territory)}
-                />
-              ))}
-            </div>
-          </section>
-        ) : domains.length > 0 ? (
-          <p className="mt-8 rounded-2xl border border-[var(--border-light)] bg-white/30 p-4 text-sm text-[var(--text-muted-warm)]">
-            More suggestions will appear as your map grows.
-          </p>
-        ) : null}
 
         <section className="mt-8 rounded-[2rem] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-5">
           <form
@@ -492,6 +461,7 @@ export function TerritorySetupClient() {
             </label>
             <div className="mt-4 flex gap-2">
               <input
+                ref={newTopicInputRef}
                 id="add-topic"
                 type="text"
                 value={newTopic}
@@ -532,7 +502,7 @@ export function TerritorySetupClient() {
         ) : null}
       </div>
 
-      <div className="fixed inset-x-0 bottom-16 z-50 border-t border-[var(--border-warm)] bg-[var(--cream)]/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:bottom-0 md:pb-3">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-warm)] bg-[var(--cream)]/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           <Link href="/" className="btn-ghost min-h-11 px-5">
             Home
@@ -568,7 +538,6 @@ function TerritoryZone({
   maxPointsByTier,
   highlighted,
   dragState,
-  onMove,
   onDragStart,
   onDragMove,
   onDragEnd,
@@ -580,13 +549,14 @@ function TerritoryZone({
   maxPointsByTier: Record<TerritoryDomain['tier'], number>;
   highlighted: boolean;
   dragState: DragState;
-  onMove: (domain: string, frequency: TerritoryFrequency) => void;
   onDragStart: (event: ReactPointerEvent, domain: string) => void;
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
   setRef: (element: HTMLElement | null) => void;
   settling: boolean;
 }) {
+  const categoryGroups = useMemo(() => groupByCategory(domains), [domains]);
+
   return (
     <section
       ref={setRef}
@@ -596,24 +566,36 @@ function TerritoryZone({
         <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">{zone.title}</h2>
         <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">{zone.copy}</p>
       </div>
-      <div className="flex min-h-28 flex-wrap items-start gap-4 rounded-[1.5rem] border border-dashed border-[var(--border-light)] bg-[var(--cream)]/50 p-3">
-        {domains.length > 0 ? (
-          domains.map((domain) => (
-            <TerritoryCircle
-              key={domain.domain}
-              domain={domain}
-              currentZone={zone.value}
-              maxPointsForTier={maxPointsByTier[domain.tier] ?? 1}
-              onMove={onMove}
-              dragging={dragState?.domain === domain.domain}
-              onDragStart={onDragStart}
-              onDragMove={onDragMove}
-              onDragEnd={onDragEnd}
-              settling={settling}
-            />
+      <div className="min-h-28 space-y-4 rounded-[1.5rem] border border-dashed border-[var(--border-light)] bg-[var(--cream)]/50 p-3">
+        {categoryGroups.length > 0 ? (
+          categoryGroups.map(({ category, domains: groupDomains }) => (
+            <div key={category}>
+              {categoryGroups.length > 1 ? (
+                <p
+                  className="mb-2 px-1 text-[0.7rem] font-semibold tracking-[0.14em] uppercase"
+                  style={{ color: getPortraitDomainColor(category).text }}
+                >
+                  {categorySectionLabel(category)}
+                </p>
+              ) : null}
+              <div className="grid grid-cols-3 items-start gap-3">
+                {groupDomains.map((domain) => (
+                  <TerritoryCircle
+                    key={domain.domain}
+                    domain={domain}
+                    maxPointsForTier={maxPointsByTier[domain.tier] ?? 1}
+                    dragging={dragState?.domain === domain.domain}
+                    onDragStart={onDragStart}
+                    onDragMove={onDragMove}
+                    onDragEnd={onDragEnd}
+                    settling={settling}
+                  />
+                ))}
+              </div>
+            </div>
           ))
         ) : (
-          <p className="self-center px-2 text-sm text-[var(--text-muted-warm)] italic">
+          <p className="px-2 text-sm text-[var(--text-muted-warm)] italic">
             Drop a territory here.
           </p>
         )}
@@ -624,9 +606,7 @@ function TerritoryZone({
 
 function TerritoryCircle({
   domain,
-  currentZone,
   maxPointsForTier,
-  onMove,
   dragging,
   onDragStart,
   onDragMove,
@@ -634,9 +614,7 @@ function TerritoryCircle({
   settling,
 }: {
   domain: TerritoryDomain;
-  currentZone: TerritoryFrequency;
   maxPointsForTier: number;
-  onMove: (domain: string, frequency: TerritoryFrequency) => void;
   dragging: boolean;
   onDragStart: (event: ReactPointerEvent, domain: string) => void;
   onDragMove: (event: ReactPointerEvent) => void;
@@ -646,9 +624,9 @@ function TerritoryCircle({
   const broadCategory = domain.broadCategory ?? 'General Knowledge';
   const color = getPortraitDomainColor(broadCategory);
   const size = Math.min(
-    112,
+    84,
     Math.max(
-      54,
+      48,
       Math.round(
         getPortraitCircleSize(
           domain.tier as CircleSizingTier,
@@ -665,7 +643,7 @@ function TerritoryCircle({
 
   return (
     <div
-      className={`group relative flex w-[104px] touch-none flex-col items-center gap-2 rounded-[1.5rem] p-2 text-center transition duration-300 select-none ${dragging ? 'scale-95 opacity-40' : 'opacity-100'} ${settling ? 'motion-safe:animate-[territory-settle_850ms_ease-out]' : ''}`}
+      className={`group relative flex w-full touch-none flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center transition duration-300 select-none ${dragging ? 'scale-95 opacity-40' : 'opacity-100'} ${settling ? 'motion-safe:animate-[territory-settle_850ms_ease-out]' : ''}`}
       onPointerDown={(event) => onDragStart(event, domain.domain)}
       onPointerMove={onDragMove}
       onPointerUp={onDragEnd}
@@ -677,38 +655,26 @@ function TerritoryCircle({
         border={`1px solid ${color.primary}44`}
         style={{ boxShadow: '0 8px 22px rgba(26,18,8,0.08)' }}
       >
-        <span
-          style={{
-            fontSize: countFontSize,
-            color: color.primary,
-            fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
-            fontWeight: 700,
-            lineHeight: 1,
-          }}
-        >
-          {correctCount}
-        </span>
+        {correctCount > 0 ? (
+          <span
+            style={{
+              fontSize: countFontSize,
+              color: color.primary,
+              fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+              fontWeight: 700,
+              lineHeight: 1,
+            }}
+          >
+            {correctCount}
+          </span>
+        ) : null}
       </KnowledgeBubble>
       <span
-        className="max-w-[96px] font-serif text-[13px] leading-tight break-words"
+        className="max-w-full px-1 font-serif text-[13px] leading-tight break-words"
         style={{ color: color.text }}
       >
         {domain.domain}
       </span>
-      <div className="flex flex-col gap-1 opacity-100 sm:absolute sm:top-full sm:left-1/2 sm:z-20 sm:w-36 sm:-translate-x-1/2 sm:rounded-2xl sm:border sm:border-[var(--border-warm)] sm:bg-[var(--cream)] sm:p-2 sm:opacity-0 sm:shadow-lg sm:transition sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-        {ZONES.map((zone) => (
-          <button
-            key={zone.value}
-            type="button"
-            className="rounded-full px-2 py-1 text-xs text-[var(--ink)] transition hover:bg-[var(--cream-accent)] disabled:opacity-40"
-            disabled={currentZone === zone.value}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => onMove(domain.domain, zone.value)}
-          >
-            Move to {ZONE_TITLES[zone.value]}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -731,7 +697,7 @@ function GhostTerritoryCircle({
   return (
     <button
       type="button"
-      className="flex w-[104px] flex-col items-center gap-2 rounded-[1.5rem] p-2 text-center opacity-70 transition hover:opacity-100 disabled:opacity-40"
+      className="flex w-full flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center opacity-70 transition hover:opacity-100 disabled:opacity-40"
       style={style}
       disabled={disabled}
       onClick={onAdd}
@@ -739,11 +705,35 @@ function GhostTerritoryCircle({
       <div className="grid size-16 place-items-center rounded-full border border-dashed border-[var(--territory-border)] bg-white/35 text-[var(--territory-text)]">
         <Plus className="size-5" aria-hidden="true" />
       </div>
-      <span className="max-w-[96px] font-serif text-[13px] leading-tight break-words text-[var(--territory-text)]">
+      <span className="max-w-full px-1 font-serif text-[13px] leading-tight break-words text-[var(--territory-text)]">
         {territory.domain}
       </span>
       <span className="text-[10px] tracking-[0.14em] text-[var(--text-muted-warm)] uppercase">
         Add
+      </span>
+    </button>
+  );
+}
+
+function CreateYourOwnCircle({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center opacity-80 transition hover:opacity-100 disabled:opacity-40"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <div className="grid size-16 place-items-center rounded-full border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] text-[var(--ink)]">
+        <Plus className="size-5" aria-hidden="true" />
+      </div>
+      <span className="max-w-full px-1 font-serif text-[13px] leading-tight break-words text-[var(--ink)]">
+        Create your own
       </span>
     </button>
   );

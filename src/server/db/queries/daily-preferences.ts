@@ -7,7 +7,7 @@ export const DAILY_DOMAIN_MODES = ['random', 'custom'] as const;
 
 export type DailyDifficulty = typeof DAILY_DIFFICULTIES[number];
 export type DailyDomainMode = typeof DAILY_DOMAIN_MODES[number];
-export const DAILY_DOMAIN_FREQUENCIES = ['often', 'sometimes', 'resting'] as const;
+export const DAILY_DOMAIN_FREQUENCIES = ['often', 'sometimes', 'blue_moon', 'resting'] as const;
 export type DailyDomainFrequency = typeof DAILY_DOMAIN_FREQUENCIES[number];
 export type DailyDomainPreferenceFrequency = Record<string, DailyDomainFrequency>;
 
