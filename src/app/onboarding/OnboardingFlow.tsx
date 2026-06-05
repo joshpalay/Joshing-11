@@ -392,6 +392,7 @@ export default function OnboardingFlow({
           broadCategory: data.broadCategory ?? 'General Knowledge',
           explanation: data.explanation ?? null,
         })
+        setCustomChoice('suggested')
       } catch (fetchError) {
         if (
           !(
@@ -1281,30 +1282,30 @@ export default function OnboardingFlow({
                         </p>
                       ) : null}
                       {canonicalSuggestion ? (
-                        <div className="bg-background space-y-3 rounded-md border p-3">
-                          <p>
-                            Suggested:{' '}
-                            <span className="font-medium">
-                              {canonicalSuggestion.suggested}
-                            </span>
+                        <div className="bg-background space-y-2 rounded-md border p-3">
+                          <p className="text-muted-foreground text-xs">
+                            Refined for better trivia:
                           </p>
-                          <div className="flex flex-wrap gap-2">
+                          <p className="font-medium">
+                            {customChoice === 'mine'
+                              ? canonicalSuggestion.original
+                              : canonicalSuggestion.suggested}
+                          </p>
+                          {canonicalSuggestion.suggested !== canonicalSuggestion.original ? (
                             <button
                               type="button"
-                              className="btn-primary h-9"
-                              onClick={() => setCustomChoice('suggested')}
+                              className="btn-ghost h-8 text-xs"
+                              onClick={() =>
+                                setCustomChoice(
+                                  customChoice === 'mine' ? 'suggested' : 'mine'
+                                )
+                              }
                             >
-                              <Check className="size-4" />
-                              Use this
+                              {customChoice === 'mine'
+                                ? `Use refined: "${canonicalSuggestion.suggested}"`
+                                : `Use original: "${canonicalSuggestion.original}"`}
                             </button>
-                            <button
-                              type="button"
-                              className="btn-ghost h-9"
-                              onClick={() => setCustomChoice('mine')}
-                            >
-                              Keep mine
-                            </button>
-                          </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -1337,10 +1338,10 @@ export default function OnboardingFlow({
                   </span>
                   <span className="text-muted-foreground">
                     {selectedInterests.length === 0
-                      ? 'Pick at least 1 to continue'
+                      ? 'Pick up to 5 to continue'
                       : null}
                     {selectedInterests.length === 5
-                      ? '5 max - deselect one to add another'
+                      ? '5 max - deselect one to swap'
                       : null}
                   </span>
                 </div>
