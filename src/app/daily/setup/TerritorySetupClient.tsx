@@ -34,6 +34,11 @@ type DragState = {
   y: number;
 } | null;
 
+type ActiveTerritory = {
+  domain: string;
+  frequency: TerritoryFrequency;
+} | null;
+
 const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> = [
   { value: 'often', title: 'Asked Often', copy: 'These show up most in your rounds.' },
   { value: 'sometimes', title: 'Asked Sometimes', copy: 'These stay in rotation, but less often.' },
@@ -106,6 +111,12 @@ export function TerritorySetupClient({
     blue_moon: null,
     resting: null,
   });
+  const quickTargetRefs = useRef<Record<TerritoryFrequency, HTMLButtonElement | null>>({
+    often: null,
+    sometimes: null,
+    blue_moon: null,
+    resting: null,
+  });
   const newTopicInputRef = useRef<HTMLInputElement | null>(null);
   const dragPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const difficulty = initialDifficulty;
@@ -119,7 +130,9 @@ export function TerritorySetupClient({
   const [addError, setAddError] = useState<string | null>(null);
   const [addLimitReached, setAddLimitReached] = useState(false);
   const [dragState, setDragState] = useState<DragState>(null);
+  const [activeTerritory, setActiveTerritory] = useState<ActiveTerritory>(null);
   const [hoveredZone, setHoveredZone] = useState<TerritoryFrequency | null>(null);
+  const [hoveredQuickTarget, setHoveredQuickTarget] = useState<TerritoryFrequency | null>(null);
   const [settling, setSettling] = useState(true);
 
   // Data arrives from the server, so the territories render on first paint —
@@ -165,11 +178,52 @@ export function TerritorySetupClient({
     [domains],
   );
 
+  const draggingDomain = useMemo(
+    () => domains.find((domain) => domain.domain === dragState?.domain) ?? null,
+    [domains, dragState?.domain],
+  );
+
   const canSave = !submitting && domains.length > 0;
 
-  const moveDomain = useCallback((domain: string, frequency: TerritoryFrequency) => {
-    setFrequencyByDomain((existing) => ({ ...existing, [domain]: frequency }));
-  }, []);
+  const persistFrequencyByDomain = useCallback(
+    async (nextFrequencyByDomain: DomainPreferenceFrequency) => {
+      const preferenceResponse = await fetch('/api/daily/preferences', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(
+          buildSavePayload({ difficulty, frequencyByDomain: nextFrequencyByDomain }),
+        ),
+      });
+      if (!preferenceResponse.ok) {
+        const body = await preferenceResponse.json().catch(() => null);
+        throw new Error(body?.message ?? 'Could not save your setup.');
+      }
+    },
+    [difficulty],
+  );
+
+  const moveDomain = useCallback(
+    (domain: string, frequency: TerritoryFrequency) => {
+      if ((frequencyByDomain[domain] ?? 'sometimes') === frequency) return;
+      const nextFrequencyByDomain = { ...frequencyByDomain, [domain]: frequency };
+      setFrequencyByDomain(nextFrequencyByDomain);
+      setError(null);
+      void persistFrequencyByDomain(nextFrequencyByDomain).catch((caught) => {
+        setError(caught instanceof Error ? caught.message : 'Could not save your setup.');
+      });
+    },
+    [frequencyByDomain, persistFrequencyByDomain],
+  );
+
+  const handleQuickMove = useCallback(
+    (domain: string, frequency: TerritoryFrequency) => {
+      moveDomain(domain, frequency);
+      setActiveTerritory(null);
+      setHoveredQuickTarget(null);
+    },
+    [moveDomain],
+  );
 
   const addDomainRow = useCallback((row: TerritoryDomain) => {
     const key = row.domain.toLocaleLowerCase('en-US');
@@ -259,15 +313,27 @@ export function TerritorySetupClient({
     return null;
   }, []);
 
+  const quickTargetAtPoint = useCallback((x: number, y: number): TerritoryFrequency | null => {
+    for (const zone of ZONES) {
+      const element = quickTargetRefs.current[zone.value];
+      if (!element) continue;
+      const rect = element.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return zone.value;
+    }
+    return null;
+  }, []);
+
   const handleDragStart = useCallback(
-    (event: ReactPointerEvent, domain: string) => {
+    (event: ReactPointerEvent, domain: string, frequency: TerritoryFrequency) => {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
       dragPointerRef.current = { x: event.clientX, y: event.clientY };
+      setActiveTerritory({ domain, frequency });
       setDragState({ domain, x: event.clientX, y: event.clientY });
+      setHoveredQuickTarget(quickTargetAtPoint(event.clientX, event.clientY));
       setHoveredZone(zoneAtPoint(event.clientX, event.clientY));
     },
-    [zoneAtPoint],
+    [quickTargetAtPoint, zoneAtPoint],
   );
 
   const handleDragMove = useCallback(
@@ -275,9 +341,10 @@ export function TerritorySetupClient({
       if (!dragState) return;
       dragPointerRef.current = { x: event.clientX, y: event.clientY };
       setDragState({ domain: dragState.domain, x: event.clientX, y: event.clientY });
+      setHoveredQuickTarget(quickTargetAtPoint(event.clientX, event.clientY));
       setHoveredZone(zoneAtPoint(event.clientX, event.clientY));
     },
-    [dragState, zoneAtPoint],
+    [dragState, quickTargetAtPoint, zoneAtPoint],
   );
 
   // While a territory is held near the top/bottom edge, scroll the page so the
@@ -312,12 +379,23 @@ export function TerritorySetupClient({
   const handleDragEnd = useCallback(
     (event: ReactPointerEvent) => {
       if (!dragState) return;
-      const nextZone = zoneAtPoint(event.clientX, event.clientY);
+      const nextZone =
+        quickTargetAtPoint(event.clientX, event.clientY) ??
+        zoneAtPoint(event.clientX, event.clientY);
       if (nextZone) moveDomain(dragState.domain, nextZone);
       setDragState(null);
+      setActiveTerritory(null);
       setHoveredZone(null);
+      setHoveredQuickTarget(null);
     },
-    [dragState, moveDomain, zoneAtPoint],
+    [dragState, moveDomain, quickTargetAtPoint, zoneAtPoint],
+  );
+
+  const setQuickTargetRef = useCallback(
+    (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => {
+      quickTargetRefs.current[frequency] = element;
+    },
+    [],
   );
 
   const saveForNextRound = useCallback(async () => {
@@ -435,9 +513,13 @@ export function TerritorySetupClient({
               maxPointsByTier={maxPointsByTier}
               highlighted={hoveredZone === zone.value}
               dragState={dragState}
+              activeTerritory={activeTerritory}
+              hoveredQuickTarget={hoveredQuickTarget}
               onDragStart={handleDragStart}
               onDragMove={handleDragMove}
               onDragEnd={handleDragEnd}
+              onQuickMove={handleQuickMove}
+              setQuickTargetRef={setQuickTargetRef}
               setRef={(element) => {
                 zoneRefs.current[zone.value] = element;
               }}
@@ -518,17 +600,51 @@ export function TerritorySetupClient({
         </div>
       </div>
 
-      {dragState ? (
+      {dragState && draggingDomain ? (
         <div
           className="pointer-events-none fixed z-[60] -translate-x-1/2 -translate-y-1/2"
           style={{ left: dragState.x, top: dragState.y }}
         >
-          <span className="rounded-full bg-[var(--ink)] px-3 py-1 text-xs text-[var(--cream)] shadow-lg">
-            Moving territory
-          </span>
+          <DragPreview domain={draggingDomain} />
         </div>
       ) : null}
     </main>
+  );
+}
+
+function DragPreview({ domain }: { domain: TerritoryDomain }) {
+  const broadCategory = domain.broadCategory ?? 'General Knowledge';
+  const color = getPortraitDomainColor(broadCategory);
+
+  return (
+    <div className="flex max-w-24 flex-col items-center gap-1 text-center drop-shadow-lg">
+      <KnowledgeBubble
+        diameter={58}
+        light={color.light}
+        border={`1px solid ${color.primary}55`}
+        style={{ boxShadow: '0 12px 28px rgba(26,18,8,0.16)' }}
+      >
+        {domain.correctAnswerCount > 0 ? (
+          <span
+            style={{
+              color: color.primary,
+              fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+              fontSize: 18,
+              fontWeight: 700,
+              lineHeight: 1,
+            }}
+          >
+            {domain.correctAnswerCount}
+          </span>
+        ) : null}
+      </KnowledgeBubble>
+      <span
+        className="rounded-full bg-[var(--cream)]/95 px-2 py-0.5 font-serif text-[11px] leading-tight shadow-sm"
+        style={{ color: color.text }}
+      >
+        {domain.domain}
+      </span>
+    </div>
   );
 }
 
@@ -538,9 +654,13 @@ function TerritoryZone({
   maxPointsByTier,
   highlighted,
   dragState,
+  activeTerritory,
+  hoveredQuickTarget,
   onDragStart,
   onDragMove,
   onDragEnd,
+  onQuickMove,
+  setQuickTargetRef,
   setRef,
   settling,
 }: {
@@ -549,9 +669,13 @@ function TerritoryZone({
   maxPointsByTier: Record<TerritoryDomain['tier'], number>;
   highlighted: boolean;
   dragState: DragState;
-  onDragStart: (event: ReactPointerEvent, domain: string) => void;
+  activeTerritory: ActiveTerritory;
+  hoveredQuickTarget: TerritoryFrequency | null;
+  onDragStart: (event: ReactPointerEvent, domain: string, frequency: TerritoryFrequency) => void;
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
+  onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
+  setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
   setRef: (element: HTMLElement | null) => void;
   settling: boolean;
 }) {
@@ -583,11 +707,16 @@ function TerritoryZone({
                   <TerritoryCircle
                     key={domain.domain}
                     domain={domain}
+                    currentFrequency={zone.value}
                     maxPointsForTier={maxPointsByTier[domain.tier] ?? 1}
                     dragging={dragState?.domain === domain.domain}
+                    quickTargetsVisible={activeTerritory?.domain === domain.domain}
+                    hoveredQuickTarget={hoveredQuickTarget}
                     onDragStart={onDragStart}
                     onDragMove={onDragMove}
                     onDragEnd={onDragEnd}
+                    onQuickMove={onQuickMove}
+                    setQuickTargetRef={setQuickTargetRef}
                     settling={settling}
                   />
                 ))}
@@ -606,19 +735,29 @@ function TerritoryZone({
 
 function TerritoryCircle({
   domain,
+  currentFrequency,
   maxPointsForTier,
   dragging,
+  quickTargetsVisible,
+  hoveredQuickTarget,
   onDragStart,
   onDragMove,
   onDragEnd,
+  onQuickMove,
+  setQuickTargetRef,
   settling,
 }: {
   domain: TerritoryDomain;
+  currentFrequency: TerritoryFrequency;
   maxPointsForTier: number;
   dragging: boolean;
-  onDragStart: (event: ReactPointerEvent, domain: string) => void;
+  quickTargetsVisible: boolean;
+  hoveredQuickTarget: TerritoryFrequency | null;
+  onDragStart: (event: ReactPointerEvent, domain: string, frequency: TerritoryFrequency) => void;
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
+  onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
+  setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
   settling: boolean;
 }) {
   const broadCategory = domain.broadCategory ?? 'General Knowledge';
@@ -643,8 +782,8 @@ function TerritoryCircle({
 
   return (
     <div
-      className={`group relative flex w-full touch-none flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center transition duration-300 select-none ${dragging ? 'scale-95 opacity-40' : 'opacity-100'} ${settling ? 'motion-safe:animate-[territory-settle_850ms_ease-out]' : ''}`}
-      onPointerDown={(event) => onDragStart(event, domain.domain)}
+      className={`group relative flex w-full touch-none flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center transition duration-300 select-none ${dragging ? 'scale-95' : 'opacity-100'} ${settling ? 'motion-safe:animate-[territory-settle_850ms_ease-out]' : ''}`}
+      onPointerDown={(event) => onDragStart(event, domain.domain, currentFrequency)}
       onPointerMove={onDragMove}
       onPointerUp={onDragEnd}
       onPointerCancel={onDragEnd}
@@ -675,6 +814,58 @@ function TerritoryCircle({
       >
         {domain.domain}
       </span>
+      {quickTargetsVisible ? (
+        <QuickMoveTargets
+          domain={domain.domain}
+          currentFrequency={currentFrequency}
+          hoveredTarget={hoveredQuickTarget}
+          onQuickMove={onQuickMove}
+          setQuickTargetRef={setQuickTargetRef}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function QuickMoveTargets({
+  domain,
+  currentFrequency,
+  hoveredTarget,
+  onQuickMove,
+  setQuickTargetRef,
+}: {
+  domain: string;
+  currentFrequency: TerritoryFrequency;
+  hoveredTarget: TerritoryFrequency | null;
+  onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
+  setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
+}) {
+  const targets = ZONES.filter((zone) => zone.value !== currentFrequency);
+
+  return (
+    <div
+      className="mt-1 flex w-[12rem] max-w-[calc(100vw-3rem)] justify-center gap-2"
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerMove={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+      onPointerCancel={(event) => event.stopPropagation()}
+    >
+      {targets.map((target) => (
+        <button
+          key={target.value}
+          ref={(element) => setQuickTargetRef(target.value, element)}
+          type="button"
+          className={`grid size-14 place-items-center rounded-full border px-1 text-center text-[0.62rem] leading-[0.72rem] font-semibold shadow-sm transition ${
+            hoveredTarget === target.value
+              ? 'scale-110 border-[var(--ink)] bg-[var(--ink)] text-[var(--cream)] shadow-[0_10px_24px_rgba(26,18,8,0.24)]'
+              : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--ink)]'
+          }`}
+          onClick={() => onQuickMove(domain, target.value)}
+          title={`Move to ${target.title}`}
+        >
+          {target.title.replace('Asked ', '').replace('Once in a ', '')}
+        </button>
+      ))}
     </div>
   );
 }
@@ -715,13 +906,7 @@ function GhostTerritoryCircle({
   );
 }
 
-function CreateYourOwnCircle({
-  disabled,
-  onClick,
-}: {
-  disabled: boolean;
-  onClick: () => void;
-}) {
+function CreateYourOwnCircle({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
