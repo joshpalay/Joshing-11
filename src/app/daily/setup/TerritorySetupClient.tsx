@@ -185,10 +185,45 @@ export function TerritorySetupClient({
 
   const canSave = !submitting && domains.length > 0;
 
-  const moveDomain = useCallback((domain: string, frequency: TerritoryFrequency) => {
-    setFrequencyByDomain((existing) => ({ ...existing, [domain]: frequency }));
-    setActiveTerritory({ domain, frequency });
-  }, []);
+  const persistFrequencyByDomain = useCallback(
+    async (nextFrequencyByDomain: DomainPreferenceFrequency) => {
+      const preferenceResponse = await fetch('/api/daily/preferences', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(
+          buildSavePayload({ difficulty, frequencyByDomain: nextFrequencyByDomain }),
+        ),
+      });
+      if (!preferenceResponse.ok) {
+        const body = await preferenceResponse.json().catch(() => null);
+        throw new Error(body?.message ?? 'Could not save your setup.');
+      }
+    },
+    [difficulty],
+  );
+
+  const moveDomain = useCallback(
+    (domain: string, frequency: TerritoryFrequency) => {
+      if ((frequencyByDomain[domain] ?? 'sometimes') === frequency) return;
+      const nextFrequencyByDomain = { ...frequencyByDomain, [domain]: frequency };
+      setFrequencyByDomain(nextFrequencyByDomain);
+      setError(null);
+      void persistFrequencyByDomain(nextFrequencyByDomain).catch((caught) => {
+        setError(caught instanceof Error ? caught.message : 'Could not save your setup.');
+      });
+    },
+    [frequencyByDomain, persistFrequencyByDomain],
+  );
+
+  const handleQuickMove = useCallback(
+    (domain: string, frequency: TerritoryFrequency) => {
+      moveDomain(domain, frequency);
+      setActiveTerritory(null);
+      setHoveredQuickTarget(null);
+    },
+    [moveDomain],
+  );
 
   const addDomainRow = useCallback((row: TerritoryDomain) => {
     const key = row.domain.toLocaleLowerCase('en-US');
@@ -349,6 +384,7 @@ export function TerritorySetupClient({
         zoneAtPoint(event.clientX, event.clientY);
       if (nextZone) moveDomain(dragState.domain, nextZone);
       setDragState(null);
+      setActiveTerritory(null);
       setHoveredZone(null);
       setHoveredQuickTarget(null);
     },
@@ -482,7 +518,7 @@ export function TerritorySetupClient({
               onDragStart={handleDragStart}
               onDragMove={handleDragMove}
               onDragEnd={handleDragEnd}
-              onQuickMove={moveDomain}
+              onQuickMove={handleQuickMove}
               setQuickTargetRef={setQuickTargetRef}
               setRef={(element) => {
                 zoneRefs.current[zone.value] = element;
