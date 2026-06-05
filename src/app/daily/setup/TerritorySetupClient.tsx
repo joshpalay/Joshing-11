@@ -82,12 +82,17 @@ export function TerritorySetupClient() {
   const [addLimitReached, setAddLimitReached] = useState(false);
   const [dragState, setDragState] = useState<DragState>(null);
   const [hoveredZone, setHoveredZone] = useState<TerritoryFrequency | null>(null);
-  const [settling, setSettling] = useState(true);
+  const [settling, setSettling] = useState(false);
 
+  // Run the settle-in animation when the territories first render, not on mount:
+  // the data fetch can outlast a mount-anchored timer, which would close the
+  // animation window before the circles ever appear.
   useEffect(() => {
+    if (loading) return;
+    setSettling(true);
     const timer = window.setTimeout(() => setSettling(false), 900);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [loading]);
 
   useEffect(() => {
     let cancelled = false;
