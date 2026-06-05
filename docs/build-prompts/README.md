@@ -2,8 +2,9 @@
 
 > **This directory holds execution instructions, not product documentation.** The staged build prompts
 > are how the restructure was *built*; they are kept here as an implementation log. For *what the
-> product is and why*, read [`PRD-D-0-PRODUCT-DIRECTION-AND-DECISIONS.md`](../../PRD-D-0-PRODUCT-DIRECTION-AND-DECISIONS.md)
-> and the `PRD-D-1/2/3` specs — **not** these prompts. Prompts go stale the moment the code merges;
+> product is and why*, read [`DECISIONS.md`](../../DECISIONS.md),
+> [`PRD-D-0-PRODUCT-DIRECTION-AND-DECISIONS.md`](../../PRD-D-0-PRODUCT-DIRECTION-AND-DECISIONS.md),
+> and the root `PRD-D-*` specs — **not** these prompts. Prompts go stale the moment the code merges;
 > do not treat them as current spec.
 
 ## What lives here

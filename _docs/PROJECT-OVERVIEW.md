@@ -1,12 +1,12 @@
-# Joshing v11 — Project Overview
+# Joshing — Project Overview
 
 ## Product
-**Joshing** is a daily knowledge game. Each day a user answers 5 questions drawn from their declared interest domains, tracks mastery per domain, and sees friends' answers in a social feed. Biweekly "ceremonies" celebrate achievements. Web-only, phone-based signup. Focus is trivia + social learning — no leaderboards, no streaks.
+**Joshing** is a daily knowledge game. Each day a user answers 5 questions drawn from their declared interest domains, tracks mastery per domain, and shares questions with friends. The current v12-line direction splits deliberate social sharing, Daily bonus slots, and presence/awareness into separate surfaces. Biweekly "ceremonies" celebrate achievements. Web-only, phone-based signup. Focus is trivia + social learning — no leaderboards, no streaks.
 
 ## Tech Stack
 - **Framework:** Next.js 16.1.6 (App Router, strict TS)
 - **DB:** Postgres 15+ on Supabase (pooled for app, direct for migrations)
-- **ORM:** **Drizzle** (NOT Prisma — the README is stale on this point). Migrations in `drizzle/` (0000–0036, ~36 files), auto-applied at boot from `src/instrumentation.ts`.
+- **ORM:** **Drizzle** (not Prisma). Migrations live in `drizzle/`; check that directory for the current head. They are auto-applied at boot from `src/instrumentation.ts`.
 - **Styling:** Tailwind CSS 4, shadcn/ui primitives in `src/components/ui/`
 - **LLM:** Anthropic SDK. **Sonnet (`claude-sonnet-4-6`)** for generation; **Haiku (`claude-haiku-4-5-20251001`)** for grading/categorization. Centralized in `src/server/llm/` and `src/lib/llm.ts`.
 - **Auth:** Custom JWT (dev: hardcoded phone; prod: SMS OTP, partially stubbed). `jose` + `bcryptjs`.
@@ -72,6 +72,6 @@
 ## Docs / PRDs
 - **`_docs/ARCHITECTURAL-DECISIONS.md`** — background (treat as reference, may be stale)
 - `_docs/DESIGN-SYSTEM.md`, `_docs/SALVAGE-MANIFEST.md`
-- **Current product canon (v12 line):** `DECISIONS.md` + the `PRD-D-*.md` series (`PRD-D-0`–`PRD-D-4`) at repo root.
+- **Current product canon (v12 line):** `DECISIONS.md` + the `PRD-D-*.md` series (`PRD-D-0` through `PRD-D-5`) at repo root.
 - Active backlog: `PRD_BACKLOG.md`. Recent audits live in `audits/`.
-- Superseded specs/audits (v11.x and earlier): `_docs/archive/` (`PRD11.md`, `PRD-v11.1.md`, `PRD-v11.2.md`, `PRD-AUDIT.md`, `PRD-V11.1-AUDIT{,-2,-4}.md`, `PRD-11.1-MASTER-ALIGNMENT-AUDIT{,-2}.md`, `PHASE-STATUS.md`).
+- Superseded specs/audits (10.25/v11.x and earlier): `_docs/archive/` (`Joshing_PRD_v10_25 (1).md`, `PRD11.md`, `PRD-v11.1.md`, `PRD-v11.2.md`, `PRD-AUDIT.md`, `PRD-V11.1-AUDIT{,-2,-4}.md`, `PRD-11.1-MASTER-ALIGNMENT-AUDIT{,-2}.md`, `PHASE-STATUS.md`).

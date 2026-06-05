@@ -34,7 +34,7 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 
 ## Further reading
 - **Docs index + settled/open decisions:** `DECISIONS.md` (start here).
-- **Canonical product direction (the v12 line):** the `PRD-D-*.md` series (`PRD-D-0` through `PRD-D-4`). These supersede the v11.x PRDs.
+- **Canonical product direction (the v12 line):** the `PRD-D-*.md` series (`PRD-D-0` through `PRD-D-5`). These supersede the 10.25/v11.x PRDs.
 - **Design system:** `_docs/DESIGN-SYSTEM.md` — tokens, fonts (Montserrat → `--font-sans`), the Ink-on-Cream palette.
 - Architecture overview: `_docs/ARCHITECTURAL-DECISIONS.md` (may contain stale claims — treat as background, not gospel).
-- Superseded PRDs and v11.x audits are archived under `_docs/archive/`.
+- Superseded 10.25/v11.x PRDs and audits are archived under `_docs/archive/`.

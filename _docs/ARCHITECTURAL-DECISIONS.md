@@ -1,7 +1,7 @@
-# Joshing v11.0 — Architectural Decisions
+# Joshing — Architectural Decisions
 
-This document records foundational technical choices for v11.0.
-Every Claude Code session should reference this to stay consistent.
+This document records foundational technical choices. Treat product claims here as background only:
+the current product canon is `DECISIONS.md` plus the root `PRD-D-*` series.
 
 ## Stack
 
