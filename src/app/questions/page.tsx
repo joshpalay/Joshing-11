@@ -383,12 +383,12 @@ function QuestionsPageContent() {
             </button>
           </header>
 
-          <section className="mb-5 grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.75fr)_minmax(0,1.5fr)] sm:gap-3 sm:p-3">
-            <div className="relative">
+          <section className="mb-4 grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-2 sm:grid-cols-[1fr_1fr_2fr]" aria-label="Question filters">
+            <label className="relative">
               <select
                 value={domainFilter}
                 onChange={(event) => setDomainFilter(event.target.value)}
-                className="h-11 w-full appearance-none rounded-md border bg-background pl-3 pr-9 text-sm"
+                className="h-10 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 aria-label="Filter by domain"
               >
                 <option value="all">All domains</option>
@@ -396,13 +396,13 @@ function QuestionsPageContent() {
                   <option key={item.domain} value={item.domain}>{item.label}</option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            </div>
-            <div className="relative">
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            </label>
+            <label className="relative">
               <select
                 value={sortMode}
                 onChange={(event) => setSortMode(event.target.value as SortMode)}
-                className="h-11 w-full appearance-none rounded-md border bg-background pl-3 pr-9 text-sm"
+                className="h-10 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 aria-label="Sort by"
               >
                 <option value="newest">Newest</option>
@@ -410,15 +410,15 @@ function QuestionsPageContent() {
                 <option value="hardest">Hardest</option>
                 <option value="easiest">Easiest</option>
               </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            </div>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            </label>
             <label className="relative col-span-2 sm:col-span-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search questions..."
-                className="h-11 w-full rounded-md border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary"
+                className="h-10 w-full rounded-md border bg-background pl-10 pr-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               />
             </label>
           </section>
