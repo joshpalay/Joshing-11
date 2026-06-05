@@ -1287,7 +1287,10 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       preferences.selectedDomains.filter((domain) => allDomains.includes(domain)),
       recentDomainCounts,
     );
-    domainsForRound = ordered.length > 0 ? ordered : allDomains;
+    const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
+    const frequencyRank = (domain: string) => (frequencyByDomain[domain] === 'often' ? 0 : 1);
+    const weightedOrder = [...ordered].sort((a, b) => frequencyRank(a) - frequencyRank(b));
+    domainsForRound = weightedOrder.length > 0 ? weightedOrder : allDomains;
   } else {
     // Random mode: pick one domain per category for cross-category variety,
     // with a soft per-domain frequency cap applied via recentDomainCounts.
