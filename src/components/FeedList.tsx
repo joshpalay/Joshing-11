@@ -541,16 +541,29 @@ const CONTRIBUTE_PLACEHOLDER_EXAMPLES = [
 ] as const
 
 const CONTRIBUTE_PLACEHOLDER_INTERVAL_MS = 4000
+// Crossfade timings for the cycling placeholder. Kept long and asymmetric so
+// the rotation reads as a graceful dissolve rather than a hard swap: the old
+// line eases out, then the new one eases in over a longer beat.
+const CONTRIBUTE_PLACEHOLDER_FADE_OUT_MS = 600
+const CONTRIBUTE_PLACEHOLDER_FADE_IN_MS = 900
 
 function FeedContributeFooter() {
   const router = useRouter()
   const [idea, setIdea] = useState('')
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
+  // Drives the opacity crossfade. We can't animate a native <textarea>
+  // placeholder, so the placeholder is an overlaid element (below) whose
+  // opacity we toggle: fade out, swap the text while hidden, fade back in.
+  const [placeholderVisible, setPlaceholderVisible] = useState(true)
 
   // Circulate the placeholder through the example questions every few seconds.
   useEffect(() => {
     const timer = setInterval(() => {
-      setPlaceholderIndex((index) => (index + 1) % CONTRIBUTE_PLACEHOLDER_EXAMPLES.length)
+      setPlaceholderVisible(false) // ease the current line out
+      window.setTimeout(() => {
+        setPlaceholderIndex((index) => (index + 1) % CONTRIBUTE_PLACEHOLDER_EXAMPLES.length)
+        setPlaceholderVisible(true) // ease the next line in
+      }, CONTRIBUTE_PLACEHOLDER_FADE_OUT_MS)
     }, CONTRIBUTE_PLACEHOLDER_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [])
@@ -597,14 +610,35 @@ function FeedContributeFooter() {
               </h2>
             </div>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-12 pt-6 pb-8">
-              <textarea
-                value={idea}
-                onChange={(event) => setIdea(event.target.value)}
-                placeholder={CONTRIBUTE_PLACEHOLDER_EXAMPLES[placeholderIndex]}
-                aria-label="What question would you like to be asked?"
-                rows={5}
-                className="min-h-[200px] w-full resize-none rounded-[8px] border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-base text-[var(--brand-ink)] placeholder:text-[var(--brand-ink-400)] outline-none focus:border-[var(--brand-link)]"
-              />
+              {/* Wrapper lets the fading placeholder overlay sit exactly over
+                  the textarea. The overlay (not the native placeholder) is what
+                  cycles, so we can crossfade it; it shows only while empty and
+                  is hidden from AT (the textarea keeps the aria-label). */}
+              <div className="relative">
+                <textarea
+                  value={idea}
+                  onChange={(event) => setIdea(event.target.value)}
+                  aria-label="What question would you like to be asked?"
+                  rows={5}
+                  className="min-h-[200px] w-full resize-none rounded-[8px] border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-base text-[var(--brand-ink)] outline-none focus:border-[var(--brand-link)]"
+                />
+                {idea.trim() === '' ? (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 px-4 py-3 text-base text-[var(--brand-ink-400)]"
+                    style={{
+                      opacity: placeholderVisible ? 1 : 0,
+                      transition: `opacity ${
+                        placeholderVisible
+                          ? CONTRIBUTE_PLACEHOLDER_FADE_IN_MS
+                          : CONTRIBUTE_PLACEHOLDER_FADE_OUT_MS
+                      }ms ease-in-out`,
+                    }}
+                  >
+                    {CONTRIBUTE_PLACEHOLDER_EXAMPLES[placeholderIndex]}
+                  </span>
+                ) : null}
+              </div>
               <button
                 type="submit"
                 className="text-primary-foreground flex min-h-11 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] transition hover:opacity-90"
