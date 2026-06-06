@@ -21,14 +21,14 @@ type Feedback = {
   openedTerritoryDomain: string | null;
 };
 
-// D-4 CORRECTION 2 (revised): this drives the ONE active (still-unanswered)
-// milestone question — the expanded item's single focal point and single
-// action. The question reads as the live, playable one (upright navy serif,
-// slightly larger, behind a thin left rule); the action is an inline text
-// affordance, not a boxed button. The result is reported up only AFTER the
-// feedback pop-up closes, so the parent can retire the question into the quiet
-// "Answered" history (carrying the submitted answer + correctness) and promote
-// the next unanswered question — keeping exactly one active question on screen.
+// D-4 CORRECTION 2 (revised): this drives a single still-unanswered milestone
+// question. The opened milestone stacks one of these per unanswered question, so
+// the viewer can play any of them; each reads as live and playable (upright navy
+// serif, slightly larger, behind a thin left rule) with an inline text action,
+// not a boxed button. The result is reported up only AFTER the feedback pop-up
+// closes, so the parent can retire this question into the quiet "Answered"
+// history (carrying the submitted answer + correctness) and the stack above
+// shrinks to just the questions still left to play.
 export function InlineAnswerFlow({
   question,
   onResolved,

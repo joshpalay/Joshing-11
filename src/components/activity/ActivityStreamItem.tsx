@@ -22,6 +22,12 @@ import { assertNever } from '@/lib/assert-never';
 // linked or not, so the actor reads as the warm social anchor of the row.
 const ACTOR_BLUE = 'var(--brand-link)';
 
+// An opened reveal indents to sit UNDER the row's header text, not flush to the
+// far-left edge below the icon. This is exactly the ActivityIcon column width —
+// MARK_W (24) + GAP (8) — so the expansion's left rule lines up with where the
+// actor name / update copy begins, reading as a clear child of the update.
+const EXPANSION_INDENT = 32;
+
 function ActorLink({ name, userId }: { name: string; userId: string | null }) {
   if (!userId) return <b style={{ fontWeight: 600, color: ACTOR_BLUE }}>{name}</b>;
   return (
@@ -255,18 +261,20 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
       {item.action ? <ItemAction action={item.action} /> : null}
 
       {expandable && open && expand ? (
-        expand.kind === 'milestone' ? (
-          <MilestoneExpansion
-            expand={expand}
-            isResolved={isResolved}
-            resolutions={resolutions}
-            onResolved={resolve}
-          />
-        ) : expand.kind === 'same_correct' ? (
-          <ConvergenceExpansion expand={expand} />
-        ) : (
-          <SendOnwardExpansion expand={expand} />
-        )
+        <div style={{ marginLeft: EXPANSION_INDENT }}>
+          {expand.kind === 'milestone' ? (
+            <MilestoneExpansion
+              expand={expand}
+              isResolved={isResolved}
+              resolutions={resolutions}
+              onResolved={resolve}
+            />
+          ) : expand.kind === 'same_correct' ? (
+            <ConvergenceExpansion expand={expand} />
+          ) : (
+            <SendOnwardExpansion expand={expand} />
+          )}
+        </div>
       ) : null}
     </div>
   );
@@ -300,13 +308,13 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
   );
 }
 
-// CORRECTION 3 (revised): the opened milestone reads as a cluster with ONE
-// playable question. The active (first still-unanswered) question leads —
-// directly under the header — as the single focal point and single action.
-// Everything already answered drops into a quiet "Answered" history below it,
-// so the viewer never scans past settled questions to find the thing they can
-// do now. The answered-state is owned by the parent so the line's quiet
-// "{answered} of {total}" counter and the triangle mark stay in lockstep.
+// The opened milestone reveals EVERY still-unanswered question stacked together,
+// each independently playable, so the viewer sees the whole bundle the line
+// promised ("{answered} of {total} questions") rather than one question at a
+// time. Each settled question (right OR wrong) drops out of the stack and into
+// the quiet "Answered" history below, so what remains above is always exactly
+// the work left to do. The answered-state is owned by the parent so the line's
+// quiet "{answered} of {total}" counter and the triangle mark stay in lockstep.
 function MilestoneExpansion({
   expand,
   isResolved,
@@ -318,7 +326,7 @@ function MilestoneExpansion({
   resolutions: Map<string, Resolution>;
   onResolved: (questionId: string, submitted: string, isCorrect: boolean) => void;
 }) {
-  const active = expand.questions.find((q) => !isResolved(q.questionId)) ?? null;
+  const unanswered = expand.questions.filter((q) => !isResolved(q.questionId));
   const answered = expand.questions.filter((q) => isResolved(q.questionId));
 
   return (
@@ -331,9 +339,9 @@ function MilestoneExpansion({
         gap: 20,
       }}
     >
-      {active ? (
-        <InlineAnswerFlow key={active.questionId} question={active} onResolved={onResolved} />
-      ) : null}
+      {unanswered.map((q) => (
+        <InlineAnswerFlow key={q.questionId} question={q} onResolved={onResolved} />
+      ))}
       {answered.length > 0 ? (
         <AnsweredHistory questions={answered} resolutions={resolutions} />
       ) : null}
