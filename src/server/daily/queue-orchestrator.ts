@@ -130,16 +130,31 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   // (src/server/daily/types.ts), so this is a picker change — no slot-shape
   // migration required.
   //
-  // Constrain authored picks to the viewer's effective knowledge base — in
-  // custom mode that's the explicit selectedDomains list, in random mode
-  // it's the full knowledge base (which getKnowledgeBase already filters
-  // against userDomainExclusions). Without this, the authored picker
-  // surfaced any vetted public question regardless of the viewer's declared
-  // or demonstrated interests.
+  // Constrain authored AND house picks to the viewer's effective knowledge
+  // base — in custom mode that's the explicit selectedDomains list, in random
+  // mode it's the full knowledge base (which getKnowledgeBase already filters
+  // against userDomainExclusions). Without this, the authored picker surfaced
+  // any vetted public question regardless of the viewer's declared or
+  // demonstrated interests.
+  //
+  // In random mode, also drop domains the player parked in "Resting" on the
+  // Game settings page. "Resting" means "won't be asked for now" (see the
+  // territory setup zones), and the LLM generator already honors it in both
+  // modes — but the authored/house pickers only filtered by this allow-set, so
+  // a rested category could still leak into the Daily Five via a vetted friend
+  // or house question. Custom mode needs no extra handling here: buildSavePayload
+  // excludes rested domains from selectedDomains upstream, so they're already out.
+  const restingDomains = new Set(
+    Object.entries(preferences.domainPreferenceFrequency ?? {})
+      .filter(([, frequency]) => frequency === 'resting')
+      .map(([domain]) => domain.toLowerCase()),
+  );
   const allowedSubcategories: ReadonlySet<string> = new Set(
     preferences.domainMode === 'custom'
       ? preferences.selectedDomains
-      : knowledgeBase.map((domain) => domain.domain),
+      : knowledgeBase
+          .map((domain) => domain.domain)
+          .filter((domain) => !restingDomains.has(domain.toLowerCase())),
   );
 
   const socialGraph = await getFriendAndFoFUserIds(userId);
