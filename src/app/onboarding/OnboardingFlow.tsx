@@ -89,7 +89,10 @@ const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
 ]
 
 const MIN_INTERESTS = 3
-const MAX_INTERESTS = 5
+// No upper product cap — players pick as many interests as they like. This is a
+// defensive sanity bound only (the save path fans out into per-interest LLM
+// work); no real user reaches it, and the UI never shows it as a ceiling.
+const MAX_INTERESTS = 100
 
 function normalizeDomain(domain: string) {
   return domain.trim().replace(/\s+/g, ' ')
@@ -226,7 +229,7 @@ export default function OnboardingFlow({
         const selected = toSelected(interest)
         return selected ? [selected] : []
       })
-      .slice(0, 5)
+      .slice(0, MAX_INTERESTS)
   )
   const [isLoading, setIsLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -347,7 +350,7 @@ export default function OnboardingFlow({
         return current.filter(
           (item) => selectedKey(item) !== selectedKey(selected)
         )
-      if (current.length >= 5) return current
+      if (current.length >= MAX_INTERESTS) return current
       return [...current, selected]
     })
   }
@@ -453,6 +456,29 @@ export default function OnboardingFlow({
       limit.code = 'limit_reached'
       throw limit
     }
+
+    // Validate answerability up front: interests are staged client-side and not
+    // persisted until "Lock it in", so without this a topic with no factual
+    // basis ("my cat") would only be caught at the very end. The check fails
+    // open server-side, so an LLM outage never blocks staging.
+    const check = await fetch('/api/interests/check', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic: selected.domain }),
+    })
+    const checkBody = await check.json().catch(() => null)
+    if (check.ok && checkBody?.ok === false) {
+      if (checkBody.code === 'too_broad') {
+        const broad = new Error(checkBody.message) as AddTopicError
+        broad.code = 'too_broad'
+        throw broad
+      }
+      throw new Error(
+        checkBody.message ?? 'We could not find real questions for that topic.'
+      )
+    }
+
     setError(null)
     setSelectedInterests((current) =>
       current.some((item) => selectedKey(item) === selectedKey(selected))
@@ -780,7 +806,7 @@ export default function OnboardingFlow({
 
               <div className="space-y-3">
                 <p className="text-sm font-medium">
-                  Your interests · {selectedInterests.length}/{MAX_INTERESTS}
+                  Your interests · {selectedInterests.length}
                 </p>
                 {selectedInterests.length === 0 ? (
                   <p className="text-muted-foreground text-sm">

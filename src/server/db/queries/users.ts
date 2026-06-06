@@ -3,7 +3,11 @@ import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { cache } from 'react';
 
 import { db, declaredInterests, friendInvitations, playerMastery, users } from '@/server/db';
-import { categorizeInterestDomain, isCatchAllBroadCategory } from '@/server/llm/interests';
+import {
+  assertAnswerableInterest,
+  categorizeInterestDomain,
+  isCatchAllBroadCategory,
+} from '@/server/llm/interests';
 import { foldDomainPunctuation } from '@/lib/knowledge/domain-key';
 import { assertSpecificInterest } from '@/lib/knowledge/interest-specificity';
 
@@ -132,14 +136,20 @@ export function setFollowPrivacy(id: string, followPrivacy: 'public' | 'approval
     .then(([row]) => row);
 }
 
-export const MAX_ACTIVE_DECLARED_INTERESTS = 5;
+// There is no product cap on declared interests — players may declare as many as
+// they like. This is a defensive *sanity* bound only: every save fans out into
+// per-interest Haiku categorization (categorizeIfNeeded) and seeds a mastery row,
+// so an unbounded array from a client would be a cost/DoS vector. No real user
+// reaches it. (The separate "3 → 5" one-time top-up nudge lives in
+// src/server/area-top-up/rules.ts and is unaffected.)
+export const MAX_ACTIVE_DECLARED_INTERESTS = 100;
 
-// Thrown when an incremental add would push the user past the declared-interest
-// cap. Callers (API routes) detect this to return a 409 rather than a generic
-// 400 so the client can offer a "manage interests" path instead of a dead end.
+// Thrown when a write would push the user past the sanity bound above. Callers
+// (API routes) detect this to return a 409 rather than a generic 400 so the
+// client can react instead of hitting a dead end.
 export class DeclaredInterestLimitError extends Error {
   constructor(
-    message = `A player can have at most ${MAX_ACTIVE_DECLARED_INTERESTS} active declared interests.`,
+    message = `A player can declare at most ${MAX_ACTIVE_DECLARED_INTERESTS} interests.`,
   ) {
     super(message);
     this.name = 'DeclaredInterestLimitError';
@@ -258,6 +268,13 @@ export async function addDeclaredInterest(
   // lenient so legacy/pre-seeded rows can still be re-saved during an edit.)
   assertSpecificInterest(clean.label);
 
+  // Companion answerability guard: refuse topics with no public factual basis
+  // ("my cat", gibberish) so they never reach the daily generator. Fails open if
+  // the LLM is unavailable (see assessInterestAnswerability), so an outage never
+  // blocks a real add. The lenient full-replace path (saveDeclaredInterests) is
+  // intentionally NOT gated, so legacy/pre-seeded rows can always be re-saved.
+  await assertAnswerableInterest(clean.label);
+
   const active = await db
     .select({ domain: declaredInterests.domain, broadCategory: declaredInterests.broadCategory })
     .from(declaredInterests)
@@ -271,7 +288,7 @@ export async function addDeclaredInterest(
 
   if (active.length >= MAX_ACTIVE_DECLARED_INTERESTS) {
     throw new DeclaredInterestLimitError(
-      `You can track up to ${MAX_ACTIVE_DECLARED_INTERESTS} interests. Remove one on your Knowledge page to add another.`,
+      `You've reached the maximum of ${MAX_ACTIVE_DECLARED_INTERESTS} interests. Remove one on your Knowledge page to add another.`,
     );
   }
 

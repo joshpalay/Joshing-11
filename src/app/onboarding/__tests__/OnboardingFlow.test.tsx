@@ -22,7 +22,7 @@ describe('OnboardingFlow invited interests', () => {
     )
 
     expect(html).toContain('What are you into?')
-    expect(html).toContain('Your interests · 1/5')
+    expect(html).toContain('Your interests · 1')
     expect(html).toContain('Sondheim')
   })
 
@@ -40,7 +40,7 @@ describe('OnboardingFlow invited interests', () => {
       />
     )
 
-    expect(html).toContain('Your interests · 3/5')
+    expect(html).toContain('Your interests · 3')
     expect(html).toContain('Sondheim')
     expect(html).toContain('Jazz')
     expect(html).toContain('Poetry')
@@ -56,7 +56,7 @@ describe('OnboardingFlow invited interests', () => {
     )
 
     expect(html).toContain('What are you into?')
-    expect(html).toContain('Your interests · 0/5')
+    expect(html).toContain('Your interests · 0')
     expect(html).not.toContain('suggested these for you.')
   })
 })
