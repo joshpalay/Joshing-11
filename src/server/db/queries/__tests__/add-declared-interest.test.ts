@@ -51,6 +51,8 @@ vi.mock('@/server/db', () => ({
   friendInvitations: {},
 }));
 
+import { TooBroadInterestError } from '@/lib/knowledge/interest-specificity';
+
 import { addDeclaredInterest, DeclaredInterestLimitError } from '../users';
 
 describe('addDeclaredInterest', () => {
@@ -96,5 +98,12 @@ describe('addDeclaredInterest', () => {
 
   it('rejects an empty label', async () => {
     await expect(addDeclaredInterest('user-1', { label: '   ' })).rejects.toThrow(/topic name/);
+  });
+
+  it('rejects a broad-category label so the field expands it instead', async () => {
+    await expect(
+      addDeclaredInterest('user-1', { label: 'Technology' }),
+    ).rejects.toBeInstanceOf(TooBroadInterestError);
+    expect(categorizeInterestDomainMock).not.toHaveBeenCalled();
   });
 });
