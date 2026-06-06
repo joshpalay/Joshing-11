@@ -56,6 +56,11 @@ export const HOME_TOP3_ELIGIBLE_TYPES = [
   'reaction_received',
   'question_curated',
   'authored_question_shared',
+  // A question a friend addressed directly to you is high-signal — surface it in
+  // Home's top-3 (and the bell badge), not just the full /activities list, so a
+  // sent question isn't easy to miss. Already-answered sends are dropped upstream
+  // by filterUtilityActivities, so this never shows a stale "sent you a question".
+  'received_direct_question',
 ] as const satisfies readonly ActivityItemType[];
 
 export type HomeTop3EligibleType = (typeof HOME_TOP3_ELIGIBLE_TYPES)[number];
