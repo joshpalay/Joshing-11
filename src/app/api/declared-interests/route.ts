@@ -10,6 +10,7 @@ import {
   type DeclaredInterestInput,
   saveDeclaredInterests,
 } from '@/server/db/queries/users';
+import { TooBroadInterestError } from '@/lib/knowledge/interest-specificity';
 
 const addInterestSchema = z.object({
   label: z.string().trim().min(1).max(80),
@@ -110,6 +111,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'interest_limit_reached', message: error.message },
         { status: 409 },
+      );
+    }
+    // The topic is a broad category, not a specific interest. Signal the client
+    // to expand it into specific choices instead of saving it as-is.
+    if (error instanceof TooBroadInterestError) {
+      return NextResponse.json(
+        {
+          error: 'too_broad',
+          topic: error.attempted,
+          message: `"${error.attempted}" is a whole category. Pick something more specific within it.`,
+        },
+        { status: 422 },
       );
     }
     const message = error instanceof Error ? error.message : 'Could not add that topic.';

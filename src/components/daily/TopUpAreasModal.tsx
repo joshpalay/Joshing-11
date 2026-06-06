@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField';
+
 export type TopUpInterest = {
   label: string;
   broadCategory: string | null;
@@ -15,11 +17,6 @@ type Suggestion = {
 
 type SuggestionsResponse = {
   suggestions?: Suggestion[];
-};
-
-type CanonicalizeResponse = {
-  suggested?: string;
-  broadCategory?: string;
 };
 
 // One-time prompt offering invite-seeded users (who sit at exactly three
@@ -45,8 +42,6 @@ export function TopUpAreasModal({
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [selected, setSelected] = useState<TopUpInterest[]>([]);
-  const [customInput, setCustomInput] = useState('');
-  const [addingCustom, setAddingCustom] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,45 +90,26 @@ export function TopUpAreasModal({
     [maxNew],
   );
 
-  const addCustom = useCallback(async () => {
-    const raw = customInput.trim();
-    if (raw.length < 2) return;
-    if (selected.length >= maxNew) {
-      setError(`You can add ${maxNew} more.`);
-      return;
-    }
-    if (isSelected(raw)) {
-      setCustomInput('');
-      return;
-    }
-    setAddingCustom(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/onboarding/canonicalize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ rawInput: raw }),
-      });
-      const body = (await response.json().catch(() => null)) as CanonicalizeResponse | null;
-      const label = body?.suggested?.trim() || raw;
-      const broadCategory = body?.broadCategory?.trim() || 'General Knowledge';
-      if (!isSelected(label)) {
-        setSelected((current) =>
-          current.length >= maxNew ? current : [...current, { label, broadCategory }],
-        );
+  // Stage a chosen topic into the local selection (the modal persists the union
+  // on save). The shared field handles the type → add / expand-into-choices UX
+  // and the specificity gate, so a broad word like "Music" becomes specific
+  // choices here instead of being staged verbatim.
+  const stageTopic = useCallback(
+    async (topic: { label: string; broadCategory?: string | null }) => {
+      if (selected.length >= maxNew) {
+        const error = new Error(`That's the max — ${maxNew} added.`) as AddTopicError;
+        error.code = 'limit_reached';
+        throw error;
       }
-      setCustomInput('');
-    } catch {
-      // Fall back to the raw input if canonicalization fails.
+      setError(null);
       setSelected((current) =>
-        current.length >= maxNew ? current : [...current, { label: raw, broadCategory: 'General Knowledge' }],
+        current.length >= maxNew
+          ? current
+          : [...current, { label: topic.label, broadCategory: topic.broadCategory ?? 'General Knowledge' }],
       );
-      setCustomInput('');
-    } finally {
-      setAddingCustom(false);
-    }
-  }, [customInput, isSelected, maxNew, selected.length]);
+    },
+    [maxNew, selected.length],
+  );
 
   const dismissPrompt = useCallback(async () => {
     try {
@@ -275,32 +251,21 @@ export function TopUpAreasModal({
           )}
         </div>
 
-        <div className="mt-3 flex gap-2">
-          <input
-            value={customInput}
-            onChange={(event) => setCustomInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                void addCustom();
-              }
-            }}
-            maxLength={100}
-            disabled={busy || selected.length >= maxNew}
-            placeholder="Or write your own…"
-            className="min-h-10 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-3 text-sm text-[var(--text)] outline-none"
-            style={{ borderColor: 'var(--border)' }}
-          />
-          <button
-            type="button"
-            className="shrink-0 rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-raised)] disabled:opacity-50"
-            style={{ borderColor: 'var(--border)' }}
-            disabled={busy || addingCustom || selected.length >= maxNew || customInput.trim().length < 2}
-            onClick={() => void addCustom()}
-          >
-            {addingCustom ? '…' : 'Add'}
-          </button>
-        </div>
+        <AddTopicField
+          className="mt-3"
+          placeholder="Or write your own…"
+          disabled={busy || remaining <= 0}
+          existingLabels={[
+            ...existing.map((item) => item.label),
+            ...selected.map((item) => item.label),
+          ]}
+          onAdd={stageTopic}
+          inputClassName="min-h-10 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-3 text-sm text-[var(--text)] outline-none disabled:opacity-50"
+          buttonClassName="shrink-0 rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-raised)] disabled:opacity-50"
+          chipClassName="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-raised)] disabled:opacity-50"
+          mutedClassName="text-sm text-[var(--text-muted)]"
+          errorClassName="mt-2 text-sm text-[var(--danger)]"
+        />
 
         {selected.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2">

@@ -9,6 +9,7 @@ import {
   wrapUserInput,
 } from '@/lib/llm';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 
 export type WarmupAnswers = {
   deepDive?: string;
@@ -325,6 +326,71 @@ Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation
         : null,
     explanation: explanation.slice(0, 180),
   };
+}
+
+export type ExpandedInterest = {
+  label: string;
+  // null when categorization is unavailable or the model returns a catch-all;
+  // the save path re-categorizes before persisting (same contract as canonicalize).
+  broadCategory: string | null;
+};
+
+/**
+ * Break a too-broad topic ("Music", "Technology") into specific, passion-level
+ * sub-topics the player can pick from. Powers the add-topic field's
+ * expand-into-choices flow. Uses Haiku for low latency (this runs inline as the
+ * user adds a topic) and filters out any candidate that is itself still broad
+ * (isTooBroadInterest), so the menu is always actionable.
+ */
+export async function expandBroadInterest(topic: string): Promise<ExpandedInterest[]> {
+  const cleanTopic = topic.trim().replace(/\s+/g, ' ').slice(0, 80);
+  if (!cleanTopic) return [];
+
+  const client = getAnthropicClient();
+  if (!client) return [];
+
+  const systemPrompt = `A player typed a broad trivia category. Break it into 8 hyper-specific sub-topics they might be passionate about, each useful for trivia.
+Rules:
+- Every item must be hyper-specific — a person, era, movement, work, scene, or sub-field — never another broad category.
+- Good for "Music": "Late Beethoven String Quartets", "Delta Blues", "1990s Hip-Hop", "Film Scores of Ennio Morricone".
+- Bad for "Music": "Classical Music", "Rock", "Jazz" (still too broad).
+- broadCategory is a stable top-level bucket such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Technology, Food & Cuisine, Architecture & Design. Never "Other" or "General".
+Respond in JSON array only, no markdown: [ { "label": "...", "broadCategory": "..." } ]${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  const response = await loggedMessagesCreate(client, 'interests-expand', {
+    model: CANONICALIZE_MODEL,
+    max_tokens: 600,
+    temperature: 0.6,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: wrapUserInput('broad_topic', cleanTopic) }],
+  });
+
+  const parsed = parseJsonArray(extractTextContent(response.content));
+  if (!parsed) return [];
+
+  const seen = new Set<string>();
+  const candidates: ExpandedInterest[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const label = asTrimmedString(record.label ?? record.domain);
+    if (!label) continue;
+    // Drop candidates that are still bucket-level — the menu must be actionable.
+    if (isTooBroadInterest(label)) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const rawBroad = asTrimmedString(record.broadCategory ?? record.broad_category);
+    const normalized = rawBroad ? normalizeBroadCategory(rawBroad) : null;
+    candidates.push({
+      label: label.slice(0, 80),
+      broadCategory:
+        normalized && normalized !== 'General Knowledge' ? normalized.slice(0, 80) : null,
+    });
+  }
+
+  return candidates.slice(0, 8);
 }
 
 /**

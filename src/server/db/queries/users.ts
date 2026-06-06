@@ -5,6 +5,7 @@ import { cache } from 'react';
 import { db, declaredInterests, friendInvitations, playerMastery, users } from '@/server/db';
 import { categorizeInterestDomain, isCatchAllBroadCategory } from '@/server/llm/interests';
 import { foldDomainPunctuation } from '@/lib/knowledge/domain-key';
+import { assertSpecificInterest } from '@/lib/knowledge/interest-specificity';
 
 type User = InferSelectModel<typeof users>;
 
@@ -249,6 +250,13 @@ export async function addDeclaredInterest(
   if (!clean) {
     throw new Error('Enter a topic name.');
   }
+
+  // Last line of defense behind the client add-topic field: a bucket-level or
+  // catch-all label ("Technology", "general") must never persist as a declared
+  // interest. The field expands these into specific choices; this guard refuses
+  // any that slip past it. (The full-replace saveDeclaredInterests path is left
+  // lenient so legacy/pre-seeded rows can still be re-saved during an edit.)
+  assertSpecificInterest(clean.label);
 
   const active = await db
     .select({ domain: declaredInterests.domain, broadCategory: declaredInterests.broadCategory })
