@@ -447,4 +447,47 @@ describe('getFeedForUser feed visibility', () => {
     expect(result.items).toEqual([expect.objectContaining({ id: 'feed-authored-1' })]);
     expect(result.totalCount).toBe(1);
   });
+
+  it('leads the from-friends (Broadcasts) surface with a pinned direct_sent question', async () => {
+    // A question a friend sends you is pinned (route.ts sets isPinned: true). It
+    // must surface on the DEFAULT Broadcasts tab too — not only behind the Sent
+    // tab — so the recipient sees it without switching surfaces.
+    state.questionRows = [
+      { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+      { id: 'question-2', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-direct-pinned',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-1',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: true,
+        joshingGameId: null,
+      },
+      {
+        id: 'feed-authored-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-2',
+        sourceType: 'authored_shared',
+        sourceUserId: 'friend-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:01:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+    ];
+
+    const result = await getFeedForUser('recipient-1', { filter: 'from-friends' });
+
+    // Pinned sent question leads, then the Broadcasts item.
+    expect(result.items.map((item) => item.id)).toEqual(['feed-direct-pinned', 'feed-authored-1']);
+  });
 });

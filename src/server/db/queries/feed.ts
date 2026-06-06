@@ -192,7 +192,12 @@ function normalizeFeedLimit(limit: number | undefined): number {
 }
 
 
-function feedFilterPredicate(filter: FeedFilter | undefined) {
+function feedFilterPredicate(filter: FeedFilter | undefined, pinned?: boolean) {
+  // Pinned items are questions a friend addressed directly to you (only
+  // direct_sent rows are pinned today). They lead EVERY surface — including the
+  // default Broadcasts tab — so a sent question is never hidden behind the Sent
+  // tab. The surface filter therefore does not apply to the pinned fetch.
+  if (pinned) return eq(feedItems.sourceType, 'direct_sent');
   if (filter === 'sent-to-me') return eq(feedItems.sourceType, 'direct_sent');
   if (filter === 'from-friends') {
     // D-1 Stage 5: friend_answered no longer renders. Broadcasts = authored_shared
@@ -324,7 +329,7 @@ async function fetchVisibleFeedItems(
       eq(feedItems.recipientUserId, userId),
       feedPinnedPredicate(options.pinned),
       visibleSourcePredicate,
-      feedFilterPredicate(options.filter),
+      feedFilterPredicate(options.filter, options.pinned),
       inArray(feedItems.state, ACTIONABLE_FEED_STATES),
       visibleQuestionPredicate(userId, dismissedDomains),
       viewerNotAuthorPredicate(userId),
@@ -352,7 +357,7 @@ async function fetchVisibleFeedItems(
         eq(feedItems.recipientUserId, userId),
         feedPinnedPredicate(options.pinned),
         visibleSourcePredicate,
-        feedFilterPredicate(options.filter),
+        feedFilterPredicate(options.filter, options.pinned),
         inArray(feedItems.state, ACTIONABLE_FEED_STATES),
         visibleQuestionPredicate(userId, dismissedDomains),
         viewerNotAuthorPredicate(userId),

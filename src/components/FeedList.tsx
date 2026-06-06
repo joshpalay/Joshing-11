@@ -849,6 +849,15 @@ function FeedListContent({
   const showInviteFriendCta =
     !loadingInitial && !error && Boolean(feedMeta) && feedFilter === 'from-friends'
 
+  // Show the surface tabs whenever EITHER surface has content — not just the
+  // active one. Otherwise a recipient sitting on an empty Broadcasts tab never
+  // sees the "Sent (n)" tab/badge, so a question a friend sent them stays hidden.
+  // The per-surface counts are live on every response (see surfaceActionableCount).
+  const hasAnySurfaceContent =
+    items.length > 0 ||
+    (feedMeta?.broadcasts_item_count ?? 0) > 0 ||
+    (feedMeta?.sent_item_count ?? 0) > 0
+
   const emptyDiagnostics = useMemo(() => {
     if (process.env.NODE_ENV === 'production' || !feedMeta) return null
 
@@ -1271,9 +1280,12 @@ function FeedListContent({
 
   return (
     <>
-      {/* Surface switcher is hidden while the feed is empty — the empty state
-          carries its own "Questions from friends" eyebrow as the section label. */}
-      {items.length > 0 ? (
+      {/* Surface switcher shows whenever either surface has content, so the
+          "Sent (n)" tab stays reachable even when the active Broadcasts tab is
+          empty (otherwise a directly-sent question would be hidden behind a tab
+          the recipient can't see). Fully empty feeds still fall back to the
+          empty state's own "Questions from friends" eyebrow. */}
+      {hasAnySurfaceContent ? (
         <FeedSurfaceTabs active={feedFilter} meta={feedMeta} onSelect={handleSelectTab} />
       ) : null}
 
