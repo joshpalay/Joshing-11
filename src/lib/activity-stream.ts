@@ -82,7 +82,19 @@ export type StreamExpand =
 export type StreamAction =
   | { kind: 'link'; href: string; label: string }
   | { kind: 'friend_request'; friendshipId: string }
-  | { kind: 'reaction_got_it'; reactionId: string; replied: boolean };
+  | { kind: 'reaction_got_it'; reactionId: string; replied: boolean }
+  // A question a friend addressed directly to you (received_direct_question) ->
+  // ANSWER it inline, right here in the stream. The card is backed by a feed
+  // item, so the answer posts to /api/feed/{feedItemId}/answer (NOT the
+  // milestone endpoint). Everything the inline answer flow needs travels on the
+  // action so the row never has to round-trip to the home feed to be answered.
+  | {
+      kind: 'answer_direct';
+      feedItemId: string;
+      questionId: string;
+      questionText: string;
+      domain: string | null;
+    };
 
 // The triangle event-indicator family (Figma "From Your Friends" marks). One
 // 24px-wide mark per event class, rendered in the activity row's icon column
@@ -300,15 +312,28 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
       };
     }
 
-    case 'received_direct_question':
+    case 'received_direct_question': {
+      const dq = item.reference.directQuestion;
       return {
         ...base,
         line: [a, txt(' sent you a question')],
-        secondLine: item.reference.directQuestion?.questionText ?? null,
+        secondLine: dq?.questionText ?? null,
         icon: 'hourglass',
-        action: { kind: 'link', href: '/', label: 'Answer' },
+        // Answer it right here rather than linking to '/' (which only reloaded
+        // home and left the recipient with no way to actually answer). Falls
+        // back to a deep link only if the feed-item reference didn't hydrate.
+        action: dq
+          ? {
+              kind: 'answer_direct',
+              feedItemId: dq.feedItemId,
+              questionId: dq.questionId,
+              questionText: dq.questionText,
+              domain: dq.category,
+            }
+          : { kind: 'link', href: '/', label: 'Answer' },
         expand: null,
       };
+    }
 
     case 'received_joshing_game': {
       const complete = item.reference.game?.viewerStatus === 'complete';

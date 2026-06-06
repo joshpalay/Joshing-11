@@ -13,6 +13,7 @@ import type {
   StreamQuestion,
 } from '@/lib/activity-stream';
 
+import { DirectQuestionAnswer } from './DirectQuestionAnswer';
 import { InlineAnswerFlow } from './InlineAnswerFlow';
 import { ActivityIcon, specForIcon } from './ActivityIcon';
 import { FF, FM, INK, INK2, INK3, PAPER, RULE } from '@/components/lately/tokens';
@@ -301,6 +302,8 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
         </Link>
       ) : action.kind === 'friend_request' ? (
         <FriendRequestActions friendshipId={action.friendshipId} />
+      ) : action.kind === 'answer_direct' ? (
+        <DirectQuestionAnswer action={action} />
       ) : (
         <ReactionGotItButton reactionId={action.reactionId} replied={action.replied} />
       )}
