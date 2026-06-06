@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
+import { AddTopicField } from '@/components/interests/AddTopicField';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { getPortraitCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
@@ -125,7 +126,6 @@ export function TerritorySetupClient({
   const [domains, setDomains] = useState<TerritoryDomain[]>(initialDomains);
   const [frequencyByDomain, setFrequencyByDomain] =
     useState<DomainPreferenceFrequency>(initialFrequencyByDomain);
-  const [newTopic, setNewTopic] = useState('');
   const [addingTopic, setAddingTopic] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addLimitReached, setAddLimitReached] = useState(false);
@@ -245,8 +245,12 @@ export function TerritorySetupClient({
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
-        setAddLimitReached(body?.error === 'interest_limit_reached');
-        throw new Error(body?.message ?? 'Could not add that topic.');
+        const error = new Error(
+          body?.message ?? 'Could not add that topic.',
+        ) as Error & { code?: 'limit_reached' | 'too_broad' };
+        if (body?.error === 'interest_limit_reached') error.code = 'limit_reached';
+        else if (body?.error === 'too_broad') error.code = 'too_broad';
+        throw error;
       }
       const row: TerritoryDomain = {
         domain: body.domain,
@@ -269,23 +273,6 @@ export function TerritorySetupClient({
     input.focus({ preventScroll: true });
   }, []);
 
-  const addTopic = useCallback(async () => {
-    const label = newTopic.trim();
-    if (!label || addingTopic) return;
-    setAddingTopic(true);
-    setAddError(null);
-    setAddLimitReached(false);
-
-    try {
-      await adoptTopic(label);
-      setNewTopic('');
-    } catch (caught) {
-      setAddError(caught instanceof Error ? caught.message : 'Could not add that topic.');
-    } finally {
-      setAddingTopic(false);
-    }
-  }, [addingTopic, adoptTopic, newTopic]);
-
   const addNearbyTerritory = useCallback(
     async (territory: NearbyTerritory) => {
       if (addingTopic) return;
@@ -295,6 +282,8 @@ export function TerritorySetupClient({
       try {
         await adoptTopic(territory.domain, territory.broadCategory);
       } catch (caught) {
+        const coded = caught as Error & { code?: string };
+        setAddLimitReached(coded?.code === 'limit_reached');
         setAddError(caught instanceof Error ? caught.message : 'Could not add that territory.');
       } finally {
         setAddingTopic(false);
@@ -502,6 +491,19 @@ export function TerritorySetupClient({
             ))}
             <CreateYourOwnCircle disabled={addingTopic} onClick={focusCreateTopic} />
           </div>
+          {addError ? (
+            <p className="text-destructive mt-3 text-sm">
+              {addError}
+              {addLimitReached ? (
+                <>
+                  {' '}
+                  <Link href="/knowledge" className="underline">
+                    Manage interests
+                  </Link>
+                </>
+              ) : null}
+            </p>
+          ) : null}
         </section>
 
         <section className="space-y-5" aria-label="Round territory frequency zones">
@@ -529,52 +531,20 @@ export function TerritorySetupClient({
         </section>
 
         <section className="mt-8 rounded-[2rem] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-5">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void addTopic();
+          <AddTopicField
+            heading="Explore something new"
+            inputRef={newTopicInputRef}
+            existingLabels={domains.map((domain) => domain.domain)}
+            disabled={addingTopic}
+            limitReachedNode={
+              <Link href="/knowledge" className="underline">
+                Manage interests
+              </Link>
+            }
+            onAdd={async (topic) => {
+              await adoptTopic(topic.label, topic.broadCategory ?? null);
             }}
-          >
-            <label
-              htmlFor="add-topic"
-              className="block font-serif text-2xl font-semibold text-[var(--ink)]"
-            >
-              Explore something new
-            </label>
-            <div className="mt-4 flex gap-2">
-              <input
-                ref={newTopicInputRef}
-                id="add-topic"
-                type="text"
-                value={newTopic}
-                onChange={(event) => setNewTopic(event.target.value)}
-                placeholder="e.g. Byzantine Coinage"
-                maxLength={80}
-                autoComplete="off"
-                className="min-h-12 flex-1 rounded-full border border-[var(--border-warm)] bg-[var(--cream)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus-visible:ring-2 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-2 focus-visible:outline-none"
-              />
-              <button
-                type="submit"
-                className="btn-ghost min-h-12 px-5"
-                disabled={addingTopic || !newTopic.trim()}
-              >
-                {addingTopic ? 'Adding…' : 'Add'}
-              </button>
-            </div>
-            {addError ? (
-              <p className="text-destructive mt-3 text-sm">
-                {addError}
-                {addLimitReached ? (
-                  <>
-                    {' '}
-                    <Link href="/knowledge" className="underline">
-                      Manage interests
-                    </Link>
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-          </form>
+          />
         </section>
 
         {error ? (

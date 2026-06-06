@@ -12,6 +12,7 @@ import { RecentlyExpanding, type ExpandingDomain } from '@/components/knowledge/
 import { AskFriendForDomain } from '@/components/knowledge/AskFriendForDomain';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import type { MasteryTier } from '@/types/db';
 
@@ -160,6 +161,8 @@ function KnowledgePageContent() {
   const [selectedInterest, setSelectedInterest] = useState<ProposedInterest | null>(null);
   const [customInterest, setCustomInterest] = useState('');
   const [canonicalizing, setCanonicalizing] = useState(false);
+  // Specific choices a too-broad written interest expanded into (null = none).
+  const [interestChoices, setInterestChoices] = useState<ProposedInterest[] | null>(null);
   const [savingInterests, setSavingInterests] = useState(false);
   const [interestError, setInterestError] = useState<string | null>(null);
   const [tidying, setTidying] = useState(false);
@@ -322,6 +325,7 @@ function KnowledgePageContent() {
     setActiveModal({ type: 'interests', slotIndex, currentDomain });
     setSelectedInterest(null);
     setCustomInterest('');
+    setInterestChoices(null);
     setInterestError(null);
   };
 
@@ -330,28 +334,41 @@ function KnowledgePageContent() {
     setActiveModal({ type: 'manage-interests' });
     setSelectedInterest(null);
     setCustomInterest('');
+    setInterestChoices(null);
     setInterestError(null);
   };
 
+  // Stage a written interest into the slot. A specific topic is selected as-is;
+  // a too-broad one ("Music", "Technology") expands into specific choices the
+  // player picks from instead, so a slot never gets a bucket-level label.
   const proposeCustomInterest = async () => {
     const raw = customInterest.trim();
     if (!raw) return;
     setCanonicalizing(true);
     setInterestError(null);
+    setInterestChoices(null);
     try {
-      const response = await fetch('/api/onboarding/propose-interests', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ warmupAnswers: [raw] }),
-      });
-      const body = await response.json().catch(() => null) as { interests?: ProposedInterest[]; message?: string } | null;
-      if (!response.ok) throw new Error(body?.message ?? 'Could not refine that interest.');
-      const proposal = body?.interests?.[0];
-      setSelectedInterest(proposal?.label ? proposal : { label: raw });
-    } catch (caught) {
-      setInterestError(caught instanceof Error ? caught.message : 'Could not refine that interest.');
+      if (isTooBroadInterest(raw)) {
+        const response = await fetch('/api/interests/expand', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ topic: raw }),
+        });
+        const body = await response.json().catch(() => null) as { candidates?: ProposedInterest[]; message?: string } | null;
+        if (!response.ok) throw new Error(body?.message ?? 'Could not break that down.');
+        const choices = Array.isArray(body?.candidates) ? body.candidates : [];
+        if (choices.length === 0) {
+          setInterestError(`“${raw}” is a whole category. Try something more specific — a person, era, scene, or work.`);
+        } else {
+          setSelectedInterest(null);
+          setInterestChoices(choices);
+        }
+        return;
+      }
       setSelectedInterest({ label: raw });
+    } catch (caught) {
+      setInterestError(caught instanceof Error ? caught.message : 'Could not add that interest.');
     } finally {
       setCanonicalizing(false);
     }
@@ -359,6 +376,11 @@ function KnowledgePageContent() {
 
   const confirmInterestChange = async () => {
     if (activeModal?.type !== 'interests' || !selectedInterest?.label) return;
+    // Backstop the "Use my wording" path: never let a bucket-level label save.
+    if (isTooBroadInterest(selectedInterest.label)) {
+      setInterestError(`“${selectedInterest.label.trim()}” is a whole category. Pick something more specific.`);
+      return;
+    }
     const modal = activeModal;
     setSavingInterests(true);
     setInterestError(null);
@@ -682,6 +704,26 @@ function KnowledgePageContent() {
                     {canonicalizing ? 'Refining...' : 'Refine'}
                   </button>
                 </div>
+                {interestChoices ? (
+                  <div className="mt-3">
+                    <p className="m-0 text-[var(--text-muted-warm)] text-[0.82rem]">That&rsquo;s a whole category — pick what you&rsquo;re into:</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {interestChoices.map((choice) => (
+                        <button
+                          key={choice.label}
+                          type="button"
+                          className="border border-[var(--border-warm)] bg-white text-[var(--ink)] px-3 py-1.5 text-[0.82rem] cursor-pointer hover:bg-[var(--cream-warm)]"
+                          onClick={() => {
+                            setSelectedInterest({ label: choice.label, broadCategory: choice.broadCategory ?? undefined });
+                            setInterestChoices(null);
+                          }}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {selectedInterest ? (
                   <div className="mt-3 border border-[var(--border-light)] bg-[var(--cream)] p-3">
                     <p className="m-0 font-semibold">{selectedInterest.label}</p>
