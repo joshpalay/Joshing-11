@@ -20,11 +20,13 @@ import {
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
 import {
+  getAuthoredQuestionTexts,
   getKnowledgeBase,
   getRecentDailyQuestionTexts,
   getRecentDomainCounts,
   getRecentFactKeys,
   getRecentSubAnglesByDomain,
+  normalizeQuestionText,
   pickBankSource,
   type BankDifficulty,
   type RecentDailyQuestionEntry,
@@ -47,6 +49,12 @@ import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
 const RECENT_QUESTION_TEXT_LIMIT = 80;
 // Cap the recent fact-key block at this many entries inside the prompt.
 const RECENT_FACT_KEY_LIMIT = 200;
+// How many of the viewer's most-recent AUTHORED questions to seed into the +2
+// bonus Sonnet avoid list. Bounded so a prolific author doesn't flush the
+// recent-GENERATED dedup signal out of the RECENT_QUESTION_TEXT_LIMIT /
+// history-gate windows. The bank pick guards against the FULL authored set
+// separately (avoidAuthoredTexts), so the literal-reuse path stays fully covered.
+const AUTHORED_AVOID_TEXT_LIMIT = 40;
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
 
@@ -1398,10 +1406,20 @@ export async function generateBonusQuestionsForDomains(
   const results: Array<{ domain: string; question: GeneratedQuestionRow }> = [];
   if (domains.length === 0) return results;
 
-  const [previousQuestionTexts, previousFactKeys] = await Promise.all([
+  const [previousQuestionTexts, previousFactKeys, authoredTexts] = await Promise.all([
     getRecentDailyQuestionTexts(userId),
     getRecentFactKeys(userId),
+    getAuthoredQuestionTexts(userId),
   ]);
+
+  // A +2 bonus must never hand the viewer a question they themselves authored.
+  // Authored questions live in the canonical table, not the generated bank, so
+  // the standard avoid lists miss them (D-4 §B invariant: "never a friend's
+  // literal answered question"). Fold them into BOTH paths: the Sonnet avoid
+  // list (the semantic Haiku dedupe gate then also catches re-wordings) and a
+  // normalized-text guard the bank pick honors verbatim.
+  const avoidAuthoredTexts = new Set(authoredTexts.map((entry) => normalizeQuestionText(entry.text)));
+  previousQuestionTexts.unshift(...authoredTexts.slice(0, AUTHORED_AVOID_TEXT_LIMIT));
 
   for (const domain of domains) {
     // Bank-first. resolveDomainDifficulty maps 'normal' → accessible, so the
@@ -1414,6 +1432,7 @@ export async function generateBonusQuestionsForDomains(
       undefined,
       null,
       previousFactKeys,
+      avoidAuthoredTexts,
     ).catch(() => [] as GeneratedQuestionRow[]);
 
     let row: GeneratedQuestionRow | null = bankPicks[0] ?? null;
@@ -1486,6 +1505,10 @@ async function pickBankPicksForDomains(
   domainDifficultyOverrides: ReadonlyMap<string, string> | undefined,
   adaptiveLevel: number | null,
   previousFactKeys: AvoidFactKeyEntry[],
+  // Bank rows whose (normalized) text matches one of these are skipped. The +2
+  // bonus passes the viewer's authored question texts so the bank can't reuse a
+  // fact the viewer themselves wrote (see generateBonusQuestionsForDomains).
+  avoidQuestionTexts: ReadonlySet<string> = new Set(),
 ): Promise<GeneratedQuestionRow[]> {
   const avoidFactKeys = new Set(previousFactKeys.map((entry) => entry.factKey));
   const picks: GeneratedQuestionRow[] = [];
@@ -1499,7 +1522,7 @@ async function pickBankPicksForDomains(
       adaptiveLevel,
     );
     if (!difficulty) continue;
-    const source = await pickBankSource(userId, domain, difficulty, avoidFactKeys).catch(() => null);
+    const source = await pickBankSource(userId, domain, difficulty, avoidFactKeys, avoidQuestionTexts).catch(() => null);
     if (!source) continue;
     if (isGenericSubcategory(source.canonicalSubcategory)) continue;
 
