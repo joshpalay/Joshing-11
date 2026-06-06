@@ -13,7 +13,9 @@ const BROAD_CATEGORY_ALIASES: Record<string, string> = {
   'potpourri': 'General Knowledge',
 };
 
-const STABLE_BROAD_CATEGORIES = new Set([
+// The top-level portrait buckets. "General Knowledge" is the catch-all and is
+// intentionally last.
+export const STABLE_BROAD_CATEGORIES = [
   'Literature',
   'Music',
   'Film & Television',
@@ -27,7 +29,7 @@ const STABLE_BROAD_CATEGORIES = new Set([
   'Pop Culture',
   'Language',
   'General Knowledge',
-]);
+] as const;
 
 const LITERATURE_BROAD_CATEGORY_PATTERNS = [
   /\bliterat(?:ure|ary)\b/i,
@@ -44,6 +46,35 @@ const LITERATURE_BROAD_CATEGORY_PATTERNS = [
 
 function cleanBroadCategory(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
+}
+
+// Fold to a stable comparison form: lowercase, unify "&"/"and", and collapse
+// separators so "Architecture & Design", "architecture and design", and
+// "architecture_design" all match the same bucket.
+function foldForBucketMatch(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\s*&\s*/g, ' and ')
+    .replace(/[_-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const BROAD_CATEGORY_LABELS_FOLDED = new Set<string>(
+  [...STABLE_BROAD_CATEGORIES, ...Object.keys(BROAD_CATEGORY_ALIASES)].map(foldForBucketMatch),
+);
+
+/**
+ * True when `value` is itself a top-level broad-category bucket or a direct alias
+ * of one (e.g. "Technology", "film & tv", "world history"). Unlike
+ * normalizeBroadCategory, this does NOT apply the territory→Literature pattern
+ * folding, so a specific label such as "James Joyce" returns false. Used by the
+ * declared-interest specificity guard to reject bucket-level topics.
+ */
+export function isBroadCategoryLabel(value: string | null | undefined): boolean {
+  if (typeof value !== 'string') return false;
+  const folded = foldForBucketMatch(value);
+  return folded.length > 0 && BROAD_CATEGORY_LABELS_FOLDED.has(folded);
 }
 
 /**
