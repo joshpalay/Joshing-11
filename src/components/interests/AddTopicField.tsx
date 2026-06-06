@@ -17,6 +17,16 @@ export type AddTopicCandidate = { label: string; broadCategory?: string | null }
 // outcomes: re-expand on a too-broad backstop, or show the cap affordance.
 export type AddTopicError = Error & { code?: 'limit_reached' | 'too_broad' };
 
+// Cream / Ink-on-Cream defaults (the daily-setup surface). Overridable so the
+// same field matches differently-themed surfaces (e.g. the top-up modal).
+const DEFAULT_INPUT_CLASS =
+  'min-h-12 flex-1 rounded-full border border-[var(--border-warm)] bg-[var(--cream)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus-visible:ring-2 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60';
+const DEFAULT_BUTTON_CLASS = 'btn-ghost min-h-12 px-5';
+const DEFAULT_CHIP_CLASS =
+  'rounded-full border border-[var(--border-warm)] bg-[var(--cream)] px-3 py-1.5 text-sm text-[var(--ink)] transition-colors hover:bg-[var(--cream-warm)] disabled:opacity-50';
+const DEFAULT_MUTED_CLASS = 'text-sm text-[var(--text-muted-warm)]';
+const DEFAULT_ERROR_CLASS = 'text-destructive mt-3 text-sm';
+
 type AddTopicFieldProps = {
   /** Persist the chosen topic. Throw an AddTopicError to signal a known outcome. */
   onAdd: (topic: AddTopicCandidate) => Promise<void>;
@@ -30,6 +40,13 @@ type AddTopicFieldProps = {
   limitReachedNode?: ReactNode;
   /** Lets a parent focus the input (e.g. a "create your own" CTA). */
   inputRef?: RefObject<HTMLInputElement | null>;
+  // Style overrides so the field can match each surface's palette.
+  className?: string;
+  inputClassName?: string;
+  buttonClassName?: string;
+  chipClassName?: string;
+  mutedClassName?: string;
+  errorClassName?: string;
 };
 
 /**
@@ -47,6 +64,12 @@ export function AddTopicField({
   disabled = false,
   limitReachedNode,
   inputRef,
+  className,
+  inputClassName = DEFAULT_INPUT_CLASS,
+  buttonClassName = DEFAULT_BUTTON_CLASS,
+  chipClassName = DEFAULT_CHIP_CLASS,
+  mutedClassName = DEFAULT_MUTED_CLASS,
+  errorClassName = DEFAULT_ERROR_CLASS,
 }: AddTopicFieldProps) {
   const inputId = useId();
   const internalRef = useRef<HTMLInputElement | null>(null);
@@ -163,7 +186,7 @@ export function AddTopicField({
   }, [busy, disabled, value, isDuplicate, expand, commit]);
 
   return (
-    <div>
+    <div className={className}>
       {heading ? (
         <label
           htmlFor={inputId}
@@ -190,11 +213,11 @@ export function AddTopicField({
             maxLength={maxLength}
             autoComplete="off"
             disabled={disabled}
-            className="min-h-12 flex-1 rounded-full border border-[var(--border-warm)] bg-[var(--cream)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus-visible:ring-2 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+            className={inputClassName}
           />
           <button
             type="submit"
-            className="btn-ghost min-h-12 px-5"
+            className={buttonClassName}
             disabled={disabled || busy || !value.trim()}
           >
             {busy ? 'Working…' : 'Add'}
@@ -204,7 +227,7 @@ export function AddTopicField({
 
       {candidates ? (
         <div className="mt-4">
-          <p className="text-sm text-[var(--text-muted-warm)]">
+          <p className={mutedClassName}>
             {expandedFrom
               ? `“${expandedFrom}” is a whole category — pick what you’re into:`
               : 'Pick what you’re into:'}
@@ -216,7 +239,7 @@ export function AddTopicField({
                 type="button"
                 onClick={() => void commit(candidate)}
                 disabled={busy}
-                className="rounded-full border border-[var(--border-warm)] bg-[var(--cream)] px-3 py-1.5 text-sm text-[var(--ink)] transition-colors hover:bg-[var(--cream-warm)] disabled:opacity-50"
+                className={chipClassName}
               >
                 {pendingLabel === candidate.label.trim() ? 'Adding…' : candidate.label}
               </button>
@@ -226,7 +249,7 @@ export function AddTopicField({
       ) : null}
 
       {error ? (
-        <p className="text-destructive mt-3 text-sm">
+        <p className={errorClassName}>
           {error}
           {limitReached && limitReachedNode ? <> {limitReachedNode}</> : null}
         </p>
