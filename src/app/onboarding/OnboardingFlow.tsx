@@ -238,6 +238,7 @@ export default function OnboardingFlow({
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editingDomain, setEditingDomain] = useState('')
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const seedsCheckedRef = useRef(false)
   const displayInviterName = inviterName?.trim()
     ? inviterName.trim()
     : 'A friend'
@@ -330,6 +331,68 @@ export default function OnboardingFlow({
 
     return () => window.clearInterval(interval)
   }, [isGenerating])
+
+  // Run the answerability check over the friend's pre-seeded suggestions, then
+  // let only the positive results stand as the pre-selected interests. A friend
+  // can seed anything ("your mom"), and these auto-populate the selection and
+  // appear as tappable cards — so without this, junk would reach the daily
+  // generator unchecked. We pre-fill optimistically (good for SSR and the common
+  // all-valid case), then prune any seed the check explicitly rejects. Fails open
+  // per-seed, so an LLM outage leaves the friend's picks intact.
+  useEffect(() => {
+    if (seedsCheckedRef.current || preSeededInterests.length === 0) return
+    seedsCheckedRef.current = true
+    let cancelled = false
+
+    void (async () => {
+      const results = await Promise.all(
+        preSeededInterests.map(async (seed) => {
+          const domain = normalizeDomain(seed.domain)
+          if (domain.length < 2) return { seed, answerable: false }
+          try {
+            const res = await fetch('/api/interests/check', {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ topic: domain }),
+            })
+            const body = await res.json().catch(() => null)
+            // Only drop a seed when the check explicitly returns a negative.
+            return { seed, answerable: !(res.ok && body?.ok === false) }
+          } catch {
+            return { seed, answerable: true }
+          }
+        })
+      )
+      if (cancelled) return
+
+      const rejectedKeys = new Set(
+        results
+          .filter((result) => !result.answerable)
+          .map((result) =>
+            selectedKey(toSelected(result.seed) ?? { domain: '', broadCategory: '' })
+          )
+      )
+      rejectedKeys.delete('')
+      if (rejectedKeys.size === 0) return
+
+      // Remove rejected seeds everywhere: they neither pre-populate the selected
+      // interests nor remain as tappable "From <friend>" suggestion cards.
+      setInviteInterests((current) =>
+        current.filter(
+          (seed) =>
+            !rejectedKeys.has(selectedKey(toSelected(seed) ?? { domain: '', broadCategory: '' }))
+        )
+      )
+      setSelectedInterests((current) =>
+        current.filter((item) => !rejectedKeys.has(selectedKey(item)))
+      )
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [preSeededInterests])
 
   function updateWarmupAnswer(field: keyof WarmupAnswers, value: string) {
     setWarmupAnswers((current) => ({
