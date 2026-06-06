@@ -46,13 +46,16 @@ describe('saveDeclaredInterests categorization backstop', () => {
     vi.clearAllMocks();
   });
 
-  it('rejects more than 5 interests before any categorization', async () => {
+  // There is no product cap on declared interests, only a defensive sanity
+  // bound (MAX_ACTIVE_DECLARED_INTERESTS) that no real user reaches; exceeding it
+  // still short-circuits before any per-interest categorization.
+  it('rejects past the sanity bound before any categorization', async () => {
     await expect(
       saveDeclaredInterests(
         'user-1',
-        Array.from({ length: 6 }, (_, i) => ({ label: `interest-${i}` })),
+        Array.from({ length: 101 }, (_, i) => ({ label: `interest-${i}` })),
       ),
-    ).rejects.toThrow(/at most 5/);
+    ).rejects.toThrow(/at most 100/);
     expect(categorizeInterestDomainMock).not.toHaveBeenCalled();
   });
 

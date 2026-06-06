@@ -393,6 +393,83 @@ Respond in JSON array only, no markdown: [ { "label": "...", "broadCategory": ".
   return candidates.slice(0, 8);
 }
 
+export type InterestAnswerability = { answerable: boolean; reason: string | null };
+
+const UNANSWERABLE_FALLBACK_REASON =
+  'We could not find real questions for that topic. Try something more specific or more widely known.';
+
+/**
+ * Judge whether a daily trivia game could write real, factual questions about a
+ * typed interest. This is the "answerability" guard — a companion to the
+ * specificity guard (isTooBroadInterest), which rejects bucket-level labels.
+ * Answerability instead rejects topics with no public factual basis ("my cat",
+ * "asdfgh", "my street") so they never reach the daily generator, where they
+ * would silently produce nothing.
+ *
+ * FAILS OPEN: when the categorizer is unavailable or returns malformed JSON we
+ * treat the topic as answerable, exactly like categorizeInterestDomain degrades
+ * to null. We never block a real user because the model is down; junk only slips
+ * through during an outage, and the daily queue already tolerates thin domains.
+ */
+export async function assessInterestAnswerability(topic: string): Promise<InterestAnswerability> {
+  const cleanInput = topic.trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!cleanInput) return { answerable: false, reason: 'Enter a topic name.' };
+
+  const client = getAnthropicClient();
+  if (!client) return { answerable: true, reason: null };
+
+  const systemPrompt = `Decide whether a daily trivia game could write real, factual, verifiable questions about a player's declared interest.
+Respond in JSON only: { "answerable": true | false, "reason": "..." }
+- Answerable: any public subject with a body of knowable facts — a person, place, work, era, field, sport, hobby, scene, or movement. When unsure, lean answerable.
+- NOT answerable: purely personal/private topics ("my cat", "my high school friends", "my street"), gibberish or nonsense ("asdfgh", "blah blah"), or topics with essentially no public factual basis to ask about.
+- "reason" is a short, friendly explanation shown to the player only when answerable is false. Suggest making it more specific or more widely known.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  try {
+    // ~200 tokens — below Haiku's 2048 cache threshold; plain string.
+    const response = await loggedMessagesCreate(client, 'interests-answerability', {
+      model: CANONICALIZE_MODEL,
+      max_tokens: 160,
+      temperature: 0.1,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: wrapUserInput('interest_topic', cleanInput) }],
+    });
+
+    const parsed = parseJsonObject(extractTextContent(response.content));
+    if (!parsed || typeof parsed.answerable !== 'boolean') {
+      return { answerable: true, reason: null };
+    }
+    if (parsed.answerable) return { answerable: true, reason: null };
+    return { answerable: false, reason: asTrimmedString(parsed.reason) ?? UNANSWERABLE_FALLBACK_REASON };
+  } catch {
+    return { answerable: true, reason: null };
+  }
+}
+
+// Thrown at the declared-interest write boundary when a typed topic has no
+// public factual basis. Callers (API routes) map this to a 422 so the client can
+// surface the reason inline, the same way TooBroadInterestError signals "expand".
+export class UnanswerableInterestError extends Error {
+  constructor(
+    public readonly attempted: string,
+    public readonly reason: string = UNANSWERABLE_FALLBACK_REASON,
+  ) {
+    super(reason);
+    this.name = 'UnanswerableInterestError';
+  }
+}
+
+/**
+ * Throw if a typed topic is not answerable. Use at the declared-interest write
+ * boundary (incremental adds) behind the client-side up-front check. Fails open
+ * with assessInterestAnswerability, so an LLM outage never blocks a save.
+ */
+export async function assertAnswerableInterest(topic: string): Promise<void> {
+  const result = await assessInterestAnswerability(topic);
+  if (!result.answerable) {
+    throw new UnanswerableInterestError(topic, result.reason ?? UNANSWERABLE_FALLBACK_REASON);
+  }
+}
+
 /**
  * True when a stored broad_category is the catch-all rather than a real
  * top-level bucket. normalizeBroadCategory() folds "Other"/"General"/

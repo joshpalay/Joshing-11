@@ -5,6 +5,8 @@ import { getSession } from '@/server/auth/session';
 import { db, friendInvitations } from '@/server/db';
 import { getPreSeededInterestsForUser, getUserOnboardingProfile } from '@/server/db/queries/users';
 import { hasInviteLinkFriendship } from '@/server/friends/user-invite-token';
+import { assessInterestAnswerability } from '@/server/llm/interests';
+import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 
 import OnboardingFlow, { type PreSeededInterest } from './OnboardingFlow';
 
@@ -48,11 +50,28 @@ export default async function OnboardingPage() {
   }
 
   const seeded = await getPreSeededInterestsForUser(session.userId);
-  const preSeededInterests: PreSeededInterest[] = seeded.interests.map((interest) => ({
-    domain: interest.label,
-    broadCategory: interest.broadCategory ?? 'General Knowledge',
-    rationale: interest.description ?? null,
-  }));
+
+  // Validate the inviter's free-text suggestions at the invitee's first login,
+  // before the interests step renders. The inviter can seed anything ("your
+  // mom"), so only the answerable, specific-enough seeds reach Jesse and
+  // pre-populate his selection — he never sees the rejects. This reads the
+  // stored invite without modifying it, and assessInterestAnswerability fails
+  // open, so an LLM outage leaves the friend's picks intact. Seeds are capped at
+  // 3, so this is at most a few parallel Haiku checks on a one-time page load.
+  const checkedSeeds = await Promise.all(
+    seeded.interests.map(async (interest) => {
+      if (isTooBroadInterest(interest.label)) return null;
+      const { answerable } = await assessInterestAnswerability(interest.label);
+      return answerable ? interest : null;
+    }),
+  );
+  const preSeededInterests: PreSeededInterest[] = checkedSeeds
+    .filter((interest): interest is NonNullable<typeof interest> => interest !== null)
+    .map((interest) => ({
+      domain: interest.label,
+      broadCategory: interest.broadCategory ?? 'General Knowledge',
+      rationale: interest.description ?? null,
+    }));
 
   return (
     <OnboardingFlow

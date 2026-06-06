@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Combine, Plus, Repeat2, X } from 'lucide-react';
+import { Combine, Plus, Repeat2, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
@@ -268,11 +268,13 @@ function KnowledgePageContent() {
     [annotatedDomains, visibleDomains, editMode],
   );
   const sharePortraitEntries = useMemo(() => visibleDomains.map(toPortraitEntry), [visibleDomains]);
-  const declaredSlots = useMemo(() => {
+  // One entry per declared interest — no fixed slot count and no cap. The manage
+  // modal renders these plus a trailing "add interest" affordance, so the list
+  // grows and shrinks with the player. (MAX_ACTIVE only bounds the write path.)
+  const declaredSlots = useMemo<DomainMastery[]>(() => {
     if (!data) return [];
     const byKey = new Map(data.pageData.allDomains.map((domain) => [domainKey(domain.domain), domain]));
-    const filled = data.pageData.declaredInterests.slice(0, 5).map((domain) => byKey.get(domainKey(domain)) ?? emptyDomain(domain));
-    return Array.from({ length: 5 }, (_, index) => filled[index] ?? null);
+    return data.pageData.declaredInterests.map((domain) => byKey.get(domainKey(domain)) ?? emptyDomain(domain));
   }, [data]);
   const declaredKeys = useMemo(() => new Set((data?.pageData.declaredInterests ?? []).map(domainKey)), [data]);
   const demonstratedChoices = useMemo(() => {
@@ -366,6 +368,21 @@ function KnowledgePageContent() {
         }
         return;
       }
+      // Specific enough to stand on its own — now validate answerability up front
+      // so a topic with no factual basis ("my cat") is caught before the confirm
+      // step rather than silently producing nothing. The check fails open
+      // server-side, so an LLM outage still lets the player proceed.
+      const check = await fetch('/api/interests/check', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ topic: raw }),
+      });
+      const checkBody = await check.json().catch(() => null) as { ok?: boolean; message?: string } | null;
+      if (check.ok && checkBody?.ok === false) {
+        setInterestError(checkBody.message ?? 'We could not find real questions for that topic.');
+        return;
+      }
       setSelectedInterest({ label: raw });
     } catch (caught) {
       setInterestError(caught instanceof Error ? caught.message : 'Could not add that interest.');
@@ -384,22 +401,29 @@ function KnowledgePageContent() {
     const modal = activeModal;
     setSavingInterests(true);
     setInterestError(null);
-    const nextInterests = (declaredSlots
-      .map((slot, index) => {
-        if (index === modal.slotIndex) {
-          return {
-            label: selectedInterest.label.trim(),
-            description: selectedInterest.description,
-            broadCategory: selectedInterest.broadCategory,
-          };
-        }
-        return slot ? { label: slot.domain, broadCategory: slot.broadCategory } : null;
-      }) as Array<ProposedInterest | null>)
-      .filter((interest): interest is ProposedInterest => Boolean(interest?.label.trim()))
-      .slice(0, 5);
+    // Full replace: start from the current declared list, then either swap the
+    // chosen slot or append (slotIndex === declaredSlots.length signals an add).
+    const entry: ProposedInterest = {
+      label: selectedInterest.label.trim(),
+      description: selectedInterest.description,
+      broadCategory: selectedInterest.broadCategory,
+    };
+    const base: ProposedInterest[] = declaredSlots.map((slot) => ({
+      label: slot.domain,
+      broadCategory: slot.broadCategory,
+    }));
+    if (modal.slotIndex >= 0 && modal.slotIndex < base.length) {
+      base[modal.slotIndex] = entry;
+    } else {
+      base.push(entry);
+    }
+    const nextInterests = base.filter((interest) => Boolean(interest.label.trim()));
 
     try {
-      const response = await fetch('/api/onboarding/save-interests', {
+      // PATCH /api/declared-interests is the full-replace endpoint
+      // (saveDeclaredInterests). The old call hit /api/onboarding/save-interests
+      // with PATCH, which has no PATCH handler — a 405 that silently failed.
+      const response = await fetch('/api/declared-interests', {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -411,6 +435,36 @@ function KnowledgePageContent() {
       closeInterestModal();
     } catch (caught) {
       setInterestError(caught instanceof Error ? caught.message : 'Could not save your interests.');
+    } finally {
+      setSavingInterests(false);
+    }
+  };
+
+  // Drop a declared interest via the same full-replace endpoint. Blocked at the
+  // last one (the route also rejects an empty list) so a player always keeps at
+  // least one interest seeding their Daily Five.
+  const removeDeclaredInterest = async (domain: string) => {
+    const remaining = declaredSlots
+      .filter((slot) => slot.domain !== domain)
+      .map((slot) => ({ label: slot.domain, broadCategory: slot.broadCategory }));
+    if (remaining.length < 1) {
+      setInterestError('Keep at least one interest — swap it instead of removing the last one.');
+      return;
+    }
+    setSavingInterests(true);
+    setInterestError(null);
+    try {
+      const response = await fetch('/api/declared-interests', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ interests: remaining }),
+      });
+      const body = await response.json().catch(() => null) as { message?: string } | null;
+      if (!response.ok) throw new Error(body?.message ?? 'Could not remove that interest.');
+      await loadKnowledge();
+    } catch (caught) {
+      setInterestError(caught instanceof Error ? caught.message : 'Could not remove that interest.');
     } finally {
       setSavingInterests(false);
     }
@@ -786,7 +840,7 @@ function KnowledgePageContent() {
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Manage interests</h2>
-                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your five declared interests seed your Daily Five questions.</p>
+                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your declared interests seed your Daily Five questions. Add as many as you like.</p>
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
                 <X className="size-4" />
@@ -794,26 +848,28 @@ function KnowledgePageContent() {
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-[0.6rem] mt-5">
               {declaredSlots.map((slot, index) => (
-                <div key={slot?.domain ?? `empty-${index}`} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
-                  {slot ? (
-                    <>
-                      <div className="min-w-0">
-                        <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
-                        <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
-                      </div>
-                      <button type="button" className="min-h-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
-                        <Repeat2 className="size-3.5" />
-                        Swap
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className="min-h-[104px] border border-dashed border-[#c8c0b0] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full" onClick={() => openInterestModal(index, null)}>
-                      <Plus className="size-4" />
-                      Add interest
+                <div key={slot.domain} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
+                  <div className="min-w-0">
+                    <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
+                    <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
+                  </div>
+                  <div className="flex gap-[6px] mt-2">
+                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
+                      <Repeat2 className="size-3.5" />
+                      Swap
                     </button>
-                  )}
+                    <button type="button" className="min-h-[34px] w-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => void removeDeclaredInterest(slot.domain)} disabled={savingInterests || declaredSlots.length <= 1} aria-label={`Remove ${slot.displayName}`} title={declaredSlots.length <= 1 ? 'Keep at least one interest' : `Remove ${slot.displayName}`}>
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
+              <div className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
+                <button type="button" className="min-h-[104px] border border-dashed border-[#c8c0b0] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full h-full" onClick={() => openInterestModal(declaredSlots.length, null)}>
+                  <Plus className="size-4" />
+                  Add interest
+                </button>
+              </div>
             </div>
             <div className="flex justify-start gap-2 mt-4">
               <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)}>Done</button>
