@@ -693,7 +693,20 @@ export default function OnboardingFlow({
         return
       }
 
-      router.push('/')
+      // Kick off first-round generation in the background so it's ready (or
+      // nearly) when the player lands in /daily, then take them straight into
+      // gameplay instead of the homepage. keepalive lets the POST survive the
+      // client navigation; the queue route is idempotent, so /daily's own load
+      // won't double-generate. A freshly-declared interest list guarantees a
+      // knowledge base, so /daily won't bounce to setup.
+      void fetch('/api/daily/queue', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        keepalive: true,
+      }).catch(() => {})
+
+      router.push('/daily')
     } catch {
       setError('Unable to save interests.')
     } finally {
