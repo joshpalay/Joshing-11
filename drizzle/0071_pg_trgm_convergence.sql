@@ -1,0 +1,20 @@
+-- Domain convergence (deterministic dedup) substrate.
+--
+-- Enables pg_trgm so convergeDomain()'s fuzzy pass can call similarity(
+-- canonical_subcategory, $input) to align a freshly-suggested category onto an
+-- existing one across the game instead of fragmenting it. similarity() is a plain
+-- function and needs no index, so this migration intentionally adds NONE: the
+-- query filters with `similarity() >= threshold` (not the `%` operator, which
+-- would depend on the session-global set_limit GUC — unreliable under the
+-- PgBouncer-pooled connection), and a GIN trgm index would not accelerate that
+-- form while adding write amplification to the hot PLAYER_MASTERY write path. The
+-- distinct-canonical-subcategory corpus is small enough that the scan is fine; a
+-- later migration can add a matching index + switch the query if scale demands.
+--
+-- Idempotent. Mirrored by a defensive guard in src/instrumentation.ts so a
+-- database that records this migration without pg_trgm present still boots; if
+-- pg_trgm is unavailable the fuzzy pass degrades to exact-key + "create new".
+--
+-- Rollback: DROP EXTENSION IF EXISTS pg_trgm;  (only if nothing else uses it —
+-- check pg_depend first; leaving the extension installed is harmless.)
+CREATE EXTENSION IF NOT EXISTS pg_trgm;

@@ -62,6 +62,12 @@ vi.mock('@/server/friends/user-invite-token', () => ({
   hasInviteLinkFriendship: hasInviteLinkFriendshipMock,
 }))
 
+// Seeds run through convergeDomain server-side; stub it to a passthrough (no
+// exact match) so this test stays off the real DB-backed corpus query.
+vi.mock('@/server/knowledge/converge-domain', () => ({
+  convergeDomain: vi.fn(async (label: string) => ({ raw: label, candidates: [] })),
+}))
+
 // Stub the client component import so this test stays server-side.
 vi.mock('@/app/onboarding/OnboardingFlow', () => ({
   default: () => null,

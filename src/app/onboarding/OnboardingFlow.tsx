@@ -834,6 +834,7 @@ export default function OnboardingFlow({
                 heading="Add your own"
                 placeholder="e.g. Byzantine Coinage"
                 maxLength={100}
+                convergeBeforeAdd
                 disabled={selectedInterests.length >= MAX_INTERESTS}
                 existingLabels={selectedInterests.map((item) => item.domain)}
                 onAdd={addSelectedInterest}
