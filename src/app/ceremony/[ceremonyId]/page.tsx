@@ -225,7 +225,7 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
   if (beat.id === 3) {
     const heading = mode === 'solo'
       ? 'Questions that shaped your cycle.'
-      : 'These people taught you something.';
+      : 'These people gave you a chance to learn more.';
     return (
       <div className="mx-auto max-w-2xl text-center">
         <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">{heading}</h1>
@@ -311,6 +311,26 @@ export default function CeremonyPage() {
     setCurrentIndex((value) => Math.min(value + 1, beats.length));
   }
 
+  function goBack() {
+    setCurrentIndex((value) => Math.max(value - 1, 0));
+  }
+
+  function exit() {
+    router.push('/');
+  }
+
+  // Story-style tap navigation: a tap on the left third steps back a beat, a
+  // tap anywhere else advances. Buttons inside beats stopPropagation, so this
+  // only fires on the backdrop.
+  function handleTap(event: React.MouseEvent<HTMLElement>) {
+    const width = event.currentTarget.clientWidth;
+    if (width > 0 && event.clientX < width * 0.3) {
+      goBack();
+    } else {
+      advance();
+    }
+  }
+
   async function share(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation();
     setShareLoading(true);
@@ -358,9 +378,21 @@ export default function CeremonyPage() {
   return (
     <main
       className="relative grid min-h-dvh cursor-pointer place-items-center overflow-hidden bg-stone-950 px-6 py-16 text-stone-50"
-      onClick={advance}
+      onClick={handleTap}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(245,240,232,0.12),transparent_36%),linear-gradient(180deg,#1c1917_0%,#0c0a09_100%)]" />
+
+      <button
+        type="button"
+        aria-label="Exit"
+        className="absolute right-5 top-[max(1.25rem,env(safe-area-inset-top))] z-20 grid size-11 place-items-center rounded-full text-stone-300 transition hover:bg-white/10 hover:text-stone-50"
+        onClick={(event) => {
+          event.stopPropagation();
+          exit();
+        }}
+      >
+        <X className="size-7" />
+      </button>
       <div className="relative z-10 w-full">
         {isEnd ? (
           <div className="mx-auto max-w-2xl text-center">
@@ -457,7 +489,10 @@ export default function CeremonyPage() {
       ) : null}
 
       {!isEnd && beats.length > 0 ? (
-        <div className="absolute bottom-7 left-0 right-0 z-10 flex justify-center gap-2">
+        <div
+          className="absolute left-0 right-0 z-10 flex justify-center gap-2"
+          style={{ bottom: 'max(1.75rem, env(safe-area-inset-bottom))' }}
+        >
           {beats.map((beat, index) => (
             <span
               key={beat.id}

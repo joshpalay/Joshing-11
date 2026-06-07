@@ -300,7 +300,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
 
             <button
               type="button"
-              className="mx-auto block text-[14px] font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              className="mx-auto block text-sm font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
               onClick={() => {
                 setInvitePhoneMode(false);
                 swapStep('phone');
@@ -410,7 +410,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
 
             <button
               type="button"
-              className="mx-auto block text-[14px] font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              className="mx-auto block text-sm font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
               onClick={() => {
                 setCode('');
                 // Leaving the invite phone behind — collect a number manually.

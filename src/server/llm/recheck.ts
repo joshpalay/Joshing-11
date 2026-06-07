@@ -1,6 +1,7 @@
 import {
   ANTHROPIC_MODEL,
   INSTRUCTION_USER_INPUT_GUIDANCE,
+  INSTRUCTION_SCOPING_QUALIFIER,
   extractTextContent,
   getAnthropicClient,
   loggedMessagesCreate,
@@ -91,7 +92,7 @@ Return JSON only with exactly these keys:
   "confidence": 0.0,
   "reason": "one concise sentence for the player",
   "accepted_alternative": "the submitted answer normalized for future accepted alternatives, or null"
-}${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+}${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
 
   const userMessage = `${wrapUserInput('question', params.questionText)}
 ${wrapUserInput('canonical_answer', params.canonicalAnswer)}

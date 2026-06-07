@@ -1328,7 +1328,7 @@ function FeedListContent({
             <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
               Questions from friends
             </p>
-            <h2 className="mt-1 font-serif text-[18px] font-medium text-[var(--brand-ink)]">
+            <h2 className="mt-1 font-serif text-lg font-medium text-[var(--brand-ink)]">
               You are all caught up!
             </h2>
             <div className="my-3 flex justify-center">
@@ -1338,7 +1338,7 @@ function FeedListContent({
               <div className="flex justify-end">
                 <Link
                   href="/friends"
-                  className="font-serif text-[18px] font-semibold tracking-[0.05em] text-[var(--brand-orange)] underline underline-offset-4"
+                  className="font-serif text-lg font-semibold tracking-[0.05em] text-[var(--brand-orange)] underline underline-offset-4"
                 >
                   add friends →
                 </Link>
@@ -1556,6 +1556,7 @@ function FeedListContent({
             openedTerritoryDomain={pickOpenedTerritoryDomain(result.masteryDelta)}
             questionId={sheetItem.question_id}
             feedItemId={sheetItem.id}
+            onRecheck={result.correct ? null : () => submitRecheck(sheetItem)}
             onClose={() => setFeedbackSheetId(null)}
           />
         )

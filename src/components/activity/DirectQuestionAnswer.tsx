@@ -96,7 +96,7 @@ export function DirectQuestionAnswer({
         style={{
           display: 'inline-block',
           background: INK,
-          color: '#fcf8f2',
+          color: 'var(--brand-cream-page)',
           border: 'none',
           fontFamily: FM,
           fontSize: 10,

@@ -94,12 +94,20 @@ export function Nav({
   const gameSegments = pathname.split('/').filter(Boolean);
   const isGamePlayScreen = gameSegments[0] === 'games' && gameSegments.length === 2;
 
+  // The weekly ceremony (/ceremony/<id>) is a full-screen, self-contained
+  // takeover with its own progress dots and X-to-exit — same as the game play
+  // screen — so the global chrome (header, FAB, bottom nav) is suppressed. The
+  // bottom nav was previously covering the ceremony's progress dots and the FAB
+  // floated over the experience.
+  const isCeremonyScreen = pathname.startsWith('/ceremony/');
+
   if (
     pathname === '/onboarding' ||
     pathname.startsWith('/daily') ||
     pathname === '/login' ||
     pathname.startsWith('/invite/') ||
-    isGamePlayScreen
+    isGamePlayScreen ||
+    isCeremonyScreen
   ) {
     return null;
   }

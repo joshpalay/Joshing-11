@@ -105,7 +105,7 @@ function parseJsonArray(rawText: string): unknown[] | null {
 
 function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; answer: string }>): ProposedInterest[] {
   const candidates = cleanAnswers
-    .map(({ field, answer }, index) => {
+    .map(({ answer }, index) => {
       const domain = titleCase(
         answer
           .replace(/[^\p{L}\p{N}\s'&-]/gu, ' ')
@@ -121,7 +121,7 @@ function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; ans
       return {
         domain,
         broadCategory: FALLBACK_CATEGORIES[index % FALLBACK_CATEGORIES.length] ?? 'General Knowledge',
-        rationale: `Based on your answer for ${WARMUP_LABELS[field]}.`,
+        rationale: `Explore ${domain} and the stories around it.`,
       };
     })
     .filter((interest): interest is ProposedInterest => Boolean(interest));
@@ -130,32 +130,32 @@ function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; ans
     {
       domain: 'Modern Literary Fiction',
       broadCategory: 'Literature',
-      rationale: 'A focused reading territory that can support rich trivia.',
+      rationale: 'Dig into acclaimed novels and the writers behind them.',
     },
     {
-      domain: 'Auteur Film Favorites',
+      domain: 'Great Film Directors',
       broadCategory: 'Film & Television',
-      rationale: 'A film-specific lane that can be narrowed further as you play.',
+      rationale: 'Explore the directors who shaped modern cinema.',
     },
     {
-      domain: 'Personal Canon Music',
+      domain: 'Albums You Replay',
       broadCategory: 'Music',
-      rationale: 'A music lane based on artists you return to often.',
+      rationale: 'Revisit the artists and albums you keep coming back to.',
     },
     {
-      domain: 'Recent Cultural Obsessions',
+      domain: 'Pop Culture of the Moment',
       broadCategory: 'Pop Culture',
-      rationale: 'A flexible lane for recurring references and current fixations.',
+      rationale: "Catch up on the shows and stars everyone's talking about.",
     },
     {
-      domain: '20th-Century Cultural History',
+      domain: '20th-Century History',
       broadCategory: 'History',
-      rationale: 'A historically grounded lane for specific eras and movements.',
+      rationale: 'Discover the people and moments that shaped the last century.',
     },
     {
-      domain: 'Everyday Science Concepts',
+      domain: 'Everyday Science',
       broadCategory: 'Science',
-      rationale: 'A factual lane that tends to generate accessible questions.',
+      rationale: 'Learn how the science around you actually works.',
     },
   ];
 
@@ -219,7 +219,7 @@ Rules:
 - Good domains: "Late Tchaikovsky", "19th-Century Russian Symphonies", "Modernist American Poetry", "Weimar-Era Cinema".
 - Bad domains: "Music", "Books", "Movies", "History", "General Trivia".
 - Distribute across the warm-up answers. Include at least one candidate per non-empty warm-up field if possible.
-- Each rationale must briefly tie the candidate to a specific warm-up answer or demographic context.
+- Each rationale is one short, inviting sentence under 12 words that starts with a verb like Explore, Discover, Revisit, or Learn about. Make it sound like a friend suggesting it. Never describe how the suggestion was generated or reference the warm-up answers, clusters, interests, or any internal process.
 - broadCategory is a stable top-level bucket, such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, General Knowledge. It must not be an author/work/movement-specific territory; for example, James Joyce, Irish Modernism, novels, poetry, and fiction all use Literature.
 - Never return "Other" as a broadCategory. Use "General Knowledge" only when no more precise top-level bucket applies.
 - Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}${INSTRUCTION_USER_INPUT_GUIDANCE}`;

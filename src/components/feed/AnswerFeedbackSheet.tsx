@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Check, Sparkles, X } from 'lucide-react'
 
+import { FeedActionLink } from './FeedActionLink'
 import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
 import { INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types'
@@ -27,10 +28,15 @@ type AnswerFeedbackSheetProps = {
   openedTerritoryDomain?: string | null
   questionId: string
   feedItemId: string
+  // Requests a second look at a wrong answer (typos, accepted synonyms, a
+  // disputed canonical answer). Resolves with the verdict to surface inline.
+  // Omit (or pass null) to hide the recheck affordance.
+  onRecheck?: (() => Promise<{ accepted: boolean; message: string }>) | null
   onClose: () => void
 }
 
 type BankState = 'idle' | 'saving' | 'saved' | 'undoing' | 'undone' | 'error'
+type RecheckState = 'idle' | 'submitting' | 'done' | 'error'
 
 export function AnswerFeedbackSheet({
   question,
@@ -47,6 +53,7 @@ export function AnswerFeedbackSheet({
   openedTerritoryDomain = null,
   questionId,
   feedItemId,
+  onRecheck = null,
   onClose,
 }: AnswerFeedbackSheetProps) {
   const visibleCategory = visibleFeedCategory(category)
@@ -54,6 +61,9 @@ export function AnswerFeedbackSheet({
   const showTerritoryUndo = Boolean(openedTerritoryDomain) && isCorrect
   const [bankState, setBankState] = useState<BankState>('idle')
   const hasAutoSavedRef = useRef(false)
+  const [recheckState, setRecheckState] = useState<RecheckState>('idle')
+  const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
+  const [recheckAccepted, setRecheckAccepted] = useState(false)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -101,6 +111,23 @@ export function AnswerFeedbackSheet({
       setBankState('undone')
     } catch {
       setBankState('error')
+    }
+  }
+
+  const requestRecheck = async () => {
+    if (!onRecheck || recheckState === 'submitting') return
+    setRecheckState('submitting')
+    setRecheckMessage(null)
+    setRecheckAccepted(false)
+    try {
+      const outcome = await onRecheck()
+      setRecheckState('done')
+      setRecheckMessage(outcome.message)
+      setRecheckAccepted(outcome.accepted)
+    } catch {
+      setRecheckState('error')
+      setRecheckMessage('Could not recheck that answer.')
+      setRecheckAccepted(false)
     }
   }
 
@@ -255,8 +282,55 @@ export function AnswerFeedbackSheet({
             </div>
           ) : null}
 
+          {onRecheck ? (
+            <div className="space-y-2 pt-3">
+              {!isCorrect && recheckState !== 'done' ? (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    Think we got this wrong?
+                  </p>
+                  <FeedActionLink
+                    onClick={() => void requestRecheck()}
+                    disabled={recheckState === 'submitting'}
+                  >
+                    {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
+                  </FeedActionLink>
+                </div>
+              ) : null}
+              {recheckMessage ? (
+                recheckAccepted ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium"
+                    style={{
+                      backgroundColor: 'color-mix(in srgb, var(--game-correct) 12%, var(--cream))',
+                      borderColor: 'color-mix(in srgb, var(--game-correct) 35%, var(--border-warm))',
+                      color: 'var(--game-correct)',
+                    }}
+                  >
+                    <span aria-hidden className="text-[15px] leading-none">✓</span>
+                    <span>{recheckMessage}</span>
+                  </div>
+                ) : (
+                  <p
+                    role="status"
+                    aria-live="polite"
+                    className="text-[11px]"
+                    style={{
+                      color: recheckState === 'error' ? 'var(--game-wrong-strong)' : 'var(--ink)',
+                      opacity: recheckState === 'error' ? 1 : 0.6,
+                    }}
+                  >
+                    {recheckMessage}
+                  </p>
+                )
+              ) : null}
+            </div>
+          ) : null}
+
           {!isCorrect ? (
-            <div className="pt-3 text-[12px] text-muted-foreground">
+            <div className="pt-3 text-xs text-muted-foreground">
               {bankState === 'saving' ? (
                 <span>Saving to your practice bank…</span>
               ) : null}

@@ -290,7 +290,7 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
           style={{
             display: 'inline-block',
             background: INK,
-            color: '#fcf8f2',
+            color: 'var(--brand-cream-page)',
             fontFamily: FM,
             fontSize: 10,
             letterSpacing: 2,
@@ -522,7 +522,7 @@ function SendOnwardExpansion({
           onClick={() => setSendOpen(true)}
           style={{
             background: INK,
-            color: '#fcf8f2',
+            color: 'var(--brand-cream-page)',
             border: 'none',
             fontFamily: FM,
             fontSize: 10,

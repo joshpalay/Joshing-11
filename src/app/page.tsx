@@ -7,6 +7,7 @@ import TodaysFiveCard, {
   type SlotOutcome,
 } from '@/components/TodaysFiveCard'
 import { CeremonyPin } from '@/components/home/CeremonyPin'
+import { LearnedThisWeekCard } from '@/components/home/LearnedThisWeekCard'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { RecentActivitySection } from '@/components/home/RecentActivitySection'
 import { getSession } from '@/server/auth/session'
@@ -15,6 +16,7 @@ import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/dail
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
+import { getLearnedThisWeek } from '@/server/db/queries/learned'
 import { getFeedPagePayload } from '@/server/feed/get-feed-page'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 
@@ -52,6 +54,12 @@ export default async function Home() {
       {session ? (
         <Suspense fallback={null}>
           <CeremonyPinSection userId={session.userId} />
+        </Suspense>
+      ) : null}
+
+      {session ? (
+        <Suspense fallback={null}>
+          <LearnedThisWeekSection userId={session.userId} />
         </Suspense>
       ) : null}
 
@@ -122,6 +130,11 @@ async function CeremonyPinSection({ userId }: { userId: string }) {
       }}
     />
   )
+}
+
+async function LearnedThisWeekSection({ userId }: { userId: string }) {
+  const learned = await getLearnedThisWeek(userId)
+  return <LearnedThisWeekCard count={learned.length} />
 }
 
 // How many of the unified stream's home-eligible items the homepage head shows.
