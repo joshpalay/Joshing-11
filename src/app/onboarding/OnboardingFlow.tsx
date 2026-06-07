@@ -293,7 +293,7 @@ export default function OnboardingFlow({
 
   // Suggestions split into two scannable groups, each shown only when it has
   // unselected items: the inviter's picks ("Suggested by {name}") and any
-  // warm-up-generated picks ("More ideas"). Selected suggestions move up into the
+  // warm-up-generated picks ("More ideas you might like"). Selected suggestions move up into the
   // "Selected areas" chips, so they drop out of these lists automatically.
   const inviteSuggestions = inviteInterests.filter(
     (interest) => !isSelected(selectedInterests, interest)
@@ -864,7 +864,7 @@ export default function OnboardingFlow({
 
               {moreIdeas.length > 0 ? (
                 <div className="space-y-3">
-                  <p className="text-sm font-medium">More ideas</p>
+                  <p className="text-sm font-medium">More ideas you might like</p>
                   {renderSuggestionChips(moreIdeas, 'idea')}
                 </div>
               ) : null}
