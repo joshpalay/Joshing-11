@@ -11,7 +11,7 @@ import {
 } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { AddTopicField } from '@/components/interests/AddTopicField';
@@ -119,6 +119,9 @@ export function TerritorySetupClient({
     resting: null,
   });
   const newTopicInputRef = useRef<HTMLInputElement | null>(null);
+  // Only one territory is active (held) at a time, so a single ref tracks the
+  // trash drop-target rendered beside that active circle.
+  const removeTargetRef = useRef<HTMLButtonElement | null>(null);
   const dragPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const difficulty = initialDifficulty;
   const [submitting, setSubmitting] = useState(false);
@@ -133,6 +136,10 @@ export function TerritorySetupClient({
   const [activeTerritory, setActiveTerritory] = useState<ActiveTerritory>(null);
   const [hoveredZone, setHoveredZone] = useState<TerritoryFrequency | null>(null);
   const [hoveredQuickTarget, setHoveredQuickTarget] = useState<TerritoryFrequency | null>(null);
+  const [hoveredRemoveTarget, setHoveredRemoveTarget] = useState(false);
+  // Throwing a territory out is destructive, so it routes through a confirm
+  // step: dropping on the trash sets this, and the dialog completes the removal.
+  const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
   const [settling, setSettling] = useState(true);
 
   // Data arrives from the server, so the territories render on first paint —
@@ -312,6 +319,53 @@ export function TerritorySetupClient({
     return null;
   }, []);
 
+  const removeTargetAtPoint = useCallback((x: number, y: number): boolean => {
+    const element = removeTargetRef.current;
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  }, []);
+
+  const removeDomain = useCallback(
+    (domain: string) => {
+      // Optimistically drop the territory; restore both maps if the exclusion fails.
+      const previousDomains = domains;
+      const previousFrequency = frequencyByDomain;
+      setDomains((existing) => existing.filter((entry) => entry.domain !== domain));
+      setFrequencyByDomain((existing) => {
+        const { [domain]: _removed, ...rest } = existing;
+        return rest;
+      });
+      setError(null);
+      void (async () => {
+        try {
+          const response = await fetch('/api/users/domain-exclusions', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ canonical_subcategory: domain, scope: 'subcategory' }),
+          });
+          if (!response.ok) {
+            const body = await response.json().catch(() => null);
+            throw new Error(body?.message ?? 'Could not throw out that territory.');
+          }
+        } catch (caught) {
+          setDomains(previousDomains);
+          setFrequencyByDomain(previousFrequency);
+          setError(
+            caught instanceof Error ? caught.message : 'Could not throw out that territory.',
+          );
+        }
+      })();
+    },
+    [domains, frequencyByDomain],
+  );
+
+  const confirmRemoval = useCallback(() => {
+    if (pendingRemoval) removeDomain(pendingRemoval);
+    setPendingRemoval(null);
+  }, [pendingRemoval, removeDomain]);
+
   const handleDragStart = useCallback(
     (event: ReactPointerEvent, domain: string, frequency: TerritoryFrequency) => {
       event.preventDefault();
@@ -320,9 +374,10 @@ export function TerritorySetupClient({
       setActiveTerritory({ domain, frequency });
       setDragState({ domain, x: event.clientX, y: event.clientY });
       setHoveredQuickTarget(quickTargetAtPoint(event.clientX, event.clientY));
+      setHoveredRemoveTarget(removeTargetAtPoint(event.clientX, event.clientY));
       setHoveredZone(zoneAtPoint(event.clientX, event.clientY));
     },
-    [quickTargetAtPoint, zoneAtPoint],
+    [quickTargetAtPoint, removeTargetAtPoint, zoneAtPoint],
   );
 
   const handleDragMove = useCallback(
@@ -331,9 +386,10 @@ export function TerritorySetupClient({
       dragPointerRef.current = { x: event.clientX, y: event.clientY };
       setDragState({ domain: dragState.domain, x: event.clientX, y: event.clientY });
       setHoveredQuickTarget(quickTargetAtPoint(event.clientX, event.clientY));
+      setHoveredRemoveTarget(removeTargetAtPoint(event.clientX, event.clientY));
       setHoveredZone(zoneAtPoint(event.clientX, event.clientY));
     },
-    [dragState, quickTargetAtPoint, zoneAtPoint],
+    [dragState, quickTargetAtPoint, removeTargetAtPoint, zoneAtPoint],
   );
 
   // While a territory is held near the top/bottom edge, scroll the page so the
@@ -368,16 +424,22 @@ export function TerritorySetupClient({
   const handleDragEnd = useCallback(
     (event: ReactPointerEvent) => {
       if (!dragState) return;
-      const nextZone =
-        quickTargetAtPoint(event.clientX, event.clientY) ??
-        zoneAtPoint(event.clientX, event.clientY);
-      if (nextZone) moveDomain(dragState.domain, nextZone);
+      if (removeTargetAtPoint(event.clientX, event.clientY)) {
+        // Don't delete inline — open the confirm dialog first.
+        setPendingRemoval(dragState.domain);
+      } else {
+        const nextZone =
+          quickTargetAtPoint(event.clientX, event.clientY) ??
+          zoneAtPoint(event.clientX, event.clientY);
+        if (nextZone) moveDomain(dragState.domain, nextZone);
+      }
       setDragState(null);
       setActiveTerritory(null);
       setHoveredZone(null);
       setHoveredQuickTarget(null);
+      setHoveredRemoveTarget(false);
     },
-    [dragState, moveDomain, quickTargetAtPoint, zoneAtPoint],
+    [dragState, moveDomain, quickTargetAtPoint, removeTargetAtPoint, zoneAtPoint],
   );
 
   const setQuickTargetRef = useCallback(
@@ -386,6 +448,10 @@ export function TerritorySetupClient({
     },
     [],
   );
+
+  const setRemoveTargetRef = useCallback((element: HTMLButtonElement | null) => {
+    removeTargetRef.current = element;
+  }, []);
 
   const saveForNextRound = useCallback(async () => {
     if (!canSave) return;
@@ -453,12 +519,6 @@ export function TerritorySetupClient({
           </p>
         </header>
 
-        {roundComplete ? (
-          <p className="mb-6 rounded-2xl border border-[var(--border-warm)] bg-[var(--cream-warm)] p-4 text-sm text-[var(--text-muted-warm)]">
-            Today’s round is done. Changes save for your next round.
-          </p>
-        ) : null}
-
         {domains.length === 0 ? (
           <section className="mb-6 rounded-[2rem] border border-dashed border-[var(--border-warm)] bg-white/35 p-6 text-center">
             <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">
@@ -517,11 +577,13 @@ export function TerritorySetupClient({
               dragState={dragState}
               activeTerritory={activeTerritory}
               hoveredQuickTarget={hoveredQuickTarget}
+              hoveredRemoveTarget={hoveredRemoveTarget}
               onDragStart={handleDragStart}
               onDragMove={handleDragMove}
               onDragEnd={handleDragEnd}
               onQuickMove={handleQuickMove}
               setQuickTargetRef={setQuickTargetRef}
+              setRemoveTargetRef={setRemoveTargetRef}
               setRef={(element) => {
                 zoneRefs.current[zone.value] = element;
               }}
@@ -579,6 +641,44 @@ export function TerritorySetupClient({
           <DragPreview domain={draggingDomain} />
         </div>
       ) : null}
+
+      {pendingRemoval ? (
+        <div
+          className="fixed inset-0 z-[70] grid place-items-center bg-[rgba(26,18,8,0.32)] px-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="throw-out-title"
+          onClick={() => setPendingRemoval(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-[1.75rem] border border-[var(--border-warm)] bg-[var(--cream)] p-6 shadow-[0_24px_60px_rgba(26,18,8,0.28)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2
+              id="throw-out-title"
+              className="font-serif text-2xl font-semibold text-[var(--ink)]"
+            >
+              Throw out “{pendingRemoval}”?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-muted-warm)]">
+              This removes the territory from your map, so Joshing won’t ask about it. You can add
+              it back later.
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                className="btn-ghost min-h-11 px-5"
+                onClick={() => setPendingRemoval(null)}
+              >
+                Keep it
+              </button>
+              <button type="button" className="btn-danger px-5" onClick={confirmRemoval}>
+                Throw out
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -627,11 +727,13 @@ function TerritoryZone({
   dragState,
   activeTerritory,
   hoveredQuickTarget,
+  hoveredRemoveTarget,
   onDragStart,
   onDragMove,
   onDragEnd,
   onQuickMove,
   setQuickTargetRef,
+  setRemoveTargetRef,
   setRef,
   settling,
 }: {
@@ -642,11 +744,13 @@ function TerritoryZone({
   dragState: DragState;
   activeTerritory: ActiveTerritory;
   hoveredQuickTarget: TerritoryFrequency | null;
+  hoveredRemoveTarget: boolean;
   onDragStart: (event: ReactPointerEvent, domain: string, frequency: TerritoryFrequency) => void;
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
   onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
   setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
+  setRemoveTargetRef: (element: HTMLButtonElement | null) => void;
   setRef: (element: HTMLElement | null) => void;
   settling: boolean;
 }) {
@@ -683,11 +787,13 @@ function TerritoryZone({
                     dragging={dragState?.domain === domain.domain}
                     quickTargetsVisible={activeTerritory?.domain === domain.domain}
                     hoveredQuickTarget={hoveredQuickTarget}
+                    hoveredRemoveTarget={hoveredRemoveTarget}
                     onDragStart={onDragStart}
                     onDragMove={onDragMove}
                     onDragEnd={onDragEnd}
                     onQuickMove={onQuickMove}
                     setQuickTargetRef={setQuickTargetRef}
+                    setRemoveTargetRef={setRemoveTargetRef}
                     settling={settling}
                   />
                 ))}
@@ -711,11 +817,13 @@ function TerritoryCircle({
   dragging,
   quickTargetsVisible,
   hoveredQuickTarget,
+  hoveredRemoveTarget,
   onDragStart,
   onDragMove,
   onDragEnd,
   onQuickMove,
   setQuickTargetRef,
+  setRemoveTargetRef,
   settling,
 }: {
   domain: TerritoryDomain;
@@ -724,11 +832,13 @@ function TerritoryCircle({
   dragging: boolean;
   quickTargetsVisible: boolean;
   hoveredQuickTarget: TerritoryFrequency | null;
+  hoveredRemoveTarget: boolean;
   onDragStart: (event: ReactPointerEvent, domain: string, frequency: TerritoryFrequency) => void;
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
   onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
   setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
+  setRemoveTargetRef: (element: HTMLButtonElement | null) => void;
   settling: boolean;
 }) {
   const broadCategory = domain.broadCategory ?? 'General Knowledge';
@@ -785,6 +895,28 @@ function TerritoryCircle({
       >
         {domain.domain}
       </span>
+      {quickTargetsVisible ? (
+        <button
+          ref={setRemoveTargetRef}
+          type="button"
+          aria-label={`Throw out ${domain.domain}`}
+          title="Throw out"
+          // Sits beside the bubble (vertically centred on it), not under the
+          // quick-move row, so deleting reads as a distinct action.
+          className={`absolute right-0 grid size-9 -translate-y-1/2 place-items-center rounded-full border shadow-sm transition ${
+            hoveredRemoveTarget
+              ? 'scale-110 border-[var(--destructive)] bg-[var(--destructive)] text-white shadow-[0_10px_24px_rgba(180,35,24,0.32)]'
+              : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--text-muted-warm)]'
+          }`}
+          style={{ top: size / 2 }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerMove={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onPointerCancel={(event) => event.stopPropagation()}
+        >
+          <Trash2 className="size-4" aria-hidden="true" />
+        </button>
+      ) : null}
       {quickTargetsVisible ? (
         <QuickMoveTargets
           domain={domain.domain}
