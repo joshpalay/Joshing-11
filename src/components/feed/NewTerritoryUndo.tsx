@@ -1,20 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { Moon, Sparkles } from 'lucide-react'
+
+import type { TerritoryFrequency } from '@/lib/daily/territory-model'
 
 // Darkened triangle-gold so the "New territory" copy clears AA on the cream
 // card (raw --tri-amber #d9a82e is too light for small text).
 const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))'
 
-type RemoveState = 'idle' | 'removing' | 'removed' | 'error'
-
-// Default-add with undo (B-1): a correct answer in an unfamiliar domain opens
-// it in the player's Knowledge base automatically (server-side, via
-// writeMasteryEvent). This card surfaces that the domain was added and offers
-// a single "remove" that deletes the freshly-opened domain — reversing the KB
-// open and pulling it from any custom Daily Five selection. The player stays in
-// control via removal, not an opt-in gate. Used on both reveal surfaces.
+// Default-add with a soft demote (B-1): a correct answer in an unfamiliar domain
+// opens it in the player's Knowledge base automatically (server-side, via
+// writeMasteryEvent). This card surfaces that the domain was added, and the
+// primary control doesn't delete it — it moves the freshly-opened domain to
+// "Once in a Blue Moon" so it stays on the map but only surfaces every so often.
+// After moving, an "Undo" steps back to the just-added stage by restoring the
+// domain's prior frequency. The player stays in control without losing the
+// territory. Used on both reveal surfaces.
 export function NewTerritoryUndo({
   domain,
   category,
@@ -22,21 +24,54 @@ export function NewTerritoryUndo({
   domain: string
   category?: string | null
 }) {
-  const [state, setState] = useState<RemoveState>('idle')
+  // 'open' = freshly added (default rotation); 'blue_moon' = demoted to rare.
+  const [stage, setStage] = useState<'open' | 'blue_moon'>('open')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(false)
+  // The frequency the domain had before we moved it to blue_moon, so Undo can
+  // restore exactly that (usually unset → null, i.e. default rotation).
+  const [previousFrequency, setPreviousFrequency] = useState<TerritoryFrequency | null>(null)
   const label = category || domain
 
-  const handleRemove = async () => {
-    if (state === 'removing' || state === 'removed') return
-    setState('removing')
+  const setFrequency = async (frequency: TerritoryFrequency | null) => {
+    const response = await fetch('/api/daily/preferences/domain-frequency', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ domain, frequency }),
+    })
+    if (!response.ok) throw new Error('frequency update failed')
+    return (await response.json().catch(() => null)) as {
+      previousFrequency?: TerritoryFrequency | null
+    } | null
+  }
+
+  const handleBlueMoon = async () => {
+    if (busy) return
+    setBusy(true)
+    setError(false)
     try {
-      const response = await fetch(`/api/knowledge/${encodeURIComponent(domain)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      })
-      if (!response.ok) throw new Error('remove failed')
-      setState('removed')
+      const result = await setFrequency('blue_moon')
+      setPreviousFrequency(result?.previousFrequency ?? null)
+      setStage('blue_moon')
     } catch {
-      setState('error')
+      setError(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleUndo = async () => {
+    if (busy) return
+    setBusy(true)
+    setError(false)
+    try {
+      await setFrequency(previousFrequency)
+      setStage('open')
+    } catch {
+      setError(true)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -57,39 +92,61 @@ export function NewTerritoryUndo({
           }}
           aria-hidden
         >
-          <Sparkles className="size-3.5" />
+          {stage === 'blue_moon' ? <Moon className="size-3.5" /> : <Sparkles className="size-3.5" />}
         </span>
         <div className="min-w-0 flex-1">
-          {state === 'removed' ? (
-            <p className="font-serif text-sm leading-snug" style={{ color: 'var(--brand-ink)' }}>
-              Removed {label} from your knowledge base.
-            </p>
+          {stage === 'blue_moon' ? (
+            <>
+              <p className="font-serif text-sm leading-snug font-semibold" style={{ color: GOLD_INK }}>
+                {label} is now once in a blue moon.
+              </p>
+              <p className="mt-1 text-[13px] text-[var(--brand-ink)]">
+                It stays on your map but will only surface every so often.
+              </p>
+              <p className="mt-1.5 text-[13px] text-[var(--brand-ink)]">
+                {busy ? (
+                  <span className="text-[var(--brand-ink-400)]">Undoing…</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleUndo()}
+                    className="font-semibold underline underline-offset-2 hover:opacity-70"
+                    style={{ color: GOLD_INK }}
+                  >
+                    Undo
+                  </button>
+                )}
+              </p>
+            </>
           ) : (
             <>
               <p className="font-serif text-sm leading-snug font-semibold" style={{ color: GOLD_INK }}>
                 Added {label} to your knowledge base.
               </p>
+              <p className="mt-1 text-[13px] text-[var(--brand-ink)]">
+                Want it only every so often?
+              </p>
               <p className="mt-1.5 text-[13px] text-[var(--brand-ink)]">
-                {state === 'removing' ? (
-                  <span className="text-[var(--brand-ink-400)]">Removing…</span>
+                {busy ? (
+                  <span className="text-[var(--brand-ink-400)]">Moving…</span>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => void handleRemove()}
+                    onClick={() => void handleBlueMoon()}
                     className="font-semibold underline underline-offset-2 hover:opacity-70"
                     style={{ color: GOLD_INK }}
                   >
-                    Remove
+                    Move to Once in a Blue Moon
                   </button>
                 )}
               </p>
-              {state === 'error' ? (
-                <p className="mt-1.5 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>
-                  Could not remove it. Try again.
-                </p>
-              ) : null}
             </>
           )}
+          {error ? (
+            <p className="mt-1.5 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>
+              Could not update it. Try again.
+            </p>
+          ) : null}
         </div>
       </div>
     </div>
