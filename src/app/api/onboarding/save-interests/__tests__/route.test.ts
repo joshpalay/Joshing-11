@@ -23,6 +23,10 @@ vi.mock('@/server/db/queries/users', () => ({
   getUserOnboardingProfile: getUserOnboardingProfileMock,
   markOnboardingComplete: markOnboardingCompleteMock,
   saveDeclaredInterests: saveDeclaredInterestsMock,
+  // Account-wide sanity bound used by the route's parse step. Kept well above
+  // the onboarding-specific cap so the 12-cap test below exercises the right
+  // guard.
+  MAX_ACTIVE_DECLARED_INTERESTS: 100,
 }))
 
 import { POST } from '@/app/api/onboarding/save-interests/route'
@@ -179,17 +183,23 @@ describe('POST /api/onboarding/save-interests', () => {
     }
   })
 
-  it('enforces the max interest cap', async () => {
-    const response = await POST(
-      jsonRequest([
-        { domain: 'One', broadCategory: 'Other' },
-        { domain: 'Two', broadCategory: 'Other' },
-        { domain: 'Three', broadCategory: 'Other' },
-        { domain: 'Four', broadCategory: 'Other' },
-        { domain: 'Five', broadCategory: 'Other' },
-        { domain: 'Six', broadCategory: 'Other' },
-      ])
-    )
+  function manyInterests(count: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      domain: `Topic ${index + 1}`,
+      broadCategory: 'Other',
+    }))
+  }
+
+  it('accepts exactly the onboarding max of 12 interests', async () => {
+    const response = await POST(jsonRequest(manyInterests(12)))
+
+    expect(response.status).toBe(200)
+    expect(saveDeclaredInterestsMock).toHaveBeenCalledTimes(1)
+    expect(markOnboardingCompleteMock).toHaveBeenCalledWith('user-invitee')
+  })
+
+  it('enforces the onboarding max interest cap of 12', async () => {
+    const response = await POST(jsonRequest(manyInterests(13)))
 
     expect(response.status).toBe(400)
     expect(saveDeclaredInterestsMock).not.toHaveBeenCalled()
