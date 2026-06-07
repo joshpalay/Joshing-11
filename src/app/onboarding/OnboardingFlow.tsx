@@ -89,10 +89,10 @@ const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
 ]
 
 const MIN_INTERESTS = 3
-// No upper product cap — players pick as many interests as they like. This is a
-// defensive sanity bound only (the save path fans out into per-interest LLM
-// work); no real user reaches it, and the UI never shows it as a ceiling.
-const MAX_INTERESTS = 100
+// Onboarding caps the build-your-world selection at 12 (per product spec). The
+// cap also bounds the save path's per-interest LLM fan-out. Inviter-suggested
+// topics live in selectedInterests too, so they count toward this ceiling.
+const MAX_INTERESTS = 12
 
 function normalizeDomain(domain: string) {
   return domain.trim().replace(/\s+/g, ' ')
@@ -999,7 +999,9 @@ export default function OnboardingFlow({
                 <p className="text-muted-foreground mb-3 text-sm">
                   {selectedInterests.length < MIN_INTERESTS
                     ? `Pick at least ${MIN_INTERESTS} to continue (${selectedInterests.length}/${MIN_INTERESTS}).`
-                    : `${selectedInterests.length} selected.`}
+                    : selectedInterests.length >= MAX_INTERESTS
+                      ? `${MAX_INTERESTS}/${MAX_INTERESTS} — that's the max.`
+                      : `${selectedInterests.length} selected.`}
                 </p>
                 <button
                   type="button"
