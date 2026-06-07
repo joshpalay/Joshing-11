@@ -632,7 +632,7 @@ function KnowledgePageContent() {
             ) : null}
             {!editMode ? (
               <div className="mt-5 flex justify-center">
-                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] text-[#faf8f2] font-['Courier_New',monospace] text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
+                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] text-[var(--warm-paper)] font-['Courier_New',monospace] text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
                   Share portrait
                 </button>
               </div>
@@ -644,7 +644,7 @@ function KnowledgePageContent() {
       {emptyQuestionDomain ? (
         <section className="bg-[#fff7e8] border border-[#d9b56c] px-[0.95rem] py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
           <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
-          <h2 className="mt-[0.4rem] text-[1.25rem] leading-[1.35] text-[var(--ink)] font-[var(--font-literata)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
+          <h2 className="mt-[0.4rem] text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-literata)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
           <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
           <div className="flex flex-wrap gap-[10px] mt-5">
             <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>

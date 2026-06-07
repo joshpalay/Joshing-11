@@ -55,7 +55,7 @@ export function SparkleEnvelope({
         <div aria-hidden className="h-px w-[70px] bg-[var(--brand-rule)]" />
 
         <div className="flex w-full flex-col items-end gap-5">
-          <p className="w-full font-serif text-[24px] font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]">
+          <p className="w-full font-serif text-2xl font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]">
             <span aria-hidden className="opacity-60">
               &ldquo;
             </span>

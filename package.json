@@ -20,6 +20,7 @@
     "smoke:lately-milestones": "tsx scripts/lately-milestones.smoke.ts",
     "smoke:niche-match-dedup": "tsx scripts/niche-match-dedup.smoke.ts",
     "smoke:gameplay": "tsx scripts/playtest/playtest.ts",
+    "pool:health": "tsx scripts/pool-health.ts",
     "format": "node scripts/format-changed.mjs",
     "format:all": "prettier --write ."
   },

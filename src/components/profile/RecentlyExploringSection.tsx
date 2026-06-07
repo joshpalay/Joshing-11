@@ -116,7 +116,7 @@ const badgeStyle: CSSProperties = {
   height: 32,
   borderRadius: 999,
   border: '1px solid',
-  color: '#1a1208',
+  color: 'var(--warm-ink)',
   display: 'grid',
   placeItems: 'center',
   fontSize: '0.86rem',
@@ -130,7 +130,7 @@ const rowTextStyle: CSSProperties = {
 
 const domainNameStyle: CSSProperties = {
   margin: 0,
-  color: '#1a1208',
+  color: 'var(--warm-ink)',
   fontFamily: 'var(--font-literata), Georgia, serif',
   fontSize: '0.92rem',
   fontWeight: 700,
@@ -140,7 +140,7 @@ const domainNameStyle: CSSProperties = {
 
 const supportingStyle: CSSProperties = {
   margin: '0.18rem 0 0',
-  color: '#696257',
+  color: 'var(--warm-ink-700)',
   fontSize: '0.68rem',
   lineHeight: 1.25,
 }
