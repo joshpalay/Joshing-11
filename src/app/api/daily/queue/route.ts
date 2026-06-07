@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { getTodaysDailyQueue } from '@/server/db/queries/daily';
+import { countDailyQueues, getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
@@ -38,9 +38,18 @@ function serializeQueue(
   queue: NonNullable<Awaited<ReturnType<typeof getTodaysDailyQueue>>>,
   difficultyMode: string,
   userId: string,
+  // Total queues this user has ever had. When it's the only one (this one) and
+  // nothing's been answered yet, this is their first Daily Five — the client
+  // shows the one-time intro. Defaults conservatively to "not first" so a count
+  // failure never falsely re-triggers the intro for a returning player.
+  totalQueues = 2,
 ) {
   const raw = asQueueSlots(queue.slots);
   const { kept, dropped } = partitionGenericSlots(raw);
+
+  // First-run intro gate: their only queue, fully untouched.
+  const isFirstDaily =
+    totalQueues <= 1 && raw.every((slot) => !slot.answered && !slot.skipped);
 
   // A served queue shorter than DAILY_QUEUE_SIZE is the exact symptom a user
   // reports as "only 3 of my 5 showed up." Trace it at the moment of serving,
@@ -65,6 +74,7 @@ function serializeQueue(
     queue_date: queue.queueDate,
     slots: kept,
     difficulty_mode: difficultyMode,
+    is_first_daily: isFirstDaily,
   };
 }
 
@@ -77,16 +87,17 @@ export async function GET() {
   const userId = await requireUserId();
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const [queue, prefs] = await Promise.all([
+  const [queue, prefs, totalQueues] = await Promise.all([
     getTodaysDailyQueue(userId),
     getDailyPreferences(userId),
+    countDailyQueues(userId).catch(() => 2),
   ]);
 
   if (!queue) {
     return NextResponse.json({ queue: null, slots: [] });
   }
 
-  return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId));
+  return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId, totalQueues));
 }
 
 export async function POST() {
@@ -105,14 +116,15 @@ export async function POST() {
     throw error;
   }
 
-  const [queue, prefs] = await Promise.all([
+  const [queue, prefs, totalQueues] = await Promise.all([
     getTodaysDailyQueue(userId),
     getDailyPreferences(userId),
+    countDailyQueues(userId).catch(() => 2),
   ]);
 
   if (!queue) {
     return NextResponse.json({ error: 'queue_not_created' }, { status: 500 });
   }
 
-  return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId));
+  return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId, totalQueues));
 }

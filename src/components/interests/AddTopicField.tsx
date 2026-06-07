@@ -17,6 +17,16 @@ export type AddTopicCandidate = { label: string; broadCategory?: string | null }
 // outcomes: re-expand on a too-broad backstop, or show the cap affordance.
 export type AddTopicError = Error & { code?: 'limit_reached' | 'too_broad' };
 
+// One convergence suggestion surfaced before a specific topic is added: an
+// existing canonical domain across the game the typed label is close to. Shape
+// mirrors POST /api/knowledge/converge.
+type ConvergeApiCandidate = {
+  label: string;
+  broadCategory: string | null;
+  kind: 'exact' | 'fuzzy' | 'new';
+  similarity: number;
+};
+
 // Cream / Ink-on-Cream defaults (the daily-setup surface). Overridable so the
 // same field matches differently-themed surfaces (e.g. the top-up modal).
 const DEFAULT_INPUT_CLASS =
@@ -40,6 +50,14 @@ type AddTopicFieldProps = {
   limitReachedNode?: ReactNode;
   /** Lets a parent focus the input (e.g. a "create your own" CTA). */
   inputRef?: RefObject<HTMLInputElement | null>;
+  /**
+   * Before adding a specific topic, run it through POST /api/knowledge/converge
+   * to align it onto an existing canonical domain across the game. An exact
+   * match is applied transparently (same domain); fuzzy matches surface as a
+   * dismissible "did you mean?" with the typed wording as the alternative.
+   * Off by default so surfaces opt in.
+   */
+  convergeBeforeAdd?: boolean;
   // Style overrides so the field can match each surface's palette.
   className?: string;
   inputClassName?: string;
@@ -64,6 +82,7 @@ export function AddTopicField({
   disabled = false,
   limitReachedNode,
   inputRef,
+  convergeBeforeAdd = false,
   className,
   inputClassName = DEFAULT_INPUT_CLASS,
   buttonClassName = DEFAULT_BUTTON_CLASS,
@@ -82,6 +101,9 @@ export function AddTopicField({
   const [candidates, setCandidates] = useState<AddTopicCandidate[] | null>(null);
   const [expandedFrom, setExpandedFrom] = useState<string | null>(null);
   const [pendingLabel, setPendingLabel] = useState<string | null>(null);
+  const [convergence, setConvergence] = useState<
+    { typed: AddTopicCandidate; suggestions: AddTopicCandidate[] } | null
+  >(null);
 
   const isDuplicate = useCallback(
     (label: string) =>
@@ -99,6 +121,7 @@ export function AddTopicField({
       setCandidates(null);
       setExpandedFrom(null);
       setPendingLabel(null);
+      setConvergence(null);
       try {
         const response = await fetch('/api/interests/expand', {
           method: 'POST',
@@ -132,7 +155,9 @@ export function AddTopicField({
     [isDuplicate],
   );
 
-  const commit = useCallback(
+  // The actual persistence step. Shared by every path; convergence (below)
+  // resolves WHICH label to persist before calling this.
+  const persistTopic = useCallback(
     async (candidate: AddTopicCandidate) => {
       const label = candidate.label.trim();
       if (!label || busy) return;
@@ -147,6 +172,7 @@ export function AddTopicField({
       try {
         await onAdd({ label, broadCategory: candidate.broadCategory ?? null });
         setValue('');
+        setConvergence(null);
         setCandidates((prev) => {
           if (!prev) return prev;
           const next = prev.filter(
@@ -168,6 +194,84 @@ export function AddTopicField({
       }
     },
     [busy, isDuplicate, onAdd, expand],
+  );
+
+  // Add a specific topic. When convergeBeforeAdd is on, first align it onto an
+  // existing canonical domain across the game: an exact match is applied
+  // transparently; fuzzy matches surface a "did you mean?" choice; otherwise we
+  // persist the typed label. Any converge failure falls through to a plain add.
+  const commit = useCallback(
+    async (candidate: AddTopicCandidate) => {
+      if (!convergeBeforeAdd) {
+        await persistTopic(candidate);
+        return;
+      }
+      const label = candidate.label.trim();
+      if (!label || busy) return;
+      if (isDuplicate(label)) {
+        setError('You already added that one.');
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      setLimitReached(false);
+      setConvergence(null);
+      setPendingLabel(label);
+      let resolved: AddTopicCandidate | null = candidate;
+      let prompt: { typed: AddTopicCandidate; suggestions: AddTopicCandidate[] } | null = null;
+      try {
+        const response = await fetch('/api/knowledge/converge', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ label }),
+        });
+        const body = await response.json().catch(() => null);
+        if (response.ok) {
+          const list: ConvergeApiCandidate[] = Array.isArray(body?.candidates)
+            ? body.candidates
+            : [];
+          const exact = list.find(
+            (item) => item?.kind === 'exact' && typeof item.label === 'string',
+          );
+          const fuzzy = list.filter(
+            (item) => item?.kind === 'fuzzy' && typeof item.label === 'string',
+          );
+          if (exact) {
+            // Same domain — converge silently onto the canonical spelling.
+            resolved = {
+              label: exact.label,
+              broadCategory: exact.broadCategory ?? candidate.broadCategory ?? null,
+            };
+          } else if (fuzzy.length > 0) {
+            // Never auto-apply a fuzzy match — let the user pick or keep theirs.
+            resolved = null;
+            const own =
+              typeof body?.raw === 'string' && body.raw.trim() ? body.raw.trim() : label;
+            prompt = {
+              typed: { label: own, broadCategory: candidate.broadCategory ?? null },
+              suggestions: fuzzy.map((item) => ({
+                label: item.label,
+                broadCategory: item.broadCategory ?? null,
+              })),
+            };
+          }
+        }
+      } catch {
+        // Converge is best-effort — fall through and add the typed label.
+        resolved = candidate;
+      } finally {
+        setBusy(false);
+        setPendingLabel(null);
+      }
+
+      if (prompt) {
+        setConvergence(prompt);
+        return;
+      }
+      if (resolved) await persistTopic(resolved);
+    },
+    [convergeBeforeAdd, persistTopic, busy, isDuplicate],
   );
 
   const submit = useCallback(async () => {
@@ -244,6 +348,38 @@ export function AddTopicField({
                 {pendingLabel === candidate.label.trim() ? 'Adding…' : candidate.label}
               </button>
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {convergence ? (
+        <div className="mt-4">
+          <p className={mutedClassName}>
+            Did you mean one of these? Joining an area others already explore keeps your
+            questions sharper.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {convergence.suggestions.map((suggestion) => (
+              <button
+                key={suggestion.label}
+                type="button"
+                onClick={() => void persistTopic(suggestion)}
+                disabled={busy}
+                className={chipClassName}
+              >
+                {pendingLabel === suggestion.label.trim() ? 'Adding…' : suggestion.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => void persistTopic(convergence.typed)}
+              disabled={busy}
+              className={chipClassName}
+            >
+              {pendingLabel === convergence.typed.label.trim()
+                ? 'Adding…'
+                : `Add “${convergence.typed.label}” instead`}
+            </button>
           </div>
         </div>
       ) : null}

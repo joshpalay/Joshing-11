@@ -291,6 +291,22 @@ export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow
 }
 
 /**
+ * Total number of daily queues ever built for this user, across all dates.
+ *
+ * Used to detect a user's FIRST Daily Five: the orchestrator treats a zero count
+ * (no queue built yet) as first-run and seeds the queue from onboarding areas in
+ * selection order; the queue route treats a count of one (only the just-served
+ * queue) as the moment to show the one-time first-run intro.
+ */
+export async function countDailyQueues(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(dailyQueues)
+    .where(eq(dailyQueues.userId, userId));
+  return row?.count ?? 0;
+}
+
+/**
  * Deletes the user's untouched daily queues (none of whose slots are answered or
  * skipped) within the catch-up window. Returns the number of queues deleted.
  *
@@ -1377,7 +1393,15 @@ export type BankDifficulty = 'accessible' | 'moderate' | 'specialist';
 //
 // Restrictions:
 // - fact_key must be present (predates 2026-05-24; older rows lack it)
-// - not authored by the viewer
+// - not GENERATED for the viewer (userId <> viewer)
+// - not the same trivia the viewer themselves AUTHORED. The `userId <> viewer`
+//   guard only covers questions GENERATED for the viewer; a question the viewer
+//   *wrote* lives in the canonical `questions` table (creatorId = viewer), never
+//   in the generated bank, so an independently-generated bank row about the same
+//   fact would otherwise be served straight back to its author — e.g. the +2
+//   bonus handing you a question you composed and sent a friend (reported
+//   2026-06). `avoidQuestionTexts` lets the caller pass the viewer's authored
+//   question texts so those rows are skipped here.
 // - not suppressed as an embedding near-duplicate (is_duplicate; B3)
 // - fact_key not already in the viewer's recent avoid set
 //
@@ -1390,11 +1414,38 @@ export type BankDifficulty = 'accessible' | 'moderate' | 'specialist';
 // Returns null when the bank is empty for this domain+difficulty — caller
 // falls back to fresh LLM generation, which incidentally grows the bank.
 const BANK_RECENCY_WINDOW = 50;
+
+// Canonical form for cross-table question-text matching (bank row text vs. a
+// viewer-authored canonical question). Mirrors the queue-orchestrator's own
+// dedup normalization (trim + lowercase) so the two stay consistent.
+export function normalizeQuestionText(text: string): string {
+  return text.trim().toLowerCase();
+}
+
+// Pure servability check for a bank candidate (extracted for testing). A row is
+// servable only if it has a fact_key (older rows lack one), its fact_key isn't
+// in the viewer's recent avoid set, and its text isn't one the viewer authored
+// (`avoidQuestionTexts`). Keeping this pure lets the loop in pickBankSource stay
+// a thin DB shell while the routing rule itself is unit-tested.
+export function isBankRowServable(
+  row: { factKey: string | null; questionText: string },
+  avoidFactKeys: ReadonlySet<string>,
+  avoidQuestionTexts: ReadonlySet<string>,
+): boolean {
+  if (!row.factKey) return false;
+  if (avoidFactKeys.has(row.factKey)) return false;
+  // Never serve the viewer trivia they themselves authored — fact_key won't
+  // catch it (authored canonical questions have no fact_key), so match on text.
+  if (avoidQuestionTexts.has(normalizeQuestionText(row.questionText))) return false;
+  return true;
+}
+
 export async function pickBankSource(
   userId: string,
   domain: string,
   difficulty: BankDifficulty,
   avoidFactKeys: ReadonlySet<string>,
+  avoidQuestionTexts: ReadonlySet<string> = new Set(),
 ): Promise<BankSource | null> {
   let candidates: Array<typeof generatedQuestions.$inferSelect>;
   try {
@@ -1436,8 +1487,9 @@ export async function pickBankSource(
   }
 
   for (const row of candidates) {
+    if (!isBankRowServable(row, avoidFactKeys, avoidQuestionTexts)) continue;
+    // isBankRowServable guarantees a non-null factKey; this narrows it for TS.
     if (!row.factKey) continue;
-    if (avoidFactKeys.has(row.factKey)) continue;
     return {
       questionText: row.questionText,
       answer: row.answer,
@@ -1573,6 +1625,39 @@ export async function getRecentFactKeys(
     }
   }
   return out;
+}
+
+// Question texts the viewer has AUTHORED (canonical `questions`, creator =
+// viewer). The +2 bonus (and any bank reuse) must never serve a fact the viewer
+// personally wrote a question about — they obviously know it, and being handed
+// your own composed-and-sent question reads as a routing bug (reported 2026-06).
+// The other bonus avoid lists (getRecentDailyQuestionTexts / getRecentFactKeys)
+// read only generatedQuestions where userId = viewer, so authored questions —
+// which live in the canonical table and never in the generated bank — slip
+// through. Returned in the RecentDailyQuestionEntry shape so it composes
+// directly with the generation avoid list (the semantic Haiku dedupe gate then
+// also catches re-wordings); the bank pick matches the same texts verbatim.
+export async function getAuthoredQuestionTexts(
+  userId: string,
+  limit = 500,
+): Promise<RecentDailyQuestionEntry[]> {
+  const rows = await db
+    .select({
+      questionText: canonicalQuestions.questionText,
+      domain: canonicalQuestions.canonicalSubcategory,
+    })
+    .from(canonicalQuestions)
+    .where(and(
+      eq(canonicalQuestions.creatorId, userId),
+      isNull(canonicalQuestions.deletedAt),
+    ))
+    .orderBy(desc(canonicalQuestions.createdAt))
+    .limit(limit);
+
+  return rows.map((row) => ({
+    domain: row.domain ?? 'unknown',
+    text: row.questionText,
+  }));
 }
 
 export async function getAnsweredDailyCount(queue: DailyQueueRow): Promise<number> {

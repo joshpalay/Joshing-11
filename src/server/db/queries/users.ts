@@ -140,8 +140,7 @@ export function setFollowPrivacy(id: string, followPrivacy: 'public' | 'approval
 // they like. This is a defensive *sanity* bound only: every save fans out into
 // per-interest Haiku categorization (categorizeIfNeeded) and seeds a mastery row,
 // so an unbounded array from a client would be a cost/DoS vector. No real user
-// reaches it. (The separate "3 → 5" one-time top-up nudge lives in
-// src/server/area-top-up/rules.ts and is unaffected.)
+// reaches it.
 export const MAX_ACTIVE_DECLARED_INTERESTS = 100;
 
 // Thrown when a write would push the user past the sanity bound above. Callers
@@ -167,6 +166,12 @@ async function upsertDeclaredInterestRow(
   tx: DeclaredInterestTx,
   userId: string,
   interest: DeclaredInterestInput,
+  // Explicit declaration time. The full-replace path (saveDeclaredInterests)
+  // passes strictly-increasing timestamps in SELECTION ORDER so first-picked
+  // first is recoverable by getActiveDeclaredInterests (it powers the first
+  // Daily Five's strong- vs light-signal weighting). The incremental add path
+  // omits it and gets "now", which correctly reads as a newer, lighter signal.
+  declaredAt: Date = new Date(),
 ) {
   await tx
     .insert(declaredInterests)
@@ -174,14 +179,14 @@ async function upsertDeclaredInterestRow(
       userId,
       domain: interest.label,
       broadCategory: interest.broadCategory ?? null,
-      declaredAt: new Date(),
+      declaredAt,
       isActive: true,
     })
     .onConflictDoUpdate({
       target: [declaredInterests.userId, declaredInterests.domain],
       set: {
         broadCategory: interest.broadCategory ?? null,
-        declaredAt: new Date(),
+        declaredAt,
         isActive: true,
       },
     });
@@ -234,14 +239,22 @@ export async function saveDeclaredInterests(userId: string, interests: DeclaredI
   // re-runs the domain categorizer for any interest that arrived uncategorized.
   const categorized = await Promise.all(normalized.map(categorizeIfNeeded));
 
+  // Stamp the picks with strictly-increasing declaredAt in selection order so
+  // "first-picked first" survives into getActiveDeclaredInterests. A single
+  // new Date() per row can collide at the same millisecond inside one
+  // transaction (the loop is fast), which would lose the order the first Daily
+  // Five depends on — so derive each from a fixed base + index instead.
+  const declaredBase = Date.now();
   await db.transaction(async (tx) => {
     await tx
       .update(declaredInterests)
       .set({ isActive: false })
       .where(eq(declaredInterests.userId, userId));
 
+    let index = 0;
     for (const interest of categorized) {
-      await upsertDeclaredInterestRow(tx, userId, interest);
+      await upsertDeclaredInterestRow(tx, userId, interest, new Date(declaredBase + index));
+      index += 1;
     }
   });
 

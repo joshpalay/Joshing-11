@@ -8,7 +8,6 @@ import { X } from 'lucide-react';
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
-import { TopUpAreasModal, type TopUpInterest } from '@/components/daily/TopUpAreasModal';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
@@ -36,7 +35,14 @@ type QueueResponse = {
   queue_id: string;
   queue_date: string;
   slots: QueueSlot[];
+  is_first_daily?: boolean;
 };
+
+// One-time intro shown before a brand-new user's first question, explaining that
+// their first five are seeded from the areas they picked in onboarding. The
+// server flags the genuinely-first, untouched queue (is_first_daily); this local
+// flag is belt-and-suspenders so a pre-answer reload doesn't show it twice.
+const FIRST_RUN_INTRO_SEEN_KEY = 'joshing:daily-first-run-intro-seen';
 
 type AnswerResponse = {
   isCorrect?: boolean;
@@ -84,6 +90,24 @@ function answerFailureMessage(body: FailedAnswerResponse | null): string {
   return body?.message ?? (body?.error ? ANSWER_ERROR_MESSAGES[body.error] : undefined) ?? 'Could not record that answer.';
 }
 
+// Daily Five generation can come up short transiently: the queue endpoint
+// returns 503 `generation_failed` even for users with a valid knowledge base
+// when a round falls below the minimum size. Rather than dumping a bare error,
+// auto-retry a few times with backoff and surface a friendly "still working"
+// state with the attempt counter (the server has already burned its own
+// internal top-up rounds by the time we see this, so these are fresh attempts).
+const MAX_QUEUE_CREATE_ATTEMPTS = 4;
+const QUEUE_CREATE_BACKOFF_MS = [2000, 4000, 8000];
+
+// Shown after the auto-retries are exhausted — kept warm and retryable rather
+// than alarming, since the most common cause is slow generation, not a fault.
+const QUEUE_GENERATION_FAILED_MESSAGE =
+  "We're still crafting today's bespoke questions and it's taking longer than usual. Give it a moment and try again.";
+
+function generatingLabel(attempt: number): string {
+  return `Crafting your bespoke questions (attempt ${attempt}/${MAX_QUEUE_CREATE_ATTEMPTS})`;
+}
+
 // Returns the slot the player should be on, or null when the round is over.
 // The `!answered && !skipped` predicate is the canonical "pending" definition
 // shared with the status API via isRoundComplete (see @/server/daily/types) —
@@ -119,10 +143,35 @@ export default function DailyPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Non-null while we're auto-retrying queue generation; drives the friendly
+  // "still working (attempt N/4)" loading label instead of a bare error.
+  const [generatingAttempt, setGeneratingAttempt] = useState<number | null>(null);
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
   const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
-  const [areaTopUp, setAreaTopUp] = useState<{ existing: TopUpInterest[]; maxNew: number } | null>(null);
+  const [showFirstRunIntro, setShowFirstRunIntro] = useState(false);
+
+  // Show the first-run intro once, only for the server-flagged first untouched
+  // queue and only if this device hasn't already dismissed it.
+  const maybeShowFirstRunIntro = useCallback((firstDaily: boolean | undefined) => {
+    if (!firstDaily) return;
+    try {
+      if (window.localStorage.getItem(FIRST_RUN_INTRO_SEEN_KEY)) return;
+    } catch {
+      // Private mode / storage disabled: fall through and show it (server already
+      // gated on the genuinely-first, untouched queue, so this is still one-time).
+    }
+    setShowFirstRunIntro(true);
+  }, []);
+
+  const dismissFirstRunIntro = useCallback(() => {
+    setShowFirstRunIntro(false);
+    try {
+      window.localStorage.setItem(FIRST_RUN_INTRO_SEEN_KEY, '1');
+    } catch {
+      // Non-fatal — the server flag won't re-fire once a slot is answered anyway.
+    }
+  }, []);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -132,23 +181,44 @@ export default function DailyPage() {
       const body = await response.json().catch(() => null);
 
       if (response.ok && body?.queue === null) {
-        const createResponse = await fetch('/api/daily/queue', {
-          method: 'POST',
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        if (!createResponse.ok) {
+        // The queue doesn't exist yet — generate it. Generation can fall below
+        // the minimum and return 503 (generation_failed) even with a valid
+        // knowledge base, so auto-retry with backoff while showing the friendly
+        // "still working" state. 409 (no_knowledge_base) means the user
+        // genuinely has nothing to generate from — that's terminal; send them
+        // to setup rather than retrying.
+        for (let attempt = 1; attempt <= MAX_QUEUE_CREATE_ATTEMPTS; attempt += 1) {
+          setGeneratingAttempt(attempt);
+          const createResponse = await fetch('/api/daily/queue', {
+            method: 'POST',
+            credentials: 'include',
+            cache: 'no-store',
+          });
+          if (createResponse.ok) break;
+
           const createBody = await createResponse.json().catch(() => null);
-          // 409 (no_knowledge_base) means the user genuinely has nothing to
-          // generate from — send them to setup. A 503 (generation_failed) is a
-          // transient/slow-generation hiccup; surface the retryable message
-          // instead of bouncing a user with a valid knowledge base to setup.
           if (createResponse.status === 409) {
             router.replace('/daily/setup');
             return;
           }
-          throw new Error(createBody?.message ?? 'Could not load today.');
+          // Only the transient generation_failed (503) is worth retrying; a
+          // different status is a real fault, so surface its message and stop.
+          if (createResponse.status !== 503) {
+            throw new Error(createBody?.message ?? 'Could not load today.');
+          }
+          // Out of retries: fall back to the warm, retryable message.
+          if (attempt === MAX_QUEUE_CREATE_ATTEMPTS) {
+            throw new Error(QUEUE_GENERATION_FAILED_MESSAGE);
+          }
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              QUEUE_CREATE_BACKOFF_MS[attempt - 1] ??
+                QUEUE_CREATE_BACKOFF_MS[QUEUE_CREATE_BACKOFF_MS.length - 1],
+            ),
+          );
         }
+        setGeneratingAttempt(null);
         const refetchResponse = await fetch('/api/daily/queue', { cache: 'no-store', credentials: 'include' });
         const refetchBody = await refetchResponse.json().catch(() => null);
         if (!refetchResponse.ok) {
@@ -161,6 +231,7 @@ export default function DailyPage() {
         }
         const refetchSlots = Array.isArray(refetchBody.slots) ? refetchBody.slots : [];
         setQueue({ queue_id: refetchBody.queue_id, queue_date: refetchBody.queue_date, slots: refetchSlots });
+        maybeShowFirstRunIntro(refetchBody.is_first_daily);
         setLoading(false);
         return;
       }
@@ -185,12 +256,14 @@ export default function DailyPage() {
         queue_date: body.queue_date,
         slots,
       });
+      maybeShowFirstRunIntro(body.is_first_daily);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load today.');
     } finally {
+      setGeneratingAttempt(null);
       setLoading(false);
     }
-  }, [router]);
+  }, [router, maybeShowFirstRunIntro]);
 
   useEffect(() => {
     const initialTimer = window.setTimeout(() => {
@@ -199,36 +272,6 @@ export default function DailyPage() {
 
     return () => window.clearTimeout(initialTimer);
   }, [loadQueue]);
-
-  // One-time nudge for invite-seeded users who only declared three interests:
-  // the next time they play, offer to top up to five. Eligibility (onboarded,
-  // exactly three active interests, not yet dismissed) and persistence both
-  // live server-side, so this just asks whether to show and renders the modal.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch('/api/declared-interests/top-up', {
-          cache: 'no-store',
-          credentials: 'include',
-        });
-        if (!response.ok) return;
-        const body = (await response.json().catch(() => null)) as
-          | { eligible?: boolean; existing?: TopUpInterest[]; remainingSlots?: number }
-          | null;
-        if (cancelled || !body?.eligible) return;
-        setAreaTopUp({
-          existing: Array.isArray(body.existing) ? body.existing : [],
-          maxNew: Math.max(0, body.remainingSlots ?? 0),
-        });
-      } catch {
-        // Non-fatal — the prompt simply won't show this session.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const actualCurrentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
   const currentSlot = pausedAfterSlotIndex === null ? actualCurrentSlot : null;
@@ -545,10 +588,26 @@ export default function DailyPage() {
         style={{ paddingBottom: "calc(24px + env(safe-area-inset-bottom))" }}
       >
         {loading ? (
-          <LoadingScreen fullScreen label="Loading today" />
+          <LoadingScreen
+            fullScreen
+            label={generatingAttempt != null ? generatingLabel(generatingAttempt) : 'Loading today'}
+          />
         ) : error ? (
-          <div className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm text-[var(--danger)]" style={{ borderColor: 'var(--danger)' }}>
-            {error}
+          // Generation hiccups are warm and retryable, not alarming — keep this
+          // neutral (not --danger) and give the player a one-tap way to retry.
+          <div
+            className="flex flex-col items-start gap-3 rounded-[var(--radius-sm)] border px-3 py-3 text-sm text-[var(--text)]"
+            style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+          >
+            <p className="text-[var(--text-muted)]">{error}</p>
+            <button
+              type="button"
+              onClick={() => void loadQueue()}
+              className="inline-flex min-h-11 items-center rounded-md border px-3 py-1.5 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              Try again
+            </button>
           </div>
         ) : (
           <GameplayChatThread
@@ -589,13 +648,54 @@ export default function DailyPage() {
         </form>
       ) : null}
 
-      {areaTopUp && areaTopUp.maxNew > 0 ? (
-        <TopUpAreasModal
-          existing={areaTopUp.existing}
-          maxNew={areaTopUp.maxNew}
-          onDismiss={() => setAreaTopUp(null)}
-          onSaved={() => setAreaTopUp(null)}
-        />
+      {showFirstRunIntro ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="first-run-intro-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            background: 'rgba(0,0,0,0.45)',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) dismissFirstRunIntro();
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.5rem',
+              maxWidth: '24rem',
+              width: '100%',
+            }}
+          >
+            <p
+              id="first-run-intro-title"
+              className="font-serif text-lg font-semibold text-[var(--text)]"
+            >
+              Your first five
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+              Your first five are drawn from the areas you picked. Answer however you&rsquo;d
+              naturally say it.
+            </p>
+            <button
+              type="button"
+              className="btn-primary mt-5 w-full"
+              onClick={dismissFirstRunIntro}
+            >
+              Start
+            </button>
+          </div>
+        </div>
       ) : null}
     </main>
   );

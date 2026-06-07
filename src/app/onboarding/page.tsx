@@ -6,6 +6,7 @@ import { db, friendInvitations } from '@/server/db';
 import { getPreSeededInterestsForUser, getUserOnboardingProfile } from '@/server/db/queries/users';
 import { hasInviteLinkFriendship } from '@/server/friends/user-invite-token';
 import { assessInterestAnswerability } from '@/server/llm/interests';
+import { convergeDomain } from '@/server/knowledge/converge-domain';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 
 import OnboardingFlow, { type PreSeededInterest } from './OnboardingFlow';
@@ -58,11 +59,23 @@ export default async function OnboardingPage() {
   // stored invite without modifying it, and assessInterestAnswerability fails
   // open, so an LLM outage leaves the friend's picks intact. Seeds are capped at
   // 3, so this is at most a few parallel Haiku checks on a one-time page load.
+  // Run each surviving seed through the same convergence pass as user-typed
+  // adds: when a seed exactly matches a canonical domain that already exists
+  // across the game, swap to that spelling so the invitee joins the shared
+  // domain rather than minting a per-invite variant whose mastery never merges.
+  // Deterministic and DB-only; only the high-confidence exact case is applied
+  // silently — fuzzy seeds keep the inviter's wording (the invitee can still
+  // edit, and any topics they type converge in the review step).
   const checkedSeeds = await Promise.all(
     seeded.interests.map(async (interest) => {
       if (isTooBroadInterest(interest.label)) return null;
       const { answerable } = await assessInterestAnswerability(interest.label);
-      return answerable ? interest : null;
+      if (!answerable) return null;
+      const { candidates } = await convergeDomain(interest.label);
+      const exact = candidates.find((candidate) => candidate.kind === 'exact');
+      return exact
+        ? { ...interest, label: exact.label, broadCategory: exact.broadCategory ?? interest.broadCategory }
+        : interest;
     }),
   );
   const preSeededInterests: PreSeededInterest[] = checkedSeeds

@@ -560,6 +560,18 @@ export async function register() {
       // database — migrate() handles creation; dedup is best-effort regardless.
     }
 
+    // Migration 0071 enables pg_trgm, which convergeDomain()'s fuzzy pass calls
+    // via similarity() (the /api/knowledge/converge route + the onboarding seed
+    // pipeline). similarity() needs no index, so none is created — see the
+    // migration header. A database that records the migration without the
+    // extension present must still boot; if pg_trgm is unavailable the whole
+    // block is skipped — convergence degrades to exact-key + "create new".
+    try {
+      await db.execute(sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+    } catch {
+      // pg_trgm may be unavailable on this database — convergence is best-effort.
+    }
+
     // Migration 0044 adds the nullable User.last_activity_bell_opened_at
     // timestamp used by getBellBadgeCount to compute "rolled-off + unseen"
     // counts. Apply it idempotently in case the migration is recorded
@@ -954,12 +966,12 @@ export async function register() {
     }
 
     // Migration 0056 adds the nullable User.area_top_up_prompt_dismissed_at
-    // timestamp. It records that a user dismissed (or completed) the one-time
-    // "add two more areas" prompt shown to invite-seeded users who only have
-    // three declared interests. Guard for preview/production databases that may
-    // have the migration recorded without the column actually present — the
-    // GET /api/declared-interests/top-up eligibility query selects it and would
-    // 42703 before app code can recover.
+    // timestamp. It recorded that a user dismissed (or completed) the one-time
+    // "add two more areas" prompt. That prompt was removed (onboarding now lets
+    // a new user pick up to 12 areas directly, so the top-up nudge is no longer
+    // needed), but the column is retained as a harmless orphan to keep schema
+    // parity and avoid a destructive migration on existing databases. The guard
+    // stays so partially-recorded preview/production databases don't 42703.
     try {
       await db.execute(sql`
         ALTER TABLE "User"

@@ -60,7 +60,33 @@ export function buildVerifyOtpRequestBody(
   };
 }
 
-export default function LoginPanel() {
+/**
+ * Verify-OTP payload for the invite-prefill flow: no phone is sent — the
+ * server resolves the recipient phone from the invitation token. `userInvite`
+ * is forwarded so a per-user invite link is still honored if present.
+ */
+export function buildInviteVerifyOtpRequestBody(
+  code: string,
+  invitationToken: string,
+  searchParams: URLSearchParams
+) {
+  return {
+    code,
+    invitationToken,
+    useInvitePhone: true,
+    userInvite: readUserInvite(searchParams),
+  };
+}
+
+type InvitePrefill = { inviterName: string; maskedPhone: string };
+
+type LoginPanelProps = {
+  invitePrefill?: InvitePrefill | null;
+};
+
+type Step = 'invite' | 'phone' | 'code';
+
+export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitationToken = readInvitationToken(searchParams);
@@ -68,14 +94,23 @@ export default function LoginPanel() {
 
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  const [step, setStep] = useState<'phone' | 'code'>('phone');
+  // Start on the invite confirmation step only when the link resolved to a
+  // recipient phone; otherwise fall straight through to manual entry.
+  const [step, setStep] = useState<Step>(
+    invitePrefill?.maskedPhone ? 'invite' : 'phone'
+  );
+  // True once the OTP was sent to the invite's phone (so the code step and
+  // verify call use the masked phone + token instead of a typed number).
+  const [invitePhoneMode, setInvitePhoneMode] = useState(false);
+  // Masked phone to display on the code step while in invite-phone mode.
+  const [maskedPhone, setMaskedPhone] = useState(invitePrefill?.maskedPhone ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Controls the bottom-card transition: the title card (in page.tsx) stays
   // fixed; only this form card animates out, swaps content, then animates in.
   const [entering, setEntering] = useState(true);
 
-  const swapStep = useCallback((next: 'phone' | 'code') => {
+  const swapStep = useCallback((next: Step, nextError: string | null = null) => {
     // Return to the top so the title card is back in view after the button
     // press — on mobile the focused input scrolls the page down, and landing
     // mid-page on the next step looks unpolished.
@@ -83,10 +118,52 @@ export default function LoginPanel() {
     setEntering(false); // exit: fade + slide down
     window.setTimeout(() => {
       setStep(next); // swap content while hidden
-      setError(null);
+      // Clear by default; callers can carry an explanatory error onto the next
+      // step (e.g. the invite→manual fallback) since this overwrites it.
+      setError(nextError);
       requestAnimationFrame(() => setEntering(true)); // enter: fade + slide in
     }, 200);
   }, []);
+
+  async function sendCodeToInvitePhone(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+
+    if (!invitationToken) {
+      // No token to resolve a phone from — fall back to manual entry.
+      setInvitePhoneMode(false);
+      swapStep('phone');
+      return;
+    }
+
+    sendTelemetry('friend_invite_auth_started');
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/auth/request-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // No phone: the server resolves the recipient phone from the invite
+        // token and texts the code there. We only ever receive a masked form.
+        body: JSON.stringify({ invitationToken, useInvitePhone: true, userInvite }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        // The invite no longer resolves to a sendable phone — drop to manual
+        // entry so the user isn't stranded, carrying the reason onto the step.
+        setInvitePhoneMode(false);
+        swapStep('phone', data?.message ?? 'Enter your phone number to continue.');
+        return;
+      }
+
+      if (typeof data?.maskedPhone === 'string') setMaskedPhone(data.maskedPhone);
+      setInvitePhoneMode(true);
+      swapStep('code');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function continueWithPhone(event: FormEvent) {
     event.preventDefault();
@@ -136,11 +213,15 @@ export default function LoginPanel() {
 
     setLoading(true);
     try {
+      const body =
+        invitePhoneMode && invitationToken
+          ? buildInviteVerifyOtpRequestBody(trimmedCode, invitationToken, searchParams)
+          : buildVerifyOtpRequestBody(phone, trimmedCode, searchParams);
       const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(buildVerifyOtpRequestBody(phone, trimmedCode, searchParams)),
+        body: JSON.stringify(body),
       });
       const data = await response.json().catch(() => ({}));
 
@@ -171,7 +252,66 @@ export default function LoginPanel() {
         transition: 'opacity 200ms ease, transform 200ms ease',
       }}
     >
-      {step === 'phone' ? (
+      {step === 'invite' ? (
+        <form className="space-y-[14px]" onSubmit={sendCodeToInvitePhone}>
+          {/* Texting glyph (the two-tone speech bubble) — this step is about us
+              sending a code by text, so it mirrors the OTP step's mark. */}
+          <svg
+            className="mx-auto h-14 w-auto"
+            viewBox="-3 -3 54 44"
+            aria-hidden="true"
+          >
+            <g fill="var(--brand-navy)">
+              <ellipse cx="15" cy="15" rx="15" ry="12" />
+              <path d="M3 22 L11 26.5 L1 31 Z" />
+            </g>
+            <g
+              fill="var(--brand-cream-card)"
+              transform="translate(32 23) scale(1.14) translate(-32 -23)"
+            >
+              <ellipse cx="32" cy="23" rx="15" ry="12" />
+              <path d="M44 30 L36 34.5 L46.5 39 Z" />
+            </g>
+            <g fill="var(--brand-orange)">
+              <ellipse cx="32" cy="23" rx="15" ry="12" />
+              <path d="M44 30 L36 34.5 L46.5 39 Z" />
+            </g>
+          </svg>
+          <p className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black">
+            {invitePrefill?.inviterName ?? 'A friend'} invited you to Joshing.
+          </p>
+          <p className="text-center text-[15px] leading-6 text-black/70">
+            We&rsquo;ll text a code to{' '}
+            <span className="whitespace-nowrap font-medium text-black">{maskedPhone}</span>.
+          </p>
+
+          {/* Button + divider + secondary action form a tight 6px cluster,
+              matching the OTP step's rhythm. */}
+          <div className="space-y-1.5">
+            <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+              {loading ? 'Sending…' : 'Send code'}
+            </button>
+
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+              <span className="text-[17px] font-medium text-black">or</span>
+              <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+            </div>
+
+            <button
+              type="button"
+              className="mx-auto block text-[14px] font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              onClick={() => {
+                setInvitePhoneMode(false);
+                swapStep('phone');
+              }}
+              disabled={loading}
+            >
+              Use a different number
+            </button>
+          </div>
+        </form>
+      ) : step === 'phone' ? (
         <form className="space-y-[14px]" onSubmit={continueWithPhone}>
           {/* Solid filled handset, matching the Figma black phone glyph
               (and the filled treatment of the OTP step's bubble icon).
@@ -239,7 +379,9 @@ export default function LoginPanel() {
             htmlFor="code"
           >
             Enter your code for{' '}
-            <span className="whitespace-nowrap">{formatPhoneForDisplay(phone)}</span>
+            <span className="whitespace-nowrap">
+              {invitePhoneMode ? maskedPhone : formatPhoneForDisplay(phone)}
+            </span>
           </label>
           <input
             id="code"
@@ -271,6 +413,8 @@ export default function LoginPanel() {
               className="mx-auto block text-[14px] font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
               onClick={() => {
                 setCode('');
+                // Leaving the invite phone behind — collect a number manually.
+                setInvitePhoneMode(false);
                 swapStep('phone');
               }}
               disabled={loading}

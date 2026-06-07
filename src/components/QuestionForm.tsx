@@ -195,6 +195,29 @@ function alternateAnswersFrom(text: string): string[] {
   return text.split(',').map((answer) => answer.trim()).filter(Boolean).slice(0, 5);
 }
 
+// Small inline loader shown while the LLM suggestion is being fetched, so the
+// answer fields don't flash their placeholders (e.g. "Bucephalus") as if they
+// were a real answer. Mirrors the animated dots in LoadingScreen and reuses the
+// `triangle-loader-dot` class, which carries the reduced-motion guard.
+function InlineLoading({ label = 'Loading' }: { label?: string }) {
+  return (
+    <div
+      className="flex items-center justify-center gap-1 py-10 text-sm font-medium uppercase tracking-wider text-muted-foreground"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label={label}
+    >
+      <span>{label}</span>
+      <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
+        <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0s infinite' }}>.</span>
+        <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0.2s infinite' }}>.</span>
+        <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0.4s infinite' }}>.</span>
+      </span>
+    </div>
+  );
+}
+
 function answersMatch(a: string, b: string | null): boolean {
   if (!b) return true;
   return a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -533,6 +556,9 @@ export function QuestionForm({
       ) : null}
 
       {canShowAnswering ? (
+        state.suggesting ? (
+          <InlineLoading label="Loading" />
+        ) : (
         <>
           {state.stage !== 'SUBMITTING' && (counter || state.suggesting || state.suggestionError) ? (
             <div className="flex flex-wrap items-center gap-3">
@@ -733,6 +759,7 @@ export function QuestionForm({
             {onCancel ? <button type="button" onClick={onCancel} className="btn-ghost" disabled={submitDisabled}>Cancel</button> : null}
           </div>
         </>
+        )
       ) : null}
     </div>
   );

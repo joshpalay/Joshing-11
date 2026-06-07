@@ -19,6 +19,13 @@ type SaveInterestsBody = {
   telemetry?: unknown;
 };
 
+// Onboarding's build-your-world screen caps the selection at 12 (per product
+// spec); the client mirrors this with MAX_INTERESTS in OnboardingFlow. This is
+// the onboarding-specific ceiling and is intentionally lower than the
+// account-wide MAX_ACTIVE_DECLARED_INTERESTS used on daily setup / the
+// knowledge page.
+const MAX_ONBOARDING_INTERESTS = 12;
+
 function parseInterest(value: unknown): DeclaredInterestInput | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 
@@ -84,6 +91,13 @@ export async function POST(request: Request) {
   if (!interests || (interests.length === 0 && !isInviteSkip)) {
     return NextResponse.json(
       { error: 'invalid_request', message: 'Save at least 1 interest, or skip invite suggestions. Domains must be 2 to 100 characters.' },
+      { status: 400 },
+    );
+  }
+
+  if (interests.length > MAX_ONBOARDING_INTERESTS) {
+    return NextResponse.json(
+      { error: 'invalid_request', message: `Pick ${MAX_ONBOARDING_INTERESTS} interests or fewer.` },
       { status: 400 },
     );
   }
