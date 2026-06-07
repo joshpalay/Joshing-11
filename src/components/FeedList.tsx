@@ -1556,6 +1556,7 @@ function FeedListContent({
             openedTerritoryDomain={pickOpenedTerritoryDomain(result.masteryDelta)}
             questionId={sheetItem.question_id}
             feedItemId={sheetItem.id}
+            onRecheck={result.correct ? null : () => submitRecheck(sheetItem)}
             onClose={() => setFeedbackSheetId(null)}
           />
         )

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import {
+  AnswerFeedbackSheet,
   AnsweredByYouCard,
   DirectSentCard,
   DismissedFeedBar,
@@ -31,8 +32,10 @@ vi.mock('next/link', () => ({
 }))
 
 vi.mock('lucide-react', () => ({
+  Check: () => <span aria-hidden="true" />,
   Flag: () => <span aria-hidden="true" />,
   MoreHorizontal: () => <span aria-hidden="true">⋯</span>,
+  Sparkles: () => <span aria-hidden="true" />,
   X: () => <span aria-hidden="true" />,
 }))
 
@@ -331,6 +334,51 @@ describe('Feed answered states', () => {
     // Brand action-link treatment (matches "Answer →"): serif, slate, underlined — no offset-shadow box.
     expect(rendered).toContain('text-[var(--brand-link)]')
     expect(rendered).not.toContain('3px 3px 0 var(--ink)')
+  })
+})
+
+describe('Answer feedback sheet recheck affordance', () => {
+  const baseProps = {
+    question: "Who is Achilles' secret lover?",
+    isCorrect: false,
+    pointsAwarded: null,
+    correctAnswer: 'Patroclus',
+    submittedAnswer: 'Petroclus',
+    explanation: null,
+    creatorNote: null,
+    questionId: 'q1',
+    feedItemId: 'f1',
+    onClose: () => {},
+  }
+
+  it('offers a Recheck → link on a wrong answer when onRecheck is provided', () => {
+    const rendered = html(
+      <AnswerFeedbackSheet
+        {...baseProps}
+        onRecheck={async () => ({ accepted: false, message: '' })}
+      />
+    )
+    expect(rendered).toContain('Recheck →')
+    // Reuses the shared serif slate action link, not a hand-rolled button.
+    expect(rendered).toContain('text-[var(--brand-link)]')
+  })
+
+  it('hides the recheck link when no onRecheck handler is supplied', () => {
+    const rendered = html(<AnswerFeedbackSheet {...baseProps} />)
+    expect(rendered).not.toContain('Recheck →')
+  })
+
+  it('does not offer a recheck on a correct answer', () => {
+    const rendered = html(
+      <AnswerFeedbackSheet
+        {...baseProps}
+        isCorrect
+        pointsAwarded={3}
+        submittedAnswer="Patroclus"
+        onRecheck={async () => ({ accepted: false, message: '' })}
+      />
+    )
+    expect(rendered).not.toContain('Recheck →')
   })
 })
 
