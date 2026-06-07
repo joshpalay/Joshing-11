@@ -225,7 +225,7 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
   if (beat.id === 3) {
     const heading = mode === 'solo'
       ? 'Questions that shaped your cycle.'
-      : 'These people taught you something.';
+      : 'These people gave you a chance to learn more.';
     return (
       <div className="mx-auto max-w-2xl text-center">
         <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">{heading}</h1>
