@@ -78,6 +78,17 @@ const beat5FallbackSchema = z.object({
   totalCreatorPoints: z.number(),
 });
 
+// Beat 6 (Learned): questions the user missed earlier and got right this cycle.
+// Additive beat — declared nullable().optional() so the pre-existing corpus
+// (payloads written before this beat existed) still validates on read.
+const beat6Schema = z.array(
+  z.object({
+    domain: z.string(),
+    questionText: z.string(),
+    correctAnswer: z.string(),
+  }),
+);
+
 export const beatsPayloadSchema = z.object({
   cycleStart: z.string(),
   cycleEnd: z.string(),
@@ -101,6 +112,7 @@ export const beatsPayloadSchema = z.object({
   beat4: beat4Schema.nullable(),
   beat5: beat5Schema.nullable(),
   beat5FriendFallback: beat5FallbackSchema.nullable().optional(),
+  beat6: beat6Schema.nullable().optional(),
 });
 
 export type Beat1Mastered = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
@@ -119,6 +131,8 @@ export type Beat5Gave = {
 
 export type Beat1FriendFallback = { friendName: string; count: number; domains: string[] };
 export type Beat5FriendFallback = { friendName: string; totalCreatorPoints: number };
+export type Beat6LearnedItem = { domain: string; questionText: string; correctAnswer: string };
+export type Beat6Learned = Beat6LearnedItem[];
 
 export type BeatsPayload = {
   cycleStart: string;
@@ -142,6 +156,7 @@ export type BeatsPayload = {
   beat4: Beat4Alignment | null;
   beat5: Beat5Gave | null;
   beat5FriendFallback?: Beat5FriendFallback | null;
+  beat6?: Beat6Learned | null;
 };
 
 const TIER_ORDER: MasteryTier[] = ['establishing', 'familiar', 'solid', 'mastery'];
@@ -537,6 +552,60 @@ async function computeBeat5FriendFallback(
   };
 }
 
+// Cap the "something you learned" beat so the ceremony stays a quick read.
+const BEAT6_MAX_ITEMS = 5;
+
+/**
+ * Beat 6 (Learned) — questions the user got WRONG earlier and got RIGHT this
+ * cycle. "Wrong then right" is exactly answer_state = 'first_correct_after_wrong'
+ * (computeAnswerState in src/server/answer-state.ts only stamps it when a
+ * correct answer lands after a prior wrong attempt on the same user+question).
+ * masteryEvents.userId is the answerer for these surface rows, mirroring
+ * how lately.ts reads correctness off the same column.
+ *
+ * Scope note: masteryEvents.questionId references the canonical questions table,
+ * so this covers house- and friend-authored questions. Pure bot slots that never
+ * minted a canonical question row don't carry the corrected state, so they're
+ * out of scope here.
+ */
+async function computeBeat6(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Beat6Learned | null> {
+  const rows = await db
+    .select({
+      questionId: questions.id,
+      questionText: questions.questionText,
+      answerText: questions.answerText,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+      category: questions.category,
+      deletedAt: questions.deletedAt,
+    })
+    .from(masteryEvents)
+    .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
+    .where(and(
+      eq(masteryEvents.userId, userId),
+      eq(masteryEvents.answerState, 'first_correct_after_wrong'),
+      isNotNull(masteryEvents.questionId),
+      gte(masteryEvents.createdAt, cycleStart),
+      lt(masteryEvents.createdAt, cycleEndExclusive),
+    ))
+    .orderBy(desc(masteryEvents.createdAt));
+
+  // One card per question, keeping the most recent correction (rows are
+  // already newest-first).
+  const seen = new Set<string>();
+  const items: Beat6Learned = [];
+  for (const row of rows) {
+    if (row.deletedAt) continue;
+    if (seen.has(row.questionId)) continue;
+    seen.add(row.questionId);
+    const domain = domainFor(row);
+    if (!domain) continue;
+    items.push({ domain, questionText: row.questionText, correctAnswer: row.answerText });
+    if (items.length >= BEAT6_MAX_ITEMS) break;
+  }
+  return items.length > 0 ? items : null;
+}
+
 /**
  * F3.2 — count friends who answered at least one question in the cycle.
  * Plus the user themselves (always 1). Used to derive ceremony mode.
@@ -565,12 +634,13 @@ async function countActiveAnsweringPlayers(
 
 export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: Date): Promise<BeatsPayload> {
   const cycleEndExclusive = endExclusive(cycleEnd);
-  const [beat1, beat2, beat3, beat4, beat5, activeAnsweringPlayers] = await Promise.all([
+  const [beat1, beat2, beat3, beat4, beat5, beat6, activeAnsweringPlayers] = await Promise.all([
     computeBeat1(userId, cycleStart, cycleEndExclusive),
     computeBeat2(userId, cycleStart, cycleEndExclusive),
     computeBeat3(userId, cycleStart, cycleEndExclusive),
     computeBeat4(userId, cycleStart, cycleEndExclusive),
     computeBeat5(userId, cycleStart, cycleEndExclusive),
+    computeBeat6(userId, cycleStart, cycleEndExclusive),
     countActiveAnsweringPlayers(userId, cycleStart, cycleEndExclusive),
   ]);
 
@@ -599,5 +669,6 @@ export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: D
     beat4: beat4Final,
     beat5,
     beat5FriendFallback,
+    beat6,
   };
 }

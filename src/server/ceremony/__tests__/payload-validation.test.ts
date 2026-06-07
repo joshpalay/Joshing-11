@@ -100,6 +100,28 @@ describe('beatsPayloadSchema (F3.5)', () => {
     expect(result.success).toBe(true)
   })
 
+  it('accepts an optional Beat6 (something you learned this week)', () => {
+    const result = beatsPayloadSchema.safeParse({
+      ...WELL_FORMED,
+      beat6: [
+        { domain: 'jazz', questionText: 'Who composed Giant Steps?', correctAnswer: 'John Coltrane' },
+      ],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a payload omitting Beat6 entirely (pre-existing corpus)', () => {
+    expect(beatsPayloadSchema.safeParse(WELL_FORMED).success).toBe(true)
+  })
+
+  it('rejects a malformed Beat6 item', () => {
+    const result = beatsPayloadSchema.safeParse({
+      ...WELL_FORMED,
+      beat6: [{ domain: 'jazz', questionText: 'Q?' }],
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('rejects malformed friend fallback shapes', () => {
     const result = beatsPayloadSchema.safeParse({
       ...WELL_FORMED,
