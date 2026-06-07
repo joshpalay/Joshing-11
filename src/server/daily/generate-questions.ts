@@ -20,7 +20,8 @@ import {
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
 import {
-  getAuthoredQuestionTexts,
+  authoredAnswerKey,
+  getAuthoredQuestionFacts,
   getKnowledgeBase,
   getRecentDailyQuestionTexts,
   getRecentDomainCounts,
@@ -1406,20 +1407,24 @@ export async function generateBonusQuestionsForDomains(
   const results: Array<{ domain: string; question: GeneratedQuestionRow }> = [];
   if (domains.length === 0) return results;
 
-  const [previousQuestionTexts, previousFactKeys, authoredTexts] = await Promise.all([
+  const [previousQuestionTexts, previousFactKeys, authoredFacts] = await Promise.all([
     getRecentDailyQuestionTexts(userId),
     getRecentFactKeys(userId),
-    getAuthoredQuestionTexts(userId),
+    getAuthoredQuestionFacts(userId),
   ]);
 
   // A +2 bonus must never hand the viewer a question they themselves authored.
   // Authored questions live in the canonical table, not the generated bank, so
   // the standard avoid lists miss them (D-4 §B invariant: "never a friend's
-  // literal answered question"). Fold them into BOTH paths: the Sonnet avoid
-  // list (the semantic Haiku dedupe gate then also catches re-wordings) and a
-  // normalized-text guard the bank pick honors verbatim.
-  const avoidAuthoredTexts = new Set(authoredTexts.map((entry) => normalizeQuestionText(entry.text)));
-  previousQuestionTexts.unshift(...authoredTexts.slice(0, AUTHORED_AVOID_TEXT_LIMIT));
+  // literal answered question"). Guard the bank pick on TWO signatures the
+  // viewer authored: the verbatim text, and the domain+answer key that catches
+  // the same fact re-worded (the embedding backstop covers this too, but only
+  // when VOYAGE embeddings are enabled — these guards hold regardless). Also
+  // seed the Sonnet avoid list with the authored texts (bounded; the semantic
+  // Haiku dedupe gate then also catches re-wordings on the generation path).
+  const avoidAuthoredTexts = new Set(authoredFacts.map((fact) => normalizeQuestionText(fact.text)));
+  const avoidAuthoredAnswerKeys = new Set(authoredFacts.map((fact) => authoredAnswerKey(fact.domain, fact.answer)));
+  previousQuestionTexts.unshift(...authoredFacts.slice(0, AUTHORED_AVOID_TEXT_LIMIT));
 
   for (const domain of domains) {
     // Bank-first. resolveDomainDifficulty maps 'normal' → accessible, so the
@@ -1433,6 +1438,7 @@ export async function generateBonusQuestionsForDomains(
       null,
       previousFactKeys,
       avoidAuthoredTexts,
+      avoidAuthoredAnswerKeys,
     ).catch(() => [] as GeneratedQuestionRow[]);
 
     let row: GeneratedQuestionRow | null = bankPicks[0] ?? null;
@@ -1509,6 +1515,9 @@ async function pickBankPicksForDomains(
   // bonus passes the viewer's authored question texts so the bank can't reuse a
   // fact the viewer themselves wrote (see generateBonusQuestionsForDomains).
   avoidQuestionTexts: ReadonlySet<string> = new Set(),
+  // Bank rows whose domain+answer signature (authoredAnswerKey) matches one of
+  // these are skipped too — the "same fact, different wording" backstop.
+  avoidAnswerKeys: ReadonlySet<string> = new Set(),
 ): Promise<GeneratedQuestionRow[]> {
   const avoidFactKeys = new Set(previousFactKeys.map((entry) => entry.factKey));
   const picks: GeneratedQuestionRow[] = [];
@@ -1522,7 +1531,7 @@ async function pickBankPicksForDomains(
       adaptiveLevel,
     );
     if (!difficulty) continue;
-    const source = await pickBankSource(userId, domain, difficulty, avoidFactKeys, avoidQuestionTexts).catch(() => null);
+    const source = await pickBankSource(userId, domain, difficulty, avoidFactKeys, avoidQuestionTexts, avoidAnswerKeys).catch(() => null);
     if (!source) continue;
     if (isGenericSubcategory(source.canonicalSubcategory)) continue;
 

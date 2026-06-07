@@ -1406,21 +1406,38 @@ export function normalizeQuestionText(text: string): string {
   return text.trim().toLowerCase();
 }
 
+// Domain-scoped answer signature for the "same fact, different wording" guard.
+// An authored question and a bank row that share a normalized answer WITHIN the
+// same canonical subcategory are almost certainly the same fact, even when the
+// phrasings differ enough to dodge the verbatim-text guard. Scoped to the
+// domain so a common answer string (e.g. a composer's name) only collides
+// inside one narrow subcategory, not across the whole pool.
+export function authoredAnswerKey(domain: string | null, answer: string): string {
+  return `${normalizeQuestionText(domain ?? 'unknown')}|${normalizeQuestionText(answer)}`;
+}
+
 // Pure servability check for a bank candidate (extracted for testing). A row is
 // servable only if it has a fact_key (older rows lack one), its fact_key isn't
-// in the viewer's recent avoid set, and its text isn't one the viewer authored
-// (`avoidQuestionTexts`). Keeping this pure lets the loop in pickBankSource stay
-// a thin DB shell while the routing rule itself is unit-tested.
+// in the viewer's recent avoid set, its text isn't one the viewer authored
+// (`avoidQuestionTexts`), and its domain+answer signature isn't one the viewer
+// authored (`avoidAnswerKeys` — the "same fact, different wording" backstop for
+// when embeddings are off/below-threshold). Keeping this pure lets the loop in
+// pickBankSource stay a thin DB shell while the routing rule itself is
+// unit-tested.
 export function isBankRowServable(
-  row: { factKey: string | null; questionText: string },
+  row: { factKey: string | null; questionText: string; answer: string; canonicalSubcategory: string | null },
   avoidFactKeys: ReadonlySet<string>,
   avoidQuestionTexts: ReadonlySet<string>,
+  avoidAnswerKeys: ReadonlySet<string> = new Set(),
 ): boolean {
   if (!row.factKey) return false;
   if (avoidFactKeys.has(row.factKey)) return false;
   // Never serve the viewer trivia they themselves authored — fact_key won't
-  // catch it (authored canonical questions have no fact_key), so match on text.
+  // catch it (authored canonical questions have no fact_key), so match on text…
   if (avoidQuestionTexts.has(normalizeQuestionText(row.questionText))) return false;
+  // …and on the domain+answer signature, which catches a re-worded version of
+  // the same authored fact that verbatim text alone misses.
+  if (avoidAnswerKeys.has(authoredAnswerKey(row.canonicalSubcategory, row.answer))) return false;
   return true;
 }
 
@@ -1430,6 +1447,7 @@ export async function pickBankSource(
   difficulty: BankDifficulty,
   avoidFactKeys: ReadonlySet<string>,
   avoidQuestionTexts: ReadonlySet<string> = new Set(),
+  avoidAnswerKeys: ReadonlySet<string> = new Set(),
 ): Promise<BankSource | null> {
   let candidates: Array<typeof generatedQuestions.$inferSelect>;
   try {
@@ -1471,7 +1489,7 @@ export async function pickBankSource(
   }
 
   for (const row of candidates) {
-    if (!isBankRowServable(row, avoidFactKeys, avoidQuestionTexts)) continue;
+    if (!isBankRowServable(row, avoidFactKeys, avoidQuestionTexts, avoidAnswerKeys)) continue;
     // isBankRowServable guarantees a non-null factKey; this narrows it for TS.
     if (!row.factKey) continue;
     return {
@@ -1611,23 +1629,30 @@ export async function getRecentFactKeys(
   return out;
 }
 
-// Question texts the viewer has AUTHORED (canonical `questions`, creator =
-// viewer). The +2 bonus (and any bank reuse) must never serve a fact the viewer
+// One authored question carried for the +2 bonus exclusion: the domain + text
+// (composes with the generation avoid list, RecentDailyQuestionEntry-shaped)
+// plus the answer (for the domain+answer "same fact, different wording" guard).
+export type AuthoredQuestionFact = RecentDailyQuestionEntry & { answer: string };
+
+// Questions the viewer has AUTHORED (canonical `questions`, creator = viewer).
+// The +2 bonus (and any bank reuse) must never serve a fact the viewer
 // personally wrote a question about — they obviously know it, and being handed
 // your own composed-and-sent question reads as a routing bug (reported 2026-06).
 // The other bonus avoid lists (getRecentDailyQuestionTexts / getRecentFactKeys)
 // read only generatedQuestions where userId = viewer, so authored questions —
 // which live in the canonical table and never in the generated bank — slip
-// through. Returned in the RecentDailyQuestionEntry shape so it composes
-// directly with the generation avoid list (the semantic Haiku dedupe gate then
-// also catches re-wordings); the bank pick matches the same texts verbatim.
-export async function getAuthoredQuestionTexts(
+// through. The `text` composes directly with the generation avoid list (the
+// semantic Haiku dedupe gate then also catches re-wordings) and the bank pick
+// matches it verbatim; the `answer` feeds the domain+answer signature guard
+// (authoredAnswerKey) that catches a re-worded version of the same fact.
+export async function getAuthoredQuestionFacts(
   userId: string,
   limit = 500,
-): Promise<RecentDailyQuestionEntry[]> {
+): Promise<AuthoredQuestionFact[]> {
   const rows = await db
     .select({
       questionText: canonicalQuestions.questionText,
+      answer: canonicalQuestions.answerText,
       domain: canonicalQuestions.canonicalSubcategory,
     })
     .from(canonicalQuestions)
@@ -1641,6 +1666,7 @@ export async function getAuthoredQuestionTexts(
   return rows.map((row) => ({
     domain: row.domain ?? 'unknown',
     text: row.questionText,
+    answer: row.answer,
   }));
 }
 
