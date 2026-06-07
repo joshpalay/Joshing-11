@@ -148,14 +148,11 @@ export default function LoadingScreen({
       />
 
       <div className="relative z-10 mx-6 flex w-full max-w-xs flex-col items-center rounded-2xl bg-[#F5EBD3] px-8 py-10 shadow-[0_8px_24px_rgba(20,18,8,0.18)] ring-1 ring-black/5">
-        <p
-          className="text-3xl font-black tracking-[0.18em] text-[var(--warm-ink)]"
-          style={{ fontFamily: "var(--font-sans-body), system-ui, sans-serif" }}
-        >
+        <p className="font-sans text-3xl font-bold tracking-[0.1em] text-[var(--brand-ink-950)]">
           JOSHING
         </p>
         <div className="mt-6 h-px w-12 bg-[#1a1208]/20" aria-hidden="true" />
-        <p className="mt-5 flex items-baseline gap-1 text-sm font-medium tracking-wider uppercase text-[#1a1208]/70">
+        <p className="mt-5 flex items-baseline gap-1 font-inter text-sm font-normal tracking-wider uppercase text-[#1a1208]/70">
           <span>{label}</span>
           <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
             <span

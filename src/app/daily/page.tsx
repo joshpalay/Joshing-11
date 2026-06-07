@@ -104,8 +104,8 @@ const QUEUE_CREATE_BACKOFF_MS = [2000, 4000, 8000];
 const QUEUE_GENERATION_FAILED_MESSAGE =
   "We're still crafting today's bespoke questions and it's taking longer than usual. Give it a moment and try again.";
 
-function generatingLabel(attempt: number): string {
-  return `Crafting your bespoke questions (attempt ${attempt}/${MAX_QUEUE_CREATE_ATTEMPTS})`;
+function generatingLabel(): string {
+  return 'Crafting your bespoke questions';
 }
 
 // Returns the slot the player should be on, or null when the round is over.
@@ -618,7 +618,7 @@ export default function DailyPage() {
         {loading ? (
           <LoadingScreen
             fullScreen
-            label={generatingAttempt != null ? generatingLabel(generatingAttempt) : 'Loading today'}
+            label={generatingAttempt != null ? generatingLabel() : 'Loading today'}
           />
         ) : error ? (
           // Generation hiccups are warm and retryable, not alarming — keep this
