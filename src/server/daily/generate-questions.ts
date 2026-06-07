@@ -4,6 +4,7 @@ import {
   HAIKU_GATE_TIMEOUT_MS,
   HAIKU_MODEL,
   INSTRUCTION_USER_INPUT_GUIDANCE,
+  INSTRUCTION_SCOPING_QUALIFIER,
   extractTextContent,
   generateInsideJoke,
   getAnthropicClient,
@@ -94,6 +95,9 @@ Before emitting, mentally remove the work's title from the question. If what rem
 
 ONE CLEAN ANSWER (Rule 3 — ALL tiers):
 The answer must be a single short, checkable response — a name, a title, a word, a short phrase. NEVER a sentence or paragraph that explains the answer. If the natural answer is explanatory (e.g. "he understands the language of birds"), re-aim the question so the answer is crisp (e.g. ask what specific ability the potion grants → "birdsong"). Paragraph-length answers grade unpredictably and must not be produced. (This sharpens, but does not relax, the single-answer factual-recall and no-answer-leak rules above — a cleverer setup still must not name its own answer.)
+
+NAMED-AUTHORITY RULE (Rule 4 — scoping qualifiers, ALL tiers):
+When you pin a question to a specific jurisdiction, ruleset, edition, organization, version, region, or year ("In Michigan…", "under FIDE rules…", "in the 1st edition…"), the answer you emit MUST be the one correct UNDER THAT named authority — not the more common or default answer. Named specifics frequently override the default on purpose: e.g. Michigan's Rules of Evidence permit wide-open cross-examination, so "beyond the scope of direct" is NOT a valid objection there, though it is under the Federal Rules. If you are not certain how the named authority departs from the default, pick a different angle rather than risk an answer keyed to the generic default.
 
 CALIBRATION PAIRS (generic → fan-salient; study these — concrete pairs calibrate harder than abstract principles):
 - BAD (generic, roster): "In Gilmore Girls, what is the name of Lorelai's dog?" → GOOD (fan-salient, same answer): "Lorelai names her dog after a Canadian crooner — a running gag, since the real musician also haunts her dreams. What's the dog called?" → "Paul Anka"
@@ -645,7 +649,7 @@ Flag (drop) ONLY questions you judge WRONG with high confidence. A high bar appl
 Return JSON only:
 { "drop_indices": [list of zero-based indices whose stated answer is wrong], "reasons": { "<index>": "<short reason naming the correct answer>" } }
 
-If no answers are wrong, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+If no answers are wrong, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
 
 export function parseFactualGateResponse(
   raw: string,

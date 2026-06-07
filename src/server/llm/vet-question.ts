@@ -16,6 +16,7 @@ import {
   HAIKU_MODEL,
   HAIKU_GATE_TIMEOUT_MS,
   INSTRUCTION_USER_INPUT_GUIDANCE,
+  INSTRUCTION_SCOPING_QUALIFIER,
   extractTextContent,
   getAnthropicClient,
   loggedMessagesCreate,
@@ -62,7 +63,7 @@ Also emit:
 - overall_score: number 0..1 — your composite confidence the question belongs in a shared pool.
 - reason: short single sentence explaining the verdict (≤ 140 chars), human-readable, no markdown.
 
-Return only valid JSON with keys: factual, quality, safety, answer_leaked, overall_score, reason. No prose outside the object.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+Return only valid JSON with keys: factual, quality, safety, answer_leaked, overall_score, reason. No prose outside the object.${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
 
 function buildUserMessage(input: VetQuestionInput): string {
   const lines = [
