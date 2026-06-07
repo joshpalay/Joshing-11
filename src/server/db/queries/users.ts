@@ -140,8 +140,7 @@ export function setFollowPrivacy(id: string, followPrivacy: 'public' | 'approval
 // they like. This is a defensive *sanity* bound only: every save fans out into
 // per-interest Haiku categorization (categorizeIfNeeded) and seeds a mastery row,
 // so an unbounded array from a client would be a cost/DoS vector. No real user
-// reaches it. (The separate "3 → 5" one-time top-up nudge lives in
-// src/server/area-top-up/rules.ts and is unaffected.)
+// reaches it.
 export const MAX_ACTIVE_DECLARED_INTERESTS = 100;
 
 // Thrown when a write would push the user past the sanity bound above. Callers
