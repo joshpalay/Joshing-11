@@ -21,8 +21,9 @@ describe('OnboardingFlow invited interests', () => {
       />
     )
 
-    expect(html).toContain('What are you into?')
-    expect(html).toContain('Your interests · 1')
+    expect(html).toContain('Pick your starting areas')
+    expect(html).toContain('Selected areas')
+    expect(html).toContain('1 selected · pick at least 2 more')
     expect(html).toContain('Sondheim')
   })
 
@@ -40,7 +41,8 @@ describe('OnboardingFlow invited interests', () => {
       />
     )
 
-    expect(html).toContain('Your interests · 3')
+    expect(html).toContain('Selected areas')
+    expect(html).toContain('3 selected · add up to 9 more')
     expect(html).toContain('Sondheim')
     expect(html).toContain('Jazz')
     expect(html).toContain('Poetry')
@@ -55,8 +57,8 @@ describe('OnboardingFlow invited interests', () => {
       />
     )
 
-    expect(html).toContain('What are you into?')
-    expect(html).toContain('Your interests · 0')
+    expect(html).toContain('Pick your starting areas')
+    expect(html).toContain('0 selected')
     expect(html).not.toContain('suggested these for you.')
   })
 })
@@ -109,6 +111,6 @@ describe('OnboardingFlow display-name gate', () => {
     )
 
     expect(html).not.toContain('What should we call you?')
-    expect(html).toContain('What are you into?')
+    expect(html).toContain('Pick your starting areas')
   })
 })
