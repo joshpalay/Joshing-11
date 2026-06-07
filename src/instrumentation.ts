@@ -966,12 +966,12 @@ export async function register() {
     }
 
     // Migration 0056 adds the nullable User.area_top_up_prompt_dismissed_at
-    // timestamp. It records that a user dismissed (or completed) the one-time
-    // "add two more areas" prompt shown to invite-seeded users who only have
-    // three declared interests. Guard for preview/production databases that may
-    // have the migration recorded without the column actually present — the
-    // GET /api/declared-interests/top-up eligibility query selects it and would
-    // 42703 before app code can recover.
+    // timestamp. It recorded that a user dismissed (or completed) the one-time
+    // "add two more areas" prompt. That prompt was removed (onboarding now lets
+    // a new user pick up to 12 areas directly, so the top-up nudge is no longer
+    // needed), but the column is retained as a harmless orphan to keep schema
+    // parity and avoid a destructive migration on existing databases. The guard
+    // stays so partially-recorded preview/production databases don't 42703.
     try {
       await db.execute(sql`
         ALTER TABLE "User"

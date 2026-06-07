@@ -8,7 +8,6 @@ import { X } from 'lucide-react';
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
 import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
-import { TopUpAreasModal, type TopUpInterest } from '@/components/daily/TopUpAreasModal';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
@@ -36,7 +35,14 @@ type QueueResponse = {
   queue_id: string;
   queue_date: string;
   slots: QueueSlot[];
+  is_first_daily?: boolean;
 };
+
+// One-time intro shown before a brand-new user's first question, explaining that
+// their first five are seeded from the areas they picked in onboarding. The
+// server flags the genuinely-first, untouched queue (is_first_daily); this local
+// flag is belt-and-suspenders so a pre-answer reload doesn't show it twice.
+const FIRST_RUN_INTRO_SEEN_KEY = 'joshing:daily-first-run-intro-seen';
 
 type AnswerResponse = {
   isCorrect?: boolean;
@@ -143,7 +149,29 @@ export default function DailyPage() {
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
   const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
-  const [areaTopUp, setAreaTopUp] = useState<{ existing: TopUpInterest[]; maxNew: number } | null>(null);
+  const [showFirstRunIntro, setShowFirstRunIntro] = useState(false);
+
+  // Show the first-run intro once, only for the server-flagged first untouched
+  // queue and only if this device hasn't already dismissed it.
+  const maybeShowFirstRunIntro = useCallback((firstDaily: boolean | undefined) => {
+    if (!firstDaily) return;
+    try {
+      if (window.localStorage.getItem(FIRST_RUN_INTRO_SEEN_KEY)) return;
+    } catch {
+      // Private mode / storage disabled: fall through and show it (server already
+      // gated on the genuinely-first, untouched queue, so this is still one-time).
+    }
+    setShowFirstRunIntro(true);
+  }, []);
+
+  const dismissFirstRunIntro = useCallback(() => {
+    setShowFirstRunIntro(false);
+    try {
+      window.localStorage.setItem(FIRST_RUN_INTRO_SEEN_KEY, '1');
+    } catch {
+      // Non-fatal — the server flag won't re-fire once a slot is answered anyway.
+    }
+  }, []);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -203,6 +231,7 @@ export default function DailyPage() {
         }
         const refetchSlots = Array.isArray(refetchBody.slots) ? refetchBody.slots : [];
         setQueue({ queue_id: refetchBody.queue_id, queue_date: refetchBody.queue_date, slots: refetchSlots });
+        maybeShowFirstRunIntro(refetchBody.is_first_daily);
         setLoading(false);
         return;
       }
@@ -227,13 +256,14 @@ export default function DailyPage() {
         queue_date: body.queue_date,
         slots,
       });
+      maybeShowFirstRunIntro(body.is_first_daily);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load today.');
     } finally {
       setGeneratingAttempt(null);
       setLoading(false);
     }
-  }, [router]);
+  }, [router, maybeShowFirstRunIntro]);
 
   useEffect(() => {
     const initialTimer = window.setTimeout(() => {
@@ -242,36 +272,6 @@ export default function DailyPage() {
 
     return () => window.clearTimeout(initialTimer);
   }, [loadQueue]);
-
-  // One-time nudge for invite-seeded users who only declared three interests:
-  // the next time they play, offer to top up to five. Eligibility (onboarded,
-  // exactly three active interests, not yet dismissed) and persistence both
-  // live server-side, so this just asks whether to show and renders the modal.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch('/api/declared-interests/top-up', {
-          cache: 'no-store',
-          credentials: 'include',
-        });
-        if (!response.ok) return;
-        const body = (await response.json().catch(() => null)) as
-          | { eligible?: boolean; existing?: TopUpInterest[]; remainingSlots?: number }
-          | null;
-        if (cancelled || !body?.eligible) return;
-        setAreaTopUp({
-          existing: Array.isArray(body.existing) ? body.existing : [],
-          maxNew: Math.max(0, body.remainingSlots ?? 0),
-        });
-      } catch {
-        // Non-fatal — the prompt simply won't show this session.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const actualCurrentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
   const currentSlot = pausedAfterSlotIndex === null ? actualCurrentSlot : null;
@@ -648,13 +648,54 @@ export default function DailyPage() {
         </form>
       ) : null}
 
-      {areaTopUp && areaTopUp.maxNew > 0 ? (
-        <TopUpAreasModal
-          existing={areaTopUp.existing}
-          maxNew={areaTopUp.maxNew}
-          onDismiss={() => setAreaTopUp(null)}
-          onSaved={() => setAreaTopUp(null)}
-        />
+      {showFirstRunIntro ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="first-run-intro-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            background: 'rgba(0,0,0,0.45)',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) dismissFirstRunIntro();
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.5rem',
+              maxWidth: '24rem',
+              width: '100%',
+            }}
+          >
+            <p
+              id="first-run-intro-title"
+              className="font-serif text-lg font-semibold text-[var(--text)]"
+            >
+              Your first five
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+              Your first five are drawn from the areas you picked. Answer however you&rsquo;d
+              naturally say it.
+            </p>
+            <button
+              type="button"
+              className="btn-primary mt-5 w-full"
+              onClick={dismissFirstRunIntro}
+            >
+              Start
+            </button>
+          </div>
+        </div>
       ) : null}
     </main>
   );

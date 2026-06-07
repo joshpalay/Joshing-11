@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getTodaysDailyQueue: vi.fn(),
   carryForwardUntouchedDailyQueue: vi.fn(),
   clearStaleShortTodayQueue: vi.fn(),
+  countDailyQueues: vi.fn(),
   getKnowledgeBase: vi.fn(),
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   getTodaysDailyQueue: mocks.getTodaysDailyQueue,
   carryForwardUntouchedDailyQueue: mocks.carryForwardUntouchedDailyQueue,
   clearStaleShortTodayQueue: mocks.clearStaleShortTodayQueue,
+  countDailyQueues: mocks.countDailyQueues,
   getKnowledgeBase: mocks.getKnowledgeBase,
   pickEligibleAuthoredQuestions: mocks.pickEligibleAuthoredQuestions,
   pickHouseQuestions: mocks.pickHouseQuestions,
@@ -80,6 +82,8 @@ beforeEach(() => {
   mocks.getTodaysDailyQueue.mockResolvedValue(null);
   mocks.carryForwardUntouchedDailyQueue.mockResolvedValue(false);
   mocks.clearStaleShortTodayQueue.mockResolvedValue(false);
+  // Returning player; this suite checks the resting allow-set, not first-run seeding.
+  mocks.countDailyQueues.mockResolvedValue(3);
 
   mocks.pickEligibleAuthoredQuestions.mockResolvedValue([]);
   mocks.pickHouseQuestions.mockResolvedValue([]);

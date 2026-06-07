@@ -1,6 +1,7 @@
 import {
   carryForwardUntouchedDailyQueue,
   clearStaleShortTodayQueue,
+  countDailyQueues,
   createDailyQueueItem,
   createDailyQueueItemFromAuthored,
   createDailyQueueItemFromHouse,
@@ -111,6 +112,19 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
   ]);
+
+  // First Daily Five seeding (PRD prompt 5). We've passed the existing-queue and
+  // carry-forward early returns above, so if the user has never had a queue this
+  // is genuinely their first. In random mode the generator then draws the palette
+  // from declared interests in selection order (strong- vs light-signal). Never
+  // let this count query block queue building — default to non-first-run on error.
+  let isFirstRun = false;
+  try {
+    isFirstRun = (await countDailyQueues(userId)) === 0;
+  } catch (error) {
+    console.warn('[daily] countDailyQueues failed; treating as non-first-run', error);
+  }
+
   if (knowledgeBase.length === 0) {
     throw new DailyQueueFillError(
       'no_knowledge_base',
@@ -177,7 +191,7 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
 
   const remaining = DAILY_QUEUE_SIZE - authored.length - housePicks.length;
   const generated = remaining > 0
-    ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining))
+    ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining), { firstRun: isFirstRun })
     : [];
 
   // Cross-source dedup by normalized question text. The authored picker
@@ -246,7 +260,7 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     topUpRounds += 1;
     const roundShortfall =
       DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length);
-    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(roundShortfall));
+    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(roundShortfall), { firstRun: isFirstRun });
     let recoveredThisRound = 0;
     for (const question of extra) {
       if (isGenericSubcategory(question.canonicalSubcategory)) {

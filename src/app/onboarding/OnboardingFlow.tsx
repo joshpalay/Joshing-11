@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Edit3, Loader2, X } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
 import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField'
 
 // Condensed onboarding: name → handle → one interests screen (warm-up is an
@@ -77,22 +77,43 @@ const WARMUP_FIELDS: Array<{
 ]
 
 const LOADING_COPY = [
-  'Reading your answers...',
-  'Looking for connections...',
-  'Building your map...',
+  'Reading your answers…',
+  'Finding good question areas…',
+  'Turning these into question areas…',
 ]
 
 const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
   { step: 'display-name', label: 'Name' },
   { step: 'handle', label: 'Handle' },
-  { step: 'review', label: 'Interests' },
+  { step: 'review', label: 'Areas' },
 ]
 
 const MIN_INTERESTS = 3
-// Onboarding caps the build-your-world selection at 12 (per product spec). The
-// cap also bounds the save path's per-interest LLM fan-out. Inviter-suggested
-// topics live in selectedInterests too, so they count toward this ceiling.
+// Onboarding caps the starting-areas selection at 12 (per product spec). The cap
+// also bounds the save path's per-interest LLM fan-out. Inviter-suggested topics
+// live in selectedInterests too, so they count toward this ceiling.
 const MAX_INTERESTS = 12
+
+// Bottom counter copy that mirrors the selection state without dashboard-speak:
+// "0 selected" → "2 selected · pick at least 1 more" → "6 selected · add up to 6
+// more" → "12 selected · that's plenty".
+function selectionCounterCopy(count: number): string {
+  if (count <= 0) return '0 selected'
+  if (count < MIN_INTERESTS) {
+    const remaining = MIN_INTERESTS - count
+    return `${count} selected · pick at least ${remaining} more`
+  }
+  if (count >= MAX_INTERESTS) return `${MAX_INTERESTS} selected · that's plenty`
+  return `${count} selected · add up to ${MAX_INTERESTS - count} more`
+}
+
+// One primary CTA, its label tracking the selection: locked until 3, a warm
+// "that's plenty" flourish at the cap, "Start with these" in between.
+function startCtaCopy(count: number): string {
+  if (count < MIN_INTERESTS) return 'Pick at least 3 to start'
+  if (count >= MAX_INTERESTS) return "That's plenty — start with these"
+  return 'Start with these'
+}
 
 function normalizeDomain(domain: string) {
   return domain.trim().replace(/\s+/g, ' ')
@@ -218,9 +239,10 @@ export default function OnboardingFlow({
   const [proposedInterests, setProposedInterests] = useState<
     ProposedInterest[] | null
   >(null)
-  const [inviteInterests, setInviteInterests] = useState<PreSeededInterest[]>(
-    () => preSeededInterests
-  )
+  // Inviter-seeded suggestions are immutable after the initial pre-selection: the
+  // invitee keeps, ignores, or removes them (and adds their own), but never edits
+  // the wording inline — so this is a stable value, not state.
+  const inviteInterests: PreSeededInterest[] = preSeededInterests
   const [selectedInterests, setSelectedInterests] = useState<
     SelectedInterest[]
   >(() =>
@@ -235,9 +257,6 @@ export default function OnboardingFlow({
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingCopyIndex, setLoadingCopyIndex] = useState(0)
-  const [editingKey, setEditingKey] = useState<string | null>(null)
-  const [editingDomain, setEditingDomain] = useState('')
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const displayInviterName = inviterName?.trim()
     ? inviterName.trim()
     : 'A friend'
@@ -263,6 +282,53 @@ export default function OnboardingFlow({
       ),
     ],
     [inviteInterests, proposedInterests]
+  )
+
+  const isFromInvite = (interest: ProposedInterest) =>
+    inviteInterests.some(
+      (seeded) =>
+        selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) ===
+        selectedKey(toSelected(interest) ?? { domain: '', broadCategory: '' })
+    )
+
+  // Suggestions split into two scannable groups, each shown only when it has
+  // unselected items: the inviter's picks ("Suggested by {name}") and any
+  // warm-up-generated picks ("More ideas"). Selected suggestions move up into the
+  // "Selected areas" chips, so they drop out of these lists automatically.
+  const inviteSuggestions = inviteInterests.filter(
+    (interest) => !isSelected(selectedInterests, interest)
+  )
+  const moreIdeas = reviewInterests.filter(
+    (interest) =>
+      !isSelected(selectedInterests, interest) && !isFromInvite(interest)
+  )
+  const atSelectionCap = selectedInterests.length >= MAX_INTERESTS
+
+  // Compact, tappable suggestion chips (not large cards): just the area name with
+  // a "+" affordance. Tapping adds it to Selected areas. No rationale paragraphs
+  // or category labels — keeps the screen scannable on mobile.
+  const renderSuggestionChips = (list: ProposedInterest[], keyPrefix: string) => (
+    <div className="flex flex-wrap gap-2">
+      {list.map((interest) => (
+        <button
+          key={`${keyPrefix}-${interest.domain}`}
+          type="button"
+          onClick={() => toggleInterest(interest)}
+          disabled={atSelectionCap}
+          title={
+            atSelectionCap
+              ? `${MAX_INTERESTS} max — remove one to add another`
+              : undefined
+          }
+          className="bg-card inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-45"
+        >
+          <span aria-hidden="true" className="text-muted-foreground">
+            +
+          </span>
+          {interest.domain}
+        </button>
+      ))}
+    </div>
   )
 
   useEffect(() => {
@@ -355,60 +421,6 @@ export default function OnboardingFlow({
     })
   }
 
-  function beginEdit(interest: ProposedInterest) {
-    const selected = toSelected(interest)
-    if (!selected) return
-
-    setEditingKey(selectedKey(selected))
-    setEditingDomain(selected.domain)
-  }
-
-  function saveEdit(interest: ProposedInterest) {
-    const selected = toSelected(interest)
-    const nextDomain = normalizeDomain(editingDomain)
-    if (!selected || nextDomain.length < 2) return
-
-    const edited = { ...interest, domain: nextDomain }
-    setInviteInterests((current) =>
-      current.map((item) =>
-        selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) ===
-        selectedKey(selected)
-          ? edited
-          : item
-      )
-    )
-    setProposedInterests(
-      (current) =>
-        current?.map((item) =>
-          selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) ===
-          selectedKey(selected)
-            ? edited
-            : item
-        ) ?? current
-    )
-    setSelectedInterests((current) =>
-      current.map((item) =>
-        selectedKey(item) === selectedKey(selected)
-          ? { ...item, domain: nextDomain }
-          : item
-      )
-    )
-    setEditingKey(null)
-    setEditingDomain('')
-  }
-
-  function startLongPress(interest: ProposedInterest) {
-    clearLongPress()
-    longPressTimer.current = setTimeout(() => beginEdit(interest), 500)
-  }
-
-  function clearLongPress() {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-  }
-
   async function generateProposals() {
     if (!canGenerate) return
 
@@ -458,7 +470,7 @@ export default function OnboardingFlow({
     }
 
     // Validate answerability up front: interests are staged client-side and not
-    // persisted until "Lock it in", so without this a topic with no factual
+    // persisted until "Start with these", so without this a topic with no factual
     // basis ("my cat") would only be caught at the very end. The check fails
     // open server-side, so an LLM outage never blocks staging.
     const check = await fetch('/api/interests/check', {
@@ -800,17 +812,15 @@ export default function OnboardingFlow({
           {currentStep === 'review' ? (
             <div className="flex flex-1 flex-col gap-7">
               <StepHeader
-                title="What are you into?"
-                subtitle={`Add at least ${MIN_INTERESTS} things you'd love to be asked about. Tap a suggestion, write your own, or get ideas from the prompts.`}
+                title="Pick your starting areas"
+                subtitle="Choose topics that would make good questions for you. You can change these later."
               />
 
               <div className="space-y-3">
-                <p className="text-sm font-medium">
-                  Your interests · {selectedInterests.length}
-                </p>
+                <p className="text-sm font-medium">Selected areas</p>
                 {selectedInterests.length === 0 ? (
                   <p className="text-muted-foreground text-sm">
-                    Nothing yet — add at least {MIN_INTERESTS} below.
+                    Nothing yet — add a few below.
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
@@ -832,109 +842,30 @@ export default function OnboardingFlow({
 
               <AddTopicField
                 heading="Add your own"
-                placeholder="e.g. Byzantine Coinage"
+                placeholder="Add anything: a book, musician, team, era, show, place, person, or theory…"
                 maxLength={100}
                 convergeBeforeAdd
                 disabled={selectedInterests.length >= MAX_INTERESTS}
                 existingLabels={selectedInterests.map((item) => item.domain)}
                 onAdd={addSelectedInterest}
                 inputClassName="bg-background focus:ring-ring h-11 min-w-0 flex-1 rounded-md border px-3 text-base outline-none focus:ring-2 disabled:opacity-60"
-                buttonClassName="btn-primary h-11 px-5"
+                buttonClassName="bg-card h-11 rounded-md border px-5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
                 chipClassName="rounded-md border bg-card px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50"
                 mutedClassName="text-muted-foreground text-sm"
                 errorClassName="text-destructive mt-3 text-sm"
               />
 
-              {reviewInterests.some(
-                (interest) => !isSelected(selectedInterests, interest)
-              ) ? (
+              {inviteSuggestions.length > 0 ? (
                 <div className="space-y-3">
-                  <p className="text-sm font-medium">Suggestions</p>
-                  {reviewInterests
-                    .filter((interest) => !isSelected(selectedInterests, interest))
-                    .map((interest) => {
-                      const normalized = toSelected(interest)
-                      const atCap = selectedInterests.length >= MAX_INTERESTS
-                      const fromInvite = inviteInterests.some(
-                        (seeded) =>
-                          selectedKey(
-                            toSelected(seeded) ?? { domain: '', broadCategory: '' }
-                          ) ===
-                          selectedKey(normalized ?? { domain: '', broadCategory: '' })
-                      )
-                      const key = `${interest.domain}-${interest.broadCategory}`
-                      const editing = normalized
-                        ? editingKey === selectedKey(normalized)
-                        : false
+                  <p className="text-sm font-medium">Suggested by {displayInviterName}</p>
+                  {renderSuggestionChips(inviteSuggestions, 'invite')}
+                </div>
+              ) : null}
 
-                      return (
-                        <div
-                          key={key}
-                          className={[
-                            'bg-card rounded-lg border p-4 transition',
-                            atCap ? 'opacity-45' : '',
-                          ].join(' ')}
-                          title={atCap ? `${MAX_INTERESTS} max - remove one to add another` : undefined}
-                          onPointerDown={() => startLongPress(interest)}
-                          onPointerUp={clearLongPress}
-                          onPointerLeave={clearLongPress}
-                        >
-                          {editing ? (
-                            <div className="space-y-3">
-                              <input
-                                className="bg-background text-foreground focus:ring-ring h-11 w-full rounded-md border px-3 text-base outline-none focus:ring-2"
-                                value={editingDomain}
-                                maxLength={100}
-                                onChange={(event) => setEditingDomain(event.target.value)}
-                              />
-                              <div className="flex gap-2">
-                                <button type="button" className="btn-primary h-9" onClick={() => saveEdit(interest)}>
-                                  Save
-                                </button>
-                                <button type="button" className="btn-ghost h-9" onClick={() => setEditingKey(null)}>
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex gap-3">
-                              <button
-                                type="button"
-                                className="min-w-0 flex-1 text-left"
-                                onClick={() => toggleInterest(interest)}
-                                disabled={atCap}
-                              >
-                                <span className="block text-xl font-semibold tracking-normal">
-                                  {interest.domain}
-                                </span>
-                                <span className="text-muted-foreground mt-1 block text-xs font-medium uppercase">
-                                  {interest.broadCategory}
-                                </span>
-                                {interest.rationale ? (
-                                  <span className="text-muted-foreground mt-3 block text-sm leading-6 italic">
-                                    {interest.rationale}
-                                  </span>
-                                ) : null}
-                                {fromInvite ? (
-                                  <span className="text-muted-foreground mt-3 inline-flex rounded-sm border px-2 py-1 text-[11px] font-semibold uppercase">
-                                    From {displayInviterName}
-                                  </span>
-                                ) : null}
-                              </button>
-                              <button
-                                type="button"
-                                className="hover:bg-muted grid size-9 shrink-0 place-items-center rounded-md border"
-                                aria-label={`Edit ${interest.domain}`}
-                                title="Edit"
-                                onClick={() => beginEdit(interest)}
-                              >
-                                <Edit3 className="size-4" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+              {moreIdeas.length > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">More ideas</p>
+                  {renderSuggestionChips(moreIdeas, 'idea')}
                 </div>
               ) : null}
 
@@ -997,11 +928,7 @@ export default function OnboardingFlow({
                   </div>
                 ) : null}
                 <p className="text-muted-foreground mb-3 text-sm">
-                  {selectedInterests.length < MIN_INTERESTS
-                    ? `Pick at least ${MIN_INTERESTS} to continue (${selectedInterests.length}/${MIN_INTERESTS}).`
-                    : selectedInterests.length >= MAX_INTERESTS
-                      ? `${MAX_INTERESTS}/${MAX_INTERESTS} — that's the max.`
-                      : `${selectedInterests.length} selected.`}
+                  {selectionCounterCopy(selectedInterests.length)}
                 </p>
                 <button
                   type="button"
@@ -1009,7 +936,7 @@ export default function OnboardingFlow({
                   onClick={() => saveInterests()}
                   disabled={selectedInterests.length < MIN_INTERESTS || isLoading}
                 >
-                  {isLoading ? 'Saving...' : 'Lock it in'}
+                  {isLoading ? 'Saving…' : startCtaCopy(selectedInterests.length)}
                 </button>
               </div>
             </div>
