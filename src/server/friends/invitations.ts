@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto'
 
 import { and, desc, eq, gt, isNotNull, isNull, or } from 'drizzle-orm'
 
+import { maskPhoneE164 } from '@/lib/phone-e164'
 import { db, friendInvitations, users } from '@/server/db'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
 import { hashTelemetryValue, logTelemetry } from '@/server/telemetry'
@@ -30,6 +31,14 @@ export type OutgoingFriendInvitation = FriendInvitation & {
 export type FriendInvitationLanding = {
   status: 'valid' | 'expired' | 'accepted' | 'invalid'
   inviterName: string
+}
+
+export type InvitePrefill = {
+  inviterName: string
+  // Server-only: the recipient's E.164 phone resolved from the invite token.
+  // Never expose this to the client — surface `maskedPhone` instead.
+  inviteePhone: string
+  maskedPhone: string
 }
 
 export type CreateFriendInvitationInput = {
@@ -152,6 +161,48 @@ export async function getFriendInvitationLandingByToken(
   })
 
   return { status: 'valid', inviterName }
+}
+
+/**
+ * Resolve a valid, pending invite token to the data needed to prefill the
+ * login screen with the recipient's phone — the inviter's name, the raw
+ * recipient phone (server-only, for sending/verifying the OTP), and a masked
+ * form safe to show the client. Returns null unless the invite is still
+ * actionable (not accepted/cancelled/expired) and has a recipient phone, so
+ * callers naturally fall back to manual phone entry.
+ */
+export async function getInvitePrefillByToken(
+  token: string,
+  now = new Date()
+): Promise<InvitePrefill | null> {
+  const normalizedToken = token.trim()
+  if (!normalizedToken) return null
+
+  const [row] = await db
+    .select({
+      acceptedAt: friendInvitations.acceptedAt,
+      cancelledAt: friendInvitations.cancelledAt,
+      expiresAt: friendInvitations.expiresAt,
+      inviteePhone: friendInvitations.inviteePhone,
+      inviterName: users.displayName,
+    })
+    .from(friendInvitations)
+    .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
+    .where(eq(friendInvitations.token, normalizedToken))
+    .limit(1)
+
+  if (!row) return null
+  if (row.acceptedAt || row.cancelledAt) return null
+  if (row.expiresAt <= now) return null
+
+  const inviteePhone = row.inviteePhone?.trim()
+  if (!inviteePhone) return null
+
+  return {
+    inviterName: displayInviterName(row.inviterName),
+    inviteePhone,
+    maskedPhone: maskPhoneE164(inviteePhone),
+  }
 }
 
 function normalizeRequiredText(value: string, fieldName: string) {

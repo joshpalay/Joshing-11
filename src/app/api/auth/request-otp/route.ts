@@ -5,13 +5,22 @@ import { z } from 'zod';
 import { isUsPhoneNumber, normalizePhone, requestOtp } from '@/server/auth';
 import { db, users } from '@/server/db';
 import {
+  getInvitePrefillByToken,
   hasValidPendingInvitationForPhone,
+  INVITATION_ACCEPTANCE_ERROR_MESSAGE,
   INVITE_REQUIRED_MESSAGE,
 } from '@/server/friends/invitations';
 import { resolveInviteLink } from '@/server/friends/user-invite-token';
 
 const bodySchema = z.object({
-  phone: z.string().trim().min(1),
+  // Optional: in the invite-prefill flow (useInvitePhone) the client sends no
+  // phone — the recipient phone is resolved server-side from the invite token.
+  phone: z.string().trim().min(1).optional(),
+  // SMS friend-invitation token. When `useInvitePhone` is set, the recipient
+  // phone is read from this invitation and the code is texted there — the raw
+  // phone never crosses to the client (only a masked form is returned).
+  invitationToken: z.string().trim().min(1).nullish(),
+  useInvitePhone: z.boolean().optional(),
   // Per-user evergreen invite link (B-Friends-3). When a brand-new phone
   // arrives via /u/<handle>/<token>, the invitation is NOT phone-targeted, so
   // hasValidPendingInvitationForPhone() can't see it. The link itself is the
@@ -35,7 +44,37 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    // Invite-prefill flow: resolve the recipient phone from the invite token
+    // and text the code there. The valid+pending check inherently satisfies
+    // the invite gate, so no phone or separate gate check is needed. We return
+    // only a masked phone — the raw number never leaves the server.
+    if (parsed.data.useInvitePhone && parsed.data.invitationToken) {
+      const prefill = await getInvitePrefillByToken(parsed.data.invitationToken);
+      if (!prefill) {
+        return NextResponse.json(
+          { error: 'invalid_invitation', message: INVITATION_ACCEPTANCE_ERROR_MESSAGE },
+          { status: 400 },
+        );
+      }
+
+      const { code } = await requestOtp(prefill.inviteePhone);
+
+      return NextResponse.json({
+        ok: true,
+        maskedPhone: prefill.maskedPhone,
+        ...(process.env.NODE_ENV !== 'production' ? { debugCode: code } : {}),
+      });
+    }
+
     const rawPhone = parsed.data.phone;
+
+    if (!rawPhone) {
+      return NextResponse.json(
+        { error: 'invalid_request', message: 'phone is required' },
+        { status: 400 },
+      );
+    }
 
     if (!isUsPhoneNumber(rawPhone)) {
       return NextResponse.json(

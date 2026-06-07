@@ -11,6 +11,7 @@ import { db, users } from '@/server/db'
 import { hashPhoneNumber } from '@/server/lib/phone-hashing'
 import {
   acceptFriendInvitation,
+  getInvitePrefillByToken,
   getValidInvitationForPhone,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE,
   INVITE_REQUIRED_MESSAGE,
@@ -21,6 +22,7 @@ type VerifyOtpBody = {
   phone?: unknown
   code?: unknown
   invitationToken?: unknown
+  useInvitePhone?: unknown
   userInvite?: unknown
 }
 
@@ -118,7 +120,7 @@ export async function POST(request: Request) {
     const body = (await request
       .json()
       .catch(() => null)) as VerifyOtpBody | null
-    const phone = typeof body?.phone === 'string' ? body.phone.trim() : ''
+    let phone = typeof body?.phone === 'string' ? body.phone.trim() : ''
     const code = typeof body?.code === 'string' ? body.code.trim() : ''
     const tokenProvided =
       body?.invitationToken !== undefined && body?.invitationToken !== null
@@ -127,19 +129,32 @@ export async function POST(request: Request) {
         ? body.invitationToken.trim()
         : ''
     const hasUsableToken = tokenProvided && invitationToken.length > 0
+    const useInvitePhone = body?.useInvitePhone === true
     const userInvite = parseUserInvite(body?.userInvite)
+
+    // A token field was supplied but it's empty/whitespace — reject before
+    // anything else. This closes the `{"invitationToken": ""}` bypass.
+    if (tokenProvided && !hasUsableToken) {
+      return invitationRejection()
+    }
+
+    // Invite-prefill flow: no phone is sent — resolve the recipient phone from
+    // the invite token server-side so the rest of the flow (OTP verify +
+    // acceptFriendInvitation, which requires inviteePhone === verifiedPhone)
+    // works exactly as the manual path.
+    if (useInvitePhone && hasUsableToken && !phone) {
+      const prefill = await getInvitePrefillByToken(invitationToken)
+      if (!prefill) {
+        return invitationRejection()
+      }
+      phone = prefill.inviteePhone
+    }
 
     if (!phone || !code) {
       return NextResponse.json(
         { error: 'invalid_request', message: 'phone and code are required' },
         { status: 400 }
       )
-    }
-
-    // A token field was supplied but it's empty/whitespace — reject before
-    // anything else. This closes the `{"invitationToken": ""}` bypass.
-    if (tokenProvided && !hasUsableToken) {
-      return invitationRejection()
     }
 
     const normalizedPhone = await verifyOtp(phone, code)

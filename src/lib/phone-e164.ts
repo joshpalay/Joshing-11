@@ -12,3 +12,13 @@ export function normalizeToE164(raw: string, defaultCountry: 'US' = 'US'): strin
     return null
   }
 }
+
+// Mask a US E.164 number for display as "•••-•••-1234" (only the last four
+// digits are shown). Used to surface an invite's target phone without leaking
+// the full number to the client. Falls back to a fully masked placeholder when
+// the input isn't a 10-digit US number.
+export function maskPhoneE164(e164: string): string {
+  const digits = e164.replace(/\D/g, '').replace(/^1/, '')
+  if (digits.length !== 10) return '•••-•••-••••'
+  return `•••-•••-${digits.slice(6)}`
+}

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   findUserSelectMock,
   hasValidPendingInvitationForPhoneMock,
+  getInvitePrefillByTokenMock,
   requestOtpMock,
   resolveInviteLinkMock,
 } = vi.hoisted(() => {
@@ -12,6 +13,7 @@ const {
   return {
     findUserSelectMock,
     hasValidPendingInvitationForPhoneMock: vi.fn(async () => false),
+    getInvitePrefillByTokenMock: vi.fn(async () => null as unknown),
     requestOtpMock: vi.fn(async () => ({ code: '424242' })),
     resolveInviteLinkMock: vi.fn(async () => null as unknown),
   }
@@ -38,8 +40,11 @@ vi.mock('@/server/db', () => ({
 
 vi.mock('@/server/friends/invitations', () => ({
   hasValidPendingInvitationForPhone: hasValidPendingInvitationForPhoneMock,
+  getInvitePrefillByToken: getInvitePrefillByTokenMock,
   INVITE_REQUIRED_MESSAGE:
     "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite.",
+  INVITATION_ACCEPTANCE_ERROR_MESSAGE:
+    'This invitation could not be accepted.',
 }))
 
 vi.mock('@/server/friends/user-invite-token', () => ({
@@ -65,6 +70,7 @@ describe('/api/auth/request-otp invite gate', () => {
     // Default: phone belongs to no existing user (new-signup path).
     findUserSelectMock.mockResolvedValue([])
     hasValidPendingInvitationForPhoneMock.mockResolvedValue(false)
+    getInvitePrefillByTokenMock.mockResolvedValue(null)
     resolveInviteLinkMock.mockResolvedValue(null)
     requestOtpMock.mockResolvedValue({ code: '424242' })
   })
@@ -117,5 +123,61 @@ describe('/api/auth/request-otp invite gate', () => {
     expect(response.status).toBe(200)
     expect(resolveInviteLinkMock).not.toHaveBeenCalled()
     expect(requestOtpMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('/api/auth/request-otp invite-phone prefill', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    findUserSelectMock.mockReset()
+    findUserSelectMock.mockResolvedValue([])
+    hasValidPendingInvitationForPhoneMock.mockResolvedValue(false)
+    getInvitePrefillByTokenMock.mockResolvedValue(null)
+    resolveInviteLinkMock.mockResolvedValue(null)
+    requestOtpMock.mockResolvedValue({ code: '424242' })
+  })
+
+  it('sends the OTP to the invite phone and returns only the masked form', async () => {
+    getInvitePrefillByTokenMock.mockResolvedValue({
+      inviterName: 'Alex',
+      inviteePhone: '+17345556819',
+      maskedPhone: '•••-•••-6819',
+    })
+
+    const response = await POST(
+      jsonRequest({ invitationToken: 'tok-1', useInvitePhone: true }),
+    )
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body).toMatchObject({ ok: true, maskedPhone: '•••-•••-6819' })
+    // The raw phone must never cross to the client.
+    expect(JSON.stringify(body)).not.toContain('+17345556819')
+    expect(getInvitePrefillByTokenMock).toHaveBeenCalledWith('tok-1')
+    expect(requestOtpMock).toHaveBeenCalledWith('+17345556819')
+  })
+
+  it('rejects when the invite token does not resolve to a sendable phone (no OTP sent)', async () => {
+    getInvitePrefillByTokenMock.mockResolvedValue(null)
+
+    const response = await POST(
+      jsonRequest({ invitationToken: 'bogus', useInvitePhone: true }),
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ error: 'invalid_invitation' })
+    expect(requestOtpMock).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the phone gate when useInvitePhone is not set', async () => {
+    // invitationToken present but useInvitePhone absent → manual path; the
+    // brand-new phone has no invitation, so the gate blocks it.
+    const response = await POST(
+      jsonRequest({ phone: NEW_PHONE, invitationToken: 'tok-1' }),
+    )
+
+    expect(response.status).toBe(403)
+    expect(getInvitePrefillByTokenMock).not.toHaveBeenCalled()
+    expect(requestOtpMock).not.toHaveBeenCalled()
   })
 })
