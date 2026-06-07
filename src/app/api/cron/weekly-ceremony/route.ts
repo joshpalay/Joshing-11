@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
   let fired = 0;
   let skipped = 0;
   let skippedNoActivity = 0;
+  let failed = 0;
 
   for (const user of onboardedUsers) {
     const accountAgeDays = daysSinceUtc(user.createdAt, today);
@@ -69,13 +70,26 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    const ceremonyId = await fireCeremony(user.id);
-    if (ceremonyId) {
-      fired += 1;
-    } else {
-      skippedNoActivity += 1;
+    // Isolate each user: fireCeremony can throw on a transient per-user failure
+    // (e.g. the LLM domain-merge call in runDomainMergesForUser, or beats
+    // validation). Without this guard a single user's exception 500s the whole
+    // cron — every other user goes unfired and the external cron job exits 1.
+    // This is the behavior fire-ceremony.ts promises ("the cron handler will
+    // see the exception and skip this user"). Idempotency (the unique
+    // (userId, cycleStart, cycleEnd) index) means a retried run picks up any
+    // user we skip here.
+    try {
+      const ceremonyId = await fireCeremony(user.id);
+      if (ceremonyId) {
+        fired += 1;
+      } else {
+        skippedNoActivity += 1;
+      }
+    } catch (error) {
+      failed += 1;
+      console.error(`[weekly-ceremony] fireCeremony failed for user ${user.id}`, error);
     }
   }
 
-  return NextResponse.json({ fired, skipped, skippedNoActivity });
+  return NextResponse.json({ fired, skipped, skippedNoActivity, failed });
 }
