@@ -254,6 +254,7 @@ export function TopUpAreasModal({
         <AddTopicField
           className="mt-3"
           placeholder="Or write your own…"
+          convergeBeforeAdd
           disabled={busy || remaining <= 0}
           existingLabels={[
             ...existing.map((item) => item.label),

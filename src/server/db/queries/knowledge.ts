@@ -817,6 +817,102 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
   };
 }
 
+// ─── Domain convergence (deterministic dedup) ───────────────────────────────
+//
+// Powers convergeDomain() (src/server/knowledge/converge-domain.ts): align a
+// freshly-suggested category onto an existing canonical subcategory that already
+// exists ACROSS THE GAME, so the same hyper-specific domain isn't re-created per
+// user. The corpus is every player's PLAYER_MASTERY.canonical_subcategory — the
+// table the declared-interest write path already seeds — so converging onto it
+// directly merges mastery (PLAYER_MASTERY is keyed on canonical_subcategory).
+
+export type CanonicalCorpusMatch = {
+  /** The existing canonical-subcategory spelling to persist when chosen. */
+  label: string;
+  broadCategory: string | null;
+  /** How many PLAYER_MASTERY rows share this spelling (ranking + privacy floor). */
+  prevalence: number;
+  /** 1 for an exact-key match; the pg_trgm score for a fuzzy match. */
+  similarity: number;
+};
+
+// SQL mirror of domainKey() (src/lib/knowledge/domain-key.ts): fold curly
+// apostrophes to ASCII, collapse internal whitespace, trim, lowercase. Kept as a
+// single fragment so the JS and SQL key definitions can't drift — the
+// converge-domain test asserts parity. The fold-set chars and the regex pattern
+// are bound params (not inlined literals) so the apostrophe escaping stays sane.
+const CONVERGE_CURLY_APOSTROPHES = '‘’ʼ';
+const CONVERGE_ASCII_APOSTROPHES = "'''";
+const CONVERGE_WHITESPACE_PATTERN = '\\s+';
+function foldedCanonicalSubcategoryExpr() {
+  return sql`lower(btrim(regexp_replace(translate(${playerMastery.canonicalSubcategory}, ${CONVERGE_CURLY_APOSTROPHES}, ${CONVERGE_ASCII_APOSTROPHES}), ${CONVERGE_WHITESPACE_PATTERN}, ' ', 'g')))`;
+}
+
+const BROAD_CATEGORY_MODE = sql<string | null>`mode() within group (order by ${playerMastery.broadCategory})`;
+
+// Exact-key convergence: the most-prevalent corpus spelling whose domainKey()
+// equals the input's. Does NOT depend on pg_trgm, so it always works (the fuzzy
+// pass below degrades when the extension is absent). A folded-expression scan is
+// fine at the current distinct-canonical-subcategory corpus scale.
+export async function findExactCanonicalMatch(rawLabel: string): Promise<CanonicalCorpusMatch | null> {
+  const key = domainKey(rawLabel);
+  if (!key) return null;
+  const rows = await db
+    .select({
+      label: playerMastery.canonicalSubcategory,
+      broadCategory: BROAD_CATEGORY_MODE,
+      prevalence: sql<number>`count(*)::int`,
+    })
+    .from(playerMastery)
+    .where(sql`${foldedCanonicalSubcategoryExpr()} = ${key}`)
+    .groupBy(playerMastery.canonicalSubcategory)
+    .orderBy(sql`count(*) desc`)
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    label: row.label,
+    broadCategory: row.broadCategory ?? null,
+    prevalence: Number(row.prevalence),
+    similarity: 1,
+  };
+}
+
+// Fuzzy convergence via pg_trgm similarity(). Throws if pg_trgm is unavailable
+// (function does not exist) — convergeDomain() swallows that and degrades to
+// exact + "create new". The WHERE similarity() >= threshold filter is a
+// deliberate per-row scan: the index-using `%` operator depends on the
+// session-global set_limit GUC, which is unreliable under PgBouncer pooling. The
+// corpus (distinct canonical subcategories) is small enough that this is fine; a
+// later migration can add an index + switch the predicate if scale demands.
+export async function findFuzzyCanonicalMatches(
+  rawLabel: string,
+  threshold: number,
+  limit: number,
+): Promise<CanonicalCorpusMatch[]> {
+  const clean = rawLabel.trim().replace(/\s+/g, ' ');
+  if (!clean || limit <= 0) return [];
+  const score = sql<number>`max(similarity(${playerMastery.canonicalSubcategory}, ${clean}))`;
+  const rows = await db
+    .select({
+      label: playerMastery.canonicalSubcategory,
+      broadCategory: BROAD_CATEGORY_MODE,
+      prevalence: sql<number>`count(*)::int`,
+      similarity: score,
+    })
+    .from(playerMastery)
+    .where(sql`similarity(${playerMastery.canonicalSubcategory}, ${clean}) >= ${threshold}`)
+    .groupBy(playerMastery.canonicalSubcategory)
+    .orderBy(sql`max(similarity(${playerMastery.canonicalSubcategory}, ${clean})) desc`, sql`count(*) desc`)
+    .limit(limit);
+  return rows.map((row) => ({
+    label: row.label,
+    broadCategory: row.broadCategory ?? null,
+    prevalence: Number(row.prevalence),
+    similarity: Number(row.similarity),
+  }));
+}
+
 export async function getHiddenDomainKeys(userId: string): Promise<Set<string>> {
   const rows = await db
     .select({

@@ -535,6 +535,7 @@ export function TerritorySetupClient({
             heading="Explore something new"
             inputRef={newTopicInputRef}
             existingLabels={domains.map((domain) => domain.domain)}
+            convergeBeforeAdd
             disabled={addingTopic}
             limitReachedNode={
               <Link href="/knowledge" className="underline">

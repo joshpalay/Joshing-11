@@ -560,6 +560,18 @@ export async function register() {
       // database — migrate() handles creation; dedup is best-effort regardless.
     }
 
+    // Migration 0071 enables pg_trgm, which convergeDomain()'s fuzzy pass calls
+    // via similarity() (the /api/knowledge/converge route + the onboarding seed
+    // pipeline). similarity() needs no index, so none is created — see the
+    // migration header. A database that records the migration without the
+    // extension present must still boot; if pg_trgm is unavailable the whole
+    // block is skipped — convergence degrades to exact-key + "create new".
+    try {
+      await db.execute(sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+    } catch {
+      // pg_trgm may be unavailable on this database — convergence is best-effort.
+    }
+
     // Migration 0044 adds the nullable User.last_activity_bell_opened_at
     // timestamp used by getBellBadgeCount to compute "rolled-off + unseen"
     // counts. Apply it idempotently in case the migration is recorded
