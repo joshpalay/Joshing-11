@@ -98,7 +98,9 @@ Domain dirs each with `__tests__`: `auth`, `daily`, `feed`, `friends`, `knowledg
 - **DEV-1** (OTP `000000` bypass) — **Accepted for testing.** Intentional for now; revisit before public launch.
 - **DEV-2** (no OTP rate limiting) — **Accepted for testing.** Same.
 - **DEV-3** — **Withdrawn** (auditor error; cron is scheduled via GitHub Actions — see below).
-- **DEV-7** (verification substrate dormant) — **Decision: turn it on.** (Mechanism tracked separately; tier-gating is an env flag and dedup needs `VOYAGE_API_KEY`.)
+- **DEV-7** (verification substrate dormant) — **Decision: turn it on, health-check first.**
+  - *Tier gating:* stays an env flag (`VERIFICATION_TIER_GATING_ENABLED`, code default unchanged at `false`). Run `npm run pool:health` (new — `scripts/pool-health.ts`, backed by `getSelfPracticeEligibilityByDomain` in `pool-report.ts`) to confirm no surface is empty and no domain is below the thin threshold; it exits non-zero until pools look ready. Flip the env var in Vercel once it's green.
+  - *Semantic dedup:* owner sets `VOYAGE_API_KEY` in Vercel — no code change; new pool inserts embed automatically via the existing best-effort path (`embedAndResolveDuplicate`). One-time backlog embedding, if wanted later, is `scripts/backfill-pool-embeddings.ts`.
 - **VIS-1 / VIS-2** — In progress: exact-match hex→token and `text-[Npx]`→scale conversions applied; non-matching values catalogued in `audits/HEX-TEXTSIZE-WORKLIST-2026-06-07.md` for case-by-case review.
 
 ---
