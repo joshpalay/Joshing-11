@@ -291,6 +291,22 @@ export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow
 }
 
 /**
+ * Total number of daily queues ever built for this user, across all dates.
+ *
+ * Used to detect a user's FIRST Daily Five: the orchestrator treats a zero count
+ * (no queue built yet) as first-run and seeds the queue from onboarding areas in
+ * selection order; the queue route treats a count of one (only the just-served
+ * queue) as the moment to show the one-time first-run intro.
+ */
+export async function countDailyQueues(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(dailyQueues)
+    .where(eq(dailyQueues.userId, userId));
+  return row?.count ?? 0;
+}
+
+/**
  * Deletes the user's untouched daily queues (none of whose slots are answered or
  * skipped) within the catch-up window. Returns the number of queues deleted.
  *

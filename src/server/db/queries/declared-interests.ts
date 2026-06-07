@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 
 import { db, declaredInterests } from '@/server/db';
 
@@ -27,7 +27,13 @@ export async function getActiveDeclaredInterests(userId: string): Promise<Active
       isActive: declaredInterests.isActive,
     })
     .from(declaredInterests)
-    .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
+    .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)))
+    // Selection order, oldest-declared first. saveDeclaredInterests writes the
+    // onboarding picks with strictly-increasing declaredAt in selection order, so
+    // this recovers "first-picked first" — the signal the first Daily Five uses to
+    // weight strong- vs light-signal areas (see first-run-seeding.ts). domain is a
+    // stable tiebreaker for any rows that share a timestamp (e.g. legacy saves).
+    .orderBy(asc(declaredInterests.declaredAt), asc(declaredInterests.domain));
 
   return rows.map((row) => ({ ...row, territoryType: 'declared' as const }));
 }

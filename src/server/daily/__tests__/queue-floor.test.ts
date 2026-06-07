@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getTodaysDailyQueue: vi.fn(),
   carryForwardUntouchedDailyQueue: vi.fn(),
   clearStaleShortTodayQueue: vi.fn(),
+  countDailyQueues: vi.fn(),
   getKnowledgeBase: vi.fn(),
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   getTodaysDailyQueue: mocks.getTodaysDailyQueue,
   carryForwardUntouchedDailyQueue: mocks.carryForwardUntouchedDailyQueue,
   clearStaleShortTodayQueue: mocks.clearStaleShortTodayQueue,
+  countDailyQueues: mocks.countDailyQueues,
   getKnowledgeBase: mocks.getKnowledgeBase,
   pickEligibleAuthoredQuestions: mocks.pickEligibleAuthoredQuestions,
   pickHouseQuestions: mocks.pickHouseQuestions,
@@ -78,6 +80,10 @@ beforeEach(() => {
   mocks.getTodaysDailyQueue.mockResolvedValue(null);
   mocks.carryForwardUntouchedDailyQueue.mockResolvedValue(false);
   mocks.clearStaleShortTodayQueue.mockResolvedValue(false);
+  // Returning player (not first-run); these tests exercise the completeness loop,
+  // not first-run seeding. The orchestrator only passes this flag through to the
+  // (mocked) generator, so the value doesn't change call counts here.
+  mocks.countDailyQueues.mockResolvedValue(3);
 
   // A non-empty knowledge base in random mode; no authored or house picks, so
   // the queue is built purely from generated questions (the path that yields

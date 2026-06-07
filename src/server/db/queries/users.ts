@@ -166,6 +166,12 @@ async function upsertDeclaredInterestRow(
   tx: DeclaredInterestTx,
   userId: string,
   interest: DeclaredInterestInput,
+  // Explicit declaration time. The full-replace path (saveDeclaredInterests)
+  // passes strictly-increasing timestamps in SELECTION ORDER so first-picked
+  // first is recoverable by getActiveDeclaredInterests (it powers the first
+  // Daily Five's strong- vs light-signal weighting). The incremental add path
+  // omits it and gets "now", which correctly reads as a newer, lighter signal.
+  declaredAt: Date = new Date(),
 ) {
   await tx
     .insert(declaredInterests)
@@ -173,14 +179,14 @@ async function upsertDeclaredInterestRow(
       userId,
       domain: interest.label,
       broadCategory: interest.broadCategory ?? null,
-      declaredAt: new Date(),
+      declaredAt,
       isActive: true,
     })
     .onConflictDoUpdate({
       target: [declaredInterests.userId, declaredInterests.domain],
       set: {
         broadCategory: interest.broadCategory ?? null,
-        declaredAt: new Date(),
+        declaredAt,
         isActive: true,
       },
     });
@@ -233,14 +239,22 @@ export async function saveDeclaredInterests(userId: string, interests: DeclaredI
   // re-runs the domain categorizer for any interest that arrived uncategorized.
   const categorized = await Promise.all(normalized.map(categorizeIfNeeded));
 
+  // Stamp the picks with strictly-increasing declaredAt in selection order so
+  // "first-picked first" survives into getActiveDeclaredInterests. A single
+  // new Date() per row can collide at the same millisecond inside one
+  // transaction (the loop is fast), which would lose the order the first Daily
+  // Five depends on — so derive each from a fixed base + index instead.
+  const declaredBase = Date.now();
   await db.transaction(async (tx) => {
     await tx
       .update(declaredInterests)
       .set({ isActive: false })
       .where(eq(declaredInterests.userId, userId));
 
+    let index = 0;
     for (const interest of categorized) {
-      await upsertDeclaredInterestRow(tx, userId, interest);
+      await upsertDeclaredInterestRow(tx, userId, interest, new Date(declaredBase + index));
+      index += 1;
     }
   });
 

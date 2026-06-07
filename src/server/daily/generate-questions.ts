@@ -33,6 +33,8 @@ import {
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
@@ -1255,6 +1257,11 @@ function selectDiverseDomains(
 export async function generateDailyQuestionsFromKnowledgeBase(
   userId: string,
   count: number,
+  // firstRun: this is the user's very first Daily Five. In random mode we then
+  // seed the domain palette from declared interests in SELECTION ORDER (strong-
+  // vs light-signal weighting) so the first session reads as "drawn from the
+  // areas you picked" rather than a random cross-section. See first-run-seeding.ts.
+  options: { firstRun?: boolean } = {},
 ): Promise<GeneratedQuestionRow[]> {
   const [
     knowledgeBase,
@@ -1321,11 +1328,28 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         .map(([domain]) => domain.toLowerCase()),
     );
     const eligible = knowledgeBase.filter((domain) => !resting.has(domain.domain.toLowerCase()));
-    domainsForRound = selectDiverseDomains(
-      eligible.length > 0 ? eligible : knowledgeBase,
-      count,
-      recentDomainCounts,
-    );
+    const eligibleKb = eligible.length > 0 ? eligible : knowledgeBase;
+
+    // First Daily Five: seed the palette from declared interests in selection
+    // order so the session is visibly drawn from the areas the user just picked,
+    // weighted toward their first (strong-signal) picks. Falls back to normal
+    // diverse selection when the plan is empty (sparse/excluded KB) so a thin
+    // knowledge base never errors — graceful degradation, no exposed internals.
+    let firstRunPlan: string[] = [];
+    if (options.firstRun) {
+      const orderedDeclared = await getActiveDeclaredInterests(userId)
+        .then((rows) => rows.map((row) => row.domain))
+        .catch(() => [] as string[]);
+      const eligibleByKey = new Set(eligibleKb.map((d) => d.domain.toLowerCase()));
+      const orderedEligible = orderedDeclared.filter((domain) =>
+        eligibleByKey.has(domain.toLowerCase()),
+      );
+      firstRunPlan = planFirstRunDomains(orderedEligible, count);
+    }
+
+    domainsForRound = firstRunPlan.length > 0
+      ? firstRunPlan
+      : selectDiverseDomains(eligibleKb, count, recentDomainCounts);
   }
 
   const domainDifficultyOverrides = preferences.difficulty === 'adaptive'
