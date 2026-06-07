@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildInviteVerifyOtpRequestBody,
   buildVerifyOtpRequestBody,
   readInvitationToken,
 } from '@/app/login/LoginPanel'
@@ -46,6 +47,41 @@ describe('LoginPanel invitation token query aliases', () => {
       code: '000000',
       invitationToken: null,
       userInvite: null,
+    })
+  })
+})
+
+describe('LoginPanel invite-phone verify payload', () => {
+  it('omits the phone and flags useInvitePhone so the server resolves it from the token', () => {
+    expect(
+      buildInviteVerifyOtpRequestBody(
+        '000000',
+        'invite-token',
+        new URLSearchParams()
+      )
+    ).toEqual({
+      code: '000000',
+      invitationToken: 'invite-token',
+      useInvitePhone: true,
+      userInvite: null,
+    })
+  })
+
+  it('still forwards a per-user invite link when present', () => {
+    expect(
+      buildInviteVerifyOtpRequestBody(
+        '000000',
+        'invite-token',
+        new URLSearchParams([
+          ['inviteHandle', 'jpalay'],
+          ['inviteUserToken', 'user-token'],
+        ])
+      )
+    ).toEqual({
+      code: '000000',
+      invitationToken: 'invite-token',
+      useInvitePhone: true,
+      userInvite: { handle: 'jpalay', token: 'user-token' },
     })
   })
 })

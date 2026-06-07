@@ -31,12 +31,16 @@ const { dbMock, state } = vi.hoisted(() => {
       if (!state.invitation) return []
       if (!isLandingSelect) return [state.invitation]
 
+      // Joined select (landing + prefill both leftJoin users). Superset of
+      // both selections; the real query only reads the columns it selected, so
+      // extra fields here are harmless.
       return [
         {
           acceptedAt: state.invitation.acceptedAt,
           cancelledAt: state.invitation.cancelledAt,
           expiresAt: state.invitation.expiresAt,
           preSeededInterests: state.invitation.preSeededInterests,
+          inviteePhone: state.invitation.inviteePhone,
           inviterName: state.inviterName,
         },
       ]
@@ -161,6 +165,7 @@ import {
   createFriendInvitation,
   getFriendInvitationLandingByToken,
   getInvitationByToken,
+  getInvitePrefillByToken,
   getPendingInvitationForPhone,
 } from '@/server/friends/invitations'
 import { parsePreSeededInterests } from '@/server/db/queries/users'
@@ -557,6 +562,45 @@ describe('friend invitation helpers', () => {
         now,
       })
     ).resolves.toEqual(expect.objectContaining({ cancelledAt: now }))
+  })
+
+  it('resolves a valid pending invite to inviter name, raw phone, and masked phone', async () => {
+    setInvitation({ inviteePhone: '+17345556819' })
+
+    await expect(getInvitePrefillByToken('valid-token', now)).resolves.toEqual({
+      inviterName: 'Alex Inviter',
+      inviteePhone: '+17345556819',
+      maskedPhone: '•••-•••-6819',
+    })
+  })
+
+  it('falls back to "Someone" when the inviter has no display name', async () => {
+    state.inviterName = null
+    setInvitation({ inviteePhone: '+17345556819' })
+
+    await expect(getInvitePrefillByToken('valid-token', now)).resolves.toEqual(
+      expect.objectContaining({ inviterName: 'Someone' })
+    )
+  })
+
+  it('returns null for blank, accepted, cancelled, or expired invites', async () => {
+    await expect(getInvitePrefillByToken('', now)).resolves.toBeNull()
+
+    setInvitation({ acceptedAt: new Date('2026-05-13T11:00:00.000Z') })
+    await expect(getInvitePrefillByToken('accepted-token', now)).resolves.toBeNull()
+
+    setInvitation({ cancelledAt: new Date('2026-05-13T11:00:00.000Z') })
+    await expect(
+      getInvitePrefillByToken('cancelled-token', now)
+    ).resolves.toBeNull()
+
+    setInvitation({ expiresAt: new Date('2026-05-12T12:00:00.000Z') })
+    await expect(getInvitePrefillByToken('expired-token', now)).resolves.toBeNull()
+  })
+
+  it('returns null when the invite has no recipient phone', async () => {
+    setInvitation({ inviteePhone: '' })
+    await expect(getInvitePrefillByToken('valid-token', now)).resolves.toBeNull()
   })
 
   it('still parses existing onboarding pre-seeded interests', () => {
