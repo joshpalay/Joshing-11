@@ -155,7 +155,7 @@ function AnsweredResult({
     <div className="w-full space-y-1.5">
       <div className="flex items-start justify-between gap-3">
         <p
-          className="text-[14px] font-medium"
+          className="text-sm font-medium"
           style={{ color: item.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)' }}
         >
           {item.answerSummary ?? 'You answered this question.'}
@@ -262,7 +262,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
             </p>
             {category ? (
               <p
-                className="mt-1 truncate text-[12px] italic leading-tight"
+                className="mt-1 truncate text-xs italic leading-tight"
                 style={{
                   fontFamily: 'var(--font-literata)',
                   color: 'var(--ink)',
@@ -288,7 +288,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
         </div>
 
         <p
-          className="mt-3 text-[16px] leading-snug"
+          className="mt-3 text-base leading-snug"
           style={{
             fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
             color: 'var(--ink)',

@@ -94,6 +94,15 @@ Domain dirs each with `__tests__`: `auth`, `daily`, `feed`, `friends`, `knowledg
 
 ---
 
+## Owner dispositions (2026-06-07)
+- **DEV-1** (OTP `000000` bypass) — **Accepted for testing.** Intentional for now; revisit before public launch.
+- **DEV-2** (no OTP rate limiting) — **Accepted for testing.** Same.
+- **DEV-3** — **Withdrawn** (auditor error; cron is scheduled via GitHub Actions — see below).
+- **DEV-7** (verification substrate dormant) — **Decision: turn it on.** (Mechanism tracked separately; tier-gating is an env flag and dedup needs `VOYAGE_API_KEY`.)
+- **VIS-1 / VIS-2** — In progress: exact-match hex→token and `text-[Npx]`→scale conversions applied; non-matching values catalogued in `audits/HEX-TEXTSIZE-WORKLIST-2026-06-07.md` for case-by-case review.
+
+---
+
 ## Findings
 
 Grouped by lens (Dev/Backend · UX · Visual). Severity: **P0** blocks launch · **P1** hurts core experience · **P2** quality · **P3** nice-to-have.
@@ -106,8 +115,8 @@ Grouped by lens (Dev/Backend · UX · Visual). Severity: **P0** blocks launch ·
 #### DEV-2 (P0) — No rate limiting on OTP request or verify
 `src/app/api/auth/request-otp/route.ts` and `verify-otp/route.ts` apply **zero** throttling. `getRecentOtpRequestCount` exists (`src/server/auth/otp-store.ts:67`) but is **never called by any route**. Consequences: (a) unbounded SMS send → cost/abuse/Twilio SLA risk; (b) unlimited verify attempts → a 6-digit code is brute-forceable. (The `000000` bypass makes brute-force moot today, but both must be fixed.)
 
-#### DEV-3 (P1) — `daily-assignments` cron is documented as scheduled but is absent from `vercel.json`
-`src/app/api/cron/daily-assignments/route.ts:11` comment says "Scheduled at 17:05 UTC (vercel.json)"; `vercel.json` schedules only `weekly-ceremony`, `vet-questions`, `expire-friend-requests`, `pool-refill` — **not** `daily-assignments`. This route is what pre-builds each user's daily queue just after the reset *and* sends the `daily_questions` SMS. With it unscheduled: queues are never pre-warmed, so **every** user hits the synchronous `/api/daily/queue` path (up to `GENERATION_TIMEOUT_MS` = 35s, user-blocking — the exact failure mode the comment says it exists to prevent), and **daily reminder SMS never fire**. Code-vs-code contradiction with real user impact.
+#### DEV-3 — ~~`daily-assignments` cron absent from `vercel.json`~~ **WITHDRAWN (auditor error, 2026-06-07)**
+Original claim was wrong. `daily-assignments` **is** scheduled — via GitHub Actions (`.github/workflows/external-crons.yml`, `cron: '5 17 * * *'`), not Vercel. It was *deliberately* removed from `vercel.json` on 2026-05-30 because it is the only cron that also sends (non-idempotent) SMS, so a Vercel Hobby cron firing it alongside the Actions workflow could double-text users (see the REVERT NOTE in that file). The route comment I cited was stale, but the scheduling is healthy. No action; no finding.
 
 #### DEV-4 (P1) — Cron / admin auth fails open when the secret is unset
 All five cron routes and `admin/backfill-domains` use `if (!secret) return true` (e.g. `cron/daily-assignments/route.ts:43`, `cron/weekly-ceremony/route.ts:19`, `cron/vet-questions/route.ts:20`, `cron/expire-friend-requests/route.ts:10`, `cron/pool-refill/route.ts:16`, `admin/backfill-domains/route.ts:9-17`). If `CRON_SECRET`/`VERCEL_CRON_SECRET` is ever unset in an environment, every one of these (including the LLM-spending `vet-questions`/`pool-refill` and the user-mutating `backfill-domains`) becomes world-callable. Fail *closed* in production.

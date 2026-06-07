@@ -27,7 +27,7 @@ type FeedCardProps = {
 // display/card/update — category line in Cormorant SemiBold (Figma 16/24/0.64px/black).
 function CategoryLine({ category }: { category: string }) {
   return (
-    <p className="font-serif text-[16px] font-semibold leading-[24px] tracking-[0.04em] text-black">
+    <p className="font-serif text-base font-semibold leading-[24px] tracking-[0.04em] text-black">
       {category}
     </p>
   )
@@ -39,7 +39,7 @@ function QuestionText({ question, dim }: { question: string; dim?: boolean }) {
     <p
       className={cn(
         'mt-3 font-serif font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]',
-        dim ? 'text-[16px] opacity-65' : 'text-[24px]',
+        dim ? 'text-base opacity-65' : 'text-2xl',
       )}
     >
       <span aria-hidden className="opacity-60">
@@ -94,7 +94,7 @@ export function FeedCard({
           <QuestionText question={item.question} />
 
           {item.personalMessage ? (
-            <p className="mt-2 font-serif text-[14px] leading-snug text-[var(--brand-ink-700)] italic">
+            <p className="mt-2 font-serif text-sm leading-snug text-[var(--brand-ink-700)] italic">
               {item.personalMessage}
             </p>
           ) : null}
@@ -136,7 +136,7 @@ export function FeedCard({
         <QuestionText question={item.question} dim={dimQuestion} />
 
         {item.personalMessage ? (
-          <p className="mt-2 font-serif text-[14px] leading-snug text-[var(--brand-ink-700)] italic">
+          <p className="mt-2 font-serif text-sm leading-snug text-[var(--brand-ink-700)] italic">
             {item.personalMessage}
           </p>
         ) : null}

@@ -256,7 +256,7 @@ export function AnswerFeedbackSheet({
           ) : null}
 
           {!isCorrect ? (
-            <div className="pt-3 text-[12px] text-muted-foreground">
+            <div className="pt-3 text-xs text-muted-foreground">
               {bankState === 'saving' ? (
                 <span>Saving to your practice bank…</span>
               ) : null}

@@ -61,12 +61,12 @@ export function NewTerritoryUndo({
         </span>
         <div className="min-w-0 flex-1">
           {state === 'removed' ? (
-            <p className="font-serif text-[14px] leading-snug" style={{ color: 'var(--brand-ink)' }}>
+            <p className="font-serif text-sm leading-snug" style={{ color: 'var(--brand-ink)' }}>
               Removed {label} from your knowledge base.
             </p>
           ) : (
             <>
-              <p className="font-serif text-[14px] leading-snug font-semibold" style={{ color: GOLD_INK }}>
+              <p className="font-serif text-sm leading-snug font-semibold" style={{ color: GOLD_INK }}>
                 Added {label} to your knowledge base.
               </p>
               <p className="mt-1.5 text-[13px] text-[var(--brand-ink)]">
@@ -84,7 +84,7 @@ export function NewTerritoryUndo({
                 )}
               </p>
               {state === 'error' ? (
-                <p className="mt-1.5 text-[12px]" style={{ color: 'var(--game-wrong-strong)' }}>
+                <p className="mt-1.5 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>
                   Could not remove it. Try again.
                 </p>
               ) : null}

@@ -230,13 +230,13 @@ const mainStyle: CSSProperties = {
 
 const headerSectionStyle: CSSProperties = {
   background: '#ffffff',
-  border: '1px solid #ddd6c7',
+  border: '1px solid var(--warm-border-soft)',
   padding: '1rem 0.95rem',
 };
 
 const sectionStyle: CSSProperties = {
   background: '#ffffff',
-  border: '1px solid #ddd6c7',
+  border: '1px solid var(--warm-border-soft)',
   padding: '1rem 0.95rem',
 };
 
@@ -272,7 +272,7 @@ const knowledgeEyebrowStyle: CSSProperties = {
   margin: 0,
   fontSize: 13,
   fontVariant: 'small-caps',
-  color: '#1a1208',
+  color: 'var(--warm-ink)',
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   letterSpacing: '0.06em',
 };
@@ -281,14 +281,14 @@ const knowledgeSubtitleStyle: CSSProperties = {
   margin: '0.15rem 0 0',
   fontSize: 10,
   fontVariant: 'small-caps',
-  color: '#8a8070',
+  color: 'var(--warm-ink-400)',
   letterSpacing: '0.06em',
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
 };
 
 const emptyStyle: CSSProperties = {
   margin: 0,
-  color: '#696257',
+  color: 'var(--warm-ink-700)',
 };
 
 const sharePortraitWrapStyle: CSSProperties = {
@@ -301,7 +301,7 @@ const sharePortraitBtnStyle: CSSProperties = {
   padding: '11px 32px',
   border: '1.5px solid #0e0e0e',
   backgroundColor: '#0e0e0e',
-  color: '#faf8f2',
+  color: 'var(--warm-paper)',
   fontFamily: "'Courier New', monospace",
   fontSize: 12,
   letterSpacing: '0.12em',

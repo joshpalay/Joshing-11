@@ -15,7 +15,7 @@ export function RecentActivitySection({ items }: { items: StreamItem[] }) {
       </p>
       {items.length === 0 ? (
         <p
-          className="text-muted-foreground text-[12px] italic"
+          className="text-muted-foreground text-xs italic"
           style={{ fontFamily: 'var(--font-display), Georgia, serif' }}
         >
           Nothing yet — your friends will show up here.

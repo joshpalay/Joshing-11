@@ -31,7 +31,7 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss }: DirectSe
       thought you&rsquo;d like this
       {visibleCategory ? <> about {visibleCategory}</> : null}.
       {item.personalMessage ? (
-        <span className="mt-1 block font-serif text-[14px] italic leading-snug text-[var(--brand-ink-700)]">
+        <span className="mt-1 block font-serif text-sm italic leading-snug text-[var(--brand-ink-700)]">
           &ldquo;{item.personalMessage}&rdquo;
         </span>
       ) : null}

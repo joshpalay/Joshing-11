@@ -149,7 +149,7 @@ export default function LoadingScreen({
 
       <div className="relative z-10 mx-6 flex w-full max-w-xs flex-col items-center rounded-2xl bg-[#F5EBD3] px-8 py-10 shadow-[0_8px_24px_rgba(20,18,8,0.18)] ring-1 ring-black/5">
         <p
-          className="text-3xl font-black tracking-[0.18em] text-[#1a1208]"
+          className="text-3xl font-black tracking-[0.18em] text-[var(--warm-ink)]"
           style={{ fontFamily: "var(--font-sans-body), system-ui, sans-serif" }}
         >
           JOSHING

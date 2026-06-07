@@ -48,7 +48,7 @@ export function MyQuestionCard({
           <div className="flex min-w-0 flex-wrap items-center gap-2 pr-2">
             {visibleCategory ? (
               <span
-                className="truncate text-[12px] leading-tight italic"
+                className="truncate text-xs leading-tight italic"
                 style={{
                   fontFamily: 'var(--font-literata)',
                   color: 'var(--ink)',
@@ -68,7 +68,7 @@ export function MyQuestionCard({
           </div>
 
           <p
-            className="mt-1.5 font-serif text-[18px] leading-6 font-semibold tracking-[0.02em]"
+            className="mt-1.5 font-serif text-lg leading-6 font-semibold tracking-[0.02em]"
             style={{ color: 'var(--ink)' }}
           >
             {question.text}
