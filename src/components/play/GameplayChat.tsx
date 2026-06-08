@@ -115,7 +115,13 @@ export type ChatMessage =
       roundsRemaining: number;
       nextRoundOpensAt: string | null;
     }
-  | { id: string; kind: 'session_close'; scoreLine: string; interpretiveLine: string | null; summaryHref?: string }
+  | {
+      id: string;
+      kind: 'session_close';
+      scoreLine: string;
+      interpretiveLine: string | null;
+      summaryHref?: string;
+    }
   | {
       id: string;
       kind: 'bonus_offer';
@@ -133,10 +139,14 @@ const CORRECT_COPY: Array<{ headline: string }> = [
 
 function wrongHeadline(variant: number): string {
   switch (variant % 3) {
-    case 0: return 'Not this time — here\u2019s the answer.';
-    case 1: return 'You\u2019ll know this one next time.';
-    case 2: return 'Close, but not quite.';
-    default: return 'Not this time — here\u2019s the answer.';
+    case 0:
+      return 'Not this time — here\u2019s the answer.';
+    case 1:
+      return 'You\u2019ll know this one next time.';
+    case 2:
+      return 'Close, but not quite.';
+    default:
+      return 'Not this time — here\u2019s the answer.';
   }
 }
 
@@ -169,7 +179,11 @@ function firstNameFrom(creatorName: string): string {
   return space === -1 ? trimmed : trimmed.slice(0, space);
 }
 
-function wrongNamedSubLabel(creatorName: string | null, variant: number, isHouse = false): string | null {
+function wrongNamedSubLabel(
+  creatorName: string | null,
+  variant: number,
+  isHouse = false,
+): string | null {
   if (!creatorName) return null;
   // House and LLM origins are non-relational: no "{name} carries this one".
   if (isHouse || isLlmAttribution(creatorName)) return null;
@@ -223,7 +237,14 @@ function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
 
   return (
     <div className="flex flex-col items-center gap-0.5 py-0.5">
-      <p style={{ ...monoStyle, fontSize: '0.58rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+      <p
+        style={{
+          ...monoStyle,
+          fontSize: '0.58rem',
+          color: 'var(--text-muted)',
+          textAlign: 'center',
+        }}
+      >
         <span>Dismissed</span>
         <span style={{ margin: '0 6px', opacity: 0.6 }}>·</span>
         {state === 'undoing' ? (
@@ -249,7 +270,9 @@ function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
         )}
       </p>
       {state === 'error' ? (
-        <p style={{ ...monoStyle, fontSize: '0.54rem', color: 'var(--danger)', textAlign: 'center' }}>
+        <p
+          style={{ ...monoStyle, fontSize: '0.54rem', color: 'var(--danger)', textAlign: 'center' }}
+        >
           Could not undo. Try again.
         </p>
       ) : null}
@@ -271,6 +294,8 @@ function QuestionRow({
   giveUpDisabled = false,
   onDismiss,
   dismissDisabled = false,
+  onMutePresence,
+  muteDisabled = false,
 }: {
   subhead?: string | null;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
@@ -285,6 +310,10 @@ function QuestionRow({
   giveUpDisabled?: boolean;
   onDismiss?: () => void;
   dismissDisabled?: boolean;
+  // Bonus slots only (D-4 §B): "This is {Name}'s bag but not mine" — rests the
+  // slot's domain so the category stops surfacing, and closes this question.
+  onMutePresence?: () => void;
+  muteDisabled?: boolean;
 }) {
   const [visible, setVisible] = useState(!isNew);
   // A bonus slot is one drawn from a followed friend's knowledge (D-4 §B). It
@@ -295,7 +324,7 @@ function QuestionRow({
     if (!isNew) return;
     const t = window.setTimeout(() => setVisible(true), 30);
     return () => window.clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -334,13 +363,22 @@ function QuestionRow({
             lineHeight: 1.3,
           }}
         >
-          <span style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginRight: '6px' }}>
+          <span
+            style={{
+              ...monoStyle,
+              fontSize: '0.55rem',
+              color: 'var(--text-muted)',
+              marginRight: '6px',
+            }}
+          >
             FROM
           </span>
           <span style={{ fontWeight: 600 }}>{creatorName}</span>
           {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
           {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
-            <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>gave you this</span>
+            <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
+              gave you this
+            </span>
           )}
         </p>
       ) : null}
@@ -357,7 +395,8 @@ function QuestionRow({
               borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
               border: '1px solid var(--brand-navy)',
               borderBottom: 'none',
-              background: 'linear-gradient(135deg, var(--brand-navy), color-mix(in srgb, var(--brand-navy) 82%, var(--accent)))',
+              background:
+                'linear-gradient(135deg, var(--brand-navy), color-mix(in srgb, var(--brand-navy) 82%, var(--accent)))',
               boxShadow: '0 8px 20px rgba(13, 31, 58, 0.18)',
               color: 'var(--primary-foreground)',
               padding: '9px 13px 8px',
@@ -385,7 +424,10 @@ function QuestionRow({
                   lineHeight: 1.25,
                 }}
               >
-                <span aria-hidden style={{ color: 'var(--tri-amber)', fontSize: '0.8rem', lineHeight: 1 }}>
+                <span
+                  aria-hidden
+                  style={{ color: 'var(--tri-amber)', fontSize: '0.8rem', lineHeight: 1 }}
+                >
                   ✦
                 </span>
                 Bonus item
@@ -434,41 +476,70 @@ function QuestionRow({
           {badges.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
               {badges.map((badge) => (
-              <span
-                key={badge.label}
-                style={{
-                  // Figma display/pill/sans — Georgia, 12px, title-case (not the
-                  // mono uppercase used elsewhere).
-                  fontFamily: 'Georgia, "Times New Roman", serif',
-                  fontSize: '0.675rem',
-                  lineHeight: 1.1,
-                  letterSpacing: '0.01em',
-                  borderRadius: '999px',
-                  border: '1px solid var(--border)',
-                  background: badge.tone === 'warning'
-                    ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
-                    : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
-                  color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
-                  opacity: 0.9,
-                  padding: '3px 9px',
-                }}
-              >
-                {badge.label}
-              </span>
+                <span
+                  key={badge.label}
+                  style={{
+                    // Figma display/pill/sans — Georgia, 12px, title-case (not the
+                    // mono uppercase used elsewhere).
+                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    fontSize: '0.675rem',
+                    lineHeight: 1.1,
+                    letterSpacing: '0.01em',
+                    borderRadius: '999px',
+                    border: '1px solid var(--border)',
+                    background:
+                      badge.tone === 'warning'
+                        ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
+                        : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                    color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
+                    opacity: 0.9,
+                    padding: '3px 9px',
+                  }}
+                >
+                  {badge.label}
+                </span>
               ))}
             </div>
           ) : null}
         </div>
       </div>
-      {!faded && (onGiveUp || onDismiss) ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '4px', paddingLeft: '2px' }}>
+      {!faded && (onGiveUp || onDismiss || onMutePresence) ? (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '14px',
+            marginTop: '4px',
+            paddingLeft: '2px',
+          }}
+        >
           {onGiveUp ? (
-            <button type="button" onClick={onGiveUp} disabled={giveUpDisabled} style={questionActionLinkStyle}>
+            <button
+              type="button"
+              onClick={onGiveUp}
+              disabled={giveUpDisabled}
+              style={questionActionLinkStyle}
+            >
               Show me the answer
             </button>
           ) : null}
+          {onMutePresence && presenceSourceName ? (
+            <button
+              type="button"
+              onClick={onMutePresence}
+              disabled={muteDisabled}
+              style={questionActionLinkStyle}
+            >
+              This is {firstNameFrom(presenceSourceName)}&rsquo;s bag but not mine
+            </button>
+          ) : null}
           {onDismiss ? (
-            <button type="button" onClick={onDismiss} disabled={dismissDisabled} style={questionActionLinkStyle}>
+            <button
+              type="button"
+              onClick={onDismiss}
+              disabled={dismissDisabled}
+              style={questionActionLinkStyle}
+            >
               Dismiss
             </button>
           ) : null}
@@ -520,7 +591,15 @@ function UserRow({ text }: { text: string }) {
   );
 }
 
-function BreadcrumbLine({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
+function BreadcrumbLine({
+  text,
+  creatorName,
+  creatorIsHouse = false,
+}: {
+  text: string;
+  creatorName: string | null;
+  creatorIsHouse?: boolean;
+}) {
   const author = creatorName?.trim() ?? null;
   // House is non-relational like the LLM origin: no "From {firstName}." line.
   const isBot = creatorIsHouse || isLlmAttribution(author);
@@ -610,17 +689,28 @@ function RelationalFeedbackFade({ text }: { text: string }) {
 
 function reactionEmoji(value: string): string {
   switch (value) {
-    case ':exploding_head:': return '🤯';
-    case ':ok_hand:': return '👌';
-    case ':smirk:': return '😏';
-    case ':face_palm:': return '🤦';
-    case ':sunny:': return '☀️';
-    case ':thought_balloon:': return '💭';
-    case ':thinking_face:': return '🤔';
-    case ':open_book:': return '📖';
-    case ':memo:': return '📝';
-    case ':sweat_smile:': return '😅';
-    default: return value;
+    case ':exploding_head:':
+      return '🤯';
+    case ':ok_hand:':
+      return '👌';
+    case ':smirk:':
+      return '😏';
+    case ':face_palm:':
+      return '🤦';
+    case ':sunny:':
+      return '☀️';
+    case ':thought_balloon:':
+      return '💭';
+    case ':thinking_face:':
+      return '🤔';
+    case ':open_book:':
+      return '📖';
+    case ':memo:':
+      return '📝';
+    case ':sweat_smile:':
+      return '😅';
+    default:
+      return value;
   }
 }
 
@@ -647,29 +737,38 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
     return () => window.clearTimeout(timer);
   }, [status]);
 
-  const sendReaction = useCallback(async (reactionType: ReactionKey) => {
-    setStatus('sending');
-    try {
-      const response = await fetch('/api/reactions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          questionId: prompt.questionId,
-          contextType: prompt.contextType,
-          contextId: prompt.contextId,
-          reactionType,
-          customMessage: customMessage.trim() || null,
-          includeSubmittedAnswer:
-            includeSubmittedAnswer && isWrongAnswerReactionKey(reactionType),
-        }),
-      });
-      if (!response.ok) throw new Error('Could not send reaction');
-      setStatus('sent');
-    } catch {
-      setStatus('error');
-    }
-  }, [customMessage, includeSubmittedAnswer, prompt.contextId, prompt.contextType, prompt.questionId]);
+  const sendReaction = useCallback(
+    async (reactionType: ReactionKey) => {
+      setStatus('sending');
+      try {
+        const response = await fetch('/api/reactions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            questionId: prompt.questionId,
+            contextType: prompt.contextType,
+            contextId: prompt.contextId,
+            reactionType,
+            customMessage: customMessage.trim() || null,
+            includeSubmittedAnswer:
+              includeSubmittedAnswer && isWrongAnswerReactionKey(reactionType),
+          }),
+        });
+        if (!response.ok) throw new Error('Could not send reaction');
+        setStatus('sent');
+      } catch {
+        setStatus('error');
+      }
+    },
+    [
+      customMessage,
+      includeSubmittedAnswer,
+      prompt.contextId,
+      prompt.contextType,
+      prompt.questionId,
+    ],
+  );
 
   if (status === 'hidden') return null;
 
@@ -683,7 +782,14 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
 
   return (
     <div style={{ marginTop: '10px', maxWidth: '100%' }}>
-      <p style={{ ...monoStyle, marginBottom: '6px', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+      <p
+        style={{
+          ...monoStyle,
+          marginBottom: '6px',
+          fontSize: '0.6rem',
+          color: 'var(--text-muted)',
+        }}
+      >
         React to {prompt.senderName}?
       </p>
       {customOpen ? (
@@ -725,7 +831,15 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
           Include what I wrote
         </label>
       ) : null}
-      <div style={{ display: 'flex', gap: '6px', maxWidth: '100%', overflowX: 'auto', paddingBottom: '3px' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '6px',
+          maxWidth: '100%',
+          overflowX: 'auto',
+          paddingBottom: '3px',
+        }}
+      >
         {cannedSet.map((reaction) => (
           <button
             key={reaction.key}
@@ -746,7 +860,9 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
               cursor: status === 'sending' ? 'default' : 'pointer',
             }}
           >
-            <span aria-hidden style={{ marginRight: '5px' }}>{reactionEmoji(reaction.emoji)}</span>
+            <span aria-hidden style={{ marginRight: '5px' }}>
+              {reactionEmoji(reaction.emoji)}
+            </span>
             {reaction.label}
           </button>
         ))}
@@ -781,7 +897,15 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   );
 }
 
-function AuthorNoteCard({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
+function AuthorNoteCard({
+  text,
+  creatorName,
+  creatorIsHouse = false,
+}: {
+  text: string;
+  creatorName: string | null;
+  creatorIsHouse?: boolean;
+}) {
   return (
     <div
       style={{
@@ -898,7 +1022,9 @@ function ResultRow({
   recheckAction?: RecheckAction | null;
   openedTerritoryDomain?: string | null;
 }) {
-  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
+  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>(
+    'idle',
+  );
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
   const [recheckAccepted, setRecheckAccepted] = useState(false);
   const expired = result === 'expired';
@@ -926,33 +1052,36 @@ function ResultRow({
   // red "not quite"); neutral for expired/gave-up.
   const resultToneStyle: CSSProperties = expired
     ? {
-      background: 'var(--surface-2)',
-      border: '1px solid var(--border)',
-      borderLeft: '3px solid var(--border)',
-    }
+        background: 'var(--surface-2)',
+        border: '1px solid var(--border)',
+        borderLeft: '3px solid var(--border)',
+      }
     : correct
       ? {
-        // Figma Correct (#366045) — forest green, lighter card body than the
-        // vivid --success used elsewhere.
-        background: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
-        border: '1px solid color-mix(in srgb, var(--game-correct) 26%, var(--border))',
-        borderLeft: '3px solid var(--game-correct)',
-      }
+          // Figma Correct (#366045) — forest green, lighter card body than the
+          // vivid --success used elsewhere.
+          background: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
+          border: '1px solid color-mix(in srgb, var(--game-correct) 26%, var(--border))',
+          borderLeft: '3px solid var(--game-correct)',
+        }
       : gaveUp
         ? {
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
-          borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
-        }
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+            borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
+          }
         : {
-          // Figma text/wrong (#c96b4a) body + game/wrong/in-question (#c33d14) bar.
-          background: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
-          border: '1px solid color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
-          borderLeft: '3px solid var(--game-wrong-strong)',
-        };
+            // Figma text/wrong (#c96b4a) body + game/wrong/in-question (#c33d14) bar.
+            background: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
+            border: '1px solid color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
+            borderLeft: '3px solid var(--game-wrong-strong)',
+          };
 
   return (
-    <div className="flex flex-col gap-0 pt-0.5" style={{ alignItems: 'flex-start', maxWidth: '88%' }}>
+    <div
+      className="flex flex-col gap-0 pt-0.5"
+      style={{ alignItems: 'flex-start', maxWidth: '88%' }}
+    >
       <div
         style={{
           ...resultToneStyle,
@@ -969,7 +1098,13 @@ function ResultRow({
           <span style={{ color: 'var(--text-muted)' }}>This one wasn&apos;t recorded in time.</span>
         ) : correct ? (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-correct)', fontWeight: 600 }}>
+            <p
+              style={{
+                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+                color: 'var(--game-correct)',
+                fontWeight: 600,
+              }}
+            >
               <span style={{ color: 'var(--game-correct)', marginRight: '6px' }}>✓</span>
               {copy.headline}
             </p>
@@ -978,7 +1113,9 @@ function ResultRow({
                 {correctAnswer}
               </p>
             ) : null}
-            {relationalFeedbackLine ? <RelationalFeedbackFade text={relationalFeedbackLine} /> : null}
+            {relationalFeedbackLine ? (
+              <RelationalFeedbackFade text={relationalFeedbackLine} />
+            ) : null}
           </>
         ) : gaveUp ? (
           <>
@@ -1007,7 +1144,13 @@ function ResultRow({
           </>
         ) : (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-wrong-strong)', fontWeight: 600 }}>
+            <p
+              style={{
+                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+                color: 'var(--game-wrong-strong)',
+                fontWeight: 600,
+              }}
+            >
               <span style={{ color: 'var(--game-wrong-strong)', marginRight: '6px' }}>✕</span>
               {wrongHeadline(copyVariant)}
             </p>
@@ -1023,19 +1166,40 @@ function ResultRow({
                 {correctAnswer}
               </p>
             ) : null}
-            <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            <p
+              style={{
+                ...monoStyle,
+                fontSize: '0.55rem',
+                color: 'var(--text-muted)',
+                marginTop: '4px',
+              }}
+            >
               Now it&rsquo;s in yours too
             </p>
             {(() => {
               const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant, creatorIsHouse);
               return namedSubLabel ? (
-                <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                <p
+                  style={{
+                    ...monoStyle,
+                    fontSize: '0.6rem',
+                    color: 'var(--text-muted)',
+                    marginTop: '4px',
+                  }}
+                >
                   {namedSubLabel}
                 </p>
               ) : null;
             })()}
             {consolation ? (
-              <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              <p
+                style={{
+                  marginTop: '8px',
+                  fontSize: '0.88rem',
+                  color: 'var(--text-muted)',
+                  fontStyle: 'italic',
+                }}
+              >
                 {consolation}
               </p>
             ) : null}
@@ -1050,7 +1214,10 @@ function ResultRow({
                     border: '1px solid var(--border)',
                     background: 'var(--surface)',
                     color: 'var(--text)',
-                    cursor: recheckState === 'submitting' || recheckState === 'done' ? 'default' : 'pointer',
+                    cursor:
+                      recheckState === 'submitting' || recheckState === 'done'
+                        ? 'default'
+                        : 'pointer',
                     fontFamily: 'var(--font-mono)',
                     fontSize: '0.58rem',
                     letterSpacing: '0.06em',
@@ -1071,7 +1238,8 @@ function ResultRow({
                         alignItems: 'center',
                         gap: '8px',
                         borderRadius: 'var(--radius-md)',
-                        border: '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
+                        border:
+                          '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
                         background: 'color-mix(in srgb, var(--game-correct) 12%, var(--surface))',
                         color: 'var(--game-correct)',
                         padding: '8px 12px',
@@ -1080,11 +1248,22 @@ function ResultRow({
                         lineHeight: 1.35,
                       }}
                     >
-                      <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                      <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>
+                        ✓
+                      </span>
                       <span>{recheckMessage}</span>
                     </div>
                   ) : (
-                    <p role="status" aria-live="polite" style={{ marginTop: '6px', fontSize: '0.78rem', color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)', lineHeight: 1.35 }}>
+                    <p
+                      role="status"
+                      aria-live="polite"
+                      style={{
+                        marginTop: '6px',
+                        fontSize: '0.78rem',
+                        color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)',
+                        lineHeight: 1.35,
+                      }}
+                    >
                       {recheckMessage}
                     </p>
                   )
@@ -1093,11 +1272,24 @@ function ResultRow({
             ) : null}
           </>
         )}
-        {breadcrumb
-          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
-          : explanation ? <ExplanationLine text={explanation} /> : null}
+        {breadcrumb ? (
+          <BreadcrumbLine
+            text={breadcrumb}
+            creatorName={creatorName}
+            creatorIsHouse={creatorIsHouse}
+          />
+        ) : explanation ? (
+          <ExplanationLine text={explanation} />
+        ) : null}
         {typeof pointsAwarded === 'number' ? (
-          <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
+          <p
+            style={{
+              ...monoStyle,
+              fontSize: '0.55rem',
+              color: 'var(--text-muted)',
+              marginTop: '10px',
+            }}
+          >
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
             {pointsLabel ? ` - ${pointsLabel}` : ''}
           </p>
@@ -1138,7 +1330,13 @@ function ResultRow({
           </p>
         </div>
       ) : null}
-      {authorNote ? <AuthorNoteCard text={authorNote} creatorName={creatorName} creatorIsHouse={creatorIsHouse} /> : null}
+      {authorNote ? (
+        <AuthorNoteCard
+          text={authorNote}
+          creatorName={creatorName}
+          creatorIsHouse={creatorIsHouse}
+        />
+      ) : null}
       {correct && openedTerritoryDomain ? (
         <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
@@ -1245,7 +1443,11 @@ function SessionCompleteRow({
         <Link
           href={detailsHref}
           className="mt-2 inline-flex text-sm"
-          style={{ color: 'var(--text-muted)', textDecoration: 'underline', textUnderlineOffset: '2px' }}
+          style={{
+            color: 'var(--text-muted)',
+            textDecoration: 'underline',
+            textUnderlineOffset: '2px',
+          }}
         >
           Game details
         </Link>
@@ -1296,7 +1498,9 @@ function BonusOfferRow({
       >
         {available} more {available === 1 ? 'question' : 'questions'} in the pool.
       </p>
-      <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Untimed. Counts toward your score.</p>
+      <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+        Untimed. Counts toward your score.
+      </p>
       <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
         <button type="button" className="btn-primary" onClick={onAccept}>
           Keep going
@@ -1315,12 +1519,17 @@ export function GameplayChatThread({
   giveUpDisabled,
   onDismiss,
   dismissDisabled,
+  onMutePresence,
+  muteDisabled,
 }: {
   messages: ChatMessage[];
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
   onDismiss?: () => void;
   dismissDisabled?: boolean;
+  // Bonus-slot opt-out (D-4 §B). Wired only to the active bonus question.
+  onMutePresence?: () => void;
+  muteDisabled?: boolean;
 }) {
   // "Show me the answer" and "Dismiss" belong only under the active (still-
   // unanswered) question — the last question message with no result after it.
@@ -1362,6 +1571,12 @@ export function GameplayChatThread({
                 giveUpDisabled={giveUpDisabled}
                 onDismiss={onDismiss && m.id === activeQuestionId ? onDismiss : undefined}
                 dismissDisabled={dismissDisabled}
+                onMutePresence={
+                  onMutePresence && m.id === activeQuestionId && m.presenceSourceName
+                    ? onMutePresence
+                    : undefined
+                }
+                muteDisabled={muteDisabled}
               />
             );
           case 'user':

@@ -22,14 +22,22 @@ import {
   generateBonusQuestionsForDomains,
   generateDailyQuestionsFromKnowledgeBase,
 } from '@/server/daily/generate-questions';
-import { DAILY_BONUS_SLOT_MAX, DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import {
+  DAILY_BONUS_SLOT_MAX,
+  DAILY_QUEUE_MIN_SIZE,
+  DAILY_QUEUE_SIZE,
+  type QueueSlot,
+} from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { commitPendingRefineDecisions } from '@/server/refine/commit';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
 
 export class DailyQueueFillError extends Error {
-  constructor(readonly code: DailyQueueFillErrorCode, message: string) {
+  constructor(
+    readonly code: DailyQueueFillErrorCode,
+    message: string,
+  ) {
     super(message);
     this.name = 'DailyQueueFillError';
   }
@@ -190,9 +198,12 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   );
 
   const remaining = DAILY_QUEUE_SIZE - authored.length - housePicks.length;
-  const generated = remaining > 0
-    ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining), { firstRun: isFirstRun })
-    : [];
+  const generated =
+    remaining > 0
+      ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining), {
+          firstRun: isFirstRun,
+        })
+      : [];
 
   // Cross-source dedup by normalized question text. The authored picker
   // dedupes by question_id against past queues, and the generator has its
@@ -253,14 +264,21 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const topUpGenerated: typeof dedupedGenerated = [];
   let topUpRounds = 0;
   while (
-    DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length) > 0 &&
+    DAILY_QUEUE_SIZE -
+      (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length) >
+      0 &&
     topUpRounds < MAX_TOP_UP_ROUNDS &&
     Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS
   ) {
     topUpRounds += 1;
     const roundShortfall =
-      DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length);
-    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(roundShortfall), { firstRun: isFirstRun });
+      DAILY_QUEUE_SIZE -
+      (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length);
+    const extra = await generateDailyQuestionsFromKnowledgeBase(
+      userId,
+      overRequest(roundShortfall),
+      { firstRun: isFirstRun },
+    );
     let recoveredThisRound = 0;
     for (const question of extra) {
       if (isGenericSubcategory(question.canonicalSubcategory)) {
@@ -381,7 +399,10 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   // fewer slots (graceful shrink), yielding a 5–7 slot queue. The +2 serves only
   // fresh questions — never a friend's literal answered question (those live
   // behind the Lately milestone click-through, D-4 §A).
-  const bonusDomains = await getFriendDomainsForBonus(userId, DAILY_BONUS_SLOT_MAX);
+  // Resting domains are excluded from the +2 pool too, so "This is {Name}'s bag
+  // but not mine" (which parks the domain in Resting) stops it surfacing as a
+  // bonus, not just in the core five.
+  const bonusDomains = await getFriendDomainsForBonus(userId, DAILY_BONUS_SLOT_MAX, restingDomains);
   if (bonusDomains.length > 0) {
     const presenceByDomain = new Map(
       bonusDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
@@ -392,7 +413,12 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     );
     for (const { domain, question } of generatedBonus) {
       const candidate = presenceByDomain.get(domain.toLowerCase());
-      await createDailyQueueItemFromPresence(userId, question.id, toBonusPresence(candidate), position);
+      await createDailyQueueItemFromPresence(
+        userId,
+        question.id,
+        toBonusPresence(candidate),
+        position,
+      );
       position += 1;
     }
   }
