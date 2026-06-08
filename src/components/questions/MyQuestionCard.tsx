@@ -1,10 +1,11 @@
 'use client';
 
-import { ChevronUp, Lock, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Lock, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
+import { visibleFeedCategory } from '@/components/feed/category';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
-import { cn } from '@/lib/utils';
+import { difficultyCopyFromValue } from '@/lib/questions/difficulty-copy';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type MyQuestionCardProps = {
@@ -23,89 +24,110 @@ export function MyQuestionCard({
   confirming,
   cardError,
   deleting,
-  onEdit,
   onDeleteRequest,
   onConfirmDelete,
   onCancelConfirm,
 }: MyQuestionCardProps) {
   const inUse = question.usedInGamesCount > 0;
-  const hasAnswers = question.timesAnswered > 0;
-  const answerersLine =
-    question.isOwnAuthored && question.answerers ? formatAnswerersLine(question.answerers) : null;
+  const difficultyLabel = difficultyCopyFromValue(question.difficulty) ?? 'Unrated';
+  const visibleCategory = visibleFeedCategory(question.domainDisplayName);
+  const answerersLine = question.isOwnAuthored && question.answerers
+    ? formatAnswerersLine(question.answerers)
+    : null;
 
   return (
     <article
-      className={cn(
-        'bg-card relative rounded-md border px-3 py-2 transition duration-200',
-        deleting ? 'scale-[0.98] opacity-0' : 'opacity-100',
-      )}
+      className={`flex items-start gap-3 py-4 transition duration-200 ${deleting ? 'scale-[0.98] opacity-0' : 'opacity-100'}`}
     >
-      {/* Overflow menu is associated with the whole card — pinned top-right, visually quiet. */}
-      <div className="absolute top-1.5 right-1.5">
-        <CardOverflowMenu inUse={inUse} onEdit={onEdit} onDelete={onDeleteRequest} />
-      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {visibleCategory ? (
+            <span
+              className="truncate text-[12px] italic leading-tight"
+              style={{
+                fontFamily: 'var(--font-literata)',
+                color: 'var(--ink)',
+                opacity: 0.7,
+              }}
+            >
+              {visibleCategory}
+            </span>
+          ) : null}
+          <span
+            className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+            style={{ color: 'var(--ink)', opacity: 0.7 }}
+            aria-label={`LLM-rated difficulty: ${difficultyLabel}`}
+          >
+            {difficultyLabel}
+          </span>
+        </div>
 
-      <div className="min-w-0">
-        <p
-          className="pr-8 font-serif text-lg leading-6 font-semibold tracking-[0.02em]"
-          style={{ color: 'var(--ink)' }}
-        >
+        <p className="mt-2 font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
+          <span aria-hidden className="opacity-60">
+            &ldquo;
+          </span>
           {question.text}
+          <span aria-hidden className="opacity-60">
+            &rdquo;
+          </span>
         </p>
 
+        <p className="mt-2 text-[13px] leading-snug">
+          <Stat value={`${question.timesAnswered}`} label="answers" />
+          <StatSeparator />
+          <Stat value={`${question.correctRate}%`} label="correct" />
+          <StatSeparator />
+          <Stat value={`${question.usedInGamesCount}`} label="games" />
+        </p>
         {answerersLine ? (
           <p
-            className="mt-1 inline-flex items-center gap-1 text-xs leading-tight"
+            className="mt-1 text-[13px] leading-snug"
             style={{ color: 'var(--ink)', opacity: 0.65 }}
           >
-            <ChevronUp className="size-3 shrink-0" />
             {answerersLine}
           </p>
         ) : null}
-
         {question.reportState ? <ReportStateNotice state={question.reportState} /> : null}
-
-        {cardError ? <p className="text-destructive mt-1.5 text-[13px]">{cardError}</p> : null}
-
+        {cardError ? (
+          <p className="mt-2 text-[13px] text-destructive">{cardError}</p>
+        ) : null}
         {confirming ? (
-          <DeleteConfirmation onConfirmDelete={onConfirmDelete} onCancelConfirm={onCancelConfirm} />
-        ) : (
-          // Single compact analytics row: metrics align in columns across cards (tabular-nums
-          // + a fixed-width Answers segment) so creators can scan answer/correct rates
-          // vertically. Metrics are omitted entirely when nobody has answered yet; the send
-          // icon stays (subdued) so the question is still shareable.
-          <div className="mt-1.5 flex items-center text-[13px] leading-snug">
-            {hasAnswers ? (
-              <div
-                className="flex items-center gap-x-6"
-                style={{ color: 'var(--ink)', opacity: 0.65 }}
-              >
-                <span className="inline-flex min-w-[5.5rem] items-center gap-1.5">
-                  <span>Answers</span>
-                  <span className="font-medium tabular-nums">{question.timesAnswered}</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span>Correct</span>
-                  <span className="font-medium tabular-nums">{question.correctRate}%</span>
-                </span>
-              </div>
-            ) : null}
-            <div className="ml-auto">
-              <SendQuestionAction
-                question={{
-                  id: question.id,
-                  text: question.text,
-                  domain: question.domainDisplayName,
-                }}
-                label=""
-                className={cn(
-                  'hover:bg-muted -mr-1 inline-flex size-8 items-center justify-center rounded-md transition',
-                  hasAnswers ? 'text-[color:var(--brand-navy)]' : 'text-muted-foreground',
-                )}
-              />
-            </div>
+          <div className="mt-3 flex items-center gap-2">
+            <span
+              className="mr-auto text-[13px] font-medium"
+              style={{ color: 'var(--ink)' }}
+            >
+              Delete this question?
+            </span>
+            <button
+              className="rounded-md border border-destructive px-3 py-2 text-sm text-destructive"
+              type="button"
+              onClick={onConfirmDelete}
+            >
+              Confirm
+            </button>
+            <button
+              className="rounded-md border px-3 py-2 text-sm"
+              type="button"
+              onClick={onCancelConfirm}
+            >
+              Cancel
+            </button>
           </div>
-        )}
+        ) : null}
+      </div>
+
+      <div className="flex shrink-0 flex-col items-center gap-1">
+        <CardOverflowMenu inUse={inUse} onDelete={onDeleteRequest} />
+        <SendQuestionAction
+          question={{
+            id: question.id,
+            text: question.text,
+            domain: question.domainDisplayName,
+          }}
+          label=""
+          className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        />
       </div>
     </article>
   );
@@ -166,43 +188,11 @@ function ReportStateNotice({ state }: { state: NonNullable<QuestionView['reportS
   );
 }
 
-function DeleteConfirmation({
-  onConfirmDelete,
-  onCancelConfirm,
-}: {
-  onConfirmDelete: () => void;
-  onCancelConfirm: () => void;
-}) {
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-2">
-      <span className="mr-auto text-[13px] font-medium" style={{ color: 'var(--ink)' }}>
-        Delete this question?
-      </span>
-      <button
-        className="border-destructive text-destructive rounded-md border px-3 py-2 text-sm"
-        type="button"
-        onClick={onConfirmDelete}
-      >
-        Confirm
-      </button>
-      <button
-        className="rounded-md border px-3 py-2 text-sm"
-        type="button"
-        onClick={onCancelConfirm}
-      >
-        Cancel
-      </button>
-    </div>
-  );
-}
-
 function CardOverflowMenu({
   inUse,
-  onEdit,
   onDelete,
 }: {
   inUse: boolean;
-  onEdit: () => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -225,7 +215,7 @@ function CardOverflowMenu({
     };
   }, [open]);
 
-  const lockedTitle = 'Used in a game — cannot be edited';
+  const lockedTitle = 'Used in a game — cannot be deleted';
 
   return (
     <div className="relative" ref={containerRef}>
@@ -236,7 +226,7 @@ function CardOverflowMenu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((current) => !current)}
-        className="text-muted-foreground hover:bg-muted hover:text-foreground -mr-1 inline-flex size-8 items-center justify-center rounded-md transition"
+        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
         <MoreHorizontal className="size-4" />
       </button>
@@ -244,22 +234,8 @@ function CardOverflowMenu({
         <div
           id={menuId}
           role="menu"
-          className="bg-background absolute top-full right-0 z-30 mt-1 w-44 rounded-md border p-1 shadow-md"
+          className="absolute right-0 top-full z-30 mt-1 w-44 rounded-md border bg-background p-1 shadow-md"
         >
-          <button
-            type="button"
-            role="menuitem"
-            disabled={inUse}
-            title={inUse ? lockedTitle : undefined}
-            onClick={() => {
-              setOpen(false);
-              onEdit();
-            }}
-            className="hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {inUse ? <Lock className="size-4" /> : <Pencil className="size-4" />}
-            Edit
-          </button>
           <button
             type="button"
             role="menuitem"
@@ -269,7 +245,7 @@ function CardOverflowMenu({
               setOpen(false);
               onDelete();
             }}
-            className="text-destructive hover:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             {inUse ? <Lock className="size-4" /> : <Trash2 className="size-4" />}
             Delete
@@ -277,6 +253,23 @@ function CardOverflowMenu({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// The metric value stays at full ink while its unit label sits back, so the eye
+// lands on the number (e.g. "5 answers", "80% correct") rather than the noun.
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <span>
+      <span style={{ color: 'var(--ink)' }}>{value}</span>
+      <span style={{ color: 'var(--ink)', opacity: 0.45 }}> {label}</span>
+    </span>
+  );
+}
+
+function StatSeparator() {
+  return (
+    <span style={{ color: 'var(--ink)', opacity: 0.45 }}> · </span>
   );
 }
 
