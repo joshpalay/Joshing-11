@@ -1,5 +1,6 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion } from '@/lib/llm';
@@ -12,6 +13,7 @@ import {
   getQuestion,
   updateQuestion,
 } from '@/server/db/queries/questions';
+import { resolveActiveIncorrectReportsForQuestion } from '@/server/db/queries/content-reports';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -28,39 +30,48 @@ function splitAlternates(value: unknown): string[] | undefined {
   return undefined;
 }
 
-function validatePatchPayload(body: Record<string, unknown> | null) {
-  const values: {
-    text?: string;
-    correctAnswer?: string;
-    alternateAnswers?: string[];
-    explanation?: string;
-    category?: string;
-    broadCategory?: string | null;
-    subcategory?: string;
-    canonicalSubcategory?: string;
-    difficulty?: number;
-  } = {};
-  const errors: string[] = [];
+type PatchValues = {
+  text?: string;
+  correctAnswer?: string;
+  alternateAnswers?: string[];
+  explanation?: string;
+  category?: string;
+  broadCategory?: string | null;
+  subcategory?: string;
+  canonicalSubcategory?: string;
+  difficulty?: number;
+};
 
-  if (body?.text !== undefined) {
-    values.text = typeof body.text === 'string' ? body.text.trim() : '';
-    if (!values.text || values.text.length > 300) errors.push('text');
+// Field order for the `fields` error array, preserved from the prior
+// hand-rolled validator so clients keep highlighting fields in the same order.
+const PATCH_FIELD_ORDER = ['text', 'correctAnswer', 'alternateAnswers', 'explanation'] as const;
+
+// Only the fields actually present in the body are validated (partial update).
+// `explanation` tolerates a non-string (coerced to '') to match the prior
+// parser, which only ever flagged it for exceeding the length cap.
+// `alternateAnswers` keeps its lenient split (non-strings dropped, trimmed,
+// empties removed) via preprocess, and an absent value stays undefined so an
+// unrelated edit never clears stored alternates.
+const patchSchema = z.object({
+  text: z.string().transform((s) => s.trim()).pipe(z.string().min(1).max(300)).optional(),
+  correctAnswer: z.string().transform((s) => s.trim()).pipe(z.string().min(1).max(200)).optional(),
+  alternateAnswers: z
+    .preprocess((v) => (v === undefined ? undefined : splitAlternates(v) ?? []), z.array(z.string().max(200)).max(5))
+    .optional(),
+  explanation: z.string().catch('').transform((s) => s.trim()).pipe(z.string().max(500)).optional(),
+});
+
+function validatePatchPayload(body: Record<string, unknown> | null): { values: PatchValues; errors: string[] } {
+  const parsed = patchSchema.safeParse(body ?? {});
+  if (parsed.success) {
+    return { values: { ...parsed.data }, errors: [] };
   }
-  if (body?.correctAnswer !== undefined) {
-    values.correctAnswer = typeof body.correctAnswer === 'string' ? body.correctAnswer.trim() : '';
-    if (!values.correctAnswer || values.correctAnswer.length > 200) errors.push('correctAnswer');
-  }
-  if (body?.alternateAnswers !== undefined) {
-    values.alternateAnswers = splitAlternates(body.alternateAnswers) ?? [];
-    if (values.alternateAnswers.length > 5 || values.alternateAnswers.some((answer) => answer.length > 200)) {
-      errors.push('alternateAnswers');
-    }
-  }
-  if (body?.explanation !== undefined) {
-    values.explanation = typeof body.explanation === 'string' ? body.explanation.trim() : '';
-    if (values.explanation.length > 500) errors.push('explanation');
-  }
-  return { values, errors };
+  const errors = [...new Set(parsed.error.issues.map((issue) => String(issue.path[0])))].sort(
+    (a, b) =>
+      PATCH_FIELD_ORDER.indexOf(a as (typeof PATCH_FIELD_ORDER)[number]) -
+      PATCH_FIELD_ORDER.indexOf(b as (typeof PATCH_FIELD_ORDER)[number]),
+  );
+  return { values: {}, errors };
 }
 
 async function questionExistsForAnotherUser(questionId: string, userId: string): Promise<boolean> {
@@ -163,6 +174,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Question has been used in a game and cannot be edited.' }, { status: 409 });
   }
   if (!result.ok) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+  // B-Report-4: fixing the answer key (or accepted alternatives) resolves any open
+  // incorrect report on this question, which lifts B-Report-3 suppression. Scoped to
+  // answer-key/alternatives edits — a pure text/explanation/category edit does not clear it.
+  if (values.correctAnswer !== undefined || values.alternateAnswers !== undefined) {
+    await resolveActiveIncorrectReportsForQuestion(id);
+  }
 
   return NextResponse.json({ ok: true, question: await getQuestion(id, session.userId) });
 }

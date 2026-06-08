@@ -1,34 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 
 import { GameplayChatThread, newMessageId, type ChatMessage, type RecheckActionResult } from '@/components/play/GameplayChat';
+import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
-import { TopUpAreasModal, type TopUpInterest } from '@/components/daily/TopUpAreasModal';
 import LoadingScreen from '@/components/LoadingScreen';
-import { categoryLabel } from '@/lib/questions-types';
+import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import { buildSessionCloseLines, type SessionSlotSummary } from '@/server/mastery/session-close-copy';
-
-type ExclusionScope = 'subcategory' | 'broad_category' | 'category';
-
-type ExclusionTick = { scope: ExclusionScope; label: string; value: string };
-
-function buildExclusionTicks(slot: QueueSlot): ExclusionTick[] {
-  const ticks: ExclusionTick[] = [
-    { scope: 'subcategory', label: slot.domain, value: slot.domain },
-  ];
-  if (slot.broad_category && slot.broad_category.trim()) {
-    ticks.push({ scope: 'broad_category', label: slot.broad_category, value: slot.broad_category });
-  }
-  if (slot.category && slot.category.trim()) {
-    ticks.push({ scope: 'category', label: categoryLabel(slot.category), value: slot.category });
-  }
-  return ticks;
-}
 
 function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
   // Figma shows the topic/category as the question chip (not the difficulty tier).
@@ -36,14 +19,30 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
     (slot.broad_category && slot.broad_category.trim()) ||
     (slot.category ? categoryLabel(slot.category) : '') ||
     slot.domain;
-  return category ? [{ label: category }] : [];
+  const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category ? [{ label: category }] : [];
+  // Daily Five +2 bonus slots (D-4 §B) carry presence attribution and are always
+  // "accessible" — surface the accessibility badge so the lighter pick reads as
+  // a deliberate, easier add rather than a generation miss. The "bonus from a
+  // friend's knowledge" framing lives in the attribution line GameplayChat
+  // renders above the question (see presenceSourceName).
+  if (slot.presence_source_id && slot.difficulty_estimate === 'accessible') {
+    badges.push({ label: 'Accessible', tone: 'muted' });
+  }
+  return badges;
 }
 
 type QueueResponse = {
   queue_id: string;
   queue_date: string;
   slots: QueueSlot[];
+  is_first_daily?: boolean;
 };
+
+// One-time intro shown before a brand-new user's first question, explaining that
+// their first five are seeded from the areas they picked in onboarding. The
+// server flags the genuinely-first, untouched queue (is_first_daily); this local
+// flag is belt-and-suspenders so a pre-answer reload doesn't show it twice.
+const FIRST_RUN_INTRO_SEEN_KEY = 'joshing:daily-first-run-intro-seen';
 
 type AnswerResponse = {
   isCorrect?: boolean;
@@ -56,8 +55,8 @@ type AnswerResponse = {
   correctAnswer?: string;
   answer?: string;
   consolation?: string | null;
-  quip?: string | null;
   insideJoke?: string | null;
+  insideJokeKind?: InsideJokeKind | null;
   breadcrumb?: string | null;
   masteryDelta?: unknown | null;
   mastery_delta?: unknown | null;
@@ -82,11 +81,31 @@ const ANSWER_ERROR_MESSAGES: Record<string, string> = {
   not_found: 'We could not find that Daily Five queue.',
   invalid_state: 'That question is already closed.',
   question_not_found: 'We could not find that Daily Five question.',
+  grader_unavailable:
+    "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
   unexpected: 'Could not record that answer.',
 };
 
 function answerFailureMessage(body: FailedAnswerResponse | null): string {
   return body?.message ?? (body?.error ? ANSWER_ERROR_MESSAGES[body.error] : undefined) ?? 'Could not record that answer.';
+}
+
+// Daily Five generation can come up short transiently: the queue endpoint
+// returns 503 `generation_failed` even for users with a valid knowledge base
+// when a round falls below the minimum size. Rather than dumping a bare error,
+// auto-retry a few times with backoff and surface a friendly "still working"
+// state with the attempt counter (the server has already burned its own
+// internal top-up rounds by the time we see this, so these are fresh attempts).
+const MAX_QUEUE_CREATE_ATTEMPTS = 4;
+const QUEUE_CREATE_BACKOFF_MS = [2000, 4000, 8000];
+
+// Shown after the auto-retries are exhausted — kept warm and retryable rather
+// than alarming, since the most common cause is slow generation, not a fault.
+const QUEUE_GENERATION_FAILED_MESSAGE =
+  "We're still crafting today's bespoke questions and it's taking longer than usual. Give it a moment and try again.";
+
+function generatingLabel(): string {
+  return 'Crafting your bespoke questions';
 }
 
 // Returns the slot the player should be on, or null when the round is over.
@@ -117,130 +136,6 @@ function sessionCloseLines(slots: QueueSlot[]): { scoreLine: string; interpretiv
   return buildSessionCloseLines(summaries);
 }
 
-function UnfamiliarDialog({
-  ticks,
-  busy,
-  onExclude,
-  onSkipOnly,
-  onCancel,
-}: {
-  ticks: ExclusionTick[];
-  busy: boolean;
-  onExclude: (tick: ExclusionTick) => void;
-  onSkipOnly: () => void;
-  onCancel: () => void;
-}) {
-  const [tickIndex, setTickIndex] = useState(0);
-  const maxIndex = Math.max(0, ticks.length - 1);
-  const safeIndex = Math.min(tickIndex, maxIndex);
-  const selected = ticks[safeIndex] ?? ticks[0];
-
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onCancel]);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="unfamiliar-dialog-title"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 60,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '1rem',
-        background: 'rgba(0,0,0,0.45)',
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      <div
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '1.5rem',
-          maxWidth: '24rem',
-          width: '100%',
-        }}
-      >
-        <p id="unfamiliar-dialog-title" className="text-sm font-semibold text-[var(--text)]">
-          How familiar are you with this?
-        </p>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Slide to the scope you&rsquo;d like to skip going forward.
-        </p>
-
-        {ticks.length > 1 ? (
-          <div className="mt-5">
-            <input
-              type="range"
-              min={0}
-              max={maxIndex}
-              step={1}
-              value={safeIndex}
-              onChange={(event) => setTickIndex(Number(event.target.value))}
-              aria-label="Unfamiliarity scope"
-              style={{ width: '100%' }}
-            />
-            <div className="mt-2 flex justify-between gap-1 text-[0.65rem] uppercase tracking-[0.06em] text-[var(--text-muted)]">
-              {ticks.map((tick, i) => (
-                <span
-                  key={`${tick.scope}-${i}`}
-                  style={{
-                    flex: '1 1 0',
-                    textAlign: i === 0 ? 'left' : i === ticks.length - 1 ? 'right' : 'center',
-                    color: i === safeIndex ? 'var(--text)' : 'var(--text-muted)',
-                    fontWeight: i === safeIndex ? 600 : 400,
-                  }}
-                >
-                  {tick.label}
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <p className="mt-4 text-sm text-[var(--text-muted)]">
-          We&rsquo;ll stop sending you questions about{' '}
-          <span className="font-semibold text-[var(--text)]">{selected?.label ?? ''}</span>.
-        </p>
-
-        <div className="mt-4 flex flex-col gap-2">
-          <button
-            type="button"
-            className="btn-primary w-full"
-            disabled={busy || !selected}
-            onClick={() => { if (selected) onExclude(selected); }}
-          >
-            {busy ? '...' : 'Remove from my topics'}
-          </button>
-          <button
-            type="button"
-            className="w-full rounded-[var(--radius-md)] border px-4 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--surface-raised)] transition-colors"
-            style={{ borderColor: 'var(--border)' }}
-            disabled={busy}
-            onClick={onSkipOnly}
-          >
-            Just skip this one
-          </button>
-          <button
-            type="button"
-            className="text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function DailyPage() {
   const router = useRouter();
   const [queue, setQueue] = useState<QueueResponse | null>(null);
@@ -248,11 +143,38 @@ export default function DailyPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Non-null while we're auto-retrying queue generation; drives the friendly
+  // "still working (attempt N/4)" loading label instead of a bare error.
+  const [generatingAttempt, setGeneratingAttempt] = useState<number | null>(null);
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
-  const [showUnfamiliarDialog, setShowUnfamiliarDialog] = useState(false);
-  const [excludingDomain, setExcludingDomain] = useState(false);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
-  const [areaTopUp, setAreaTopUp] = useState<{ existing: TopUpInterest[]; maxNew: number } | null>(null);
+  const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
+  const [showFirstRunIntro, setShowFirstRunIntro] = useState(false);
+  // Refs for keeping the answer bar above the on-screen keyboard on mobile.
+  const answerFormRef = useRef<HTMLFormElement>(null);
+  const answerInputRef = useRef<HTMLInputElement>(null);
+
+  // Show the first-run intro once, only for the server-flagged first untouched
+  // queue and only if this device hasn't already dismissed it.
+  const maybeShowFirstRunIntro = useCallback((firstDaily: boolean | undefined) => {
+    if (!firstDaily) return;
+    try {
+      if (window.localStorage.getItem(FIRST_RUN_INTRO_SEEN_KEY)) return;
+    } catch {
+      // Private mode / storage disabled: fall through and show it (server already
+      // gated on the genuinely-first, untouched queue, so this is still one-time).
+    }
+    setShowFirstRunIntro(true);
+  }, []);
+
+  const dismissFirstRunIntro = useCallback(() => {
+    setShowFirstRunIntro(false);
+    try {
+      window.localStorage.setItem(FIRST_RUN_INTRO_SEEN_KEY, '1');
+    } catch {
+      // Non-fatal — the server flag won't re-fire once a slot is answered anyway.
+    }
+  }, []);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -262,23 +184,44 @@ export default function DailyPage() {
       const body = await response.json().catch(() => null);
 
       if (response.ok && body?.queue === null) {
-        const createResponse = await fetch('/api/daily/queue', {
-          method: 'POST',
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        if (!createResponse.ok) {
+        // The queue doesn't exist yet — generate it. Generation can fall below
+        // the minimum and return 503 (generation_failed) even with a valid
+        // knowledge base, so auto-retry with backoff while showing the friendly
+        // "still working" state. 409 (no_knowledge_base) means the user
+        // genuinely has nothing to generate from — that's terminal; send them
+        // to setup rather than retrying.
+        for (let attempt = 1; attempt <= MAX_QUEUE_CREATE_ATTEMPTS; attempt += 1) {
+          setGeneratingAttempt(attempt);
+          const createResponse = await fetch('/api/daily/queue', {
+            method: 'POST',
+            credentials: 'include',
+            cache: 'no-store',
+          });
+          if (createResponse.ok) break;
+
           const createBody = await createResponse.json().catch(() => null);
-          // 409 (no_knowledge_base) means the user genuinely has nothing to
-          // generate from — send them to setup. A 503 (generation_failed) is a
-          // transient/slow-generation hiccup; surface the retryable message
-          // instead of bouncing a user with a valid knowledge base to setup.
           if (createResponse.status === 409) {
             router.replace('/daily/setup');
             return;
           }
-          throw new Error(createBody?.message ?? 'Could not load today.');
+          // Only the transient generation_failed (503) is worth retrying; a
+          // different status is a real fault, so surface its message and stop.
+          if (createResponse.status !== 503) {
+            throw new Error(createBody?.message ?? 'Could not load today.');
+          }
+          // Out of retries: fall back to the warm, retryable message.
+          if (attempt === MAX_QUEUE_CREATE_ATTEMPTS) {
+            throw new Error(QUEUE_GENERATION_FAILED_MESSAGE);
+          }
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              QUEUE_CREATE_BACKOFF_MS[attempt - 1] ??
+                QUEUE_CREATE_BACKOFF_MS[QUEUE_CREATE_BACKOFF_MS.length - 1],
+            ),
+          );
         }
+        setGeneratingAttempt(null);
         const refetchResponse = await fetch('/api/daily/queue', { cache: 'no-store', credentials: 'include' });
         const refetchBody = await refetchResponse.json().catch(() => null);
         if (!refetchResponse.ok) {
@@ -291,6 +234,7 @@ export default function DailyPage() {
         }
         const refetchSlots = Array.isArray(refetchBody.slots) ? refetchBody.slots : [];
         setQueue({ queue_id: refetchBody.queue_id, queue_date: refetchBody.queue_date, slots: refetchSlots });
+        maybeShowFirstRunIntro(refetchBody.is_first_daily);
         setLoading(false);
         return;
       }
@@ -315,12 +259,14 @@ export default function DailyPage() {
         queue_date: body.queue_date,
         slots,
       });
+      maybeShowFirstRunIntro(body.is_first_daily);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load today.');
     } finally {
+      setGeneratingAttempt(null);
       setLoading(false);
     }
-  }, [router]);
+  }, [router, maybeShowFirstRunIntro]);
 
   useEffect(() => {
     const initialTimer = window.setTimeout(() => {
@@ -329,36 +275,6 @@ export default function DailyPage() {
 
     return () => window.clearTimeout(initialTimer);
   }, [loadQueue]);
-
-  // One-time nudge for invite-seeded users who only declared three interests:
-  // the next time they play, offer to top up to five. Eligibility (onboarded,
-  // exactly three active interests, not yet dismissed) and persistence both
-  // live server-side, so this just asks whether to show and renders the modal.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch('/api/declared-interests/top-up', {
-          cache: 'no-store',
-          credentials: 'include',
-        });
-        if (!response.ok) return;
-        const body = (await response.json().catch(() => null)) as
-          | { eligible?: boolean; existing?: TopUpInterest[]; remainingSlots?: number }
-          | null;
-        if (cancelled || !body?.eligible) return;
-        setAreaTopUp({
-          existing: Array.isArray(body.existing) ? body.existing : [],
-          maxNew: Math.max(0, body.remainingSlots ?? 0),
-        });
-      } catch {
-        // Non-fatal — the prompt simply won't show this session.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const actualCurrentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
   const currentSlot = pausedAfterSlotIndex === null ? actualCurrentSlot : null;
@@ -369,87 +285,6 @@ export default function DailyPage() {
   const queueLength = queue && queue.slots.length > 0 ? queue.slots.length : DAILY_QUEUE_SIZE;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
 
-
-  const skipCurrent = useCallback(async () => {
-    if (!queue || !currentSlot || submitting) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/daily/skip', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ queue_id: queue.queue_id, slot_index: currentSlot.slot_index }),
-      });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(body?.message ?? 'Could not skip that question.');
-      }
-      const nextSlots = Array.isArray(body?.slots) ? (body.slots as QueueSlot[]) : null;
-      setQueue((existing) => {
-        if (!existing) return existing;
-        if (nextSlots) return { ...existing, slots: nextSlots };
-        return {
-          ...existing,
-          slots: existing.slots.map((slot) =>
-            slot.slot_index === currentSlot.slot_index ? { ...slot, skipped: true } : slot
-          ),
-        };
-      });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not skip that question.');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [currentSlot, queue, submitting]);
-
-  const excludeDomainAndSkip = useCallback(async (tick: ExclusionTick) => {
-    if (!currentSlot) return;
-    setExcludingDomain(true);
-    try {
-      await fetch('/api/users/domain-exclusions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ canonical_subcategory: tick.value, scope: tick.scope }),
-      });
-      // Subcategory exclusions also need to drop the domain from the user's
-      // selectedDomains list in Custom mode so today's queue rebuild can't
-      // re-pull it; broader scopes are filtered out by getKnowledgeBase via
-      // userDomainExclusions and don't touch selectedDomains.
-      if (tick.scope === 'subcategory') {
-        try {
-          const prefsResponse = await fetch('/api/daily/preferences', { credentials: 'include' });
-          if (prefsResponse.ok) {
-            const prefsBody = await prefsResponse.json().catch(() => null) as {
-              preferences: { domainMode: string; selectedDomains: string[] };
-              domains: Array<{ domain: string }>;
-            } | null;
-            if (prefsBody && prefsBody.preferences.domainMode === 'custom') {
-              const nextDomains = prefsBody.preferences.selectedDomains.filter((d) => d !== tick.value);
-              if (nextDomains.length > 0 && nextDomains.length !== prefsBody.preferences.selectedDomains.length) {
-                await fetch('/api/daily/preferences', {
-                  method: 'PATCH',
-                  headers: { 'content-type': 'application/json' },
-                  credentials: 'include',
-                  body: JSON.stringify({ domainMode: 'custom', selectedDomains: nextDomains }),
-                });
-              }
-            }
-          }
-        } catch {
-          // preferences sync is best-effort; the exclusion write above already
-          // ensures future queue builds skip this domain.
-        }
-      }
-    } catch {
-      // exclusion is best-effort; still skip the slot so the user can move on
-    } finally {
-      setExcludingDomain(false);
-    }
-    setShowUnfamiliarDialog(false);
-    void skipCurrent();
-  }, [currentSlot, skipCurrent]);
 
   const requestRecheck = useCallback(async (slotIndex: number): Promise<RecheckActionResult> => {
     if (!queue) throw new Error('No active queue');
@@ -511,6 +346,8 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
+          presenceSourceName: slot.presence_source_name ?? null,
+          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -528,11 +365,17 @@ export default function DailyPage() {
           correctAnswer: slot.answer_state === 'correct' ? null : slot.reveal_canonical_answer ?? null,
           consolation: slot.reveal_quip ?? null,
           insideJoke: slot.reveal_inside_joke ?? null,
+          insideJokeKind: slot.reveal_inside_joke_kind ?? null,
+          authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
           breadcrumb: slot.reveal_breadcrumb ?? null,
           explanation: slot.reveal_explainer ?? null,
           copyVariant: slot.slot_index,
-          creatorName: slot.source === 'friend' ? (slot.author_name ?? null) : null,
+          // D-3: house core slots surface the 'Joshing' name + Editorial badge
+          // (creatorIsHouse), rendered non-relationally by GameplayChat.
+          creatorName: slot.source === 'friend' || slot.source === 'house' ? (slot.author_name ?? null) : null,
+          creatorIsHouse: slot.source === 'house',
           canonicalSubcategory: slot.domain,
+          openedTerritoryDomain: openedTerritoryBySlot[slot.slot_index] ?? null,
           recheckAction: slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
             ? { onSubmit: () => requestRecheck(slot.slot_index) }
             : null,
@@ -554,11 +397,10 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
+          presenceSourceName: slot.presence_source_name ?? null,
+          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
           isNew: true,
           badges: questionBadges(slot),
-          onDismiss: () => setShowUnfamiliarDialog(true),
-          dismissLabel: 'Not familiar with this topic',
-          dismissImmediate: false,
         });
         if (submitting && answer.trim()) {
           rows.push({ id: 'u-pending', kind: 'user', text: answer.trim() });
@@ -585,7 +427,7 @@ export default function DailyPage() {
     return rows.length > 0
       ? rows
       : [{ id: newMessageId(), kind: 'system', text: "Today's five is not ready yet." }];
-  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer, pendingGiveUp]);
+  }, [allDone, currentSlot?.slot_index, queue, requestRecheck, submitting, answer, pendingGiveUp, openedTerritoryBySlot]);
 
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
@@ -652,6 +494,15 @@ export default function DailyPage() {
       }
 
       const isCorrect = Boolean(body.isCorrect ?? body.correct);
+      // A correct answer in an unfamiliar domain default-adds it to the KB
+      // (B-1). The server reports the freshly-opened domain on masteryDelta;
+      // stash it per-slot so the reveal can surface the "Added — remove?" undo.
+      // Client-only — deliberately not persisted into the QueueSlot schema.
+      const masteryDelta = body.masteryDelta ?? body.mastery_delta;
+      const openedDomain = isCorrect ? pickOpenedTerritoryDomain(masteryDelta) : null;
+      if (openedDomain) {
+        setOpenedTerritoryBySlot((existing) => ({ ...existing, [currentSlot.slot_index]: openedDomain }));
+      }
       setQueue((existing) => existing
         ? {
             ...existing,
@@ -666,8 +517,9 @@ export default function DailyPage() {
                     reveal_canonical_answer: body.correctAnswer ?? body.answer,
                     reveal_explainer: body.explanation ?? body.explainer,
                     reveal_breadcrumb: null,
-                    reveal_quip: opts.gaveUp ? null : body.consolation ?? body.quip ?? null,
+                    reveal_quip: opts.gaveUp ? null : body.consolation ?? null,
                     reveal_inside_joke: body.insideJoke ?? null,
+                    reveal_inside_joke_kind: body.insideJokeKind ?? null,
                   }
                 : slot
             ),
@@ -701,6 +553,31 @@ export default function DailyPage() {
       setPendingGiveUp(false);
     }
   }, [postAnswer]);
+
+  // Keep the "Answer" bar above the on-screen keyboard. On mobile the layout
+  // viewport doesn't shrink when the keyboard opens, so a `position: sticky`
+  // footer ends up hidden behind it (the original "scroll to find the button"
+  // bug). The VisualViewport API reports the genuinely-visible region, so we
+  // lift the bar by however much the keyboard overlaps it. Re-runs when the
+  // input bar mounts for a new pending slot. No-ops where VisualViewport is
+  // unsupported — the sticky positioning still applies as before.
+  useEffect(() => {
+    const form = answerFormRef.current;
+    const viewport = window.visualViewport;
+    if (!form || !viewport) return;
+    const update = () => {
+      const overlap = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      form.style.transform = overlap > 0 ? `translateY(-${overlap}px)` : '';
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+      form.style.transform = '';
+    };
+  }, [currentSlot?.slot_index]);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col px-0">
@@ -739,73 +616,143 @@ export default function DailyPage() {
         style={{ paddingBottom: "calc(24px + env(safe-area-inset-bottom))" }}
       >
         {loading ? (
-          <LoadingScreen fullScreen label="Loading today" />
+          <LoadingScreen
+            fullScreen
+            label={generatingAttempt != null ? generatingLabel() : 'Loading today'}
+          />
         ) : error ? (
-          <div className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm text-[var(--danger)]" style={{ borderColor: 'var(--danger)' }}>
-            {error}
+          // Generation hiccups are warm and retryable, not alarming — keep this
+          // neutral (not --danger) and give the player a one-tap way to retry.
+          <div
+            className="flex flex-col items-start gap-3 rounded-[var(--radius-sm)] border px-3 py-3 text-sm text-[var(--text)]"
+            style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+          >
+            <p className="text-[var(--text-muted)]">{error}</p>
+            <button
+              type="button"
+              onClick={() => void loadQueue()}
+              className="inline-flex min-h-11 items-center rounded-md border px-3 py-1.5 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              Try again
+            </button>
           </div>
         ) : (
-          <GameplayChatThread messages={messages} />
+          <GameplayChatThread
+            messages={messages}
+            onGiveUp={() => void giveUpCurrent()}
+            giveUpDisabled={submitting}
+          />
         )}
       </section>
 
       {currentSlot && !loading ? (
         <form
+          ref={answerFormRef}
           className="sticky bottom-0 z-30 mt-auto border-t px-4 py-3"
+          aria-label="Submit your answer"
           style={{
             borderColor: 'var(--border)',
             background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
             backdropFilter: 'blur(6px)',
             paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
+            // Smooth the lift/settle as the keyboard opens and closes (the
+            // translateY is driven imperatively by the VisualViewport effect).
+            transition: 'transform 0.15s ease-out',
           }}
           onSubmit={(event) => {
+            // Native single-input form submit already fires on Enter/Return;
+            // handling it here keeps the click and keyboard paths identical
+            // across platforms.
             event.preventDefault();
             void submitAnswer();
           }}
         >
           <div className="flex gap-2">
             <input
+              ref={answerInputRef}
               value={answer}
               onChange={(event) => setAnswer(event.target.value)}
+              onFocus={() => {
+                // Belt-and-suspenders for browsers without VisualViewport: nudge
+                // the field into view once the keyboard has begun animating in.
+                window.setTimeout(() => {
+                  answerInputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }, 250);
+              }}
               disabled={submitting}
               placeholder="Your answer..."
+              aria-label="Your answer"
+              // Label the keyboard's return key as a send/submit action so it's
+              // the obvious way to answer on mobile.
+              enterKeyHint="send"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
               className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
               style={{ borderColor: 'var(--border)' }}
             />
-            <button type="submit" className="btn-primary shrink-0" disabled={submitting || !answer.trim()}>
-              {submitting ? '...' : 'Answer'}
-            </button>
-          </div>
-          <div className="mt-2 flex items-center justify-end gap-3">
             <button
-              type="button"
-              className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground underline underline-offset-4"
-              disabled={submitting}
-              onClick={() => void giveUpCurrent()}
+              type="submit"
+              className="btn-primary shrink-0"
+              aria-label="Submit answer"
+              disabled={submitting || !answer.trim()}
             >
-              Show me the answer
+              {submitting ? '...' : 'Answer'}
             </button>
           </div>
         </form>
       ) : null}
 
-      {showUnfamiliarDialog && currentSlot ? (
-        <UnfamiliarDialog
-          ticks={buildExclusionTicks(currentSlot)}
-          busy={excludingDomain || submitting}
-          onExclude={(tick) => void excludeDomainAndSkip(tick)}
-          onSkipOnly={() => { setShowUnfamiliarDialog(false); void skipCurrent(); }}
-          onCancel={() => setShowUnfamiliarDialog(false)}
-        />
-      ) : null}
-
-      {areaTopUp && areaTopUp.maxNew > 0 ? (
-        <TopUpAreasModal
-          existing={areaTopUp.existing}
-          maxNew={areaTopUp.maxNew}
-          onDismiss={() => setAreaTopUp(null)}
-          onSaved={() => setAreaTopUp(null)}
-        />
+      {showFirstRunIntro ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="first-run-intro-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            background: 'rgba(0,0,0,0.45)',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) dismissFirstRunIntro();
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.5rem',
+              maxWidth: '24rem',
+              width: '100%',
+            }}
+          >
+            <p
+              id="first-run-intro-title"
+              className="font-serif text-lg font-semibold text-[var(--text)]"
+            >
+              Your first five
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+              Your first five are drawn from the areas you picked. Answer however you&rsquo;d
+              naturally say it.
+            </p>
+            <button
+              type="button"
+              className="btn-primary mt-5 w-full"
+              onClick={dismissFirstRunIntro}
+            >
+              Start
+            </button>
+          </div>
+        </div>
       ) : null}
     </main>
   );

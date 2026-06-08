@@ -1,0 +1,13 @@
+-- B-FirstRecap-1 — First-Session Recap "seen" signal.
+--
+-- The one-time cinematic recap (recap.type = 'first_session') fires after the
+-- user's first ever completed Daily Five. This nullable timestamp records when
+-- it was shown so re-entering the app, refreshing, or replaying catch-up never
+-- re-trigger it. NULL = not yet seen; a non-NULL value permanently suppresses it.
+--
+-- Additive nullable column with no default — the safe case. Mirrored by a
+-- defensive guard in src/instrumentation.ts so a preview/production database
+-- that records this migration without the column present still boots.
+--
+-- Rollback: ALTER TABLE "User" DROP COLUMN IF EXISTS "first_session_recap_seen_at";
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "first_session_recap_seen_at" timestamp with time zone;

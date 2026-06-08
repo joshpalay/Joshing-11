@@ -10,8 +10,11 @@ const {
 } = vi.hoisted(() => {
   const state = {
     existingUser: null as { id: string } | null,
+    // A pre-existing follow edge inviter -> invitee (shape: { id, state }).
     existingFriendship: null as Record<string, unknown> | null,
-    insertedFriendship: { id: 'friendship-1', status: 'pending' } as Record<
+    // The invitee's follow-privacy gate, returned by the followPrivacy lookup.
+    targetFollowPrivacy: 'approval_required' as 'public' | 'approval_required',
+    insertedFriendship: { id: 'friendship-1', state: 'pending' } as Record<
       string,
       unknown
     >,
@@ -23,6 +26,9 @@ const {
       from: vi.fn(() => ({
         where: vi.fn(() => ({
           limit: vi.fn(async () => {
+            if (selection && 'followPrivacy' in selection) {
+              return [{ followPrivacy: state.targetFollowPrivacy }]
+            }
             if (selection && Object.values(selection).includes('users.id')) {
               return state.existingUser ? [state.existingUser] : []
             }
@@ -83,16 +89,16 @@ vi.mock('@/server/db', () => ({
   db: dbMock,
   activityItems: { id: 'activityItems.id' },
   friendInvitations: { id: 'friendInvitations.id' },
-  friendships: {
-    id: 'friendships.id',
-    userAId: 'friendships.userAId',
-    userBId: 'friendships.userBId',
-    status: 'friendships.status',
-    requestedByUserId: 'friendships.requestedByUserId',
+  follows: {
+    id: 'follows.id',
+    followerId: 'follows.followerId',
+    followeeId: 'follows.followeeId',
+    state: 'follows.state',
   },
   users: {
     id: 'users.id',
     phoneNumber: 'users.phoneNumber',
+    followPrivacy: 'users.followPrivacy',
   },
 }))
 
@@ -143,7 +149,8 @@ describe('POST /api/friend-invitations', () => {
     getSessionMock.mockResolvedValue({ userId: 'user-inviter' })
     state.existingUser = null
     state.existingFriendship = null
-    state.insertedFriendship = { id: 'friendship-1', status: 'pending' }
+    state.targetFollowPrivacy = 'approval_required'
+    state.insertedFriendship = { id: 'friendship-1', state: 'pending' }
     state.updateValues = undefined
     process.env.NEXT_PUBLIC_APP_URL = 'https://joshing.example'
   })
@@ -351,12 +358,11 @@ describe('POST /api/friend-invitations', () => {
     )
   })
 
-  it('returns already-friends state without creating a duplicate friendship request', async () => {
+  it('returns already-following state without creating a duplicate follow', async () => {
     state.existingUser = { id: 'user-invitee' }
     state.existingFriendship = {
       id: 'friendship-active',
-      status: 'active',
-      requestedByUserId: 'user-inviter',
+      state: 'approved',
     }
 
     const response = await POST(
@@ -367,12 +373,12 @@ describe('POST /api/friend-invitations', () => {
     expect(response.status).toBe(200)
     expect(createFriendInvitationMock).not.toHaveBeenCalled()
     expect(dbMock.insert).not.toHaveBeenCalled()
-    expect(body.state).toBe('already_friends')
+    expect(body.state).toBe('already_following')
     expect(body.friendshipRequest).toEqual(
       expect.objectContaining({
         id: 'friendship-active',
-        status: 'active',
-        state: 'already_friends',
+        status: 'approved',
+        state: 'already_following',
       })
     )
   })
@@ -381,8 +387,7 @@ describe('POST /api/friend-invitations', () => {
     state.existingUser = { id: 'user-invitee' }
     state.existingFriendship = {
       id: 'friendship-pending',
-      status: 'pending',
-      requestedByUserId: 'user-inviter',
+      state: 'pending',
     }
 
     const response = await POST(
@@ -395,13 +400,11 @@ describe('POST /api/friend-invitations', () => {
     expect(body.state).toBe('pending_existing')
   })
 
-  it('handles reverse pending requests without creating a duplicate friendship request', async () => {
+  it('auto-approves the follow when the invitee is a public account', async () => {
     state.existingUser = { id: 'user-invitee' }
-    state.existingFriendship = {
-      id: 'friendship-reverse',
-      status: 'pending',
-      requestedByUserId: 'user-invitee',
-    }
+    state.existingFriendship = null
+    state.targetFollowPrivacy = 'public'
+    state.insertedFriendship = { id: 'friendship-1', state: 'approved' }
 
     const response = await POST(
       jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' })
@@ -409,8 +412,11 @@ describe('POST /api/friend-invitations', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(dbMock.insert).not.toHaveBeenCalled()
-    expect(body.state).toBe('reverse_pending')
+    expect(dbMock.insert).toHaveBeenCalled()
+    expect(body.state).toBe('auto_approved')
+    expect(body.friendshipRequest).toEqual(
+      expect.objectContaining({ id: 'friendship-1', status: 'approved', state: 'auto_approved' }),
+    )
   })
 
   it('rejects 4 interests', async () => {

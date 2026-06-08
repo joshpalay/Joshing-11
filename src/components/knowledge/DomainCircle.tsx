@@ -1,7 +1,4 @@
-import {
-  DOMAIN_ICON_COMPONENTS,
-  DomainInitialIcon,
-} from '@/components/icons/domain-icons'
+import { DOMAIN_ICON_COMPONENTS } from '@/components/icons/domain-icons'
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
 import { KnowledgeBubble, domainBubbleGradient } from '@/components/knowledge/KnowledgeBubble'
@@ -88,15 +85,7 @@ export function DomainCircle({
             border="1px dashed #c8c0b0"
             opacity={0.5}
           >
-            {Icon ? (
-              <Icon size={iconSize} color="#0a1f3d" />
-            ) : (
-              <DomainInitialIcon
-                size={iconSize}
-                color="#0a1f3d"
-                label={canonicalSubcategory}
-              />
-            )}
+            {Icon ? <Icon size={iconSize} color="#0a1f3d" /> : null}
           </KnowledgeBubble>
         </div>
         <p style={{ ...nameStyle, opacity: 0.3 }}>{canonicalSubcategory}</p>
@@ -131,15 +120,7 @@ export function DomainCircle({
             boxShadow: highlighted ? '0 0 8px #f0c060' : undefined,
           }}
         >
-          {Icon ? (
-            <Icon size={iconSize} color="#0a1f3d" />
-          ) : (
-            <DomainInitialIcon
-              size={iconSize}
-              color="#0a1f3d"
-              label={canonicalSubcategory}
-            />
-          )}
+          {Icon ? <Icon size={iconSize} color="#0a1f3d" /> : null}
         </KnowledgeBubble>
       </div>
       <p style={nameStyle}>{canonicalSubcategory}</p>

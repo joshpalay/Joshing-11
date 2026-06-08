@@ -236,10 +236,10 @@ const titleStyle: CSSProperties = {
 const shareButtonStyle: CSSProperties = {
   minHeight: 38,
   padding: '0 0.82rem',
-  border: '1px solid #ddd6c7',
+  border: '1px solid var(--warm-border-soft)',
   borderRadius: 999,
   background: '#fffdf8',
-  color: '#1a1208',
+  color: 'var(--warm-ink)',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -271,7 +271,7 @@ const badgeStyle: CSSProperties = {
   height: 32,
   borderRadius: 999,
   border: '1px solid',
-  color: '#1a1208',
+  color: 'var(--warm-ink)',
   display: 'grid',
   placeItems: 'center',
   fontSize: '0.86rem',
@@ -285,7 +285,7 @@ const rowTextStyle: CSSProperties = {
 
 const domainNameStyle: CSSProperties = {
   margin: 0,
-  color: '#1a1208',
+  color: 'var(--warm-ink)',
   fontFamily: 'var(--font-literata), Georgia, serif',
   fontSize: '0.92rem',
   fontWeight: 700,
@@ -295,7 +295,7 @@ const domainNameStyle: CSSProperties = {
 
 const supportingStyle: CSSProperties = {
   margin: '0.18rem 0 0',
-  color: '#696257',
+  color: 'var(--warm-ink-700)',
   fontSize: '0.68rem',
   lineHeight: 1.25,
 };
@@ -307,14 +307,14 @@ const emptyWrapStyle: CSSProperties = {
 
 const emptyTitleStyle: CSSProperties = {
   margin: 0,
-  color: '#1a1208',
+  color: 'var(--warm-ink)',
   fontSize: '0.92rem',
   fontWeight: 600,
 };
 
 const emptyCopyStyle: CSSProperties = {
   margin: '0.3rem 0 0',
-  color: '#696257',
+  color: 'var(--warm-ink-700)',
   fontSize: '0.82rem',
   lineHeight: 1.35,
 };

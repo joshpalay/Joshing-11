@@ -113,6 +113,9 @@ vi.mock('@/server/db/queries/questions', () => ({
 
 vi.mock('@/server/db/queries/friends', () => ({
   getFriends: getFriendsMock,
+  // Broadcast fan-out now reads my followers; in these tests the recipient set
+  // is the same fixture, so alias it to the existing mock.
+  getFollowers: getFriendsMock,
 }))
 
 vi.mock('@/server/db/queries/feed', () => ({
@@ -127,6 +130,7 @@ vi.mock('@/server/knowledge/open-domain', () => ({
 
 vi.mock('@/server/questions/llm-difficulty', () => ({
   assessQuestionDifficulty: assessQuestionDifficultyMock,
+  fallbackQuestionDifficulty: () => ({ tier: 'solid', difficulty: 3 }),
 }))
 
 vi.mock('@/server/sms', () => ({
@@ -515,7 +519,35 @@ describe('POST /api/questions category leak handling', () => {
     expect(createArgs.publicStatus).toBe('eligible_pending')
   })
 
-  it('returns 500 with a friendly message when an enrichment step throws', async () => {
+  it('hard-blocks a safety-fail verdict: saves as visibility blocked, skips all fan-out, returns a non-graphic content-check error', async () => {
+    categorizeQuestionMock.mockResolvedValue({
+      broad_category: 'Arts & Literature',
+      subcategory: 'Victorian Literature',
+    })
+    // Real verdictToBlockedVisibility (vet-verdict is not mocked) keys off rejectionKind.
+    vetQuestionMock.mockResolvedValue({ status: 'rejected', score: 0.1, reason: 'safety: …', rejectionKind: 'safety' })
+    getFriendsMock.mockResolvedValue([{ id: 'friend-1', displayName: 'Friend One' }])
+
+    const response = await POST(questionRequest({ shareToFeed: true, sendToFriendIds: [] }))
+    const body = await response.json()
+
+    expect(response.status).toBe(422)
+    expect(body.error).toBe('failed_content_check')
+    // Must not echo or name the triggered safety category.
+    expect(JSON.stringify(body)).not.toMatch(/slur|harass|minor|doxx|safety/i)
+
+    // Persisted as blocked so it can never be re-shared, even from the bank.
+    expect(createQuestionMock).toHaveBeenCalledTimes(1)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { visibility?: string; publicStatus: string }
+    expect(createArgs.visibility).toBe('blocked')
+    expect(createArgs.publicStatus).toBe('rejected')
+
+    // No fan-out: no broadcast or direct-send feed rows in the same request.
+    expect(state.feedInsertValues).toEqual([])
+    expect(state.questionUpdateValues).toEqual([])
+  })
+
+  it('still saves the question with a fallback difficulty when difficulty enrichment throws', async () => {
     categorizeQuestionMock.mockResolvedValue({
       broad_category: 'Arts & Literature',
       subcategory: 'Victorian Literature',
@@ -524,11 +556,28 @@ describe('POST /api/questions category leak handling', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     const response = await POST(questionRequest({}))
-    const body = await response.json()
 
-    expect(response.status).toBe(500)
-    expect(body.error).toBe('server_error')
-    expect(body.message).toMatch(/something went wrong/i)
-    expect(createQuestionMock).not.toHaveBeenCalled()
+    // Enrichment is optional: an outage degrades the signal, it does not 500 the save.
+    expect(response.status).toBe(201)
+    expect(createQuestionMock).toHaveBeenCalledTimes(1)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { difficulty: number }
+    expect(createArgs.difficulty).toBe(3)
+  })
+
+  it('saves with needs_review status when the vet step throws, never auto-publishing', async () => {
+    categorizeQuestionMock.mockResolvedValue({
+      broad_category: 'Arts & Literature',
+      subcategory: 'Victorian Literature',
+    })
+    vetQuestionMock.mockRejectedValue(new Error('vet down'))
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const response = await POST(questionRequest({}))
+
+    expect(response.status).toBe(201)
+    expect(createQuestionMock).toHaveBeenCalledTimes(1)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { publicStatus: string }
+    // verdictToPublicStatus maps needs_review → not_scored (never eligible/public).
+    expect(createArgs.publicStatus).toBe('not_scored')
   })
 })

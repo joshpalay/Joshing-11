@@ -1,9 +1,23 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { db, declaredInterests } from '@/server/db';
-import { type DeclaredInterestInput, saveDeclaredInterests } from '@/server/db/queries/users';
+import {
+  addDeclaredInterest,
+  DeclaredInterestLimitError,
+  type DeclaredInterestInput,
+  MAX_ACTIVE_DECLARED_INTERESTS,
+  saveDeclaredInterests,
+} from '@/server/db/queries/users';
+import { TooBroadInterestError } from '@/lib/knowledge/interest-specificity';
+import { UnanswerableInterestError } from '@/server/llm/interests';
+
+const addInterestSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  broadCategory: z.string().trim().max(80).optional(),
+});
 
 type DeclaredInterestsBody = {
   interests?: unknown;
@@ -39,7 +53,8 @@ function parseInterests(value: unknown): DeclaredInterestInput[] | null {
     return parsed ? [parsed] : [];
   });
 
-  if (interests.length < 1 || interests.length > 5) return null;
+  // No product cap — only the defensive sanity bound shared with the DB layer.
+  if (interests.length < 1 || interests.length > MAX_ACTIVE_DECLARED_INTERESTS) return null;
   return interests;
 }
 
@@ -56,7 +71,7 @@ export async function GET() {
     .from(declaredInterests)
     .where(and(eq(declaredInterests.userId, session.userId), eq(declaredInterests.isActive, true)))
     .orderBy(asc(declaredInterests.declaredAt))
-    .limit(5);
+    .limit(MAX_ACTIVE_DECLARED_INTERESTS);
 
   return NextResponse.json({
     interests: interests.map((interest) => ({
@@ -68,6 +83,64 @@ export async function GET() {
   });
 }
 
+// Append a single interest without replacing the existing list (PATCH replaces).
+// Backs the "add a topic" field on the daily setup screen.
+export async function POST(request: Request) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const parsed = addInterestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'invalid_request', message: 'Enter a topic name (up to 80 characters).' },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const result = await addDeclaredInterest(session.userId, {
+      label: parsed.data.label,
+      broadCategory: parsed.data.broadCategory ?? null,
+    });
+    return NextResponse.json({
+      domain: result.domain,
+      broadCategory: result.broadCategory,
+      tier: 'establishing',
+      totalPoints: 0,
+      created: result.created,
+    });
+  } catch (error) {
+    if (error instanceof DeclaredInterestLimitError) {
+      return NextResponse.json(
+        { error: 'interest_limit_reached', message: error.message },
+        { status: 409 },
+      );
+    }
+    // The topic is a broad category, not a specific interest. Signal the client
+    // to expand it into specific choices instead of saving it as-is.
+    if (error instanceof TooBroadInterestError) {
+      return NextResponse.json(
+        {
+          error: 'too_broad',
+          topic: error.attempted,
+          message: `"${error.attempted}" is a whole category. Pick something more specific within it.`,
+        },
+        { status: 422 },
+      );
+    }
+    // The topic has no public factual basis (e.g. "my cat", gibberish). Signal
+    // the client to surface the reason inline rather than save an empty domain.
+    if (error instanceof UnanswerableInterestError) {
+      return NextResponse.json(
+        { error: 'unanswerable', topic: error.attempted, message: error.message },
+        { status: 422 },
+      );
+    }
+    const message = error instanceof Error ? error.message : 'Could not add that topic.';
+    return NextResponse.json({ error: 'add_failed', message }, { status: 400 });
+  }
+}
+
 export async function PATCH(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -77,7 +150,7 @@ export async function PATCH(request: Request) {
 
   if (!interests) {
     return NextResponse.json(
-      { error: 'invalid_request', message: 'Send 1 to 5 interests.' },
+      { error: 'invalid_request', message: 'Send at least 1 interest.' },
       { status: 400 },
     );
   }

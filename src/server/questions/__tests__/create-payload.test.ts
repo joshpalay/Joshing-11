@@ -105,6 +105,34 @@ describe('create question payload categorization', () => {
     expect(result.value.sendToFriendIds).toEqual([]);
   });
 
+  describe('visibility (D-1 Stage 4)', () => {
+    it('defaults to public when omitted', () => {
+      const result = readCreateQuestionPayload({ ...basePayload });
+      expect(result.errors).toEqual([]);
+      expect(result.value.visibility).toBe('public');
+    });
+
+    it('accepts the three valid values', () => {
+      for (const visibility of ['public', 'friends', 'private'] as const) {
+        const result = readCreateQuestionPayload({ ...basePayload, visibility });
+        expect(result.errors).toEqual([]);
+        expect(result.value.visibility).toBe(visibility);
+      }
+    });
+
+    it('is case-insensitive and trims', () => {
+      const result = readCreateQuestionPayload({ ...basePayload, visibility: '  Friends ' });
+      expect(result.errors).toEqual([]);
+      expect(result.value.visibility).toBe('friends');
+    });
+
+    it('rejects an invalid non-empty value', () => {
+      const result = readCreateQuestionPayload({ ...basePayload, visibility: 'everyone' });
+      expect(result.errors).toContain('visibility');
+      expect(result.value.visibility).toBe('public');
+    });
+  });
+
   describe('answer-in-question guard', () => {
     it('rejects when the answer appears verbatim in the question', () => {
       const result = readCreateQuestionPayload({

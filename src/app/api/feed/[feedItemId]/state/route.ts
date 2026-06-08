@@ -11,14 +11,16 @@ type RouteContext = {
   params: Promise<{ feedItemId: string }>;
 };
 
-function parseState(value: unknown): 'skipped' | 'dismissed' | null {
+// 'active'/'restore' is the Undo path: it returns a previously dismissed (or
+// skipped) card to the actionable feed so the optimistic client dismiss can be
+// reversed durably, not just in session view-state.
+function parseState(value: unknown): 'skipped' | 'dismissed' | 'active' | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const state = (value as Record<string, unknown>).state;
-  return state === 'skip' || state === 'skipped'
-    ? 'skipped'
-    : state === 'dismiss' || state === 'dismissed'
-      ? 'dismissed'
-      : null;
+  if (state === 'skip' || state === 'skipped') return 'skipped';
+  if (state === 'dismiss' || state === 'dismissed') return 'dismissed';
+  if (state === 'active' || state === 'restore') return 'active';
+  return null;
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -29,7 +31,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const state = parseState(await request.json().catch(() => null));
   if (!state) {
     return NextResponse.json(
-      { error: 'validation', message: 'state must be skip, skipped, dismiss, or dismissed' },
+      { error: 'validation', message: 'state must be skip, skipped, dismiss, dismissed, active, or restore' },
       { status: 400 },
     );
   }

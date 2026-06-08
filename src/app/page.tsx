@@ -8,10 +8,10 @@ import TodaysFiveCard, {
 } from '@/components/TodaysFiveCard'
 import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
-import { RecentActivitySection } from '@/components/home/RecentActivitySection'
 import { getSession } from '@/server/auth/session'
+import { buildActivityStream } from '@/server/activity/build-stream'
+import { getCommonGroundPromo } from '@/server/activity/common-ground-promo'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
-import { getRecentActivityForHome } from '@/server/db/queries/activity'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
@@ -51,26 +51,11 @@ export default async function Home() {
 
       {session ? (
         <Suspense fallback={null}>
-          <MissedQuestionsSection userId={session.userId} />
-        </Suspense>
-      ) : null}
-
-      {session ? (
-        <Suspense fallback={null}>
           <CeremonyPinSection userId={session.userId} />
         </Suspense>
       ) : null}
 
-      {session ? (
-        <Suspense fallback={null}>
-          <RecentActivityServerSection userId={session.userId} />
-        </Suspense>
-      ) : null}
-
       <section id="feed">
-        <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
-          From your friends
-        </p>
         {session ? (
           <Suspense fallback={<FeedSkeleton />}>
             <FromYourFriendsSection userId={session.userId} />
@@ -84,9 +69,10 @@ export default async function Home() {
 }
 
 async function TodaysFiveSection({ userId }: { userId: string }) {
-  const [queue, preferences] = await Promise.all([
+  const [queue, preferences, catchupItems] = await Promise.all([
     getTodaysDailyQueue(userId),
     getDailyPreferences(userId),
+    getCatchupQuestions(userId),
   ])
 
   const status = buildDailyStatusSnapshot(queue)
@@ -96,20 +82,26 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
     selectedDomains: preferences.selectedDomains,
   }
 
-  return (
-    <TodaysFiveCard
-      initialStatus={status}
-      initialPreferences={cardPreferences}
-    />
-  )
-}
-
-async function MissedQuestionsSection({ userId }: { userId: string }) {
-  const catchupItems = await getCatchupQuestions(userId)
-  const count = catchupItems.length
-  if (count === 0) return null
+  const missedCount = catchupItems.length
   const expiringCount = catchupItems.filter((item) => item.expiresSoon).length
-  return <MissedQuestionsCard count={count} expiringCount={expiringCount} />
+  // Suppress the standalone Catch up card in the missed>0 completed state — the
+  // completed hero's Branch A already owns that entry point, so showing both
+  // would be a duplicate. When the round is still in progress (hero is in its
+  // play state, not Branch A), the standalone card stays.
+  const showStandaloneCatchup = missedCount > 0 && !status.isComplete
+
+  return (
+    <>
+      <TodaysFiveCard
+        initialStatus={status}
+        initialPreferences={cardPreferences}
+        initialMissedCount={missedCount}
+      />
+      {showStandaloneCatchup ? (
+        <MissedQuestionsCard count={missedCount} expiringCount={expiringCount} />
+      ) : null}
+    </>
+  )
 }
 
 async function CeremonyPinSection({ userId }: { userId: string }) {
@@ -126,23 +118,52 @@ async function CeremonyPinSection({ userId }: { userId: string }) {
   )
 }
 
-async function RecentActivityServerSection({ userId }: { userId: string }) {
-  const items = await getRecentActivityForHome(userId, 3)
-  return <RecentActivitySection items={items} />
-}
-
 async function FromYourFriendsSection({ userId }: { userId: string }) {
-  const feedPage = await getFeedPagePayload(userId, {
-    limit: FEED_PAGE_SIZE,
-    cursor: null,
-    filter: 'all',
-  })
+  // The unified "What's Happening" home feed: the question feed merged with the
+  // full activity/Lately stream, interleaved chronologically inside FeedList.
+  // Filter 'all' (not 'from-friends') so directly-sent questions thread in; the
+  // prefetch matches FeedList's unifiedHome seeding for a no-round-trip paint.
+  const [feedPage, activityItems, commonGroundPromo] = await Promise.all([
+    getFeedPagePayload(userId, {
+      limit: FEED_PAGE_SIZE,
+      cursor: null,
+      filter: 'all',
+    }),
+    buildActivityStream(userId),
+    getCommonGroundPromo(userId),
+  ])
+  // The weekly reflection lives in the dedicated CeremonyPin editorial marker
+  // above this feed (calm, gold, no CTA). Drop the redundant 'ceremony_ready'
+  // activity card here so the reflection doesn't double up / compete with social
+  // activity in the home stream. It's the only activity that links to /ceremony/;
+  // the card still appears in the full /activities log.
+  const homeActivityItems = [
+    // Home-only common-ground discovery promo at the head of the activity rows
+    // (see getCommonGroundPromo). Null when the viewer has no untested shared
+    // ground with any probed friend.
+    ...(commonGroundPromo ? [commonGroundPromo] : []),
+    ...activityItems.filter(
+      (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
+    ),
+  ]
   return (
-    <FeedList
-      pageSize={FEED_PAGE_SIZE}
-      infinite
-      initialPage={feedPage}
-    />
+    <>
+      {/* Sit the header on the feed's left gutter — the same 2px the activity
+          rows pad in (where the fixed icon column / shape marks begin), so the
+          header and the shapes share one left edge. The day labels indent
+          further (pl-[34px], past the icon column) to meet the row copy. */}
+      <p className="mb-2 pl-[2px] text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+        What&rsquo;s happening
+      </p>
+      <FeedList
+        pageSize={FEED_PAGE_SIZE}
+        infinite
+        initialPage={feedPage}
+        showContributeFooter
+        unifiedHome
+        activityItems={homeActivityItems}
+      />
+    </>
   )
 }
 

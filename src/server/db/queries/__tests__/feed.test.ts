@@ -10,6 +10,7 @@ const { dbMock, state } = vi.hoisted(() => {
     | { op: 'isNull'; column: string }
     | { op: 'notInArray'; column: string; values: readonly unknown[] }
     | { op: 'notExists' }
+    | { op: 'exists' }
     | { op: 'lt'; column: string; value: unknown };
 
   type FeedRow = {
@@ -70,6 +71,12 @@ const { dbMock, state } = vi.hoisted(() => {
         // viewer-not-already-answered subquery as always passing so the
         // existing visibility cases continue to drive what's exercised here.
         return true;
+      case 'exists':
+        // The tests don't model the follows table; treat the
+        // viewer-follows-author subquery (D-1 Stage 4 'friends' gate) as
+        // passing. Existing cases use 'public' visibility, so this only
+        // matters if a case explicitly exercises followers-only questions.
+        return true;
       case 'lt':
         return String(columnValue(predicate.column, feedItem, question)) < String(predicate.value);
     }
@@ -117,6 +124,7 @@ vi.mock('drizzle-orm', () => ({
   lt: vi.fn((column, value) => ({ op: 'lt', column, value })),
   ne: vi.fn((column, value) => ({ op: 'ne', column, value })),
   notExists: vi.fn(() => ({ op: 'notExists' })),
+  exists: vi.fn(() => ({ op: 'exists' })),
   notInArray: vi.fn((column, values) => ({ op: 'notInArray', column, values })),
   or: vi.fn((...predicates) => ({ op: 'or', predicates })),
   sql: Object.assign(
@@ -144,6 +152,11 @@ vi.mock('@/server/db', () => ({
     isPinned: 'feedItems.isPinned',
   },
   masteryEvents: {},
+  follows: {
+    followerId: 'follows.followerId',
+    followeeId: 'follows.followeeId',
+    state: 'follows.state',
+  },
   questions: {
     id: 'questions.id',
     visibility: 'questions.visibility',
@@ -380,10 +393,11 @@ describe('getFeedForUser feed visibility', () => {
     expect(result.totalCount).toBe(2);
   });
 
-  it('applies the from-friends URL filter', async () => {
+  it('applies the from-friends (Broadcasts) URL filter: authored_shared in, direct_sent and friend_answered out', async () => {
     state.questionRows = [
       { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
       { id: 'question-2', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+      { id: 'question-3', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
     ];
     state.feedRows = [
       {
@@ -400,12 +414,69 @@ describe('getFeedForUser feed visibility', () => {
         joshingGameId: null,
       },
       {
-        id: 'feed-friend-1',
+        id: 'feed-authored-1',
         recipientUserId: 'recipient-1',
         questionId: 'question-2',
-        sourceType: 'friend_answered',
+        sourceType: 'authored_shared',
         sourceUserId: 'friend-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:01:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+      {
+        // D-1 Stage 5: friend_answered is still written but no longer rendered.
+        id: 'feed-friend-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-3',
+        sourceType: 'friend_answered',
+        sourceUserId: 'friend-2',
         sourceResult: 'correct',
+        sourceEventAt: new Date('2026-05-14T12:02:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: false,
+        joshingGameId: null,
+      },
+    ];
+
+    const result = await getFeedForUser('recipient-1', { filter: 'from-friends' });
+
+    expect(result.items).toEqual([expect.objectContaining({ id: 'feed-authored-1' })]);
+    expect(result.totalCount).toBe(1);
+  });
+
+  it('leads the from-friends (Broadcasts) surface with a pinned direct_sent question', async () => {
+    // A question a friend sends you is pinned (route.ts sets isPinned: true). It
+    // must surface on the DEFAULT Broadcasts tab too — not only behind the Sent
+    // tab — so the recipient sees it without switching surfaces.
+    state.questionRows = [
+      { id: 'question-1', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+      { id: 'question-2', visibility: 'public', deletedAt: null, canonicalSubcategory: 'Music' },
+    ];
+    state.feedRows = [
+      {
+        id: 'feed-direct-pinned',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-1',
+        sourceType: 'direct_sent',
+        sourceUserId: 'sender-1',
+        sourceResult: null,
+        sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+        personalMessage: null,
+        state: 'active',
+        isPinned: true,
+        joshingGameId: null,
+      },
+      {
+        id: 'feed-authored-1',
+        recipientUserId: 'recipient-1',
+        questionId: 'question-2',
+        sourceType: 'authored_shared',
+        sourceUserId: 'friend-1',
+        sourceResult: null,
         sourceEventAt: new Date('2026-05-14T12:01:00.000Z'),
         personalMessage: null,
         state: 'active',
@@ -416,7 +487,7 @@ describe('getFeedForUser feed visibility', () => {
 
     const result = await getFeedForUser('recipient-1', { filter: 'from-friends' });
 
-    expect(result.items).toEqual([expect.objectContaining({ id: 'feed-friend-1' })]);
-    expect(result.totalCount).toBe(1);
+    // Pinned sent question leads, then the Broadcasts item.
+    expect(result.items.map((item) => item.id)).toEqual(['feed-direct-pinned', 'feed-authored-1']);
   });
 });

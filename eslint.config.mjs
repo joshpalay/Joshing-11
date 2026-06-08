@@ -33,7 +33,10 @@ const TOKEN_LINT_RULE = {
 // Files that predate the rule and still carry off-system colors. Grandfathered to
 // a warning so the build stays green while the backlog is worked down — new files
 // (and any cleaned file removed from this list) are held at error. Shrink this
-// list; don't add to it.
+// list; don't add to it. These warnings are the *only* ones `npm run lint`
+// tolerates: the script pins `--max-warnings` to their current count (33), so the
+// warning lane can't silently grow. When you clean a file off this list, drop the
+// `--max-warnings` ceiling in package.json by the number of warnings it removed.
 const TOKEN_LINT_GRANDFATHERED = [
   "src/components/AddToBankAction.tsx",
   "src/components/CreateChooser.tsx",
@@ -44,15 +47,11 @@ const TOKEN_LINT_GRANDFATHERED = [
   "src/components/feed/AnswerFeedbackSheet.tsx",
   "src/components/feed/AnswerSheet.tsx",
   "src/components/feed/FeedActions.tsx",
-  "src/components/feed/FeedCard.tsx",
-  "src/components/feed/SparkleEnvelope.tsx",
   "src/components/friends/ContactMatchBlock.tsx",
   "src/components/friends/FindFriendsSearch.tsx",
   "src/components/games/QuestionRatingButtons.tsx",
-  "src/components/home/CeremonyPin.tsx",
   "src/components/knowledge/AskFriendForDomain.tsx",
   "src/components/profile/AuthoredQuestionsFeed.tsx",
-  "src/components/profile/InlineEditableField.tsx",
   "src/components/profile/InlineHandleField.tsx",
   "src/components/profile/PreviewBanner.tsx",
   "src/components/profile/SharedInterestsOverlap.tsx",
@@ -74,6 +73,22 @@ const eslintConfig = defineConfig([
     ".drizzle-tmp/**",
     "next-env.d.ts",
   ]),
+  // Honor the repo-wide `_`-prefix convention for intentionally-unused bindings
+  // (e.g. `(..._args) => …`, a parked `_legacyInsertDeclared`). Without this the
+  // default rule warns on them, polluting the warning lane that the
+  // `--max-warnings` ratchet (see the `lint` script) is meant to hold flat.
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
   {
     files: ["src/components/**/*.tsx"],
     rules: TOKEN_LINT_RULE,

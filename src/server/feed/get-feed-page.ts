@@ -9,9 +9,10 @@
 
 import { and, count, eq, inArray, isNull, ne, notExists, or } from 'drizzle-orm';
 
-import { db, feedItems, friendships, masteryEvents, questions, users } from '@/server/db';
+import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import {
+  feedItemVisibilityPredicate,
   getDismissedDomains,
   getFeedForUser,
   type CollapsedFeedItem,
@@ -31,6 +32,7 @@ const feedQuestionSelectColumns = {
   questionText: questions.questionText,
   answerText: questions.answerText,
   creatorId: questions.creatorId,
+  source: questions.source,
   explainerBrief: questions.explainerBrief,
   factualExplanation: questions.factualExplanation,
   canonicalSubcategory: questions.canonicalSubcategory,
@@ -98,40 +100,22 @@ function directSentAttribution(sourceName: string, domain: string | null): strin
 function feedFilterSourcePredicate(filter: FeedFilter) {
   if (filter === 'sent-to-me') return eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE);
   if (filter === 'from-friends') {
-    return inArray(feedItems.sourceType, ['friend_answered', 'authored_shared', 'thumbs_upped']);
+    // D-1 Stage 5: friend_answered no longer renders. Broadcasts = authored_shared
+    // (friend_added envelope) + legacy thumbs_upped.
+    return inArray(feedItems.sourceType, ['authored_shared', 'thumbs_upped']);
   }
   return undefined;
 }
 
-function feedCardType(item: CollapsedFeedItem): 'direct_sent' | 'friend_answered' | 'friend_added' | 'friend_liked' | 'answered_by_you' {
+// D-1 Stage 5: friend_answered is no longer a feed card. The remaining source
+// types map explicitly; any unexpected/legacy row falls back to the friend_added
+// (authored_shared) broadcast envelope rather than throwing, so a stray row can
+// never crash the feed.
+function feedCardType(item: CollapsedFeedItem): 'direct_sent' | 'friend_added' | 'friend_liked' | 'answered_by_you' {
   if (item.state === 'answered') return 'answered_by_you';
   if (item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE) return 'direct_sent';
-  if (item.sourceType === 'authored_shared') return 'friend_added';
   if (item.sourceType === 'thumbs_upped') return 'friend_liked';
-  return 'friend_answered';
-}
-
-function friendAnsweredAttribution(
-  item: CollapsedFeedItem,
-  userById: Map<string, UserDisplay>,
-  domain: string | null,
-  authorName: string,
-): string {
-  const results = item.friendResults;
-  if (!results || results.length === 0) {
-    const name = displayName(userById.get(item.sourceUserId));
-    return domain ? `${name} knew ${authorName}’s question — ${domain}` : `${name} knew ${authorName}’s question`;
-  }
-
-  if (results.length === 1) {
-    const { displayName: answererName } = results[0];
-    return domain
-      ? `Common ground in ${domain}: ${answererName} knew ${authorName}’s question`
-      : `${answererName} and ${authorName} share this one`;
-  }
-
-  const names = results.slice(0, 3).map(({ displayName: answererName }) => answererName).join(' · ');
-  return domain ? `Common ground in ${domain}: ${names}` : `${names} share this one`;
+  return 'friend_added';
 }
 
 function compactNulls<T extends Record<string, unknown>>(obj: T): T {
@@ -148,19 +132,64 @@ export type FeedPageOptions = {
   filter: FeedFilter;
 };
 
+// Count of items the viewer can still act on in a given surface, mirroring the
+// visibility rules getFeedForUser applies (active/skipped state, source-type
+// visibility, question visibility, not-self-authored, and the already-answered
+// hide for non-direct_sent). Used for the per-tab badge counts and the active
+// filter's pre_filter_active_count.
+function surfaceActionableCount(viewerUserId: string, filter: FeedFilter): Promise<number> {
+  return db
+    .select({ value: count() })
+    .from(feedItems)
+    .innerJoin(questions, eq(feedItems.questionId, questions.id))
+    .where(and(
+      eq(feedItems.recipientUserId, viewerUserId),
+      visibleSourcePredicate,
+      feedFilterSourcePredicate(filter),
+      inArray(feedItems.state, ['active', 'skipped']),
+      feedItemVisibilityPredicate(viewerUserId),
+      or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
+      or(
+        eq(feedItems.sourceType, 'direct_sent'),
+        notExists(
+          db
+            .select({ id: masteryEvents.id })
+            .from(masteryEvents)
+            .where(and(
+              eq(masteryEvents.userId, viewerUserId),
+              eq(masteryEvents.answeredByUserId, viewerUserId),
+              eq(masteryEvents.questionId, feedItems.questionId),
+            )),
+        ),
+      ),
+    ))
+    .then((rows) => rows[0]?.value ?? 0);
+}
+
 export type FeedPagePayload = Awaited<ReturnType<typeof getFeedPagePayload>>;
 
 export async function getFeedPagePayload(viewerUserId: string, options: FeedPageOptions) {
   const { limit, cursor, filter } = options;
 
-  const [feedPage, friendCount, dismissedDomains, totalItemCount, preFilterActiveCount] = await Promise.all([
+  const [
+    feedPage,
+    friendCount,
+    dismissedDomains,
+    totalItemCount,
+    preFilterActiveCount,
+    broadcastsItemCount,
+    sentItemCount,
+  ] = await Promise.all([
     getFeedForUser(viewerUserId, { limit, cursor, filter }),
+    // "has_friends" empty-state signal: people I follow are exactly the
+    // authors who can populate my feed, so an approved-outbound-follow count
+    // is the right, single-index proxy (D-1 Stage 3 follow model).
     db
       .select({ value: count() })
-      .from(friendships)
+      .from(follows)
       .where(and(
-        eq(friendships.status, 'active'),
-        or(eq(friendships.userAId, viewerUserId), eq(friendships.userBId, viewerUserId)),
+        eq(follows.followerId, viewerUserId),
+        eq(follows.state, 'approved'),
       ))
       .then((rows) => rows[0]?.value ?? 0),
     getDismissedDomains(viewerUserId),
@@ -172,36 +201,16 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         eq(feedItems.recipientUserId, viewerUserId),
         visibleSourcePredicate,
         feedFilterSourcePredicate(filter),
+        feedItemVisibilityPredicate(viewerUserId),
         or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
       ))
       .then((rows) => rows[0]?.value ?? 0),
-    db
-      .select({ value: count() })
-      .from(feedItems)
-      .innerJoin(questions, eq(feedItems.questionId, questions.id))
-      .where(and(
-        eq(feedItems.recipientUserId, viewerUserId),
-        visibleSourcePredicate,
-        feedFilterSourcePredicate(filter),
-        inArray(feedItems.state, ['active', 'skipped']),
-        or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
-        // Match the visibility rule applied in getFeedForUser so this
-        // diagnostic count reflects what the user actually sees.
-        or(
-          eq(feedItems.sourceType, 'direct_sent'),
-          notExists(
-            db
-              .select({ id: masteryEvents.id })
-              .from(masteryEvents)
-              .where(and(
-                eq(masteryEvents.userId, viewerUserId),
-                eq(masteryEvents.answeredByUserId, viewerUserId),
-                eq(masteryEvents.questionId, feedItems.questionId),
-              )),
-          ),
-        ),
-      ))
-      .then((rows) => rows[0]?.value ?? 0),
+    // Active filter's actionable count (drives the focused-feed empty state).
+    surfaceActionableCount(viewerUserId, filter),
+    // D-1 Stage 5: both tab badges must be live on every response, regardless of
+    // which surface is active.
+    surfaceActionableCount(viewerUserId, 'from-friends'),
+    surfaceActionableCount(viewerUserId, 'sent-to-me'),
   ]);
 
   const activeItemCount = feedPage.totalCount;
@@ -233,6 +242,8 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
       total_item_count: totalItemCount,
       active_item_count: activeItemCount,
       pre_filter_active_count: preFilterActiveCount,
+      broadcasts_item_count: broadcastsItemCount,
+      sent_item_count: sentItemCount,
       page_item_count: pageItemCount,
       limit,
       cursor: cursor ? encodeFeedCursor(cursor) : null,
@@ -246,7 +257,6 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
       const question = item.questionId ? questionById.get(item.questionId) : undefined;
       const sourceUser = userById.get(item.sourceUserId);
       const sourceName = displayName(sourceUser);
-      const authorName = displayName(question?.creatorId ? userById.get(question.creatorId) : null, 'the author');
       const domain = socialFeedDomainLabel(question);
       const cardType = feedCardType(item);
       // Fall back to viewer's mastery-event answer status when answerResult is null
@@ -275,8 +285,7 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
           ? authoredSharedAttribution(sourceName, domain)
           : item.sourceType === DIRECT_SENT_FEED_SOURCE_TYPE
             ? directSentAttribution(sourceName, domain)
-            : friendAnsweredAttribution(item, userById, domain, authorName),
-        friend_results: item.friendResults ?? null,
+            : sourceName,
         viewer_answer_status: item.viewerAnswerStatus ?? null,
         endorsement_count: item.thumbsUpCount ?? null,
         additional_endorsers: item.additionalEndorsers ?? null,
@@ -287,6 +296,13 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         state: item.state,
         is_pinned: item.isPinned,
         question_text: question?.questionText ?? null,
+        // B-6: question provenance so the recipient-facing verb reflects who
+        // actually authored the question (human-authored vs curated LLM), not
+        // the feed item's send mechanism. Only an explicit 'authored' source
+        // ever reads as human authorship downstream; everything else defaults
+        // to the curated verb (B-5: a curated/LLM send must never imply a human
+        // wrote it).
+        question_source: question?.source ?? null,
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
         domain_pill: domain,

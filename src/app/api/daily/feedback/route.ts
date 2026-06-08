@@ -1,32 +1,30 @@
 import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { db, generatedQuestions, questionFeedback, questions } from '@/server/db';
 
 export const dynamic = 'force-dynamic';
 
-type FeedbackSignal = 'thumbs_up' | 'thumbs_down';
-
-function parseSignal(value: unknown): FeedbackSignal | null {
-  return value === 'thumbs_up' || value === 'thumbs_down' ? value : null;
-}
+const bodySchema = z.object({
+  question_id: z.string().optional().catch(undefined),
+  generated_question_id: z.string().optional().catch(undefined),
+  signal: z.enum(['thumbs_up', 'thumbs_down']).optional().catch(undefined),
+});
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const body = await request.json().catch(() => null) as {
-    question_id?: unknown;
-    generated_question_id?: unknown;
-    signal?: unknown;
-  } | null;
+  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  const body = parsed.success ? parsed.data : null;
 
   const questionId = typeof body?.question_id === 'string' && body.question_id ? body.question_id : null;
   const generatedQuestionId = typeof body?.generated_question_id === 'string' && body.generated_question_id
     ? body.generated_question_id
     : null;
-  const signal = parseSignal(body?.signal);
+  const signal = body?.signal ?? null;
 
   if (!signal) {
     return NextResponse.json(

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Combine, Plus, Repeat2, X } from 'lucide-react';
+import { Combine, Plus, Repeat2, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
@@ -12,6 +12,8 @@ import { RecentlyExpanding, type ExpandingDomain } from '@/components/knowledge/
 import { AskFriendForDomain } from '@/components/knowledge/AskFriendForDomain';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
+import { domainKey } from '@/lib/knowledge/domain-key';
 import type { MasteryTier } from '@/types/db';
 
 type DomainMastery = {
@@ -84,10 +86,6 @@ function asTier(value: string): MasteryTier {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(Math.round(value));
-}
-
-function domainKey(value: string): string {
-  return value.trim().toLowerCase();
 }
 
 function displayMind(domains: DomainMastery[], declaredInterests: string[]): string {
@@ -163,6 +161,8 @@ function KnowledgePageContent() {
   const [selectedInterest, setSelectedInterest] = useState<ProposedInterest | null>(null);
   const [customInterest, setCustomInterest] = useState('');
   const [canonicalizing, setCanonicalizing] = useState(false);
+  // Specific choices a too-broad written interest expanded into (null = none).
+  const [interestChoices, setInterestChoices] = useState<ProposedInterest[] | null>(null);
   const [savingInterests, setSavingInterests] = useState(false);
   const [interestError, setInterestError] = useState<string | null>(null);
   const [tidying, setTidying] = useState(false);
@@ -268,11 +268,13 @@ function KnowledgePageContent() {
     [annotatedDomains, visibleDomains, editMode],
   );
   const sharePortraitEntries = useMemo(() => visibleDomains.map(toPortraitEntry), [visibleDomains]);
-  const declaredSlots = useMemo(() => {
+  // One entry per declared interest — no fixed slot count and no cap. The manage
+  // modal renders these plus a trailing "add interest" affordance, so the list
+  // grows and shrinks with the player. (MAX_ACTIVE only bounds the write path.)
+  const declaredSlots = useMemo<DomainMastery[]>(() => {
     if (!data) return [];
     const byKey = new Map(data.pageData.allDomains.map((domain) => [domainKey(domain.domain), domain]));
-    const filled = data.pageData.declaredInterests.slice(0, 5).map((domain) => byKey.get(domainKey(domain)) ?? emptyDomain(domain));
-    return Array.from({ length: 5 }, (_, index) => filled[index] ?? null);
+    return data.pageData.declaredInterests.map((domain) => byKey.get(domainKey(domain)) ?? emptyDomain(domain));
   }, [data]);
   const declaredKeys = useMemo(() => new Set((data?.pageData.declaredInterests ?? []).map(domainKey)), [data]);
   const demonstratedChoices = useMemo(() => {
@@ -325,6 +327,7 @@ function KnowledgePageContent() {
     setActiveModal({ type: 'interests', slotIndex, currentDomain });
     setSelectedInterest(null);
     setCustomInterest('');
+    setInterestChoices(null);
     setInterestError(null);
   };
 
@@ -333,28 +336,56 @@ function KnowledgePageContent() {
     setActiveModal({ type: 'manage-interests' });
     setSelectedInterest(null);
     setCustomInterest('');
+    setInterestChoices(null);
     setInterestError(null);
   };
 
+  // Stage a written interest into the slot. A specific topic is selected as-is;
+  // a too-broad one ("Music", "Technology") expands into specific choices the
+  // player picks from instead, so a slot never gets a bucket-level label.
   const proposeCustomInterest = async () => {
     const raw = customInterest.trim();
     if (!raw) return;
     setCanonicalizing(true);
     setInterestError(null);
+    setInterestChoices(null);
     try {
-      const response = await fetch('/api/onboarding/propose-interests', {
+      if (isTooBroadInterest(raw)) {
+        const response = await fetch('/api/interests/expand', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ topic: raw }),
+        });
+        const body = await response.json().catch(() => null) as { candidates?: ProposedInterest[]; message?: string } | null;
+        if (!response.ok) throw new Error(body?.message ?? 'Could not break that down.');
+        const choices = Array.isArray(body?.candidates) ? body.candidates : [];
+        if (choices.length === 0) {
+          setInterestError(`“${raw}” is a whole category. Try something more specific — a person, era, scene, or work.`);
+        } else {
+          setSelectedInterest(null);
+          setInterestChoices(choices);
+        }
+        return;
+      }
+      // Specific enough to stand on its own — now validate answerability up front
+      // so a topic with no factual basis ("my cat") is caught before the confirm
+      // step rather than silently producing nothing. The check fails open
+      // server-side, so an LLM outage still lets the player proceed.
+      const check = await fetch('/api/interests/check', {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ warmupAnswers: [raw] }),
+        body: JSON.stringify({ topic: raw }),
       });
-      const body = await response.json().catch(() => null) as { interests?: ProposedInterest[]; message?: string } | null;
-      if (!response.ok) throw new Error(body?.message ?? 'Could not refine that interest.');
-      const proposal = body?.interests?.[0];
-      setSelectedInterest(proposal?.label ? proposal : { label: raw });
-    } catch (caught) {
-      setInterestError(caught instanceof Error ? caught.message : 'Could not refine that interest.');
+      const checkBody = await check.json().catch(() => null) as { ok?: boolean; message?: string } | null;
+      if (check.ok && checkBody?.ok === false) {
+        setInterestError(checkBody.message ?? 'We could not find real questions for that topic.');
+        return;
+      }
       setSelectedInterest({ label: raw });
+    } catch (caught) {
+      setInterestError(caught instanceof Error ? caught.message : 'Could not add that interest.');
     } finally {
       setCanonicalizing(false);
     }
@@ -362,25 +393,37 @@ function KnowledgePageContent() {
 
   const confirmInterestChange = async () => {
     if (activeModal?.type !== 'interests' || !selectedInterest?.label) return;
+    // Backstop the "Use my wording" path: never let a bucket-level label save.
+    if (isTooBroadInterest(selectedInterest.label)) {
+      setInterestError(`“${selectedInterest.label.trim()}” is a whole category. Pick something more specific.`);
+      return;
+    }
     const modal = activeModal;
     setSavingInterests(true);
     setInterestError(null);
-    const nextInterests = (declaredSlots
-      .map((slot, index) => {
-        if (index === modal.slotIndex) {
-          return {
-            label: selectedInterest.label.trim(),
-            description: selectedInterest.description,
-            broadCategory: selectedInterest.broadCategory,
-          };
-        }
-        return slot ? { label: slot.domain, broadCategory: slot.broadCategory } : null;
-      }) as Array<ProposedInterest | null>)
-      .filter((interest): interest is ProposedInterest => Boolean(interest?.label.trim()))
-      .slice(0, 5);
+    // Full replace: start from the current declared list, then either swap the
+    // chosen slot or append (slotIndex === declaredSlots.length signals an add).
+    const entry: ProposedInterest = {
+      label: selectedInterest.label.trim(),
+      description: selectedInterest.description,
+      broadCategory: selectedInterest.broadCategory,
+    };
+    const base: ProposedInterest[] = declaredSlots.map((slot) => ({
+      label: slot.domain,
+      broadCategory: slot.broadCategory,
+    }));
+    if (modal.slotIndex >= 0 && modal.slotIndex < base.length) {
+      base[modal.slotIndex] = entry;
+    } else {
+      base.push(entry);
+    }
+    const nextInterests = base.filter((interest) => Boolean(interest.label.trim()));
 
     try {
-      const response = await fetch('/api/onboarding/save-interests', {
+      // PATCH /api/declared-interests is the full-replace endpoint
+      // (saveDeclaredInterests). The old call hit /api/onboarding/save-interests
+      // with PATCH, which has no PATCH handler — a 405 that silently failed.
+      const response = await fetch('/api/declared-interests', {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -392,6 +435,36 @@ function KnowledgePageContent() {
       closeInterestModal();
     } catch (caught) {
       setInterestError(caught instanceof Error ? caught.message : 'Could not save your interests.');
+    } finally {
+      setSavingInterests(false);
+    }
+  };
+
+  // Drop a declared interest via the same full-replace endpoint. Blocked at the
+  // last one (the route also rejects an empty list) so a player always keeps at
+  // least one interest seeding their Daily Five.
+  const removeDeclaredInterest = async (domain: string) => {
+    const remaining = declaredSlots
+      .filter((slot) => slot.domain !== domain)
+      .map((slot) => ({ label: slot.domain, broadCategory: slot.broadCategory }));
+    if (remaining.length < 1) {
+      setInterestError('Keep at least one interest — swap it instead of removing the last one.');
+      return;
+    }
+    setSavingInterests(true);
+    setInterestError(null);
+    try {
+      const response = await fetch('/api/declared-interests', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ interests: remaining }),
+      });
+      const body = await response.json().catch(() => null) as { message?: string } | null;
+      if (!response.ok) throw new Error(body?.message ?? 'Could not remove that interest.');
+      await loadKnowledge();
+    } catch (caught) {
+      setInterestError(caught instanceof Error ? caught.message : 'Could not remove that interest.');
     } finally {
       setSavingInterests(false);
     }
@@ -559,7 +632,7 @@ function KnowledgePageContent() {
             ) : null}
             {!editMode ? (
               <div className="mt-5 flex justify-center">
-                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] text-[#faf8f2] font-['Courier_New',monospace] text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
+                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] text-[var(--warm-paper)] font-['Courier_New',monospace] text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
                   Share portrait
                 </button>
               </div>
@@ -571,7 +644,7 @@ function KnowledgePageContent() {
       {emptyQuestionDomain ? (
         <section className="bg-[#fff7e8] border border-[#d9b56c] px-[0.95rem] py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
           <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
-          <h2 className="mt-[0.4rem] text-[1.25rem] leading-[1.35] text-[var(--ink)] font-[var(--font-literata)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
+          <h2 className="mt-[0.4rem] text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-literata)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
           <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
           <div className="flex flex-wrap gap-[10px] mt-5">
             <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
@@ -685,6 +758,26 @@ function KnowledgePageContent() {
                     {canonicalizing ? 'Refining...' : 'Refine'}
                   </button>
                 </div>
+                {interestChoices ? (
+                  <div className="mt-3">
+                    <p className="m-0 text-[var(--text-muted-warm)] text-[0.82rem]">That&rsquo;s a whole category — pick what you&rsquo;re into:</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {interestChoices.map((choice) => (
+                        <button
+                          key={choice.label}
+                          type="button"
+                          className="border border-[var(--border-warm)] bg-white text-[var(--ink)] px-3 py-1.5 text-[0.82rem] cursor-pointer hover:bg-[var(--cream-warm)]"
+                          onClick={() => {
+                            setSelectedInterest({ label: choice.label, broadCategory: choice.broadCategory ?? undefined });
+                            setInterestChoices(null);
+                          }}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {selectedInterest ? (
                   <div className="mt-3 border border-[var(--border-light)] bg-[var(--cream)] p-3">
                     <p className="m-0 font-semibold">{selectedInterest.label}</p>
@@ -747,7 +840,7 @@ function KnowledgePageContent() {
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Manage interests</h2>
-                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your five declared interests seed your Daily Five questions.</p>
+                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your declared interests seed your Daily Five questions. Add as many as you like.</p>
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
                 <X className="size-4" />
@@ -755,26 +848,28 @@ function KnowledgePageContent() {
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-[0.6rem] mt-5">
               {declaredSlots.map((slot, index) => (
-                <div key={slot?.domain ?? `empty-${index}`} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
-                  {slot ? (
-                    <>
-                      <div className="min-w-0">
-                        <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
-                        <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
-                      </div>
-                      <button type="button" className="min-h-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
-                        <Repeat2 className="size-3.5" />
-                        Swap
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className="min-h-[104px] border border-dashed border-[#c8c0b0] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full" onClick={() => openInterestModal(index, null)}>
-                      <Plus className="size-4" />
-                      Add interest
+                <div key={slot.domain} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
+                  <div className="min-w-0">
+                    <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
+                    <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
+                  </div>
+                  <div className="flex gap-[6px] mt-2">
+                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
+                      <Repeat2 className="size-3.5" />
+                      Swap
                     </button>
-                  )}
+                    <button type="button" className="min-h-[34px] w-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => void removeDeclaredInterest(slot.domain)} disabled={savingInterests || declaredSlots.length <= 1} aria-label={`Remove ${slot.displayName}`} title={declaredSlots.length <= 1 ? 'Keep at least one interest' : `Remove ${slot.displayName}`}>
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
+              <div className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
+                <button type="button" className="min-h-[104px] border border-dashed border-[#c8c0b0] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full h-full" onClick={() => openInterestModal(declaredSlots.length, null)}>
+                  <Plus className="size-4" />
+                  Add interest
+                </button>
+              </div>
             </div>
             <div className="flex justify-start gap-2 mt-4">
               <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)}>Done</button>
@@ -785,7 +880,7 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'write-question' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] px-5 pt-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Write a question</h2>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">

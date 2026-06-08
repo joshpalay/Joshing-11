@@ -16,6 +16,7 @@ import {
   HAIKU_MODEL,
   HAIKU_GATE_TIMEOUT_MS,
   INSTRUCTION_USER_INPUT_GUIDANCE,
+  INSTRUCTION_SCOPING_QUALIFIER,
   extractTextContent,
   getAnthropicClient,
   loggedMessagesCreate,
@@ -62,7 +63,7 @@ Also emit:
 - overall_score: number 0..1 — your composite confidence the question belongs in a shared pool.
 - reason: short single sentence explaining the verdict (≤ 140 chars), human-readable, no markdown.
 
-Return only valid JSON with keys: factual, quality, safety, answer_leaked, overall_score, reason. No prose outside the object.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+Return only valid JSON with keys: factual, quality, safety, answer_leaked, overall_score, reason. No prose outside the object.${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
 
 function buildUserMessage(input: VetQuestionInput): string {
   const lines = [
@@ -140,12 +141,14 @@ export async function vetQuestion(input: VetQuestionInput): Promise<VetVerdict> 
   const answerLeaked = parsed.answer_leaked === true;
   const reason = trimmed(parsed.reason, 'vetted');
 
-  // Hard rejects first.
-  if (factual === 'fail') return { status: 'rejected', score: overall, reason: `factual: ${reason}` };
-  if (safety === 'fail') return { status: 'rejected', score: overall, reason: `safety: ${reason}` };
-  if (answerLeaked) return { status: 'rejected', score: overall, reason: `answer in question: ${reason}` };
+  // Hard rejects first. rejectionKind discriminates which dimension failed;
+  // only 'safety' triggers the visibility hard-block downstream (the others
+  // stay public-pool signals that remain shareable to friends).
+  if (factual === 'fail') return { status: 'rejected', score: overall, reason: `factual: ${reason}`, rejectionKind: 'factual' };
+  if (safety === 'fail') return { status: 'rejected', score: overall, reason: `safety: ${reason}`, rejectionKind: 'safety' };
+  if (answerLeaked) return { status: 'rejected', score: overall, reason: `answer in question: ${reason}`, rejectionKind: 'answer_leaked' };
   if (quality < QUALITY_APPROVAL_THRESHOLD) {
-    return { status: 'rejected', score: overall, reason: `quality ${quality.toFixed(2)}: ${reason}` };
+    return { status: 'rejected', score: overall, reason: `quality ${quality.toFixed(2)}: ${reason}`, rejectionKind: 'quality' };
   }
 
   // Cannot verify the fact, but no other red flags — let a human (or a later

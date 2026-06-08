@@ -13,9 +13,13 @@ const bodySchema = z
   .object({
     contacts: z.boolean().optional(),
     mutualFriends: z.boolean().optional(),
+    nicheMatch: z.boolean().optional(),
   })
   .refine(
-    (b) => b.contacts !== undefined || b.mutualFriends !== undefined,
+    (b) =>
+      b.contacts !== undefined
+      || b.mutualFriends !== undefined
+      || b.nicheMatch !== undefined,
     'must specify at least one change',
   );
 

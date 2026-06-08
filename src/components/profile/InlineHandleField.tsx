@@ -221,7 +221,7 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   }
   if (status === 'saved') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+      <span className="inline-flex items-center gap-1 text-xs text-[var(--success)]">
         <Check className="size-3" />
         Saved
       </span>

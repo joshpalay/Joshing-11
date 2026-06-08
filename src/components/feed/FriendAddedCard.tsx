@@ -9,6 +9,7 @@ type FriendAddedCardProps = {
   item: FriendAddedFeedItem
   overflow?: ReactNode
   onAnswer?: () => void
+  onDismiss?: () => void
   onHideCategory?: () => void
   className?: string
 }
@@ -17,6 +18,7 @@ export function FriendAddedCard({
   item,
   overflow,
   onAnswer,
+  onDismiss,
   onHideCategory,
   className,
 }: FriendAddedCardProps) {
@@ -52,11 +54,15 @@ export function FriendAddedCard({
 
   return (
     <SparkleEnvelope
+      // Broadcasts render on the plain hairline-bordered tile (Figma Frame 2),
+      // not the triangle mat — that motif is reserved for direct sends.
+      variant="bordered"
       signal={signal}
       question={item.question}
       overflow={overflow}
       // You can't answer your own question — suppress the action on authored cards.
       onAnswer={item.viewerIsAuthor ? undefined : onAnswer}
+      onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
       className={className}
     />
   )

@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { visibleFeedCategory } from './category'
 import { FeedActionLink } from './FeedActionLink'
 import { FeedCardShell } from './FeedCardShell'
+import { FeedDismissButton } from './FeedDismissButton'
 import type { FeedCardBaseItem } from './types'
 import { colorForCategory, colorForUser } from './visual'
 
@@ -13,6 +14,8 @@ type FeedCardProps = {
   item: FeedCardBaseItem
   overflow?: ReactNode
   onAnswer?: () => void
+  /** Quiet, secondary dismiss control (bottom-left, opposite Answer). View-state only. */
+  onDismiss?: () => void
   footer?: ReactNode
   className?: string
   headerContent?: ReactNode
@@ -24,7 +27,7 @@ type FeedCardProps = {
 // display/card/update — category line in Cormorant SemiBold (Figma 16/24/0.64px/black).
 function CategoryLine({ category }: { category: string }) {
   return (
-    <p className="font-serif text-[16px] font-semibold leading-[24px] tracking-[0.04em] text-black">
+    <p className="font-serif text-base font-semibold leading-[24px] tracking-[0.04em] text-[var(--brand-ink)]">
       {category}
     </p>
   )
@@ -36,7 +39,7 @@ function QuestionText({ question, dim }: { question: string; dim?: boolean }) {
     <p
       className={cn(
         'mt-3 font-serif font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]',
-        dim ? 'text-[16px] opacity-65' : 'text-[24px]',
+        dim ? 'text-base opacity-65' : 'text-2xl',
       )}
     >
       <span aria-hidden className="opacity-60">
@@ -54,6 +57,7 @@ export function FeedCard({
   item,
   overflow,
   onAnswer,
+  onDismiss,
   footer,
   className,
   headerContent,
@@ -90,7 +94,7 @@ export function FeedCard({
           <QuestionText question={item.question} />
 
           {item.personalMessage ? (
-            <p className="mt-2 font-serif text-[14px] leading-snug text-[var(--brand-ink-700)] italic">
+            <p className="mt-2 font-serif text-sm leading-snug text-[var(--brand-ink-700)] italic">
               {item.personalMessage}
             </p>
           ) : null}
@@ -110,7 +114,7 @@ export function FeedCard({
               headerContent
             ) : (
               <>
-                <p className="text-[15px] leading-[23px] tracking-[0.05em] text-black">
+                <p className="text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
                   {item.authorHref ? (
                     <Link href={item.authorHref} className="font-medium" style={{ color: nameColor }}>
                       {authorName}
@@ -132,13 +136,19 @@ export function FeedCard({
         <QuestionText question={item.question} dim={dimQuestion} />
 
         {item.personalMessage ? (
-          <p className="mt-2 font-serif text-[14px] leading-snug text-[var(--brand-ink-700)] italic">
+          <p className="mt-2 font-serif text-sm leading-snug text-[var(--brand-ink-700)] italic">
             {item.personalMessage}
           </p>
         ) : null}
 
         {onAnswer ? (
-          <div className="mt-3 flex justify-end">
+          <div
+            className={cn(
+              'mt-3 flex items-center gap-3',
+              onDismiss ? 'justify-between' : 'justify-end',
+            )}
+          >
+            {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
             <FeedActionLink onClick={onAnswer}>Answer →</FeedActionLink>
           </div>
         ) : footer ? (

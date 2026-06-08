@@ -133,7 +133,9 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
         questionText: generated.questionText,
         answerText: generated.answer,
         factualExplanation: generated.explainer,
-        acceptedAlternatives: [],
+        // Carry the machine row's acceptable_variants (B4 Phase 4) onto the
+        // canonical row so grading honors right-but-rephrased answers everywhere.
+        acceptedAlternatives: generated.acceptableVariants ?? [],
         answerSource: 'llm_suggested',
         questionType: 'factual',
         category: 'general_knowledge',
@@ -145,6 +147,16 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
         calibratedDifficulty: asDifficulty(generated.difficultyEstimate),
         status: 'verified',
         visibility: 'public',
+        // Carry the machine row's earned trust tier onto the canonical row (B4
+        // Phase 2): a machine_verified generated question yields a machine_verified
+        // Question, which human play can then promote to human_validated. Without
+        // this the canonical row would default to 'unverified' and never promote.
+        // Null-creator daily_generated rows are machine-origin, so they must NOT
+        // default to author_confirmed (that tier means a human authored it).
+        trustTier: generated.trustTier,
+        // Carry the precomputed aside through; the editorial label is applied at
+        // display time (selectInsideJokeForViewer) for these null-creator rows.
+        insideJoke: generated.insideJoke,
       })
       .onConflictDoNothing({ target: questions.generatedQuestionId })
       .returning({ id: questions.id });

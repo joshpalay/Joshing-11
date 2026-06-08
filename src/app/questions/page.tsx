@@ -1,7 +1,7 @@
 'use client';
 
-import { Plus, Search, X } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { ChevronDown, Plus, Search, X } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
@@ -12,10 +12,41 @@ import type { QuestionView } from '@/server/db/queries/questions';
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
 type OrderMode = 'category' | 'recency';
 type Tab = 'authored' | 'answered';
+// Capability 8 (B-4 Stage A): the CreateChooser passes a three-way intent that
+// pre-selects the composer's destinations. 'followers' maps to D-1 Stage 4's
+// 'friends' visibility (followers-only) — not a hardcoded 'public'.
+type CreateIntent = 'bank' | 'followers' | 'specific';
 type DrawerState =
   | { mode: 'closed' }
-  | { mode: 'create' }
+  // intent is null for the page's own "Write a question" buttons (and the
+  // legacy `?create=1` link), which keep the form's existing defaults. Only the
+  // CreateChooser supplies an explicit intent.
+  | { mode: 'create'; intent: CreateIntent | null; prefillText?: string }
   | { mode: 'edit'; question: QuestionView };
+
+function parseIntent(raw: string | null): CreateIntent | null {
+  return raw === 'bank' || raw === 'followers' || raw === 'specific' ? raw : null;
+}
+
+// Translate the create intent into the QuestionForm's initial destination
+// state. The form still surfaces every control, so these are starting points
+// the author can adjust — not a locked mode. A null intent returns no
+// overrides, preserving the form's pre-existing default destinations.
+function createFormProps(intent: CreateIntent | null): {
+  initialValues?: Partial<QuestionFormValues>;
+  initialSpecificMode?: boolean;
+} {
+  switch (intent) {
+    case 'followers':
+      return { initialValues: { shareToFeed: true, visibility: 'friends' } };
+    case 'specific':
+      return { initialSpecificMode: true };
+    case 'bank':
+      return { initialValues: { shareToFeed: false } };
+    default:
+      return {};
+  }
+}
 
 type AnsweredApiResponse = {
   items?: AnsweredQuestionItem[];
@@ -94,6 +125,8 @@ export default function QuestionsPage() {
 
 function QuestionsPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [tab, setTab] = useState<Tab>('authored');
   const [questions, setQuestions] = useState<QuestionView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,9 +137,23 @@ function QuestionsPageContent() {
   const [orderMode, setOrderMode] = useState<OrderMode>('recency');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
-  const [drawer, setDrawer] = useState<DrawerState>(() => (
-    searchParams.get('create') === '1' ? { mode: 'create' } : { mode: 'closed' }
-  ));
+  // The composer (create) drawer is driven by the URL so the global Nav FAB,
+  // the CreateChooser, and the feed footer can all open it by navigating to
+  // ?create=1 — including when we're already on /questions, where the page
+  // doesn't remount. The editor (edit) drawer is local, opened by a card.
+  const [editingQuestion, setEditingQuestion] = useState<QuestionView | null>(null);
+  const createRequested = searchParams.get('create') === '1';
+  const drawer: DrawerState = editingQuestion
+    ? { mode: 'edit', question: editingQuestion }
+    : createRequested
+      ? {
+          mode: 'create',
+          intent: parseIntent(searchParams.get('intent')),
+          // The feed's "what would you like to be asked?" prompt rides the idea
+          // in via ?text= so the composer opens pre-filled with the reader's words.
+          prefillText: searchParams.get('text')?.trim() || undefined,
+        }
+      : { mode: 'closed' };
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [cardError, setCardError] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -164,6 +211,31 @@ function QuestionsPageContent() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  // Strip the composer params from the URL (no-op if none are present). Keeping
+  // this separate lets the FAB reopen the composer with a fresh ?create=1 push —
+  // a same-URL push would otherwise be a no-op and leave the drawer closed.
+  const clearComposerParams = useCallback(() => {
+    if (searchParams.has('create') || searchParams.has('intent') || searchParams.has('text')) {
+      router.replace(pathname, { scroll: false });
+    }
+  }, [pathname, router, searchParams]);
+
+  const openComposer = useCallback(() => {
+    router.push('/questions?create=1', { scroll: false });
+  }, [router]);
+
+  const openEditor = useCallback((question: QuestionView) => {
+    setEditingQuestion(question);
+    // The editor takes precedence over a URL-driven composer; clear the params
+    // so closing the editor returns to the list instead of reopening it.
+    clearComposerParams();
+  }, [clearComposerParams]);
+
+  const closeDrawer = useCallback(() => {
+    setEditingQuestion(null);
+    clearComposerParams();
+  }, [clearComposerParams]);
+
   const filteredQuestions = useMemo(() => {
     const query = search.trim().toLowerCase();
     return questions
@@ -199,7 +271,7 @@ function QuestionsPageContent() {
     const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
     if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not save that question.');
     setQuestions((current) => [body.question!, ...current]);
-    setDrawer({ mode: 'closed' });
+    closeDrawer();
     if (values.sendToFriendIds.length > 0) {
       const n = values.sendToFriendIds.length;
       setToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
@@ -223,7 +295,7 @@ function QuestionsPageContent() {
     const body = await response.json().catch(() => null) as { question?: QuestionView; error?: string; message?: string } | null;
     if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not update that question.');
     setQuestions((current) => current.map((question) => question.id === questionId ? body.question! : question));
-    setDrawer({ mode: 'closed' });
+    closeDrawer();
     setToast('Question updated.');
   }
 
@@ -305,40 +377,46 @@ function QuestionsPageContent() {
               <h1 className="font-serif text-3xl font-semibold">Your Questions</h1>
               <p className="mt-1 text-sm text-muted-foreground">{questions.length} questions</p>
             </div>
-            <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={() => setDrawer({ mode: 'create' })}>
+            <button className="btn-primary inline-flex items-center gap-2" type="button" onClick={openComposer}>
               <Plus className="size-4" />
               Write a question
             </button>
           </header>
 
-          <section className="mb-5 grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3 sm:p-3">
-            <select
-              value={orderMode}
-              onChange={(event) => setOrderMode(event.target.value as OrderMode)}
-              className="h-11 rounded-md border bg-background px-3 text-sm"
-              aria-label="Order by"
-            >
-              <option value="recency">By recency</option>
-              <option value="category">By category</option>
-            </select>
-            <select
-              value={sortMode}
-              onChange={(event) => setSortMode(event.target.value as SortMode)}
-              className="h-11 rounded-md border bg-background px-3 text-sm"
-              aria-label="Sort by"
-            >
-              <option value="newest">Newest</option>
-              <option value="most_answered">Most answered</option>
-              <option value="hardest">Hardest</option>
-              <option value="easiest">Easiest</option>
-            </select>
+          <section className="mb-4 grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-2 sm:grid-cols-[1fr_1fr_2fr]" aria-label="Question filters">
+            <label className="relative">
+              <select
+                value={orderMode}
+                onChange={(event) => setOrderMode(event.target.value as OrderMode)}
+                className="h-10 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                aria-label="Order by"
+              >
+                <option value="recency">By recency</option>
+                <option value="category">By category</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            </label>
+            <label className="relative">
+              <select
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value as SortMode)}
+                className="h-10 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                aria-label="Sort by"
+              >
+                <option value="newest">Newest</option>
+                <option value="most_answered">Most answered</option>
+                <option value="hardest">Hardest</option>
+                <option value="easiest">Easiest</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            </label>
             <label className="relative col-span-2 sm:col-span-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search questions..."
-                className="h-11 w-full rounded-md border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary"
+                className="h-10 w-full rounded-md border bg-background pl-10 pr-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               />
             </label>
           </section>
@@ -349,7 +427,7 @@ function QuestionsPageContent() {
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
                 You haven&apos;t written any questions yet. Write one to get started.
               </p>
-              <button className="btn-primary mt-5" type="button" onClick={() => setDrawer({ mode: 'create' })}>
+              <button className="btn-primary mt-5" type="button" onClick={openComposer}>
                 Write a question
               </button>
             </section>
@@ -369,7 +447,7 @@ function QuestionsPageContent() {
                   confirming={confirmingId === question.id}
                   cardError={cardError[question.id]}
                   deleting={removingId === question.id}
-                  onEdit={() => setDrawer({ mode: 'edit', question })}
+                  onEdit={() => openEditor(question)}
                   onDeleteRequest={() => setConfirmingId(question.id)}
                   onConfirmDelete={() => void confirmDelete(question)}
                   onCancelConfirm={() => setConfirmingId(null)}
@@ -409,22 +487,25 @@ function QuestionsPageContent() {
 
       {drawer.mode !== 'closed' ? (
         <div className="fixed inset-0 z-[60] flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
-          <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={() => setDrawer({ mode: 'closed' })} />
-          <aside className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-background p-5 shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
+          <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={closeDrawer} />
+          <aside className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-background px-5 pt-5 shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{drawer.mode === 'edit' ? 'Edit' : 'Create'}</p>
                 <h2 className="font-serif text-2xl font-semibold">{drawer.mode === 'edit' ? 'Edit question' : 'Write a question'}</h2>
               </div>
-              <button className="rounded-md border p-2 hover:bg-muted" type="button" onClick={() => setDrawer({ mode: 'closed' })} title="Close">
+              <button className="rounded-md border p-2 hover:bg-muted" type="button" onClick={closeDrawer} title="Close">
                 <X className="size-4" />
               </button>
             </div>
             <QuestionForm
               mode={drawer.mode}
-              initialValues={drawer.mode === 'edit' ? initialValues(drawer.question) : undefined}
+              initialValues={drawer.mode === 'edit'
+                ? initialValues(drawer.question)
+                : { ...createFormProps(drawer.intent).initialValues, ...(drawer.prefillText ? { text: drawer.prefillText } : {}) }}
+              initialSpecificMode={drawer.mode === 'create' ? createFormProps(drawer.intent).initialSpecificMode : undefined}
               onSubmit={drawer.mode === 'edit' ? (values) => saveEdit(drawer.question.id, values) : saveCreate}
-              onCancel={() => setDrawer({ mode: 'closed' })}
+              onCancel={closeDrawer}
             />
           </aside>
         </div>

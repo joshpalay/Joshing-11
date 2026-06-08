@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { after, NextRequest } from 'next/server';
+import { z } from 'zod';
 
-import { gradeAnswer, selectQuip } from '@/server/grading';
+import { gradeAnswer } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
 import { dailyQueues, db, feedItems, questions } from '@/server/db';
@@ -14,10 +15,11 @@ import {
 } from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { awardAuthorCredit } from '@/server/mastery/author-credit';
+import { awardAuthorCredit, isAuthorCreditEligible } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
+import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
@@ -28,13 +30,17 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+const bodySchema = z.object({
+  dailyQueueItemId: z.string().min(1),
+  submittedAnswer: z.string(),
+});
+
 function parseBody(value: unknown): { dailyQueueItemId: string; submittedAnswer: string } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const dailyQueueItemId = typeof record.dailyQueueItemId === 'string' ? record.dailyQueueItemId : null;
-  const submittedAnswer = typeof record.submittedAnswer === 'string' ? record.submittedAnswer.trim() : null;
-  if (!dailyQueueItemId || !submittedAnswer) return null;
-  return { dailyQueueItemId, submittedAnswer };
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
+  const submittedAnswer = parsed.data.submittedAnswer.trim();
+  if (!submittedAnswer) return null;
+  return { dailyQueueItemId: parsed.data.dailyQueueItemId, submittedAnswer };
 }
 
 function nextItemPayload(item: CatchupQuestion | null) {
@@ -54,6 +60,7 @@ function nextItemPayload(item: CatchupQuestion | null) {
     expiresAt: item.expiresAt,
     expiresSoon: item.expiresSoon,
     difficultyEstimate: item.difficultyEstimate,
+    authorName: item.authorName,
   };
 }
 
@@ -135,9 +142,18 @@ async function handleDailyCatchupAnswer({
     catchupItem.questionText,
     'factual',
   );
+  // Fail toward the player (B4 Phase 4 / Drift Risk 2): a grader outage is not a
+  // real verdict — never persist 'wrong'. Hold for retry.
+  if (grade.status === 'unscored') {
+    return catchUpErrorResponse(
+      503,
+      'grader_unavailable',
+      "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+      { refresh_required: false, next_action: 'retry' },
+    );
+  }
   const isCorrect = grade.result === 'correct';
   const answerState = isCorrect ? 'correct' : 'incorrect';
-  const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
 
   // Promote the bot question to a canonical row BEFORE writing the mastery
   // event so cross-surface dedup can key on the canonical Question.id
@@ -147,10 +163,21 @@ async function handleDailyCatchupAnswer({
   let canonicalQuestionId: string | null = null;
   let persistedCreatorId: string | null = null;
   let persistedDomainForCreator: string | null = null;
+  // Author commentary + aside travel with the question regardless of whether
+  // it's answered live or here in catch-up (B-7). Resolved from the same
+  // canonical row we already load for creator/domain, then gated through
+  // selectInsideJokeForViewer so catch-up neither over- nor under-exposes the
+  // aside relative to the live path.
+  let persistedInsideJoke: string | null = null;
+  let persistedCreatorNote: string | null = null;
 
-  if (slot.source === 'friend') {
+  // Friend and house (D-3) slots both already live in the canonical `questions`
+  // table — resolve by question_id rather than promoting a GeneratedQuestion.
+  // House questions carry creatorId=null, so persistedCreatorId stays null and
+  // no author credit accrues (house is mastery-ineligible by construction).
+  if (slot.source === 'friend' || slot.source === 'house') {
     if (!slot.question_id) {
-      return catchUpErrorResponse(500, 'invalid_state', 'Friend catch-up slot missing canonical question id');
+      return catchUpErrorResponse(500, 'invalid_state', 'Canonical catch-up slot missing question id');
     }
     canonicalQuestionId = slot.question_id;
     const [canonicalRow] = await db
@@ -159,6 +186,8 @@ async function handleDailyCatchupAnswer({
         domain: questions.canonicalSubcategory,
         broadCategory: questions.broadCategory,
         category: questions.category,
+        insideJoke: questions.insideJoke,
+        creatorNote: questions.creatorNote,
       })
       .from(questions)
       .where(eq(questions.id, slot.question_id))
@@ -166,6 +195,8 @@ async function handleDailyCatchupAnswer({
     persistedCreatorId = canonicalRow?.creatorId ?? null;
     persistedDomainForCreator =
       canonicalRow?.domain || canonicalRow?.broadCategory || canonicalRow?.category || null;
+    persistedInsideJoke = canonicalRow?.insideJoke ?? null;
+    persistedCreatorNote = canonicalRow?.creatorNote ?? null;
   } else {
     let persistAttempt = 0;
     while (persistAttempt < 2 && canonicalQuestionId === null) {
@@ -174,13 +205,15 @@ async function handleDailyCatchupAnswer({
         const persisted = await persistGeneratedQuestion(catchupItem.questionId, catchupItem.domain);
         canonicalQuestionId = persisted.questionId;
         const [persistedQuestion] = await db
-          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category })
+          .select({ creatorId: questions.creatorId, domain: questions.canonicalSubcategory, broadCategory: questions.broadCategory, category: questions.category, insideJoke: questions.insideJoke, creatorNote: questions.creatorNote })
           .from(questions)
           .where(eq(questions.id, persisted.questionId))
           .limit(1);
         persistedCreatorId = persistedQuestion?.creatorId ?? null;
         persistedDomainForCreator =
           persistedQuestion?.domain || persistedQuestion?.broadCategory || persistedQuestion?.category || null;
+        persistedInsideJoke = persistedQuestion?.insideJoke ?? null;
+        persistedCreatorNote = persistedQuestion?.creatorNote ?? null;
       } catch (error) {
         const finalAttempt = persistAttempt >= 2;
         console.warn(
@@ -196,6 +229,15 @@ async function handleDailyCatchupAnswer({
       }
     }
   }
+
+  // Same provenance-calibrated gate the live path uses (B-5): relational label
+  // for authored questions shown to author/friends, editorial label for
+  // LLM-origin questions shown to everyone, hidden from strangers otherwise.
+  const insideJokeForViewer = await selectInsideJokeForViewer(
+    persistedInsideJoke,
+    persistedCreatorId,
+    userId,
+  );
 
   const priorAnswers = canonicalQuestionId
     ? await readPriorAnswersForQuestion(userId, canonicalQuestionId)
@@ -226,13 +268,14 @@ async function handleDailyCatchupAnswer({
       reveal_canonical_answer: catchupItem.correctAnswer,
       reveal_explainer: catchupItem.explanation ?? '',
       reveal_quip: grade.consolation,
+      reveal_inside_joke: insideJokeForViewer?.text ?? null,
+      reveal_inside_joke_kind: insideJokeForViewer?.kind ?? null,
       // Drop any breadcrumb persisted from the original (often wrong) live
       // answer. This slot is being re-answered in catch-up, so the old
       // breadcrumb no longer matches the submitted answer or verdict; leaving
       // it would make /api/breadcrumb short-circuit on the stale value and
       // render a correction for an answer the user never gave this turn.
       reveal_breadcrumb: null,
-      quip,
     } satisfies QueueSlot;
   });
 
@@ -274,20 +317,26 @@ async function handleDailyCatchupAnswer({
 
   if (canonicalQuestionId) {
     try {
-      if (isCorrect && persistedCreatorId && persistedCreatorId !== userId && persistedDomainForCreator) {
+      const creditContext = {
+        isCorrect,
+        creatorId: persistedCreatorId,
+        answererUserId: userId,
+        domain: persistedDomainForCreator,
+      };
+      if (isAuthorCreditEligible(creditContext)) {
         void promoteDeclaredToDemonstrated({
-          userId: persistedCreatorId,
-          domain: persistedDomainForCreator,
+          userId: creditContext.creatorId,
+          domain: creditContext.domain,
           triggeringFriendId: userId,
           questionId: canonicalQuestionId,
         });
 
         // Author credit (PRD §8.32): off the user's hot path.
         void awardAuthorCredit({
-          creatorUserId: persistedCreatorId,
+          creatorUserId: creditContext.creatorId,
           answererUserId: userId,
           questionId: canonicalQuestionId,
-          domain: persistedDomainForCreator,
+          domain: creditContext.domain,
           sourceId: `catchup:${catchupItem.dailyQueueItemId}:${userId}`,
           scope: 'daily/catchup/answer',
         });
@@ -327,7 +376,9 @@ async function handleDailyCatchupAnswer({
     explanation: catchupItem.explanation,
     explainer: catchupItem.explanation,
     consolation: grade.consolation,
-    quip,
+    insideJoke: insideJokeForViewer?.text ?? null,
+    insideJokeKind: insideJokeForViewer?.kind ?? null,
+    creatorNote: persistedCreatorNote,
     nextItem: nextItemPayload(nextItem),
   });
 }
@@ -376,9 +427,25 @@ async function handleFeedCatchupAnswer({
     catchupItem.questionText,
     feedRow.question.questionType,
   );
+  // Fail toward the player (B4 Phase 4 / Drift Risk 2): hold a grader outage for retry.
+  if (grade.status === 'unscored') {
+    return catchUpErrorResponse(
+      503,
+      'grader_unavailable',
+      "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+      { refresh_required: false, next_action: 'retry' },
+    );
+  }
   const isCorrect = grade.result === 'correct';
   const answerState = isCorrect ? 'correct' : 'incorrect';
-  const quip = selectQuip({ isCorrect, surface: 'daily', friendResult: null });
+
+  // Carry the author's commentary + provenance-calibrated aside on the feed
+  // catch-up path too (B-7 / B-5), gated identically to the live feed answer.
+  const insideJokeForViewer = await selectInsideJokeForViewer(
+    feedRow.question.insideJoke,
+    feedRow.question.creatorId,
+    userId,
+  );
 
   const priorAnswers = await readPriorAnswersForQuestion(userId, feedRow.question.id);
   const masteryAnswerState = computeAnswerState(
@@ -478,7 +545,9 @@ async function handleFeedCatchupAnswer({
     explanation: catchupItem.explanation,
     explainer: catchupItem.explanation,
     consolation: grade.consolation,
-    quip,
+    insideJoke: insideJokeForViewer?.text ?? null,
+    insideJokeKind: insideJokeForViewer?.kind ?? null,
+    creatorNote: feedRow.question.creatorNote ?? null,
     nextItem: nextItemPayload(nextItem),
   });
 }

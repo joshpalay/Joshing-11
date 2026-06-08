@@ -2,6 +2,35 @@ import type { LatelyDirection, LatelyMoment } from '@/server/db/queries/lately';
 
 export type LatelyBucketLabel = 'TODAY' | 'YESTERDAY' | 'EARLIER THIS WEEK';
 
+// Prominence tiers (D-4 §C). Lower number = higher prominence. The Lately feed
+// sorts by tier BEFORE recency, so a flood of friend-skill milestones can never
+// push a "they_got_you" (someone answered your authored question) or a
+// niche-match discovery item out of view within its day bucket.
+export const LATELY_TIER = {
+  ANSWERED_YOU: 0, // they_got_you — someone answered YOUR authored question
+  NICHE_MATCH: 1, // niche-match stranger discovery
+  MILESTONE: 2, // friend skill milestones (deep + breadth)
+  OTHER: 3, // you_got_them moments and everything else
+} as const;
+
+export type LatelyTier = (typeof LATELY_TIER)[keyof typeof LATELY_TIER];
+
+export function latelyTierForMomentDir(dir: LatelyDirection): LatelyTier {
+  return dir === 'they_got_you' ? LATELY_TIER.ANSWERED_YOU : LATELY_TIER.OTHER;
+}
+
+// Stable prominence sort: tier ascending (most prominent first), then most
+// recent first within a tier. Applied before day-bucketing, so each day bucket
+// preserves the tier ordering.
+export function sortByProminence<T extends { tier: number; sortAt: Date }>(
+  items: T[],
+): T[] {
+  return [...items].sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    return b.sortAt.getTime() - a.sortAt.getTime();
+  });
+}
+
 export type LatelyBucket = {
   label: LatelyBucketLabel;
   items: LatelyMoment[];
@@ -40,6 +69,25 @@ export function assignCaption(
     dir === 'they_got_you' ? THEY_GOT_YOU_CAPTIONS : YOU_GOT_THEM_CAPTIONS;
   const template = pool[djb2(momentId) % pool.length];
   return template.replace('{NAME}', friendFirstName.toUpperCase());
+}
+
+// Convergence (B-Convergence-1) headlines are PERSON-FIRST and never name a
+// domain — naming one of a mixed-domain cluster misrepresents the rest, and
+// naming all reads as a stats list (a brand violation). Unlike the moment
+// CAPTIONS above (all-caps chips), these are sentence-case one-liners: the
+// `{Name}` token is replaced with the friend's first name AT RENDER (as an
+// actor link), so the template is returned verbatim here. Assigned
+// deterministically by moment id, the same djb2 mechanism the moments use.
+export const CONVERGENCE_CAPTIONS = [
+  'You and {Name} keep landing in the same place.',
+  'Turns out you and {Name} think alike.',
+  'You and {Name} are on the same wavelength lately.',
+  'You and {Name} both knew these.',
+  'The people who get you, getting you — you and {Name}.',
+] as const;
+
+export function convergenceCaptionTemplate(momentId: string): string {
+  return CONVERGENCE_CAPTIONS[djb2(momentId) % CONVERGENCE_CAPTIONS.length];
 }
 
 function ymdInZone(date: Date, tz: string): string {

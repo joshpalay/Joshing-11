@@ -12,6 +12,11 @@ import {
 } from '@/server/db';
 import { broadCategoryDisplayName } from '@/lib/question-categorization';
 import { pgErrorCode } from '@/server/db/pg-error';
+import { embedAndResolveDuplicate } from '@/server/pool/dedup';
+import {
+  getActiveIncorrectReportsForAuthor,
+  getUpheldInappropriateForAuthor,
+} from '@/server/db/queries/content-reports';
 
 export type QuestionView = {
   id: string;
@@ -50,6 +55,8 @@ export type QuestionView = {
   tags: string[];
   asked_count: number;
   correct_count: number;
+  // "Nobody got it" QA signal (B4 Phase 2): ≥N holders tried, none correct.
+  nobody_correct_flag: boolean;
   isInBank?: boolean;
   isOwnAuthored?: boolean;
   authorName?: string;
@@ -57,7 +64,22 @@ export type QuestionView = {
   llmSuggestedAnswer: string | null;
   critiqueIterations: number;
   answerers?: { names: string[]; total: number };
+  // B-Report-4: quiet author-facing content-report state on the author's own bank
+  // rows. Absent for everyone else and for house/machine content (never surfaced).
+  reportState?: QuestionReportState | null;
 };
+
+// "needs_attention" carries the correction (note + kind + suggested answer) but
+// never the reporter's identity; "removed" is the read-only upheld-inappropriate
+// terminal state.
+export type QuestionReportState =
+  | {
+      kind: 'needs_attention';
+      note: string;
+      incorrectKind: 'answer_key' | 'premise' | null;
+      suggestedAnswer: string | null;
+    }
+  | { kind: 'removed'; category: 'inappropriate' };
 
 export type QuestionMutationResult = { ok: boolean; reason?: 'not_found' | 'in_use' };
 
@@ -117,6 +139,8 @@ const questionViewColumns = {
   sharedToFriendsFeed: questionTableColumns.sharedToFriendsFeed,
   askedCount: questionTableColumns.askedCount,
   correctCount: questionTableColumns.correctCount,
+  // "Nobody got it" review smell (B4 Phase 2) — surfaced as a QA signal.
+  nobodyCorrectFlag: questionTableColumns.nobodyCorrectFlag,
   createdAt: questionTableColumns.createdAt,
   updatedAt: questionTableColumns.updatedAt,
   deletedAt: questionTableColumns.deletedAt,
@@ -124,8 +148,14 @@ const questionViewColumns = {
 
 export const bankQuestionSelectColumns = questionViewColumns;
 
-type QuestionViewRow = Omit<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>
-  & Partial<Pick<QuestionRow, 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'>>;
+// The pool-substrate fields (B1) are not part of the rendered question view, so
+// they are excluded here like the other non-view columns — partial selects
+// (e.g. bankQuestionSelectColumns) need not fetch them.
+type QuestionViewNonViewKey =
+  | 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'
+  | 'trustTier' | 'perishable' | 'sourceRefs' | 'isDuplicate' | 'suppressedBy' | 'embedding';
+type QuestionViewRow = Omit<QuestionRow, QuestionViewNonViewKey>
+  & Partial<Pick<QuestionRow, QuestionViewNonViewKey>>;
 
 function difficultyToNumber(value: QuestionRow['difficultyEstimate']): number {
   if (value === 'accessible') return 1;
@@ -246,6 +276,7 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
     tags: [],
     asked_count: row.askedCount,
     correct_count: row.correctCount,
+    nobody_correct_flag: row.nobodyCorrectFlag ?? false,
     verified: row.verified ?? true,
     llmSuggestedAnswer: row.llmSuggestedAnswer ?? null,
     critiqueIterations: row.critiqueIterations ?? 0,
@@ -254,7 +285,47 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
 
 export async function getQuestionsForUser(userId: string): Promise<QuestionView[]> {
   const { getBankedQuestions } = await import('@/server/db/queries/bank');
-  return getBankedQuestions(userId, { onlyAuthored: true });
+  const views = await getBankedQuestions(userId, { onlyAuthored: true });
+  return attachAuthorReportState(userId, views);
+}
+
+// B-Report-4: attach the quiet author-facing report state to the author's own
+// authored rows. The read helpers already enforce the house guard server-side, so
+// house/machine content can never receive a state. "removed" (upheld inappropriate)
+// takes precedence over "needs attention" (open incorrect) on the same question.
+async function attachAuthorReportState(
+  userId: string,
+  views: QuestionView[],
+): Promise<QuestionView[]> {
+  const ownIds = views
+    .filter((view) => view.isOwnAuthored && view.creator_id === userId)
+    .map((view) => view.id);
+  if (ownIds.length === 0) return views;
+
+  const [incorrectByQuestion, removed] = await Promise.all([
+    getActiveIncorrectReportsForAuthor(userId, ownIds),
+    getUpheldInappropriateForAuthor(userId, ownIds),
+  ]);
+  if (incorrectByQuestion.size === 0 && removed.size === 0) return views;
+
+  return views.map((view) => {
+    if (removed.has(view.id)) {
+      return { ...view, reportState: { kind: 'removed', category: 'inappropriate' } };
+    }
+    const incorrect = incorrectByQuestion.get(view.id);
+    if (incorrect) {
+      return {
+        ...view,
+        reportState: {
+          kind: 'needs_attention',
+          note: incorrect.note,
+          incorrectKind: incorrect.incorrectKind,
+          suggestedAnswer: incorrect.suggestedAnswer,
+        },
+      };
+    }
+    return view;
+  });
 }
 
 export async function hasUserAuthoredAnyQuestion(userId: string): Promise<boolean> {
@@ -271,6 +342,7 @@ export type AuthoredQuestionPreview = {
   questionText: string;
   canonicalSubcategory: string | null;
   broadCategory: string | null;
+  difficulty: 'accessible' | 'moderate' | 'specialist' | null;
   createdAt: string;
   viewerAnswered: { result: 'correct' | 'incorrect' } | null;
 };
@@ -318,6 +390,9 @@ export async function getAuthoredQuestionsForUser(params: {
       questionText: questions.questionText,
       canonicalSubcategory: questions.canonicalSubcategory,
       broadCategory: questions.broadCategory,
+      calibratedDifficulty: questions.calibratedDifficulty,
+      llmDifficulty: questions.llmDifficulty,
+      difficultyEstimate: questions.difficultyEstimate,
       createdAt: questions.createdAt,
     })
     .from(questions)
@@ -359,6 +434,8 @@ export async function getAuthoredQuestionsForUser(params: {
     questionText: row.questionText,
     canonicalSubcategory: row.canonicalSubcategory,
     broadCategory: row.broadCategory,
+    difficulty:
+      row.calibratedDifficulty ?? row.llmDifficulty ?? row.difficultyEstimate ?? null,
     createdAt: row.createdAt.toISOString(),
     viewerAnswered: viewerStatus.get(row.id) ?? null,
   }));
@@ -394,8 +471,13 @@ export async function createQuestion(params: {
   publicStatus?: 'not_scored' | 'eligible_pending' | 'rejected' | 'opted_out' | 'migrated';
   publicEligibilityScore?: number | null;
   publicEligibilityReason?: string | null;
+  // 'blocked' is set by the create route on a safety-fail vet verdict; it is
+  // not user-selectable. See verdictToBlockedVisibility.
+  visibility?: 'public' | 'friends' | 'private' | 'blocked';
 }): Promise<{ id: string }> {
   await ensureQuestionSurfacePriorityColumn();
+
+  const visibility = params.visibility ?? 'public';
 
   const difficulty = numberToDifficulty(params.difficulty);
   const baseValues = {
@@ -416,7 +498,7 @@ export async function createQuestion(params: {
     calibratedDifficulty: difficulty,
     answerSource: params.llmSuggestedAnswer ? (params.verified ? 'llm_suggested' : 'llm_edited') : 'creator_written',
     questionType: 'factual',
-    visibility: 'public',
+    visibility,
     status: params.verified ? 'verified' : 'unverified',
     ...(params.publicStatus !== undefined ? { publicStatus: params.publicStatus } : {}),
     ...(params.publicEligibilityScore !== undefined ? { publicEligibilityScore: params.publicEligibilityScore } : {}),
@@ -475,7 +557,7 @@ export async function createQuestion(params: {
         ${difficulty}::"DifficultyEstimate",
         ${difficulty}::"DifficultyEstimate",
         ${status}::"QuestionStatus",
-        'public'::"QuestionVisibility"
+        ${visibility}::"QuestionVisibility"
       )
       RETURNING "id"
     `);
@@ -522,6 +604,13 @@ export async function createQuestion(params: {
     .onConflictDoNothing({
       target: [userQuestionBank.userId, userQuestionBank.questionId],
     });
+
+  // Semantic-dedup backstop (B1 pool substrate). Best-effort, no-op without a
+  // VOYAGE_API_KEY. A human-authored question that collides with an existing
+  // MACHINE pool row suppresses the *machine* row (human beats machine); a
+  // collision with another human row suppresses this new one. Always flags,
+  // never deletes.
+  await embedAndResolveDuplicate({ id: created.id, origin: 'human', questionText: params.text });
 
   return { id: created.id };
 }

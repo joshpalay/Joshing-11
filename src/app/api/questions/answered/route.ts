@@ -19,10 +19,12 @@ export async function GET() {
     id: item.id,
     questionId: item.questionId,
     questionText: item.questionText,
+    domainDisplayName: item.domainDisplayName,
     submittedAnswer: item.submittedAnswer,
     correctAnswer: item.correctAnswer,
     result: item.result,
     askerName: item.askerName,
+    authorIsHouse: item.authorIsHouse,
     answeredAt: item.answeredAt,
     sourceLabel: item.sourceLabel,
   }));

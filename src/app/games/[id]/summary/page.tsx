@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
+import { answerHeadingStyle } from '@/components/answer-heading';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
@@ -11,7 +12,6 @@ import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay';
 import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy';
 import MasteryMoment from '@/components/review/MasteryMoment';
 import { getSession } from '@/server/auth/session';
-import { getDeliveredCreatorNotesForQuestions } from '@/server/creator-notes';
 import { db, masteryEvents, playerMastery } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { computeOverlapCells, getJoshingGame, type JoshingGameView } from '@/server/db/queries/joshing-game';
@@ -126,10 +126,6 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
 
   const questionCount = view.questions.length;
   const bankedById = await checkBankedQuestions(session.userId, view.questions.map((question) => question.questionId));
-  const creatorNotesByQuestionId = await getDeliveredCreatorNotesForQuestions(
-    session.userId,
-    view.questions.map((question) => question.questionId),
-  );
   const responseByUserQuestion = new Map(view.responses.map((response) => [responseKey(response.userId, response.questionId), response]));
   const viewerResponses = view.responses.filter((response) => response.userId === session.userId);
   const viewerHasPlayed = viewerResponses.length >= questionCount;
@@ -289,7 +285,10 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
               const { brief, full } = explainerVariantsFor(gameQuestion.question, outcome);
               const hasDistinctFull = Boolean(full && full !== brief);
               const briefForDisplay = brief ?? full ?? null;
-              const creatorNote = creatorNotesByQuestionId.get(gameQuestion.questionId);
+              const authorNote = gameQuestion.question.creatorNote ?? null;
+              const authorName = gameQuestion.question.creatorId === view.game.creatorId
+                ? view.creator.displayName
+                : null;
 
               return (
                 <article key={gameQuestion.questionId} className="card p-4">
@@ -337,8 +336,13 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       <span className="font-medium text-foreground">You:</span>{' '}
                       {response?.submittedAnswer?.trim() || 'No answer submitted'}
                     </p>
-                    <p className="text-muted-foreground">
-                      <span className="font-medium text-foreground">Answer:</span> {gameQuestion.question.answerText}
+                    <p
+                      style={{
+                        ...answerHeadingStyle,
+                        color: correct ? 'var(--game-correct)' : 'var(--brand-ink)',
+                      }}
+                    >
+                      {gameQuestion.question.answerText}
                     </p>
                   </div>
                   {briefForDisplay ? (
@@ -356,10 +360,10 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       )}
                     </div>
                   ) : null}
-                  {creatorNote ? (
+                  {authorNote ? (
                     <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
-                      <span className="font-medium">A note from {creatorNote.authorName}:</span>{' '}
-                      {creatorNote.noteText}
+                      <span className="font-medium">{authorName ? `Why ${authorName} asked:` : 'Why they asked:'}</span>{' '}
+                      {authorNote}
                     </p>
                   ) : null}
                   <div className="mt-4 flex flex-wrap items-center justify-end gap-2">

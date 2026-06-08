@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
+import { normalizeDomainPreferenceFrequency } from '@/lib/daily/territory-model';
 import { getKnowledgeBase, invalidateUntouchedDailyQueues } from '@/server/db/queries/daily';
 import {
   DAILY_DIFFICULTIES,
@@ -13,23 +15,21 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+const difficultySchema = z.enum(DAILY_DIFFICULTIES);
+const domainModeSchema = z.enum(DAILY_DOMAIN_MODES);
+
 function isValidDifficulty(value: unknown): value is DailyDifficulty {
-  return DAILY_DIFFICULTIES.includes(value as DailyDifficulty);
+  return difficultySchema.safeParse(value).success;
 }
 
 function isValidDomainMode(value: unknown): value is DailyDomainMode {
-  return DAILY_DOMAIN_MODES.includes(value as DailyDomainMode);
+  return domainModeSchema.safeParse(value).success;
 }
 
 function parseStringArray(value: unknown): string[] | null {
-  if (!Array.isArray(value)) return null;
-  const result: string[] = [];
-  for (const item of value) {
-    if (typeof item !== 'string') return null;
-    const trimmed = item.trim();
-    if (trimmed) result.push(trimmed);
-  }
-  return [...new Set(result)];
+  const parsed = z.array(z.string()).safeParse(value);
+  if (!parsed.success) return null;
+  return [...new Set(parsed.data.map((item) => item.trim()).filter(Boolean))];
 }
 
 // Order-insensitive comparison; both inputs are already de-duped upstream
@@ -52,6 +52,8 @@ function serializePreferences(preferences: Awaited<ReturnType<typeof getDailyPre
     difficulty: preferences.difficulty,
     domainMode: preferences.domainMode,
     selectedDomains: preferences.selectedDomains,
+    domainPreferenceFrequency: preferences.domainPreferenceFrequency,
+    domain_preference_frequency: preferences.domainPreferenceFrequency,
     updatedAt: preferences.updatedAt?.toISOString() ?? null,
     difficulty_preference: preferences.difficulty,
     selected_domains: preferences.selectedDomains,
@@ -76,6 +78,8 @@ export async function GET() {
       source: domain.source,
       totalPoints: domain.totalPoints,
       tier: domain.tier,
+      correctAnswerCount: domain.correctAnswerCount,
+      correct_answer_count: domain.correctAnswerCount,
       canonical_subcategory: domain.domain,
       broad_category: domain.broadCategory,
       total_points: domain.totalPoints,
@@ -96,6 +100,7 @@ export async function PATCH(request: NextRequest) {
   const difficultyValue = record.difficulty ?? record.difficulty_preference;
   const domainModeValue = record.domainMode ?? record.domain_mode;
   const selectedDomainsValue = record.selectedDomains ?? record.selected_domains;
+  const domainPreferenceFrequencyValue = record.domainPreferenceFrequency ?? record.domain_preference_frequency;
 
   if (difficultyValue !== undefined && !isValidDifficulty(difficultyValue)) {
     return NextResponse.json({ error: 'validation', message: 'invalid_difficulty' }, { status: 400 });
@@ -114,9 +119,19 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  const parsedDomainPreferenceFrequency =
+    domainPreferenceFrequencyValue === undefined
+      ? undefined
+      : normalizeDomainPreferenceFrequency(domainPreferenceFrequencyValue);
+
   const knowledgeBase = await getKnowledgeBase(userId);
   const allowedDomains = new Set(knowledgeBase.map((domain) => domain.domain));
   const sanitizedDomains = parsedSelectedDomains?.filter((domain) => allowedDomains.has(domain));
+  const sanitizedDomainPreferenceFrequency = parsedDomainPreferenceFrequency
+    ? Object.fromEntries(
+        Object.entries(parsedDomainPreferenceFrequency).filter(([domain]) => allowedDomains.has(domain)),
+      )
+    : undefined;
   const nextDomainMode = isValidDomainMode(domainModeValue) ? domainModeValue : undefined;
 
   if (nextDomainMode === 'custom' && sanitizedDomains?.length === 0) {
@@ -132,6 +147,7 @@ export async function PATCH(request: NextRequest) {
     ...(isValidDifficulty(difficultyValue) ? { difficulty: difficultyValue } : {}),
     ...(nextDomainMode ? { domainMode: nextDomainMode } : {}),
     ...(sanitizedDomains ? { selectedDomains: sanitizedDomains } : {}),
+    ...(sanitizedDomainPreferenceFrequency ? { domainPreferenceFrequency: sanitizedDomainPreferenceFrequency } : {}),
   });
 
   // A change to the question-defining preferences — topics (selected domains),
@@ -146,7 +162,8 @@ export async function PATCH(request: NextRequest) {
   const questionInputsChanged =
     before.difficulty !== preferences.difficulty ||
     before.domainMode !== preferences.domainMode ||
-    !selectedDomainsEqual(before.selectedDomains, preferences.selectedDomains);
+    !selectedDomainsEqual(before.selectedDomains, preferences.selectedDomains) ||
+    JSON.stringify(before.domainPreferenceFrequency) !== JSON.stringify(preferences.domainPreferenceFrequency);
   if (questionInputsChanged) {
     await invalidateUntouchedDailyQueues(userId);
   }

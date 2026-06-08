@@ -15,10 +15,17 @@ import {
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { notSuppressedByContentReport } from '@/server/db/queries/content-reports';
 import { pgErrorCode } from '@/server/db/pg-error';
-import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
+import { CATEGORIES, categoryLabel, HOUSE_AUTHOR, resolveAuthorDisplay } from '@/lib/questions-types';
 import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
-import type { QueueSlot } from '@/server/daily/types';
+import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import {
+  FRIEND_FACING_TIERS,
+  SELF_PRACTICE_TIERS,
+  applyTierGate,
+  type TrustTier,
+} from '@/server/daily/verification-gating';
 import {
   catchUpExpiresAt,
   expiresWithin24Hours,
@@ -43,10 +50,11 @@ function asQueueSlotDifficulty(
 export type KnowledgeBaseDomain = {
   domain: string;
   broadCategory: string | null;
-  source: 'declared' | 'friend_mediated' | 'authorship';
+  source: 'declared' | 'demonstrated';
   territoryType: 'declared' | 'demonstrated';
   totalPoints: number;
   tier: 'establishing' | 'familiar' | 'solid' | 'mastery';
+  correctAnswerCount: number;
 };
 
 export type DailyPreferenceRow = typeof dailyPreferences.$inferSelect;
@@ -85,6 +93,19 @@ export type CatchupQueueItem = {
   difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   submittedAnswer: string | null;
   wasSkipped: boolean;
+  /**
+   * Display name of the human author, when one exists. Null for LLM-origin
+   * questions (daily-generated, or curated_sent feed items with no creator) —
+   * the client renders the non-person LLM_QUESTION_ATTRIBUTION label for those
+   * rather than implying a person wrote it.
+   */
+  authorName: string | null;
+  /**
+   * D-3: the author is the non-human house/editorial author. `authorName` is the
+   * house name ('Joshing') and the client renders the persistent Editorial badge
+   * with no relational copy. Set explicitly (not inferred from the name string).
+   */
+  authorIsHouse: boolean;
 };
 
 export type CatchupQuestion = CatchupQueueItem;
@@ -163,6 +184,19 @@ async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclus
   return { subcategories, broadCategories };
 }
 
+async function getCorrectAnswerCountsByDomain(userId: string): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      domain: masteryEvents.canonicalSubcategory,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(masteryEvents)
+    .where(and(eq(masteryEvents.userId, userId), inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct'])))
+    .groupBy(masteryEvents.canonicalSubcategory);
+
+  return new Map(rows.map((row) => [normalizeDomain(row.domain).toLowerCase(), Number(row.count ?? 0)]));
+}
+
 async function getPlayerMasteryKnowledgeRows(userId: string) {
   try {
     return await db
@@ -195,10 +229,11 @@ async function getPlayerMasteryKnowledgeRows(userId: string) {
 }
 
 export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
-  const [masteryRows, declaredRows, excludedDomains] = await Promise.all([
+  const [masteryRows, declaredRows, excludedDomains, correctCountsByDomain] = await Promise.all([
     getPlayerMasteryKnowledgeRows(userId),
     getActiveDeclaredInterests(userId),
     getExcludedKnowledgeDomains(userId),
+    getCorrectAnswerCountsByDomain(userId),
   ]);
 
   const isExcluded = (domain: string, broadCategory: string | null): boolean => {
@@ -217,10 +252,11 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
     domainsByKey.set(key, {
       domain,
       broadCategory: row.broadCategory,
-      source: row.territoryType === 'declared' ? 'declared' : 'friend_mediated',
+      source: row.territoryType === 'declared' ? 'declared' : 'demonstrated',
       territoryType: row.territoryType,
       totalPoints: row.totalPoints,
       tier: row.tier,
+      correctAnswerCount: correctCountsByDomain.get(key) ?? 0,
     });
   }
 
@@ -237,6 +273,7 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
       territoryType: existing?.territoryType ?? row.territoryType,
       totalPoints: existing?.totalPoints ?? 0,
       tier: existing?.tier ?? 'establishing',
+      correctAnswerCount: existing?.correctAnswerCount ?? correctCountsByDomain.get(key) ?? 0,
     });
   }
 
@@ -252,6 +289,22 @@ export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow
     .limit(1);
 
   return queue ?? null;
+}
+
+/**
+ * Total number of daily queues ever built for this user, across all dates.
+ *
+ * Used to detect a user's FIRST Daily Five: the orchestrator treats a zero count
+ * (no queue built yet) as first-run and seeds the queue from onboarding areas in
+ * selection order; the queue route treats a count of one (only the just-served
+ * queue) as the moment to show the one-time first-run intro.
+ */
+export async function countDailyQueues(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(dailyQueues)
+    .where(eq(dailyQueues.userId, userId));
+  return row?.count ?? 0;
 }
 
 /**
@@ -334,7 +387,13 @@ export async function carryForwardUntouchedDailyQueue(userId: string): Promise<b
   if (!prior) return false;
 
   const priorSlots = asQueueSlots(prior.slots);
-  if (priorSlots.length === 0) return false;
+  // Only carry forward a *full* untouched queue. A short prior queue (a low-yield
+  // or transiently-failed generation day) must be allowed to regenerate — rolling
+  // it forward freezes the shortfall, so a one-off bad day (e.g. the 2026-05-29
+  // over-provision truncation that yielded 3) gives the user the same partial set
+  // every day until they happen to play it. Re-dating is purely a cost saver for
+  // absent users; a fresh generation for a short queue is the right trade.
+  if (priorSlots.length < DAILY_QUEUE_SIZE) return false;
   if (priorSlots.some((slot) => slot.answered || slot.skipped)) return false;
 
   // Clear any empty/partial today-row first so the unique (user, queue_date)
@@ -358,6 +417,39 @@ export async function carryForwardUntouchedDailyQueue(userId: string): Promise<b
   }
 }
 
+/**
+ * If today's queue is a SHORT, UNTOUCHED set that was carried over from a prior
+ * day, delete it so the caller can regenerate a fresh, full set. Returns true
+ * when it cleared one.
+ *
+ * carryForwardUntouchedDailyQueue re-dates a prior unplayed queue onto today but
+ * leaves createdAt untouched, so a carried queue's createdAt predates today's
+ * assignment window. A short queue *built today* (createdAt within the window)
+ * is graceful-degrade for a genuinely low-yield day and is left intact —
+ * regenerating it on every page load would re-bill the LLM. Only a carried-over
+ * shortfall is stale: without this, a one-off bad generation day (e.g. the
+ * 2026-05-29 over-provision truncation that yielded 3) freezes the user's Daily
+ * Five short and rolls forward unchanged until they happen to play it.
+ */
+export async function clearStaleShortTodayQueue(userId: string): Promise<boolean> {
+  const today = await getTodaysDailyQueue(userId);
+  if (!today) return false;
+
+  const slots = asQueueSlots(today.slots);
+  if (slots.length === 0 || slots.length >= DAILY_QUEUE_SIZE) return false;
+  if (slots.some((slot) => slot.answered || slot.skipped)) return false;
+
+  // assignmentDate is the UTC calendar date of the current window's start. A row
+  // physically created during this window (createdAt >= assignmentDate) was built
+  // for today — keep it even if short. A carried-forward queue keeps its original,
+  // earlier createdAt, so it falls before assignmentDate and is cleared.
+  const { assignmentDate } = getDailyAssignmentBounds();
+  if (today.createdAt >= assignmentDate) return false; // built for today — keep it
+
+  await db.delete(dailyQueues).where(eq(dailyQueues.id, today.id));
+  return true;
+}
+
 export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
   const generatedIds = asQueueSlots(queue.slots)
     .map((slot) => slot.generated_question_id)
@@ -369,6 +461,19 @@ export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
     .select()
     .from(generatedQuestions)
     .where(inArray(generatedQuestions.id, generatedIds));
+}
+
+// Resolve creator display names for a set of (possibly null/duplicate) creator
+// ids, returning a id→name map. Null/absent ids are skipped — their questions
+// are LLM-origin and the client labels them non-relationally.
+async function resolveCreatorNames(creatorIds: Array<string | null>): Promise<Map<string, string | null>> {
+  const ids = [...new Set(creatorIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return new Map();
+  const nameRows = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(inArray(users.id, ids));
+  return new Map(nameRows.map((row) => [row.id, row.displayName]));
 }
 
 export async function getCatchupQuestions(userId: string): Promise<CatchupQuestion[]> {
@@ -431,6 +536,10 @@ async function getDailyCatchupItems(
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
   const canonicalById = new Map(canonicalRows.map((question) => [question.id, question]));
 
+  // Resolve human author names for canonical (friend-authored) slots so the
+  // client shows the real person; generated slots have no creator and stay null.
+  const authorNameById = await resolveCreatorNames(canonicalRows.map((q) => q.creatorId));
+
   return candidateSlots
     .map(({ queue, slot }): CatchupQuestion | null => {
       const queueDate = String(queue.queueDate);
@@ -467,6 +576,8 @@ async function getDailyCatchupItems(
           difficultyEstimate: asQueueSlotDifficulty(question.difficultyEstimate) ?? null,
           submittedAnswer: slot.submitted_answer ?? null,
           wasSkipped: Boolean(slot.skipped),
+          authorName: null, // daily-generated: LLM origin, no human author
+          authorIsHouse: false,
         } satisfies CatchupQuestion;
       }
 
@@ -505,6 +616,7 @@ async function getDailyCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: slot.submitted_answer ?? null,
         wasSkipped: Boolean(slot.skipped),
+        ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })
     .filter((question): question is CatchupQuestion => Boolean(question));
@@ -540,6 +652,10 @@ async function getFeedCatchupItems(
     if (pgErrorCode(error) === '42703') return [];
     throw error;
   }
+
+  // Feed catch-up items can be friend-authored (authored_shared) or LLM
+  // (curated_sent, null creator) — resolve the real author for the former.
+  const authorNameById = await resolveCreatorNames(rows.map(({ question }) => question.creatorId));
 
   return rows
     .map(({ feedItem, question }): CatchupQuestion | null => {
@@ -578,6 +694,7 @@ async function getFeedCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: feedItem.submittedAnswer ?? null,
         wasSkipped: false,
+        ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })
     .filter((item): item is CatchupQuestion => Boolean(item));
@@ -658,6 +775,91 @@ export async function createDailyQueueItem(
   });
 }
 
+/** Presence attribution for a Daily Five +2 bonus slot (D-4 §B). */
+export type BonusPresence = {
+  sourceId: string;
+  sourceName: string | null;
+  /** Additional followed friends (beyond the named one) whose world surfaces this domain. */
+  extraCount: number;
+};
+
+/**
+ * Persists a Daily Five +2 bonus slot (D-4 §B): a freshly generated accessible
+ * question, sourced like a bot slot (source='bot', generated_question_id) but
+ * carrying presence_* attribution ("from {Name}'s world") instead of a literal
+ * answerer. Replaces createDailyQueueItemFromAnswerer.
+ */
+export async function createDailyQueueItemFromPresence(
+  userId: string,
+  generatedQuestionId: string,
+  presence: BonusPresence,
+  position: number,
+): Promise<DailyQueueRow> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+  const [question] = await db
+    .select()
+    .from(generatedQuestions)
+    .where(and(
+      eq(generatedQuestions.id, generatedQuestionId),
+      eq(generatedQuestions.userId, userId),
+      isNotNull(generatedQuestions.id),
+    ))
+    .limit(1);
+
+  if (!question) {
+    throw new Error('Generated bonus question not found for user.');
+  }
+
+  const slot: QueueSlot = {
+    slot_index: position,
+    source: 'bot',
+    generated_question_id: question.id,
+    domain: question.canonicalSubcategory,
+    broad_category: question.broadCategory,
+    category: null,
+    question_text: question.questionText,
+    difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate),
+    presence_source_id: presence.sourceId,
+    presence_source_name: presence.sourceName,
+    presence_source_extra_count: presence.extraCount > 0 ? presence.extraCount : undefined,
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(dailyQueues)
+      .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
+      .limit(1);
+
+    if (!existing) {
+      const [created] = await tx
+        .insert(dailyQueues)
+        .values({ userId, queueDate: assignmentDateStr, slots: [slot] })
+        .returning();
+      await tx
+        .update(generatedQuestions)
+        .set({ usedInQueue: true })
+        .where(eq(generatedQuestions.id, generatedQuestionId));
+      return created;
+    }
+
+    const slots = asQueueSlots(existing.slots).filter((item) => item.slot_index !== position);
+    const nextSlots = [...slots, slot].sort((a, b) => a.slot_index - b.slot_index);
+    const [updated] = await tx
+      .update(dailyQueues)
+      .set({ slots: nextSlots })
+      .where(eq(dailyQueues.id, existing.id))
+      .returning();
+    await tx
+      .update(generatedQuestions)
+      .set({ usedInQueue: true })
+      .where(eq(generatedQuestions.id, generatedQuestionId));
+    return updated;
+  });
+}
+
 export type AuthoredPick = {
   id: string;
   creatorId: string | null;
@@ -670,6 +872,26 @@ export type AuthoredPick = {
   category: string;
   difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   authorName: string | null;
+  authorNote: string | null;
+};
+
+/**
+ * D-3: a labeled non-human house/editorial question selected for the Daily core.
+ * Mirrors AuthoredPick minus the human-author fields — the house identity is
+ * fixed (resolved from HOUSE_AUTHOR at slot-build time), never a users row, so
+ * there is no creatorId / authorName here. `authorNote` carries an optional
+ * editorial aside (populated in Stage 5).
+ */
+export type HousePick = {
+  id: string;
+  questionText: string;
+  answerText: string;
+  alternateAnswers: string[];
+  factualExplanation: string | null;
+  canonicalSubcategory: string;
+  broadCategory: string | null;
+  category: string;
+  difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   authorNote: string | null;
 };
 
@@ -770,6 +992,7 @@ export async function pickEligibleAuthoredQuestions(
       difficultyEstimate: canonicalQuestions.difficultyEstimate,
       creatorNote: canonicalQuestions.creatorNote,
       publicEligibilityScore: canonicalQuestions.publicEligibilityScore,
+      trustTier: canonicalQuestions.trustTier,
       createdAt: canonicalQuestions.createdAt,
     })
     .from(canonicalQuestions)
@@ -780,12 +1003,23 @@ export async function pickEligibleAuthoredQuestions(
       isNotNull(canonicalQuestions.canonicalSubcategory),
       inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
       isNull(canonicalQuestions.deletedAt),
+      // B-Report-3: never draw a reported question into a new daily queue.
+      notSuppressedByContentReport(canonicalQuestions.id, 'question'),
     ))
     .orderBy(
       desc(canonicalQuestions.publicEligibilityScore),
       desc(canonicalQuestions.createdAt),
     )
     .limit(overFetch);
+
+  // Tier-gate (B4 Phase 3): friend-facing requires human_validated|author_confirmed.
+  // Off by default — shadow-logs and serves today's set until the flag is flipped.
+  const tierGated = applyTierGate(
+    'friend-facing/authored',
+    candidates,
+    (row) => row.trustTier as TrustTier,
+    FRIEND_FACING_TIERS,
+  ).rows;
 
   const tierOf = (creatorId: string | null): number => {
     if (!creatorId) return 3;
@@ -794,7 +1028,7 @@ export async function pickEligibleAuthoredQuestions(
     return 2;
   };
 
-  const filtered = candidates
+  const filtered = tierGated
     .filter((row) => row.creatorId && row.creatorId !== viewerUserId)
     .filter((row) => !seenQuestionIds.has(row.id))
     .filter((row) => row.canonicalSubcategory && !isGenericSubcategory(row.canonicalSubcategory))
@@ -896,6 +1130,206 @@ export async function createDailyQueueItemFromAuthored(
   });
 }
 
+/** Candidate row shape for the pure house selector (subset of canonical columns). */
+export type HouseCandidateRow = {
+  id: string;
+  questionText: string;
+  answerText: string;
+  alternateAnswers: string[] | null;
+  factualExplanation: string | null;
+  canonicalSubcategory: string | null;
+  broadCategory: string | null;
+  category: string | null;
+  difficultyEstimate: string | null;
+  creatorNote: string | null;
+  createdAt: Date | null;
+};
+
+/**
+ * Pure selection step for house questions (extracted for testing). Drops
+ * anything the viewer has already seen and anything in a generic bucket domain,
+ * prefers newest curated content, and caps at `limit`. Domain matching to the
+ * viewer's niches happens in the SQL filter (allowedSubcategories); this step is
+ * the in-memory dedup + ordering.
+ */
+export function selectHousePicks(
+  rows: HouseCandidateRow[],
+  seenQuestionIds: ReadonlySet<string>,
+  limit: number,
+): HousePick[] {
+  if (limit <= 0) return [];
+  return rows
+    .filter((row) => !seenQuestionIds.has(row.id))
+    .filter((row) => row.canonicalSubcategory && !isGenericSubcategory(row.canonicalSubcategory))
+    .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+    .slice(0, limit)
+    .map((row) => ({
+      id: row.id,
+      questionText: row.questionText,
+      answerText: row.answerText,
+      alternateAnswers: row.alternateAnswers ?? [],
+      factualExplanation: row.factualExplanation,
+      canonicalSubcategory: row.canonicalSubcategory ?? '',
+      broadCategory: row.broadCategory,
+      category: String(row.category ?? ''),
+      difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
+      authorNote: row.creatorNote ?? null,
+    } satisfies HousePick));
+}
+
+/**
+ * D-3 — selects up to `limit` house/editorial questions (canonical rows with
+ * source='house_authored', creatorId null) matched to the viewer's niches by
+ * domain. This is the bank/domain matching path (NOT the +2 relevance ranking):
+ * candidates are constrained to `allowedSubcategories` (the viewer's knowledge
+ * base) exactly like the bot/bank pool, and deduped against questions the viewer
+ * has already seen on a past daily or answered. House questions never enter the
+ * Feed and never occupy a +2 bonus slot (see createDailyQueueItemFromHouse /
+ * isCorrectAnswerFeedEligible).
+ *
+ * House content is editorially curated, so it is NOT gated on the public-vetting
+ * status the authored picker requires — only visibility='public' and not deleted.
+ */
+export async function pickHouseQuestions(
+  viewerUserId: string,
+  limit: number,
+  allowedSubcategories: ReadonlySet<string>,
+): Promise<HousePick[]> {
+  if (limit <= 0) return [];
+  if (allowedSubcategories.size === 0) return [];
+
+  // House questions never reach the viewer's feed (Invariant — house is not
+  // feed-eligible), so dedup only needs past daily queues + answered questions.
+  const [pastQueues, answeredRows] = await Promise.all([
+    db
+      .select({ slots: dailyQueues.slots })
+      .from(dailyQueues)
+      .where(eq(dailyQueues.userId, viewerUserId)),
+    db
+      .select({ questionId: masteryEvents.questionId })
+      .from(masteryEvents)
+      .where(and(
+        eq(masteryEvents.userId, viewerUserId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        isNotNull(masteryEvents.questionId),
+      )),
+  ]);
+  const seenQuestionIds = new Set<string>();
+  for (const row of pastQueues) {
+    for (const slot of asQueueSlots(row.slots)) {
+      if (slot.question_id) seenQuestionIds.add(slot.question_id);
+    }
+  }
+  for (const row of answeredRows) {
+    if (row.questionId) seenQuestionIds.add(row.questionId);
+  }
+
+  const candidates = await db
+    .select({
+      id: canonicalQuestions.id,
+      questionText: canonicalQuestions.questionText,
+      answerText: canonicalQuestions.answerText,
+      alternateAnswers: canonicalQuestions.acceptedAlternatives,
+      factualExplanation: canonicalQuestions.factualExplanation,
+      canonicalSubcategory: canonicalQuestions.canonicalSubcategory,
+      broadCategory: canonicalQuestions.broadCategory,
+      category: canonicalQuestions.category,
+      difficultyEstimate: canonicalQuestions.difficultyEstimate,
+      creatorNote: canonicalQuestions.creatorNote,
+      trustTier: canonicalQuestions.trustTier,
+      createdAt: canonicalQuestions.createdAt,
+    })
+    .from(canonicalQuestions)
+    .where(and(
+      eq(canonicalQuestions.source, 'house_authored'),
+      isNull(canonicalQuestions.creatorId),
+      eq(canonicalQuestions.visibility, 'public'),
+      isNotNull(canonicalQuestions.canonicalSubcategory),
+      inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
+      isNull(canonicalQuestions.deletedAt),
+      // B-Report-3: a reported house question is suppressed from new queues too.
+      notSuppressedByContentReport(canonicalQuestions.id, 'question'),
+    ))
+    .orderBy(desc(canonicalQuestions.createdAt))
+    .limit(Math.max(limit * 4, 20));
+
+  // Tier-gate (B4 Phase 3): house editorial is the friend-facing bucket
+  // (author-asserted, public per D9). Off by default — shadow-logs only.
+  const gatedCandidates = applyTierGate(
+    'house/editorial',
+    candidates,
+    (row) => row.trustTier as TrustTier,
+    FRIEND_FACING_TIERS,
+  ).rows;
+
+  return selectHousePicks(gatedCandidates, seenQuestionIds, limit);
+}
+
+/**
+ * Builds the QueueSlot for a house core slot (pure; extracted for testing).
+ * source='house', a canonical question_id, author_name='Joshing' — and crucially
+ * NO author_id (the house identity is never a users.id; Invariant H-1) and NO
+ * answerer_* fields (so it is unmistakably a core slot, never a +2 bonus slot).
+ */
+export function buildHouseSlot(pick: HousePick, position: number): QueueSlot {
+  return {
+    slot_index: position,
+    source: 'house',
+    question_id: pick.id,
+    author_name: HOUSE_AUTHOR.displayName,
+    author_note: pick.authorNote ?? undefined,
+    domain: pick.canonicalSubcategory,
+    broad_category: pick.broadCategory,
+    category: pick.category || null,
+    question_text: pick.questionText,
+    difficulty_estimate: pick.difficultyEstimate ?? undefined,
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+}
+
+/**
+ * Inserts a house/editorial question into the viewer's daily queue as a
+ * `source: 'house'` core slot. Counterpart to createDailyQueueItemFromAuthored.
+ */
+export async function createDailyQueueItemFromHouse(
+  userId: string,
+  pick: HousePick,
+  position: number,
+): Promise<DailyQueueRow> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+  const slot = buildHouseSlot(pick, position);
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(dailyQueues)
+      .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
+      .limit(1);
+
+    if (!existing) {
+      const [created] = await tx
+        .insert(dailyQueues)
+        .values({
+          userId,
+          queueDate: assignmentDateStr,
+          slots: [slot],
+        })
+        .returning();
+      return created;
+    }
+
+    const slots = asQueueSlots(existing.slots).filter((item) => item.slot_index !== position);
+    const nextSlots = [...slots, slot].sort((a, b) => a.slot_index - b.slot_index);
+    const [updated] = await tx
+      .update(dailyQueues)
+      .set({ slots: nextSlots })
+      .where(eq(dailyQueues.id, existing.id))
+      .returning();
+    return updated;
+  });
+}
+
 export type RecentDailyQuestionEntry = {
   domain: string;
   text: string;
@@ -964,20 +1398,60 @@ export type BankDifficulty = 'accessible' | 'moderate' | 'specialist';
 //
 // Restrictions:
 // - fact_key must be present (predates 2026-05-24; older rows lack it)
-// - created within the last 30 days (filters out the worst pre-quality-gate
-//   historical drift)
-// - not authored by the viewer
+// - not GENERATED for the viewer (userId <> viewer)
+// - not the same trivia the viewer themselves AUTHORED. The `userId <> viewer`
+//   guard only covers questions GENERATED for the viewer; a question the viewer
+//   *wrote* lives in the canonical `questions` table (creatorId = viewer), never
+//   in the generated bank, so an independently-generated bank row about the same
+//   fact would otherwise be served straight back to its author — e.g. the +2
+//   bonus handing you a question you composed and sent a friend (reported
+//   2026-06). `avoidQuestionTexts` lets the caller pass the viewer's authored
+//   question texts so those rows are skipped here.
+// - not suppressed as an embedding near-duplicate (is_duplicate; B3)
 // - fact_key not already in the viewer's recent avoid set
+//
+// Durability (B1 pool substrate / PRD-D-5 §5.1, D8): the bank no longer excludes
+// questions by age — nothing decays out, so thin domains stop drying up. Recency
+// still *ranks*: we draw a newest-first window and shuffle within it, so when a
+// domain has plenty of recent rows the result matches the prior "random among
+// recent" behavior, and only falls back to older rows when recent ones run out.
 //
 // Returns null when the bank is empty for this domain+difficulty — caller
 // falls back to fresh LLM generation, which incidentally grows the bank.
+const BANK_RECENCY_WINDOW = 50;
+
+// Canonical form for cross-table question-text matching (bank row text vs. a
+// viewer-authored canonical question). Mirrors the queue-orchestrator's own
+// dedup normalization (trim + lowercase) so the two stay consistent.
+export function normalizeQuestionText(text: string): string {
+  return text.trim().toLowerCase();
+}
+
+// Pure servability check for a bank candidate (extracted for testing). A row is
+// servable only if it has a fact_key (older rows lack one), its fact_key isn't
+// in the viewer's recent avoid set, and its text isn't one the viewer authored
+// (`avoidQuestionTexts`). Keeping this pure lets the loop in pickBankSource stay
+// a thin DB shell while the routing rule itself is unit-tested.
+export function isBankRowServable(
+  row: { factKey: string | null; questionText: string },
+  avoidFactKeys: ReadonlySet<string>,
+  avoidQuestionTexts: ReadonlySet<string>,
+): boolean {
+  if (!row.factKey) return false;
+  if (avoidFactKeys.has(row.factKey)) return false;
+  // Never serve the viewer trivia they themselves authored — fact_key won't
+  // catch it (authored canonical questions have no fact_key), so match on text.
+  if (avoidQuestionTexts.has(normalizeQuestionText(row.questionText))) return false;
+  return true;
+}
+
 export async function pickBankSource(
   userId: string,
   domain: string,
   difficulty: BankDifficulty,
   avoidFactKeys: ReadonlySet<string>,
+  avoidQuestionTexts: ReadonlySet<string> = new Set(),
 ): Promise<BankSource | null> {
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   let candidates: Array<typeof generatedQuestions.$inferSelect>;
   try {
     candidates = await db
@@ -988,21 +1462,41 @@ export async function pickBankSource(
         eq(generatedQuestions.difficultyEstimate, difficulty),
         isNotNull(generatedQuestions.factKey),
         sql`${generatedQuestions.userId} <> ${userId}`,
-        gte(generatedQuestions.createdAt, since),
+        eq(generatedQuestions.isDuplicate, false),
+        // B-Report-3: skip generated questions under an open/upheld report.
+        notSuppressedByContentReport(generatedQuestions.id, 'generated'),
       ))
-      .orderBy(sql`random()`)
-      .limit(8);
+      .orderBy(desc(generatedQuestions.createdAt))
+      .limit(BANK_RECENCY_WINDOW);
   } catch (error) {
-    // Tolerate the brief window where the sub_angles column is missing
-    // (migration 0055): a hard failure here would silently disable the
-    // entire bank-pick path until the migration lands.
+    // Tolerate the brief window where a newly-added column is missing
+    // (sub_angles in 0055; is_duplicate in 0062): a hard failure here would
+    // silently disable the entire bank-pick path until the migration lands.
     if (pgErrorCode(error) === '42703') return null;
     throw error;
   }
 
+  // Tier-gate (B4 Phase 3): self-practice may only serve tier ≥ machine_verified.
+  // Off by default — shadow-logs the would-filter count and serves today's set
+  // until the enforcement flag is flipped.
+  candidates = applyTierGate(
+    'self-practice/bank',
+    candidates,
+    (row) => row.trustTier as TrustTier,
+    SELF_PRACTICE_TIERS,
+  ).rows;
+
+  // Shuffle the recency window (Fisher–Yates) so selection within it stays
+  // varied; recency already biases which rows land in the window.
+  for (let i = candidates.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+
   for (const row of candidates) {
+    if (!isBankRowServable(row, avoidFactKeys, avoidQuestionTexts)) continue;
+    // isBankRowServable guarantees a non-null factKey; this narrows it for TS.
     if (!row.factKey) continue;
-    if (avoidFactKeys.has(row.factKey)) continue;
     return {
       questionText: row.questionText,
       answer: row.answer,
@@ -1140,23 +1634,41 @@ export async function getRecentFactKeys(
   return out;
 }
 
-export async function getAnsweredDailyCount(queue: DailyQueueRow): Promise<number> {
-  return asQueueSlots(queue.slots).filter((slot) => slot.answered).length;
+// Question texts the viewer has AUTHORED (canonical `questions`, creator =
+// viewer). The +2 bonus (and any bank reuse) must never serve a fact the viewer
+// personally wrote a question about — they obviously know it, and being handed
+// your own composed-and-sent question reads as a routing bug (reported 2026-06).
+// The other bonus avoid lists (getRecentDailyQuestionTexts / getRecentFactKeys)
+// read only generatedQuestions where userId = viewer, so authored questions —
+// which live in the canonical table and never in the generated bank — slip
+// through. Returned in the RecentDailyQuestionEntry shape so it composes
+// directly with the generation avoid list (the semantic Haiku dedupe gate then
+// also catches re-wordings); the bank pick matches the same texts verbatim.
+export async function getAuthoredQuestionTexts(
+  userId: string,
+  limit = 500,
+): Promise<RecentDailyQuestionEntry[]> {
+  const rows = await db
+    .select({
+      questionText: canonicalQuestions.questionText,
+      domain: canonicalQuestions.canonicalSubcategory,
+    })
+    .from(canonicalQuestions)
+    .where(and(
+      eq(canonicalQuestions.creatorId, userId),
+      isNull(canonicalQuestions.deletedAt),
+    ))
+    .orderBy(desc(canonicalQuestions.createdAt))
+    .limit(limit);
+
+  return rows.map((row) => ({
+    domain: row.domain ?? 'unknown',
+    text: row.questionText,
+  }));
 }
 
-export async function userHasFriendMediatedDomain(userId: string, domain: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: masteryEvents.id })
-    .from(masteryEvents)
-    .where(and(
-      eq(masteryEvents.userId, userId),
-      eq(masteryEvents.canonicalSubcategory, domain),
-      inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-      isNotNull(masteryEvents.questionId),
-    ))
-    .limit(1);
-
-  return Boolean(row);
+export async function getAnsweredDailyCount(queue: DailyQueueRow): Promise<number> {
+  return asQueueSlots(queue.slots).filter((slot) => slot.answered).length;
 }
 
 export async function getKBDomainEntry(userId: string, domain: string) {

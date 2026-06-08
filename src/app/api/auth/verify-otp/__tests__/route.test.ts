@@ -7,6 +7,7 @@ const {
   findUserSelectMock,
   hasAcceptedInvitationForUserMock,
   getValidInvitationForPhoneMock,
+  getInvitePrefillByTokenMock,
   provisionUserInsertMock,
   verifyOtpMock,
 } = vi.hoisted(() => {
@@ -39,6 +40,7 @@ const {
     findUserSelectMock,
     hasAcceptedInvitationForUserMock: vi.fn(async () => false),
     getValidInvitationForPhoneMock: vi.fn(async () => null as unknown),
+    getInvitePrefillByTokenMock: vi.fn(async () => null as unknown),
     provisionUserInsertMock,
     verifyOtpMock: vi.fn(async (phone: string, code: string) =>
       code === '000000' ? phone : null
@@ -67,8 +69,13 @@ vi.mock('@/server/db', () => ({
 vi.mock('@/server/friends/invitations', () => ({
   acceptFriendInvitation: acceptFriendInvitationMock,
   getValidInvitationForPhone: getValidInvitationForPhoneMock,
+  getInvitePrefillByToken: getInvitePrefillByTokenMock,
   hasAcceptedInvitationForUser: hasAcceptedInvitationForUserMock,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE: 'This invitation could not be accepted.',
+  // The route also imports INVITE_REQUIRED_MESSAGE for its 403 (new-signup,
+  // no token) path; mock must expose it or that branch throws.
+  INVITE_REQUIRED_MESSAGE:
+    "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite.",
 }))
 
 import { POST } from '@/app/api/auth/verify-otp/route'
@@ -116,12 +123,14 @@ describe('/api/auth/verify-otp invitation gate', () => {
     provisionUserInsertMock.mockReset()
     hasAcceptedInvitationForUserMock.mockReset()
     getValidInvitationForPhoneMock.mockReset()
+    getInvitePrefillByTokenMock.mockReset()
     acceptFriendInvitationMock.mockReset()
 
     findUserSelectMock.mockResolvedValue([])
     provisionUserInsertMock.mockResolvedValue([])
     hasAcceptedInvitationForUserMock.mockResolvedValue(false)
     getValidInvitationForPhoneMock.mockResolvedValue(null)
+    getInvitePrefillByTokenMock.mockResolvedValue(null)
     acceptFriendInvitationMock.mockResolvedValue({ accepted: true })
   })
 
@@ -220,10 +229,14 @@ describe('/api/auth/verify-otp invitation gate', () => {
       )
       const body = await response.json()
 
-      expect(response.status).toBe(400)
+      // New signup with no token is gated by inviteRequiredRejection() →
+      // 403 invite_required (not the 400 invalid_invitation used for bad/empty
+      // tokens). This is the invite-only signup gate.
+      expect(response.status).toBe(403)
       expect(body).toEqual({
-        error: 'invalid_invitation',
-        message: 'This invitation could not be accepted.',
+        error: 'invite_required',
+        message:
+          "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite.",
       })
       expect(createSessionMock).not.toHaveBeenCalled()
       // No user should be created.
@@ -352,6 +365,61 @@ describe('/api/auth/verify-otp invitation gate', () => {
 
       expect(response.status).toBe(400)
       expect(body.error).toBe('invalid_invitation')
+      expect(createSessionMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('invite-phone prefill (no phone sent)', () => {
+    it('resolves the phone from the token, verifies, provisions, and accepts the invitation', async () => {
+      getInvitePrefillByTokenMock.mockResolvedValue({
+        inviterName: 'Alex',
+        inviteePhone: '+15559876543',
+        maskedPhone: '•••-•••-6543',
+      })
+      findUserSelectMock.mockResolvedValueOnce([])
+      getValidInvitationForPhoneMock.mockResolvedValueOnce(VALID_INVITATION)
+      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER])
+      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true })
+
+      const response = await POST(
+        jsonRequest({
+          code: '000000',
+          invitationToken: 'invite-token',
+          useInvitePhone: true,
+        })
+      )
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body.invitation).toEqual({ accepted: true })
+      // 000000 bypass works against the server-resolved phone.
+      expect(verifyOtpMock).toHaveBeenCalledWith('+15559876543', '000000')
+      expect(acceptFriendInvitationMock).toHaveBeenCalledWith({
+        token: 'invite-token',
+        inviteeUserId: 'user-2',
+        verifiedPhone: '+15559876543',
+      })
+      expect(createSessionMock).toHaveBeenCalledWith('user-2', {
+        invitationAccepted: true,
+        onboardingComplete: false,
+      })
+    })
+
+    it('rejects when the invite token no longer resolves to a phone', async () => {
+      getInvitePrefillByTokenMock.mockResolvedValue(null)
+
+      const response = await POST(
+        jsonRequest({
+          code: '000000',
+          invitationToken: 'stale-token',
+          useInvitePhone: true,
+        })
+      )
+      const body = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(body.error).toBe('invalid_invitation')
+      expect(verifyOtpMock).not.toHaveBeenCalled()
       expect(createSessionMock).not.toHaveBeenCalled()
     })
   })

@@ -1,5 +1,6 @@
-import { and, eq, inArray, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { db, questions, userQuestionBank, users } from '@/server/db';
@@ -25,24 +26,19 @@ function getBaseUrl(request: NextRequest): string {
   return host ? `${protocol}://${host}` : request.nextUrl.origin;
 }
 
+const bodySchema = z.object({
+  title: z.string(),
+  recipientIds: z.array(z.string()),
+  questionIds: z.array(z.string()),
+});
+
 function parseBody(value: unknown): CreateJoshingGameBody | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-
-  if (
-    typeof record.title !== 'string'
-    || !Array.isArray(record.recipientIds)
-    || !Array.isArray(record.questionIds)
-    || !record.recipientIds.every((id) => typeof id === 'string')
-    || !record.questionIds.every((id) => typeof id === 'string')
-  ) {
-    return null;
-  }
-
+  const parsed = bodySchema.safeParse(value);
+  if (!parsed.success) return null;
   return {
-    title: record.title.trim(),
-    recipientIds: record.recipientIds,
-    questionIds: record.questionIds,
+    title: parsed.data.title.trim(),
+    recipientIds: parsed.data.recipientIds,
+    questionIds: parsed.data.questionIds,
   };
 }
 
@@ -112,6 +108,11 @@ export async function POST(request: NextRequest) {
       .where(and(
         inArray(questions.id, uniqueQuestionIds),
         isNull(questions.deletedAt),
+        // Safety hard-block: a question that failed the safety vet
+        // (visibility='blocked') can never be added to a Joshing Game, even
+        // one the author owns. Excluding it here drops it from allowedQuestionIds
+        // so the size check below 400s the request.
+        ne(questions.visibility, 'blocked'),
         or(eq(questions.creatorId, session.userId), isNotNull(userQuestionBank.id)),
       )),
   ]);

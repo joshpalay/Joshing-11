@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto'
 
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
-import { db, users } from '@/server/db'
+import { db, follows, users } from '@/server/db'
+import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
 
 // Match the prior-art token primitive used for FriendInvitation tokens at
@@ -122,6 +123,23 @@ export async function resolveInviteLink(handle: string, token: string): Promise<
   }
 }
 
+// True when someone follows `userId` on an approved edge — the footprint left
+// by upsertInvitationFriendship when a per-user invite link is accepted (it
+// creates a mutual approved follow but NO FriendInvitation row). The onboarding
+// route uses this as a second invite-provenance signal so users who arrived via
+// /u/<handle>/<token> aren't bounced back to /login (which loops through the
+// onboarding-claim refresh). A brand-new user reaching onboarding can only have
+// an approved follower through an accepted invitation, so this is a safe gate.
+export async function hasInviteLinkFriendship(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ followerId: follows.followerId })
+    .from(follows)
+    .where(and(eq(follows.followeeId, userId), eq(follows.state, 'approved')))
+    .limit(1)
+
+  return Boolean(row)
+}
+
 // Called from verify-otp when the user arrives via /u/<handle>/<token>.
 // Validates server-side and creates an active Friendship via the existing
 // upsertInvitationFriendship helper. Silent failure (don't block login on
@@ -148,6 +166,12 @@ export async function acceptUserInviteLink({
       inviterUserId: inviter.inviterUserId,
       inviteeUserId,
       formedAt: now,
+    })
+    // One-time inviter feed backfill (B-HomeSeed-1). Best-effort internally so
+    // it can't throw — a backfill hiccup must never fail the link acceptance.
+    await backfillInviterFeedItems({
+      inviterUserId: inviter.inviterUserId,
+      inviteeUserId,
     })
     return { accepted: true }
   } catch {

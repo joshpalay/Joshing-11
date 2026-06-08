@@ -14,6 +14,7 @@ export type QuestionFormValues = {
   critiqueIterations: number;
   sendToFriendIds: string[];
   shareToFeed?: boolean;
+  visibility?: 'public' | 'friends' | 'private';
 };
 
 type CritiqueResult =
@@ -63,6 +64,7 @@ type State = {
   suggesting: boolean;
   specificMode: boolean;
   shareToFeed: boolean;
+  visibility: 'public' | 'friends' | 'private';
   friends: FriendOption[];
   friendsLoading: boolean;
   sendToFriendIds: string[];
@@ -87,6 +89,7 @@ type Action =
   | { type: 'DONE' }
   | { type: 'SPECIFIC_MODE'; value: boolean }
   | { type: 'SHARE_TO_FEED'; value: boolean }
+  | { type: 'VISIBILITY'; value: 'public' | 'friends' | 'private' }
   | { type: 'FRIENDS_LOADING'; value: boolean }
   | { type: 'FRIENDS_LOADED'; friends: FriendOption[] }
   | { type: 'RECENTS_LOADED'; ids: string[] }
@@ -112,6 +115,7 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     suggesting: false,
     specificMode: initialSpecificMode,
     shareToFeed: initialValues?.shareToFeed ?? !initialSpecificMode,
+    visibility: initialValues?.visibility ?? 'public',
     friends: [],
     friendsLoading: false,
     sendToFriendIds: initialValues?.sendToFriendIds ?? [],
@@ -165,6 +169,16 @@ function reducer(state: State, action: Action): State {
     case 'DONE': return { ...state, stage: 'DONE' };
     case 'SPECIFIC_MODE': return { ...state, specificMode: action.value, shareToFeed: action.value ? false : state.shareToFeed, sendToFriendIds: [], friendSearch: '' };
     case 'SHARE_TO_FEED': return { ...state, shareToFeed: action.value, specificMode: action.value ? false : state.specificMode, sendToFriendIds: action.value ? [] : state.sendToFriendIds };
+    case 'VISIBILITY': {
+      // A private question is author-only: broadcasting or direct-sending it
+      // would create feed rows the render-time visibility filter then hides.
+      // Clear those destinations when switching to private (mirrors how
+      // SPECIFIC_MODE clears shareToFeed).
+      if (action.value === 'private') {
+        return { ...state, visibility: action.value, shareToFeed: false, specificMode: false, sendToFriendIds: [], friendSearch: '' };
+      }
+      return { ...state, visibility: action.value };
+    }
     case 'FRIENDS_LOADING': return { ...state, friendsLoading: action.value };
     case 'FRIENDS_LOADED': return { ...state, friends: action.friends, friendsLoading: false };
     case 'RECENTS_LOADED': return { ...state, recentFriendIds: action.ids };
@@ -179,6 +193,29 @@ function reducer(state: State, action: Action): State {
 
 function alternateAnswersFrom(text: string): string[] {
   return text.split(',').map((answer) => answer.trim()).filter(Boolean).slice(0, 5);
+}
+
+// Small inline loader shown while the LLM suggestion is being fetched, so the
+// answer fields don't flash their placeholders (e.g. "Bucephalus") as if they
+// were a real answer. Mirrors the animated dots in LoadingScreen and reuses the
+// `triangle-loader-dot` class, which carries the reduced-motion guard.
+function InlineLoading({ label = 'Loading' }: { label?: string }) {
+  return (
+    <div
+      className="flex items-center justify-center gap-1 py-10 text-sm font-medium uppercase tracking-wider text-muted-foreground"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label={label}
+    >
+      <span>{label}</span>
+      <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
+        <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0s infinite' }}>.</span>
+        <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0.2s infinite' }}>.</span>
+        <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0.4s infinite' }}>.</span>
+      </span>
+    </div>
+  );
 }
 
 function answersMatch(a: string, b: string | null): boolean {
@@ -210,6 +247,22 @@ function remainingCopy(state: State): string | null {
   if (remaining === 2) return '2 reviews left today';
   if (remaining === 1) return '1 review left today';
   return 'Last review for today';
+}
+
+// D9 (PRD-D-5 §5.1): authored questions are public by default — reach is a
+// reward, not a risk. The signpost states this plainly and positively; it is
+// never a cautionary or blocking warning. Friends-only is the calm exception.
+// `visibility` is the existing column the unified pool layer reads as `scope`
+// (public → public, friends → friends_only); no new field is written.
+export function scopeSignpost(visibility: 'public' | 'friends' | 'private'): string {
+  switch (visibility) {
+    case 'public':
+      return 'Others can play this. Your friends will see it’s from you.';
+    case 'friends':
+      return 'Kept to friends only — only people who follow you will see it.';
+    case 'private':
+      return 'Only you can see this — it won’t be shared.';
+  }
 }
 
 export function QuestionForm({
@@ -310,6 +363,10 @@ export function QuestionForm({
     dispatch({ type: 'SHARE_TO_FEED', value: on });
   }
 
+  function setVisibility(value: 'public' | 'friends' | 'private') {
+    dispatch({ type: 'VISIBILITY', value });
+  }
+
   async function runCritique() {
     const questionText = state.questionText.trim();
     if (!questionText) return;
@@ -404,6 +461,7 @@ export function QuestionForm({
         critiqueIterations: state.critiqueIterations,
         sendToFriendIds: state.specificMode ? state.sendToFriendIds : [],
         shareToFeed: state.shareToFeed,
+        visibility: state.visibility,
       });
       dispatch({ type: 'DONE' });
     } catch (caught) {
@@ -415,6 +473,14 @@ export function QuestionForm({
   const critique = state.critiqueResult;
   const counter = remainingCopy(state);
   const canShowAnswering = state.stage === 'ANSWERING' || state.stage === 'SUBMITTING' || mode === 'edit';
+  // The form lives inside a scrollable drawer/modal (questions + knowledge
+  // pages). Keep the action buttons pinned to the bottom on an opaque,
+  // composited footer: the backdrop-blur layer prevents the iOS Safari
+  // repaint artifact that left a ghost copy of these buttons painted over the
+  // scrolling content, and sticky keeps Save/Cancel reachable on long forms.
+  // `-mx-5 px-5 pb-5` full-bleeds the bar within the host's px-5 padding
+  // (which drops its own bottom padding so this footer sits flush).
+  const actionBarClass = 'sticky bottom-0 z-10 -mx-5 flex flex-wrap items-center gap-3 border-t bg-background/95 px-5 pb-5 pt-3 backdrop-blur';
 
   return (
     <div className="space-y-5">
@@ -480,7 +546,7 @@ export function QuestionForm({
       ) : null}
 
       {!canShowAnswering ? (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className={actionBarClass}>
           <button type="button" onClick={() => void runCritique()} disabled={!state.questionText.trim() || state.stage === 'CRITIQUING'} className="btn-primary">
             {state.stage === 'CRITIQUING' ? 'Reviewing...' : 'Continue'}
           </button>
@@ -490,6 +556,9 @@ export function QuestionForm({
       ) : null}
 
       {canShowAnswering ? (
+        state.suggesting ? (
+          <InlineLoading label="Loading" />
+        ) : (
         <>
           {state.stage !== 'SUBMITTING' && (counter || state.suggesting || state.suggestionError) ? (
             <div className="flex flex-wrap items-center gap-3">
@@ -545,7 +614,7 @@ export function QuestionForm({
 
           {state.llmSuggestedAnswer ? (
             verified ? (
-              <p className="text-sm text-emerald-700">✓ Verified — matches LLM suggestion</p>
+              <p className="text-sm text-[var(--success)]">✓ Verified — matches LLM suggestion</p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-sm text-amber-700">⚠ Unverified — your answer differs from the LLM&apos;s suggestion. Recipients will see this.</p>
@@ -564,9 +633,31 @@ export function QuestionForm({
           {showDestinations ? (
             <div className="rounded-md border bg-muted/40 p-4">
               <p className="mb-3 text-xs uppercase tracking-[0.1em] text-muted-foreground">Destinations</p>
+              <div className="mb-3">
+                <p className="mb-2 text-xs uppercase tracking-[0.1em] text-muted-foreground">Who can see this</p>
+                <div className="inline-flex rounded-md border bg-background p-0.5" role="group" aria-label="Question visibility">
+                  {([
+                    { value: 'public', label: 'Public' },
+                    { value: 'friends', label: 'Followers' },
+                    { value: 'private', label: 'Private' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setVisibility(option.value)}
+                      aria-pressed={state.visibility === option.value}
+                      disabled={state.stage === 'SUBMITTING'}
+                      className={['rounded px-3 py-1 text-sm transition', state.visibility === option.value ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted'].join(' ')}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-foreground">{scopeSignpost(state.visibility)}</p>
+              </div>
               <label className="mb-2 flex cursor-default items-center gap-2 text-sm"><input type="checkbox" checked readOnly disabled className="rounded" /><span className="text-foreground">Save to bank</span></label>
-              <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Share with all friends</span></label>
-              <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.specificMode} onChange={(event) => toggleSpecificMode(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING'} /><span className="text-foreground">Send to specific friends only</span></label>
+              <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING' || state.visibility === 'private'} /><span className="text-foreground">Share with all friends</span></label>
+              <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.specificMode} onChange={(event) => toggleSpecificMode(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING' || state.visibility === 'private'} /><span className="text-foreground">Send to specific friends only</span></label>
               {state.specificMode ? (
                 <div className="mt-1 space-y-3">
                   {state.sendToFriendIds.length > 0 ? (
@@ -663,11 +754,12 @@ export function QuestionForm({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          <div className={actionBarClass}>
             <button type="button" disabled={submitDisabled} onClick={() => void finalSave()} className="btn-primary">{submitDisabled ? loadingLabel : resolvedSubmitLabel}</button>
             {onCancel ? <button type="button" onClick={onCancel} className="btn-ghost" disabled={submitDisabled}>Cancel</button> : null}
           </div>
         </>
+        )
       ) : null}
     </div>
   );

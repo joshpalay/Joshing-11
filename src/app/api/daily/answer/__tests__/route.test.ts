@@ -7,7 +7,6 @@ const {
   persistGeneratedQuestionMock,
   promoteDeclaredToDemonstratedMock,
   readPriorAnswersForQuestionMock,
-  selectQuipMock,
   suggestAnswerMock,
   updateDomainDifficultyOnAnswerMock,
   writeMasteryEventMock,
@@ -87,7 +86,6 @@ const {
     })),
     promoteDeclaredToDemonstratedMock: vi.fn(),
     readPriorAnswersForQuestionMock: vi.fn(async () => []),
-    selectQuipMock: vi.fn(() => 'quip'),
     suggestAnswerMock: vi.fn(),
     updateDomainDifficultyOnAnswerMock: vi.fn(async () => undefined),
     writeMasteryEventMock: vi.fn(async () => ({
@@ -106,7 +104,6 @@ const {
 
 vi.mock('@/server/grading', () => ({
   gradeAnswer: gradeAnswerMock,
-  selectQuip: selectQuipMock,
 }))
 
 vi.mock('@/server/adaptive-difficulty', () => ({
@@ -129,8 +126,6 @@ vi.mock('@/server/db', () => ({
     category: 'q.c',
     insideJoke: 'q.ij',
   },
-  // PRD §8.4.3: bot slots with points run an extra playerMastery domain check.
-  playerMastery: { userId: 'pm.userId', canonicalSubcategory: 'pm.cs' },
 }))
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({
@@ -167,17 +162,14 @@ import { POST } from '@/app/api/daily/answer/route'
 function setupDbChain() {
   // Reset and re-seed the select() responses in the order the route issues them
   // for a bot slot: dailyQueues (queue) → generatedQuestions (question) →
-  // questions (persisted creator info, post-persist) → playerMastery (the
-  // §8.4.3 domain check). The domain row must be truthy so the route doesn't
-  // zero out points / skip the mastery write for an "unknown domain". When
-  // persistGeneratedQuestion throws, the route skips the creator select, so the
-  // playerMastery check consumes the creator handler instead — still truthy, so
-  // both the happy path and the persist-failure path resolve correctly.
+  // questions (persisted creator info, post-persist). The old PRD §8.4.3
+  // "bot questions can only deepen existing domains" gate (a fourth
+  // playerMastery select) has been removed (B-1) — a correct bot answer now
+  // default-adds the domain via writeMasteryEvent, like the authored path.
   selectCallChain.length = 0
   selectCallChain.push(async () => [dbState.queue])
   selectCallChain.push(async () => [dbState.question])
   selectCallChain.push(async () => [dbState.persistedQuestion])
-  selectCallChain.push(async () => [{ canonicalSubcategory: 'history' }])
 }
 
 function jsonRequest(body: unknown) {
@@ -292,6 +284,36 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
     )
   })
 
+  it('B-1: correct bot answer in an unfamiliar domain default-adds it (no §8.4.3 gate)', async () => {
+    // No playerMastery row is seeded for this domain — under the old gate the
+    // route would zero points and skip the mastery write. Now it must score
+    // the answer fully and surface the freshly-opened territory.
+    setupDbChain()
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+    writeMasteryEventMock.mockResolvedValueOnce({
+      domain: 'history',
+      points: 100,
+      previousTier: 'establishing',
+      newTier: 'establishing',
+      tierChanged: false,
+      openedNewTerritory: true,
+    })
+
+    const res = await POST(jsonRequest(VALID_BODY) as never)
+    expect(res.status).toBe(200)
+
+    // Full points written, not zeroed for an "unknown domain".
+    expect(writeMasteryEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ answerState: 'first_correct', pointsAwarded: 100 }),
+    )
+
+    // The response carries the opened-territory signal the reveal undo reads.
+    const body = await res.json()
+    expect(body.pointsAwarded).toBe(100)
+    expect(body.masteryDelta.openedNewTerritory).toBe(true)
+    expect(body.masteryDelta.domain).toBe('history')
+  })
+
   it('persists generated question BEFORE writing mastery event', async () => {
     setupDbChain()
     gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
@@ -337,5 +359,51 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
     )
     // No feed propagation without canonical id.
     expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/daily/answer grader outage (#6 — never score wrong on LLM failure)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    readPriorAnswersForQuestionMock.mockResolvedValue([])
+  })
+
+  it('holds the answer for retry (503) and persists nothing when the grader is unreachable', async () => {
+    setupDbChain()
+    // gradeAnswer signals an unreachable LLM grader via status: 'unscored'.
+    // There is NO result field — the route must refuse to score it rather than
+    // penalise an infra outage.
+    gradeAnswerMock.mockResolvedValueOnce({
+      status: 'unscored',
+      reason: 'llm_error',
+    })
+
+    const res = await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.error).toBe('grader_unavailable')
+
+    // The slot must stay untouched (unanswered) so the player can resubmit, and
+    // no scoring side effects may fire.
+    expect(dbMock.update).not.toHaveBeenCalled()
+    expect(writeMasteryEventMock).not.toHaveBeenCalled()
+    expect(updateDomainDifficultyOnAnswerMock).not.toHaveBeenCalled()
+    expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
+  })
+
+  it('still scores give-ups as wrong (grader is skipped, so never held for retry)', async () => {
+    setupDbChain()
+    // gaveUp short-circuits gradeAnswer with gradedVia: 'exact', so this path
+    // must persist a real wrong answer — the outage hold must not swallow it.
+    const res = await POST(
+      jsonRequest({ ...VALID_BODY, gave_up: true, submitted_answer: '' }) as never,
+    )
+
+    expect(res.status).toBe(200)
+    expect(gradeAnswerMock).not.toHaveBeenCalled()
+    expect(writeMasteryEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ answerState: 'incorrect', pointsAwarded: 0 }),
+    )
   })
 })

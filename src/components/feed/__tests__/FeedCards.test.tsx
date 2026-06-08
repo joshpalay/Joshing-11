@@ -3,12 +3,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import {
+  AnswerFeedbackSheet,
   AnsweredByYouCard,
   DirectSentCard,
+  DismissedFeedBar,
   FeedCardShell,
   FeedOverflowMenu,
   FriendAddedCard,
-  FriendAnsweredCard,
   FriendLikedCard,
   feedCardPreviewFixtures,
   getFeedOverflowMenuLabels,
@@ -31,8 +32,10 @@ vi.mock('next/link', () => ({
 }))
 
 vi.mock('lucide-react', () => ({
+  Check: () => <span aria-hidden="true" />,
   Flag: () => <span aria-hidden="true" />,
   MoreHorizontal: () => <span aria-hidden="true">⋯</span>,
+  Sparkles: () => <span aria-hidden="true" />,
   X: () => <span aria-hidden="true" />,
 }))
 
@@ -56,7 +59,6 @@ describe('Feed card preview fixtures', () => {
   it('covers every requested typed card state', () => {
     expect(Object.keys(feedCardPreviewFixtures)).toEqual([
       'directSentUnanswered',
-      'friendAnsweredRight',
       'friendAddedWroteQuestion',
       'friendLikedShared',
       'friendLikedCollapsedMultiEndorsement',
@@ -77,11 +79,6 @@ describe('Feed card preview fixtures', () => {
     expect(directSent).toContain('Food &amp; Drink')
     expect(directSent).toContain('SCOBY')
 
-    const friendAnswered = html(<FriendAnsweredCard item={fixtures.friendAnsweredRight} />)
-    expect(friendAnswered).toContain('Noah')
-    expect(friendAnswered).toContain('Science')
-    expect(friendAnswered).toContain('magnetar')
-
     const friendAdded = html(<FriendAddedCard item={fixtures.friendAddedWroteQuestion} />)
     expect(friendAdded).toContain('Ari')
     expect(friendAdded).toContain('History')
@@ -97,7 +94,6 @@ describe('Feed card preview fixtures', () => {
   it('drops the "has knowledge to share" phrasing from the unanswered question card', () => {
     const variants = [
       html(<DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />),
-      html(<FriendAnsweredCard item={feedCardPreviewFixtures.friendAnsweredRight} />),
       html(<FriendAddedCard item={feedCardPreviewFixtures.friendAddedWroteQuestion} />),
       html(<FriendLikedCard item={feedCardPreviewFixtures.friendLikedShared} />),
     ]
@@ -155,6 +151,97 @@ describe('Feed unanswered card actions', () => {
     )
     expect(rendered).toContain('More Feed actions')
     expect(rendered).not.toContain('Send to friend')
+  })
+})
+
+describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
+  it('renders the quiet Dismiss control on the card face when onDismiss is provided', () => {
+    const rendered = html(
+      <DirectSentCard
+        item={feedCardPreviewFixtures.directSentUnanswered}
+        onAnswer={() => undefined}
+        onDismiss={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismiss')
+    expect(rendered).toContain('Answer →')
+    // The Dismiss button must never expose the mute affordance on the card face.
+    expect(rendered).not.toContain('Not into')
+  })
+
+  it('omits the Dismiss control when onDismiss is not provided', () => {
+    const rendered = html(
+      <DirectSentCard
+        item={feedCardPreviewFixtures.directSentUnanswered}
+        onAnswer={() => undefined}
+      />
+    )
+    expect(rendered).not.toContain('Dismiss')
+  })
+
+  it('shows Dismissed, Undo, and the category mute affordance in the inline bar', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category="Roman aqueducts"
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismissed')
+    expect(rendered).toContain('Undo')
+    expect(rendered).toContain('Not into Roman aqueducts?')
+  })
+
+  it('hides the mute affordance when there is no category', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category={null}
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismissed')
+    expect(rendered).toContain('Undo')
+    expect(rendered).not.toContain('Not into')
+  })
+
+  it('reveals the answer on the card back when loaded', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category="Roman aqueducts"
+        answer="Pont du Gard"
+        answerLoading={false}
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismissed')
+    expect(rendered).toContain('Pont du Gard')
+  })
+
+  it('shows a loading state while the answer is being fetched', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category={null}
+        answerLoading
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Revealing answer')
+  })
+
+  it('falls back to an unavailable message when the answer fetch errors', () => {
+    const rendered = html(
+      <DismissedFeedBar
+        category={null}
+        answerError
+        answerLoading={false}
+        onUndo={() => undefined}
+        onMute={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Answer unavailable')
   })
 })
 
@@ -250,54 +337,65 @@ describe('Feed answered states', () => {
   })
 })
 
-describe('FriendAnsweredCard viewer-already-answered footer', () => {
-  it('reframes the header around the viewer when both were correct and uses warm footer copy', () => {
+describe('Answer feedback sheet recheck affordance', () => {
+  const baseProps = {
+    question: "Who is Achilles' secret lover?",
+    isCorrect: false,
+    pointsAwarded: null,
+    correctAnswer: 'Patroclus',
+    submittedAnswer: 'Petroclus',
+    explanation: null,
+    creatorNote: null,
+    questionId: 'q1',
+    feedItemId: 'f1',
+    onClose: () => {},
+  }
+
+  it('offers a Recheck → link on a wrong answer when onRecheck is provided', () => {
     const rendered = html(
-      <FriendAnsweredCard
-        item={{
-          ...feedCardPreviewFixtures.friendAnsweredRight,
-          viewerResult: 'correct',
-          friendCorrect: true,
-        }}
-        onAnswer={() => undefined}
+      <AnswerFeedbackSheet
+        {...baseProps}
+        onRecheck={async () => ({ accepted: false, message: '' })}
       />
     )
-    expect(rendered).toContain('got your Science question')
-    expect(rendered).toContain('You both know some Science.')
-    expect(rendered).not.toContain('You both had it')
-    expect(rendered).not.toContain('Answer →')
+    expect(rendered).toContain('Recheck →')
+    // Reuses the shared serif slate action link, not a hand-rolled button.
+    expect(rendered).toContain('text-[var(--brand-link)]')
   })
 
-  it('renders a "missed your … question" header and "you missed it" footer when viewer was wrong and friend was right', () => {
-    const rendered = html(
-      <FriendAnsweredCard
-        item={{
-          ...feedCardPreviewFixtures.friendAnsweredRight,
-          viewerResult: 'incorrect',
-          friendCorrect: true,
-        }}
-        onAnswer={() => undefined}
-      />
-    )
-    // Friend was right, so from the viewer's perspective the friend "got" their question.
-    expect(rendered).toContain('got your Science question')
-    expect(rendered).toContain('Noah knew this')
-    expect(rendered).toContain('you missed it')
-    expect(rendered).not.toContain('Answer →')
+  it('hides the recheck link when no onRecheck handler is supplied', () => {
+    const rendered = html(<AnswerFeedbackSheet {...baseProps} />)
+    expect(rendered).not.toContain('Recheck →')
   })
 
-  it('omits the status footer and the reframed header when the viewer has not answered yet', () => {
+  it('does not offer a recheck on a correct answer', () => {
     const rendered = html(
-      <FriendAnsweredCard
-        item={feedCardPreviewFixtures.friendAnsweredRight}
-        onAnswer={() => undefined}
+      <AnswerFeedbackSheet
+        {...baseProps}
+        isCorrect
+        pointsAwarded={3}
+        submittedAnswer="Patroclus"
+        onRecheck={async () => ({ accepted: false, message: '' })}
       />
     )
-    expect(rendered).toContain('Answer →')
-    expect(rendered).not.toContain('You both had it')
-    expect(rendered).not.toContain('You both know some')
-    expect(rendered).not.toContain('you missed it')
-    expect(rendered).not.toContain('got your Science question')
+    expect(rendered).not.toContain('Recheck →')
+  })
+
+  // B-Report-2: the content-reporting ⋯ is opt-in so the shared result sheet does not
+  // surface it on the feed / direct-answer result modals — only where a surface passes `report`.
+  it('hides the content-report ⋯ menu when no report context is supplied', () => {
+    const rendered = html(<AnswerFeedbackSheet {...baseProps} />)
+    expect(rendered).not.toContain('More actions')
+  })
+
+  it('shows the content-report ⋯ when a report context is supplied', () => {
+    const rendered = html(
+      <AnswerFeedbackSheet
+        {...baseProps}
+        report={{ target: { questionId: 'q1' }, surface: 'lately_result' }}
+      />
+    )
+    expect(rendered).toContain('More actions')
   })
 })
 

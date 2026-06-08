@@ -302,7 +302,7 @@ export default function AddFriendInvite() {
         <form className="space-y-5" onSubmit={goToInterests}>
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-              Add friend
+              Invite Someone
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
               Who came to mind?

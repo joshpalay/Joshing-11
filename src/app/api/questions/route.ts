@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion, generateInsideJoke } from '@/lib/llm';
 import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
+// Imported from vet-verdict (not vet-question) so it resolves to the real
+// pure mapper even where vet-question is mocked.
+import { verdictToBlockedVisibility } from '@/server/llm/vet-verdict';
 import { getSession } from '@/server/auth/session';
 import { db, feedDismissedDomains, feedItems, questions, users } from '@/server/db';
 import {
@@ -11,7 +14,7 @@ import {
   getQuestion,
   getQuestionsForUser,
 } from '@/server/db/queries/questions';
-import { getFriends } from '@/server/db/queries/friends';
+import { getFollowers, getFriends } from '@/server/db/queries/friends';
 import {
   rollOffOldItems,
   userHasQuestionInBlockingFeed,
@@ -22,7 +25,7 @@ import { sendSms } from '@/server/sms';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import { readCreateQuestionPayload } from '@/server/questions/create-payload';
 import { textContainsAnswer } from '@/server/questions/self-answering';
-import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
+import { assessQuestionDifficulty, fallbackQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export const dynamic = 'force-dynamic';
@@ -148,46 +151,76 @@ export async function POST(request: NextRequest) {
   // inputs (question + answer + category) and don't depend on each other's
   // output — run them in parallel so the route's wall-clock is ~1× a single
   // LLM call instead of 3×. Categorization upstream is the only true
-  // sequencing dependency in this handler. Haiku-vet failure is meant to be
-  // non-fatal (the /api/cron/vet-questions sweep retries), but bundling it
-  // here is fine because Promise.all rejects fast and we treat the trio as
-  // a single enrichment stage.
-  try {
-    [difficultyAssessment, insideJoke, verdict] = await Promise.all([
-      assessQuestionDifficulty({
-        questionText: questionFields.text,
-        correctAnswer: questionFields.correctAnswer,
-        broadCategory: questionFields.broadCategory,
-        canonicalSubcategory: questionFields.canonicalSubcategory,
-        explanation: questionFields.explanation,
-      }),
-      generateInsideJoke({
-        questionText: questionFields.text,
-        correctAnswer: questionFields.correctAnswer,
-        broadCategory: questionFields.broadCategory,
-        canonicalSubcategory: questionFields.canonicalSubcategory,
-      }),
-      vetQuestion({
-        questionText: questionFields.text,
-        answer: questionFields.correctAnswer,
-        alternateAnswers: questionFields.alternateAnswers,
-        explanation: questionFields.explanation ?? null,
-        broadCategory: questionFields.broadCategory,
-        canonicalSubcategory: questionFields.canonicalSubcategory,
-      }),
-    ]);
-  } catch (error) {
-    console.error('[questions/create] unexpected_failure', {
-      stage: 'enrichment',
+  // sequencing dependency in this handler.
+  //
+  // Each of these is *optional* enrichment with its own degraded fallback
+  // (difficulty → fallbackQuestionDifficulty(); inside joke → null; vet →
+  // needs_review, which the /api/cron/vet-questions sweep retries). We use
+  // allSettled rather than Promise.all so a single enrichment outage degrades
+  // that one signal instead of rejecting the whole batch and 500ing the save.
+  // The structural guarantee lives here, not in each helper's internal
+  // try/catch discipline.
+  const [difficultyResult, insideJokeResult, verdictResult] = await Promise.allSettled([
+    assessQuestionDifficulty({
+      questionText: questionFields.text,
+      correctAnswer: questionFields.correctAnswer,
+      broadCategory: questionFields.broadCategory,
+      canonicalSubcategory: questionFields.canonicalSubcategory,
+      explanation: questionFields.explanation,
+    }),
+    generateInsideJoke({
+      questionText: questionFields.text,
+      correctAnswer: questionFields.correctAnswer,
+      broadCategory: questionFields.broadCategory,
+      canonicalSubcategory: questionFields.canonicalSubcategory,
+    }),
+    vetQuestion({
+      questionText: questionFields.text,
+      answer: questionFields.correctAnswer,
+      alternateAnswers: questionFields.alternateAnswers,
+      explanation: questionFields.explanation ?? null,
+      broadCategory: questionFields.broadCategory,
+      canonicalSubcategory: questionFields.canonicalSubcategory,
+    }),
+  ]);
+
+  const logEnrichmentFailure = (stage: string, reason: unknown) => {
+    console.error('[questions/create] enrichment_degraded', {
+      stage,
       userId: session.userId,
-      message: error instanceof Error ? error.message : String(error),
+      message: reason instanceof Error ? reason.message : String(reason),
     });
-    return NextResponse.json(
-      { error: 'server_error', message: 'Something went wrong saving that question. Try again.' },
-      { status: 500 },
-    );
+  };
+
+  if (difficultyResult.status === 'fulfilled') {
+    difficultyAssessment = difficultyResult.value;
+  } else {
+    logEnrichmentFailure('difficulty', difficultyResult.reason);
+    difficultyAssessment = fallbackQuestionDifficulty();
+  }
+
+  if (insideJokeResult.status === 'fulfilled') {
+    insideJoke = insideJokeResult.value;
+  } else {
+    logEnrichmentFailure('inside_joke', insideJokeResult.reason);
+    insideJoke = null;
+  }
+
+  if (verdictResult.status === 'fulfilled') {
+    verdict = verdictResult.value;
+  } else {
+    // Failed vet falls back to needs_review (never auto-publishes) — the cron
+    // sweep re-vets these. This mirrors vetQuestion's own internal llm_error path.
+    logEnrichmentFailure('vet', verdictResult.reason);
+    verdict = { status: 'needs_review' as const, score: null, reason: 'llm_error' };
   }
   let publicScoring = verdictToPublicStatus(verdict);
+  // Safety-fail verdicts are hard-blocked from every surface: we override the
+  // saved visibility to 'blocked' (a state questionVisibilityPredicate and all
+  // bank/send/game read paths exclude) and skip ALL fan-out below. This is
+  // safety-only — factual/quality/answer-leaked rejections stay publicStatus
+  // signals and remain shareable to friends.
+  const blockedVisibility = verdictToBlockedVisibility(verdict);
   if (categoryLeaksAnswer && publicScoring.publicStatus !== 'rejected') {
     publicScoring = {
       publicStatus: 'rejected',
@@ -228,8 +261,27 @@ export async function POST(request: NextRequest) {
     publicStatus: publicScoring.publicStatus,
     publicEligibilityScore: publicScoring.publicEligibilityScore,
     publicEligibilityReason: publicScoring.publicEligibilityReason,
+    // Override any user-chosen visibility on a safety hard-block. Placed after
+    // the spread so it wins over categorizedQuestionFields.visibility.
+    ...(blockedVisibility ? { visibility: blockedVisibility } : {}),
   });
   console.info('[questions/create]', { questionId: created.id, userId: session.userId, verified: categorizedQuestionFields.verified, category: categorizedQuestionFields.category, canonicalSubcategory: categorizedQuestionFields.canonicalSubcategory, difficultyTier: difficultyAssessment.tier });
+
+  // Safety hard-block: short-circuit BEFORE any fan-out (broadcast + direct
+  // send), KB-domain opening, and the success payload. The question is saved
+  // as 'blocked' (in the author's bank, but unshareable) and must not reach any
+  // recipient feed even in this same request. We do not name the triggered
+  // category. Matches the existing creation-error response shape.
+  if (blockedVisibility) {
+    console.info('[questions/create] safety_blocked', { questionId: created.id, userId: session.userId });
+    return NextResponse.json(
+      {
+        error: 'failed_content_check',
+        message: "We couldn't publish or share that question because it didn't pass a content check.",
+      },
+      { status: 422 },
+    );
+  }
   const feedShare = {
     requested: shareToFeed,
     createdCount: 0,
@@ -240,7 +292,9 @@ export async function POST(request: NextRequest) {
   };
 
   if (shareToFeed) {
-    const friends = await getFriends(session.userId);
+    // Broadcast fan-out reaches my followers (people who follow me), not just
+    // mutuals — directional follow model (D-1 Stage 3).
+    const friends = await getFollowers(session.userId);
     const friendIds = friends.map((friend) => friend.id);
     const dismissedRecipientIds = new Set<string>();
 

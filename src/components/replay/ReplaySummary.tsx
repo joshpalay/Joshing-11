@@ -67,7 +67,7 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
         }}
       >
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>This round</p>
-        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[#111111]">
+        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[var(--warm-ink)]">
           {correct}<span className="text-3xl text-[var(--text-muted)]">/{total}</span>
         </p>
         <p style={{ ...monoStyle, marginTop: '12px', color: 'var(--text-muted)' }}>

@@ -9,9 +9,10 @@ type DirectSentCardProps = {
   item: DirectSentFeedItem
   overflow?: ReactNode
   onAnswer?: () => void
+  onDismiss?: () => void
 }
 
-export function DirectSentCard({ item, overflow, onAnswer }: DirectSentCardProps) {
+export function DirectSentCard({ item, overflow, onAnswer, onDismiss }: DirectSentCardProps) {
   const visibleCategory = visibleFeedCategory(item.category)
   const senderName = item.senderName || item.avatarName || 'A friend'
   const senderHref = item.senderHref ?? item.authorHref ?? null
@@ -30,7 +31,7 @@ export function DirectSentCard({ item, overflow, onAnswer }: DirectSentCardProps
       thought you&rsquo;d like this
       {visibleCategory ? <> about {visibleCategory}</> : null}.
       {item.personalMessage ? (
-        <span className="mt-1 block font-serif text-[14px] italic leading-snug text-[var(--brand-ink-700)]">
+        <span className="mt-1 block font-serif text-sm italic leading-snug text-[var(--brand-ink-700)]">
           &ldquo;{item.personalMessage}&rdquo;
         </span>
       ) : null}
@@ -43,6 +44,7 @@ export function DirectSentCard({ item, overflow, onAnswer }: DirectSentCardProps
       question={item.question}
       overflow={overflow}
       onAnswer={item.viewerIsAuthor ? undefined : onAnswer}
+      onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
     />
   )
 }

@@ -5,36 +5,33 @@ export type CeremonyPinStatus = {
   latestUnviewed: { id: string; firedAt: string } | null
 }
 
+// One ceremonial editorial marker, in the same visual family as the existing
+// weekly-summary countdown: centered, gold, uppercase, calm. No card, no border,
+// no box, no CTA button — the line itself is the moment. A subtle opacity-only
+// fade-in on first paint (no movement, no pulse), gated to motion-safe. When a
+// reflection is ready the whole row is the tap target; the future-state
+// countdown is the same treatment with only the text changed.
+const MARKER_CLASS =
+  'flex items-center justify-center gap-2 py-3 text-center text-xs font-medium tracking-[0.08em] text-[var(--tri-amber)] uppercase motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700'
+
 /**
  * Top-of-home ceremony slot. Lifted out of FeedList so Home can render it
- * directly (above RecentActivity) and FeedList stays focused on the playable
- * stream.
+ * directly (above the feed) and FeedList stays focused on the playable stream.
  *
- * Three states:
- *   1. Unviewed ceremony → amber link card "Your weekly reflection is ready"
- *   2. Today is Sunday (UTC) → hidden (cron is firing; nothing to nag about)
- *   3. Otherwise → countdown "Weekly Summary in N days"
+ * Three states, ONE treatment (always the calm gold marker, never a dashboard
+ * card):
+ *   1. Unviewed ceremony → tappable "Your weekly reflection is ready"
+ *   2. Today is Sunday (UTC) → hidden (cron is firing; nothing to anticipate)
+ *   3. Otherwise → countdown "Weekly Reflection in N days"
  */
 export function CeremonyPin({ status }: { status: CeremonyPinStatus | null }) {
   if (!status) return null
 
   if (status.latestUnviewed) {
     return (
-      <Link
-        href={`/ceremony/${status.latestUnviewed.id}`}
-        className="block rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-stone-950 shadow-sm"
-      >
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 text-lg" aria-hidden>
-            ✦
-          </span>
-          <div>
-            <p className="font-medium">Your weekly reflection is ready</p>
-            <p className="mt-1 text-sm text-stone-700">
-              See what you&rsquo;ve been up to {'->'}
-            </p>
-          </div>
-        </div>
+      <Link href={`/ceremony/${status.latestUnviewed.id}`} className={MARKER_CLASS}>
+        <span aria-hidden>✦</span>
+        <span>Your weekly reflection is ready</span>
       </Link>
     )
   }
@@ -59,11 +56,11 @@ export function CeremonyPin({ status }: { status: CeremonyPinStatus | null }) {
   )
   const label =
     daysUntil === 1
-      ? 'Weekly Summary tomorrow'
-      : `Weekly Summary in ${daysUntil} days`
+      ? 'Weekly Reflection tomorrow'
+      : `Weekly Reflection in ${daysUntil} days`
 
   return (
-    <div className="-my-2 flex items-center justify-center gap-2 text-xs font-medium tracking-[0.08em] text-[#D9A82E] uppercase">
+    <div className={MARKER_CLASS}>
       <span aria-hidden>✦</span>
       <span>{label}</span>
     </div>

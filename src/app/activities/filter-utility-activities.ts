@@ -9,6 +9,15 @@ import type { LatelyMoment } from '@/server/db/queries/lately';
 //     plus a domain transition). The "SEE YOUR MAP" CTA lives on /knowledge.
 //   - received_direct_question whose question the viewer already got
 //     correctly: covered by the you_got_them moment for that questionId.
+//
+// D-2 NICHE-MATCH NOTE — do NOT add the niche_match_* types to this dedup set.
+// Lately moments (getLatelyMoments, both directions) are FRIEND-scoped, but
+// niche-match only fires between strangers (the 'none' relationship state — see
+// notifyNicheMatch's stranger gate), so a niche-match item can never collide
+// with a they_got_you / you_got_them moment for the same questionId. They are
+// disjoint by construction; dropping them here would silently delete the only
+// surface the discovery loop renders on. Covered by the
+// filter-utility-activities tests.
 export function filterUtilityActivities(
   items: ActivityItemView[],
   moments: LatelyMoment[],

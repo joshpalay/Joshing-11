@@ -53,7 +53,7 @@ export function resolveCanonicalSubcategoryLabel(input: ResolveCategoryLabelInpu
 }
 
 export type ResolveReviewCategoryDisplayInput = ResolveCategoryLabelInput & {
-  /** Prisma `Question.category` when hyper-specific fields are empty */
+  /** The question's `category` column when hyper-specific fields are empty */
   broad_category_key?: string | null;
 };
 

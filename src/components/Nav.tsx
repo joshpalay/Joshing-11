@@ -2,16 +2,15 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Brain, Home, Pencil, Plus, User, Users } from 'lucide-react';
 import { CreateChooser } from '@/components/CreateChooser';
 
 const navItems = [
   { href: '/', label: 'Home', Icon: Home },
-  { href: '/friends', label: 'Friends', Icon: Users },
   { href: '/questions', label: 'Questions', Icon: Pencil },
   { href: '/knowledge', label: 'Knowledge', Icon: Brain },
-  { href: '/users/me', label: 'Profile', Icon: User },
+  { href: '/friends', label: 'Friends', Icon: Users },
 ];
 
 function initialsFor(name: string): string {
@@ -26,6 +25,30 @@ function formatBadgeCount(count: number): string {
   return String(count);
 }
 
+function AccountIcon({
+  active,
+  initials,
+}: {
+  active: boolean;
+  initials: string | null;
+}) {
+  if (!initials) {
+    return <User className="size-5" strokeWidth={active ? 2.4 : 1.8} />;
+  }
+
+  return (
+    <span
+      className={[
+        'grid size-5 place-items-center rounded-full text-[10px] font-semibold',
+        active ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground',
+      ].join(' ')}
+      aria-hidden="true"
+    >
+      {initials}
+    </span>
+  );
+}
+
 export function Nav({
   initialUserId = null,
   initialDisplayName = null,
@@ -38,9 +61,16 @@ export function Nav({
   friendsDotVisible?: boolean;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const accountInitials = initialDisplayName ? initialsFor(initialDisplayName) || null : null;
   const currentUserId = initialUserId;
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
+  // On Home and the Questions page the FAB is a dedicated "add a question"
+  // shortcut: it drops straight into the composer (?create=1) rather than the
+  // generic three-way Create chooser. The composer still surfaces every
+  // destination control, so nothing is lost by skipping the chooser here. The
+  // chooser stays as the FAB action on the other surfaces.
+  const isQuestionComposerShortcut = pathname === '/' || pathname.startsWith('/questions');
   const isOtherUserProfilePath = (() => {
     if (!pathname.startsWith('/users/')) return false;
     const rest = pathname.slice('/users/'.length);
@@ -64,33 +94,24 @@ export function Nav({
   const gameSegments = pathname.split('/').filter(Boolean);
   const isGamePlayScreen = gameSegments[0] === 'games' && gameSegments.length === 2;
 
+  // The weekly ceremony (/ceremony/<id>) is a full-screen, self-contained
+  // takeover with its own progress dots and X-to-exit — same as the game play
+  // screen — so the global chrome (header, FAB, bottom nav) is suppressed. The
+  // bottom nav was previously covering the ceremony's progress dots and the FAB
+  // floated over the experience.
+  const isCeremonyScreen = pathname.startsWith('/ceremony/');
+
   if (
     pathname === '/onboarding' ||
     pathname.startsWith('/daily') ||
     pathname === '/login' ||
     pathname.startsWith('/invite/') ||
-    isGamePlayScreen
+    isGamePlayScreen ||
+    isCeremonyScreen
   ) {
     return null;
   }
 
-  function AccountIcon({ active }: { active: boolean }) {
-    if (!accountInitials) {
-      return <User className="size-5" strokeWidth={active ? 2.4 : 1.8} />;
-    }
-
-    return (
-      <span
-        className={[
-          'grid size-5 place-items-center rounded-full text-[10px] font-semibold',
-          active ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground',
-        ].join(' ')}
-        aria-hidden="true"
-      >
-        {accountInitials}
-      </span>
-    );
-  }
 
   // The Profile tab is active for both the canonical /users/<self-id>
   // route and the /users/me alias before it redirects.
@@ -119,32 +140,51 @@ export function Nav({
           >
             Joshing
           </Link>
-          <Link
-            href="/activities"
-            aria-label={
-              showBadge ? `Activity, ${bellBadgeCount} unread` : 'Activity'
-            }
-            className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            <Bell className="size-5" strokeWidth={1.9} />
-            {showBadge ? (
-              <span
-                className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
-                style={{ backgroundColor: 'var(--destructive)' }}
-                aria-hidden="true"
-              >
-                {badgeText}
-              </span>
-            ) : null}
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/activities"
+              aria-label={
+                showBadge ? `Activity, ${bellBadgeCount} unread` : 'Activity'
+              }
+              className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <Bell className="size-5" strokeWidth={1.9} />
+              {showBadge ? (
+                <span
+                  className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-[5px] text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
+                  style={{ backgroundColor: 'var(--destructive)' }}
+                  aria-hidden="true"
+                >
+                  {badgeText}
+                </span>
+              ) : null}
+            </Link>
+            <Link
+              href="/users/me"
+              aria-label="Account and settings"
+              aria-current={isProfileTabActive('/users/me') ? 'page' : undefined}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <AccountIcon active={isProfileTabActive('/users/me')} initials={accountInitials} />
+            </Link>
+          </div>
         </div>
       </header>
       {showNewGameShortcut ? (
         <button
           type="button"
-          className="fixed bottom-24 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg md:hidden"
-          aria-label="Create"
-          onClick={() => setCreateChooserOpen(true)}
+          className={[
+            'fixed bottom-24 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg',
+            // The dedicated add-a-question FAB shows on every viewport; the
+            // generic Create chooser FAB stays mobile-only as before.
+            isQuestionComposerShortcut ? '' : 'md:hidden',
+          ].join(' ')}
+          aria-label={isQuestionComposerShortcut ? 'Add a question' : 'Create'}
+          onClick={() =>
+            isQuestionComposerShortcut
+              ? router.push('/questions?create=1')
+              : setCreateChooserOpen(true)
+          }
         >
           <Plus className="size-6" />
         </button>
@@ -183,7 +223,7 @@ export function Nav({
               >
                 <span aria-hidden="true" className="relative grid place-items-center">
                   {isProfile ? (
-                    <AccountIcon active={active} />
+                    <AccountIcon active={active} initials={accountInitials} />
                   ) : (
                     <Icon
                       className="size-5"

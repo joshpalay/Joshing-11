@@ -23,6 +23,7 @@ import {
   HAIKU_MODEL,
   HAIKU_GATE_TIMEOUT_MS,
   INSTRUCTION_USER_INPUT_GUIDANCE,
+  INSTRUCTION_SCOPING_QUALIFIER,
   extractTextContent,
   getAnthropicClient,
   loggedMessagesCreate,
@@ -48,7 +49,7 @@ Work in this order and return JSON only:
 4. explanation: a brief educational explanation (2-3 sentences) that would help someone learn if they got it wrong.
 
 Respond with valid JSON only, no prose outside the object:
-{ "reasoning": "...", "correctAnswer": "...", "alternateAnswers": ["...", "..."], "explanation": "..." }${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+{ "reasoning": "...", "correctAnswer": "...", "alternateAnswers": ["...", "..."], "explanation": "..." }${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
 
 const VERIFIER_SYSTEM_PROMPT = `You are fact-checking a single proposed answer to a trivia question before it is shown to the question's author. You are given the question and the proposed answer.
 
@@ -59,7 +60,7 @@ Decide one verdict:
 
 Flag "WRONG" only when you are confident. A high bar applies — when in doubt, return "OK".
 
-Return valid JSON only: { "verdict": "OK" | "WRONG" | "UNVERIFIABLE", "corrected_answer": "..." | null }${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+Return valid JSON only: { "verdict": "OK" | "WRONG" | "UNVERIFIABLE", "corrected_answer": "..." | null }${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
 
 export function asSuggestion(value: Record<string, unknown> | null): QuestionSuggestion | null {
   const correctAnswer = typeof value?.correctAnswer === 'string' ? value.correctAnswer.trim() : '';

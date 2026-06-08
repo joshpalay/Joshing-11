@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type ReactNode } from 'react'
 
+import { answerHeadingStyle } from '@/components/answer-heading'
 import { KnowledgeCircle } from '@/components/knowledge/CategoryCircles'
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
@@ -155,32 +156,35 @@ function AnsweredResult({
     <div className="w-full space-y-1.5">
       <div className="flex items-start justify-between gap-3">
         <p
-          className="text-[14px] font-medium"
+          className="text-sm font-medium"
           style={{ color: item.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)' }}
         >
           {item.answerSummary ?? 'You answered this question.'}
         </p>
         {item.isCorrect ? <KnowledgeGainIndicator item={item} /> : null}
       </div>
-      {!item.isCorrect && item.correctAnswer ? (
+      {item.correctAnswer ? (
         <p
-          className="text-[13px] italic"
           style={{
-            fontFamily: 'var(--font-literata)',
-            color: 'var(--ink)',
-            opacity: 0.7,
+            ...answerHeadingStyle,
+            color: item.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)',
           }}
         >
           {item.correctAnswer}
         </p>
       ) : null}
-      {!item.isCorrect && item.quip ? (
-        <p
-          className="text-[13px]"
-          style={{ color: 'var(--ink)', opacity: 0.6 }}
-        >
-          {item.quip}
-        </p>
+      {item.creatorNote ? (
+        <div className="mt-1.5 rounded-md border bg-muted/40 px-3 py-2">
+          <p className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-muted-foreground">
+            Why they asked
+          </p>
+          <p
+            className="mt-1 text-[13px] leading-6"
+            style={{ fontFamily: 'var(--font-literata)', color: 'var(--ink)' }}
+          >
+            {item.creatorNote}
+          </p>
+        </div>
       ) : null}
       {(onRetry || (recheckAction && recheckState !== 'done')) ? (
         <div className="flex items-center justify-end gap-4 pt-2">
@@ -257,7 +261,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
             </p>
             {category ? (
               <p
-                className="mt-1 truncate text-[12px] italic leading-tight"
+                className="mt-1 truncate text-xs italic leading-tight"
                 style={{
                   fontFamily: 'var(--font-literata)',
                   color: 'var(--ink)',
@@ -283,7 +287,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
         </div>
 
         <p
-          className="mt-3 text-[16px] leading-snug"
+          className="mt-3 text-base leading-snug"
           style={{
             fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
             color: 'var(--ink)',

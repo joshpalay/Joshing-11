@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
+import { EditorialBadge } from '@/components/EditorialBadge';
 import { cn } from '@/lib/utils';
 
 type ArchiveSource = 'daily' | 'feed' | 'joshing_game' | 'sent_to_me' | 'written_by_me';
@@ -29,8 +30,9 @@ type ArchiveItem = {
   isInBank: boolean;
   myRating: 'up' | 'down' | null;
   canUseQuestionActions?: boolean;
-  creatorNote: { authorName: string; noteText: string } | null;
   verified: boolean;
+  askerName: string;
+  authorIsHouse: boolean;
 };
 
 type ArchiveFacet = {
@@ -384,13 +386,6 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
         </details>
       ) : null}
 
-      {item.creatorNote ? (
-        <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
-          <span className="font-medium">A note from {item.creatorNote.authorName}:</span>{' '}
-          {item.creatorNote.noteText}
-        </p>
-      ) : null}
-
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Link
           href={`/knowledge/${encodeURIComponent(item.domain)}`}
@@ -405,6 +400,12 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
           <span className="font-mono font-semibold text-foreground">+{Math.round(item.pointsAwarded)} pts</span>
         ) : null}
         {item.answeredAt ? <span>· {formatDate(item.answeredAt)}</span> : null}
+        {item.askerName.trim() ? (
+          <span className="inline-flex items-center gap-1">
+            · Asked by {item.askerName}
+            {item.authorIsHouse ? <EditorialBadge /> : null}
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">

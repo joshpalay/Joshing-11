@@ -32,7 +32,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       original,
       suggested: original,
-      broadCategory: 'General Knowledge',
+      // null, not the catch-all — the save path re-categorizes before persisting.
+      broadCategory: null,
       explanation: null,
     });
   }

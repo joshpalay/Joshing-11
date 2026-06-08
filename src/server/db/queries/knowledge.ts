@@ -12,11 +12,13 @@ import {
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { getDailyPreferences, updateDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { domainKey } from '@/lib/knowledge/domain-key';
 import { pgErrorCode } from '@/server/db/pg-error';
 import type { MasteryTier } from '@/types/db';
 
@@ -196,10 +198,6 @@ function displayNameForDomain(domain: string): string {
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function domainKey(domain: string): string {
-  return domain.trim().toLowerCase();
 }
 
 function percent(value: number): number {
@@ -390,6 +388,32 @@ function toDomainMasteryRow(
   };
 }
 
+// Collapse player-mastery rows whose canonical subcategories differ only by
+// typographic spelling (e.g. a curly-apostrophe declared-interest seed row and
+// the straight-apostrophe row earned by answering questions) into one entry per
+// domain key, summing their points. Building the lookup with `new Map(...)`
+// instead would keep only the last colliding row and silently drop the other
+// row's points. Rows arrive points-descending, so the first row seen wins for
+// non-additive fields (broadCategory, tier) while points accumulate.
+function buildMasteryByDomain(
+  masteryRows: Array<typeof playerMastery.$inferSelect>,
+): Map<string, typeof playerMastery.$inferSelect> {
+  const byKey = new Map<string, typeof playerMastery.$inferSelect>();
+  for (const row of masteryRows) {
+    const key = domainKey(row.canonicalSubcategory);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, row);
+    } else {
+      byKey.set(key, {
+        ...existing,
+        totalPoints: Number(existing.totalPoints ?? 0) + Number(row.totalPoints ?? 0),
+      });
+    }
+  }
+  return byKey;
+}
+
 export async function getUserMasteryOverview(userId: string): Promise<MasteryOverview> {
   const [declaredRows, masteryRows, eventRows, recentRows, hiddenDomainKeys] = await Promise.all([
     getActiveDeclaredInterests(userId),
@@ -456,7 +480,7 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
     statsByDomain.set(key, existing);
   }
 
-  const masteryByDomain = new Map(masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]));
+  const masteryByDomain = buildMasteryByDomain(masteryRows);
   const knowledgeDomainNames = new Map<string, {
     domain: string;
     broadCategory: string | null;
@@ -544,7 +568,7 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
     statsByDomain.set(key, existing);
   }
 
-  const masteryByDomain = new Map(masteryRows.map((row) => [domainKey(row.canonicalSubcategory), row]));
+  const masteryByDomain = buildMasteryByDomain(masteryRows);
   const knowledgeDomainNames = new Map<string, {
     domain: string;
     broadCategory: string | null;
@@ -793,6 +817,102 @@ export async function getDomainDetail(userId: string, domain: string): Promise<D
   };
 }
 
+// ─── Domain convergence (deterministic dedup) ───────────────────────────────
+//
+// Powers convergeDomain() (src/server/knowledge/converge-domain.ts): align a
+// freshly-suggested category onto an existing canonical subcategory that already
+// exists ACROSS THE GAME, so the same hyper-specific domain isn't re-created per
+// user. The corpus is every player's PLAYER_MASTERY.canonical_subcategory — the
+// table the declared-interest write path already seeds — so converging onto it
+// directly merges mastery (PLAYER_MASTERY is keyed on canonical_subcategory).
+
+export type CanonicalCorpusMatch = {
+  /** The existing canonical-subcategory spelling to persist when chosen. */
+  label: string;
+  broadCategory: string | null;
+  /** How many PLAYER_MASTERY rows share this spelling (ranking + privacy floor). */
+  prevalence: number;
+  /** 1 for an exact-key match; the pg_trgm score for a fuzzy match. */
+  similarity: number;
+};
+
+// SQL mirror of domainKey() (src/lib/knowledge/domain-key.ts): fold curly
+// apostrophes to ASCII, collapse internal whitespace, trim, lowercase. Kept as a
+// single fragment so the JS and SQL key definitions can't drift — the
+// converge-domain test asserts parity. The fold-set chars and the regex pattern
+// are bound params (not inlined literals) so the apostrophe escaping stays sane.
+const CONVERGE_CURLY_APOSTROPHES = '‘’ʼ';
+const CONVERGE_ASCII_APOSTROPHES = "'''";
+const CONVERGE_WHITESPACE_PATTERN = '\\s+';
+function foldedCanonicalSubcategoryExpr() {
+  return sql`lower(btrim(regexp_replace(translate(${playerMastery.canonicalSubcategory}, ${CONVERGE_CURLY_APOSTROPHES}, ${CONVERGE_ASCII_APOSTROPHES}), ${CONVERGE_WHITESPACE_PATTERN}, ' ', 'g')))`;
+}
+
+const BROAD_CATEGORY_MODE = sql<string | null>`mode() within group (order by ${playerMastery.broadCategory})`;
+
+// Exact-key convergence: the most-prevalent corpus spelling whose domainKey()
+// equals the input's. Does NOT depend on pg_trgm, so it always works (the fuzzy
+// pass below degrades when the extension is absent). A folded-expression scan is
+// fine at the current distinct-canonical-subcategory corpus scale.
+export async function findExactCanonicalMatch(rawLabel: string): Promise<CanonicalCorpusMatch | null> {
+  const key = domainKey(rawLabel);
+  if (!key) return null;
+  const rows = await db
+    .select({
+      label: playerMastery.canonicalSubcategory,
+      broadCategory: BROAD_CATEGORY_MODE,
+      prevalence: sql<number>`count(*)::int`,
+    })
+    .from(playerMastery)
+    .where(sql`${foldedCanonicalSubcategoryExpr()} = ${key}`)
+    .groupBy(playerMastery.canonicalSubcategory)
+    .orderBy(sql`count(*) desc`)
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    label: row.label,
+    broadCategory: row.broadCategory ?? null,
+    prevalence: Number(row.prevalence),
+    similarity: 1,
+  };
+}
+
+// Fuzzy convergence via pg_trgm similarity(). Throws if pg_trgm is unavailable
+// (function does not exist) — convergeDomain() swallows that and degrades to
+// exact + "create new". The WHERE similarity() >= threshold filter is a
+// deliberate per-row scan: the index-using `%` operator depends on the
+// session-global set_limit GUC, which is unreliable under PgBouncer pooling. The
+// corpus (distinct canonical subcategories) is small enough that this is fine; a
+// later migration can add an index + switch the predicate if scale demands.
+export async function findFuzzyCanonicalMatches(
+  rawLabel: string,
+  threshold: number,
+  limit: number,
+): Promise<CanonicalCorpusMatch[]> {
+  const clean = rawLabel.trim().replace(/\s+/g, ' ');
+  if (!clean || limit <= 0) return [];
+  const score = sql<number>`max(similarity(${playerMastery.canonicalSubcategory}, ${clean}))`;
+  const rows = await db
+    .select({
+      label: playerMastery.canonicalSubcategory,
+      broadCategory: BROAD_CATEGORY_MODE,
+      prevalence: sql<number>`count(*)::int`,
+      similarity: score,
+    })
+    .from(playerMastery)
+    .where(sql`similarity(${playerMastery.canonicalSubcategory}, ${clean}) >= ${threshold}`)
+    .groupBy(playerMastery.canonicalSubcategory)
+    .orderBy(sql`max(similarity(${playerMastery.canonicalSubcategory}, ${clean})) desc`, sql`count(*) desc`)
+    .limit(limit);
+  return rows.map((row) => ({
+    label: row.label,
+    broadCategory: row.broadCategory ?? null,
+    prevalence: Number(row.prevalence),
+    similarity: Number(row.similarity),
+  }));
+}
+
 export async function getHiddenDomainKeys(userId: string): Promise<Set<string>> {
   const rows = await db
     .select({
@@ -840,6 +960,66 @@ export async function setDomainVisibility(
         updatedAt: new Date(),
       },
     });
+}
+
+/**
+ * Removes a freshly-opened Knowledge base domain — the "undo" for the
+ * default-add that fires when a player answers correctly in unfamiliar
+ * territory (B-1). This is a true delete, not a hide: it drops the
+ * PLAYER_MASTERY row and the player's MASTERY_EVENTS for that domain
+ * (since the domain was just opened, those are this answer's events), and
+ * pulls the domain out of any custom Daily-Five selection so the single
+ * "remove" fully reverses the open across the KB and the Daily Five.
+ *
+ * Scoped to the reveal-time undo affordance; not general KB editing. Match
+ * is case-insensitive so the client can pass the domain label as shown.
+ * Returns whether a PLAYER_MASTERY row was actually removed.
+ */
+export async function removeKnowledgeDomain(userId: string, domain: string): Promise<{ removed: boolean }> {
+  const normalizedDomain = domain.trim().replace(/\s+/g, ' ');
+  if (!normalizedDomain) throw new Error('domain is required');
+  const domainKey = normalizedDomain.toLowerCase();
+
+  const removed = await db.transaction(async (tx) => {
+    const deletedRows = await tx
+      .delete(playerMastery)
+      .where(and(
+        eq(playerMastery.userId, userId),
+        sql`lower(${playerMastery.canonicalSubcategory}) = ${domainKey}`,
+      ))
+      .returning({ id: playerMastery.id });
+
+    await tx
+      .delete(masteryEvents)
+      .where(and(
+        eq(masteryEvents.userId, userId),
+        sql`lower(${masteryEvents.canonicalSubcategory}) = ${domainKey}`,
+      ));
+
+    return deletedRows.length > 0;
+  });
+
+  // Custom-mode cleanup: if the player has hand-picked Daily Five domains,
+  // drop the removed one so it stops surfacing. Best-effort and outside the
+  // delete transaction — a stale selection is inert (random mode reads the
+  // live KB; custom mode just won't find questions for a domain that's gone).
+  try {
+    const preferences = await getDailyPreferences(userId);
+    if (preferences.domainMode === 'custom') {
+      const next = preferences.selectedDomains.filter((d) => d.toLowerCase() !== domainKey);
+      if (next.length !== preferences.selectedDomains.length) {
+        await updateDailyPreferences(userId, { selectedDomains: next });
+      }
+    }
+  } catch (error) {
+    console.warn('[removeKnowledgeDomain] failed to prune Daily Five selection', {
+      userId,
+      domain: normalizedDomain,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return { removed };
 }
 
 function calendarDay(value: Date): string {

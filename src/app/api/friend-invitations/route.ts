@@ -22,7 +22,10 @@ const MAX_SUGGESTED_INTEREST_LENGTH = 60
 const INVITES_PER_USER_WINDOW = 12
 const INVITES_PER_PHONE_WINDOW = 4
 const INVITE_WINDOW_MS = 1000 * 60 * 60
-const SAME_PHONE_COOLDOWN_MS = 1000 * 60 * 10
+// Resend prohibition temporarily lifted: this same-phone cooldown previously
+// blocked re-inviting the same person for 10 minutes. Restore `1000 * 60 * 10`
+// to bring the resend prohibition back.
+const SAME_PHONE_COOLDOWN_MS = 0
 const CANCELLED_PHONE_COOLDOWN_MS = 1000 * 60 * 20
 const IGNORED_PHONE_COOLDOWN_MS = 1000 * 60 * 60 * 24
 
@@ -551,15 +554,13 @@ export async function POST(request: Request) {
         )
       }
 
+      // Inviting an existing user from the invite flow follows them (pending or
+      // auto-approved per their privacy gate). Follow requests don't expire.
       const { friendship: friendshipRequest, state } =
         await createOrReusePendingFriendshipRequest({
           inviterUserId: session.userId,
           inviteeUserId: existingUser.id,
           suggestedInterests,
-          // SMS-style invitations don't expire under v12. Pass null
-          // explicitly so the new 30-day direct-request default doesn't
-          // bleed into this flow.
-          expiresAt: null,
         })
 
       const inviteUrl = `${getBaseUrl(request)}/activities#friendship-${encodeURIComponent(friendshipRequest.id)}`
@@ -593,7 +594,7 @@ export async function POST(request: Request) {
         expiresAt: null,
         friendshipRequest: {
           id: friendshipRequest.id,
-          status: friendshipRequest.status,
+          status: friendshipRequest.state,
           state,
           inviteeUserId: existingUser.id,
         },

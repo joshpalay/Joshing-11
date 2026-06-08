@@ -31,12 +31,16 @@ const { dbMock, state } = vi.hoisted(() => {
       if (!state.invitation) return []
       if (!isLandingSelect) return [state.invitation]
 
+      // Joined select (landing + prefill both leftJoin users). Superset of
+      // both selections; the real query only reads the columns it selected, so
+      // extra fields here are harmless.
       return [
         {
           acceptedAt: state.invitation.acceptedAt,
           cancelledAt: state.invitation.cancelledAt,
           expiresAt: state.invitation.expiresAt,
           preSeededInterests: state.invitation.preSeededInterests,
+          inviteePhone: state.invitation.inviteePhone,
           inviterName: state.inviterName,
         },
       ]
@@ -147,13 +151,19 @@ vi.mock('@/server/db', () => ({
     personalMessage: 'friendInvitations.personalMessage',
     inviteeUserId: 'friendInvitations.inviteeUserId',
   },
+  // upsertInvitationFriendship imports `follows` from @/server/db. Mirror the
+  // columns it touches so the conflict-upsert builds.
+  follows: {
+    followerId: 'follows.followerId',
+    followeeId: 'follows.followeeId',
+  },
 }))
 
-vi.mock('@/server/db/schema', () => ({
-  friendships: {
-    userAId: 'friendships.userAId',
-    userBId: 'friendships.userBId',
-  },
+// The one-time inviter feed backfill (B-HomeSeed-1) fires inside
+// acceptFriendInvitation; it has its own dedicated test, so stub it here to keep
+// these tests focused on the acceptance logic.
+vi.mock('@/server/feed/backfill-inviter-feed', () => ({
+  backfillInviterFeedItems: vi.fn(async () => ({ created: 0 })),
 }))
 
 import {
@@ -162,6 +172,7 @@ import {
   createFriendInvitation,
   getFriendInvitationLandingByToken,
   getInvitationByToken,
+  getInvitePrefillByToken,
   getPendingInvitationForPhone,
 } from '@/server/friends/invitations'
 import { parsePreSeededInterests } from '@/server/db/queries/users'
@@ -215,16 +226,19 @@ describe('acceptFriendInvitation', () => {
       })
     )
     expect(dbMock.transaction).toHaveBeenCalledTimes(1)
+    // Invitation creates a mutual follow: two approved edges, both directions.
     expect(state.friendshipValues).toEqual([
       expect.objectContaining({
-        userAId: 'user-invitee',
-        userBId: 'user-inviter',
-        status: 'active',
-        requestedByUserId: 'user-inviter',
-        formedVia: 'invitation',
-        formedAt: now,
-        removedAt: null,
-        removedByUserId: null,
+        followerId: 'user-inviter',
+        followeeId: 'user-invitee',
+        state: 'approved',
+        approvedAt: now,
+      }),
+      expect.objectContaining({
+        followerId: 'user-invitee',
+        followeeId: 'user-inviter',
+        state: 'approved',
+        approvedAt: now,
       }),
     ])
   })
@@ -263,12 +277,16 @@ describe('acceptFriendInvitation', () => {
     )
     expect(state.friendshipValues).toEqual([
       expect.objectContaining({
-        userAId: 'user-jaime',
-        userBId: 'user-josh',
-        status: 'active',
-        requestedByUserId: 'user-josh',
-        formedVia: 'invitation',
-        formedAt: now,
+        followerId: 'user-josh',
+        followeeId: 'user-jaime',
+        state: 'approved',
+        approvedAt: now,
+      }),
+      expect.objectContaining({
+        followerId: 'user-jaime',
+        followeeId: 'user-josh',
+        state: 'approved',
+        approvedAt: now,
       }),
     ])
 
@@ -280,11 +298,13 @@ describe('acceptFriendInvitation', () => {
         now,
       })
     ).resolves.toEqual({ accepted: false, reason: 'accepted' })
+    // The already-accepted re-attempt writes no further edges: still exactly
+    // the two approved edges from the single successful acceptance.
     expect(
       state.friendshipValues.filter(
-        (friendship) => (friendship as { status?: string }).status === 'active'
+        (edge) => (edge as { state?: string }).state === 'approved'
       )
-    ).toHaveLength(1)
+    ).toHaveLength(2)
   })
 
   it('rejects a valid token when the verified phone does not match the invitation phone', async () => {
@@ -549,6 +569,45 @@ describe('friend invitation helpers', () => {
         now,
       })
     ).resolves.toEqual(expect.objectContaining({ cancelledAt: now }))
+  })
+
+  it('resolves a valid pending invite to inviter name, raw phone, and masked phone', async () => {
+    setInvitation({ inviteePhone: '+17345556819' })
+
+    await expect(getInvitePrefillByToken('valid-token', now)).resolves.toEqual({
+      inviterName: 'Alex Inviter',
+      inviteePhone: '+17345556819',
+      maskedPhone: '•••-•••-6819',
+    })
+  })
+
+  it('falls back to "Someone" when the inviter has no display name', async () => {
+    state.inviterName = null
+    setInvitation({ inviteePhone: '+17345556819' })
+
+    await expect(getInvitePrefillByToken('valid-token', now)).resolves.toEqual(
+      expect.objectContaining({ inviterName: 'Someone' })
+    )
+  })
+
+  it('returns null for blank, accepted, cancelled, or expired invites', async () => {
+    await expect(getInvitePrefillByToken('', now)).resolves.toBeNull()
+
+    setInvitation({ acceptedAt: new Date('2026-05-13T11:00:00.000Z') })
+    await expect(getInvitePrefillByToken('accepted-token', now)).resolves.toBeNull()
+
+    setInvitation({ cancelledAt: new Date('2026-05-13T11:00:00.000Z') })
+    await expect(
+      getInvitePrefillByToken('cancelled-token', now)
+    ).resolves.toBeNull()
+
+    setInvitation({ expiresAt: new Date('2026-05-12T12:00:00.000Z') })
+    await expect(getInvitePrefillByToken('expired-token', now)).resolves.toBeNull()
+  })
+
+  it('returns null when the invite has no recipient phone', async () => {
+    setInvitation({ inviteePhone: '' })
+    await expect(getInvitePrefillByToken('valid-token', now)).resolves.toBeNull()
   })
 
   it('still parses existing onboarding pre-seeded interests', () => {

@@ -1,4 +1,5 @@
 import { CATEGORIES, categoryLabel } from '@/lib/questions-types';
+import { foldDomainPunctuation } from '@/lib/knowledge/domain-key';
 
 export type BroadQuestionCategory = (typeof CATEGORIES)[number];
 
@@ -30,7 +31,11 @@ export function normalizeBroadQuestionCategory(value: string): BroadQuestionCate
 }
 
 export function normalizeCanonicalSubcategory(value: string): string {
-  const normalized = value.trim().replace(/\s+/g, ' ');
+  // Fold curly/typographic apostrophes to ASCII so a subcategory always has one
+  // spelling. A declared interest typed as "90's" (curly via iOS auto-correct)
+  // and the question pipeline's "90's" (straight) must produce the same
+  // canonical subcategory, or their mastery points split across two territories.
+  const normalized = foldDomainPunctuation(value).trim().replace(/\s+/g, ' ');
   const eliotNormalized = normalized.replace(/\./g, '').replace(/\s+/g, ' ').toLowerCase();
   if (eliotNormalized === 'ts eliot' || eliotNormalized === 't s eliot') {
     return 'T. S. Eliot';

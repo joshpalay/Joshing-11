@@ -1,19 +1,14 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Edit3, Loader2, Plus, X } from 'lucide-react'
-import { COUNTRIES } from '@/lib/onboarding/countries'
-import { US_STATES } from '@/lib/onboarding/us-regions'
+import { Loader2, X } from 'lucide-react'
+import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField'
 
-type CurrentStep =
-  | 'display-name'
-  | 'handle'
-  | 'invite-suggestions'
-  | 'background'
-  | 'warmup'
-  | 'review'
+// Condensed onboarding: name → handle → one interests screen (warm-up is an
+// optional expander there; the cultural-anchor/background step was removed).
+type CurrentStep = 'display-name' | 'handle' | 'review'
 
 export type WarmupAnswers = {
   deepDive?: string
@@ -56,13 +51,6 @@ function sanitizeForHandle(input: string): string {
     .slice(0, HANDLE_MAX)
 }
 
-type CanonicalSuggestion = {
-  original: string
-  suggested: string
-  broadCategory: string
-  explanation: string | null
-}
-
 const WARMUP_FIELDS: Array<{
   field: keyof WarmupAnswers
   label: string
@@ -89,16 +77,43 @@ const WARMUP_FIELDS: Array<{
 ]
 
 const LOADING_COPY = [
-  'Reading your answers...',
-  'Looking for connections...',
-  'Building your map...',
+  'Reading your answers…',
+  'Finding good question areas…',
+  'Turning these into question areas…',
 ]
 
 const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
-  { step: 'background', label: 'About You' },
-  { step: 'warmup', label: 'Warmup' },
-  { step: 'review', label: 'Review' },
+  { step: 'display-name', label: 'Name' },
+  { step: 'handle', label: 'Handle' },
+  { step: 'review', label: 'Areas' },
 ]
+
+const MIN_INTERESTS = 3
+// Onboarding caps the starting-areas selection at 12 (per product spec). The cap
+// also bounds the save path's per-interest LLM fan-out. Inviter-suggested topics
+// live in selectedInterests too, so they count toward this ceiling.
+const MAX_INTERESTS = 12
+
+// Bottom counter copy that mirrors the selection state without dashboard-speak:
+// "0 selected" → "2 selected · pick at least 1 more" → "6 selected · add up to 6
+// more" → "12 selected · that's plenty".
+function selectionCounterCopy(count: number): string {
+  if (count <= 0) return '0 selected'
+  if (count < MIN_INTERESTS) {
+    const remaining = MIN_INTERESTS - count
+    return `${count} selected · pick at least ${remaining} more`
+  }
+  if (count >= MAX_INTERESTS) return `${MAX_INTERESTS} selected · that's plenty`
+  return `${count} selected · add up to ${MAX_INTERESTS - count} more`
+}
+
+// One primary CTA, its label tracking the selection: locked until 3, a warm
+// "that's plenty" flourish at the cap, "Start with these" in between.
+function startCtaCopy(count: number): string {
+  if (count < MIN_INTERESTS) return 'Pick at least 3 to start'
+  if (count >= MAX_INTERESTS) return "That's plenty — start with these"
+  return 'Start with these'
+}
 
 function normalizeDomain(domain: string) {
   return domain.trim().replace(/\s+/g, ' ')
@@ -141,13 +156,10 @@ function Spinner({ small = false }: { small?: boolean }) {
 }
 
 function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
-  const activeIndex =
-    currentStep === 'invite-suggestions'
-      ? -1
-      : Math.max(
-          0,
-          STEP_DOTS.findIndex((item) => item.step === currentStep)
-        )
+  const activeIndex = Math.max(
+    0,
+    STEP_DOTS.findIndex((item) => item.step === currentStep)
+  )
 
   return (
     <div
@@ -199,7 +211,7 @@ export default function OnboardingFlow({
   const [currentStep, setCurrentStep] = useState<CurrentStep>(() => {
     if (!hasInitialDisplayName) return 'display-name'
     if (!hasInitialHandle) return 'handle'
-    return preSeededInterests.length > 0 ? 'invite-suggestions' : 'background'
+    return 'review'
   })
   const [displayName, setDisplayName] = useState<string>(() =>
     (initialDisplayName ?? inviteeDisplayName ?? '')
@@ -222,16 +234,15 @@ export default function OnboardingFlow({
   >({ state: 'idle' })
   const [isSavingHandle, setIsSavingHandle] = useState(false)
   const [handleError, setHandleError] = useState<string | null>(null)
-  const [birthYear, setBirthYear] = useState('')
-  const [grewUpCountry, setGrewUpCountry] = useState('')
-  const [grewUpRegion, setGrewUpRegion] = useState('')
+  const [showWarmup, setShowWarmup] = useState(false)
   const [warmupAnswers, setWarmupAnswers] = useState<WarmupAnswers>({})
   const [proposedInterests, setProposedInterests] = useState<
     ProposedInterest[] | null
   >(null)
-  const [inviteInterests, setInviteInterests] = useState<PreSeededInterest[]>(
-    () => preSeededInterests
-  )
+  // Inviter-seeded suggestions are immutable after the initial pre-selection: the
+  // invitee keeps, ignores, or removes them (and adds their own), but never edits
+  // the wording inline — so this is a stable value, not state.
+  const inviteInterests: PreSeededInterest[] = preSeededInterests
   const [selectedInterests, setSelectedInterests] = useState<
     SelectedInterest[]
   >(() =>
@@ -240,36 +251,15 @@ export default function OnboardingFlow({
         const selected = toSelected(interest)
         return selected ? [selected] : []
       })
-      .slice(0, 5)
+      .slice(0, MAX_INTERESTS)
   )
   const [isLoading, setIsLoading] = useState(false)
-  const [isCanonicalizing, setIsCanonicalizing] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingCopyIndex, setLoadingCopyIndex] = useState(0)
-  const [editingKey, setEditingKey] = useState<string | null>(null)
-  const [editingDomain, setEditingDomain] = useState('')
-  const [showComposer, setShowComposer] = useState(false)
-  const [customInput, setCustomInput] = useState('')
-  const [canonicalSuggestion, setCanonicalSuggestion] =
-    useState<CanonicalSuggestion | null>(null)
-  const [customChoice, setCustomChoice] = useState<'suggested' | 'mine' | null>(
-    null
-  )
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const displayInviterName = inviterName?.trim()
     ? inviterName.trim()
     : 'A friend'
-
-  const parsedBirthYear = parseInt(birthYear, 10)
-  const maxBirthYear = new Date().getFullYear() - 13
-  const birthYearValid =
-    birthYear.length === 4 &&
-    parsedBirthYear >= 1920 &&
-    parsedBirthYear <= maxBirthYear
-  const canAdvanceBackground =
-    birthYearValid &&
-    grewUpCountry !== '' &&
-    (grewUpCountry !== 'US' || grewUpRegion !== '')
 
   const canGenerate =
     normalizeDomain(warmupAnswers.deepDive ?? '').length > 0 &&
@@ -292,6 +282,53 @@ export default function OnboardingFlow({
       ),
     ],
     [inviteInterests, proposedInterests]
+  )
+
+  const isFromInvite = (interest: ProposedInterest) =>
+    inviteInterests.some(
+      (seeded) =>
+        selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) ===
+        selectedKey(toSelected(interest) ?? { domain: '', broadCategory: '' })
+    )
+
+  // Suggestions split into two scannable groups, each shown only when it has
+  // unselected items: the inviter's picks ("Suggested by {name}") and any
+  // warm-up-generated picks ("More ideas you might like"). Selected suggestions move up into the
+  // "Selected areas" chips, so they drop out of these lists automatically.
+  const inviteSuggestions = inviteInterests.filter(
+    (interest) => !isSelected(selectedInterests, interest)
+  )
+  const moreIdeas = reviewInterests.filter(
+    (interest) =>
+      !isSelected(selectedInterests, interest) && !isFromInvite(interest)
+  )
+  const atSelectionCap = selectedInterests.length >= MAX_INTERESTS
+
+  // Compact, tappable suggestion chips (not large cards): just the area name with
+  // a "+" affordance. Tapping adds it to Selected areas. No rationale paragraphs
+  // or category labels — keeps the screen scannable on mobile.
+  const renderSuggestionChips = (list: ProposedInterest[], keyPrefix: string) => (
+    <div className="flex flex-wrap gap-2">
+      {list.map((interest) => (
+        <button
+          key={`${keyPrefix}-${interest.domain}`}
+          type="button"
+          onClick={() => toggleInterest(interest)}
+          disabled={atSelectionCap}
+          title={
+            atSelectionCap
+              ? `${MAX_INTERESTS} max — remove one to add another`
+              : undefined
+          }
+          className="bg-card inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-45"
+        >
+          <span aria-hidden="true" className="text-muted-foreground">
+            +
+          </span>
+          {interest.domain}
+        </button>
+      ))}
+    </div>
   )
 
   useEffect(() => {
@@ -351,67 +388,14 @@ export default function OnboardingFlow({
   }, [currentStep, handle])
 
   useEffect(() => {
-    if (!isLoading || currentStep !== 'warmup') return
+    if (!isGenerating) return
 
     const interval = window.setInterval(() => {
       setLoadingCopyIndex((current) => (current + 1) % LOADING_COPY.length)
     }, 3000)
 
     return () => window.clearInterval(interval)
-  }, [currentStep, isLoading])
-
-  useEffect(() => {
-    const rawInput = normalizeDomain(customInput)
-    const resetTimer = window.setTimeout(() => {
-      setCanonicalSuggestion(null)
-      setCustomChoice(null)
-      if (!showComposer || rawInput.length <= 3) setIsCanonicalizing(false)
-    }, 0)
-
-    if (!showComposer || rawInput.length <= 3) {
-      return () => window.clearTimeout(resetTimer)
-    }
-
-    const controller = new AbortController()
-    const timer = window.setTimeout(async () => {
-      setIsCanonicalizing(true)
-      try {
-        const response = await fetch('/api/onboarding/canonicalize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rawInput }),
-          signal: controller.signal,
-        })
-        const data = await response.json().catch(() => ({}))
-
-        if (!response.ok || typeof data?.suggested !== 'string') return
-
-        setCanonicalSuggestion({
-          original: data.original ?? rawInput,
-          suggested: data.suggested,
-          broadCategory: data.broadCategory ?? 'General Knowledge',
-          explanation: data.explanation ?? null,
-        })
-      } catch (fetchError) {
-        if (
-          !(
-            fetchError instanceof DOMException &&
-            fetchError.name === 'AbortError'
-          )
-        ) {
-          setCanonicalSuggestion(null)
-        }
-      } finally {
-        if (!controller.signal.aborted) setIsCanonicalizing(false)
-      }
-    }, 800)
-
-    return () => {
-      controller.abort()
-      window.clearTimeout(resetTimer)
-      window.clearTimeout(timer)
-    }
-  }, [customInput, showComposer])
+  }, [isGenerating])
 
   function updateWarmupAnswer(field: keyof WarmupAnswers, value: string) {
     setWarmupAnswers((current) => ({
@@ -432,87 +416,25 @@ export default function OnboardingFlow({
         return current.filter(
           (item) => selectedKey(item) !== selectedKey(selected)
         )
-      if (current.length >= 5) return current
+      if (current.length >= MAX_INTERESTS) return current
       return [...current, selected]
     })
-  }
-
-  function beginEdit(interest: ProposedInterest) {
-    const selected = toSelected(interest)
-    if (!selected) return
-
-    setEditingKey(selectedKey(selected))
-    setEditingDomain(selected.domain)
-  }
-
-  function saveEdit(interest: ProposedInterest) {
-    const selected = toSelected(interest)
-    const nextDomain = normalizeDomain(editingDomain)
-    if (!selected || nextDomain.length < 2) return
-
-    const edited = { ...interest, domain: nextDomain }
-    setInviteInterests((current) =>
-      current.map((item) =>
-        selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) ===
-        selectedKey(selected)
-          ? edited
-          : item
-      )
-    )
-    setProposedInterests(
-      (current) =>
-        current?.map((item) =>
-          selectedKey(toSelected(item) ?? { domain: '', broadCategory: '' }) ===
-          selectedKey(selected)
-            ? edited
-            : item
-        ) ?? current
-    )
-    setSelectedInterests((current) =>
-      current.map((item) =>
-        selectedKey(item) === selectedKey(selected)
-          ? { ...item, domain: nextDomain }
-          : item
-      )
-    )
-    setEditingKey(null)
-    setEditingDomain('')
-  }
-
-  function startLongPress(interest: ProposedInterest) {
-    clearLongPress()
-    longPressTimer.current = setTimeout(() => beginEdit(interest), 500)
-  }
-
-  function clearLongPress() {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
   }
 
   async function generateProposals() {
     if (!canGenerate) return
 
     setError(null)
-    setIsLoading(true)
+    setIsGenerating(true)
     setLoadingCopyIndex(0)
 
     try {
+      // Cultural anchor was removed from onboarding; the endpoint generates
+      // from warm-up answers alone.
       const response = await fetch('/api/onboarding/propose-interests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          warmupAnswers,
-          culturalAnchor:
-            birthYearValid && grewUpCountry
-              ? {
-                  birthYear: parsedBirthYear,
-                  grewUpCountry,
-                  grewUpRegion: grewUpRegion || undefined,
-                }
-              : undefined,
-        }),
+        body: JSON.stringify({ warmupAnswers }),
       })
       const data = await response.json().catch(() => ({}))
 
@@ -524,14 +446,63 @@ export default function OnboardingFlow({
       }
 
       setProposedInterests(data.proposedInterests)
-      setCurrentStep('review')
+      setShowWarmup(false)
     } catch {
       setError(
         "We couldn't generate suggestions. You can try again or write your own."
       )
     } finally {
-      setIsLoading(false)
+      setIsGenerating(false)
     }
+  }
+
+  // Stage a chosen topic (from the add-topic field) into the selected list.
+  async function addSelectedInterest(topic: { label: string; broadCategory?: string | null }) {
+    const selected = toSelected({
+      domain: topic.label,
+      broadCategory: topic.broadCategory ?? 'General Knowledge',
+    })
+    if (!selected) throw new Error('Enter a topic name.')
+    if (selectedInterests.length >= MAX_INTERESTS) {
+      const limit = new Error(`That's the max — ${MAX_INTERESTS} interests.`) as AddTopicError
+      limit.code = 'limit_reached'
+      throw limit
+    }
+
+    // Validate answerability up front: interests are staged client-side and not
+    // persisted until "Start with these", so without this a topic with no factual
+    // basis ("my cat") would only be caught at the very end. The check fails
+    // open server-side, so an LLM outage never blocks staging.
+    const check = await fetch('/api/interests/check', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic: selected.domain }),
+    })
+    const checkBody = await check.json().catch(() => null)
+    if (check.ok && checkBody?.ok === false) {
+      if (checkBody.code === 'too_broad') {
+        const broad = new Error(checkBody.message) as AddTopicError
+        broad.code = 'too_broad'
+        throw broad
+      }
+      throw new Error(
+        checkBody.message ?? 'We could not find real questions for that topic.'
+      )
+    }
+
+    setError(null)
+    setSelectedInterests((current) =>
+      current.some((item) => selectedKey(item) === selectedKey(selected))
+        ? current
+        : [...current, selected].slice(0, MAX_INTERESTS)
+    )
+  }
+
+  function removeSelectedInterest(target: SelectedInterest) {
+    setSelectedInterests((current) =>
+      current.filter((item) => selectedKey(item) !== selectedKey(target))
+    )
   }
 
   async function submitDisplayName() {
@@ -567,16 +538,12 @@ export default function OnboardingFlow({
       if (!handle && !hasInitialHandle) {
         setHandle(sanitizeForHandle(trimmed))
       }
-      setCurrentStep(hasInitialHandle ? nextStepAfterHandle() : 'handle')
+      setCurrentStep(hasInitialHandle ? 'review' : 'handle')
     } catch {
       setDisplayNameError("We couldn't save that name. Try again.")
     } finally {
       setIsSavingDisplayName(false)
     }
-  }
-
-  function nextStepAfterHandle(): CurrentStep {
-    return inviteInterests.length > 0 ? 'invite-suggestions' : 'background'
   }
 
   async function submitHandle() {
@@ -609,43 +576,12 @@ export default function OnboardingFlow({
       }
 
       setHandle(candidate)
-      setCurrentStep(nextStepAfterHandle())
+      setCurrentStep('review')
     } catch {
       setHandleError("We couldn't save that handle. Try again.")
     } finally {
       setIsSavingHandle(false)
     }
-  }
-
-  function keepInviteInterests() {
-    setError(null)
-    const toSave = inviteInterests
-      .flatMap((interest) => {
-        const selected = toSelected(interest)
-        return selected ? [selected] : []
-      })
-      .slice(0, 5)
-    saveInterests(toSave)
-  }
-
-  function reviewInviteInterests() {
-    setError(null)
-    setSelectedInterests(
-      inviteInterests
-        .flatMap((interest) => {
-          const selected = toSelected(interest)
-          return selected ? [selected] : []
-        })
-        .slice(0, 5)
-    )
-    setCurrentStep('background')
-  }
-
-  function skipInviteInterests() {
-    setError(null)
-    setSelectedInterests([])
-    setInviteInterests([])
-    setCurrentStep('background')
   }
 
   async function saveInterests(interestsOverride?: SelectedInterest[]) {
@@ -654,7 +590,7 @@ export default function OnboardingFlow({
         const selected = toSelected(interest)
         return selected ? [selected] : []
       })
-      .slice(0, 5)
+      .slice(0, MAX_INTERESTS)
 
     const inviteSelectedCount = inviteInterests.filter((interest) => {
       const selected = toSelected(interest)
@@ -665,8 +601,8 @@ export default function OnboardingFlow({
         : false
     }).length
 
-    if (cleanSelected.length === 0) {
-      setError('Pick at least 1 to continue.')
+    if (cleanSelected.length < MIN_INTERESTS) {
+      setError(`Pick at least ${MIN_INTERESTS} to continue.`)
       return
     }
 
@@ -692,7 +628,20 @@ export default function OnboardingFlow({
         return
       }
 
-      router.push('/')
+      // Kick off first-round generation in the background so it's ready (or
+      // nearly) when the player lands in /daily, then take them straight into
+      // gameplay instead of the homepage. keepalive lets the POST survive the
+      // client navigation; the queue route is idempotent, so /daily's own load
+      // won't double-generate. A freshly-declared interest list guarantees a
+      // knowledge base, so /daily won't bounce to setup.
+      void fetch('/api/daily/queue', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        keepalive: true,
+      }).catch(() => {})
+
+      router.push('/daily')
     } catch {
       setError('Unable to save interests.')
     } finally {
@@ -700,35 +649,7 @@ export default function OnboardingFlow({
     }
   }
 
-  function skipSuggestions() {
-    setError(null)
-    setProposedInterests([])
-    setShowComposer(true)
-    setCurrentStep('review')
-  }
-
-  function addCustomInterest() {
-    const rawInput = normalizeDomain(customInput)
-    const chosenDomain =
-      customChoice === 'suggested' && canonicalSuggestion
-        ? canonicalSuggestion.suggested
-        : rawInput
-    const broadCategory = canonicalSuggestion?.broadCategory ?? 'General Knowledge'
-    const selected = toSelected({ domain: chosenDomain, broadCategory })
-
-    if (!selected || selectedInterests.length >= 5) return
-
-    setSelectedInterests((current) => {
-      if (current.some((item) => selectedKey(item) === selectedKey(selected)))
-        return current
-      return [...current, selected].slice(0, 5)
-    })
-    setCustomInput('')
-    setCanonicalSuggestion(null)
-    setCustomChoice(null)
-  }
-
-  if (isLoading && currentStep === 'warmup') {
+  if (isGenerating) {
     return (
       <main className="bg-background text-foreground grid min-h-screen place-items-center px-5 py-12">
         <div className="flex max-w-sm flex-col items-center gap-5 text-center">
@@ -888,439 +809,114 @@ export default function OnboardingFlow({
             </div>
           ) : null}
 
-          {currentStep === 'invite-suggestions' ? (
-            <div className="flex flex-1 flex-col justify-center gap-8">
-              <StepHeader
-                title={`${displayInviterName} suggested these for you.`}
-                subtitle="Keep the ones that fit. You can edit or skip them."
-              />
-
-              <ul className="space-y-3">
-                {inviteInterests.map((interest) => (
-                  <li
-                    key={`${interest.domain}-${interest.broadCategory}`}
-                    className="bg-card rounded-lg border p-4"
-                  >
-                    <span className="block text-xl font-semibold tracking-normal">
-                      {interest.domain}
-                    </span>
-                    <span className="text-muted-foreground mt-1 block text-xs font-medium uppercase">
-                      {interest.broadCategory}
-                    </span>
-                    {interest.rationale ? (
-                      <span className="text-muted-foreground mt-3 block text-sm leading-6 italic">
-                        {interest.rationale}
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  className="btn-primary h-12 w-full"
-                  onClick={keepInviteInterests}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Saving...' : 'These look good'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-ghost h-12 w-full"
-                  onClick={reviewInviteInterests}
-                  disabled={isLoading}
-                >
-                  Let me adjust them
-                </button>
-                <button
-                  type="button"
-                  className="btn-ghost h-12 w-full"
-                  onClick={skipInviteInterests}
-                  disabled={isLoading}
-                >
-                  Start fresh
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {currentStep === 'background' ? (
-            <div className="flex flex-1 flex-col gap-7">
-              <StepHeader
-                title="Welcome to Joshing"
-                subtitle="Two quick facts to calibrate your daily round. We won't share these."
-              />
-
-              <div className="space-y-5">
-                <label className="block">
-                  <span className="text-sm font-medium">
-                    What year were you born?
-                  </span>
-                  <input
-                    type="number"
-                    className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
-                    placeholder="e.g. 1978"
-                    min={1920}
-                    max={2010}
-                    value={birthYear}
-                    onChange={(e) => setBirthYear(e.target.value.slice(0, 4))}
-                  />
-                  {birthYear.length === 4 && !birthYearValid ? (
-                    <span className="text-destructive mt-1 block text-xs">
-                      Please enter a year between 1920 and {maxBirthYear}.
-                    </span>
-                  ) : null}
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium">
-                    Where did you grow up?
-                  </span>
-                  <select
-                    className="bg-card focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
-                    value={grewUpCountry}
-                    onChange={(e) => {
-                      setGrewUpCountry(e.target.value)
-                      setGrewUpRegion('')
-                    }}
-                  >
-                    <option value="">Select a country</option>
-                    {COUNTRIES.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {grewUpCountry === 'US' ? (
-                  <label className="block">
-                    <span className="text-sm font-medium">Which state?</span>
-                    <select
-                      className="bg-card focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
-                      value={grewUpRegion}
-                      onChange={(e) => setGrewUpRegion(e.target.value)}
-                    >
-                      <option value="">Select a state</option>
-                      {US_STATES.map((s) => (
-                        <option key={s.code} value={s.name}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-              </div>
-
-              <div className="mt-auto space-y-3 pt-2">
-                <button
-                  type="button"
-                  className="btn-primary h-12 w-full"
-                  onClick={() => setCurrentStep('warmup')}
-                  disabled={!canAdvanceBackground}
-                >
-                  Continue
-                </button>
-                {inviteInterests.length > 0 ? (
-                  <button
-                    type="button"
-                    className="btn-ghost h-12 w-full"
-                    onClick={() => setCurrentStep('invite-suggestions')}
-                  >
-                    Back
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {currentStep === 'warmup' ? (
-            <div className="flex flex-1 flex-col gap-7">
-              <StepHeader
-                title="Tell us about your interests"
-                subtitle="Free text. The more specific, the better."
-              />
-
-              <div className="space-y-4">
-                {WARMUP_FIELDS.map(
-                  ({ field, label, placeholder, optional }) => {
-                    const value = warmupAnswers[field] ?? ''
-                    return (
-                      <label key={field} className="block">
-                        <span className="text-sm font-medium">
-                          {label}
-                          {optional ? (
-                            <span className="text-muted-foreground">
-                              {' '}
-                              optional
-                            </span>
-                          ) : null}
-                        </span>
-                        <input
-                          className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
-                          maxLength={200}
-                          placeholder={placeholder}
-                          value={value}
-                          onChange={(event) =>
-                            updateWarmupAnswer(field, event.target.value)
-                          }
-                        />
-                        {value.length > 150 ? (
-                          <span className="text-muted-foreground mt-1 block text-right text-xs">
-                            {value.length}/200
-                          </span>
-                        ) : null}
-                      </label>
-                    )
-                  }
-                )}
-              </div>
-
-              {error ? (
-                <ErrorPanel
-                  message={error}
-                  actions={
-                    <>
-                      <button
-                        type="button"
-                        className="btn-primary h-10"
-                        onClick={generateProposals}
-                      >
-                        Try again
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-ghost h-10"
-                        onClick={skipSuggestions}
-                      >
-                        Skip suggestions
-                      </button>
-                    </>
-                  }
-                />
-              ) : null}
-
-              <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
-                <button
-                  type="button"
-                  className="btn-ghost h-12"
-                  onClick={() => setCurrentStep('background')}
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary h-12"
-                  onClick={generateProposals}
-                  disabled={!canGenerate || isLoading}
-                >
-                  See suggestions
-                </button>
-              </div>
-            </div>
-          ) : null}
-
           {currentStep === 'review' ? (
             <div className="flex flex-1 flex-col gap-7">
               <StepHeader
-                title="Here's what we found"
-                subtitle="Pick up to 5. You can edit any of them, or write your own."
+                title="Pick your starting areas"
+                subtitle="Choose topics that would make good questions for you. You can change these later."
               />
 
               <div className="space-y-3">
-                {reviewInterests.map((interest) => {
-                  const selected = isSelected(selectedInterests, interest)
-                  const normalized = toSelected(interest)
-                  const atCap = selectedInterests.length >= 5 && !selected
-                  const fromInvite = inviteInterests.some(
-                    (seeded) =>
-                      selectedKey(
-                        toSelected(seeded) ?? { domain: '', broadCategory: '' }
-                      ) ===
-                      selectedKey(
-                        normalized ?? { domain: '', broadCategory: '' }
-                      )
-                  )
-                  const key = `${interest.domain}-${interest.broadCategory}`
-                  const editing = normalized
-                    ? editingKey === selectedKey(normalized)
-                    : false
-
-                  return (
-                    <div
-                      key={key}
-                      className={[
-                        'rounded-lg border p-4 transition',
-                        selected
-                          ? 'border-foreground bg-foreground text-background'
-                          : 'bg-card',
-                        atCap ? 'opacity-45' : '',
-                      ].join(' ')}
-                      title={
-                        atCap
-                          ? '5 max - deselect one to add another'
-                          : undefined
-                      }
-                      onPointerDown={() => startLongPress(interest)}
-                      onPointerUp={clearLongPress}
-                      onPointerLeave={clearLongPress}
-                    >
-                      {editing ? (
-                        <div className="space-y-3">
-                          <input
-                            className="bg-background text-foreground focus:ring-ring h-11 w-full rounded-md border px-3 text-base outline-none focus:ring-2"
-                            value={editingDomain}
-                            maxLength={100}
-                            onChange={(event) =>
-                              setEditingDomain(event.target.value)
-                            }
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              className="btn-primary h-9"
-                              onClick={() => saveEdit(interest)}
-                            >
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-ghost h-9"
-                              onClick={() => setEditingKey(null)}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex gap-3">
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 text-left"
-                            onClick={() => toggleInterest(interest)}
-                            disabled={atCap}
-                          >
-                            <span className="block text-xl font-semibold tracking-normal">
-                              {interest.domain}
-                            </span>
-                            <span
-                              className={`mt-1 block text-xs font-medium uppercase ${selected ? 'text-background/70' : 'text-muted-foreground'}`}
-                            >
-                              {interest.broadCategory}
-                            </span>
-                            {interest.rationale ? (
-                              <span
-                                className={`mt-3 block text-sm leading-6 italic ${selected ? 'text-background/80' : 'text-muted-foreground'}`}
-                              >
-                                {interest.rationale}
-                              </span>
-                            ) : null}
-                            {fromInvite ? (
-                              <span
-                                className={`mt-3 inline-flex rounded-sm border px-2 py-1 text-[11px] font-semibold uppercase ${selected ? 'border-background/30 text-background/80' : 'text-muted-foreground'}`}
-                              >
-                                From {displayInviterName}
-                              </span>
-                            ) : null}
-                          </button>
-                          <button
-                            type="button"
-                            className={`grid size-9 shrink-0 place-items-center rounded-md border ${selected ? 'border-background/30' : 'hover:bg-muted'}`}
-                            aria-label={`Edit ${interest.domain}`}
-                            title="Edit"
-                            onClick={() => beginEdit(interest)}
-                          >
-                            <Edit3 className="size-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+                <p className="text-sm font-medium">Selected areas</p>
+                {selectedInterests.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    Nothing yet — add a few below.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedInterests.map((interest) => (
+                      <button
+                        key={selectedKey(interest)}
+                        type="button"
+                        className="bg-foreground text-background inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium"
+                        onClick={() => removeSelectedInterest(interest)}
+                        aria-label={`Remove ${interest.domain}`}
+                      >
+                        {interest.domain}
+                        <X className="size-3.5" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
+              <AddTopicField
+                heading="Add your own"
+                placeholder="Add anything: a book, musician, team, era, show, place, person, or theory…"
+                maxLength={100}
+                convergeBeforeAdd
+                disabled={selectedInterests.length >= MAX_INTERESTS}
+                existingLabels={selectedInterests.map((item) => item.domain)}
+                onAdd={addSelectedInterest}
+                inputClassName="bg-background focus:ring-ring h-11 min-w-0 flex-1 rounded-md border px-3 text-base outline-none focus:ring-2 disabled:opacity-60"
+                buttonClassName="bg-card h-11 rounded-md border px-5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+                chipClassName="rounded-md border bg-card px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50"
+                mutedClassName="text-muted-foreground text-sm"
+                errorClassName="text-destructive mt-3 text-sm"
+              />
+
+              {inviteSuggestions.length > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Suggested by {displayInviterName}</p>
+                  {renderSuggestionChips(inviteSuggestions, 'invite')}
+                </div>
+              ) : null}
+
+              {moreIdeas.length > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">More ideas you might like</p>
+                  {renderSuggestionChips(moreIdeas, 'idea')}
+                </div>
+              ) : null}
+
               <div className="space-y-3">
-                {!showComposer ? (
+                {!showWarmup ? (
                   <button
                     type="button"
-                    className="btn-ghost h-11 w-full gap-2"
-                    onClick={() => setShowComposer(true)}
-                    disabled={selectedInterests.length >= 5}
+                    className="btn-ghost h-11 w-full"
+                    onClick={() => setShowWarmup(true)}
                   >
-                    <Plus className="size-4" />
-                    Write your own
+                    Need ideas? Answer a couple quick questions
                   </button>
                 ) : (
-                  <div className="bg-card rounded-lg border p-4">
-                    <div className="flex items-center gap-2">
-                      <input
-                        className="bg-background focus:ring-ring h-11 min-w-0 flex-1 rounded-md border px-3 text-base outline-none focus:ring-2"
-                        placeholder="Write an interest"
-                        value={customInput}
-                        maxLength={100}
-                        onChange={(event) => setCustomInput(event.target.value)}
-                        disabled={selectedInterests.length >= 5}
-                      />
+                  <div className="bg-card space-y-4 rounded-lg border p-4">
+                    {WARMUP_FIELDS.map(({ field, label, placeholder, optional }) => {
+                      const value = warmupAnswers[field] ?? ''
+                      return (
+                        <label key={field} className="block">
+                          <span className="text-sm font-medium">
+                            {label}
+                            {optional ? (
+                              <span className="text-muted-foreground"> optional</span>
+                            ) : null}
+                          </span>
+                          <input
+                            className="bg-background placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
+                            maxLength={200}
+                            placeholder={placeholder}
+                            value={value}
+                            onChange={(event) => updateWarmupAnswer(field, event.target.value)}
+                          />
+                        </label>
+                      )
+                    })}
+                    <div className="flex gap-2">
                       <button
                         type="button"
-                        className="hover:bg-muted grid size-11 place-items-center rounded-md border"
-                        aria-label="Close composer"
-                        title="Close"
-                        onClick={() => setShowComposer(false)}
+                        className="btn-primary h-11 flex-1"
+                        onClick={generateProposals}
+                        disabled={!canGenerate || isGenerating}
                       >
-                        <X className="size-4" />
+                        See suggestions
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost h-11 px-4"
+                        onClick={() => setShowWarmup(false)}
+                      >
+                        Hide
                       </button>
                     </div>
-
-                    <div className="mt-3 min-h-11 text-sm">
-                      {isCanonicalizing ? (
-                        <p className="text-muted-foreground flex items-center gap-2">
-                          <Spinner small />
-                          Checking wording...
-                        </p>
-                      ) : null}
-                      {canonicalSuggestion ? (
-                        <div className="bg-background space-y-3 rounded-md border p-3">
-                          <p>
-                            Suggested:{' '}
-                            <span className="font-medium">
-                              {canonicalSuggestion.suggested}
-                            </span>
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className="btn-primary h-9"
-                              onClick={() => setCustomChoice('suggested')}
-                            >
-                              <Check className="size-4" />
-                              Use this
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-ghost h-9"
-                              onClick={() => setCustomChoice('mine')}
-                            >
-                              Keep mine
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btn-primary mt-3 h-11 w-full"
-                      onClick={addCustomInterest}
-                      disabled={
-                        normalizeDomain(customInput).length < 2 ||
-                        selectedInterests.length >= 5 ||
-                        (canonicalSuggestion !== null && customChoice === null)
-                      }
-                    >
-                      Add
-                    </button>
                   </div>
                 )}
               </div>
@@ -1331,37 +927,17 @@ export default function OnboardingFlow({
                     <ErrorPanel message={error} />
                   </div>
                 ) : null}
-                <div className="mb-3 flex items-center justify-between text-sm">
-                  <span className="font-medium">
-                    {selectedInterests.length} of 5 selected
-                  </span>
-                  <span className="text-muted-foreground">
-                    {selectedInterests.length === 0
-                      ? 'Pick at least 1 to continue'
-                      : null}
-                    {selectedInterests.length === 5
-                      ? '5 max - deselect one to add another'
-                      : null}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    className="btn-ghost h-12"
-                    onClick={() => setCurrentStep('warmup')}
-                    disabled={isLoading}
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-primary h-12"
-                    onClick={() => saveInterests()}
-                    disabled={selectedInterests.length === 0 || isLoading}
-                  >
-                    {isLoading ? 'Saving...' : 'Lock it in'}
-                  </button>
-                </div>
+                <p className="text-muted-foreground mb-3 text-sm">
+                  {selectionCounterCopy(selectedInterests.length)}
+                </p>
+                <button
+                  type="button"
+                  className="btn-primary h-12 w-full"
+                  onClick={() => saveInterests()}
+                  disabled={selectedInterests.length < MIN_INTERESTS || isLoading}
+                >
+                  {isLoading ? 'Saving…' : startCtaCopy(selectedInterests.length)}
+                </button>
               </div>
             </div>
           ) : null}

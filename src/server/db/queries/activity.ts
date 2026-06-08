@@ -2,9 +2,9 @@ import { and, count, desc, eq, gt, inArray, isNull, ne, notInArray, sql } from '
 
 import {
   activityItems,
-  creatorNotes,
   db,
   feedItems,
+  follows,
   friendships,
   gradeDisputes,
   joshingGameQuestions,
@@ -71,6 +71,16 @@ export type ActivityItemView = Pick<
       questionText: string | null;
       result: 'correct' | 'incorrect';
     };
+    // D-2 niche-match discovery. Hydrated for both new types
+    // (niche_match_answered_your_question / niche_match_you_answered). Reuses
+    // referenceType: 'question' + referenceId: questionId. The result is always
+    // 'correct' by construction (the write only fires on a correct answer), so
+    // unlike friendAnsweredQuestion there is no got-it/couldn't framing — the
+    // domain is the discovery hook.
+    nicheMatch?: {
+      domain: string | null;
+      questionText: string | null;
+    };
     authoredSharedQuestion?: {
       domain: string;
       recipientCount: number;
@@ -84,14 +94,6 @@ export type ActivityItemView = Pick<
       status: string;
       requestedByUserId: string;
       suggestedInterests: string[];
-    };
-    creatorNote?: {
-      id: string;
-      questionText: string;
-      correctAnswer: string;
-      submittedAnswer: string | null;
-      noteText: string;
-      deliveredAt: Date | null;
     };
     gradeDispute?: {
       id: string;
@@ -127,15 +129,19 @@ function isActivityType(value: string): value is ActivityItemType {
     'ceremony_ready',
     'friend_request',
     'friend_request_accepted',
+    'follow',
+    'follow_request',
+    'follow_approved',
     'invited_friend_played_first_five',
     'received_direct_question',
     'reaction_received',
     'question_curated',
-    'creator_note_received',
     'friend_answered_your_question',
     'authored_question_shared',
     'declared_promoted',
     'grade_dispute_filed',
+    'niche_match_answered_your_question',
+    'niche_match_you_answered',
   ].includes(value);
 }
 
@@ -152,6 +158,40 @@ function parseFriendshipRequestInterests(value: unknown): string[] {
 }
 
 async function hydrateFriendshipRequests(items: ActivityItemRow[]) {
+  const result = new Map<string, NonNullable<ActivityItemView['reference']['friendshipRequest']>>();
+
+  // New follow-model rows reference the `follows` table; legacy friend-request
+  // rows reference the frozen `friendships` table. Hydrate both into one map
+  // keyed by referenceId, normalising follow `state` onto the same `status`
+  // shape the activity card already reads ('approved' -> 'active').
+  const followIds = [
+    ...new Set(
+      items
+        .filter((item) => item.referenceType === 'follow')
+        .map((item) => item.referenceId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (followIds.length > 0) {
+    const followRows = await db
+      .select({
+        id: follows.id,
+        state: follows.state,
+        followerId: follows.followerId,
+        requestContext: follows.requestContext,
+      })
+      .from(follows)
+      .where(inArray(follows.id, followIds));
+    for (const row of followRows) {
+      result.set(row.id, {
+        id: row.id,
+        status: row.state === 'approved' ? 'active' : 'pending',
+        requestedByUserId: row.followerId,
+        suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
+      });
+    }
+  }
+
   const friendshipIds = [
     ...new Set(
       items
@@ -160,29 +200,27 @@ async function hydrateFriendshipRequests(items: ActivityItemRow[]) {
         .filter((id): id is string => Boolean(id)),
     ),
   ];
-  if (friendshipIds.length === 0) {
-    return new Map<string, NonNullable<ActivityItemView['reference']['friendshipRequest']>>();
+  if (friendshipIds.length > 0) {
+    const rows = await db
+      .select({
+        id: friendships.id,
+        status: friendships.status,
+        requestedByUserId: friendships.requestedByUserId,
+        requestContext: friendships.requestContext,
+      })
+      .from(friendships)
+      .where(inArray(friendships.id, friendshipIds));
+    for (const row of rows) {
+      result.set(row.id, {
+        id: row.id,
+        status: row.status,
+        requestedByUserId: row.requestedByUserId,
+        suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
+      });
+    }
   }
 
-  const rows = await db
-    .select({
-      id: friendships.id,
-      status: friendships.status,
-      requestedByUserId: friendships.requestedByUserId,
-      requestContext: friendships.requestContext,
-    })
-    .from(friendships)
-    .where(inArray(friendships.id, friendshipIds));
-
-  return new Map(rows.map((row) => [
-    row.id,
-    {
-      id: row.id,
-      status: row.status,
-      requestedByUserId: row.requestedByUserId,
-      suggestedInterests: parseFriendshipRequestInterests(row.requestContext),
-    },
-  ]));
+  return result;
 }
 
 async function hydrateActors(items: ActivityItemRow[]) {
@@ -486,80 +524,6 @@ async function hydrateCuratedQuestions(items: ActivityItemRow[]) {
   return new Map(rows.map((row) => [row.id, { questionText: row.questionText }] as const));
 }
 
-async function hydrateCreatorNotes(items: ActivityItemRow[]) {
-  const noteIds = [
-    ...new Set(
-      items
-        .filter((item) => item.referenceType === 'creator_note')
-        .map((item) => item.referenceId)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
-  if (noteIds.length === 0) {
-    return new Map<string, NonNullable<ActivityItemView['reference']['creatorNote']>>();
-  }
-
-  const rows = await db
-    .select({
-      note: creatorNotes,
-      questionText: questions.questionText,
-      correctAnswer: questions.answerText,
-    })
-    .from(creatorNotes)
-    .innerJoin(questions, eq(creatorNotes.questionId, questions.id))
-    .where(inArray(creatorNotes.id, noteIds));
-
-  const questionIds = [...new Set(rows.map((row) => row.note.questionId))];
-  const feedItemIds = [
-    ...new Set(
-      rows
-        .filter((row) => row.note.contextType === 'feed')
-        .map((row) => row.note.contextId)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
-  const gameRows = questionIds.length > 0
-    ? await db
-        .select({
-          questionId: joshingGameResponses.questionId,
-          userId: joshingGameResponses.userId,
-          submittedAnswer: joshingGameResponses.submittedAnswer,
-        })
-        .from(joshingGameResponses)
-        .where(inArray(joshingGameResponses.questionId, questionIds))
-    : [];
-  const feedRows = feedItemIds.length > 0
-    ? await db
-        .select({
-          feedItemId: feedItems.id,
-          submittedAnswer: feedItems.submittedAnswer,
-        })
-        .from(feedItems)
-        .where(inArray(feedItems.id, feedItemIds))
-    : [];
-
-  const submittedByQuestionUser = new Map(
-    gameRows.map((row) => [`${row.questionId}:${row.userId}`, row.submittedAnswer] as const),
-  );
-  const submittedByFeedItem = new Map(
-    feedRows.map((row) => [row.feedItemId, row.submittedAnswer] as const),
-  );
-
-  return new Map(rows.map((row) => [
-    row.note.id,
-    {
-      id: row.note.id,
-      questionText: row.questionText,
-      correctAnswer: row.correctAnswer,
-      submittedAnswer: row.note.contextType === 'feed' && row.note.contextId
-        ? submittedByFeedItem.get(row.note.contextId) ?? null
-        : submittedByQuestionUser.get(`${row.note.questionId}:${row.note.recipientUserId}`) ?? null,
-      noteText: row.note.noteText,
-      deliveredAt: row.note.deliveredAt,
-    },
-  ] as const));
-}
-
 async function hydrateGradeDisputes(items: ActivityItemRow[]) {
   const disputeIds = [
     ...new Set(
@@ -650,6 +614,52 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
   );
 }
 
+// D-2 niche-match. A parallel hydrator to hydrateFriendAnsweredQuestions —
+// NOT shared, because that one hardcodes its own type filter
+// (friend_answered_your_question) and a mastery-event correctness lookup the
+// niche types don't need (they only ever fire on a correct answer). Both
+// niche types reference the answered question (referenceType 'question'); we
+// surface its domain (the discovery hook) and text. Keyed by item.id so each
+// row hydrates independently even when two rows point at the same question.
+async function hydrateNicheMatchQuestions(items: ActivityItemRow[]) {
+  const relevant = items.filter(
+    (item) =>
+      (item.type === 'niche_match_answered_your_question'
+        || item.type === 'niche_match_you_answered')
+      && item.referenceType === 'question'
+      && item.referenceId,
+  );
+  if (relevant.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['nicheMatch']>>();
+  }
+
+  const questionIds = [...new Set(relevant.map((item) => item.referenceId!))];
+  const questionRows = await db
+    .select({
+      id: questions.id,
+      questionText: questions.questionText,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+    })
+    .from(questions)
+    .where(inArray(questions.id, questionIds));
+
+  const questionById = new Map(questionRows.map((r) => [r.id, r]));
+
+  return new Map(
+    relevant.map((item) => {
+      const q = questionById.get(item.referenceId!);
+      return [
+        item.id,
+        {
+          domain: q ? (q.canonicalSubcategory ?? q.broadCategory ?? null) : null,
+          questionText: q?.questionText ?? null,
+        } satisfies NonNullable<ActivityItemView['reference']['nicheMatch']>,
+      ];
+    }),
+  );
+}
+
 async function hydrateAuthoredSharedQuestions(items: ActivityItemRow[]) {
   const relevant = items.filter(
     (item) => item.type === 'authored_question_shared' && item.referenceType === 'question' && item.referenceId,
@@ -726,8 +736,8 @@ async function hydrateActivityRows(
     reactionsById,
     directQuestionsById,
     curatedQuestionsById,
-    creatorNotesById,
     friendAnsweredQuestionsById,
+    nicheMatchById,
     authoredSharedQuestionsById,
     declaredPromotedById,
     gradeDisputesById,
@@ -739,8 +749,8 @@ async function hydrateActivityRows(
     hydrateReactions(rows),
     hydrateDirectQuestions(rows),
     hydrateCuratedQuestions(rows),
-    hydrateCreatorNotes(rows),
     hydrateFriendAnsweredQuestions(rows),
+    hydrateNicheMatchQuestions(rows),
     hydrateAuthoredSharedQuestions(rows),
     hydrateDeclaredPromoted(rows),
     hydrateGradeDisputes(rows),
@@ -759,7 +769,7 @@ async function hydrateActivityRows(
       createdAt: row.createdAt,
       actor: row.actorUserId ? actorsById.get(row.actorUserId) ?? null : null,
       reference: {
-        friendshipRequest: row.referenceType === 'friendship' && row.referenceId
+        friendshipRequest: (row.referenceType === 'friendship' || row.referenceType === 'follow') && row.referenceId
           ? friendshipRequestsById.get(row.referenceId)
           : undefined,
         game: row.referenceType === 'joshing_game' && row.referenceId
@@ -780,14 +790,15 @@ async function hydrateActivityRows(
         friendAnsweredQuestion: row.type === 'friend_answered_your_question'
           ? friendAnsweredQuestionsById.get(row.id)
           : undefined,
+        nicheMatch: row.type === 'niche_match_answered_your_question'
+          || row.type === 'niche_match_you_answered'
+          ? nicheMatchById.get(row.id)
+          : undefined,
         authoredSharedQuestion: row.type === 'authored_question_shared'
           ? authoredSharedQuestionsById.get(row.id)
           : undefined,
         declaredPromoted: row.type === 'declared_promoted'
           ? declaredPromotedById.get(row.id)
-          : undefined,
-        creatorNote: row.referenceType === 'creator_note' && row.referenceId
-          ? creatorNotesById.get(row.referenceId)
           : undefined,
         gradeDispute: row.referenceType === 'grade_dispute' && row.referenceId
           ? gradeDisputesById.get(row.referenceId)

@@ -1,4 +1,6 @@
 import { sql } from 'drizzle-orm';
+
+import type { QuestionSource } from '@/lib/questions-types';
 import {
   boolean,
   check,
@@ -15,6 +17,7 @@ import {
   unique,
   uniqueIndex,
   uuid,
+  vector,
 } from 'drizzle-orm/pg-core';
 
 const id = (name = 'id') => text(name).primaryKey().default(sql`gen_random_uuid()::text`);
@@ -35,7 +38,36 @@ export const categoryEnum = pgEnum('Category', [
   'general_knowledge',
 ]);
 
-export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends']);
+// 'blocked' is a safety hard-block terminal state (see verdictToBlockedVisibility):
+// a question that failed the safety vet. It is NOT user-selectable and is excluded
+// by questionVisibilityPredicate and every bank/send/game read path.
+export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends', 'blocked']);
+
+// B1 pool substrate (PRD-D-5 §5.1 / §6). Trust climbs as a question earns it:
+// unverified (fresh, pre-checks) → machine_verified (retrieval + ask-to-answer,
+// B3/B4) → human_validated (N humans correct in play) → author_confirmed
+// (human-authored, answer asserted by author). B1 only adds the field + the
+// grandfather backfill; live tier-gating stays OFF until B4.
+export const trustTierEnum = pgEnum('TrustTier', [
+  'unverified',
+  'machine_verified',
+  'human_validated',
+  'author_confirmed',
+]);
+// Pool scope (PRD-D-5 §5.1 / D9). The spec models scope as friends_only | public
+// (machine default public; human authored public with a one-tap friends_only
+// override). We carry a third `private` value so the unified selection layer can
+// represent the human Question.visibility 'private' losslessly; machine rows only
+// ever use friends_only | public.
+export const questionScopeEnum = pgEnum('QuestionScope', ['private', 'friends_only', 'public']);
+
+// D-1 Stage 3 — directional follow model.
+// `state` on a follow edge: a follow targeting an approval_required user lands
+// as `pending` (a request the followee approves); a follow targeting a public
+// user lands `approved` immediately. Invites create approved edges directly.
+export const followStateEnum = pgEnum('FollowState', ['pending', 'approved']);
+// Per-user gate on *new* followers. Default approval_required (opt into public).
+export const followPrivacyEnum = pgEnum('FollowPrivacy', ['public', 'approval_required']);
 export const publicStatusEnum = pgEnum('PublicStatus', [
   'not_scored',
   'eligible_pending',
@@ -55,6 +87,19 @@ export const gradeDisputeStatusEnum = pgEnum('GradeDisputeStatus', [
   'pending',
   'reviewed',
   'alternative_added',
+  'dismissed',
+]);
+export const contentReportCategoryEnum = pgEnum('ContentReportCategory', [
+  'incorrect',
+  'inappropriate',
+]);
+export const contentReportIncorrectKindEnum = pgEnum('ContentReportIncorrectKind', [
+  'answer_key',
+  'premise',
+]);
+export const contentReportStatusEnum = pgEnum('ContentReportStatus', [
+  'open',
+  'upheld',
   'dismissed',
 ]);
 export const difficultyEstimateEnum = pgEnum('DifficultyEstimate', [
@@ -102,6 +147,8 @@ export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'expiry_reminder',
   'incognito_round_invitation',
   'anniversary_milestone',
+  // Retired with the post-wrong-answer CreatorNote nudge (B-3). Kept as
+  // tombstones because Postgres can't cleanly drop enum values; no code emits these.
   'creator_note_prompt',
   'creator_note_received',
   'ceremony_ready',
@@ -181,9 +228,20 @@ export const users = pgTable(
     avatarColor: text('avatar_color'),
     discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
+    // D-2 niche-match discovery. TEST-PHASE default ON (DEFAULT true) — deliberate
+    // for the test cohort only. The production default is an OPEN DECISION to
+    // revisit after the test; do not assume default-ON as the shipping default.
+    // See drizzle/0059_niche_match_discoverability.sql.
+    discoverableByNicheMatch: boolean('discoverable_by_niche_match').notNull().default(true),
+    // D-1 Stage 3 — gate on new followers. Default approval_required; public is opt-in.
+    followPrivacy: followPrivacyEnum('follow_privacy').notNull().default('approval_required'),
     phoneHash: text('phone_hash'),
     lastFriendDiscoveryCheckAt: timestamp('last_friend_discovery_check_at', { withTimezone: true }),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
+    // B-FirstRecap-1: timestamp the one-time first-session recap was shown. NULL
+    // until the user sees the cinematic recap that fires after their first ever
+    // completed Daily Five; set once so re-entry/refresh/catch-up never re-fire it.
+    firstSessionRecapSeenAt: timestamp('first_session_recap_seen_at', { withTimezone: true }),
     birthYear: integer('birth_year'),
     grewUpCountry: text('grew_up_country'),
     grewUpRegion: text('grew_up_region'),
@@ -234,7 +292,7 @@ export const questions = pgTable(
     id: id(),
     creatorId: text('creator_id').references(() => users.id),
     generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id, { onDelete: 'set null' }),
-    source: text('source').$type<'authored' | 'daily_generated'>().notNull().default('authored'),
+    source: text('source').$type<QuestionSource>().notNull().default('authored'),
     sourceQuestionId: text('source_question_id'),
     sourceCreatorId: text('source_creator_id'),
     questionText: text('question_text').notNull(),
@@ -277,6 +335,28 @@ export const questions = pgTable(
     askedCount: integer('asked_count').notNull().default(0),
     correctCount: integer('correct_count').notNull().default(0),
     surfacePriorityScore: doublePrecision('surface_priority_score').notNull().default(0),
+    // B1 pool substrate (PRD-D-5 §5.1). Human-authored rows grandfather to
+    // author_confirmed. Scope, n_answered and empirical_correct_rate are NOT
+    // duplicated here — the unified selection layer reuses visibility, askedCount
+    // and correctRate (see src/server/db/queries/pool.ts).
+    trustTier: trustTierEnum('trust_tier').notNull().default('unverified'),
+    // Perishable = time-relative facts ("the latest…", "who currently…") flagged
+    // for re-grounding (B3); evergreen by default (no decay — D8).
+    perishable: boolean('perishable').notNull().default(false),
+    // Provenance refs from retrieval-grounded generation; populated in B3.
+    sourceRefs: jsonb('source_refs').$type<string[]>().notNull().default([]),
+    // "Nobody got it" smell (B4 Phase 2, §5.3 layer 3 / §7). True when ≥N distinct
+    // domain-holders have answered and NONE got it right — a hallucination smell,
+    // not a hard question. Flags for review; never auto-deletes (no decay, D8).
+    nobodyCorrectFlag: boolean('nobody_correct_flag').notNull().default(false),
+    // Embedding-dedup flags (B3). Human beats machine on collision; the loser is
+    // suppressed (flagged), never deleted. suppressedBy holds the surviving
+    // question id (may live in either table, so not a hard FK).
+    isDuplicate: boolean('is_duplicate').notNull().default(false),
+    suppressedBy: text('suppressed_by'),
+    // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
+    // Nullable: populated at insert and by the batched backfill (B3).
+    embedding: vector('embedding', { dimensions: 1024 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -290,6 +370,15 @@ export const questions = pgTable(
     index('Question_source_question_id_idx').on(table.sourceQuestionId),
     index('Question_source_creator_id_idx').on(table.sourceCreatorId),
     uniqueIndex('Question_generated_question_id_key').on(table.generatedQuestionId),
+    // Selection-layer filters (B1 pool substrate). Filter capability only — no
+    // live tier-gating yet (B4 owns enforcement).
+    index('Question_trust_tier_idx').on(table.trustTier),
+    index('Question_is_duplicate_idx').on(table.isDuplicate),
+    // Partial index for the "nobody got it" review queue (B4 Phase 2): the flag is
+    // true for a tiny minority of rows, so a partial index keeps the scan cheap.
+    index('Question_nobody_correct_flag_idx')
+      .on(table.nobodyCorrectFlag)
+      .where(sql`${table.nobodyCorrectFlag} = true`),
   ],
 );
 
@@ -431,28 +520,6 @@ export const questionReactions = pgTable(
   ],
 );
 
-export const creatorNotes = pgTable(
-  'CreatorNote',
-  {
-    id: id(),
-    authorUserId: text('authorUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    recipientUserId: text('recipientUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
-    contextType: text('contextType').$type<'feed' | 'joshing_game' | 'daily'>().notNull(),
-    contextId: text('contextId'),
-    noteText: text('noteText').notNull(),
-    promptedAt: timestamp('promptedAt', { withTimezone: true }).notNull().defaultNow(),
-    writtenAt: timestamp('writtenAt', { withTimezone: true }),
-    deliveredAt: timestamp('deliveredAt', { withTimezone: true }),
-    createdAt: createdAt(),
-  },
-  (table) => [
-    index('CreatorNote_authorUserId_promptedAt_idx').on(table.authorUserId, table.promptedAt),
-    index('CreatorNote_recipientUserId_questionId_idx').on(table.recipientUserId, table.questionId),
-    index('CreatorNote_questionId_idx').on(table.questionId),
-  ],
-);
-
 export const gradeDisputes = pgTable(
   'GradeDispute',
   {
@@ -495,6 +562,23 @@ export const smsLogs = pgTable(
   ],
 );
 
+export const emailVerificationTokens = pgTable(
+  'EmailVerificationToken',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('EmailVerificationToken_token_hash_key').on(table.tokenHash),
+    index('EmailVerificationToken_user_id_idx').on(table.userId),
+  ],
+);
+
 export const generatedQuestions = pgTable(
   'GeneratedQuestion',
   {
@@ -517,14 +601,50 @@ export const generatedQuestions = pgTable(
     // per domain and fed back to the generation prompt as positive guidance:
     // "you've covered X, Y, Z — pick something else." See migration 0055.
     subAngles: text('sub_angles').array().notNull().default([]),
+    // Precomputed "between us" aside, generated once at question-generation time
+    // (src/server/daily/generate-questions.ts) and copied into Question.inside_joke
+    // when the row is persisted. Nullable: older rows and any where generation
+    // failed simply have no aside.
+    insideJoke: text('inside_joke'),
     createdAt: createdAt(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedInQueue: boolean('used_in_queue').notNull().default(false),
+    // B1 pool substrate (PRD-D-5 §5.1). Machine rows grandfather to
+    // machine_verified; scope defaults public. Unlike the human table, the
+    // machine bank has no native scope/answered/correct-rate columns, so these
+    // are added here (the selection layer reads them directly).
+    trustTier: trustTierEnum('trust_tier').notNull().default('unverified'),
+    scope: questionScopeEnum('scope').notNull().default('public'),
+    perishable: boolean('perishable').notNull().default(false),
+    sourceRefs: jsonb('source_refs').$type<string[]>().notNull().default([]),
+    // Ask-to-answer record (B4 Phase 1, PRD-D-5 §5.3 layer 2). True when an
+    // independent cold solver corroborated the stored answer at generation time.
+    // This + B3 corroboration is what earns the machine_verified trust tier.
+    askToAnswerVerified: boolean('ask_to_answer_verified').notNull().default(false),
+    // Acceptable answer variants (B4 Phase 4, §5.3). Equivalent phrasings the cold
+    // solver produced that the judge accepted; honored in grading so a right-but-
+    // rephrased answer is marked correct. Carried to Question.accepted_alternatives
+    // when a machine row is promoted to canonical.
+    acceptableVariants: text('acceptable_variants').array().notNull().default([]),
+    // Empirical play stats (D11 / "nobody got it" smell). Back-filled from answer
+    // history where a join exists; machine rows usually start 0 / null.
+    nAnswered: integer('n_answered').notNull().default(0),
+    empiricalCorrectRate: doublePrecision('empirical_correct_rate'),
+    // Embedding-dedup flags (B3). On a human-beats-machine collision, the machine
+    // row is the loser: is_duplicate=true, suppressed_by=<human id>. Never deleted.
+    isDuplicate: boolean('is_duplicate').notNull().default(false),
+    suppressedBy: text('suppressed_by'),
+    // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
+    embedding: vector('embedding', { dimensions: 1024 }),
   },
   (table) => [
     index('GeneratedQuestion_user_id_idx').on(table.userId),
     index('GeneratedQuestion_user_id_used_in_queue_idx').on(table.userId, table.usedInQueue),
     index('GeneratedQuestion_user_id_fact_key_idx').on(table.userId, table.factKey),
+    // Selection-layer filters (B1): tier/scope filter capability + suppress-aware
+    // bank pick. Not gated on any live surface yet (B4 owns enforcement).
+    index('GeneratedQuestion_trust_tier_idx').on(table.trustTier),
+    index('GeneratedQuestion_is_duplicate_idx').on(table.isDuplicate),
   ],
 );
 
@@ -563,6 +683,51 @@ export const questionRatings = pgTable(
   ],
 );
 
+export const contentReports = pgTable(
+  'ContentReport',
+  {
+    id: id(),
+    reporterUserId: text('reporter_user_id').notNull().references(() => users.id),
+    questionId: text('question_id').references(() => questions.id),
+    generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id),
+    category: contentReportCategoryEnum('category').notNull(),
+    incorrectKind: contentReportIncorrectKindEnum('incorrect_kind'),
+    note: text('note').notNull(),
+    suggestedAnswer: text('suggested_answer'),
+    surface: text('surface'),
+    status: contentReportStatusEnum('status').notNull().default('open'),
+    reviewDecision: text('review_decision'),
+    reviewReason: text('review_reason'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('ContentReport_reporter_user_id_idx').on(table.reporterUserId),
+    index('ContentReport_question_id_idx').on(table.questionId),
+    index('ContentReport_generated_question_id_idx').on(table.generatedQuestionId),
+    index('ContentReport_status_idx').on(table.status),
+    check(
+      'ContentReport_one_target',
+      sql`(question_id IS NOT NULL)::int + (generated_question_id IS NOT NULL)::int = 1`,
+    ),
+    check(
+      'ContentReport_incorrect_kind_scope',
+      sql`incorrect_kind IS NULL OR category = 'incorrect'`,
+    ),
+    // One open report per user per target. The target is split across two
+    // nullable columns, so the single-COALESCE form Drizzle can't express
+    // becomes two partial unique indexes — each scoped to its own column and
+    // to status = 'open', mirroring feed_dismissed_domains_active_unique. A
+    // fresh report is allowed once a prior one leaves 'open' (re-report policy).
+    uniqueIndex('ContentReport_one_open_per_question')
+      .on(table.reporterUserId, table.questionId)
+      .where(sql`status = 'open' AND question_id IS NOT NULL`),
+    uniqueIndex('ContentReport_one_open_per_generated_question')
+      .on(table.reporterUserId, table.generatedQuestionId)
+      .where(sql`status = 'open' AND generated_question_id IS NOT NULL`),
+  ],
+);
+
 export const dailyQueues = pgTable(
   'DailyQueue',
   {
@@ -588,6 +753,10 @@ export const dailyPreferences = pgTable(
     difficulty: text('difficulty').notNull().default('adaptive'),
     domainMode: text('domain_mode').notNull().default('random'),
     selectedDomains: jsonb('selected_domains').$type<string[]>().notNull().default([]),
+    domainPreferenceFrequency: jsonb('domain_preference_frequency')
+      .$type<Record<string, 'often' | 'sometimes' | 'blue_moon' | 'resting'>>()
+      .notNull()
+      .default({}),
     difficultyPreference: text('difficulty_preference').notNull().default('normal'),
     updatedAt: updatedAt(),
   },
@@ -626,6 +795,10 @@ export const userDomainDifficulties = pgTable(
     consecutiveCorrect: integer('consecutive_correct').notNull().default(0),
     consecutiveIncorrect: integer('consecutive_incorrect').notNull().default(0),
     lastUpdated: timestamp('last_updated', { withTimezone: true }).notNull().defaultNow(),
+    // Refine Your Game "Ease off": while this is in the future the served
+    // difficulty is pinned — updateDomainDifficultyOnAnswer() skips the step.
+    // NULL means no freeze (normal adaptive behavior).
+    freezeUntil: timestamp('freeze_until', { withTimezone: true }),
   },
   (table) => [
     unique('USER_DOMAIN_DIFFICULTY_user_id_canonical_subcategory_key').on(
@@ -651,6 +824,42 @@ export const userDomainExclusions = pgTable(
       table.scope,
       table.canonicalSubcategory,
     ),
+  ],
+);
+
+// Decision + cooldown ledger for the Refine Your Game section on the daily
+// summary. One row per refine item the player acted on (or that was shown and
+// defaulted). `action` moves pending -> committed | defaulted; staged changes
+// apply at next-daily build (src/server/refine/commit.ts), which is also when
+// `cooldownUntil` is stamped. See drizzle/0063_daily_refine_decision.sql.
+export const dailyRefineDecisions = pgTable(
+  'DAILY_REFINE_DECISION',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    queueId: text('queue_id').notNull().references(() => dailyQueues.id, { onDelete: 'cascade' }),
+    // 'friend_expansion' | 'difficulty_escalation' | 'struggle_pruning'
+    itemType: text('item_type').notNull(),
+    canonicalSubcategory: text('canonical_subcategory').notNull(),
+    // Set only for friend_expansion (the bonus source friend).
+    friendId: text('friend_id'),
+    // 'pending' | 'committed' | 'defaulted'
+    action: text('action').notNull().default('pending'),
+    committedAt: timestamp('committed_at', { withTimezone: true }),
+    cooldownUntil: timestamp('cooldown_until', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // COALESCE(friend_id,'') in the unique index keeps the upsert key stable
+    // for non-expansion rows; expressed in SQL (drizzle/0063), not modeled here.
+    index('DAILY_REFINE_DECISION_cooldown_idx').on(
+      table.userId,
+      table.itemType,
+      table.canonicalSubcategory,
+      table.cooldownUntil,
+    ),
+    index('DAILY_REFINE_DECISION_uncommitted_idx').on(table.userId, table.committedAt),
   ],
 );
 
@@ -739,6 +948,34 @@ export const friendships = pgTable(
   ],
 );
 
+// D-1 Stage 3 — directional follow edges. Two rows model a mutual ("friend")
+// relationship; one row models a one-directional follow. The follower is always
+// the requester, so there is no separate requestedByUserId. Unfollow is a hard
+// delete (no `removed` state). `friendships` is frozen and kept for rollback;
+// all relationship reads/writes go through this table.
+export const follows = pgTable(
+  'Follow',
+  {
+    id: id(),
+    followerId: text('followerId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    followeeId: text('followeeId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    state: followStateEnum('state').notNull().default('pending'),
+    // Carried from the originating request so the incoming-request card can
+    // still render a personal note and suggested interests.
+    personalNote: text('personalNote'),
+    requestContext: jsonb('requestContext').$type<{ suggestedInterests?: string[] }>(),
+    createdAt: createdAt(),
+    approvedAt: timestamp('approvedAt', { withTimezone: true }),
+  },
+  (table) => [
+    unique('Follow_followerId_followeeId_key').on(table.followerId, table.followeeId),
+    // "who I follow" + outbound pending; "my followers" + inbound pending.
+    index('Follow_followerId_state_idx').on(table.followerId, table.state),
+    index('Follow_followeeId_state_idx').on(table.followeeId, table.state),
+    check('Follow_distinct_users', sql`${table.followerId} <> ${table.followeeId}`),
+  ],
+);
+
 export const contactHashes = pgTable(
   'ContactHash',
   {
@@ -785,7 +1022,6 @@ export const feedItems = pgTable(
     sourceAnswerId: text('sourceAnswerId'),
     state: text('state').notNull().default('active'),
     isPinned: boolean('isPinned').notNull().default(false),
-    quip: text('quip'),
     catchupResolvedAt: timestamp('catchupResolvedAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -837,7 +1073,6 @@ export const joshingGameResponses = pgTable(
     isPartial: boolean('isPartial').notNull().default(false),
     answerState: text('answerState'),
     pointsAwarded: doublePrecision('pointsAwarded'),
-    quip: text('quip'),
     answeredAt: timestamp('answeredAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },

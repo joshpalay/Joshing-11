@@ -8,27 +8,31 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }))
 
-describe('OnboardingFlow invited-interest copy', () => {
-  it('names the inviter when available', () => {
+describe('OnboardingFlow invited interests', () => {
+  it('pre-selects a seeded interest on the interests step', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         inviterName="Alex Inviter"
         initialDisplayName="Returning User"
+        initialHandle="returninguser"
         preSeededInterests={[
           { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
         ]}
       />
     )
 
-    expect(html).toContain('Alex Inviter suggested these for you.')
+    expect(html).toContain('Pick your starting areas')
+    expect(html).toContain('Selected areas')
+    expect(html).toContain('1 selected · pick at least 2 more')
     expect(html).toContain('Sondheim')
   })
 
-  it("renders Josh as Jaime's inviter with all three suggested interests", () => {
+  it('pre-selects all three seeded interests', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         inviterName="Josh"
         initialDisplayName="Returning User"
+        initialHandle="returninguser"
         preSeededInterests={[
           { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
           { domain: 'Jazz', broadCategory: 'Music', rationale: null },
@@ -37,32 +41,24 @@ describe('OnboardingFlow invited-interest copy', () => {
       />
     )
 
-    expect(html).toContain('Josh suggested these for you.')
+    expect(html).toContain('Selected areas')
+    expect(html).toContain('3 selected · add up to 9 more')
     expect(html).toContain('Sondheim')
     expect(html).toContain('Jazz')
     expect(html).toContain('Poetry')
   })
 
-  it('uses friend fallback when inviter name is unavailable', () => {
+  it('lands setup-skipping users on the interests step with nothing seeded', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
-        inviterName={null}
+        preSeededInterests={[]}
         initialDisplayName="Returning User"
-        preSeededInterests={[
-          { domain: 'Jazz', broadCategory: 'Music', rationale: null },
-        ]}
+        initialHandle="returninguser"
       />
     )
 
-    expect(html).toContain('A friend suggested these for you.')
-  })
-
-  it('still renders regular onboarding with no invite', () => {
-    const html = renderToStaticMarkup(
-      <OnboardingFlow preSeededInterests={[]} initialDisplayName="Returning User" />
-    )
-
-    expect(html).toContain('Welcome to Joshing')
+    expect(html).toContain('Pick your starting areas')
+    expect(html).toContain('0 selected')
     expect(html).not.toContain('suggested these for you.')
   })
 })
@@ -110,10 +106,11 @@ describe('OnboardingFlow display-name gate', () => {
       <OnboardingFlow
         preSeededInterests={[]}
         initialDisplayName="Existing Name"
+        initialHandle="existingname"
       />
     )
 
     expect(html).not.toContain('What should we call you?')
-    expect(html).toContain('Welcome to Joshing')
+    expect(html).toContain('Pick your starting areas')
   })
 })

@@ -58,6 +58,8 @@ vi.mock('@/server/db/queries/feed', () => ({
   getDismissedDomains: getDismissedDomainsMock,
   getFeedForUser: getFeedForUserMock,
   visibleFeedSourcePredicate: { op: 'visibleFeedSourcePredicate' },
+  questionVisibilityPredicate: vi.fn((viewerUserId) => ({ op: 'questionVisibilityPredicate', viewerUserId })),
+  feedItemVisibilityPredicate: vi.fn((viewerUserId) => ({ op: 'feedItemVisibilityPredicate', viewerUserId })),
 }));
 vi.mock('@/server/db', () => ({
   db: dbMock,
@@ -71,6 +73,11 @@ vi.mock('@/server/db', () => ({
     status: 'friendships.status',
     userAId: 'friendships.userAId',
     userBId: 'friendships.userBId',
+  },
+  follows: {
+    followerId: 'follows.followerId',
+    followeeId: 'follows.followeeId',
+    state: 'follows.state',
   },
   masteryEvents: {
     id: 'masteryEvents.id',
@@ -208,7 +215,9 @@ describe('GET /api/feed', () => {
 
 
   it.each([
-    ['friend_answered correct maps to friend-answered card type', 'friend_answered', 'correct', 'friend_answered'],
+    // D-1 Stage 5: friend_answered no longer renders; a stray row defensively
+    // falls back to the friend_added (authored_shared) envelope rather than crashing.
+    ['friend_answered defensively falls back to friend-added card type', 'friend_answered', 'correct', 'friend_added'],
     ['authored_shared maps to friend-added card type', 'authored_shared', null, 'friend_added'],
     ['legacy thumbs_upped maps to friend-liked card type', 'thumbs_upped', null, 'friend_liked'],
   ] as const)('%s', async (_label, sourceType, sourceResult, cardType) => {

@@ -9,6 +9,7 @@ import {
   wrapUserInput,
 } from '@/lib/llm';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 
 export type WarmupAnswers = {
   deepDive?: string;
@@ -30,7 +31,10 @@ export type ProposedInterest = {
 
 export type CanonicalizedInterest = {
   suggested: string;
-  broadCategory: string;
+  // null when categorization is unavailable or the model returns a catch-all.
+  // The save path (saveDeclaredInterests) re-categorizes null/catch-all values
+  // before persisting, so this helper never fabricates "General Knowledge".
+  broadCategory: string | null;
   explanation: string;
 };
 
@@ -101,7 +105,7 @@ function parseJsonArray(rawText: string): unknown[] | null {
 
 function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; answer: string }>): ProposedInterest[] {
   const candidates = cleanAnswers
-    .map(({ field, answer }, index) => {
+    .map(({ answer }, index) => {
       const domain = titleCase(
         answer
           .replace(/[^\p{L}\p{N}\s'&-]/gu, ' ')
@@ -117,7 +121,7 @@ function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; ans
       return {
         domain,
         broadCategory: FALLBACK_CATEGORIES[index % FALLBACK_CATEGORIES.length] ?? 'General Knowledge',
-        rationale: `Based on your answer for ${WARMUP_LABELS[field]}.`,
+        rationale: `Explore ${domain} and the stories around it.`,
       };
     })
     .filter((interest): interest is ProposedInterest => Boolean(interest));
@@ -126,32 +130,32 @@ function fallbackInterests(cleanAnswers: Array<{ field: keyof WarmupAnswers; ans
     {
       domain: 'Modern Literary Fiction',
       broadCategory: 'Literature',
-      rationale: 'A focused reading territory that can support rich trivia.',
+      rationale: 'Dig into acclaimed novels and the writers behind them.',
     },
     {
-      domain: 'Auteur Film Favorites',
+      domain: 'Great Film Directors',
       broadCategory: 'Film & Television',
-      rationale: 'A film-specific lane that can be narrowed further as you play.',
+      rationale: 'Explore the directors who shaped modern cinema.',
     },
     {
-      domain: 'Personal Canon Music',
+      domain: 'Albums You Replay',
       broadCategory: 'Music',
-      rationale: 'A music lane based on artists you return to often.',
+      rationale: 'Revisit the artists and albums you keep coming back to.',
     },
     {
-      domain: 'Recent Cultural Obsessions',
+      domain: 'Pop Culture of the Moment',
       broadCategory: 'Pop Culture',
-      rationale: 'A flexible lane for recurring references and current fixations.',
+      rationale: "Catch up on the shows and stars everyone's talking about.",
     },
     {
-      domain: '20th-Century Cultural History',
+      domain: '20th-Century History',
       broadCategory: 'History',
-      rationale: 'A historically grounded lane for specific eras and movements.',
+      rationale: 'Discover the people and moments that shaped the last century.',
     },
     {
-      domain: 'Everyday Science Concepts',
+      domain: 'Everyday Science',
       broadCategory: 'Science',
-      rationale: 'A factual lane that tends to generate accessible questions.',
+      rationale: 'Learn how the science around you actually works.',
     },
   ];
 
@@ -215,7 +219,7 @@ Rules:
 - Good domains: "Late Tchaikovsky", "19th-Century Russian Symphonies", "Modernist American Poetry", "Weimar-Era Cinema".
 - Bad domains: "Music", "Books", "Movies", "History", "General Trivia".
 - Distribute across the warm-up answers. Include at least one candidate per non-empty warm-up field if possible.
-- Each rationale must briefly tie the candidate to a specific warm-up answer or demographic context.
+- Each rationale is one short, inviting sentence under 12 words that starts with a verb like Explore, Discover, Revisit, or Learn about. Make it sound like a friend suggesting it. Never describe how the suggestion was generated or reference the warm-up answers, clusters, interests, or any internal process.
 - broadCategory is a stable top-level bucket, such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, General Knowledge. It must not be an author/work/movement-specific territory; for example, James Joyce, Irish Modernism, novels, poetry, and fiction all use Literature.
 - Never return "Other" as a broadCategory. Use "General Knowledge" only when no more precise top-level bucket applies.
 - Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}${INSTRUCTION_USER_INPUT_GUIDANCE}`;
@@ -277,7 +281,7 @@ export async function canonicalizeInterest(rawInput: string): Promise<Canonicali
   const cleanInput = rawInput.trim().replace(/\s+/g, ' ').slice(0, 100);
   const fallback: CanonicalizedInterest = {
     suggested: cleanInput,
-    broadCategory: 'General Knowledge',
+    broadCategory: null,
     explanation: 'Kept your original wording because a suggestion was not available.',
   };
 
@@ -311,9 +315,219 @@ Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation
     return fallback;
   }
 
+  const normalizedBroad = normalizeBroadCategory(broadCategory);
   return {
     suggested: suggested.slice(0, 100),
-    broadCategory: (normalizeBroadCategory(broadCategory) ?? 'General Knowledge').slice(0, 80),
+    // Don't surface the catch-all as a real suggestion; let the save path
+    // re-categorize. null normalizes and "General Knowledge" both collapse here.
+    broadCategory:
+      normalizedBroad && normalizedBroad !== 'General Knowledge'
+        ? normalizedBroad.slice(0, 80)
+        : null,
     explanation: explanation.slice(0, 180),
   };
+}
+
+export type ExpandedInterest = {
+  label: string;
+  // null when categorization is unavailable or the model returns a catch-all;
+  // the save path re-categorizes before persisting (same contract as canonicalize).
+  broadCategory: string | null;
+};
+
+/**
+ * Break a too-broad topic ("Music", "Technology") into specific, passion-level
+ * sub-topics the player can pick from. Powers the add-topic field's
+ * expand-into-choices flow. Uses Haiku for low latency (this runs inline as the
+ * user adds a topic) and filters out any candidate that is itself still broad
+ * (isTooBroadInterest), so the menu is always actionable.
+ */
+export async function expandBroadInterest(topic: string): Promise<ExpandedInterest[]> {
+  const cleanTopic = topic.trim().replace(/\s+/g, ' ').slice(0, 80);
+  if (!cleanTopic) return [];
+
+  const client = getAnthropicClient();
+  if (!client) return [];
+
+  const systemPrompt = `A player typed a broad trivia category. Break it into 8 hyper-specific sub-topics they might be passionate about, each useful for trivia.
+Rules:
+- Every item must be hyper-specific — a person, era, movement, work, scene, or sub-field — never another broad category.
+- Good for "Music": "Late Beethoven String Quartets", "Delta Blues", "1990s Hip-Hop", "Film Scores of Ennio Morricone".
+- Bad for "Music": "Classical Music", "Rock", "Jazz" (still too broad).
+- broadCategory is a stable top-level bucket such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Technology, Food & Cuisine, Architecture & Design. Never "Other" or "General".
+Respond in JSON array only, no markdown: [ { "label": "...", "broadCategory": "..." } ]${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  const response = await loggedMessagesCreate(client, 'interests-expand', {
+    model: CANONICALIZE_MODEL,
+    max_tokens: 600,
+    temperature: 0.6,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: wrapUserInput('broad_topic', cleanTopic) }],
+  });
+
+  const parsed = parseJsonArray(extractTextContent(response.content));
+  if (!parsed) return [];
+
+  const seen = new Set<string>();
+  const candidates: ExpandedInterest[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const label = asTrimmedString(record.label ?? record.domain);
+    if (!label) continue;
+    // Drop candidates that are still bucket-level — the menu must be actionable.
+    if (isTooBroadInterest(label)) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const rawBroad = asTrimmedString(record.broadCategory ?? record.broad_category);
+    const normalized = rawBroad ? normalizeBroadCategory(rawBroad) : null;
+    candidates.push({
+      label: label.slice(0, 80),
+      broadCategory:
+        normalized && normalized !== 'General Knowledge' ? normalized.slice(0, 80) : null,
+    });
+  }
+
+  return candidates.slice(0, 8);
+}
+
+export type InterestAnswerability = { answerable: boolean; reason: string | null };
+
+const UNANSWERABLE_FALLBACK_REASON =
+  'We could not find real questions for that topic. Try something more specific or more widely known.';
+
+/**
+ * Judge whether a daily trivia game could write real, factual questions about a
+ * typed interest. This is the "answerability" guard — a companion to the
+ * specificity guard (isTooBroadInterest), which rejects bucket-level labels.
+ * Answerability instead rejects topics with no public factual basis ("my cat",
+ * "asdfgh", "my street") so they never reach the daily generator, where they
+ * would silently produce nothing.
+ *
+ * FAILS OPEN: when the categorizer is unavailable or returns malformed JSON we
+ * treat the topic as answerable, exactly like categorizeInterestDomain degrades
+ * to null. We never block a real user because the model is down; junk only slips
+ * through during an outage, and the daily queue already tolerates thin domains.
+ */
+export async function assessInterestAnswerability(topic: string): Promise<InterestAnswerability> {
+  const cleanInput = topic.trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!cleanInput) return { answerable: false, reason: 'Enter a topic name.' };
+
+  const client = getAnthropicClient();
+  if (!client) return { answerable: true, reason: null };
+
+  const systemPrompt = `Decide whether a daily trivia game could write real, factual, verifiable questions about a player's declared interest.
+Respond in JSON only: { "answerable": true | false, "reason": "..." }
+- Answerable: any public subject with a body of knowable facts — a person, place, work, era, field, sport, hobby, scene, or movement. When unsure, lean answerable.
+- NOT answerable: purely personal/private topics ("my cat", "my high school friends", "my street"), gibberish or nonsense ("asdfgh", "blah blah"), or topics with essentially no public factual basis to ask about.
+- "reason" is a short, friendly explanation shown to the player only when answerable is false. Suggest making it more specific or more widely known.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  try {
+    // ~200 tokens — below Haiku's 2048 cache threshold; plain string.
+    const response = await loggedMessagesCreate(client, 'interests-answerability', {
+      model: CANONICALIZE_MODEL,
+      max_tokens: 160,
+      temperature: 0.1,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: wrapUserInput('interest_topic', cleanInput) }],
+    });
+
+    const parsed = parseJsonObject(extractTextContent(response.content));
+    if (!parsed || typeof parsed.answerable !== 'boolean') {
+      return { answerable: true, reason: null };
+    }
+    if (parsed.answerable) return { answerable: true, reason: null };
+    return { answerable: false, reason: asTrimmedString(parsed.reason) ?? UNANSWERABLE_FALLBACK_REASON };
+  } catch {
+    return { answerable: true, reason: null };
+  }
+}
+
+// Thrown at the declared-interest write boundary when a typed topic has no
+// public factual basis. Callers (API routes) map this to a 422 so the client can
+// surface the reason inline, the same way TooBroadInterestError signals "expand".
+export class UnanswerableInterestError extends Error {
+  constructor(
+    public readonly attempted: string,
+    public readonly reason: string = UNANSWERABLE_FALLBACK_REASON,
+  ) {
+    super(reason);
+    this.name = 'UnanswerableInterestError';
+  }
+}
+
+/**
+ * Throw if a typed topic is not answerable. Use at the declared-interest write
+ * boundary (incremental adds) behind the client-side up-front check. Fails open
+ * with assessInterestAnswerability, so an LLM outage never blocks a save.
+ */
+export async function assertAnswerableInterest(topic: string): Promise<void> {
+  const result = await assessInterestAnswerability(topic);
+  if (!result.answerable) {
+    throw new UnanswerableInterestError(topic, result.reason ?? UNANSWERABLE_FALLBACK_REASON);
+  }
+}
+
+/**
+ * True when a stored broad_category is the catch-all rather than a real
+ * top-level bucket. normalizeBroadCategory() folds "Other"/"General"/
+ * "Potpourri" into "General Knowledge", so a null/empty value or a value that
+ * normalizes to "General Knowledge" is exactly the set we treat as
+ * "uncategorized" — the value the portrait renders as the "Other interests"
+ * circle. Used both by the declared-interest write path (to decide whether to
+ * (re)categorize) and by the backfill script.
+ */
+export function isCatchAllBroadCategory(value: string | null | undefined): boolean {
+  if (typeof value !== 'string') return true;
+  const normalized = normalizeBroadCategory(value);
+  return normalized === null || normalized === 'General Knowledge';
+}
+
+/**
+ * Resolve a real top-level broad category for a single declared-interest
+ * domain. Unlike canonicalizeInterest (which fabricates the "General Knowledge"
+ * catch-all on failure), this returns null when the categorizer is unavailable
+ * or can't place the domain, so callers persist an honest, backfillable
+ * "uncategorized" value instead of permanently stranding the domain in the
+ * "Other interests" circle.
+ */
+export async function categorizeInterestDomain(domain: string): Promise<string | null> {
+  const cleanInput = domain.trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!cleanInput) return null;
+
+  const client = getAnthropicClient();
+  if (!client) return null;
+
+  const systemPrompt = `Assign one stable, top-level "broad category" to a user's declared trivia interest.
+Respond in JSON only: { "broadCategory": "..." }
+- broadCategory is a stable top-level bucket such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Technology, Food & Cuisine, Architecture & Design.
+- It must NOT be a person/work/movement/era-specific territory. Examples: "Romantic Era Classical symphony music" -> Music; "90's Bollywood" -> Film & Television; "Mortgage backed securities" -> Finance; "James Joyce" -> Literature.
+- If none of the listed buckets fit, name the closest real top-level field as a 1-2 word label.
+- NEVER return "General Knowledge", "Other", "General", or "Potpourri" — these are forbidden catch-alls. Always pick the closest real category.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  try {
+    // ~150 tokens — below Haiku's 2048 cache threshold; plain string.
+    const response = await loggedMessagesCreate(client, 'interests-categorize-domain', {
+      model: CANONICALIZE_MODEL,
+      max_tokens: 80,
+      temperature: 0.2,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: wrapUserInput('interest_domain', cleanInput) }],
+    });
+
+    const text = extractTextContent(response.content);
+    const parsed = parseJsonObject(text);
+    const raw = asTrimmedString(parsed?.broadCategory ?? parsed?.broad_category);
+    if (!raw) return null;
+
+    const normalized = normalizeBroadCategory(raw);
+    // The model occasionally ignores the prohibition; treat any catch-all
+    // result as a miss so we never persist it.
+    if (!normalized || normalized === 'General Knowledge') return null;
+    return normalized.slice(0, 80);
+  } catch {
+    return null;
+  }
 }
