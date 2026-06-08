@@ -1,10 +1,41 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 
 import { db, generatedQuestions, questions } from '@/server/db';
 import {
   GenericCanonicalSubcategoryError,
   isGenericSubcategory,
 } from '@/server/questions/canonical-subcategory';
+
+/**
+ * The single canonical `Question` id for a generated question, if one already
+ * exists — across BOTH provenance columns:
+ *   - `generated_question_id`: the row the daily-answer path persists.
+ *   - `source_question_id`:    the row the send-to-friend path mints (curated_sent).
+ *
+ * Both link back to the same `GeneratedQuestion`, i.e. the same fact. Resolving
+ * to one shared id is what stops a question from forking into two `Question`
+ * rows — which otherwise defeats every question_id-keyed dedup downstream (feed
+ * "already answered" suppression, the send already-in-feed guard) and produces
+ * the answer-it-twice loop. Prefers the daily_generated row so repeated calls
+ * converge on one stable id regardless of which path created which first.
+ */
+export async function findCanonicalQuestionIdForGenerated(
+  generatedId: string,
+): Promise<string | null> {
+  const [existing] = await db
+    .select({ id: questions.id })
+    .from(questions)
+    .where(and(
+      isNull(questions.deletedAt),
+      or(
+        eq(questions.generatedQuestionId, generatedId),
+        eq(questions.sourceQuestionId, generatedId),
+      ),
+    ))
+    .orderBy(sql`case when ${questions.source} = 'daily_generated' then 0 else 1 end`)
+    .limit(1);
+  return existing?.id ?? null;
+}
 
 function normalizeQuestionTextForDedup(value: string): string {
   return value
@@ -28,14 +59,14 @@ function asDifficulty(value: string): 'accessible' | 'moderate' | 'specialist' |
 
 export async function persistGeneratedQuestion(generatedQuestionId: string, slotDomain?: string): Promise<PersistGeneratedQuestionResult> {
   try {
-    const [existing] = await db
-      .select({ id: questions.id })
-      .from(questions)
-      .where(eq(questions.generatedQuestionId, generatedQuestionId))
-      .limit(1);
-
-    if (existing) {
-      return { questionId: existing.id, alreadyExisted: true };
+    // Reuse any canonical Question already linked to this generated row — by
+    // generated_question_id (the usual daily path) OR source_question_id (a
+    // curated_sent row a prior send-to-friend minted). The latter is what closes
+    // the send-then-answer ordering: without it, persisting after a send would
+    // create a SECOND row for the same fact and re-open the answer-it-twice loop.
+    const existingId = await findCanonicalQuestionIdForGenerated(generatedQuestionId);
+    if (existingId) {
+      return { questionId: existingId, alreadyExisted: true };
     }
 
     const [generated] = await db
