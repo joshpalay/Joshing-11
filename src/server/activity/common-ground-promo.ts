@@ -75,7 +75,7 @@ export async function getCommonGroundPromo(
       friend: { points: d.friend.mastery_points, tier: d.friend.current_tier },
     }));
 
-    const embed: StreamEmbed = {
+    const embed: Extract<StreamEmbed, { kind: 'common_ground' }> = {
       kind: 'common_ground',
       friendId: friend.id,
       friendFirstName: firstName(friend.displayName),
