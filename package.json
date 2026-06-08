@@ -21,6 +21,8 @@
     "smoke:niche-match-dedup": "tsx scripts/niche-match-dedup.smoke.ts",
     "smoke:gameplay": "tsx scripts/playtest/playtest.ts",
     "pool:health": "tsx scripts/pool-health.ts",
+    "pool:embed-backfill": "tsx scripts/backfill-pool-embeddings.ts",
+    "pool:embed-backfill:apply": "tsx scripts/backfill-pool-embeddings.ts --apply",
     "format": "node scripts/format-changed.mjs",
     "format:all": "prettier --write ."
   },
