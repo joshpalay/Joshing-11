@@ -68,6 +68,16 @@ export type QuestionRecap = {
   authorNote: string | null;
   /** D-3: the author is the non-human house/editorial author (Editorial badge, non-relational copy). */
   authorIsHouse: boolean;
+  /**
+   * B-Report-2: which content table this recap row points at, for a ContentReport.
+   * Exactly one id is set — curated questions carry `questionId`, LLM-origin questions
+   * carry `generatedQuestionId`. Null only for the synthetic-fallback slot (no real row
+   * to report), in which case the ⋯ report items are hidden.
+   */
+  reportTarget:
+    | { questionId: string; generatedQuestionId?: undefined }
+    | { generatedQuestionId: string; questionId?: undefined }
+    | null;
 };
 
 export type DomainGain = {
@@ -241,6 +251,11 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       authorId: slot.source === 'friend' ? (slot.author_id ?? null) : null,
       authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
       authorIsHouse: slot.source === 'house',
+      reportTarget: slot.question_id
+        ? { questionId: slot.question_id }
+        : slot.generated_question_id
+          ? { generatedQuestionId: slot.generated_question_id }
+          : null,
     };
   });
 
