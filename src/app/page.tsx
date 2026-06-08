@@ -140,7 +140,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
   )
   return (
     <>
-      <p className="mb-2 px-3 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+      <p className="mb-2 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
         What&rsquo;s happening
       </p>
       <FeedList
