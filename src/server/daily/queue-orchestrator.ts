@@ -165,18 +165,60 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining))
     : [];
 
-  // Cross-source dedup by normalized question text. The authored picker
-  // dedupes by question_id against past queues, and the generator has its
-  // own batch/history dedup — but neither knows about the other, so the
-  // same prompt can land in two slots of the same queue (e.g. an authored
-  // "Apples are in what plant family?" alongside an LLM-generated one).
+  // Cross-source dedup. The authored picker dedupes by question_id against
+  // past queues, and the generator has its own batch/history dedup — but
+  // neither knows about the other, so the same trivia can land in two slots
+  // of the same queue (e.g. an authored "Apples are in what plant family?"
+  // alongside an LLM-generated one).
+  //
+  // Exact-text matching is necessary but not sufficient: it misses the
+  // cross-phrasing case, where an authored question and an LLM one encode the
+  // SAME fact in different words. That is exactly how a daily once served two
+  // adjacent "The Inner Light" Picard questions — one authored ("In the TNG
+  // episode 'The Inner Light,' Picard lives an entire lifetime…") and one
+  // generated ("In 'Star Trek: The Next Generation,' the episode 'The Inner
+  // Light' features Picard…") — both answered "a Ressikan flute". Different
+  // text, different canonical_subcategory label ("Star Trek" vs "Star Trek:
+  // The Next Generation"), identical trivia. So we also dedup on a fact
+  // signature: the normalized answer scoped to a coarse domain key. Two
+  // questions with the same answer about the same subject are the same fact
+  // regardless of wording. (The pool's embedding-based dedup would also catch
+  // this, but it is inert wherever VOYAGE_API_KEY is unset.)
   const seenTexts = new Set<string>();
+  const seenFacts = new Set<string>();
   const normalize = (text: string) => text.trim().toLowerCase();
+  const factSignature = (answer: string | null, domain: string | null): string | null => {
+    const normAnswer = (answer ?? '')
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, ' ') // drop parenthetical glosses, e.g. "(a small flute)"
+      .replace(/^(a|an|the)\s+/, '') // leading article
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+    // Too short/generic to dedup on safely (e.g. a bare year or single common
+    // word could collide across genuinely different questions).
+    if (normAnswer.length < 4) return null;
+    const coarseDomain = (domain ?? '')
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .split(' ')
+      .slice(0, 2) // "star trek" collapses "Star Trek" and "Star Trek: The Next Generation"
+      .join(' ');
+    return `${coarseDomain}|${normAnswer}`;
+  };
+  const rememberFact = (answer: string | null, domain: string | null) => {
+    const sig = factSignature(answer, domain);
+    if (sig) seenFacts.add(sig);
+  };
   for (const pick of authored) {
     seenTexts.add(normalize(pick.questionText));
+    rememberFact(pick.answerText, pick.canonicalSubcategory);
   }
   for (const pick of housePicks) {
     seenTexts.add(normalize(pick.questionText));
+    rememberFact(pick.answerText, pick.canonicalSubcategory);
   }
   const dedupedGenerated: typeof generated = [];
   let droppedDuplicates = 0;
@@ -191,11 +233,13 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       continue;
     }
     const key = normalize(question.questionText);
-    if (seenTexts.has(key)) {
+    const sig = factSignature(question.answer, question.canonicalSubcategory);
+    if (seenTexts.has(key) || (sig !== null && seenFacts.has(sig))) {
       droppedDuplicates += 1;
       continue;
     }
     seenTexts.add(key);
+    if (sig) seenFacts.add(sig);
     dedupedGenerated.push(question);
   }
   if (droppedDuplicates > 0) {
@@ -239,8 +283,10 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
         continue;
       }
       const key = normalize(question.questionText);
-      if (seenTexts.has(key)) continue;
+      const sig = factSignature(question.answer, question.canonicalSubcategory);
+      if (seenTexts.has(key) || (sig !== null && seenFacts.has(sig))) continue;
       seenTexts.add(key);
+      if (sig) seenFacts.add(sig);
       topUpGenerated.push(question);
       recoveredThisRound += 1;
     }
