@@ -148,7 +148,11 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
   ]
   return (
     <>
-      <p className="mb-2 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+      {/* Sit the header on the feed's left gutter — the same 2px the activity
+          rows pad in (where the fixed icon column / shape marks begin), so the
+          header and the shapes share one left edge. The day labels indent
+          further (pl-[34px], past the icon column) to meet the row copy. */}
+      <p className="mb-2 pl-[2px] text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
         What&rsquo;s happening
       </p>
       <FeedList
