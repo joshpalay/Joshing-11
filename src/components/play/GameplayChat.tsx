@@ -177,6 +177,15 @@ const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
   (name) => `${name} thought you might`,
 ];
 
+// Trim an explainer to its first sentence for the live thread — the full text
+// still lives in the End of Session Review. Keeps the thread moving while giving
+// a one-line "why" directly under the answer.
+function firstSentence(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^.*?[.!?](?=\s|$)/);
+  return match ? match[0] : trimmed;
+}
+
 function firstNameFrom(creatorName: string): string {
   const trimmed = creatorName.trim();
   const space = trimmed.indexOf(' ');
@@ -840,15 +849,16 @@ function ResultRow({
   const expired = result === 'expired';
   const correct = result === 'correct';
   const gaveUp = result === 'gave_up';
+  // Every reveal shows a one-sentence explainer directly under the answer; the
+  // full text always remains in the End of Session Review, so nothing is lost.
   const explainerText = breadcrumb ?? explanation ?? null;
-  // What sits beneath the revealed answer in the live thread:
-  //   • Correct  → keep momentum: one light reflection only (the "Between us!"
-  //                wink preferred over the creator note), explainer deferred to
-  //                the End of Session Review.
-  //   • Wrong / gave-up / expired → discovery: a plain one-sentence explainer
-  //                directly under the answer, with the "Between us!" wink below
-  //                it when one exists. The longer creator note goes to review.
-  const showInlineExplainer = !correct && Boolean(explainerText);
+  const explainerSentence = explainerText ? firstSentence(explainerText) : null;
+  // Correct keeps its explainer inline within the verdict block (before the
+  // "common ground" beat); the other reveals render it after the discovery copy.
+  const showDiscoveryExplainer = !correct && Boolean(explainerSentence);
+  // One reflection card beneath the result: the lighter "Between us!" wink is
+  // preferred over the creator note, which otherwise falls back in on correct
+  // answers. The fuller creator note lives in the review.
   const showJokeCard = Boolean(insideJoke);
   const showNoteCard = correct && !insideJoke && Boolean(authorNote);
   const requestRecheck = useCallback(async () => {
@@ -916,6 +926,7 @@ function ResultRow({
                 {correctAnswer}
               </p>
             ) : null}
+            {explainerSentence ? <ExplainerLine text={explainerSentence} /> : null}
             <p
               style={{
                 marginTop: '8px',
@@ -1032,7 +1043,7 @@ function ResultRow({
             ) : null}
           </>
         )}
-        {showInlineExplainer && explainerText ? <ExplainerLine text={explainerText} /> : null}
+        {showDiscoveryExplainer && explainerSentence ? <ExplainerLine text={explainerSentence} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}

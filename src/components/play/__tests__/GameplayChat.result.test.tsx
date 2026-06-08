@@ -46,18 +46,20 @@ describe('GameplayChat correct-answer treatment (D-5 live thread)', () => {
     expect(rendered).toContain('common ground ++');
   });
 
-  it('never renders both the explainer and the "Between us!" card after a correct answer', () => {
+  it('shows a one-sentence explainer under a correct answer, trimming the rest to review', () => {
     const rendered = html([
       resultMessage({
         result: 'correct',
-        explanation: 'A long background paragraph about why this answer matters.',
+        explanation: 'Bach wrote it around 1741. This longer second sentence belongs in review.',
         insideJoke: 'Still your favourite Bach fact.',
         insideJokeKind: 'editorial',
       }),
     ]);
-    // The light wink is kept; the longer explainer is deferred to review.
+    // The first sentence stays in the thread; the rest is deferred to the review.
+    expect(rendered).toContain('Bach wrote it around 1741.');
+    expect(rendered).not.toContain('This longer second sentence belongs in review.');
+    // The light "Between us!" wink is still shown below.
     expect(rendered).toContain('Still your favourite Bach fact.');
-    expect(rendered).not.toContain('A long background paragraph about why this answer matters.');
   });
 
   it('keeps wrong-answer discovery: reveals the answer and shows the explainer when no wink exists', () => {
