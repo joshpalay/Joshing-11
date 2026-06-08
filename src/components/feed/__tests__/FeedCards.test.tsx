@@ -380,6 +380,23 @@ describe('Answer feedback sheet recheck affordance', () => {
     )
     expect(rendered).not.toContain('Recheck →')
   })
+
+  // B-Report-2: the content-reporting ⋯ is opt-in so the shared result sheet does not
+  // surface it on the feed / direct-answer result modals — only where a surface passes `report`.
+  it('hides the content-report ⋯ menu when no report context is supplied', () => {
+    const rendered = html(<AnswerFeedbackSheet {...baseProps} />)
+    expect(rendered).not.toContain('More actions')
+  })
+
+  it('shows the content-report ⋯ when a report context is supplied', () => {
+    const rendered = html(
+      <AnswerFeedbackSheet
+        {...baseProps}
+        report={{ target: { questionId: 'q1' }, surface: 'lately_result' }}
+      />
+    )
+    expect(rendered).toContain('More actions')
+  })
 })
 
 describe('Authored-by-viewer card', () => {

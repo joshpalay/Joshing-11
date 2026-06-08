@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Flag, Heart, MoreHorizontal, X } from 'lucide-react'
+import { Heart, MoreHorizontal, X } from 'lucide-react'
 import LoadingScreen from '@/components/LoadingScreen'
 import {
   type CSSProperties,
@@ -30,6 +30,7 @@ import type {
 import { RoundReminderCard } from './RoundReminderCard'
 import { FirstSessionRecap } from './FirstSessionRecap'
 import type { FirstSessionRecapView } from '@/server/daily/first-session-recap'
+import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
 
 // useSyncExternalStore inputs for the client-only reset-time label. Hoisted so
 // the subscribe/snapshot functions are stable across renders.
@@ -37,7 +38,10 @@ const subscribeNoop = () => () => {}
 const getResetTimeSnapshot = () => formatNextResetTimeLocal()
 const getResetTimeServerSnapshot = (): string | null => null
 
-type FeedbackSignal = 'thumbs_up' | 'thumbs_down'
+// The heart is the only feedback signal on the recap now; the negative surface is
+// the ⋯ report items (B-Report-2). The /api/daily/feedback route still accepts the
+// other signal for the separate feed thumbs-down, which this page no longer sends.
+type FeedbackSignal = 'thumbs_up'
 
 
 const DAILY_DIFFICULTY_LABELS: Record<string, string> = {
@@ -147,6 +151,11 @@ export default function DailySummaryPage() {
   // the user's first completed Daily Five. Null unless eligible + not yet seen.
   const [firstSessionRecap, setFirstSessionRecap] =
     useState<FirstSessionRecapView | null>(null)
+  // B-Report-2: recap rows the player removed by reporting them as inappropriate.
+  // View-state only this prompt — durable self-hide is B-Report-3.
+  const [hiddenQuestionIds, setHiddenQuestionIds] = useState<Set<string>>(
+    () => new Set(),
+  )
   // Client-only reset-time label; null during SSR to keep hydration stable.
   const resetTime = useSyncExternalStore(
     subscribeNoop,
@@ -294,9 +303,21 @@ export default function DailySummaryPage() {
       <section className="mt-6">
         <h2 style={titleStyle}>Round Recap</h2>
         <div className="mt-3 space-y-3">
-          {summary.questions.map((question) => (
-            <QuestionCard key={question.questionId} question={question} />
-          ))}
+          {summary.questions
+            .filter((question) => !hiddenQuestionIds.has(question.questionId))
+            .map((question) => (
+              <QuestionCard
+                key={question.questionId}
+                question={question}
+                onHide={() =>
+                  setHiddenQuestionIds((prev) => {
+                    const next = new Set(prev)
+                    next.add(question.questionId)
+                    return next
+                  })
+                }
+              />
+            ))}
         </div>
       </section>
 
@@ -401,13 +422,15 @@ function InterpretiveLine({ text }: { text: string }) {
   )
 }
 
-function QuestionCard({ question }: { question: QuestionRecap }) {
+function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: () => void }) {
   const [isOverflowOpen, setIsOverflowOpen] = useState(false)
   const [rating, setRating] = useState<FeedbackSignal | null>(null)
   const [isFeedbackPending, startFeedbackTransition] = useTransition()
   const [exclusionState, setExclusionState] = useState<ExclusionState>({
     kind: 'idle',
   })
+  // B-Report-2: which "why" sheet is open, if any. Null = no sheet.
+  const [reportCategory, setReportCategory] = useState<'incorrect' | 'inappropriate' | null>(null)
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateFeedback = useCallback(
@@ -469,11 +492,6 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
       // Fire-and-forget; the affordance returns on reload if persistence failed.
     }
   }, [question.domain])
-
-  const handleReportContent = useCallback(() => {
-    updateFeedback('thumbs_down')
-    setIsOverflowOpen(false)
-  }, [updateFeedback])
 
   useEffect(() => {
     return () => {
@@ -663,9 +681,27 @@ function QuestionCard({ question }: { question: QuestionRecap }) {
           onClose={() => setIsOverflowOpen(false)}
           onHideQuestionsLikeThis={handleExcludeDomain}
           onMuteCategory={handleExcludeDomain}
-          onReportContent={handleReportContent}
-          reportSelected={rating === 'thumbs_down'}
-          reportDisabled={isFeedbackPending}
+          canReport={question.reportTarget !== null}
+          onReportIncorrect={() => {
+            setIsOverflowOpen(false)
+            setReportCategory('incorrect')
+          }}
+          onReportInappropriate={() => {
+            setIsOverflowOpen(false)
+            setReportCategory('inappropriate')
+          }}
+        />
+      ) : null}
+
+      {reportCategory && question.reportTarget ? (
+        <ReportReasonSheet
+          category={reportCategory}
+          target={question.reportTarget as ReportReasonTarget}
+          surface="round_recap"
+          onClose={() => setReportCategory(null)}
+          onSubmitted={(category) => {
+            if (category === 'inappropriate') onHide()
+          }}
         />
       ) : null}
     </article>
@@ -677,17 +713,17 @@ function QuestionCardOverflowMenu({
   onClose,
   onHideQuestionsLikeThis,
   onMuteCategory,
-  onReportContent,
-  reportSelected,
-  reportDisabled,
+  canReport,
+  onReportIncorrect,
+  onReportInappropriate,
 }: {
   question: QuestionRecap
   onClose: () => void
   onHideQuestionsLikeThis: () => void
   onMuteCategory: () => void
-  onReportContent: () => void
-  reportSelected: boolean
-  reportDisabled: boolean
+  canReport: boolean
+  onReportIncorrect: () => void
+  onReportInappropriate: () => void
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:top-14 sm:right-3 sm:block sm:bg-transparent sm:p-0">
@@ -739,19 +775,24 @@ function QuestionCardOverflowMenu({
             className="hover:bg-muted flex min-h-11 w-full justify-start rounded-xl border-0 px-3 text-left text-sm"
           />
         ) : null}
-        <button
-          type="button"
-          onClick={onReportContent}
-          disabled={reportDisabled}
-          aria-pressed={reportSelected}
-          className={cn(
-            'text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm transition disabled:opacity-60',
-            reportSelected ? 'bg-muted text-foreground' : ''
-          )}
-        >
-          <Flag className="size-4" />
-          Report content
-        </button>
+        {canReport ? (
+          <>
+            <button
+              type="button"
+              onClick={onReportIncorrect}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+            >
+              This is incorrect
+            </button>
+            <button
+              type="button"
+              onClick={onReportInappropriate}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+            >
+              This is inappropriate
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   )

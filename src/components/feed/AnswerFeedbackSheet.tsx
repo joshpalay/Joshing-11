@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Check, Sparkles, X } from 'lucide-react'
+import { Check, MoreHorizontal, Sparkles, X } from 'lucide-react'
 
 import { FeedActionLink } from './FeedActionLink'
 import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
 import { INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types'
+import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
 // card (raw --tri-amber #d9a82e is too light for small text). Used by the
@@ -32,6 +33,10 @@ type AnswerFeedbackSheetProps = {
   // disputed canonical answer). Resolves with the verdict to surface inline.
   // Omit (or pass null) to hide the recheck affordance.
   onRecheck?: (() => Promise<{ accepted: boolean; message: string }>) | null
+  // B-Report-2: opt-in content-reporting ⋯ menu. This sheet is shared across several
+  // post-result surfaces; only the milestone inline flow enables it (the prompt scopes
+  // the entry point to that surface). Omit on the feed/direct-answer result modals.
+  report?: { target: ReportReasonTarget; surface: 'round_recap' | 'lately_result' } | null
   onClose: () => void
 }
 
@@ -54,6 +59,7 @@ export function AnswerFeedbackSheet({
   questionId,
   feedItemId,
   onRecheck = null,
+  report = null,
   onClose,
 }: AnswerFeedbackSheetProps) {
   const visibleCategory = visibleFeedCategory(category)
@@ -64,6 +70,10 @@ export function AnswerFeedbackSheet({
   const [recheckState, setRecheckState] = useState<RecheckState>('idle')
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
   const [recheckAccepted, setRecheckAccepted] = useState(false)
+  // B-Report-2: the ⋯ menu (none existed on this surface before) and the "why" sheet.
+  // A Lately milestone question is always a curated Question, so the target is questionId.
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [reportCategory, setReportCategory] = useState<'incorrect' | 'inappropriate' | null>(null)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -167,14 +177,27 @@ export function AnswerFeedbackSheet({
           ) : (
             <div />
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {report ? (
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen(true)}
+                aria-label="More actions"
+                aria-expanded={isMenuOpen}
+                className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <MoreHorizontal className="size-5" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-2">
@@ -363,6 +386,67 @@ export function AnswerFeedbackSheet({
           </button>
         </div>
       </div>
+
+      {report && isMenuOpen ? (
+        <div
+          className="fixed inset-0 z-[58] flex items-end justify-center px-3 pt-16 pb-3 sm:items-start sm:pt-24"
+          style={{ background: 'rgba(0,0,0,0.2)' }}
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close menu"
+            onClick={() => setIsMenuOpen(false)}
+          />
+          <div className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl">
+            <div className="flex items-center justify-between px-3 py-2 sm:hidden">
+              <p className="text-foreground text-sm font-medium">More actions</p>
+              <button
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setIsMenuOpen(false)}
+                className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(false)
+                setReportCategory('incorrect')
+              }}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+            >
+              This is incorrect
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(false)
+                setReportCategory('inappropriate')
+              }}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+            >
+              This is inappropriate
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {report && reportCategory ? (
+        <ReportReasonSheet
+          category={reportCategory}
+          target={report.target}
+          surface={report.surface}
+          onClose={() => setReportCategory(null)}
+          onSubmitted={(category) => {
+            // Inappropriate → the result card disappears from view (close the modal).
+            // Durable self-hide / propagation suppression is B-Report-3.
+            if (category === 'inappropriate') onClose()
+          }}
+        />
+      ) : null}
     </div>
   )
 }
