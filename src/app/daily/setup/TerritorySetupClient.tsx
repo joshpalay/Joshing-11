@@ -232,6 +232,14 @@ export function TerritorySetupClient({
     [moveDomain],
   );
 
+  const handleRemoveRequest = useCallback((domain: string) => {
+    // Tapping the throw-out target opens the same confirm dialog as dragging
+    // onto it, so deletion always goes through one explicit confirmation.
+    setPendingRemoval(domain);
+    setActiveTerritory(null);
+    setHoveredRemoveTarget(false);
+  }, []);
+
   const addDomainRow = useCallback((row: TerritoryDomain) => {
     const key = row.domain.toLocaleLowerCase('en-US');
     setDomains((existing) =>
@@ -582,6 +590,7 @@ export function TerritorySetupClient({
               onDragMove={handleDragMove}
               onDragEnd={handleDragEnd}
               onQuickMove={handleQuickMove}
+              onRemove={handleRemoveRequest}
               setQuickTargetRef={setQuickTargetRef}
               setRemoveTargetRef={setRemoveTargetRef}
               setRef={(element) => {
@@ -732,6 +741,7 @@ function TerritoryZone({
   onDragMove,
   onDragEnd,
   onQuickMove,
+  onRemove,
   setQuickTargetRef,
   setRemoveTargetRef,
   setRef,
@@ -749,6 +759,7 @@ function TerritoryZone({
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
   onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
+  onRemove: (domain: string) => void;
   setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
   setRemoveTargetRef: (element: HTMLButtonElement | null) => void;
   setRef: (element: HTMLElement | null) => void;
@@ -792,6 +803,7 @@ function TerritoryZone({
                     onDragMove={onDragMove}
                     onDragEnd={onDragEnd}
                     onQuickMove={onQuickMove}
+                    onRemove={onRemove}
                     setQuickTargetRef={setQuickTargetRef}
                     setRemoveTargetRef={setRemoveTargetRef}
                     settling={settling}
@@ -822,6 +834,7 @@ function TerritoryCircle({
   onDragMove,
   onDragEnd,
   onQuickMove,
+  onRemove,
   setQuickTargetRef,
   setRemoveTargetRef,
   settling,
@@ -837,6 +850,7 @@ function TerritoryCircle({
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
   onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
+  onRemove: (domain: string) => void;
   setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
   setRemoveTargetRef: (element: HTMLButtonElement | null) => void;
   settling: boolean;
@@ -896,34 +910,15 @@ function TerritoryCircle({
         {domain.domain}
       </span>
       {quickTargetsVisible ? (
-        <button
-          ref={setRemoveTargetRef}
-          type="button"
-          aria-label={`Throw out ${domain.domain}`}
-          title="Throw out"
-          // Sits beside the bubble (vertically centred on it), not under the
-          // quick-move row, so deleting reads as a distinct action.
-          className={`absolute right-0 grid size-9 -translate-y-1/2 place-items-center rounded-full border shadow-sm transition ${
-            hoveredRemoveTarget
-              ? 'scale-110 border-[var(--destructive)] bg-[var(--destructive)] text-white shadow-[0_10px_24px_rgba(180,35,24,0.32)]'
-              : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--text-muted-warm)]'
-          }`}
-          style={{ top: size / 2 }}
-          onPointerDown={(event) => event.stopPropagation()}
-          onPointerMove={(event) => event.stopPropagation()}
-          onPointerUp={(event) => event.stopPropagation()}
-          onPointerCancel={(event) => event.stopPropagation()}
-        >
-          <Trash2 className="size-4" aria-hidden="true" />
-        </button>
-      ) : null}
-      {quickTargetsVisible ? (
         <QuickMoveTargets
           domain={domain.domain}
           currentFrequency={currentFrequency}
           hoveredTarget={hoveredQuickTarget}
+          hoveredRemoveTarget={hoveredRemoveTarget}
           onQuickMove={onQuickMove}
+          onRemove={onRemove}
           setQuickTargetRef={setQuickTargetRef}
+          setRemoveTargetRef={setRemoveTargetRef}
         />
       ) : null}
     </div>
@@ -934,20 +929,26 @@ function QuickMoveTargets({
   domain,
   currentFrequency,
   hoveredTarget,
+  hoveredRemoveTarget,
   onQuickMove,
+  onRemove,
   setQuickTargetRef,
+  setRemoveTargetRef,
 }: {
   domain: string;
   currentFrequency: TerritoryFrequency;
   hoveredTarget: TerritoryFrequency | null;
+  hoveredRemoveTarget: boolean;
   onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
+  onRemove: (domain: string) => void;
   setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
+  setRemoveTargetRef: (element: HTMLButtonElement | null) => void;
 }) {
   const targets = ZONES.filter((zone) => zone.value !== currentFrequency);
 
   return (
     <div
-      className="mt-1 flex w-[12rem] max-w-[calc(100vw-3rem)] justify-center gap-2"
+      className="mt-1 flex max-w-[calc(100vw-3rem)] flex-wrap justify-center gap-2"
       onPointerDown={(event) => event.stopPropagation()}
       onPointerMove={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
@@ -969,6 +970,22 @@ function QuickMoveTargets({
           {target.title.replace('Asked ', '').replace('Once in a ', '')}
         </button>
       ))}
+      {/* Throw-out sits at the end of the quick-move row so deleting reads as
+          a sibling action of the frequency moves, kept clear of the bubble. */}
+      <button
+        ref={setRemoveTargetRef}
+        type="button"
+        aria-label={`Throw out ${domain}`}
+        title="Throw out"
+        className={`grid size-14 place-items-center rounded-full border shadow-sm transition ${
+          hoveredRemoveTarget
+            ? 'scale-110 border-[var(--destructive)] bg-[var(--destructive)] text-white shadow-[0_10px_24px_rgba(180,35,24,0.32)]'
+            : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--text-muted-warm)]'
+        }`}
+        onClick={() => onRemove(domain)}
+      >
+        <Trash2 className="size-5" aria-hidden="true" />
+      </button>
     </div>
   );
 }
