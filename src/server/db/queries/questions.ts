@@ -14,7 +14,7 @@ import { broadCategoryDisplayName } from '@/lib/question-categorization';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { embedAndResolveDuplicate } from '@/server/pool/dedup';
 import {
-  getOpenIncorrectReportsForAuthor,
+  getActiveIncorrectReportsForAuthor,
   getUpheldInappropriateForAuthor,
 } from '@/server/db/queries/content-reports';
 
@@ -303,7 +303,7 @@ async function attachAuthorReportState(
   if (ownIds.length === 0) return views;
 
   const [incorrectByQuestion, removed] = await Promise.all([
-    getOpenIncorrectReportsForAuthor(userId, ownIds),
+    getActiveIncorrectReportsForAuthor(userId, ownIds),
     getUpheldInappropriateForAuthor(userId, ownIds),
   ]);
   if (incorrectByQuestion.size === 0 && removed.size === 0) return views;

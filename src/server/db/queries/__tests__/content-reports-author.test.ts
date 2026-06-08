@@ -72,9 +72,9 @@ vi.mock('@/server/db', () => {
 });
 
 import {
-  getOpenIncorrectReportsForAuthor,
+  getActiveIncorrectReportsForAuthor,
   getUpheldInappropriateForAuthor,
-  resolveOpenIncorrectReportsForQuestion,
+  resolveActiveIncorrectReportsForQuestion,
 } from '@/server/db/queries/content-reports';
 
 type Op = { op?: string; parts?: Op[]; column?: unknown; value?: unknown; values?: unknown[] };
@@ -87,15 +87,15 @@ beforeEach(() => {
   returningRows = [];
 });
 
-describe('getOpenIncorrectReportsForAuthor', () => {
-  it('maps the most recent open incorrect report per question and never selects reporter identity', async () => {
+describe('getActiveIncorrectReportsForAuthor', () => {
+  it('maps the most recent active incorrect report per question and never selects reporter identity', async () => {
     selectRows = [
       { questionId: 'q1', note: 'newest', incorrectKind: 'answer_key', suggestedAnswer: 'Paris' },
       { questionId: 'q1', note: 'older', incorrectKind: 'premise', suggestedAnswer: null },
       { questionId: 'q2', note: 'n2', incorrectKind: null, suggestedAnswer: null },
     ];
 
-    const result = await getOpenIncorrectReportsForAuthor('author-1', ['q1', 'q2']);
+    const result = await getActiveIncorrectReportsForAuthor('author-1', ['q1', 'q2']);
 
     expect(result.get('q1')).toEqual({
       questionId: 'q1',
@@ -109,13 +109,13 @@ describe('getOpenIncorrectReportsForAuthor', () => {
     expect(Object.keys(capturedProjection ?? {})).not.toContain('reporterUserId');
   });
 
-  it('scopes to open incorrect reports on the author own non-house questions (house guard)', async () => {
-    await getOpenIncorrectReportsForAuthor('author-1', ['q1']);
+  it('scopes to active (open|upheld) incorrect reports on the author own non-house questions (house guard)', async () => {
+    await getActiveIncorrectReportsForAuthor('author-1', ['q1']);
 
     expect((capturedWhere as Op).parts).toEqual(
       expect.arrayContaining([
         { op: 'eq', column: 'cr.category', value: 'incorrect' },
-        { op: 'eq', column: 'cr.status', value: 'open' },
+        { op: 'inArray', column: 'cr.status', values: ['open', 'upheld'] },
         { op: 'eq', column: 'q.creatorId', value: 'author-1' },
         { op: 'ne', column: 'q.source', value: 'house_authored' },
       ]),
@@ -123,7 +123,7 @@ describe('getOpenIncorrectReportsForAuthor', () => {
   });
 
   it('short-circuits with no query for an empty id list', async () => {
-    const result = await getOpenIncorrectReportsForAuthor('author-1', []);
+    const result = await getActiveIncorrectReportsForAuthor('author-1', []);
     expect(result.size).toBe(0);
     expect(capturedWhere).toBeNull();
   });
@@ -147,11 +147,11 @@ describe('getUpheldInappropriateForAuthor', () => {
   });
 });
 
-describe('resolveOpenIncorrectReportsForQuestion', () => {
-  it('dismisses open incorrect reports with an author_edited marker and returns the count', async () => {
+describe('resolveActiveIncorrectReportsForQuestion', () => {
+  it('dismisses active (open|upheld) incorrect reports with an author_edited marker and returns the count', async () => {
     returningRows = [{ id: 'r1' }, { id: 'r2' }];
 
-    const count = await resolveOpenIncorrectReportsForQuestion('q1');
+    const count = await resolveActiveIncorrectReportsForQuestion('q1');
 
     expect(count).toBe(2);
     expect(capturedSet).toMatchObject({
@@ -165,7 +165,7 @@ describe('resolveOpenIncorrectReportsForQuestion', () => {
       expect.arrayContaining([
         { op: 'eq', column: 'cr.questionId', value: 'q1' },
         { op: 'eq', column: 'cr.category', value: 'incorrect' },
-        { op: 'eq', column: 'cr.status', value: 'open' },
+        { op: 'inArray', column: 'cr.status', values: ['open', 'upheld'] },
       ]),
     );
   });

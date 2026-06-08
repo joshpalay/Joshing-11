@@ -1,7 +1,7 @@
-import { and, desc, eq, gte, inArray, ne, notExists, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, ne, notExists, or, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
-import { contentReports, db, questions } from '@/server/db';
+import { contentReports, db, generatedQuestions, questions, users } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 
 // B-Report-2: write + read helpers for ContentReport. Mirrors the house style in
@@ -201,8 +201,10 @@ export type AuthorIncorrectReport = {
 };
 
 // Reporter identity is intentionally NOT selected here — the author must never see
-// who reported. Returns the most recent open incorrect report per question.
-export async function getOpenIncorrectReportsForAuthor(
+// who reported. Returns the most recent active (open|upheld) incorrect report per
+// question. Upheld is included so an admin upholding "this answer is wrong" leaves
+// the author's "needs attention" in place until they fix it (B-Report-5 §6.4).
+export async function getActiveIncorrectReportsForAuthor(
   authorUserId: string,
   questionIds: string[],
 ): Promise<Map<string, AuthorIncorrectReport>> {
@@ -222,7 +224,7 @@ export async function getOpenIncorrectReportsForAuthor(
       and(
         inArray(contentReports.questionId, questionIds),
         eq(contentReports.category, 'incorrect'),
-        eq(contentReports.status, 'open'),
+        inArray(contentReports.status, ['open', 'upheld']),
         eq(questions.creatorId, authorUserId),
         ne(questions.source, 'house_authored'),
       ),
@@ -271,10 +273,11 @@ export async function getUpheldInappropriateForAuthor(
 }
 
 // B-Report-4 / B-Report-3 bridge: an author fixing the answer key resolves their
-// open incorrect reports. status → 'dismissed' lifts B-Report-3 suppression (which
-// reads open|upheld); reviewDecision='author_edited' distinguishes this from a
-// moderator dismissal. Returns the number of reports resolved.
-export async function resolveOpenIncorrectReportsForQuestion(questionId: string): Promise<number> {
+// active incorrect reports (open OR upheld — an admin-upheld "wrong answer" is also
+// cleared by the fix). status → 'dismissed' lifts B-Report-3 suppression (which reads
+// open|upheld); reviewDecision='author_edited' distinguishes this from a moderator
+// dismissal. Returns the number of reports resolved.
+export async function resolveActiveIncorrectReportsForQuestion(questionId: string): Promise<number> {
   const updated = await db
     .update(contentReports)
     .set({
@@ -287,9 +290,157 @@ export async function resolveOpenIncorrectReportsForQuestion(questionId: string)
       and(
         eq(contentReports.questionId, questionId),
         eq(contentReports.category, 'incorrect'),
-        eq(contentReports.status, 'open'),
+        inArray(contentReports.status, ['open', 'upheld']),
       ),
     )
     .returning({ id: contentReports.id });
   return updated.length;
+}
+
+// ─── B-Report-5: admin review queue ─────────────────────────────────────────
+//
+// Admin-only (ADMIN_USER_IDS allowlist, enforced at the route/page). The review list
+// is the ONLY place reporter identity is exposed. Uphold/dismiss are the only two
+// actions. Uphold-inappropriate on an authored question is the ONLY place
+// visibility='blocked' is set; for a generated question the upheld report itself is
+// the terminal suppression (B-Report-3 reads open|upheld), so no column is written.
+
+export type AdminReviewReport = {
+  id: string;
+  category: ContentReportCategory;
+  incorrectKind: ContentReportIncorrectKind | null;
+  note: string;
+  suggestedAnswer: string | null;
+  surface: string | null;
+  createdAt: Date;
+  target: { table: 'question' | 'generated'; id: string };
+  questionText: string | null;
+  correctAnswer: string | null;
+  // Admin-only — never exposed on any author/player surface.
+  reporterUserId: string;
+  reporterName: string | null;
+};
+
+// Open reports for review: inappropriate (high-priority) first, then oldest-first.
+export async function getOpenReportsForReview(): Promise<AdminReviewReport[]> {
+  const rows = await db
+    .select({
+      id: contentReports.id,
+      category: contentReports.category,
+      incorrectKind: contentReports.incorrectKind,
+      note: contentReports.note,
+      suggestedAnswer: contentReports.suggestedAnswer,
+      surface: contentReports.surface,
+      createdAt: contentReports.createdAt,
+      questionId: contentReports.questionId,
+      generatedQuestionId: contentReports.generatedQuestionId,
+      questionText: questions.questionText,
+      questionAnswer: questions.answerText,
+      generatedText: generatedQuestions.questionText,
+      generatedAnswer: generatedQuestions.answer,
+      reporterUserId: contentReports.reporterUserId,
+      reporterName: users.displayName,
+    })
+    .from(contentReports)
+    .leftJoin(questions, eq(contentReports.questionId, questions.id))
+    .leftJoin(generatedQuestions, eq(contentReports.generatedQuestionId, generatedQuestions.id))
+    .leftJoin(users, eq(contentReports.reporterUserId, users.id))
+    .where(eq(contentReports.status, 'open'))
+    .orderBy(
+      desc(sql`(${contentReports.category} = 'inappropriate')`),
+      asc(contentReports.createdAt),
+    );
+
+  return rows.map((row) => {
+    const isGenerated = row.generatedQuestionId != null;
+    return {
+      id: row.id,
+      category: row.category,
+      incorrectKind: row.incorrectKind,
+      note: row.note,
+      suggestedAnswer: row.suggestedAnswer,
+      surface: row.surface,
+      createdAt: row.createdAt,
+      target: isGenerated
+        ? { table: 'generated' as const, id: row.generatedQuestionId! }
+        : { table: 'question' as const, id: row.questionId! },
+      questionText: isGenerated ? row.generatedText : row.questionText,
+      correctAnswer: isGenerated ? row.generatedAnswer : row.questionAnswer,
+      reporterUserId: row.reporterUserId,
+      reporterName: row.reporterName,
+    };
+  });
+}
+
+export type AdminActionResult =
+  | { ok: true; action: 'upheld' | 'dismissed'; category: ContentReportCategory; hardRemoved: boolean }
+  | { ok: false; reason: 'not_found' | 'already_resolved' };
+
+// Uphold: status='upheld'. For inappropriate, hard-remove — authored →
+// visibility='blocked' (the ONLY place set); generated → the upheld report is itself
+// terminal (no column write). Incorrect uphold marks it actioned and leaves the
+// author's "needs attention" for them to clear by editing the key (B-Report-4).
+export async function upholdReport(reportId: string, reviewReason?: string): Promise<AdminActionResult> {
+  const [report] = await db
+    .select({
+      category: contentReports.category,
+      questionId: contentReports.questionId,
+      generatedQuestionId: contentReports.generatedQuestionId,
+      status: contentReports.status,
+    })
+    .from(contentReports)
+    .where(eq(contentReports.id, reportId))
+    .limit(1);
+
+  if (!report) return { ok: false, reason: 'not_found' };
+  if (report.status !== 'open') return { ok: false, reason: 'already_resolved' };
+
+  await db
+    .update(contentReports)
+    .set({
+      status: 'upheld',
+      reviewDecision: 'admin_upheld',
+      reviewReason: reviewReason?.trim() || null,
+      reviewedAt: new Date(),
+    })
+    .where(and(eq(contentReports.id, reportId), eq(contentReports.status, 'open')));
+
+  let hardRemoved = false;
+  if (report.category === 'inappropriate' && report.questionId) {
+    // The ONLY visibility='blocked' write in the codebase (excluded by
+    // questionVisibilityPredicate + every bank/send/game read path).
+    await db.update(questions).set({ visibility: 'blocked' }).where(eq(questions.id, report.questionId));
+    hardRemoved = true;
+  } else if (report.category === 'inappropriate' && report.generatedQuestionId) {
+    // Generated has no terminal column; the upheld report is the terminal state
+    // (B-Report-3 suppression reads open|upheld). Nothing else to write.
+    hardRemoved = true;
+  }
+
+  return { ok: true, action: 'upheld', category: report.category, hardRemoved };
+}
+
+// Dismiss: status='dismissed'. Lifts B-Report-3 suppression automatically (predicate
+// is open|upheld); for inappropriate, the author never learns it happened.
+export async function dismissReport(reportId: string, reviewReason?: string): Promise<AdminActionResult> {
+  const [report] = await db
+    .select({ category: contentReports.category, status: contentReports.status })
+    .from(contentReports)
+    .where(eq(contentReports.id, reportId))
+    .limit(1);
+
+  if (!report) return { ok: false, reason: 'not_found' };
+  if (report.status !== 'open') return { ok: false, reason: 'already_resolved' };
+
+  await db
+    .update(contentReports)
+    .set({
+      status: 'dismissed',
+      reviewDecision: 'admin_dismissed',
+      reviewReason: reviewReason?.trim() || null,
+      reviewedAt: new Date(),
+    })
+    .where(and(eq(contentReports.id, reportId), eq(contentReports.status, 'open')));
+
+  return { ok: true, action: 'dismissed', category: report.category, hardRemoved: false };
 }

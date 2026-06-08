@@ -13,7 +13,7 @@ import {
   getQuestion,
   updateQuestion,
 } from '@/server/db/queries/questions';
-import { resolveOpenIncorrectReportsForQuestion } from '@/server/db/queries/content-reports';
+import { resolveActiveIncorrectReportsForQuestion } from '@/server/db/queries/content-reports';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -179,7 +179,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   // incorrect report on this question, which lifts B-Report-3 suppression. Scoped to
   // answer-key/alternatives edits — a pure text/explanation/category edit does not clear it.
   if (values.correctAnswer !== undefined || values.alternateAnswers !== undefined) {
-    await resolveOpenIncorrectReportsForQuestion(id);
+    await resolveActiveIncorrectReportsForQuestion(id);
   }
 
   return NextResponse.json({ ok: true, question: await getQuestion(id, session.userId) });

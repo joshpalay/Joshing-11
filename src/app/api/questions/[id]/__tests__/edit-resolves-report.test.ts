@@ -44,7 +44,7 @@ vi.mock('@/server/db/queries/questions', () => ({
   deleteQuestion: vi.fn(),
 }));
 vi.mock('@/server/db/queries/content-reports', () => ({
-  resolveOpenIncorrectReportsForQuestion: resolveMock,
+  resolveActiveIncorrectReportsForQuestion: resolveMock,
 }));
 vi.mock('@/lib/llm', () => ({ categorizeQuestion: categorizeMock }));
 vi.mock('@/server/questions/llm-difficulty', () => ({ assessQuestionDifficulty: assessDifficultyMock }));
