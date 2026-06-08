@@ -24,6 +24,8 @@ import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMoti
 import { SparkleDivider, SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
+import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
+import type { StreamItem } from '@/lib/activity-stream'
 import type { InsideJokeKind, QuestionSource } from '@/lib/questions-types'
 
 type FriendResult = {
@@ -430,9 +432,29 @@ type FeedListProps = {
    * authenticated home render; left off for the logged-out feed.
    */
   showContributeFooter?: boolean
+  /**
+   * The unified-home "What's Happening" surface. When set, the activity stream
+   * (Lately) is interleaved chronologically into the question feed, the surface
+   * tabs are hidden, and the feed filter is pinned to 'all' so directly-sent
+   * questions thread in. See `activityItems`.
+   */
+  unifiedHome?: boolean
+  /**
+   * The full activity/Lately stream to interleave when `unifiedHome` is set.
+   * Each StreamItem renders via <ActivityStreamItem>; a received_direct_question
+   * row is de-duped against its richer direct_sent feed card (see unifiedRows).
+   */
+  activityItems?: StreamItem[]
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
+
+// One row of the unified-home feed: either a paginated question card or an
+// interleaved activity (Lately) one-liner. Both carry `source_event_at` so the
+// existing recency grouping works over the merged list unchanged.
+type UnifiedRow =
+  | { kind: 'feed'; sortMs: number; source_event_at: string; item: FeedApiItem }
+  | { kind: 'activity'; sortMs: number; source_event_at: string; item: StreamItem }
 
 export default function FeedList(props: FeedListProps) {
   return (
@@ -658,17 +680,27 @@ function FeedListContent({
   infinite = false,
   initialPage = null,
   showContributeFooter = false,
+  unifiedHome = false,
+  activityItems = [],
 }: FeedListProps) {
   const searchParams = useSearchParams()
   const initialFilterParam =
     searchParams.get('filter') ?? searchParams.get('feed_filter') ?? 'from-friends'
   // D-1 Stage 5: the feed is two surfaces — Broadcasts ('from-friends', default)
   // and Sent ('sent-to-me'). Legacy ?filter=all links land on Broadcasts.
-  const initialFilter: FeedFilter =
-    initialFilterParam === 'sent-to-me' ? 'sent-to-me' : 'from-friends'
-  // initialPage is the server pre-fetch of the default Broadcasts surface, so it
-  // only seeds state when that's the active filter; Sent falls back to a client fetch.
-  const initialPageMatchesFilter = initialPage !== null && initialFilter === 'from-friends'
+  // unifiedHome overrides both: one merged surface pinned to 'all' so directly-
+  // sent questions thread in alongside the activity stream.
+  const initialFilter: FeedFilter = unifiedHome
+    ? 'all'
+    : initialFilterParam === 'sent-to-me'
+      ? 'sent-to-me'
+      : 'from-friends'
+  // initialPage is the server pre-fetch of the active surface, so it only seeds
+  // state when that's the active filter; other surfaces fall back to a client
+  // fetch. On unifiedHome the prefetch is the 'all' page, so it seeds directly.
+  const initialPageMatchesFilter =
+    initialPage !== null &&
+    (unifiedHome ? initialFilter === 'all' : initialFilter === 'from-friends')
   const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const [items, setItems] = useState<FeedApiItem[]>(
@@ -821,6 +853,41 @@ function FeedListContent({
     return () => observer.disconnect()
   }, [hasMore, infinite, loadFeed, loadingInitial, loadingMore, nextCursor])
 
+  // The unified-home render model: question cards + interleaved activity rows,
+  // newest-first. groupItemsByRecency assumes descending order, so we sort here.
+  // Activity is bounded (~30-day windows) and arrives once as a prop; the feed
+  // paginates underneath, so re-sorting the whole union on every `items` change
+  // settles activity into its correct chronological slots as older pages load.
+  const unifiedRows = useMemo<UnifiedRow[]>(() => {
+    const feedRows: UnifiedRow[] = items.map((item) => ({
+      kind: 'feed',
+      item,
+      source_event_at: item.source_event_at,
+      sortMs: Date.parse(item.source_event_at),
+    }))
+    if (!unifiedHome || activityItems.length === 0) return feedRows
+
+    // Dedupe: a received_direct_question activity one-liner duplicates the
+    // richer direct_sent feed card once that card has loaded — keep the card,
+    // drop the one-liner. The link is the feed item id (carried on the row's
+    // answer_direct action vs the feed item's own id).
+    const feedIds = new Set(items.map((i) => i.id))
+    const activityRows: UnifiedRow[] = []
+    for (const item of activityItems) {
+      if (item.action?.kind === 'answer_direct' && feedIds.has(item.action.feedItemId)) {
+        continue
+      }
+      const sortAt = item.sortAt instanceof Date ? item.sortAt : new Date(item.sortAt)
+      activityRows.push({
+        kind: 'activity',
+        item,
+        source_event_at: sortAt.toISOString(),
+        sortMs: sortAt.getTime(),
+      })
+    }
+    return [...feedRows, ...activityRows].sort((a, b) => b.sortMs - a.sortMs)
+  }, [items, activityItems, unifiedHome])
+
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
     if (error) return error
@@ -845,9 +912,13 @@ function FeedListContent({
     return 'Quiet today. Check back when your friends have played.'
   }, [error, feedFilter, feedMeta, loadingInitial])
 
-  // The invite CTA only makes sense on the friend-sourced Broadcasts surface.
+  // The invite CTA makes sense on the friend-sourced Broadcasts surface and on
+  // the unified-home feed (which includes the Broadcasts sources).
   const showInviteFriendCta =
-    !loadingInitial && !error && Boolean(feedMeta) && feedFilter === 'from-friends'
+    !loadingInitial &&
+    !error &&
+    Boolean(feedMeta) &&
+    (feedFilter === 'from-friends' || (unifiedHome && feedFilter === 'all'))
 
   // Show the surface tabs whenever EITHER surface has content — not just the
   // active one. Otherwise a recipient sitting on an empty Broadcasts tab never
@@ -1285,7 +1356,7 @@ function FeedListContent({
           empty (otherwise a directly-sent question would be hidden behind a tab
           the recipient can't see). Fully empty feeds still fall back to the
           empty state's own "Questions from friends" eyebrow. */}
-      {hasAnySurfaceContent ? (
+      {!unifiedHome && hasAnySurfaceContent ? (
         <FeedSurfaceTabs active={feedFilter} meta={feedMeta} onSelect={handleSelectTab} />
       ) : null}
 
@@ -1305,7 +1376,7 @@ function FeedListContent({
         </div>
       ) : null}
 
-      {items.length === 0 ? (
+      {unifiedRows.length === 0 ? (
         loadingInitial ? (
           <section className="flex min-h-48 flex-col items-center justify-center py-12 text-center">
             <p className="text-muted-foreground text-sm">{emptyCopy}</p>
@@ -1353,12 +1424,24 @@ function FeedListContent({
         )
       ) : (
         <section className="space-y-3 pb-8">
-          {groupItemsByRecency(items).map((group) => (
+          {groupItemsByRecency(unifiedRows).map((group) => (
             <Fragment key={group.key}>
               <h2 className="text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0">
                 {group.label}
               </h2>
-              {group.items.map((item) => {
+              {group.items.map((row) => {
+                // Interleaved activity (Lately) one-liner: self-contained,
+                // renders its own row (no swipe/overflow/answer-sheet chrome).
+                if (row.kind === 'activity') {
+                  return (
+                    <ActivityStreamItem
+                      key={`a-${row.item.id}`}
+                      item={row.item}
+                      timestamp={formatRelativeTime(row.item.sortAt)}
+                    />
+                  )
+                }
+                const item = row.item
                 const result = results[item.id]
                 const cardState =
                   cardStates[item.id] ??
