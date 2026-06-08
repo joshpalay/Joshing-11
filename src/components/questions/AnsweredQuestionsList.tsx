@@ -1,5 +1,7 @@
 'use client';
 
+import type { CSSProperties } from 'react';
+
 import { answerHeadingStyle } from '@/components/answer-heading';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
@@ -24,6 +26,11 @@ export type AnsweredQuestionItem = {
     | { generatedQuestionId: string; questionId?: undefined }
     | null;
 };
+
+// The answered-history list packs answers into a narrow table column, so it
+// renders the shared "answer as headline" treatment a notch smaller than the
+// full-bleed reveal surfaces while keeping the same serif/weight.
+const answeredAnswerStyle: CSSProperties = { ...answerHeadingStyle, fontSize: '1.3rem' };
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -58,7 +65,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
 
   return (
     <section>
-      <div className="hidden grid-cols-[2fr_2fr_1fr_1fr_auto] gap-3 border-b px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
+      <div className="hidden grid-cols-[2fr_2fr_1fr_1fr_5rem] gap-3 border-b px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
         <div>Question</div>
         <div>Your answer</div>
         <div>Asked by</div>
@@ -73,14 +80,14 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
           return (
             <li
               key={item.id}
-              className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[2fr_2fr_1fr_1fr_auto] sm:items-start sm:gap-3"
+              className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[2fr_2fr_1fr_1fr_5rem] sm:items-start sm:gap-3"
             >
               <div className="text-sm">
                 <p className="line-clamp-3 text-foreground">{item.questionText}</p>
               </div>
               <div className="text-sm">
                 {correct ? (
-                  <p style={{ ...answerHeadingStyle, color: 'var(--game-correct)' }}>
+                  <p style={{ ...answeredAnswerStyle, color: 'var(--game-correct)' }}>
                     {answer.text}
                   </p>
                 ) : (
@@ -95,7 +102,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
                       {answer.text}
                     </span>
                     {item.correctAnswer ? (
-                      <p style={{ ...answerHeadingStyle, color: 'var(--brand-ink)' }}>
+                      <p style={{ ...answeredAnswerStyle, color: 'var(--brand-ink)' }}>
                         {item.correctAnswer}
                       </p>
                     ) : null}
