@@ -187,9 +187,124 @@ function PendingInviteCard({
   );
 }
 
+function requestTiming(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Recently';
+  return formatRelativeTime(value);
+}
+
+function IncomingRequestCard({
+  request,
+  pendingRequestId,
+  onApprove,
+  onIgnore,
+}: {
+  request: IncomingRequest;
+  pendingRequestId: string | null;
+  onApprove: (request: IncomingRequest) => void;
+  onIgnore: (request: IncomingRequest) => void;
+}) {
+  const busy = pendingRequestId === request.id;
+
+  return (
+    <article className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-foreground font-medium">{request.requesterName}</h3>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Wants to follow you · {requestTiming(request.createdAt)}
+          </p>
+        </div>
+      </div>
+
+      {request.personalNote ? (
+        <p className="text-muted-foreground mt-3 text-sm leading-6">“{request.personalNote}”</p>
+      ) : null}
+
+      {request.suggestedInterests.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {request.suggestedInterests.map((interest) => (
+            <span
+              key={interest}
+              className="border-primary/10 bg-primary/5 text-foreground rounded-full border px-3 py-1 text-sm"
+            >
+              {interest}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          type="button"
+          className="btn-primary flex min-h-11 flex-1 items-center justify-center rounded-full"
+          onClick={() => onApprove(request)}
+          disabled={busy}
+        >
+          {busy ? 'Working…' : 'Approve'}
+        </button>
+        <button
+          type="button"
+          className="text-muted-foreground min-h-11 px-4 text-sm"
+          onClick={() => onIgnore(request)}
+          disabled={busy}
+        >
+          Ignore
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function OutboundRequestCard({
+  request,
+  pendingRequestId,
+  onCancel,
+}: {
+  request: OutboundRequest;
+  pendingRequestId: string | null;
+  onCancel: (request: OutboundRequest) => void;
+}) {
+  const busy = pendingRequestId === request.id;
+
+  return (
+    <article className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-foreground font-medium">{request.recipientName}</h3>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Request sent · {requestTiming(request.createdAt)}
+          </p>
+        </div>
+        <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-medium">
+          Waiting
+        </span>
+      </div>
+
+      {request.personalNote ? (
+        <p className="text-muted-foreground mt-3 text-sm leading-6">“{request.personalNote}”</p>
+      ) : null}
+
+      <div className="mt-4 flex justify-center">
+        <button
+          type="button"
+          className="text-muted-foreground text-sm"
+          onClick={() => onCancel(request)}
+          disabled={busy}
+        >
+          {busy ? 'Cancelling…' : 'Cancel request'}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 export default function FriendsList() {
   const [following, setFollowing] = useState<Person[]>([]);
   const [followers, setFollowers] = useState<Person[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([]);
+  const [outboundRequests, setOutboundRequests] = useState<OutboundRequest[]>([]);
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [invites, setInvites] = useState<OutgoingInvite[]>([]);
   const [friendsLoading, setFriendsLoading] = useState(true);
   const [invitesLoading, setInvitesLoading] = useState(true);
@@ -218,12 +333,40 @@ export default function FriendsList() {
 
       setFollowing(body.following);
       setFollowers(body.followers);
+      setIncomingRequests(body.incomingRequests);
+      setOutboundRequests(body.outboundRequests);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load friends.');
     } finally {
       setFriendsLoading(false);
     }
   }, []);
+
+  const actOnRequest = useCallback(
+    async (friendshipId: string, action: 'accept' | 'ignore' | 'cancel', failureMessage: string) => {
+      setPendingRequestId(friendshipId);
+      setError(null);
+
+      try {
+        const response = await fetch(`/api/friend-requests/${friendshipId}/${action}`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+
+        if (!response.ok) {
+          throw new Error(body?.message ?? failureMessage);
+        }
+
+        await loadFriends();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : failureMessage);
+      } finally {
+        setPendingRequestId(null);
+      }
+    },
+    [loadFriends],
+  );
 
   const loadInvites = useCallback(async () => {
     setError(null);
@@ -322,6 +465,18 @@ export default function FriendsList() {
     }
   }
 
+  function approveRequest(request: IncomingRequest) {
+    void actOnRequest(request.id, 'accept', 'Could not approve this request.');
+  }
+
+  function ignoreRequest(request: IncomingRequest) {
+    void actOnRequest(request.id, 'ignore', 'Could not ignore this request.');
+  }
+
+  function cancelRequest(request: OutboundRequest) {
+    void actOnRequest(request.id, 'cancel', 'Could not cancel this request.');
+  }
+
   const loading = friendsLoading || invitesLoading;
 
   return (
@@ -330,7 +485,29 @@ export default function FriendsList() {
 
       {loading ? <p className="text-muted-foreground text-sm">Loading friends…</p> : null}
 
-      {!loading && pendingInvites.length > 0 ? (
+      {!loading && incomingRequests.length > 0 ? (
+        <section aria-labelledby="follow-requests" className="space-y-3">
+          <h2
+            id="follow-requests"
+            className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
+          >
+            Follow Requests
+          </h2>
+          <div className="space-y-3">
+            {incomingRequests.map((request) => (
+              <IncomingRequestCard
+                key={request.id}
+                request={request}
+                pendingRequestId={pendingRequestId}
+                onApprove={approveRequest}
+                onIgnore={ignoreRequest}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {!loading && (pendingInvites.length > 0 || outboundRequests.length > 0) ? (
         <section aria-labelledby="waiting-for-response" className="space-y-3">
           <h2
             id="waiting-for-response"
@@ -347,6 +524,14 @@ export default function FriendsList() {
                 cancellingId={cancellingId}
                 onCopy={copyInvite}
                 onCancel={cancelInvite}
+              />
+            ))}
+            {outboundRequests.map((request) => (
+              <OutboundRequestCard
+                key={request.id}
+                request={request}
+                pendingRequestId={pendingRequestId}
+                onCancel={cancelRequest}
               />
             ))}
           </div>
