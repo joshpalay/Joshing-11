@@ -41,16 +41,16 @@ type ActiveTerritory = {
 } | null;
 
 const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> = [
-  { value: 'often', title: 'Asked Often', copy: 'These show up most in your rounds.' },
-  { value: 'sometimes', title: 'Asked Sometimes', copy: 'These stay in rotation, but less often.' },
+  { value: 'often', title: 'Often', copy: 'These show up most in your rounds.' },
+  { value: 'sometimes', title: 'Sometimes', copy: 'These stay in rotation, but less often.' },
   {
     value: 'blue_moon',
-    title: 'Once in a Blue Moon',
+    title: 'Blue Moon',
     copy: 'Still on your map, but only surface every so often.',
   },
   {
     value: 'resting',
-    title: 'Resting',
+    title: 'Never',
     copy: 'These are part of your map, but won’t be asked for now.',
   },
 ];
@@ -252,9 +252,9 @@ export function TerritorySetupClient({
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
-        const error = new Error(
-          body?.message ?? 'Could not add that topic.',
-        ) as Error & { code?: 'limit_reached' | 'too_broad' };
+        const error = new Error(body?.message ?? 'Could not add that topic.') as Error & {
+          code?: 'limit_reached' | 'too_broad';
+        };
         if (body?.error === 'interest_limit_reached') error.code = 'limit_reached';
         else if (body?.error === 'too_broad') error.code = 'too_broad';
         throw error;
