@@ -1,38 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { X } from 'lucide-react';
 
 import { GameplayChatThread, type ChatMessage } from '@/components/play/GameplayChat';
-
-async function fetchJoshingGameBreadcrumb(
-  gameId: string,
-  questionId: string,
-  messageId: string,
-  setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
-): Promise<void> {
-  try {
-    const response = await fetch('/api/breadcrumb', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ source: 'joshing_game', gameId, questionId }),
-    });
-    if (!response.ok) return;
-    const body = await response.json().catch(() => null) as { breadcrumb?: string | null } | null;
-    const breadcrumb = body?.breadcrumb ?? null;
-    if (!breadcrumb) return;
-    setMessages((existing) => existing.map((message) =>
-      message.id === messageId && message.kind === 'result'
-        ? { ...message, breadcrumb }
-        : message,
-    ));
-  } catch {
-    // Breadcrumb is purely additive context; failure is silently ignored.
-  }
-}
 import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy';
 import type { InsideJokeKind } from '@/lib/questions-types';
 import type { JoshingGameView, QuestionRow } from '@/server/db/queries/joshing-game';
@@ -228,8 +201,6 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
             : null,
         },
       ]);
-
-      void fetchJoshingGameBreadcrumb(game.game.id, currentQuestion.questionId, resultMessageId, setMessages);
 
       nextQuestionTimerRef.current = window.setTimeout(() => {
         setPausingAfterAnswer(false);

@@ -591,57 +591,23 @@ function UserRow({ text }: { text: string }) {
   );
 }
 
-function BreadcrumbLine({
-  text,
-  creatorName,
-  creatorIsHouse = false,
-}: {
-  text: string;
-  creatorName: string | null;
-  creatorIsHouse?: boolean;
-}) {
-  const author = creatorName?.trim() ?? null;
-  // House is non-relational like the LLM origin: no "From {firstName}." line.
-  const isBot = creatorIsHouse || isLlmAttribution(author);
-  const showAuthor = author && !isBot;
-  return (
-    <div
-      style={{
-        marginTop: '9px',
-        borderLeft: '2px solid color-mix(in srgb, var(--text) 20%, transparent)',
-        paddingLeft: '8px',
-      }}
-    >
-      {showAuthor ? (
-        <p
-          style={{
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-            fontSize: '0.7rem',
-            fontStyle: 'italic',
-            color: 'var(--text-muted)',
-          }}
-        >
-          From {firstNameFrom(author!)}.
-        </p>
-      ) : null}
-      <p
-        style={{
-          marginTop: showAuthor ? '2px' : '0',
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.782rem',
-          fontStyle: 'italic',
-          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          opacity: 0.78,
-          lineHeight: 1.46,
-        }}
-      >
-        &ldquo;{text}&rdquo;
-      </p>
-    </div>
-  );
+// The reveal carries one short explanatory line. It must read as a single,
+// consistent sentence (two at the most) — stored explainers can run several
+// sentences or paragraphs, so clamp to the first two and never let the card
+// swap in longer content after the fact.
+function clampToSentences(text: string, max = 2): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  // Split on sentence terminators that are followed by whitespace, keeping the
+  // terminator with its sentence. Abbreviations may over-split, but the result
+  // is still a tidy one-to-two-sentence blurb, which is the goal.
+  const sentences = trimmed.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g);
+  if (!sentences || sentences.length <= max) return trimmed;
+  return sentences.slice(0, max).join(' ').trim();
 }
 
 function ExplanationLine({ text }: { text: string }) {
+  const clamped = clampToSentences(text);
   return (
     <div
       style={{
@@ -659,7 +625,7 @@ function ExplanationLine({ text }: { text: string }) {
           lineHeight: 1.51,
         }}
       >
-        {text}
+        {clamped}
       </p>
     </div>
   );
@@ -987,7 +953,6 @@ function ResultRow({
   consolation,
   insideJoke,
   insideJokeKind,
-  breadcrumb,
   authorNote,
   explanation,
   copyVariant,
@@ -1272,15 +1237,7 @@ function ResultRow({
             ) : null}
           </>
         )}
-        {breadcrumb ? (
-          <BreadcrumbLine
-            text={breadcrumb}
-            creatorName={creatorName}
-            creatorIsHouse={creatorIsHouse}
-          />
-        ) : explanation ? (
-          <ExplanationLine text={explanation} />
-        ) : null}
+        {explanation ? <ExplanationLine text={explanation} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p
             style={{
