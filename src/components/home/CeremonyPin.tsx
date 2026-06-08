@@ -63,7 +63,7 @@ export function CeremonyPin({ status }: { status: CeremonyPinStatus | null }) {
       : `Weekly Summary in ${daysUntil} days`
 
   return (
-    <div className="-my-2 flex items-center justify-center gap-2 text-xs font-medium tracking-[0.08em] text-[#D9A82E] uppercase">
+    <div className="-my-2 flex items-center justify-center gap-2 text-xs font-medium tracking-[0.08em] text-[var(--tri-amber)] uppercase">
       <span aria-hidden>✦</span>
       <span>{label}</span>
     </div>
