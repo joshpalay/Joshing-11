@@ -165,9 +165,10 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   }
 
   // Opened milestone clusters read as a distinct, quiet "opened" state: a touch
-  // more vertical room, a faint inset (slightly lifted paper + a gentle inset of
-  // the side padding) and top/bottom hairlines — never a heavy card shadow or
-  // loud fill, so the item still sits inside the feed.
+  // more vertical room, a slightly lifted paper fill, and top/bottom hairlines —
+  // never a heavy card shadow or loud fill, so the item still sits inside the
+  // feed. Horizontal padding stays constant with the collapsed state so the icon
+  // and header text don't shift sideways when the card opens.
   const opened = expandable && open;
 
   return (
@@ -178,7 +179,7 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
           ? {
               borderTop: `1px solid ${RULE}`,
               borderBottom: `1px solid ${RULE}`,
-              padding: '18px 10px',
+              padding: '18px 2px',
               background: PAPER,
             }
           : {
