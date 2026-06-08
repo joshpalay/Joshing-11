@@ -362,7 +362,9 @@ export default function DailyPage() {
           questionText: slot.question_text,
           result: slot.answer_state === 'correct' ? 'correct' : gaveUp ? 'gave_up' : 'wrong',
           submitted: slot.submitted_answer ?? '',
-          correctAnswer: slot.answer_state === 'correct' ? null : slot.reveal_canonical_answer ?? null,
+          // Show the canonical answer on every reveal — including correct ones
+          // — so it appears as the headline inside the result card.
+          correctAnswer: slot.reveal_canonical_answer ?? null,
           consolation: slot.reveal_quip ?? null,
           insideJoke: slot.reveal_inside_joke ?? null,
           insideJokeKind: slot.reveal_inside_joke_kind ?? null,

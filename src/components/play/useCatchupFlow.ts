@@ -146,7 +146,7 @@ export function buildCatchupResultMessage(params: {
     questionText: item.questionText,
     result: isCorrect ? 'correct' : 'wrong',
     submitted: submittedAnswer,
-    correctAnswer: isCorrect ? null : data.correctAnswer ?? data.answer ?? item.correctAnswer,
+    correctAnswer: data.correctAnswer ?? data.answer ?? item.correctAnswer,
     consolation: data.consolation ?? null,
     breadcrumb: null,
     explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
