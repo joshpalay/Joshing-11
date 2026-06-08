@@ -81,7 +81,7 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
     expect(message.insideJokeKind).toBe('relational');
   });
 
-  it('renders a human author\'s commentary and the relational aside, identical to the live path', () => {
+  it('shows only the lighter relational aside in the live thread and defers the creator note to review when both exist', () => {
     const rendered = html([
       buildCatchupResultMessage({
         id: 'r-1',
@@ -97,16 +97,17 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
       }),
     ]);
 
-    // Commentary reaches the screen with the relational "Why {name} asked" label.
-    expect(rendered).toContain('I lost a bet over this in 2019.');
-    expect(rendered).toContain('Why Dana asked');
-    // Aside reaches the screen with the relational (human-authored) label.
+    // The "Between us!" wink is preferred in the live thread (D-5): one reflection.
     expect(rendered).toContain('You still owe me a coffee.');
     expect(rendered).toContain(INSIDE_JOKE_LABELS.relational);
     expect(rendered).not.toContain(INSIDE_JOKE_LABELS.editorial);
+    // The fuller creator note is deferred to the End of Session Review, so it
+    // never appears (or repeats) alongside the aside in the live thread.
+    expect(rendered).not.toContain('I lost a bet over this in 2019.');
+    expect(rendered).not.toContain('Why Dana asked');
   });
 
-  it('renders the editorial label + editor\'s note for a house-authored question (no relational copy)', () => {
+  it('prefers the editorial aside in the live thread and defers the editor\'s note to review when both exist', () => {
     const rendered = html([
       buildCatchupResultMessage({
         id: 'r-1',
@@ -122,12 +123,31 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
       }),
     ]);
 
-    expect(rendered).toContain('A favourite of the editorial desk.');
+    // The editorial wink shows; the longer editor's note is deferred to review.
     expect(rendered).toContain('One for the archive.');
     expect(rendered).toContain(INSIDE_JOKE_LABELS.editorial);
+    expect(rendered).not.toContain('A favourite of the editorial desk.');
     // House commentary is editorial, never relational — no "Why {name} asked".
     expect(rendered).not.toContain('Why Joshing asked');
-    expect(rendered).toContain('Editor');
+    // The editor's-note card is deferred to review, so its label is absent too.
+    expect(rendered).not.toContain('Editor');
+  });
+
+  it('still surfaces the creator note in the live thread when there is no aside to prefer', () => {
+    const rendered = html([
+      buildCatchupResultMessage({
+        id: 'r-1',
+        item: catchupItem({ authorName: 'Dana', authorIsHouse: false }),
+        data: answerResponse({ creatorNote: 'I lost a bet over this in 2019.', insideJoke: null, insideJokeKind: null }),
+        isCorrect: true,
+        submittedAnswer: 'Bach',
+        pointsAwarded: 4,
+      }),
+    ]);
+
+    // With no lighter wink available, the single reflection falls back to the note.
+    expect(rendered).toContain('I lost a bet over this in 2019.');
+    expect(rendered).toContain('Why Dana asked');
   });
 
   it('renders no aside when the server gated it out (selectInsideJokeForViewer returned null)', () => {

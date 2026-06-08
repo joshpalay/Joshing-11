@@ -90,8 +90,6 @@ export type ChatMessage =
       copyVariant: number;
       /** Creator display name — used in wrong-answer copy variant 2 */
       creatorName: string | null;
-      /** B12 — short line under correct reveal; fades after 2.5s */
-      relationalFeedbackLine?: string | null;
       /** Domain exclusion — canonical subcategory for "remove from rotation" affordance */
       canonicalSubcategory?: string | null;
       /** B-1 — domain newly opened in the KB by this correct answer; surfaces the "Added [Domain] — remove?" undo. */
@@ -124,12 +122,13 @@ export type ChatMessage =
       onDecline: () => void;
     };
 
-const CORRECT_COPY: Array<{ headline: string }> = [
-  { headline: 'Nice pull.' },
-  { headline: 'Right on.' },
-  { headline: 'Locked in.' },
-  { headline: 'Exactly.' },
-];
+// Shared width for every left-aligned card in the play thread so the column
+// reads as one coherent conversation — question, bonus, result, reflection, and
+// session-close cards all share a left + right edge. Sourced from a single CSS
+// token so no card type defines its own one-off width. The only intentional
+// exceptions are centered system lines, the right-aligned answer bubble, and
+// global/header chrome.
+const THREAD_CARD_MAX_WIDTH = 'var(--play-thread-card-width)';
 
 function wrongHeadline(variant: number): string {
   switch (variant % 3) {
@@ -347,7 +346,7 @@ function QuestionRow({
       <div
         style={{
           alignSelf: 'flex-start',
-          maxWidth: '81%',
+          maxWidth: THREAD_CARD_MAX_WIDTH,
           width: '100%',
         }}
       >
@@ -586,28 +585,6 @@ function ExplanationLine({ text }: { text: string }) {
   );
 }
 
-function RelationalFeedbackFade({ text }: { text: string }) {
-  const [faded, setFaded] = useState(false);
-  useEffect(() => {
-    const t = window.setTimeout(() => setFaded(true), 2500);
-    return () => window.clearTimeout(t);
-  }, []);
-  return (
-    <p
-      style={{
-        marginTop: '8px',
-        fontSize: '0.78rem',
-        color: 'var(--text-muted)',
-        lineHeight: 1.35,
-        opacity: faded ? 0 : 1,
-        transition: 'opacity 0.45s ease',
-      }}
-    >
-      {text}
-    </p>
-  );
-}
-
 function reactionEmoji(value: string): string {
   switch (value) {
     case ':exploding_head:': return '🤯';
@@ -820,8 +797,10 @@ function AuthorNoteCard({ text, creatorName, creatorIsHouse = false }: { text: s
         style={{
           marginTop: '4px',
           fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.92rem',
-          lineHeight: 1.45,
+          // Reflection/creator-note body bumped ~14% for readability (D-5);
+          // the eyebrow label above stays small and secondary.
+          fontSize: '1.05rem',
+          lineHeight: 1.5,
         }}
       >
         {text}
@@ -869,7 +848,6 @@ function ResultRow({
   copyVariant,
   creatorName,
   creatorIsHouse = false,
-  relationalFeedbackLine,
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
@@ -890,7 +868,6 @@ function ResultRow({
   copyVariant: number;
   creatorName: string | null;
   creatorIsHouse?: boolean;
-  relationalFeedbackLine?: string | null;
   canonicalSubcategory?: string | null;
   reactionPrompt?: ReactionPromptData | null;
   pointsAwarded?: number | null;
@@ -904,7 +881,20 @@ function ResultRow({
   const expired = result === 'expired';
   const correct = result === 'correct';
   const gaveUp = result === 'gave_up';
-  const copy = CORRECT_COPY[copyVariant % 4];
+  const hasExplainer = Boolean(breadcrumb || explanation);
+  // The live thread shows at most ONE supplementary card beneath the verdict, so
+  // the conversation keeps momentum and never stacks repetitive explanation. The
+  // fuller creator note + factual explainer always remain in the End of Session
+  // Review, so nothing is lost.
+  //   • Correct  → a light reflection only — the social "Between us!" wink is
+  //                preferred over the creator note, and the long explainer is
+  //                deferred entirely to the review.
+  //   • Wrong/etc → discovery is preserved: the wink still wins when present,
+  //                 otherwise the explainer carries the teaching moment, with the
+  //                 creator note as the final fallback.
+  const liveSupplement: 'joke' | 'note' | 'explainer' | null = correct
+    ? (insideJoke ? 'joke' : authorNote ? 'note' : null)
+    : (insideJoke ? 'joke' : hasExplainer ? 'explainer' : authorNote ? 'note' : null);
   const requestRecheck = useCallback(async () => {
     if (!recheckAction || recheckState === 'submitting') return;
     setRecheckState('submitting');
@@ -952,7 +942,7 @@ function ResultRow({
         };
 
   return (
-    <div className="flex flex-col gap-0 pt-0.5" style={{ alignItems: 'flex-start', maxWidth: '88%' }}>
+    <div className="flex flex-col gap-0 pt-0.5" style={{ alignItems: 'flex-start', maxWidth: THREAD_CARD_MAX_WIDTH }}>
       <div
         style={{
           ...resultToneStyle,
@@ -969,16 +959,29 @@ function ResultRow({
           <span style={{ color: 'var(--text-muted)' }}>This one wasn&apos;t recorded in time.</span>
         ) : correct ? (
           <>
+            {/* Compact, calm success moment: verdict line, the correct answer
+                repeated immediately (even on a right answer), then the light
+                "common ground" beat. The fuller explanation lives in review. */}
             <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-correct)', fontWeight: 600 }}>
               <span style={{ color: 'var(--game-correct)', marginRight: '6px' }}>✓</span>
-              {copy.headline}
+              Locked in.
             </p>
             {correctAnswer ? (
-              <p style={{ ...answerHeadingStyle, marginTop: '8px', color: 'var(--game-correct)' }}>
+              <p style={{ ...answerHeadingStyle, marginTop: '8px', fontSize: '1.85rem', color: 'var(--game-correct)' }}>
                 {correctAnswer}
               </p>
             ) : null}
-            {relationalFeedbackLine ? <RelationalFeedbackFade text={relationalFeedbackLine} /> : null}
+            <p
+              style={{
+                marginTop: '6px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.62rem',
+                letterSpacing: '0.04em',
+                color: 'color-mix(in srgb, var(--game-correct) 70%, var(--text-muted))',
+              }}
+            >
+              common ground ++
+            </p>
           </>
         ) : gaveUp ? (
           <>
@@ -1016,7 +1019,9 @@ function ResultRow({
                 style={{
                   ...answerHeadingStyle,
                   marginTop: '8px',
-                  // Figma question/game/answer — Cormorant Bold, scaled to match question text.
+                  // Figma question/game/answer — Cormorant Bold, scaled to match
+                  // question text; bumped ~12% so the repeated answer reads clearly.
+                  fontSize: '1.85rem',
                   color: 'var(--brand-ink)',
                 }}
               >
@@ -1093,9 +1098,11 @@ function ResultRow({
             ) : null}
           </>
         )}
-        {breadcrumb
-          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
-          : explanation ? <ExplanationLine text={explanation} /> : null}
+        {liveSupplement === 'explainer'
+          ? (breadcrumb
+              ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
+              : explanation ? <ExplanationLine text={explanation} /> : null)
+          : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
@@ -1103,7 +1110,7 @@ function ResultRow({
           </p>
         ) : null}
       </div>
-      {insideJoke ? (
+      {liveSupplement === 'joke' && insideJoke ? (
         <div
           style={{
             marginTop: '8px',
@@ -1130,15 +1137,19 @@ function ResultRow({
             style={{
               marginTop: '4px',
               fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-              fontSize: '0.92rem',
-              lineHeight: 1.45,
+              // Reflection body bumped ~14% for readability (D-5); the small,
+              // letter-spaced label above stays secondary.
+              fontSize: '1.05rem',
+              lineHeight: 1.5,
             }}
           >
             {insideJoke}
           </p>
         </div>
       ) : null}
-      {authorNote ? <AuthorNoteCard text={authorNote} creatorName={creatorName} creatorIsHouse={creatorIsHouse} /> : null}
+      {liveSupplement === 'note' && authorNote
+        ? <AuthorNoteCard text={authorNote} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
+        : null}
       {correct && openedTerritoryDomain ? (
         <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
@@ -1161,7 +1172,7 @@ function SessionCloseRow({
       className="mt-4"
       style={{
         alignSelf: 'flex-start',
-        maxWidth: '88%',
+        maxWidth: THREAD_CARD_MAX_WIDTH,
         borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border)',
         background: 'var(--surface-2)',
@@ -1385,7 +1396,6 @@ export function GameplayChatThread({
                 copyVariant={m.copyVariant}
                 creatorName={m.creatorName}
                 creatorIsHouse={m.creatorIsHouse}
-                relationalFeedbackLine={m.relationalFeedbackLine}
                 canonicalSubcategory={m.canonicalSubcategory}
                 reactionPrompt={m.reactionPrompt}
                 pointsAwarded={m.pointsAwarded}
