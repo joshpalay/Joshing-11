@@ -74,6 +74,7 @@ function GrowthCircleRow({
         maxPoints={maxPoints}
         animate={visible}
         size={54}
+        variant="summary"
       />
       <div style={{ flex: 1, minWidth: 0 }}>
         {isNewTerritory && (
