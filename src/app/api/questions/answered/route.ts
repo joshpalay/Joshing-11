@@ -27,6 +27,7 @@ export async function GET() {
     authorIsHouse: item.authorIsHouse,
     answeredAt: item.answeredAt,
     sourceLabel: item.sourceLabel,
+    reportTarget: item.reportTarget,
   }));
 
   return NextResponse.json({ items, nextCursor: archive.nextCursor });
