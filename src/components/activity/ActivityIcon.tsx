@@ -44,17 +44,16 @@ const MARK_W = 24;
 const GAP = 8;
 const LINE_H = 22.5; // first text line: 15px × 1.5
 // The stacked single-shape marks (diamond / hourglass / domain) are a vertical
-// pair of triangles. Full base=height triangles would make the pair 24×48 — too
-// tall, and the two halves end up far apart vertically (they read as two
-// disconnected shapes). We draw each half intentionally shorter than base=height
-// so the pair is 24×STACK_H and the halves sit close together. The cluster
-// (BundleMark, made of small triangles) keeps full base=height. Rendered at 70%,
-// centered horizontally in the 24px column.
+// pair of triangles. Each half is base=height (24×24) so the triangles stay
+// isosceles and un-smushed — matching the BundleMark invariant below. The pair
+// is therefore 24×48; we render it at 70% so it isn't too tall next to the text,
+// centered horizontally in the 24px column. (Drawing the halves shorter than
+// base=height squishes the rhombus/hourglass/domain and was reverted.)
 const LARGE_SCALE = 0.7;
 // Height of each half of a stacked mark, and the total viewBox height of the
-// pair. Shorter than the 24px base on purpose — see LARGE_SCALE note above.
-const STACK_HALF = 18;
-const STACK_H = STACK_HALF * 2; // 36
+// pair. base=height (= MARK_W) keeps the triangles un-smushed.
+const STACK_HALF = 24;
+const STACK_H = STACK_HALF * 2; // 48
 
 export type ActivityIconSpec =
   | { kind: 'bundle'; total: number; unanswered: number }
