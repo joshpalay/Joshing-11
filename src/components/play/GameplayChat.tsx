@@ -124,11 +124,11 @@ export type ChatMessage =
       onDecline: () => void;
     };
 
-const CORRECT_COPY: Array<{ headline: string; subLabel: string }> = [
-  { headline: 'Nice pull.', subLabel: 'common ground' },
-  { headline: 'Right on.', subLabel: 'common ground +' },
-  { headline: 'Locked in.', subLabel: 'common ground ++' },
-  { headline: 'Exactly.', subLabel: 'common ground +++' },
+const CORRECT_COPY: Array<{ headline: string }> = [
+  { headline: 'Nice pull.' },
+  { headline: 'Right on.' },
+  { headline: 'Locked in.' },
+  { headline: 'Exactly.' },
 ];
 
 function wrongHeadline(variant: number): string {
@@ -978,9 +978,6 @@ function ResultRow({
                 {correctAnswer}
               </p>
             ) : null}
-            <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-              {copy.subLabel}
-            </p>
             {relationalFeedbackLine ? <RelationalFeedbackFade text={relationalFeedbackLine} /> : null}
           </>
         ) : gaveUp ? (
