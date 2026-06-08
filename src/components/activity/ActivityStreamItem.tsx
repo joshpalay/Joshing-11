@@ -97,12 +97,13 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
 
-  // CORRECTION 3 (revised): the answered-of-total counter lives on the LINE
-  // (collapsed and expanded), so the answered-state is held HERE — not inside
-  // the expansion — and ticks up + persists as the viewer answers, even after
-  // the result pop-up closes or the line is collapsed and reopened. We also keep
-  // each in-session resolution (submitted answer + correctness) here so the
-  // expanded "Answered" history can read it back. Milestone lines only.
+  // CORRECTION 3 (revised): the answered-of-total state is conveyed by the
+  // bundle triangle mark (solid → hollow as questions are answered), so the
+  // answered-state is held HERE — not inside the expansion — and ticks up +
+  // persists as the viewer answers, even after the result pop-up closes or the
+  // line is collapsed and reopened. We also keep each in-session resolution
+  // (submitted answer + correctness) here so the expanded "Answered" history can
+  // read it back. Milestone lines only.
   const expand = item.expand;
   const milestoneQuestions = expand && expand.kind === 'milestone' ? expand.questions : null;
   // Questions the server already records as answered (correctly) on load. We
@@ -134,11 +135,6 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   }
 
   const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;
-
-  const milestoneProgress =
-    milestoneQuestions && milestoneQuestions.length > 0
-      ? { answered: answeredCount, total: milestoneQuestions.length }
-      : null;
 
   // The bundle mark (milestone) shares the row's live answered-state: as the
   // viewer answers questions inline, solid triangles flip to hollow. Caps at 5
@@ -233,19 +229,6 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
               {item.secondLine}
             </p>
           ) : null}
-          {milestoneProgress ? (
-            <p
-              style={{
-                margin: '4px 0 0',
-                fontFamily: FM,
-                fontSize: 10,
-                letterSpacing: 1,
-                color: INK3,
-              }}
-            >
-              {milestoneProgress.answered} of {milestoneProgress.total} questions
-            </p>
-          ) : null}
         </div>
 
         <div
@@ -318,8 +301,8 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
 // promised ("{answered} of {total} questions") rather than one question at a
 // time. Each settled question (right OR wrong) drops out of the stack and into
 // the quiet "Answered" history below, so what remains above is always exactly
-// the work left to do. The answered-state is owned by the parent so the line's
-// quiet "{answered} of {total}" counter and the triangle mark stay in lockstep.
+// the work left to do. The answered-state is owned by the parent so the bundle
+// triangle mark ticks from solid to hollow in lockstep as questions settle.
 function MilestoneExpansion({
   expand,
   isResolved,
