@@ -72,11 +72,12 @@ export function MyQuestionCard({
           </span>
         </p>
 
-        <p
-          className="mt-2 text-[13px] leading-snug"
-          style={{ color: 'var(--ink)', opacity: 0.65 }}
-        >
-          {question.timesAnswered} answers · {question.correctRate}% correct · {question.usedInGamesCount} games
+        <p className="mt-2 text-[13px] leading-snug">
+          <Stat value={`${question.timesAnswered}`} label="answers" />
+          <StatSeparator />
+          <Stat value={`${question.correctRate}%`} label="correct" />
+          <StatSeparator />
+          <Stat value={`${question.usedInGamesCount}`} label="games" />
         </p>
         {answerersLine ? (
           <p
@@ -196,6 +197,23 @@ function CardOverflowMenu({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// The metric value stays at full ink while its unit label sits back, so the eye
+// lands on the number (e.g. "5 answers", "80% correct") rather than the noun.
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <span>
+      <span style={{ color: 'var(--ink)' }}>{value}</span>
+      <span style={{ color: 'var(--ink)', opacity: 0.45 }}> {label}</span>
+    </span>
+  );
+}
+
+function StatSeparator() {
+  return (
+    <span style={{ color: 'var(--ink)', opacity: 0.45 }}> · </span>
   );
 }
 

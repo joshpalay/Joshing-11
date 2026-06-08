@@ -10,6 +10,7 @@ import { AnsweredQuestionsList, type AnsweredQuestionItem } from '@/components/q
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
+type OrderMode = 'category' | 'recency';
 type Tab = 'authored' | 'answered';
 type DrawerState =
   | { mode: 'closed' }
@@ -100,7 +101,7 @@ function QuestionsPageContent() {
   const [answered, setAnswered] = useState<AnsweredQuestionItem[] | null>(null);
   const [answeredLoading, setAnsweredLoading] = useState(false);
   const [answeredError, setAnsweredError] = useState<string | null>(null);
-  const [domainFilter, setDomainFilter] = useState('all');
+  const [orderMode, setOrderMode] = useState<OrderMode>('recency');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState<DrawerState>(() => (
@@ -163,28 +164,27 @@ function QuestionsPageContent() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const availableDomains = useMemo(() => (
-    [...new Map(questions.map((question) => [question.domain, question.domainDisplayName] as const)).entries()]
-      .map(([domain, label]) => ({ domain, label }))
-      .sort((a, b) => a.label.localeCompare(b.label))
-  ), [questions]);
-
   const filteredQuestions = useMemo(() => {
     const query = search.trim().toLowerCase();
     return questions
-      .filter((question) => domainFilter === 'all' || question.domain === domainFilter)
       .filter((question) => !query || question.text.toLowerCase().includes(query))
       .slice()
       .sort((a, b) => {
+        // "By category" groups questions by their domain name (e.g. Literature),
+        // then falls back to the secondary sort within each category.
+        if (orderMode === 'category') {
+          const byCategory = a.domainDisplayName.localeCompare(b.domainDisplayName);
+          if (byCategory !== 0) return byCategory;
+        }
         if (sortMode === 'most_answered') return b.timesAnswered - a.timesAnswered || Date.parse(b.createdAt) - Date.parse(a.createdAt);
         if (sortMode === 'hardest') return a.correctRate - b.correctRate || b.timesAnswered - a.timesAnswered;
         if (sortMode === 'easiest') return b.correctRate - a.correctRate || b.timesAnswered - a.timesAnswered;
         return Date.parse(b.createdAt) - Date.parse(a.createdAt);
       });
-  }, [domainFilter, questions, search, sortMode]);
+  }, [orderMode, questions, search, sortMode]);
 
   function clearFilters() {
-    setDomainFilter('all');
+    setOrderMode('recency');
     setSortMode('newest');
     setSearch('');
   }
@@ -313,15 +313,13 @@ function QuestionsPageContent() {
 
           <section className="mb-5 grid grid-cols-2 gap-2 rounded-lg border bg-card p-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3 sm:p-3">
             <select
-              value={domainFilter}
-              onChange={(event) => setDomainFilter(event.target.value)}
+              value={orderMode}
+              onChange={(event) => setOrderMode(event.target.value as OrderMode)}
               className="h-11 rounded-md border bg-background px-3 text-sm"
-              aria-label="Filter by domain"
+              aria-label="Order by"
             >
-              <option value="all">All domains</option>
-              {availableDomains.map((item) => (
-                <option key={item.domain} value={item.domain}>{item.label}</option>
-              ))}
+              <option value="recency">By recency</option>
+              <option value="category">By category</option>
             </select>
             <select
               value={sortMode}
