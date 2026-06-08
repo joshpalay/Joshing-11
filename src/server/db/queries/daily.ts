@@ -39,6 +39,7 @@ import {
 } from '@/server/play/catch-up-turn-sequencing';
 import { getBasePoints } from '@/server/mastery/scoring';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
+import { domainKey } from '@/lib/knowledge/domain-key';
 
 function asQueueSlotDifficulty(
   value: string | null | undefined,
@@ -1516,6 +1517,14 @@ export async function pickBankSource(
 // to a lookback window. Used by `selectDiverseDomains` to deprioritise
 // over-saturated domains so a user with 10 active interests doesn't see
 // the same 2-3 domains every day.
+//
+// The map is keyed by domainKey() — the same apostrophe-folded, whitespace-
+// collapsed, lowercased key the knowledge/mastery code uses — so that spelling
+// variants of one subcategory ("90's Hip-Hop" / "90’s Hip-Hop", "T.S. Eliot" /
+// "T. S. Eliot", "Jazz" / "jazz") collapse into a single bucket. Without this
+// fold each variant counts separately, so the weekly cap and least-recent
+// ordering treat them as distinct domains and the cooldown silently leaks.
+// Callers must look up with domainKey(domain) to match.
 export async function getRecentDomainCounts(
   userId: string,
   lookbackDays = 7,
@@ -1533,9 +1542,13 @@ export async function getRecentDomainCounts(
     ))
     .groupBy(generatedQuestions.canonicalSubcategory);
 
+  // SQL groups by the raw column, so two spelling variants arrive as separate
+  // rows; sum them into the one canonical key here.
   const result = new Map<string, number>();
   for (const row of rows) {
-    if (row.domain) result.set(row.domain, Number(row.count) || 0);
+    if (!row.domain) continue;
+    const key = domainKey(row.domain);
+    result.set(key, (result.get(key) ?? 0) + (Number(row.count) || 0));
   }
   return result;
 }
