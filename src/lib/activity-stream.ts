@@ -43,9 +43,12 @@ export type StreamQuestion = {
   questionId: string;
   text: string;
   domain: string | null;
-  // True when the viewer has already answered this question correctly. Drives
-  // the milestone "{k} of {n} answered" progress and the no-double-credit story.
-  answered: boolean;
+  // The viewer's own prior result on this question, if any. `null` = never
+  // attempted. ANY non-null value (correct OR incorrect) locks the question in
+  // the milestone expansion — a single attempt is the viewer's only swing in
+  // the feed — and drives the ANSWERED history's "Correct" / "Not this time"
+  // copy plus the bundle progress mark.
+  priorResult: 'correct' | 'incorrect' | null;
 };
 
 // The action an expanded, question-backed item offers — determined by the
@@ -182,7 +185,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   questionId: item.referenceId,
                   text: faq.questionText,
                   domain,
-                  answered: false,
+                  priorResult: null,
                 },
               }
             : null,
@@ -206,7 +209,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   questionId: item.referenceId,
                   text: nm.questionText,
                   domain,
-                  answered: false,
+                  priorResult: null,
                 },
                 strangerId: item.actorUserId,
                 strangerName: actorName(item),
@@ -232,7 +235,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   questionId: item.referenceId,
                   text: nm.questionText,
                   domain,
-                  answered: true,
+                  priorResult: 'correct',
                 },
                 strangerId: item.actorUserId,
                 strangerName: actorName(item),
@@ -482,7 +485,7 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
         questionId: moment.questionId,
         text: moment.questionText,
         domain: moment.category,
-        answered: true,
+        priorResult: 'correct',
       },
     },
   };

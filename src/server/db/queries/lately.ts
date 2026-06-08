@@ -354,28 +354,39 @@ export async function getMilestoneQuestionText(
   return out;
 }
 
-// Which of the given questions the viewer has ALREADY answered correctly. Drives
-// the milestone expansion's "{k} of {n} answered" progress on first render and
-// makes the no-double-credit reality visible (a question already in the viewer's
-// mastery history won't earn new credit on re-answer — it becomes repeat_correct).
-export async function getViewerCorrectlyAnsweredIds(
+// The viewer's own prior result on each of the given questions, if any. Drives
+// the milestone expansion's progress on first render AND the cross-session lock:
+// a single attempt (right OR wrong) settles the question, so it must report
+// incorrect attempts too — reporting only correct ones is what let a
+// wrong-answered question re-open as answerable on reload. Correct wins over
+// incorrect (mirrors getViewerAnswerStatusForQuestions in feed.ts); a question
+// the viewer never attempted is simply absent from the map. Scoped to
+// answeredByUserId so author/curator-credit events (a non-answerer's row) never
+// count as the viewer's own attempt.
+export async function getViewerPriorAnswerResults(
   userId: string,
   ids: string[],
-): Promise<Set<string>> {
-  const out = new Set<string>();
+): Promise<Map<string, 'correct' | 'incorrect'>> {
+  const out = new Map<string, 'correct' | 'incorrect'>();
   if (ids.length === 0) return out;
   const rows = await db
-    .select({ questionId: masteryEvents.questionId })
+    .select({ questionId: masteryEvents.questionId, answerState: masteryEvents.answerState })
     .from(masteryEvents)
     .where(
       and(
         eq(masteryEvents.userId, userId),
+        eq(masteryEvents.answeredByUserId, userId),
         inArray(masteryEvents.questionId, ids),
-        inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
       ),
     );
   for (const row of rows) {
-    if (row.questionId) out.add(row.questionId);
+    if (!row.questionId) continue;
+    const isCorrect = row.answerState !== null && row.answerState !== 'incorrect';
+    if (isCorrect) {
+      out.set(row.questionId, 'correct');
+    } else if (!out.has(row.questionId)) {
+      out.set(row.questionId, 'incorrect');
+    }
   }
   return out;
 }

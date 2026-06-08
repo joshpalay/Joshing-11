@@ -106,11 +106,18 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   // read it back. Milestone lines only.
   const expand = item.expand;
   const milestoneQuestions = expand && expand.kind === 'milestone' ? expand.questions : null;
-  // Questions the server already records as answered (correctly) on load. We
-  // don't have the original submitted text for these, so the history shows a
-  // calm "Correct" without the "You answered:" clause for them.
+  // Questions the server already records as attempted on load — right OR wrong.
+  // A single attempt is the viewer's only swing in the feed, so any prior
+  // result locks the question here. We don't have the original submitted text
+  // for these, so the history shows a calm "Correct" / "Not this time" (per the
+  // server-recorded result) without the "You answered:" clause for them.
   const [serverAnswered] = useState<Set<string>>(
-    () => new Set((milestoneQuestions ?? []).filter((q) => q.answered).map((q) => q.questionId)),
+    () =>
+      new Set(
+        (milestoneQuestions ?? [])
+          .filter((q) => q.priorResult !== null)
+          .map((q) => q.questionId),
+      ),
   );
   // Resolutions captured this session — both correct and "not this time" — keyed
   // by questionId, carrying what the viewer typed so the history can echo it. A
@@ -303,7 +310,7 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
 // the quiet "Answered" history below, so what remains above is always exactly
 // the work left to do. The answered-state is owned by the parent so the bundle
 // triangle mark ticks from solid to hollow in lockstep as questions settle.
-function MilestoneExpansion({
+export function MilestoneExpansion({
   expand,
   isResolved,
   resolutions,
@@ -373,10 +380,12 @@ function AnsweredHistory({
       >
         {questions.map((q) => {
           const r = resolutions.get(q.questionId);
-          // No in-session resolution means the server already had it on load as
-          // a correct answer; we lack the original text, so we show a calm
-          // "Correct" without the answer clause rather than invent one.
-          const isCorrect = r ? r.isCorrect : true;
+          // No in-session resolution means the server already had this attempt on
+          // load; we lack the original text, so we show a calm "Correct" / "Not
+          // this time" from the server-recorded result without inventing an
+          // answer clause. priorResult is non-null here (it's why the question
+          // sits in this answered list); treat anything but 'incorrect' as right.
+          const isCorrect = r ? r.isCorrect : q.priorResult !== 'incorrect';
           // Result reads in the app's semantic answer colors: green for correct,
           // red for "not this time" — same tokens the AnswerFeedbackSheet uses.
           const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)';
