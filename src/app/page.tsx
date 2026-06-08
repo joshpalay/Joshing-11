@@ -130,6 +130,14 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
     }),
     buildActivityStream(userId),
   ])
+  // The weekly reflection lives in the dedicated CeremonyPin editorial marker
+  // above this feed (calm, gold, no CTA). Drop the redundant 'ceremony_ready'
+  // activity card here so the reflection doesn't double up / compete with social
+  // activity in the home stream. It's the only activity that links to /ceremony/;
+  // the card still appears in the full /activities log.
+  const homeActivityItems = activityItems.filter(
+    (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
+  )
   return (
     <>
       <p className="mb-2 px-3 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
@@ -141,7 +149,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
         initialPage={feedPage}
         showContributeFooter
         unifiedHome
-        activityItems={activityItems}
+        activityItems={homeActivityItems}
       />
     </>
   )
