@@ -132,6 +132,14 @@ export function TerritorySetupClient({
   const [addingTopic, setAddingTopic] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addLimitReached, setAddLimitReached] = useState(false);
+  // "Create your own" lives at the top of the Add-a-Territory box and toggles
+  // open into an inline topic field on tap.
+  const [creating, setCreating] = useState(false);
+  // Lightweight confirmation toast shown when a territory is added.
+  const [toast, setToast] = useState<string | null>(null);
+  // Suggestions rotate so the box doesn't feel stale on repeat visits — see
+  // visibleNearbyTerritories below.
+  const [suggestionOffset, setSuggestionOffset] = useState(0);
   const [dragState, setDragState] = useState<DragState>(null);
   const [activeTerritory, setActiveTerritory] = useState<ActiveTerritory>(null);
   const [hoveredZone, setHoveredZone] = useState<TerritoryFrequency | null>(null);
@@ -148,6 +156,23 @@ export function TerritorySetupClient({
     const timer = window.setTimeout(() => setSettling(false), 900);
     return () => window.clearTimeout(timer);
   }, []);
+
+  // Pick a random starting point for the suggestion rotation on each visit so
+  // the same few territories don't sit there stale. Deferred a frame so it runs
+  // client-side only (no hydration mismatch) and outside the synchronous effect body.
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() =>
+      setSuggestionOffset(Math.floor(Math.random() * 1000)),
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  // Auto-dismiss the confirmation toast.
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const maxPointsByTier = useMemo(() => {
     const result: Record<TerritoryDomain['tier'], number> = {
@@ -184,6 +209,16 @@ export function TerritorySetupClient({
     () => getNearbyTerritories(domains.map((domain) => domain.domain)),
     [domains],
   );
+
+  // Show a rotating window of suggestions rather than always the same top few,
+  // so the box stays fresh between visits. With three or fewer we just show them.
+  const visibleNearbyTerritories = useMemo(() => {
+    const SHOWN = 3;
+    if (nearbyTerritories.length <= SHOWN) return nearbyTerritories;
+    const start = suggestionOffset % nearbyTerritories.length;
+    const rotated = [...nearbyTerritories.slice(start), ...nearbyTerritories.slice(0, start)];
+    return rotated.slice(0, SHOWN);
+  }, [nearbyTerritories, suggestionOffset]);
 
   const draggingDomain = useMemo(
     () => domains.find((domain) => domain.domain === dragState?.domain) ?? null,
@@ -281,11 +316,14 @@ export function TerritorySetupClient({
     [addDomainRow],
   );
 
-  const focusCreateTopic = useCallback(() => {
-    const input = newTopicInputRef.current;
-    if (!input) return;
-    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    input.focus({ preventScroll: true });
+  const openCreateTopic = useCallback(() => {
+    setCreating(true);
+    setAddError(null);
+    setAddLimitReached(false);
+    // The field mounts on the next paint, so focus after it exists.
+    window.requestAnimationFrame(() => {
+      newTopicInputRef.current?.focus({ preventScroll: true });
+    });
   }, []);
 
   const addNearbyTerritory = useCallback(
@@ -296,6 +334,7 @@ export function TerritorySetupClient({
       setAddLimitReached(false);
       try {
         await adoptTopic(territory.domain, territory.broadCategory);
+        setToast(`Added “${territory.domain}”`);
       } catch (caught) {
         const coded = caught as Error & { code?: string };
         setAddLimitReached(coded?.code === 'limit_reached');
@@ -548,17 +587,54 @@ export function TerritorySetupClient({
                 : 'Create your own, and more suggestions will appear as your map grows.'}
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            {nearbyTerritories.map((territory) => (
-              <GhostTerritoryCircle
-                key={territory.domain}
-                territory={territory}
+          {creating ? (
+            <div className="mb-5 rounded-[1.5rem] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-4">
+              <AddTopicField
+                inputRef={newTopicInputRef}
+                existingLabels={domains.map((domain) => domain.domain)}
+                convergeBeforeAdd
                 disabled={addingTopic}
-                onAdd={() => void addNearbyTerritory(territory)}
+                limitReachedNode={
+                  <Link href="/knowledge" className="underline">
+                    Manage interests
+                  </Link>
+                }
+                onAdd={async (topic) => {
+                  await adoptTopic(topic.label, topic.broadCategory ?? null);
+                  setToast(`Added “${topic.label}”`);
+                }}
               />
-            ))}
-            <CreateYourOwnCircle disabled={addingTopic} onClick={focusCreateTopic} />
-          </div>
+              <button
+                type="button"
+                className="mt-3 text-sm text-[var(--text-muted-warm)] underline-offset-2 hover:underline"
+                onClick={() => setCreating(false)}
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="mb-5 flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 font-serif text-base text-[var(--ink)] transition hover:bg-[var(--cream)] disabled:opacity-40"
+              disabled={addingTopic}
+              onClick={openCreateTopic}
+            >
+              <Plus className="size-5" aria-hidden="true" />
+              Create your own
+            </button>
+          )}
+          {visibleNearbyTerritories.length > 0 ? (
+            <div className="grid grid-cols-3 gap-3">
+              {visibleNearbyTerritories.map((territory) => (
+                <GhostTerritoryCircle
+                  key={territory.domain}
+                  territory={territory}
+                  disabled={addingTopic}
+                  onAdd={() => void addNearbyTerritory(territory)}
+                />
+              ))}
+            </div>
+          ) : null}
           {addError ? (
             <p className="text-destructive mt-3 text-sm">
               {addError}
@@ -601,24 +677,6 @@ export function TerritorySetupClient({
           ))}
         </section>
 
-        <section className="mt-8 rounded-[2rem] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-5">
-          <AddTopicField
-            heading="Explore something new"
-            inputRef={newTopicInputRef}
-            existingLabels={domains.map((domain) => domain.domain)}
-            convergeBeforeAdd
-            disabled={addingTopic}
-            limitReachedNode={
-              <Link href="/knowledge" className="underline">
-                Manage interests
-              </Link>
-            }
-            onAdd={async (topic) => {
-              await adoptTopic(topic.label, topic.broadCategory ?? null);
-            }}
-          />
-        </section>
-
         {error ? (
           <p className="border-destructive/40 text-destructive mt-6 rounded-2xl border bg-white/50 p-4 text-sm">
             {error}
@@ -648,6 +706,18 @@ export function TerritorySetupClient({
           style={{ left: dragState.x, top: dragState.y }}
         >
           <DragPreview domain={draggingDomain} />
+        </div>
+      ) : null}
+
+      {toast ? (
+        <div className="pointer-events-none fixed bottom-24 left-1/2 z-[80] -translate-x-1/2">
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-medium text-[var(--cream)] shadow-[0_12px_28px_rgba(26,18,8,0.28)] motion-safe:animate-[territory-settle_300ms_ease-out]"
+          >
+            {toast}
+          </div>
         </div>
       ) : null}
 
@@ -1021,24 +1091,6 @@ function GhostTerritoryCircle({
       </span>
       <span className="text-[10px] tracking-[0.14em] text-[var(--text-muted-warm)] uppercase">
         Add
-      </span>
-    </button>
-  );
-}
-
-function CreateYourOwnCircle({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="flex w-full flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center opacity-80 transition hover:opacity-100 disabled:opacity-40"
-      disabled={disabled}
-      onClick={onClick}
-    >
-      <div className="grid size-16 place-items-center rounded-full border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] text-[var(--ink)]">
-        <Plus className="size-5" aria-hidden="true" />
-      </div>
-      <span className="max-w-full px-1 font-serif text-[13px] leading-tight break-words text-[var(--ink)]">
-        Create your own
       </span>
     </button>
   );
