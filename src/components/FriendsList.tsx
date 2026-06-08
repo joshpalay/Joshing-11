@@ -1,9 +1,12 @@
 'use client';
 
+import { ChevronDown, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { formatRelativeTime } from '@/components/feed/visual';
+
+type FriendSort = 'name_asc' | 'name_desc' | 'recent';
 
 type Person = {
   id: string;
@@ -106,7 +109,7 @@ function FriendCard({ person }: { person: Person }) {
   return (
     <Link
       href={`/users/${person.id}`}
-      className="group bg-card text-card-foreground hover:border-foreground/25 focus-visible:ring-ring block rounded-2xl border p-4 shadow-sm transition hover:shadow-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      className="group focus-visible:ring-ring block py-4 transition focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <h3 className="text-foreground font-medium group-hover:underline group-hover:underline-offset-4">
         {person.displayName}
@@ -311,6 +314,8 @@ export default function FriendsList() {
   const [error, setError] = useState<string | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [friendSort, setFriendSort] = useState<FriendSort>('name_asc');
+  const [friendSearch, setFriendSearch] = useState('');
 
   const loadFriends = useCallback(async () => {
     setError(null);
@@ -416,10 +421,39 @@ export default function FriendsList() {
       if (!person.youFollow || !person.followsYou) continue;
       peopleById.set(person.id, person);
     }
-    return Array.from(peopleById.values()).sort((a, b) =>
-      a.displayName.localeCompare(b.displayName),
-    );
+    return Array.from(peopleById.values());
   }, [followers, following]);
+
+  const visibleFriends = useMemo(() => {
+    const query = friendSearch.trim().toLowerCase();
+    return friends
+      .filter((person) => {
+        if (!query) return true;
+        const haystack = [
+          person.displayName,
+          ...person.declaredInterests,
+          ...person.sharedInterests,
+        ]
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(query);
+      })
+      .slice()
+      .sort((a, b) => {
+        if (friendSort === 'name_desc') return b.displayName.localeCompare(a.displayName);
+        if (friendSort === 'recent') {
+          const aTime = a.lastActiveAt ? Date.parse(a.lastActiveAt) : 0;
+          const bTime = b.lastActiveAt ? Date.parse(b.lastActiveAt) : 0;
+          return bTime - aTime || a.displayName.localeCompare(b.displayName);
+        }
+        return a.displayName.localeCompare(b.displayName);
+      });
+  }, [friends, friendSearch, friendSort]);
+
+  function clearFriendFilters() {
+    setFriendSort('name_asc');
+    setFriendSearch('');
+  }
 
   const pendingInvites = useMemo(
     () => invites.filter((invite) => invite.status === 'pending'),
@@ -547,11 +581,56 @@ export default function FriendsList() {
             Friends
           </h2>
           {friends.length > 0 ? (
-            <div className="space-y-3">
-              {friends.map((person) => (
-                <FriendCard key={person.id} person={person} />
-              ))}
-            </div>
+            <>
+              <div
+                className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-2 sm:grid-cols-[1fr_2fr]"
+                aria-label="Friend filters"
+              >
+                <label className="relative">
+                  <select
+                    value={friendSort}
+                    onChange={(event) => setFriendSort(event.target.value as FriendSort)}
+                    className="focus-visible:border-primary focus-visible:ring-primary h-10 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                    aria-label="Sort by"
+                  >
+                    <option value="name_asc">Name (A–Z)</option>
+                    <option value="name_desc">Name (Z–A)</option>
+                    <option value="recent">Recently active</option>
+                  </select>
+                  <ChevronDown
+                    className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2"
+                    aria-hidden="true"
+                  />
+                </label>
+                <label className="relative">
+                  <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                  <input
+                    value={friendSearch}
+                    onChange={(event) => setFriendSearch(event.target.value)}
+                    placeholder="Search friends..."
+                    className="focus-visible:border-primary focus-visible:ring-primary h-10 w-full rounded-md border bg-background pr-3 pl-10 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                  />
+                </label>
+              </div>
+              {visibleFriends.length > 0 ? (
+                <div className="divide-border border-border divide-y border-t">
+                  {visibleFriends.map((person) => (
+                    <FriendCard key={person.id} person={person} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground py-8 text-center text-sm">
+                  No friends match your filter.{' '}
+                  <button
+                    type="button"
+                    className="text-primary underline"
+                    onClick={clearFriendFilters}
+                  >
+                    Clear filters
+                  </button>
+                </p>
+              )}
+            </>
           ) : pendingInvites.length > 0 ? (
             <p className="bg-card text-muted-foreground rounded-2xl border p-4 text-sm shadow-sm">
               Accepted invitations will appear here.

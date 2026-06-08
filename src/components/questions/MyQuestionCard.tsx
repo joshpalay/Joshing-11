@@ -72,21 +72,21 @@ export function MyQuestionCard({
           </span>
         </p>
 
-        <p className="mt-2 text-[13px] leading-snug">
+        {answerersLine ? (
+          <p
+            className="mt-2 text-[13px] leading-snug"
+            style={{ color: 'var(--ink)', opacity: 0.65 }}
+          >
+            {answerersLine}
+          </p>
+        ) : null}
+        <p className={`${answerersLine ? 'mt-1' : 'mt-2'} text-[13px] leading-snug`}>
           <Stat value={`${question.timesAnswered}`} label="answers" />
           <StatSeparator />
           <Stat value={`${question.correctRate}%`} label="correct" />
           <StatSeparator />
           <Stat value={`${question.usedInGamesCount}`} label="games" />
         </p>
-        {answerersLine ? (
-          <p
-            className="mt-1 text-[13px] leading-snug"
-            style={{ color: 'var(--ink)', opacity: 0.65 }}
-          >
-            {answerersLine}
-          </p>
-        ) : null}
         {question.reportState ? <ReportStateNotice state={question.reportState} /> : null}
         {cardError ? (
           <p className="mt-2 text-[13px] text-destructive">{cardError}</p>

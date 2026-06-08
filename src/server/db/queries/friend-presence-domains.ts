@@ -116,7 +116,10 @@ export function rankFriendDomainsForBonus(
     acc.anyTerritory ||= c.inTerritory;
     acc.anyActivity ||= c.inActivity;
     if (c.broadCategory && !acc.broadCategory) acc.broadCategory = c.broadCategory;
-    if (c.lastActivityAt != null && (acc.lastActivityAt == null || c.lastActivityAt > acc.lastActivityAt)) {
+    if (
+      c.lastActivityAt != null &&
+      (acc.lastActivityAt == null || c.lastActivityAt > acc.lastActivityAt)
+    ) {
       acc.lastActivityAt = c.lastActivityAt;
     }
     if (c.strength > acc.strength) acc.strength = c.strength;
@@ -205,6 +208,12 @@ function activityMs(lastActivityAt: string | null): number | null {
 export async function getFriendDomainsForBonus(
   viewerUserId: string,
   limit: number,
+  // Lowercased domains the viewer parked in "Resting" ("won't be asked"). A
+  // rested domain is dropped from the bonus pool BEFORE ranking/limiting, so the
+  // opt-out ("This is {Name}'s bag but not mine") holds for the +2 the same way
+  // it already does for the core five — and we still surface up to `limit`
+  // non-rested friend domains rather than letting a rested one consume a slot.
+  excludeDomains: ReadonlySet<string> = new Set(),
 ): Promise<FriendDomainCandidate[]> {
   if (limit <= 0) return [];
 
@@ -218,9 +227,7 @@ export async function getFriendDomainsForBonus(
 
   const perFriend = await Promise.all(
     following.map(async (friend) => {
-      const effectiveViewer: EffectiveViewer = mutualIds.has(friend.id)
-        ? 'friend'
-        : 'stranger';
+      const effectiveViewer: EffectiveViewer = mutualIds.has(friend.id) ? 'friend' : 'stranger';
       const sectionSettings = await getSectionVisibilities(friend.id);
       if (!canViewSection(sectionSettings, 'knowledge_base', effectiveViewer)) {
         return [] as FriendDomainContribution[];
@@ -235,6 +242,7 @@ export async function getFriendDomainsForBonus(
 
       const contributions: FriendDomainContribution[] = [];
       for (const domain of allDomains) {
+        if (excludeDomains.has(domain.domain.toLowerCase())) continue;
         const inTerritory = isTerritoryDomain(domain);
         const inActivity = !domain.isHidden && activityDomains.has(domain.domain.toLowerCase());
         if (!inTerritory && !inActivity) continue;

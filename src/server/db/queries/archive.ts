@@ -40,6 +40,16 @@ export type ArchiveItem = {
   verified: boolean;
   askerName: string;
   authorIsHouse: boolean;
+  /**
+   * B-Report-2: which content table this row points at, for a ContentReport.
+   * Exactly one id is set — curated questions carry `questionId`, LLM-origin
+   * questions carry `generatedQuestionId`. Null only for the synthetic-fallback
+   * daily slot (no real row to report), in which case the ⋯ report items hide.
+   */
+  reportTarget:
+    | { questionId: string; generatedQuestionId?: undefined }
+    | { generatedQuestionId: string; questionId?: undefined }
+    | null;
 };
 
 export type ArchiveKind = 'all' | 'answered';
@@ -225,6 +235,11 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
           verified: bankQuestion?.verified ?? true,
           askerName: authored.authorName ?? askerDisplay ?? (generated ? LLM_QUESTION_ATTRIBUTION : ''),
           authorIsHouse: authored.authorIsHouse,
+          reportTarget: slot.question_id
+            ? { questionId: slot.question_id }
+            : slot.generated_question_id
+              ? { generatedQuestionId: slot.generated_question_id }
+              : null,
         } satisfies ArchiveItem;
       }),
   );
@@ -302,6 +317,7 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       // resolve a real name via the creatorUser left join.
       askerName: creatorUser?.displayName ?? LLM_QUESTION_ATTRIBUTION,
       authorIsHouse: false,
+      reportTarget: { questionId: question.id },
     } satisfies ArchiveItem;
   });
 }
@@ -344,6 +360,7 @@ async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
       verified: question.verified,
       askerName: creatorUser?.displayName ?? '',
       authorIsHouse: false,
+      reportTarget: { questionId: question.id },
     } satisfies ArchiveItem;
   });
 }
@@ -399,6 +416,7 @@ async function readWrittenByMeItems(userId: string): Promise<ArchiveItem[]> {
       verified: question.verified,
       askerName: '',
       authorIsHouse: false,
+      reportTarget: { questionId: question.id },
     } satisfies ArchiveItem;
   });
 }

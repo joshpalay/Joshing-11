@@ -3,6 +3,7 @@
 import { answerHeadingStyle } from '@/components/answer-heading';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
+import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 
 export type AnsweredQuestionItem = {
   id: string;
@@ -16,6 +17,12 @@ export type AnsweredQuestionItem = {
   authorIsHouse: boolean;
   answeredAt: string | null;
   sourceLabel: string;
+  // B-Report-2: the content row to flag from the ⋯ menu. Null when there's no
+  // reportable row (a synthetic daily slot), in which case the menu is hidden.
+  reportTarget:
+    | { questionId: string; generatedQuestionId?: undefined }
+    | { generatedQuestionId: string; questionId?: undefined }
+    | null;
 };
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -107,7 +114,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
               <div className="hidden text-sm text-muted-foreground sm:block">
                 {formatDate(item.answeredAt)}
               </div>
-              <div className="hidden sm:flex sm:justify-end">
+              <div className="hidden sm:flex sm:justify-end sm:gap-2">
                 <SendQuestionAction
                   question={{
                     id: item.questionId,
@@ -117,8 +124,9 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
                   label=""
                   className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground"
                 />
+                {item.reportTarget ? <AnsweredRowActions target={item.reportTarget} /> : null}
               </div>
-              <div className="sm:hidden">
+              <div className="flex items-center gap-2 sm:hidden">
                 <SendQuestionAction
                   question={{
                     id: item.questionId,
@@ -126,6 +134,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
                     domain: item.domainDisplayName,
                   }}
                 />
+                {item.reportTarget ? <AnsweredRowActions target={item.reportTarget} /> : null}
               </div>
             </li>
           );
