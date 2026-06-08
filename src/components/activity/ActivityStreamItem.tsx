@@ -8,11 +8,16 @@ import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
 import { SendQuestionDrawer } from '@/components/SendQuestionDrawer';
 import type {
+  StreamEmbed,
   StreamExpand,
   StreamItem,
   StreamLinePart,
   StreamQuestion,
 } from '@/lib/activity-stream';
+import {
+  circleDatasetMax,
+  DomainCircleSvg,
+} from '@/components/profile/common-ground-circles';
 
 import { DirectQuestionAnswer } from './DirectQuestionAnswer';
 import { InlineAnswerFlow } from './InlineAnswerFlow';
@@ -251,6 +256,10 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
         </div>
       </div>
 
+      {item.embed?.kind === 'common_ground' ? (
+        <CommonGroundEmbed embed={item.embed} />
+      ) : null}
+
       {item.action ? <ItemAction action={item.action} /> : null}
 
       {expandable && open && expand ? (
@@ -269,6 +278,76 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
           )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// The homepage common-ground promo embed: the friend's top shared-but-untested
+// domains as the overlapping-circle motif (same geometry as the profile page),
+// indented to sit under the row's one-liner, with a link through to the profile.
+// Read-only and non-expanding — it stops click propagation so taps on the
+// circles or link never toggle a (non-existent) expansion.
+function CommonGroundEmbed({
+  embed,
+}: {
+  embed: Extract<StreamEmbed, { kind: 'common_ground' }>;
+}) {
+  const datasetMax = circleDatasetMax(
+    embed.domains.flatMap((d) => [d.viewer.points, d.friend.points]),
+  );
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{ marginLeft: EXPANSION_INDENT, marginTop: 12 }}
+    >
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+        {embed.domains.map((d) => (
+          <div
+            key={d.label}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 6,
+              maxWidth: 120,
+            }}
+          >
+            <DomainCircleSvg
+              viewerPoints={d.viewer.points}
+              friendPoints={d.friend.points}
+              viewerTier={d.viewer.tier}
+              friendTier={d.friend.tier}
+              datasetMax={datasetMax}
+              ariaLabel={`${d.label}: shared with ${embed.friendFirstName}, still untested`}
+            />
+            <span
+              style={{
+                fontFamily: 'Georgia, serif',
+                fontSize: 12.5,
+                lineHeight: 1.3,
+                textAlign: 'center',
+                color: INK2,
+              }}
+            >
+              {d.label}
+            </span>
+          </div>
+        ))}
+      </div>
+      <Link
+        href={embed.friendHref}
+        style={{
+          display: 'inline-block',
+          marginTop: 12,
+          fontFamily: FM,
+          fontSize: 10,
+          letterSpacing: 2,
+          color: ACTOR_BLUE,
+          textDecoration: 'none',
+        }}
+      >
+        SEE WHAT YOU SHARE →
+      </Link>
     </div>
   );
 }

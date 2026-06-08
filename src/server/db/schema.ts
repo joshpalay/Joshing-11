@@ -89,6 +89,19 @@ export const gradeDisputeStatusEnum = pgEnum('GradeDisputeStatus', [
   'alternative_added',
   'dismissed',
 ]);
+export const contentReportCategoryEnum = pgEnum('ContentReportCategory', [
+  'incorrect',
+  'inappropriate',
+]);
+export const contentReportIncorrectKindEnum = pgEnum('ContentReportIncorrectKind', [
+  'answer_key',
+  'premise',
+]);
+export const contentReportStatusEnum = pgEnum('ContentReportStatus', [
+  'open',
+  'upheld',
+  'dismissed',
+]);
 export const difficultyEstimateEnum = pgEnum('DifficultyEstimate', [
   'accessible',
   'moderate',
@@ -667,6 +680,51 @@ export const questionRatings = pgTable(
     unique('QuestionRating_user_id_question_id_key').on(table.userId, table.questionId),
     index('QuestionRating_user_id_idx').on(table.userId),
     index('QuestionRating_question_id_idx').on(table.questionId),
+  ],
+);
+
+export const contentReports = pgTable(
+  'ContentReport',
+  {
+    id: id(),
+    reporterUserId: text('reporter_user_id').notNull().references(() => users.id),
+    questionId: text('question_id').references(() => questions.id),
+    generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id),
+    category: contentReportCategoryEnum('category').notNull(),
+    incorrectKind: contentReportIncorrectKindEnum('incorrect_kind'),
+    note: text('note').notNull(),
+    suggestedAnswer: text('suggested_answer'),
+    surface: text('surface'),
+    status: contentReportStatusEnum('status').notNull().default('open'),
+    reviewDecision: text('review_decision'),
+    reviewReason: text('review_reason'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('ContentReport_reporter_user_id_idx').on(table.reporterUserId),
+    index('ContentReport_question_id_idx').on(table.questionId),
+    index('ContentReport_generated_question_id_idx').on(table.generatedQuestionId),
+    index('ContentReport_status_idx').on(table.status),
+    check(
+      'ContentReport_one_target',
+      sql`(question_id IS NOT NULL)::int + (generated_question_id IS NOT NULL)::int = 1`,
+    ),
+    check(
+      'ContentReport_incorrect_kind_scope',
+      sql`incorrect_kind IS NULL OR category = 'incorrect'`,
+    ),
+    // One open report per user per target. The target is split across two
+    // nullable columns, so the single-COALESCE form Drizzle can't express
+    // becomes two partial unique indexes — each scoped to its own column and
+    // to status = 'open', mirroring feed_dismissed_domains_active_unique. A
+    // fresh report is allowed once a prior one leaves 'open' (re-report policy).
+    uniqueIndex('ContentReport_one_open_per_question')
+      .on(table.reporterUserId, table.questionId)
+      .where(sql`status = 'open' AND question_id IS NOT NULL`),
+    uniqueIndex('ContentReport_one_open_per_generated_question')
+      .on(table.reporterUserId, table.generatedQuestionId)
+      .where(sql`status = 'open' AND generated_question_id IS NOT NULL`),
   ],
 );
 

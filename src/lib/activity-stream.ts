@@ -20,6 +20,7 @@
 
 import { HOME_TOP3_ELIGIBLE_TYPES } from '@/server/activity/write-activity';
 import type { ActivityItemView } from '@/server/db/queries/activity';
+import type { MasteryTier } from '@/types/db';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 import { LATELY_TIER, latelyTierForMomentDir } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
@@ -112,6 +113,24 @@ export type StreamAction =
 //                   domain opened (expansion).
 export type StreamIconKind = 'bundle' | 'diamond' | 'hourglass' | 'domain' | null;
 
+// An optional rich embed rendered inline beneath a row's one-liner. Almost no
+// rows carry one. The common-ground promo (homepage "What's happening" ONLY)
+// uses it to surface a few domains the viewer shares with a friend as the
+// overlapping-circle motif from the profile page — a quiet discovery nudge.
+export type CommonGroundPromoDomain = {
+  label: string;
+  viewer: { points: number; tier: MasteryTier };
+  friend: { points: number; tier: MasteryTier };
+};
+
+export type StreamEmbed = {
+  kind: 'common_ground';
+  friendId: string;
+  friendFirstName: string;
+  friendHref: string;
+  domains: CommonGroundPromoDomain[];
+};
+
 export type StreamItem = {
   id: string;
   sortAt: Date;
@@ -126,6 +145,8 @@ export type StreamItem = {
   expand: StreamExpand | null;
   // Which triangle mark (if any) precedes this row. See StreamIconKind.
   icon: StreamIconKind;
+  // Optional inline embed rendered under the one-liner (see StreamEmbed).
+  embed?: StreamEmbed | null;
 };
 
 // --- Small builders ----------------------------------------------------------
@@ -573,5 +594,32 @@ export function convergenceToStreamItem(
       friendName: convergence.friendName,
       questions,
     },
+  };
+}
+
+// --- Common-ground promo -----------------------------------------------------
+
+// A homepage-only discovery nudge: "You and {friend} share ground worth
+// testing", with the friend's top few shared-but-untested domains drawn as the
+// overlapping-circle motif from their profile. Question-free, so it never
+// expands; the embed carries everything ActivityStreamItem needs to render the
+// circles plus a link through to the friend's profile.
+export function commonGroundPromoToStreamItem(
+  embed: StreamEmbed,
+  sortAt: Date,
+  id: string,
+): StreamItem {
+  return {
+    id,
+    sortAt,
+    tier: LATELY_TIER.OTHER,
+    homeEligible: true,
+    line: [txt('You and '), act(embed.friendFirstName, embed.friendId), txt(' share ground worth testing')],
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'domain',
+    expand: null,
+    embed,
   };
 }

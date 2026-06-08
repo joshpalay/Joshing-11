@@ -1426,7 +1426,14 @@ function FeedListContent({
         <section className="space-y-3 pb-8">
           {groupItemsByRecency(unifiedRows).map((group) => (
             <Fragment key={group.key}>
-              <h2 className="text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0">
+              <h2
+                className={`text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0 ${
+                  // On the unified-home feed, the day label aligns to where the
+                  // activity-row copy starts — past the fixed icon column
+                  // (MARK_W 24 + GAP 8) plus the row's 2px horizontal padding.
+                  unifiedHome ? 'pl-[34px]' : ''
+                }`}
+              >
                 {group.label}
               </h2>
               {group.items.map((row) => {
