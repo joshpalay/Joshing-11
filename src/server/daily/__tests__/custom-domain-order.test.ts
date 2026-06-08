@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { domainKey } from '@/lib/knowledge/domain-key';
+
 // generate-questions.ts imports @/server/db, which throws at module load
 // without a connection string. The helper under test never touches the DB;
 // a dummy URL plus dynamic import (the repo convention) keeps the unit pure.
@@ -12,7 +14,9 @@ beforeAll(async () => {
 
 describe('orderCustomDomainsByLeastRecent', () => {
   it('puts the least-recently-generated domains first', () => {
-    // Mirrors the affected account: deep mined domains vs fresh picks.
+    // Mirrors the affected account: deep mined domains vs fresh picks. The count
+    // map is keyed by domainKey() (matching getRecentDomainCounts), so build the
+    // keys with the same fold the production code uses.
     const domains = [
       "Wagner's Ring Cycle",
       'Shakespearean Tragedy',
@@ -21,11 +25,11 @@ describe('orderCustomDomainsByLeastRecent', () => {
       'T.S. Eliot',
     ];
     const counts = new Map<string, number>([
-      ["Wagner's Ring Cycle", 12],
-      ['Shakespearean Tragedy', 15],
-      ['Classic Broadway Musicals (1940s-1960s)', 0],
-      ['Animated Television Series (1970s-1980s)', 0],
-      ['T.S. Eliot', 2],
+      [domainKey("Wagner's Ring Cycle"), 12],
+      [domainKey('Shakespearean Tragedy'), 15],
+      [domainKey('Classic Broadway Musicals (1940s-1960s)'), 0],
+      [domainKey('Animated Television Series (1970s-1980s)'), 0],
+      [domainKey('T.S. Eliot'), 2],
     ]);
 
     const ordered = orderCustomDomainsByLeastRecent(domains, counts);
@@ -42,10 +46,22 @@ describe('orderCustomDomainsByLeastRecent', () => {
     ]);
   });
 
+  it('collapses spelling variants onto one canonical count', () => {
+    // The generation history recorded a curly-apostrophe spelling, while the
+    // user's selected domain uses the straight apostrophe. Both fold to the same
+    // domainKey, so the mined count must apply to the selected variant and sink
+    // it below a genuinely fresh domain.
+    const ordered = orderCustomDomainsByLeastRecent(
+      ["90's Hip-Hop", 'Bebop'],
+      new Map([[domainKey('90’s Hip-Hop'), 9]]),
+    );
+    expect(ordered).toEqual(['Bebop', "90's Hip-Hop"]);
+  });
+
   it('treats a domain absent from the counts map as count 0 (fresh)', () => {
     const ordered = orderCustomDomainsByLeastRecent(
       ['Mined', 'NeverGenerated'],
-      new Map([['Mined', 7]]),
+      new Map([[domainKey('Mined'), 7]]),
     );
     expect(ordered).toEqual(['NeverGenerated', 'Mined']);
   });
