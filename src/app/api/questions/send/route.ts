@@ -11,6 +11,7 @@ import {
   userHasQuestionInBlockingFeed,
 } from '@/server/db/queries/feed';
 import { getFriends } from '@/server/db/queries/friends';
+import { isQuestionReportSuppressed } from '@/server/db/queries/content-reports';
 import { sendSms } from '@/server/sms';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
@@ -34,6 +35,17 @@ export async function POST(request: NextRequest) {
   const friends = await getFriends(session.userId);
   if (!friends.some((friend) => friend.id === parsed.recipientUserId)) {
     return NextResponse.json({ error: 'Recipient is not a friend.' }, { status: 403 });
+  }
+
+  // B-Report-3: a question under an open/upheld content report can't enter a new
+  // surface. Check the RAW incoming id (which may be a GeneratedQuestion) before
+  // resolveQuestionIdForSend mints it into a fresh curated Question — otherwise a
+  // report on the original would be laundered away by the new id.
+  if (await isQuestionReportSuppressed(parsed.questionId)) {
+    return NextResponse.json(
+      { error: 'under_review', message: 'This question is under review and can’t be sent right now.' },
+      { status: 409 },
+    );
   }
 
   const sendableQuestionId = await resolveQuestionIdForSend(parsed.questionId);
