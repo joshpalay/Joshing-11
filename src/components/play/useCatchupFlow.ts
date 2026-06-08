@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
 import { CATCH_UP_BATCH_SIZE } from '@/lib/game-constants';
@@ -100,33 +100,6 @@ function formatQuestionSubhead(item: CatchupQueueItem): string {
   const date = new Date(`${item.queueDate}T12:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return 'FROM EARLIER';
   return `FROM ${new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(date).toUpperCase()}`;
-}
-
-async function fetchBreadcrumbForCatchupMessage(
-  queueId: string,
-  slotIndex: number,
-  messageId: string,
-  setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
-): Promise<void> {
-  try {
-    const response = await fetch('/api/breadcrumb', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ source: 'daily', queueId, slotIndex }),
-    });
-    if (!response.ok) return;
-    const body = await response.json().catch(() => null) as { breadcrumb?: string | null } | null;
-    const breadcrumb = body?.breadcrumb ?? null;
-    if (!breadcrumb) return;
-    setMessages((existing) => existing.map((message) =>
-      message.id === messageId && message.kind === 'result'
-        ? { ...message, breadcrumb }
-        : message,
-    ));
-  } catch {
-    // Breadcrumb is purely additive context; failure is silently ignored.
-  }
 }
 
 // Builds the result-turn message a catch-up answer produces, mapping the
@@ -491,16 +464,6 @@ export function useCatchupFlow() {
           pointsAwarded,
         }),
       ]);
-
-      // Breadcrumbs are computed from daily-queue slots only; feed-sourced
-      // catch-up items use a `feed:<feedItemId>` ID and have no slot to look up.
-      if (!item.dailyQueueItemId.startsWith('feed:')) {
-        const [queueId, slotIndexValue] = item.dailyQueueItemId.split(':');
-        const slotIndex = Number(slotIndexValue);
-        if (queueId && Number.isInteger(slotIndex)) {
-          void fetchBreadcrumbForCatchupMessage(queueId, slotIndex, resultMessageId, setMessages);
-        }
-      }
 
       const revealedAnswer = data.correctAnswer ?? data.answer ?? item.correctAnswer;
       window.setTimeout(() => {

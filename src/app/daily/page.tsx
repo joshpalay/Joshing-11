@@ -510,35 +510,6 @@ export default function DailyPage() {
     return map;
   }, [queue?.slots]);
 
-  const fetchBreadcrumb = useCallback(async (queueId: string, slotIndex: number) => {
-    try {
-      const response = await fetch('/api/breadcrumb', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ source: 'daily', queueId, slotIndex }),
-      });
-      if (!response.ok) return;
-      const body = (await response.json().catch(() => null)) as {
-        breadcrumb?: string | null;
-      } | null;
-      const breadcrumb = body?.breadcrumb ?? null;
-      if (!breadcrumb) return;
-      setQueue((existing) =>
-        existing && existing.queue_id === queueId
-          ? {
-              ...existing,
-              slots: existing.slots.map((slot) =>
-                slot.slot_index === slotIndex ? { ...slot, reveal_breadcrumb: breadcrumb } : slot,
-              ),
-            }
-          : existing,
-      );
-    } catch {
-      // Breadcrumb is purely additive context; failure is silently ignored.
-    }
-  }, []);
-
   const postAnswer = useCallback(
     async (opts: { submittedAnswer: string; gaveUp: boolean }) => {
       if (!queue || !currentSlot || submitting) return;
@@ -608,17 +579,13 @@ export default function DailyPage() {
         setPausedAfterSlotIndex(currentSlot.slot_index);
         window.setTimeout(() => setPausedAfterSlotIndex(null), 850);
         setAnswer('');
-
-        if (!opts.gaveUp) {
-          void fetchBreadcrumb(queue.queue_id, currentSlot.slot_index);
-        }
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : 'Could not record that answer.');
       } finally {
         setSubmitting(false);
       }
     },
-    [currentSlot, fetchBreadcrumb, queue, submitting],
+    [currentSlot, queue, submitting],
   );
 
   const submitAnswer = useCallback(async () => {

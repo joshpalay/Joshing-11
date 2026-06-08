@@ -926,7 +926,6 @@ function ResultRow({
   consolation,
   insideJoke,
   insideJokeKind,
-  breadcrumb,
   authorNote,
   explanation,
   copyVariant,
@@ -969,8 +968,10 @@ function ResultRow({
   const gaveUp = result === 'gave_up';
   // Every reveal shows a one-sentence explainer directly under the answer; the
   // full text always remains in the End of Session Review, so nothing is lost.
-  const explainerText = breadcrumb ?? explanation ?? null;
-  const explainerSentence = explainerText ? firstSentence(explainerText) : null;
+  // Sourced from the stored explainer that arrives with the answer response —
+  // not the async breadcrumb — so the line is shown once and never swaps in
+  // longer/replacement content after the fact.
+  const explainerSentence = explanation ? firstSentence(explanation) : null;
   // Correct keeps its explainer inline within the verdict block (before the
   // "common ground" beat); the other reveals render it after the discovery copy.
   const showDiscoveryExplainer = !correct && Boolean(explainerSentence);
