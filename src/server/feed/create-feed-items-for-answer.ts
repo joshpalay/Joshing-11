@@ -6,6 +6,7 @@ import { getNicheMatchDiscoverable } from '@/server/db/queries/account';
 import { getFollowers } from '@/server/db/queries/friends';
 import { getRelationship } from '@/server/db/queries/friend-requests';
 import { rollOffOldItems } from '@/server/db/queries/feed';
+import { isQuestionReportSuppressed } from '@/server/db/queries/content-reports';
 import { isCorrectAnswerFeedEligible, SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 // Joshing-games funnel through this same after() entrypoint but stamp their
@@ -62,6 +63,12 @@ async function _createFeedItemsForFriendsFromAnswer(
     .limit(1);
 
   if (thumbsDown || ratingDown) return;
+
+  // B-Report-3: an open/upheld content report suppresses NEW propagation entirely —
+  // no friend fan-out, no niche-match discovery, no previous-answerer pings. This
+  // only blocks new feed items; existing copies on other players are untouched and
+  // lift automatically if the report is later dismissed.
+  if (await isQuestionReportSuppressed(questionId)) return;
 
   const [question] = await db
     .select({

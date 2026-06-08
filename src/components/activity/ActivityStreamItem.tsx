@@ -1,17 +1,26 @@
 'use client';
 
+import { Send } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, type KeyboardEvent } from 'react';
 
 import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
+import { AddFriendButton } from '@/components/friends/AddFriendButton';
+import { colorForUser, initialsFor, isDarkColor } from '@/components/feed/visual';
 import { SendQuestionDrawer } from '@/components/SendQuestionDrawer';
 import type {
+  StreamEmbed,
   StreamExpand,
   StreamItem,
   StreamLinePart,
   StreamQuestion,
 } from '@/lib/activity-stream';
+import {
+  circleDatasetMax,
+  DomainCircleSvg,
+} from '@/components/profile/common-ground-circles';
 
 import { DirectQuestionAnswer } from './DirectQuestionAnswer';
 import { InlineAnswerFlow } from './InlineAnswerFlow';
@@ -22,6 +31,29 @@ import { assertNever } from '@/lib/assert-never';
 // Friend names render in the activity-blue from Figma (--brand-link #4a5d75),
 // linked or not, so the actor reads as the warm social anchor of the row.
 const ACTOR_BLUE = 'var(--brand-link)';
+
+// Promo embed CTA link ("See what you share" / "See your knowledge"): a plain
+// underlined text link in the body font, NOT the old monospace letterspaced caps
+// treatment, so it reads unmistakably as a link.
+const EMBED_LINK_STYLE = {
+  display: 'inline-block',
+  marginTop: 12,
+  fontFamily: FF,
+  fontSize: 13,
+  fontWeight: 600,
+  color: ACTOR_BLUE,
+  textDecoration: 'underline',
+  textUnderlineOffset: 3,
+} as const;
+
+// Badge accents for the recently-expanding embed rows — the reds / golds / blues
+// from the /knowledge "Recently Expanding" module (ROW_ACCENTS), trimmed to the
+// three we ever render.
+const EXPANDING_ROW_ACCENTS = [
+  { border: '#c9564d', fill: 'rgba(201, 86, 77, 0.16)' },
+  { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)' },
+  { border: '#65a8bb', fill: 'rgba(101, 168, 187, 0.20)' },
+] as const;
 
 // An opened reveal indents to sit UNDER the row's header text, not flush to the
 // far-left edge below the icon. This is exactly the ActivityIcon column width —
@@ -96,19 +128,27 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
 
-  // CORRECTION 3 (revised): the answered-of-total counter lives on the LINE
-  // (collapsed and expanded), so the answered-state is held HERE — not inside
-  // the expansion — and ticks up + persists as the viewer answers, even after
-  // the result pop-up closes or the line is collapsed and reopened. We also keep
-  // each in-session resolution (submitted answer + correctness) here so the
-  // expanded "Answered" history can read it back. Milestone lines only.
+  // CORRECTION 3 (revised): the answered-of-total state is conveyed by the
+  // bundle triangle mark (solid → hollow as questions are answered), so the
+  // answered-state is held HERE — not inside the expansion — and ticks up +
+  // persists as the viewer answers, even after the result pop-up closes or the
+  // line is collapsed and reopened. We also keep each in-session resolution
+  // (submitted answer + correctness) here so the expanded "Answered" history can
+  // read it back. Milestone lines only.
   const expand = item.expand;
   const milestoneQuestions = expand && expand.kind === 'milestone' ? expand.questions : null;
-  // Questions the server already records as answered (correctly) on load. We
-  // don't have the original submitted text for these, so the history shows a
-  // calm "Correct" without the "You answered:" clause for them.
+  // Questions the server already records as attempted on load — right OR wrong.
+  // A single attempt is the viewer's only swing in the feed, so any prior
+  // result locks the question here. We don't have the original submitted text
+  // for these, so the history shows a calm "Correct" / "Not this time" (per the
+  // server-recorded result) without the "You answered:" clause for them.
   const [serverAnswered] = useState<Set<string>>(
-    () => new Set((milestoneQuestions ?? []).filter((q) => q.answered).map((q) => q.questionId)),
+    () =>
+      new Set(
+        (milestoneQuestions ?? [])
+          .filter((q) => q.priorResult !== null)
+          .map((q) => q.questionId),
+      ),
   );
   // Resolutions captured this session — both correct and "not this time" — keyed
   // by questionId, carrying what the viewer typed so the history can echo it. A
@@ -133,11 +173,6 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   }
 
   const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;
-
-  const milestoneProgress =
-    milestoneQuestions && milestoneQuestions.length > 0
-      ? { answered: answeredCount, total: milestoneQuestions.length }
-      : null;
 
   // The bundle mark (milestone) shares the row's live answered-state: as the
   // viewer answers questions inline, solid triangles flip to hollow. Caps at 5
@@ -165,9 +200,10 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   }
 
   // Opened milestone clusters read as a distinct, quiet "opened" state: a touch
-  // more vertical room, a faint inset (slightly lifted paper + a gentle inset of
-  // the side padding) and top/bottom hairlines — never a heavy card shadow or
-  // loud fill, so the item still sits inside the feed.
+  // more vertical room, a slightly lifted paper fill, and top/bottom hairlines —
+  // never a heavy card shadow or loud fill, so the item still sits inside the
+  // feed. Horizontal padding stays constant with the collapsed state so the icon
+  // and header text don't shift sideways when the card opens.
   const opened = expandable && open;
 
   return (
@@ -178,7 +214,7 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
           ? {
               borderTop: `1px solid ${RULE}`,
               borderBottom: `1px solid ${RULE}`,
-              padding: '18px 10px',
+              padding: '18px 2px',
               background: PAPER,
             }
           : {
@@ -231,19 +267,6 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
               {item.secondLine}
             </p>
           ) : null}
-          {milestoneProgress ? (
-            <p
-              style={{
-                margin: '4px 0 0',
-                fontFamily: FM,
-                fontSize: 10,
-                letterSpacing: 1,
-                color: INK3,
-              }}
-            >
-              {milestoneProgress.answered} of {milestoneProgress.total} questions
-            </p>
-          ) : null}
         </div>
 
         <div
@@ -258,6 +281,14 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
           <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap' }}>{timestamp}</span>
         </div>
       </div>
+
+      {item.embed?.kind === 'common_ground' ? (
+        <CommonGroundEmbed embed={item.embed} />
+      ) : item.embed?.kind === 'recently_expanding' ? (
+        <RecentlyExpandingEmbed embed={item.embed} />
+      ) : item.embed?.kind === 'add_friends' ? (
+        <AddFriendsEmbed embed={item.embed} />
+      ) : null}
 
       {item.action ? <ItemAction action={item.action} /> : null}
 
@@ -277,6 +308,218 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
           )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// The homepage common-ground promo embed: the friend's top shared-but-untested
+// domains as the overlapping-circle motif (same geometry as the profile page),
+// indented to sit under the row's one-liner, with a link through to the profile.
+// Read-only and non-expanding — it stops click propagation so taps on the
+// circles or link never toggle a (non-existent) expansion.
+function CommonGroundEmbed({
+  embed,
+}: {
+  embed: Extract<StreamEmbed, { kind: 'common_ground' }>;
+}) {
+  const datasetMax = circleDatasetMax(
+    embed.domains.flatMap((d) => [d.viewer.points, d.friend.points]),
+  );
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{ marginLeft: EXPANSION_INDENT, marginTop: 12 }}
+    >
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+        {embed.domains.map((d) => (
+          <div
+            key={d.label}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 6,
+              maxWidth: 120,
+            }}
+          >
+            <DomainCircleSvg
+              viewerPoints={d.viewer.points}
+              friendPoints={d.friend.points}
+              viewerTier={d.viewer.tier}
+              friendTier={d.friend.tier}
+              datasetMax={datasetMax}
+              ariaLabel={`${d.label}: shared with ${embed.friendFirstName}, still untested`}
+            />
+            <span
+              style={{
+                fontFamily: 'Georgia, serif',
+                fontSize: 12.5,
+                lineHeight: 1.3,
+                textAlign: 'center',
+                color: INK2,
+              }}
+            >
+              {d.label}
+            </span>
+          </div>
+        ))}
+      </div>
+      <Link href={embed.friendHref} style={EMBED_LINK_STYLE}>
+        See what you share →
+      </Link>
+    </div>
+  );
+}
+
+// The homepage recently-expanding promo embed: the viewer's fastest-growing
+// territories listed in the /knowledge "Recently Expanding" row style (colored
+// letter badge + serif title + supporting line), indented to sit under the row's
+// one-liner, with a link through to the knowledge page. Read-only and
+// non-expanding — it stops click propagation so taps never toggle a (non-
+// existent) expansion.
+function RecentlyExpandingEmbed({
+  embed,
+}: {
+  embed: Extract<StreamEmbed, { kind: 'recently_expanding' }>;
+}) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{ marginLeft: EXPANSION_INDENT, marginTop: 12 }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {embed.domains.map((d, i) => {
+          const accent = EXPANDING_ROW_ACCENTS[i % EXPANDING_ROW_ACCENTS.length]!;
+          return (
+            <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
+                aria-hidden="true"
+                style={{
+                  width: 30,
+                  height: 30,
+                  flexShrink: 0,
+                  borderRadius: 999,
+                  border: `1px solid ${accent.border}`,
+                  background: accent.fill,
+                  color: INK,
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                }}
+              >
+                {d.initial}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontFamily: 'Georgia, serif',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                    color: INK,
+                  }}
+                >
+                  {d.label}
+                </p>
+                {d.caption ? (
+                  <p style={{ margin: '2px 0 0', fontSize: 12, lineHeight: 1.3, color: INK2 }}>
+                    {d.caption}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Link href={embed.href} style={EMBED_LINK_STYLE}>
+        See your knowledge →
+      </Link>
+    </div>
+  );
+}
+
+// The homepage add-friends promo embed: either a few contact-match people the
+// viewer can follow (each row reuses the canonical AddFriendButton state machine
+// + a refresh on change) or, when there's no one to suggest, a copy-only nudge
+// toward /friends/find. Indented to sit under the row's one-liner; stops click
+// propagation so taps never toggle a (non-existent) expansion.
+function AddFriendsEmbed({
+  embed,
+}: {
+  embed: Extract<StreamEmbed, { kind: 'add_friends' }>;
+}) {
+  const router = useRouter();
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{ marginLeft: EXPANSION_INDENT, marginTop: 12 }}
+    >
+      {embed.variant === 'suggestions' ? (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {embed.people.map((p) => {
+              const bg = p.avatarColor ?? colorForUser(p.id);
+              return (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Link
+                    href={`/users/${p.id}`}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      flexShrink: 0,
+                      borderRadius: 999,
+                      background: bg,
+                      color: isDarkColor(bg) ? '#fff' : INK,
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    {initialsFor(p.displayName)}
+                  </Link>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <Link
+                      href={`/users/${p.id}`}
+                      style={{ color: INK, fontWeight: 600, fontSize: 14, textDecoration: 'none' }}
+                    >
+                      {p.displayName}
+                    </Link>
+                    {p.handle ? (
+                      <span style={{ display: 'block', fontSize: 12, lineHeight: 1.3, color: INK3 }}>
+                        @{p.handle}
+                      </span>
+                    ) : null}
+                  </div>
+                  <AddFriendButton
+                    targetUserId={p.id}
+                    targetDisplayName={p.displayName}
+                    relationship={p.relationship}
+                    onChange={() => router.refresh()}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <Link href={embed.href} style={EMBED_LINK_STYLE}>
+            Find more friends →
+          </Link>
+        </>
+      ) : (
+        <>
+          <p style={{ margin: 0, fontFamily: 'Georgia, serif', fontSize: 14, lineHeight: 1.45, color: INK2 }}>
+            Know someone who would enjoy the questions and discoveries happening here?
+          </p>
+          <Link href={embed.href} style={EMBED_LINK_STYLE}>
+            Find friends →
+          </Link>
+        </>
+      )}
     </div>
   );
 }
@@ -316,9 +559,9 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
 // promised ("{answered} of {total} questions") rather than one question at a
 // time. Each settled question (right OR wrong) drops out of the stack and into
 // the quiet "Answered" history below, so what remains above is always exactly
-// the work left to do. The answered-state is owned by the parent so the line's
-// quiet "{answered} of {total}" counter and the triangle mark stay in lockstep.
-function MilestoneExpansion({
+// the work left to do. The answered-state is owned by the parent so the bundle
+// triangle mark ticks from solid to hollow in lockstep as questions settle.
+export function MilestoneExpansion({
   expand,
   isResolved,
   resolutions,
@@ -388,10 +631,12 @@ function AnsweredHistory({
       >
         {questions.map((q) => {
           const r = resolutions.get(q.questionId);
-          // No in-session resolution means the server already had it on load as
-          // a correct answer; we lack the original text, so we show a calm
-          // "Correct" without the answer clause rather than invent one.
-          const isCorrect = r ? r.isCorrect : true;
+          // No in-session resolution means the server already had this attempt on
+          // load; we lack the original text, so we show a calm "Correct" / "Not
+          // this time" from the server-recorded result without inventing an
+          // answer clause. priorResult is non-null here (it's why the question
+          // sits in this answered list); treat anything but 'incorrect' as right.
+          const isCorrect = r ? r.isCorrect : q.priorResult !== 'incorrect';
           // Result reads in the app's semantic answer colors: green for correct,
           // red for "not this time" — same tokens the AnswerFeedbackSheet uses.
           const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)';
@@ -521,6 +766,9 @@ function SendOnwardExpansion({
           type="button"
           onClick={() => setSendOpen(true)}
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
             background: INK,
             color: 'var(--brand-cream-page)',
             border: 'none',
@@ -531,7 +779,8 @@ function SendOnwardExpansion({
             cursor: 'pointer',
           }}
         >
-          SEND IT ONWARD →
+          SEND TO A FRIEND
+          <Send size={12} aria-hidden />
         </button>
 
         {expand.kind === 'niche_match' && expand.strangerId ? (

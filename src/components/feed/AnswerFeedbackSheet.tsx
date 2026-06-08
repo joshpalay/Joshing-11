@@ -1,12 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Check, Sparkles, X } from 'lucide-react'
+import { Check, MoreHorizontal, Sparkles, X } from 'lucide-react'
 
+import { answerHeadingStyle } from '@/components/answer-heading'
 import { FeedActionLink } from './FeedActionLink'
 import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
 import { INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types'
+import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
 // card (raw --tri-amber #d9a82e is too light for small text). Used by the
@@ -32,6 +34,10 @@ type AnswerFeedbackSheetProps = {
   // disputed canonical answer). Resolves with the verdict to surface inline.
   // Omit (or pass null) to hide the recheck affordance.
   onRecheck?: (() => Promise<{ accepted: boolean; message: string }>) | null
+  // B-Report-2: opt-in content-reporting ⋯ menu. This sheet is shared across several
+  // post-result surfaces; only the milestone inline flow enables it (the prompt scopes
+  // the entry point to that surface). Omit on the feed/direct-answer result modals.
+  report?: { target: ReportReasonTarget; surface: 'round_recap' | 'lately_result' } | null
   onClose: () => void
 }
 
@@ -54,6 +60,7 @@ export function AnswerFeedbackSheet({
   questionId,
   feedItemId,
   onRecheck = null,
+  report = null,
   onClose,
 }: AnswerFeedbackSheetProps) {
   const visibleCategory = visibleFeedCategory(category)
@@ -64,6 +71,10 @@ export function AnswerFeedbackSheet({
   const [recheckState, setRecheckState] = useState<RecheckState>('idle')
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
   const [recheckAccepted, setRecheckAccepted] = useState(false)
+  // B-Report-2: the ⋯ menu (none existed on this surface before) and the "why" sheet.
+  // A Lately milestone question is always a curated Question, so the target is questionId.
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [reportCategory, setReportCategory] = useState<'incorrect' | 'inappropriate' | null>(null)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -144,12 +155,12 @@ export function AnswerFeedbackSheet({
       <div
         className={
           showNewTerritory
-            ? 'relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-2xl ring-2'
-            : 'relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl'
+            ? 'relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-2xl ring-2'
+            : 'relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl'
         }
         style={showNewTerritory ? { '--tw-ring-color': 'color-mix(in srgb, var(--tri-amber) 55%, transparent)' } as CSSProperties : undefined}
       >
-        <div className="flex items-center justify-between px-5 pt-5 pb-2">
+        <div className="flex items-center justify-between px-5 pt-4 pb-1">
           {showNewTerritory ? (
             <p
               className="inline-flex items-center gap-1.5 text-[0.68rem] font-semibold tracking-[0.18em] uppercase"
@@ -167,18 +178,31 @@ export function AnswerFeedbackSheet({
           ) : (
             <div />
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {report ? (
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen(true)}
+                aria-label="More actions"
+                aria-expanded={isMenuOpen}
+                className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <MoreHorizontal className="size-5" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-2">
-          <div className="flex items-center gap-3 pb-3">
+          <div className="flex items-center gap-3 pb-2">
             <span
               className="inline-flex size-9 items-center justify-center rounded-full"
               style={{
@@ -214,38 +238,38 @@ export function AnswerFeedbackSheet({
             />
           ) : null}
 
-          <p className="pb-3 font-serif text-lg leading-7 text-[var(--brand-ink)]">
+          <p className="pb-2 font-serif text-lg leading-6 text-[var(--brand-ink)]">
             {question}
           </p>
 
-          <div className="space-y-1.5 pb-3">
-            <p
-              className="text-[13px] italic"
-              style={{
-                fontFamily: 'var(--font-literata)',
-                color: 'var(--ink)',
-                opacity: 0.7,
-              }}
-            >
-              Your answer: {submittedAnswer}
-            </p>
-            {!isCorrect && correctAnswer ? (
+          <div className="space-y-1 pb-2">
+            {correctAnswer ? (
+              <p
+                style={{
+                  ...answerHeadingStyle,
+                  color: isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)',
+                }}
+              >
+                {correctAnswer}
+              </p>
+            ) : null}
+            {!isCorrect ? (
               <p
                 className="text-[13px] italic"
                 style={{
                   fontFamily: 'var(--font-literata)',
                   color: 'var(--ink)',
-                  opacity: 0.85,
+                  opacity: 0.7,
                 }}
               >
-                Correct answer: {correctAnswer}
+                Your answer: {submittedAnswer}
               </p>
             ) : null}
           </div>
 
           {explanation ? (
-            <div className="rounded-2xl bg-muted p-4">
-              <p className="font-serif text-[15px] leading-7 text-[var(--brand-ink-700)]">
+            <div className="rounded-2xl bg-muted p-3.5">
+              <p className="font-serif text-[15px] leading-6 text-[var(--brand-ink-700)]">
                 {explanation}
               </p>
             </div>
@@ -253,7 +277,7 @@ export function AnswerFeedbackSheet({
 
           {insideJoke ? (
             <div
-              className="mt-3 rounded-2xl border p-4"
+              className="mt-2.5 rounded-2xl border p-3.5"
               style={{
                 backgroundColor: 'color-mix(in srgb, var(--tri-amber) 12%, var(--brand-card))',
                 borderColor: 'color-mix(in srgb, var(--tri-amber) 40%, var(--brand-border))',
@@ -265,18 +289,18 @@ export function AnswerFeedbackSheet({
               >
                 {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
               </p>
-              <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
+              <p className="mt-1 font-serif text-[15px] leading-6 text-[var(--brand-ink)]">
                 {insideJoke}
               </p>
             </div>
           ) : null}
 
           {creatorNote ? (
-            <div className="mt-3 rounded-2xl border bg-muted p-4">
+            <div className="mt-2.5 rounded-2xl border bg-muted p-3.5">
               <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
                 Why they asked
               </p>
-              <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
+              <p className="mt-1 font-serif text-[15px] leading-6 text-[var(--brand-ink)]">
                 {creatorNote}
               </p>
             </div>
@@ -357,12 +381,73 @@ export function AnswerFeedbackSheet({
           ) : null}
         </div>
 
-        <div className="px-5 pt-2 pb-8">
+        <div className="px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           <button type="button" onClick={onClose} className="btn-primary w-full">
             Done
           </button>
         </div>
       </div>
+
+      {report && isMenuOpen ? (
+        <div
+          className="fixed inset-0 z-[58] flex items-end justify-center px-3 pt-16 pb-3 sm:items-start sm:pt-24"
+          style={{ background: 'rgba(0,0,0,0.2)' }}
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close menu"
+            onClick={() => setIsMenuOpen(false)}
+          />
+          <div className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl">
+            <div className="flex items-center justify-between px-3 py-2 sm:hidden">
+              <p className="text-foreground text-sm font-medium">More actions</p>
+              <button
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setIsMenuOpen(false)}
+                className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(false)
+                setReportCategory('incorrect')
+              }}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+            >
+              This is incorrect
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(false)
+                setReportCategory('inappropriate')
+              }}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+            >
+              This is inappropriate
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {report && reportCategory ? (
+        <ReportReasonSheet
+          category={reportCategory}
+          target={report.target}
+          surface={report.surface}
+          onClose={() => setReportCategory(null)}
+          onSubmitted={(category) => {
+            // Inappropriate → the result card disappears from view (close the modal).
+            // Durable self-hide / propagation suppression is B-Report-3.
+            if (category === 'inappropriate') onClose()
+          }}
+        />
+      ) : null}
     </div>
   )
 }

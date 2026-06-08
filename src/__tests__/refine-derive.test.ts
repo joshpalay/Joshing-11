@@ -45,14 +45,16 @@ describe('deriveFriendExpansion', () => {
   });
 
   it('does not fire when the player already owns the subdomain', () => {
-    const slots = [
-      slot({ presence_source_id: 'f1', domain: 'Jazz', answer_state: 'correct' }),
-    ];
+    const slots = [slot({ presence_source_id: 'f1', domain: 'Jazz', answer_state: 'correct' })];
     expect(deriveFriendExpansion(slots, new Set(['jazz']))).toHaveLength(0);
   });
 
   it('does not fire on an incorrect answer or a non-bonus slot', () => {
-    const incorrectBonus = slot({ presence_source_id: 'f1', domain: 'Jazz', answer_state: 'incorrect' });
+    const incorrectBonus = slot({
+      presence_source_id: 'f1',
+      domain: 'Jazz',
+      answer_state: 'incorrect',
+    });
     const nonBonusCorrect = slot({ domain: 'Jazz', answer_state: 'correct' });
     expect(deriveFriendExpansion([incorrectBonus, nonBonusCorrect], new Set())).toHaveLength(0);
   });
@@ -106,9 +108,22 @@ describe('pruningThreshold + deriveStrugglePruning', () => {
 });
 
 describe('selectRefineCandidates', () => {
-  const friend: RefineCandidate = { type: 'friend_expansion', subdomainId: 'a', subdomainLabel: 'a', friendId: 'f1' };
-  const escalation: RefineCandidate = { type: 'difficulty_escalation', subdomainId: 'b', subdomainLabel: 'b' };
-  const pruning: RefineCandidate = { type: 'struggle_pruning', subdomainId: 'c', subdomainLabel: 'c' };
+  const friend: RefineCandidate = {
+    type: 'friend_expansion',
+    subdomainId: 'a',
+    subdomainLabel: 'a',
+    friendId: 'f1',
+  };
+  const escalation: RefineCandidate = {
+    type: 'difficulty_escalation',
+    subdomainId: 'b',
+    subdomainLabel: 'b',
+  };
+  const pruning: RefineCandidate = {
+    type: 'struggle_pruning',
+    subdomainId: 'c',
+    subdomainLabel: 'c',
+  };
 
   it('orders by priority friend → escalation → pruning', () => {
     const out = selectRefineCandidates([pruning, escalation, friend], new Set());
@@ -142,8 +157,16 @@ describe('selectRefineCandidates', () => {
   });
 
   it('keeps both candidates when one subdomain qualifies for two types', () => {
-    const dualEscalation: RefineCandidate = { type: 'difficulty_escalation', subdomainId: 'dual', subdomainLabel: 'dual' };
-    const dualPruning: RefineCandidate = { type: 'struggle_pruning', subdomainId: 'dual', subdomainLabel: 'dual' };
+    const dualEscalation: RefineCandidate = {
+      type: 'difficulty_escalation',
+      subdomainId: 'dual',
+      subdomainLabel: 'dual',
+    };
+    const dualPruning: RefineCandidate = {
+      type: 'struggle_pruning',
+      subdomainId: 'dual',
+      subdomainLabel: 'dual',
+    };
     const out = selectRefineCandidates([dualPruning, dualEscalation], new Set());
     expect(out.map((c) => c.type)).toEqual(['difficulty_escalation', 'struggle_pruning']);
   });
@@ -165,7 +188,9 @@ describe('copy', () => {
     expect(openText(pruning)).toBe(
       "You've missed the last 4 subprime mortgage questions. Rest them for now?",
     );
-    expect(resolvedText(pruning)).toBe("Resting subprime mortgage for now — it won't be asked.");
+    expect(resolvedText(pruning)).toBe(
+      "Moving subprime mortgage to Never for now — it won't be asked.",
+    );
 
     const escalation: RefineCandidate = {
       type: 'difficulty_escalation',

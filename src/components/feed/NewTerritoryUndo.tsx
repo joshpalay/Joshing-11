@@ -1,79 +1,70 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { Moon, Sparkles } from 'lucide-react'
+import { useState } from 'react';
+import { Sparkles } from 'lucide-react';
 
-import type { TerritoryFrequency } from '@/lib/daily/territory-model'
+import {
+  TERRITORY_FREQUENCIES,
+  TERRITORY_FREQUENCY_LABEL,
+  type TerritoryFrequency,
+} from '@/lib/daily/territory-model';
 
 // Darkened triangle-gold so the "New territory" copy clears AA on the cream
 // card (raw --tri-amber #d9a82e is too light for small text).
-const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))'
+const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))';
 
-// Default-add with a soft demote (B-1): a correct answer in an unfamiliar domain
+// Default-add with player control (B-1): a correct answer in an unfamiliar domain
 // opens it in the player's Knowledge base automatically (server-side, via
-// writeMasteryEvent). This card surfaces that the domain was added, and the
-// primary control doesn't delete it — it moves the freshly-opened domain to
-// "Once in a Blue Moon" so it stays on the map but only surfaces every so often.
-// After moving, an "Undo" steps back to the just-added stage by restoring the
-// domain's prior frequency. The player stays in control without losing the
-// territory. Used on both reveal surfaces.
+// writeMasteryEvent), starting in the default "Sometimes" rotation. This card
+// surfaces that the domain was added and lets the player dial how often it should
+// come up — Often / Sometimes / Blue Moon / Never — via a segmented control that
+// saves on tap. No Undo is needed: the control is self-reversible (re-tap another
+// tier). Used on both reveal surfaces.
+const FREQUENCY_HINT: Record<TerritoryFrequency, string> = {
+  often: 'Shows up most in your rounds.',
+  sometimes: 'Stays in normal rotation.',
+  blue_moon: 'Only surfaces every so often.',
+  resting: "Stays on your map, but won't be asked.",
+};
+
 export function NewTerritoryUndo({
   domain,
   category,
 }: {
-  domain: string
-  category?: string | null
+  domain: string;
+  category?: string | null;
 }) {
-  // 'open' = freshly added (default rotation); 'blue_moon' = demoted to rare.
-  const [stage, setStage] = useState<'open' | 'blue_moon'>('open')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(false)
-  // The frequency the domain had before we moved it to blue_moon, so Undo can
-  // restore exactly that (usually unset → null, i.e. default rotation).
-  const [previousFrequency, setPreviousFrequency] = useState<TerritoryFrequency | null>(null)
-  const label = category || domain
+  // Freshly-added domains start in the default rotation ('sometimes').
+  const [selected, setSelected] = useState<TerritoryFrequency>('sometimes');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const label = category || domain;
 
-  const setFrequency = async (frequency: TerritoryFrequency | null) => {
+  const setFrequency = async (frequency: TerritoryFrequency) => {
     const response = await fetch('/api/daily/preferences/domain-frequency', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ domain, frequency }),
-    })
-    if (!response.ok) throw new Error('frequency update failed')
-    return (await response.json().catch(() => null)) as {
-      previousFrequency?: TerritoryFrequency | null
-    } | null
-  }
+    });
+    if (!response.ok) throw new Error('frequency update failed');
+  };
 
-  const handleBlueMoon = async () => {
-    if (busy) return
-    setBusy(true)
-    setError(false)
+  const handleSelect = async (frequency: TerritoryFrequency) => {
+    if (busy || frequency === selected) return;
+    const previous = selected;
+    setSelected(frequency);
+    setBusy(true);
+    setError(false);
     try {
-      const result = await setFrequency('blue_moon')
-      setPreviousFrequency(result?.previousFrequency ?? null)
-      setStage('blue_moon')
+      await setFrequency(frequency);
     } catch {
-      setError(true)
+      setSelected(previous);
+      setError(true);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
-
-  const handleUndo = async () => {
-    if (busy) return
-    setBusy(true)
-    setError(false)
-    try {
-      await setFrequency(previousFrequency)
-      setStage('open')
-    } catch {
-      setError(true)
-    } finally {
-      setBusy(false)
-    }
-  }
+  };
 
   return (
     <div
@@ -92,56 +83,47 @@ export function NewTerritoryUndo({
           }}
           aria-hidden
         >
-          {stage === 'blue_moon' ? <Moon className="size-3.5" /> : <Sparkles className="size-3.5" />}
+          <Sparkles className="size-3.5" />
         </span>
         <div className="min-w-0 flex-1">
-          {stage === 'blue_moon' ? (
-            <>
-              <p className="font-serif text-sm leading-snug font-semibold" style={{ color: GOLD_INK }}>
-                {label} is now once in a blue moon.
-              </p>
-              <p className="mt-1 text-[13px] text-[var(--brand-ink)]">
-                It stays on your map but will only surface every so often.
-              </p>
-              <p className="mt-1.5 text-[13px] text-[var(--brand-ink)]">
-                {busy ? (
-                  <span className="text-[var(--brand-ink-400)]">Undoing…</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void handleUndo()}
-                    className="font-semibold underline underline-offset-2 hover:opacity-70"
-                    style={{ color: GOLD_INK }}
-                  >
-                    Undo
-                  </button>
-                )}
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="font-serif text-sm leading-snug font-semibold" style={{ color: GOLD_INK }}>
-                Added {label} to your knowledge base.
-              </p>
-              <p className="mt-1 text-[13px] text-[var(--brand-ink)]">
-                Want it only every so often?
-              </p>
-              <p className="mt-1.5 text-[13px] text-[var(--brand-ink)]">
-                {busy ? (
-                  <span className="text-[var(--brand-ink-400)]">Moving…</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void handleBlueMoon()}
-                    className="font-semibold underline underline-offset-2 hover:opacity-70"
-                    style={{ color: GOLD_INK }}
-                  >
-                    Move to Once in a Blue Moon
-                  </button>
-                )}
-              </p>
-            </>
-          )}
+          <p className="font-serif text-sm leading-snug font-semibold" style={{ color: GOLD_INK }}>
+            Added {label} to your knowledge base.
+          </p>
+          <p className="mt-1 text-[13px] text-[var(--brand-ink)]">How often should it come up?</p>
+
+          <div
+            className="mt-2 flex flex-wrap gap-1.5"
+            role="group"
+            aria-label={`How often to ask about ${label}`}
+          >
+            {TERRITORY_FREQUENCIES.map((frequency) => {
+              const isSelected = frequency === selected;
+              return (
+                <button
+                  key={frequency}
+                  type="button"
+                  onClick={() => void handleSelect(frequency)}
+                  disabled={busy}
+                  aria-pressed={isSelected}
+                  className="rounded-full border px-3 py-1 text-[13px] font-semibold transition-opacity disabled:opacity-60"
+                  style={{
+                    color: isSelected ? 'var(--brand-card)' : GOLD_INK,
+                    backgroundColor: isSelected
+                      ? GOLD_INK
+                      : 'color-mix(in srgb, var(--tri-amber) 12%, var(--brand-card))',
+                    borderColor: 'color-mix(in srgb, var(--tri-amber) 40%, var(--brand-border))',
+                  }}
+                >
+                  {TERRITORY_FREQUENCY_LABEL[frequency]}
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="mt-1.5 text-[13px] text-[var(--brand-ink-400)]">
+            {busy ? 'Saving…' : FREQUENCY_HINT[selected]}
+          </p>
+
           {error ? (
             <p className="mt-1.5 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>
               Could not update it. Try again.
@@ -150,5 +132,5 @@ export function NewTerritoryUndo({
         </div>
       </div>
     </div>
-  )
+  );
 }

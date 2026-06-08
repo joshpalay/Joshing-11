@@ -130,6 +130,7 @@ vi.mock('@/server/knowledge/open-domain', () => ({
 
 vi.mock('@/server/questions/llm-difficulty', () => ({
   assessQuestionDifficulty: assessQuestionDifficultyMock,
+  fallbackQuestionDifficulty: () => ({ tier: 'solid', difficulty: 3 }),
 }))
 
 vi.mock('@/server/sms', () => ({
@@ -546,7 +547,7 @@ describe('POST /api/questions category leak handling', () => {
     expect(state.questionUpdateValues).toEqual([])
   })
 
-  it('returns 500 with a friendly message when an enrichment step throws', async () => {
+  it('still saves the question with a fallback difficulty when difficulty enrichment throws', async () => {
     categorizeQuestionMock.mockResolvedValue({
       broad_category: 'Arts & Literature',
       subcategory: 'Victorian Literature',
@@ -555,11 +556,28 @@ describe('POST /api/questions category leak handling', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     const response = await POST(questionRequest({}))
-    const body = await response.json()
 
-    expect(response.status).toBe(500)
-    expect(body.error).toBe('server_error')
-    expect(body.message).toMatch(/something went wrong/i)
-    expect(createQuestionMock).not.toHaveBeenCalled()
+    // Enrichment is optional: an outage degrades the signal, it does not 500 the save.
+    expect(response.status).toBe(201)
+    expect(createQuestionMock).toHaveBeenCalledTimes(1)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { difficulty: number }
+    expect(createArgs.difficulty).toBe(3)
+  })
+
+  it('saves with needs_review status when the vet step throws, never auto-publishing', async () => {
+    categorizeQuestionMock.mockResolvedValue({
+      broad_category: 'Arts & Literature',
+      subcategory: 'Victorian Literature',
+    })
+    vetQuestionMock.mockRejectedValue(new Error('vet down'))
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const response = await POST(questionRequest({}))
+
+    expect(response.status).toBe(201)
+    expect(createQuestionMock).toHaveBeenCalledTimes(1)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { publicStatus: string }
+    // verdictToPublicStatus maps needs_review → not_scored (never eligible/public).
+    expect(createArgs.publicStatus).toBe('not_scored')
   })
 })

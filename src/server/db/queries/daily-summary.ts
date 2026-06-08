@@ -11,6 +11,7 @@ import {
 } from '@/server/db';
 import { resolveTier } from '@/server/mastery/tiers';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
+import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { buildRefineSection } from '@/server/db/queries/refine';
 import { getFeedPagePayload } from '@/server/feed/get-feed-page';
@@ -68,6 +69,16 @@ export type QuestionRecap = {
   authorNote: string | null;
   /** D-3: the author is the non-human house/editorial author (Editorial badge, non-relational copy). */
   authorIsHouse: boolean;
+  /**
+   * B-Report-2: which content table this recap row points at, for a ContentReport.
+   * Exactly one id is set — curated questions carry `questionId`, LLM-origin questions
+   * carry `generatedQuestionId`. Null only for the synthetic-fallback slot (no real row
+   * to report), in which case the ⋯ report items are hidden.
+   */
+  reportTarget:
+    | { questionId: string; generatedQuestionId?: undefined }
+    | { generatedQuestionId: string; questionId?: undefined }
+    | null;
 };
 
 export type DomainGain = {
@@ -241,8 +252,29 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       authorId: slot.source === 'friend' ? (slot.author_id ?? null) : null,
       authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
       authorIsHouse: slot.source === 'house',
+      reportTarget: slot.question_id
+        ? { questionId: slot.question_id }
+        : slot.generated_question_id
+          ? { generatedQuestionId: slot.generated_question_id }
+          : null,
     };
   });
+
+  // B-Report-3: durable self-hide. A recap card the viewer reported as
+  // inappropriate (open|upheld) stays gone across refreshes — read straight from
+  // the ContentReport row, no new state. Incorrect reports do not self-hide.
+  // Totals stay computed from slots (below), matching B-Report-2's card-only removal.
+  const reportTargetIds = recaps
+    .map((recap) => recap.reportTarget?.questionId ?? recap.reportTarget?.generatedQuestionId)
+    .filter((id): id is string => Boolean(id));
+  const hiddenIds = await getViewerHiddenQuestionIds(userId, reportTargetIds);
+  const visibleRecaps =
+    hiddenIds.size === 0
+      ? recaps
+      : recaps.filter((recap) => {
+          const targetId = recap.reportTarget?.questionId ?? recap.reportTarget?.generatedQuestionId;
+          return !(targetId && hiddenIds.has(targetId));
+        });
 
   const totalSkipped = slots.filter((slot) => slot.skipped).length;
   const totalAnswered = slots.filter((slot) => slot.answered).length;
@@ -264,7 +296,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     totalSkipped,
     pointsEarned,
     difficultyMode: prefs.difficulty,
-    questions: recaps,
+    questions: visibleRecaps,
     domainGains: gainedDomains
       .map((domain) => ({
         domain,

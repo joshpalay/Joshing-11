@@ -41,6 +41,6 @@ export function resolvedText(candidate: RefineCandidate): string {
     case 'difficulty_escalation':
       return `We'll keep ${label} at this level for the next month.`;
     case 'struggle_pruning':
-      return `Resting ${label} for now — it won't be asked.`;
+      return `Moving ${label} to Never for now — it won't be asked.`;
   }
 }

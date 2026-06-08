@@ -4,38 +4,18 @@ import type {
   CommonGround as CommonGroundData,
   CommonGroundDomain,
 } from '@/server/db/queries/common-ground'
-import type { MasteryTier } from '@/types/db'
+
+import {
+  circleDatasetMax,
+  DomainCircleSvg,
+  FRIEND_FILL,
+  VIEWER_FILL,
+} from './common-ground-circles'
 
 type CommonGroundProps = {
   // Null when the section isn't applicable (e.g. owner self-view); renders nothing.
   data: CommonGroundData | null
   friendFirstName: string
-}
-
-// Circle geometry is ported from src/components/OverlapMap.tsx (CategoryItem).
-// Diameter scales with a user's mastery points in the domain; the gap between
-// the two circles encodes overlap strength. Unlike OverlapMap (whose overlap
-// ratio comes from shared correct answers), here overlap is derived from tier
-// closeness, per the profile-page spec.
-const MIN_DIAMETER = 20
-const MAX_DIAMETER = 56
-
-// Viewer = brand navy, friend = brand orange — the app's two signature accents
-// (--brand-navy / --brand-orange) form a calm, on-brand two-tone split so each
-// circle reads as "you" vs the friend at a glance against the cream surface.
-const VIEWER_FILL = '#1f3a5a' // --brand-navy
-const FRIEND_FILL = '#d15e36' // --brand-orange
-const CIRCLE_OPACITY = 0.72
-
-const TIER_INDEX: Record<MasteryTier, number> = {
-  establishing: 0,
-  familiar: 1,
-  solid: 2,
-  mastery: 3,
-}
-
-function overlapRatioFromTiers(a: MasteryTier, b: MasteryTier): number {
-  return 1 - Math.abs(TIER_INDEX[a] - TIER_INDEX[b]) / 3
 }
 
 export function CommonGround({ data, friendFirstName }: CommonGroundProps) {
@@ -54,12 +34,8 @@ export function CommonGround({ data, friendFirstName }: CommonGroundProps) {
     headline = `No overlap with ${friendFirstName} yet.`
   }
 
-  // Scale circle diameters against the largest mastery score across everything
-  // we render, so the biggest circle is always MAX_DIAMETER. Floored at 1 to
-  // avoid divide-by-zero when every domain is latent at zero points.
-  const datasetMax = Math.max(
-    1,
-    ...[...proven, ...latent].flatMap((d) => [
+  const datasetMax = circleDatasetMax(
+    [...proven, ...latent].flatMap((d) => [
       d.viewer.mastery_points,
       d.friend.mastery_points,
     ]),
@@ -181,23 +157,6 @@ function DomainCircles({
   datasetMax: number
   friendFirstName: string
 }) {
-  const dA =
-    MIN_DIAMETER +
-    (domain.viewer.mastery_points / datasetMax) * (MAX_DIAMETER - MIN_DIAMETER)
-  const dB =
-    MIN_DIAMETER +
-    (domain.friend.mastery_points / datasetMax) * (MAX_DIAMETER - MIN_DIAMETER)
-  const rA = dA / 2
-  const rB = dB / 2
-  const overlapRatio = overlapRatioFromTiers(
-    domain.viewer.current_tier,
-    domain.friend.current_tier,
-  )
-  const gap = (rA + rB) * (1 - overlapRatio * 0.85)
-  const svgWidth = rA + gap + rB
-  const svgHeight = Math.max(dA, dB)
-  const cy = svgHeight / 2
-
   const label =
     domain.kind === 'proven'
       ? `You and ${friendFirstName} both know ${domain.canonical_subcategory}`
@@ -205,29 +164,14 @@ function DomainCircles({
 
   return (
     <div className="flex max-w-[160px] min-w-[110px] flex-col items-center gap-1.5 px-1">
-      <svg
-        width={svgWidth}
-        height={svgHeight}
-        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-        role="img"
-        aria-label={label}
-      >
-        {/* fill via style (not the SVG attribute) to keep parity with OverlapMap */}
-        <circle
-          cx={rA}
-          cy={cy}
-          r={rA}
-          style={{ fill: VIEWER_FILL }}
-          opacity={CIRCLE_OPACITY}
-        />
-        <circle
-          cx={rA + gap}
-          cy={cy}
-          r={rB}
-          style={{ fill: FRIEND_FILL }}
-          opacity={CIRCLE_OPACITY}
-        />
-      </svg>
+      <DomainCircleSvg
+        viewerPoints={domain.viewer.mastery_points}
+        friendPoints={domain.friend.mastery_points}
+        viewerTier={domain.viewer.current_tier}
+        friendTier={domain.friend.current_tier}
+        datasetMax={datasetMax}
+        ariaLabel={label}
+      />
       <p
         className="text-center font-serif text-sm leading-tight"
         style={{ color: 'var(--brand-ink)' }}

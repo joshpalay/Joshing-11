@@ -41,16 +41,16 @@ type ActiveTerritory = {
 } | null;
 
 const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> = [
-  { value: 'often', title: 'Asked Often', copy: 'These show up most in your rounds.' },
-  { value: 'sometimes', title: 'Asked Sometimes', copy: 'These stay in rotation, but less often.' },
+  { value: 'often', title: 'Often', copy: 'These show up most in your rounds.' },
+  { value: 'sometimes', title: 'Sometimes', copy: 'These stay in rotation, but less often.' },
   {
     value: 'blue_moon',
-    title: 'Once in a Blue Moon',
+    title: 'Blue Moon',
     copy: 'Still on your map, but only surface every so often.',
   },
   {
     value: 'resting',
-    title: 'Resting',
+    title: 'Never',
     copy: 'These are part of your map, but won’t be asked for now.',
   },
 ];
@@ -132,6 +132,15 @@ export function TerritorySetupClient({
   const [addingTopic, setAddingTopic] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addLimitReached, setAddLimitReached] = useState(false);
+  // "Create your own" lives at the top of the Add-a-Territory box and toggles
+  // open into an inline topic field on tap.
+  const [creating, setCreating] = useState(false);
+  // Lightweight confirmation toast shown when a territory is added, with an
+  // optional one-tap undo that removes the territory it just announced.
+  const [toast, setToast] = useState<{ message: string; undoDomain?: string } | null>(null);
+  // Suggestions rotate so the box doesn't feel stale on repeat visits — see
+  // visibleNearbyTerritories below.
+  const [suggestionOffset, setSuggestionOffset] = useState(0);
   const [dragState, setDragState] = useState<DragState>(null);
   const [activeTerritory, setActiveTerritory] = useState<ActiveTerritory>(null);
   const [hoveredZone, setHoveredZone] = useState<TerritoryFrequency | null>(null);
@@ -148,6 +157,24 @@ export function TerritorySetupClient({
     const timer = window.setTimeout(() => setSettling(false), 900);
     return () => window.clearTimeout(timer);
   }, []);
+
+  // Pick a random starting point for the suggestion rotation on each visit so
+  // the same few territories don't sit there stale. Deferred a frame so it runs
+  // client-side only (no hydration mismatch) and outside the synchronous effect body.
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() =>
+      setSuggestionOffset(Math.floor(Math.random() * 1000)),
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  // Auto-dismiss the confirmation toast. Linger a little longer so the undo
+  // affordance is reachable.
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const maxPointsByTier = useMemo(() => {
     const result: Record<TerritoryDomain['tier'], number> = {
@@ -184,6 +211,16 @@ export function TerritorySetupClient({
     () => getNearbyTerritories(domains.map((domain) => domain.domain)),
     [domains],
   );
+
+  // Show a rotating window of suggestions rather than always the same top few,
+  // so the box stays fresh between visits. With three or fewer we just show them.
+  const visibleNearbyTerritories = useMemo(() => {
+    const SHOWN = 3;
+    if (nearbyTerritories.length <= SHOWN) return nearbyTerritories;
+    const start = suggestionOffset % nearbyTerritories.length;
+    const rotated = [...nearbyTerritories.slice(start), ...nearbyTerritories.slice(0, start)];
+    return rotated.slice(0, SHOWN);
+  }, [nearbyTerritories, suggestionOffset]);
 
   const draggingDomain = useMemo(
     () => domains.find((domain) => domain.domain === dragState?.domain) ?? null,
@@ -232,6 +269,14 @@ export function TerritorySetupClient({
     [moveDomain],
   );
 
+  const handleRemoveRequest = useCallback((domain: string) => {
+    // Tapping the throw-out target opens the same confirm dialog as dragging
+    // onto it, so deletion always goes through one explicit confirmation.
+    setPendingRemoval(domain);
+    setActiveTerritory(null);
+    setHoveredRemoveTarget(false);
+  }, []);
+
   const addDomainRow = useCallback((row: TerritoryDomain) => {
     const key = row.domain.toLocaleLowerCase('en-US');
     setDomains((existing) =>
@@ -252,9 +297,9 @@ export function TerritorySetupClient({
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
-        const error = new Error(
-          body?.message ?? 'Could not add that topic.',
-        ) as Error & { code?: 'limit_reached' | 'too_broad' };
+        const error = new Error(body?.message ?? 'Could not add that topic.') as Error & {
+          code?: 'limit_reached' | 'too_broad';
+        };
         if (body?.error === 'interest_limit_reached') error.code = 'limit_reached';
         else if (body?.error === 'too_broad') error.code = 'too_broad';
         throw error;
@@ -273,11 +318,14 @@ export function TerritorySetupClient({
     [addDomainRow],
   );
 
-  const focusCreateTopic = useCallback(() => {
-    const input = newTopicInputRef.current;
-    if (!input) return;
-    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    input.focus({ preventScroll: true });
+  const openCreateTopic = useCallback(() => {
+    setCreating(true);
+    setAddError(null);
+    setAddLimitReached(false);
+    // The field mounts on the next paint, so focus after it exists.
+    window.requestAnimationFrame(() => {
+      newTopicInputRef.current?.focus({ preventScroll: true });
+    });
   }, []);
 
   const addNearbyTerritory = useCallback(
@@ -287,7 +335,8 @@ export function TerritorySetupClient({
       setAddError(null);
       setAddLimitReached(false);
       try {
-        await adoptTopic(territory.domain, territory.broadCategory);
+        const row = await adoptTopic(territory.domain, territory.broadCategory);
+        setToast({ message: `Added “${row.domain}”`, undoDomain: row.domain });
       } catch (caught) {
         const coded = caught as Error & { code?: string };
         setAddLimitReached(coded?.code === 'limit_reached');
@@ -540,17 +589,54 @@ export function TerritorySetupClient({
                 : 'Create your own, and more suggestions will appear as your map grows.'}
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            {nearbyTerritories.map((territory) => (
-              <GhostTerritoryCircle
-                key={territory.domain}
-                territory={territory}
+          {creating ? (
+            <div className="mb-5 rounded-[1.5rem] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-4">
+              <AddTopicField
+                inputRef={newTopicInputRef}
+                existingLabels={domains.map((domain) => domain.domain)}
+                convergeBeforeAdd
                 disabled={addingTopic}
-                onAdd={() => void addNearbyTerritory(territory)}
+                limitReachedNode={
+                  <Link href="/knowledge" className="underline">
+                    Manage interests
+                  </Link>
+                }
+                onAdd={async (topic) => {
+                  const row = await adoptTopic(topic.label, topic.broadCategory ?? null);
+                  setToast({ message: `Added “${row.domain}”`, undoDomain: row.domain });
+                }}
               />
-            ))}
-            <CreateYourOwnCircle disabled={addingTopic} onClick={focusCreateTopic} />
-          </div>
+              <button
+                type="button"
+                className="mt-3 text-sm text-[var(--text-muted-warm)] underline-offset-2 hover:underline"
+                onClick={() => setCreating(false)}
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="mb-5 flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 font-serif text-base text-[var(--ink)] transition hover:bg-[var(--cream)] disabled:opacity-40"
+              disabled={addingTopic}
+              onClick={openCreateTopic}
+            >
+              <Plus className="size-5" aria-hidden="true" />
+              Create your own
+            </button>
+          )}
+          {visibleNearbyTerritories.length > 0 ? (
+            <div className="grid grid-cols-3 gap-3">
+              {visibleNearbyTerritories.map((territory) => (
+                <GhostTerritoryCircle
+                  key={territory.domain}
+                  territory={territory}
+                  disabled={addingTopic}
+                  onAdd={() => void addNearbyTerritory(territory)}
+                />
+              ))}
+            </div>
+          ) : null}
           {addError ? (
             <p className="text-destructive mt-3 text-sm">
               {addError}
@@ -582,6 +668,7 @@ export function TerritorySetupClient({
               onDragMove={handleDragMove}
               onDragEnd={handleDragEnd}
               onQuickMove={handleQuickMove}
+              onRemove={handleRemoveRequest}
               setQuickTargetRef={setQuickTargetRef}
               setRemoveTargetRef={setRemoveTargetRef}
               setRef={(element) => {
@@ -590,24 +677,6 @@ export function TerritorySetupClient({
               settling={settling}
             />
           ))}
-        </section>
-
-        <section className="mt-8 rounded-[2rem] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-5">
-          <AddTopicField
-            heading="Explore something new"
-            inputRef={newTopicInputRef}
-            existingLabels={domains.map((domain) => domain.domain)}
-            convergeBeforeAdd
-            disabled={addingTopic}
-            limitReachedNode={
-              <Link href="/knowledge" className="underline">
-                Manage interests
-              </Link>
-            }
-            onAdd={async (topic) => {
-              await adoptTopic(topic.label, topic.broadCategory ?? null);
-            }}
-          />
         </section>
 
         {error ? (
@@ -639,6 +708,30 @@ export function TerritorySetupClient({
           style={{ left: dragState.x, top: dragState.y }}
         >
           <DragPreview domain={draggingDomain} />
+        </div>
+      ) : null}
+
+      {toast ? (
+        <div className="fixed bottom-24 left-1/2 z-[80] -translate-x-1/2">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-3 rounded-full bg-[var(--ink)] py-2.5 pr-2.5 pl-5 text-sm font-medium text-[var(--cream)] shadow-[0_12px_28px_rgba(26,18,8,0.28)] motion-safe:animate-[territory-settle_300ms_ease-out]"
+          >
+            <span>{toast.message}</span>
+            {toast.undoDomain ? (
+              <button
+                type="button"
+                className="rounded-full bg-[var(--cream)]/15 px-3 py-1 text-xs font-semibold tracking-[0.08em] text-[var(--cream)] uppercase transition hover:bg-[var(--cream)]/25"
+                onClick={() => {
+                  if (toast.undoDomain) removeDomain(toast.undoDomain);
+                  setToast(null);
+                }}
+              >
+                Undo
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -732,6 +825,7 @@ function TerritoryZone({
   onDragMove,
   onDragEnd,
   onQuickMove,
+  onRemove,
   setQuickTargetRef,
   setRemoveTargetRef,
   setRef,
@@ -749,6 +843,7 @@ function TerritoryZone({
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
   onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
+  onRemove: (domain: string) => void;
   setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
   setRemoveTargetRef: (element: HTMLButtonElement | null) => void;
   setRef: (element: HTMLElement | null) => void;
@@ -792,6 +887,7 @@ function TerritoryZone({
                     onDragMove={onDragMove}
                     onDragEnd={onDragEnd}
                     onQuickMove={onQuickMove}
+                    onRemove={onRemove}
                     setQuickTargetRef={setQuickTargetRef}
                     setRemoveTargetRef={setRemoveTargetRef}
                     settling={settling}
@@ -822,6 +918,7 @@ function TerritoryCircle({
   onDragMove,
   onDragEnd,
   onQuickMove,
+  onRemove,
   setQuickTargetRef,
   setRemoveTargetRef,
   settling,
@@ -837,6 +934,7 @@ function TerritoryCircle({
   onDragMove: (event: ReactPointerEvent) => void;
   onDragEnd: (event: ReactPointerEvent) => void;
   onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
+  onRemove: (domain: string) => void;
   setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
   setRemoveTargetRef: (element: HTMLButtonElement | null) => void;
   settling: boolean;
@@ -896,34 +994,15 @@ function TerritoryCircle({
         {domain.domain}
       </span>
       {quickTargetsVisible ? (
-        <button
-          ref={setRemoveTargetRef}
-          type="button"
-          aria-label={`Throw out ${domain.domain}`}
-          title="Throw out"
-          // Sits beside the bubble (vertically centred on it), not under the
-          // quick-move row, so deleting reads as a distinct action.
-          className={`absolute right-0 grid size-9 -translate-y-1/2 place-items-center rounded-full border shadow-sm transition ${
-            hoveredRemoveTarget
-              ? 'scale-110 border-[var(--destructive)] bg-[var(--destructive)] text-white shadow-[0_10px_24px_rgba(180,35,24,0.32)]'
-              : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--text-muted-warm)]'
-          }`}
-          style={{ top: size / 2 }}
-          onPointerDown={(event) => event.stopPropagation()}
-          onPointerMove={(event) => event.stopPropagation()}
-          onPointerUp={(event) => event.stopPropagation()}
-          onPointerCancel={(event) => event.stopPropagation()}
-        >
-          <Trash2 className="size-4" aria-hidden="true" />
-        </button>
-      ) : null}
-      {quickTargetsVisible ? (
         <QuickMoveTargets
           domain={domain.domain}
           currentFrequency={currentFrequency}
           hoveredTarget={hoveredQuickTarget}
+          hoveredRemoveTarget={hoveredRemoveTarget}
           onQuickMove={onQuickMove}
+          onRemove={onRemove}
           setQuickTargetRef={setQuickTargetRef}
+          setRemoveTargetRef={setRemoveTargetRef}
         />
       ) : null}
     </div>
@@ -934,20 +1013,26 @@ function QuickMoveTargets({
   domain,
   currentFrequency,
   hoveredTarget,
+  hoveredRemoveTarget,
   onQuickMove,
+  onRemove,
   setQuickTargetRef,
+  setRemoveTargetRef,
 }: {
   domain: string;
   currentFrequency: TerritoryFrequency;
   hoveredTarget: TerritoryFrequency | null;
+  hoveredRemoveTarget: boolean;
   onQuickMove: (domain: string, frequency: TerritoryFrequency) => void;
+  onRemove: (domain: string) => void;
   setQuickTargetRef: (frequency: TerritoryFrequency, element: HTMLButtonElement | null) => void;
+  setRemoveTargetRef: (element: HTMLButtonElement | null) => void;
 }) {
   const targets = ZONES.filter((zone) => zone.value !== currentFrequency);
 
   return (
     <div
-      className="mt-1 flex w-[12rem] max-w-[calc(100vw-3rem)] justify-center gap-2"
+      className="mt-1 flex max-w-[calc(100vw-3rem)] flex-wrap justify-center gap-2"
       onPointerDown={(event) => event.stopPropagation()}
       onPointerMove={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
@@ -969,6 +1054,22 @@ function QuickMoveTargets({
           {target.title.replace('Asked ', '').replace('Once in a ', '')}
         </button>
       ))}
+      {/* Throw-out sits at the end of the quick-move row so deleting reads as
+          a sibling action of the frequency moves, kept clear of the bubble. */}
+      <button
+        ref={setRemoveTargetRef}
+        type="button"
+        aria-label={`Throw out ${domain}`}
+        title="Throw out"
+        className={`grid size-14 place-items-center rounded-full border shadow-sm transition ${
+          hoveredRemoveTarget
+            ? 'scale-110 border-[var(--destructive)] bg-[var(--destructive)] text-white shadow-[0_10px_24px_rgba(180,35,24,0.32)]'
+            : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--text-muted-warm)]'
+        }`}
+        onClick={() => onRemove(domain)}
+      >
+        <Trash2 className="size-5" aria-hidden="true" />
+      </button>
     </div>
   );
 }
@@ -1004,24 +1105,6 @@ function GhostTerritoryCircle({
       </span>
       <span className="text-[10px] tracking-[0.14em] text-[var(--text-muted-warm)] uppercase">
         Add
-      </span>
-    </button>
-  );
-}
-
-function CreateYourOwnCircle({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="flex w-full flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center opacity-80 transition hover:opacity-100 disabled:opacity-40"
-      disabled={disabled}
-      onClick={onClick}
-    >
-      <div className="grid size-16 place-items-center rounded-full border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] text-[var(--ink)]">
-        <Plus className="size-5" aria-hidden="true" />
-      </div>
-      <span className="max-w-full px-1 font-serif text-[13px] leading-tight break-words text-[var(--ink)]">
-        Create your own
       </span>
     </button>
   );

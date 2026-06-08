@@ -84,7 +84,11 @@ function CategoryItem({
   const rB = dB / 2;
   const overlapRatio = overlapRatioOf(cell);
   const centerGap = (rA + rB) * (1 - overlapRatio * 0.85);
-  const svgWidth = rA + centerGap + rB;
+  // Circle B's right edge is at (rA + centerGap + rB), but circle A (centered
+  // at rA) reaches 2*rA. When A is the larger circle and the gap is small, A
+  // overruns that width and gets clipped by the SVG viewport. Size to the true
+  // bounding box so neither circle is cut off.
+  const svgWidth = Math.max(2 * rA, rA + centerGap + rB);
   const svgHeight = Math.max(dA, dB);
   const cxA = rA;
   const cxB = rA + centerGap;

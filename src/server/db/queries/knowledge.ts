@@ -629,6 +629,24 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
   };
 }
 
+// The "Recently Expanding" territories in isolation — the same derivation the
+// knowledge page uses, but without the mastery / declared / hidden joins, so the
+// home-feed promo (getRecentlyExpandingPromo) can read it cheaply.
+export async function getExpandingDomains(userId: string): Promise<ExpandingDomain[]> {
+  const eventRows = await db
+    .select({
+      canonicalSubcategory: masteryEvents.canonicalSubcategory,
+      sourceType: masteryEvents.sourceType,
+      answerState: masteryEvents.answerState,
+      sessionContext: masteryEvents.sessionContext,
+      awardedPoints: masteryEvents.awardedPoints,
+      createdAt: masteryEvents.createdAt,
+    })
+    .from(masteryEvents)
+    .where(eq(masteryEvents.userId, userId));
+  return deriveExpandingDomains(eventRows);
+}
+
 export async function getProgressionLandscape(userId: string): Promise<ProgressionView[]> {
   const pageData = await getKnowledgePageData(userId);
 

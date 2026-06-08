@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { runPoolRefill } from '@/server/daily/retrieval-grounded';
+import { isCronAuthorized } from '@/server/auth/cron';
 
 export const dynamic = 'force-dynamic';
 // B3 retrieval-grounded pool refill (PRD-D-5 §5.3). Heavy, off the user's
@@ -11,15 +12,8 @@ export const dynamic = 'force-dynamic';
 // retrieval calls.
 export const maxDuration = 300;
 
-function isAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET;
-  if (!secret) return true;
-  const authHeader = request.headers.get('authorization');
-  return authHeader === `Bearer ${secret}`;
-}
-
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

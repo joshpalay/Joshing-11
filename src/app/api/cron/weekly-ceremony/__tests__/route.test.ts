@@ -47,8 +47,13 @@ const SUNDAY = new Date('2026-06-07T08:00:00.000Z')
 // Account old enough to clear MIN_ACCOUNT_AGE_DAYS.
 const OLD_ACCOUNT = new Date('2026-01-01T00:00:00.000Z')
 
+const CRON_SECRET = 'test-cron-secret'
+
 function buildRequest() {
-  return new Request('https://joshing.example/api/cron/weekly-ceremony', { method: 'GET' })
+  return new Request('https://joshing.example/api/cron/weekly-ceremony', {
+    method: 'GET',
+    headers: { authorization: `Bearer ${CRON_SECRET}` },
+  })
 }
 
 describe('GET /api/cron/weekly-ceremony — per-user resilience', () => {
@@ -56,12 +61,14 @@ describe('GET /api/cron/weekly-ceremony — per-user resilience', () => {
     vi.clearAllMocks()
     vi.useFakeTimers()
     vi.setSystemTime(SUNDAY)
+    process.env.CRON_SECRET = CRON_SECRET
     recentCeremonyMock.mockResolvedValue([])
     fireCeremonyMock.mockResolvedValue('cer-1')
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    delete process.env.CRON_SECRET
   })
 
   it('does not 500 when one user fails — it skips them and fires the rest', async () => {

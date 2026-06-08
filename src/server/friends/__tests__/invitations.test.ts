@@ -159,6 +159,13 @@ vi.mock('@/server/db', () => ({
   },
 }))
 
+// The one-time inviter feed backfill (B-HomeSeed-1) fires inside
+// acceptFriendInvitation; it has its own dedicated test, so stub it here to keep
+// these tests focused on the acceptance logic.
+vi.mock('@/server/feed/backfill-inviter-feed', () => ({
+  backfillInviterFeedItems: vi.fn(async () => ({ created: 0 })),
+}))
+
 import {
   acceptFriendInvitation,
   cancelFriendInvitation,

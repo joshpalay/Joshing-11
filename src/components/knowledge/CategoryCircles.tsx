@@ -106,11 +106,21 @@ export function KnowledgeCircle({
       const c1 = 1.70158;
       const c3 = c1 + 1;
       const eased = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-      setOpacity(Math.max(MIN_OPACITY, Math.min(1, MIN_OPACITY + (finalOpacity - MIN_OPACITY) * Math.max(0, Math.min(1.2, eased)))));
+      setOpacity(
+        Math.max(
+          MIN_OPACITY,
+          Math.min(
+            1,
+            MIN_OPACITY + (finalOpacity - MIN_OPACITY) * Math.max(0, Math.min(1.2, eased)),
+          ),
+        ),
+      );
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-    return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
   }, [animate, finalOpacity]);
 
   // Size-scale also animates: start small, grow to target
@@ -131,7 +141,9 @@ export function KnowledgeCircle({
       if (t < 1) scaleRafRef.current = requestAnimationFrame(tick);
     };
     scaleRafRef.current = requestAnimationFrame(tick);
-    return () => { if (scaleRafRef.current !== null) cancelAnimationFrame(scaleRafRef.current); };
+    return () => {
+      if (scaleRafRef.current !== null) cancelAnimationFrame(scaleRafRef.current);
+    };
   }, [animate]);
 
   const displaySize = Math.round(resolvedSize * scale);

@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
+import { answerHeadingStyle } from '@/components/answer-heading';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
 import { NewTerritoryUndo } from '@/components/feed/NewTerritoryUndo';
@@ -148,14 +149,8 @@ const monoStyle: CSSProperties = {
 
 // The answer, repeated as a prominent serif headline on the result card —
 // mirrors the feed reveal treatment ("eyebrow → answer as headline →
-// explanation"). Shared by the correct and wrong cards so the two stay in
-// sync; bumped up from the previous 1.4875rem so the answer reads clearly.
-const answerHeadingStyle: CSSProperties = {
-  fontFamily: 'var(--font-cormorant), Georgia, serif',
-  fontSize: '1.65rem',
-  fontWeight: 700,
-  lineHeight: 1.14,
-};
+// explanation"). Shared via `answer-heading.ts` so every answer-reveal surface
+// (this card, the feed sheet, the summary recap, the history list) stays in sync.
 
 // Darkened triangle-gold so warning/inside-joke labels clear AA on the cream
 // surface (raw --tri-amber #d9a82e is too light for small text). Mirrors the

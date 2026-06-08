@@ -20,10 +20,12 @@
 
 import { HOME_TOP3_ELIGIBLE_TYPES } from '@/server/activity/write-activity';
 import type { ActivityItemView } from '@/server/db/queries/activity';
+import type { MasteryTier } from '@/types/db';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 import { LATELY_TIER, latelyTierForMomentDir } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
 import type { Convergence } from '@/lib/convergence';
+import type { RelationshipResult } from '@/server/db/queries/friend-requests';
 
 // --- Serializable model ------------------------------------------------------
 
@@ -43,9 +45,12 @@ export type StreamQuestion = {
   questionId: string;
   text: string;
   domain: string | null;
-  // True when the viewer has already answered this question correctly. Drives
-  // the milestone "{k} of {n} answered" progress and the no-double-credit story.
-  answered: boolean;
+  // The viewer's own prior result on this question, if any. `null` = never
+  // attempted. ANY non-null value (correct OR incorrect) locks the question in
+  // the milestone expansion — a single attempt is the viewer's only swing in
+  // the feed — and drives the ANSWERED history's "Correct" / "Not this time"
+  // copy plus the bundle progress mark.
+  priorResult: 'correct' | 'incorrect' | null;
 };
 
 // The action an expanded, question-backed item offers — determined by the
@@ -109,6 +114,66 @@ export type StreamAction =
 //                   domain opened (expansion).
 export type StreamIconKind = 'bundle' | 'diamond' | 'hourglass' | 'domain' | null;
 
+// An optional rich embed rendered inline beneath a row's one-liner. Almost no
+// rows carry one. The common-ground promo (homepage "What's happening" ONLY)
+// uses it to surface a few domains the viewer shares with a friend as the
+// overlapping-circle motif from the profile page — a quiet discovery nudge.
+export type CommonGroundPromoDomain = {
+  label: string;
+  viewer: { points: number; tier: MasteryTier };
+  friend: { points: number; tier: MasteryTier };
+};
+
+export type RecentlyExpandingPromoDomain = {
+  // The domain display name, its short supporting line, and the letter shown in
+  // the row's colored badge — all precomputed server-side so the embed stays a
+  // pure render (mirrors the /knowledge "Recently Expanding" module rows).
+  label: string;
+  caption: string;
+  initial: string;
+};
+
+export type AddFriendsPromoPerson = {
+  // A contact-match suggestion. avatarColor / handle may be null; relationship
+  // drives the AddFriendButton state machine (so the embed stays a pure render).
+  id: string;
+  displayName: string;
+  handle: string | null;
+  avatarColor: string | null;
+  relationship: RelationshipResult;
+};
+
+// Inline embeds rendered under a stream row's one-liner. A discriminated union
+// so each promo carries only its own payload; ActivityStreamItem switches on
+// `kind`. `common_ground` draws the overlapping-circle motif with a link to a
+// friend; `recently_expanding` lists the viewer's fastest-growing territories
+// with a link to /knowledge; `add_friends` either suggests people to follow or
+// (when there are none) nudges toward inviting someone.
+export type StreamEmbed =
+  | {
+      kind: 'common_ground';
+      friendId: string;
+      friendFirstName: string;
+      friendHref: string;
+      domains: CommonGroundPromoDomain[];
+    }
+  | {
+      kind: 'recently_expanding';
+      href: string;
+      domains: RecentlyExpandingPromoDomain[];
+    }
+  | {
+      kind: 'add_friends';
+      variant: 'suggestions';
+      href: string;
+      people: AddFriendsPromoPerson[];
+    }
+  | {
+      kind: 'add_friends';
+      variant: 'invite';
+      href: string;
+    };
+
 export type StreamItem = {
   id: string;
   sortAt: Date;
@@ -123,6 +188,8 @@ export type StreamItem = {
   expand: StreamExpand | null;
   // Which triangle mark (if any) precedes this row. See StreamIconKind.
   icon: StreamIconKind;
+  // Optional inline embed rendered under the one-liner (see StreamEmbed).
+  embed?: StreamEmbed | null;
 };
 
 // --- Small builders ----------------------------------------------------------
@@ -182,7 +249,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   questionId: item.referenceId,
                   text: faq.questionText,
                   domain,
-                  answered: false,
+                  priorResult: null,
                 },
               }
             : null,
@@ -206,7 +273,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   questionId: item.referenceId,
                   text: nm.questionText,
                   domain,
-                  answered: false,
+                  priorResult: null,
                 },
                 strangerId: item.actorUserId,
                 strangerName: actorName(item),
@@ -232,7 +299,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   questionId: item.referenceId,
                   text: nm.questionText,
                   domain,
-                  answered: true,
+                  priorResult: 'correct',
                 },
                 strangerId: item.actorUserId,
                 strangerName: actorName(item),
@@ -482,7 +549,7 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
         questionId: moment.questionId,
         text: moment.questionText,
         domain: moment.category,
-        answered: true,
+        priorResult: 'correct',
       },
     },
   };
@@ -570,5 +637,80 @@ export function convergenceToStreamItem(
       friendName: convergence.friendName,
       questions,
     },
+  };
+}
+
+// --- Common-ground promo -----------------------------------------------------
+
+// A homepage-only discovery nudge: "You and {friend} share ground worth
+// testing", with the friend's top few shared-but-untested domains drawn as the
+// overlapping-circle motif from their profile. Question-free, so it never
+// expands; the embed carries everything ActivityStreamItem needs to render the
+// circles plus a link through to the friend's profile.
+export function commonGroundPromoToStreamItem(
+  embed: Extract<StreamEmbed, { kind: 'common_ground' }>,
+  sortAt: Date,
+  id: string,
+): StreamItem {
+  return {
+    id,
+    sortAt,
+    tier: LATELY_TIER.OTHER,
+    homeEligible: true,
+    line: [txt('You and '), act(embed.friendFirstName, embed.friendId), txt(' share ground worth testing')],
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'domain',
+    expand: null,
+    embed,
+  };
+}
+
+// A homepage-only knowledge nudge: "Your world is expanding", with the viewer's
+// fastest-growing territories listed in the same row style as the /knowledge
+// "Recently Expanding" module. Question-free, so it never expands; the embed
+// carries the (capped) domain rows plus a link through to the knowledge page.
+export function recentlyExpandingPromoToStreamItem(
+  embed: Extract<StreamEmbed, { kind: 'recently_expanding' }>,
+  sortAt: Date,
+  id: string,
+): StreamItem {
+  return {
+    id,
+    sortAt,
+    tier: LATELY_TIER.OTHER,
+    homeEligible: true,
+    line: [txt('Your world is expanding')],
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'domain',
+    expand: null,
+    embed,
+  };
+}
+
+// A homepage-only "grow your circle" nudge. With `suggestions` it lists a few
+// contact-match people to follow (each row carries its relationship so the
+// embed's AddFriendButton can act); with `invite` it's a copy-only prompt toward
+// /friends/find. Question-free, so it never expands.
+export function addFriendsPromoToStreamItem(
+  embed: Extract<StreamEmbed, { kind: 'add_friends' }>,
+  sortAt: Date,
+  id: string,
+): StreamItem {
+  return {
+    id,
+    sortAt,
+    tier: LATELY_TIER.OTHER,
+    homeEligible: true,
+    line: [txt(embed.variant === 'suggestions' ? 'People you may know' : 'Grow your circle')],
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'domain',
+    expand: null,
+    embed,
   };
 }

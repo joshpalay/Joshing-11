@@ -153,6 +153,7 @@ export function InlineAnswerFlow({
           openedTerritoryDomain={feedback.openedTerritoryDomain}
           questionId={question.questionId}
           feedItemId={`milestone:${question.questionId}`}
+          report={{ target: { questionId: question.questionId }, surface: 'lately_result' }}
           onClose={finish}
         />
       ) : null}

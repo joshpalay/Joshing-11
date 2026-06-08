@@ -1176,6 +1176,139 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0072 (B-FirstRecap-1) adds the nullable
+    // User.first_session_recap_seen_at timestamp. The first-session recap
+    // orchestrator (GET /api/daily/first-session-recap) and the seen-marker
+    // (POST .../seen) both read/write it on the post-summary path, so a
+    // preview/production database with the migration recorded but the column
+    // missing would 42703 before migrate() could repair it. Additive nullable
+    // column with no default — pre-apply it idempotently.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "first_session_recap_seen_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
+    // Migration 0073 (B-Report-1) adds the ContentReport table + its three
+    // enums (ContentReportCategory / ContentReportIncorrectKind /
+    // ContentReportStatus). Purely additive substrate — nothing reads it yet
+    // (B-Report-2 onward wires it up) — but a preview/production database that
+    // records the migration without the objects present must still boot, and a
+    // newly-added enum value/type referenced inside the migrator transaction
+    // can 22P02/42704, so create the enums, table, FKs, CHECKs, and indexes
+    // idempotently outside that transaction. Re-running is a no-op.
+    try {
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."ContentReportCategory" AS ENUM('incorrect', 'inappropriate');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."ContentReportIncorrectKind" AS ENUM('answer_key', 'premise');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."ContentReportStatus" AS ENUM('open', 'upheld', 'dismissed');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "ContentReport" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "reporter_user_id" text NOT NULL,
+          "question_id" text,
+          "generated_question_id" text,
+          "category" "public"."ContentReportCategory" NOT NULL,
+          "incorrect_kind" "public"."ContentReportIncorrectKind",
+          "note" text NOT NULL,
+          "suggested_answer" text,
+          "surface" text,
+          "status" "public"."ContentReportStatus" NOT NULL DEFAULT 'open',
+          "review_decision" text,
+          "review_reason" text,
+          "reviewed_at" timestamp with time zone,
+          "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+          CONSTRAINT "ContentReport_one_target"
+            CHECK ((question_id IS NOT NULL)::int + (generated_question_id IS NOT NULL)::int = 1),
+          CONSTRAINT "ContentReport_incorrect_kind_scope"
+            CHECK (incorrect_kind IS NULL OR category = 'incorrect')
+        )
+      `);
+      await db.execute(sql`
+        DO $$
+        DECLARE
+          report_table regclass := to_regclass('public."ContentReport"');
+          user_table regclass := to_regclass('public."User"');
+          question_table regclass := to_regclass('public."Question"');
+          generated_question_table regclass := to_regclass('public."GeneratedQuestion"');
+        BEGIN
+          IF report_table IS NOT NULL
+            AND user_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'ContentReport_reporter_user_id_User_id_fk'
+                AND conrelid = report_table
+            )
+          THEN
+            ALTER TABLE "ContentReport"
+              ADD CONSTRAINT "ContentReport_reporter_user_id_User_id_fk"
+              FOREIGN KEY ("reporter_user_id") REFERENCES "User"("id");
+          END IF;
+
+          IF report_table IS NOT NULL
+            AND question_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'ContentReport_question_id_Question_id_fk'
+                AND conrelid = report_table
+            )
+          THEN
+            ALTER TABLE "ContentReport"
+              ADD CONSTRAINT "ContentReport_question_id_Question_id_fk"
+              FOREIGN KEY ("question_id") REFERENCES "Question"("id");
+          END IF;
+
+          IF report_table IS NOT NULL
+            AND generated_question_table IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'ContentReport_generated_question_id_GeneratedQuestion_id_fk'
+                AND conrelid = report_table
+            )
+          THEN
+            ALTER TABLE "ContentReport"
+              ADD CONSTRAINT "ContentReport_generated_question_id_GeneratedQuestion_id_fk"
+              FOREIGN KEY ("generated_question_id") REFERENCES "GeneratedQuestion"("id");
+          END IF;
+        END $$
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "ContentReport_reporter_user_id_idx" ON "ContentReport" ("reporter_user_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "ContentReport_question_id_idx" ON "ContentReport" ("question_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "ContentReport_generated_question_id_idx" ON "ContentReport" ("generated_question_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "ContentReport_status_idx" ON "ContentReport" ("status")`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "ContentReport_one_open_per_question"
+          ON "ContentReport" ("reporter_user_id", "question_id")
+          WHERE status = 'open' AND question_id IS NOT NULL
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "ContentReport_one_open_per_generated_question"
+          ON "ContentReport" ("reporter_user_id", "generated_question_id")
+          WHERE status = 'open' AND generated_question_id IS NOT NULL
+      `);
+    } catch {
+      // User, Question, or GeneratedQuestion may not exist yet on a fresh
+      // database — migrate() creates them before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

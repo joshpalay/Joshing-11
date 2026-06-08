@@ -428,7 +428,7 @@ export default async function UserProfilePage({
           )}
           <Link
             href={`/users/${portrait.user.id}/knowledge`}
-            className="mt-3 inline-flex text-sm font-semibold text-stone-950 underline-offset-4 hover:underline"
+            className="mt-3 inline-flex text-sm font-semibold text-[var(--warm-ink)] underline-offset-4 hover:underline"
           >
             {isSelf
               ? 'View your full knowledge base →'

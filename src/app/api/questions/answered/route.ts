@@ -19,6 +19,7 @@ export async function GET() {
     id: item.id,
     questionId: item.questionId,
     questionText: item.questionText,
+    domainDisplayName: item.domainDisplayName,
     submittedAnswer: item.submittedAnswer,
     correctAnswer: item.correctAnswer,
     result: item.result,

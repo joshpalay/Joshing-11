@@ -199,12 +199,15 @@ function HourglassMark({ seed }: { seed: string }) {
 }
 
 // The hourglass split apart on a diagonal: a half top-right and a half
-// bottom-left. Divergence = a new domain opened.
+// bottom-left. Divergence = a new domain opened. The two halves are pulled in
+// toward the centerline (each shifted 6 units off the viewBox edge instead of
+// sitting flush against it) so the diagonal gap between them reads tighter —
+// they still split on the same diagonal and stay rotationally symmetric.
 function DomainMark({ seed }: { seed: string }) {
   return (
     <MarkSvg h={48} scale={LARGE_SCALE}>
-      <path d="M24,0 L12,0 L24,24 Z" fill={colorFor(seed, 0)} fillOpacity={FILL_OPACITY} />
-      <path d="M0,24 L12,48 L0,48 Z" fill={colorFor(seed, 1)} fillOpacity={FILL_OPACITY} />
+      <path d="M18,0 L6,0 L18,24 Z" fill={colorFor(seed, 0)} fillOpacity={FILL_OPACITY} />
+      <path d="M6,24 L18,48 L6,48 Z" fill={colorFor(seed, 1)} fillOpacity={FILL_OPACITY} />
     </MarkSvg>
   );
 }

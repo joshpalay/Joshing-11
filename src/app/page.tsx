@@ -10,6 +10,9 @@ import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { getSession } from '@/server/auth/session'
 import { buildActivityStream } from '@/server/activity/build-stream'
+import { getCommonGroundPromo } from '@/server/activity/common-ground-promo'
+import { getRecentlyExpandingPromo } from '@/server/activity/recently-expanding-promo'
+import { getAddFriendsPromo } from '@/server/activity/add-friends-promo'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
@@ -122,17 +125,38 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
   // full activity/Lately stream, interleaved chronologically inside FeedList.
   // Filter 'all' (not 'from-friends') so directly-sent questions thread in; the
   // prefetch matches FeedList's unifiedHome seeding for a no-round-trip paint.
-  const [feedPage, activityItems] = await Promise.all([
+  const [feedPage, activityItems, commonGroundPromo, recentlyExpandingPromo, addFriendsPromo] = await Promise.all([
     getFeedPagePayload(userId, {
       limit: FEED_PAGE_SIZE,
       cursor: null,
       filter: 'all',
     }),
     buildActivityStream(userId),
+    getCommonGroundPromo(userId),
+    getRecentlyExpandingPromo(userId),
+    getAddFriendsPromo(userId),
   ])
+  // The weekly reflection lives in the dedicated CeremonyPin editorial marker
+  // above this feed (calm, gold, no CTA). Drop the redundant 'ceremony_ready'
+  // activity card here so the reflection doesn't double up / compete with social
+  // activity in the home stream. It's the only activity that links to /ceremony/;
+  // the card still appears in the full /activities log.
+  const homeActivityItems = [
+    // Home-only common-ground discovery promo at the head of the activity rows
+    // (see getCommonGroundPromo). Null when the viewer has no untested shared
+    // ground with any probed friend.
+    ...(commonGroundPromo ? [commonGroundPromo] : []),
+    ...activityItems.filter(
+      (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
+    ),
+  ]
   return (
     <>
-      <p className="mb-2 px-3 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+      {/* Sit the header on the feed's left gutter — the same 2px the activity
+          rows pad in (where the fixed icon column / shape marks begin), so the
+          header and the shapes share one left edge. The day labels indent
+          further (pl-[34px], past the icon column) to meet the row copy. */}
+      <p className="mb-2 pl-[2px] text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
         What&rsquo;s happening
       </p>
       <FeedList
@@ -141,7 +165,9 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
         initialPage={feedPage}
         showContributeFooter
         unifiedHome
-        activityItems={activityItems}
+        activityItems={homeActivityItems}
+        expandingPromo={recentlyExpandingPromo}
+        addFriendsPromo={addFriendsPromo}
       />
     </>
   )
