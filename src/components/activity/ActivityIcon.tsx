@@ -44,10 +44,17 @@ const MARK_W = 24;
 const GAP = 8;
 const LINE_H = 22.5; // first text line: 15px × 1.5
 // The stacked single-shape marks (diamond / hourglass / domain) are a vertical
-// pair of base=height triangles, so at full width they're 24×48 — too tall next
-// to the text. Render them at 70% (the cluster, made of small triangles, stays
-// full size). They center horizontally in the 24px column.
+// pair of triangles. Full base=height triangles would make the pair 24×48 — too
+// tall, and the two halves end up far apart vertically (they read as two
+// disconnected shapes). We draw each half intentionally shorter than base=height
+// so the pair is 24×STACK_H and the halves sit close together. The cluster
+// (BundleMark, made of small triangles) keeps full base=height. Rendered at 70%,
+// centered horizontally in the 24px column.
 const LARGE_SCALE = 0.7;
+// Height of each half of a stacked mark, and the total viewBox height of the
+// pair. Shorter than the 24px base on purpose — see LARGE_SCALE note above.
+const STACK_HALF = 18;
+const STACK_H = STACK_HALF * 2; // 36
 
 export type ActivityIconSpec =
   | { kind: 'bundle'; total: number; unanswered: number }
@@ -180,9 +187,17 @@ function BundleMark({
 // random palette colour.
 function DiamondMark({ seed }: { seed: string }) {
   return (
-    <MarkSvg h={48} scale={LARGE_SCALE}>
-      <path d="M12,0 L0,24 L24,24 Z" fill={colorFor(seed, 0)} fillOpacity={FILL_OPACITY} />
-      <path d="M0,24 L24,24 L12,48 Z" fill={colorFor(seed, 1)} fillOpacity={FILL_OPACITY} />
+    <MarkSvg h={STACK_H} scale={LARGE_SCALE}>
+      <path
+        d={`M12,0 L0,${STACK_HALF} L24,${STACK_HALF} Z`}
+        fill={colorFor(seed, 0)}
+        fillOpacity={FILL_OPACITY}
+      />
+      <path
+        d={`M0,${STACK_HALF} L24,${STACK_HALF} L12,${STACK_H} Z`}
+        fill={colorFor(seed, 1)}
+        fillOpacity={FILL_OPACITY}
+      />
     </MarkSvg>
   );
 }
@@ -191,9 +206,17 @@ function DiamondMark({ seed }: { seed: string }) {
 // sent your way.
 function HourglassMark({ seed }: { seed: string }) {
   return (
-    <MarkSvg h={48} scale={LARGE_SCALE}>
-      <path d="M0,0 L24,0 L12,24 Z" fill={colorFor(seed, 0)} fillOpacity={FILL_OPACITY} />
-      <path d="M12,24 L0,48 L24,48 Z" fill={colorFor(seed, 1)} fillOpacity={FILL_OPACITY} />
+    <MarkSvg h={STACK_H} scale={LARGE_SCALE}>
+      <path
+        d={`M0,0 L24,0 L12,${STACK_HALF} Z`}
+        fill={colorFor(seed, 0)}
+        fillOpacity={FILL_OPACITY}
+      />
+      <path
+        d={`M12,${STACK_HALF} L0,${STACK_H} L24,${STACK_H} Z`}
+        fill={colorFor(seed, 1)}
+        fillOpacity={FILL_OPACITY}
+      />
     </MarkSvg>
   );
 }
@@ -205,9 +228,17 @@ function HourglassMark({ seed }: { seed: string }) {
 // they still split on the same diagonal and stay rotationally symmetric.
 function DomainMark({ seed }: { seed: string }) {
   return (
-    <MarkSvg h={48} scale={LARGE_SCALE}>
-      <path d="M18,0 L6,0 L18,24 Z" fill={colorFor(seed, 0)} fillOpacity={FILL_OPACITY} />
-      <path d="M6,24 L18,48 L6,48 Z" fill={colorFor(seed, 1)} fillOpacity={FILL_OPACITY} />
+    <MarkSvg h={STACK_H} scale={LARGE_SCALE}>
+      <path
+        d={`M18,0 L6,0 L18,${STACK_HALF} Z`}
+        fill={colorFor(seed, 0)}
+        fillOpacity={FILL_OPACITY}
+      />
+      <path
+        d={`M6,${STACK_HALF} L18,${STACK_H} L6,${STACK_H} Z`}
+        fill={colorFor(seed, 1)}
+        fillOpacity={FILL_OPACITY}
+      />
     </MarkSvg>
   );
 }
