@@ -194,7 +194,12 @@ function DomainCircles({
     domain.friend.current_tier,
   )
   const gap = (rA + rB) * (1 - overlapRatio * 0.85)
-  const svgWidth = rA + gap + rB
+  // The friend circle's right edge sits at (rA + gap + rB), but the viewer
+  // circle (centered at rA) reaches 2*rA. When the viewer's circle is the
+  // larger of the two and the gap is small (high tier overlap), 2*rA exceeds
+  // rA + gap + rB and the viewer circle gets clipped by the SVG viewport.
+  // Size the viewport to the true bounding box so neither circle is cut off.
+  const svgWidth = Math.max(2 * rA, rA + gap + rB)
   const svgHeight = Math.max(dA, dB)
   const cy = svgHeight / 2
 
