@@ -225,6 +225,10 @@ export const users = pgTable(
     phoneHash: text('phone_hash'),
     lastFriendDiscoveryCheckAt: timestamp('last_friend_discovery_check_at', { withTimezone: true }),
     onboardingComplete: boolean('onboardingComplete').notNull().default(false),
+    // B-FirstRecap-1: timestamp the one-time first-session recap was shown. NULL
+    // until the user sees the cinematic recap that fires after their first ever
+    // completed Daily Five; set once so re-entry/refresh/catch-up never re-fire it.
+    firstSessionRecapSeenAt: timestamp('first_session_recap_seen_at', { withTimezone: true }),
     birthYear: integer('birth_year'),
     grewUpCountry: text('grew_up_country'),
     grewUpRegion: text('grew_up_region'),
