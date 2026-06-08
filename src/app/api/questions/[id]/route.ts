@@ -13,6 +13,7 @@ import {
   getQuestion,
   updateQuestion,
 } from '@/server/db/queries/questions';
+import { resolveOpenIncorrectReportsForQuestion } from '@/server/db/queries/content-reports';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -173,6 +174,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Question has been used in a game and cannot be edited.' }, { status: 409 });
   }
   if (!result.ok) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+  // B-Report-4: fixing the answer key (or accepted alternatives) resolves any open
+  // incorrect report on this question, which lifts B-Report-3 suppression. Scoped to
+  // answer-key/alternatives edits — a pure text/explanation/category edit does not clear it.
+  if (values.correctAnswer !== undefined || values.alternateAnswers !== undefined) {
+    await resolveOpenIncorrectReportsForQuestion(id);
+  }
 
   return NextResponse.json({ ok: true, question: await getQuestion(id, session.userId) });
 }

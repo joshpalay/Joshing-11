@@ -13,6 +13,10 @@ import {
 import { broadCategoryDisplayName } from '@/lib/question-categorization';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { embedAndResolveDuplicate } from '@/server/pool/dedup';
+import {
+  getOpenIncorrectReportsForAuthor,
+  getUpheldInappropriateForAuthor,
+} from '@/server/db/queries/content-reports';
 
 export type QuestionView = {
   id: string;
@@ -60,7 +64,22 @@ export type QuestionView = {
   llmSuggestedAnswer: string | null;
   critiqueIterations: number;
   answerers?: { names: string[]; total: number };
+  // B-Report-4: quiet author-facing content-report state on the author's own bank
+  // rows. Absent for everyone else and for house/machine content (never surfaced).
+  reportState?: QuestionReportState | null;
 };
+
+// "needs_attention" carries the correction (note + kind + suggested answer) but
+// never the reporter's identity; "removed" is the read-only upheld-inappropriate
+// terminal state.
+export type QuestionReportState =
+  | {
+      kind: 'needs_attention';
+      note: string;
+      incorrectKind: 'answer_key' | 'premise' | null;
+      suggestedAnswer: string | null;
+    }
+  | { kind: 'removed'; category: 'inappropriate' };
 
 export type QuestionMutationResult = { ok: boolean; reason?: 'not_found' | 'in_use' };
 
@@ -266,7 +285,47 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
 
 export async function getQuestionsForUser(userId: string): Promise<QuestionView[]> {
   const { getBankedQuestions } = await import('@/server/db/queries/bank');
-  return getBankedQuestions(userId, { onlyAuthored: true });
+  const views = await getBankedQuestions(userId, { onlyAuthored: true });
+  return attachAuthorReportState(userId, views);
+}
+
+// B-Report-4: attach the quiet author-facing report state to the author's own
+// authored rows. The read helpers already enforce the house guard server-side, so
+// house/machine content can never receive a state. "removed" (upheld inappropriate)
+// takes precedence over "needs attention" (open incorrect) on the same question.
+async function attachAuthorReportState(
+  userId: string,
+  views: QuestionView[],
+): Promise<QuestionView[]> {
+  const ownIds = views
+    .filter((view) => view.isOwnAuthored && view.creator_id === userId)
+    .map((view) => view.id);
+  if (ownIds.length === 0) return views;
+
+  const [incorrectByQuestion, removed] = await Promise.all([
+    getOpenIncorrectReportsForAuthor(userId, ownIds),
+    getUpheldInappropriateForAuthor(userId, ownIds),
+  ]);
+  if (incorrectByQuestion.size === 0 && removed.size === 0) return views;
+
+  return views.map((view) => {
+    if (removed.has(view.id)) {
+      return { ...view, reportState: { kind: 'removed', category: 'inappropriate' } };
+    }
+    const incorrect = incorrectByQuestion.get(view.id);
+    if (incorrect) {
+      return {
+        ...view,
+        reportState: {
+          kind: 'needs_attention',
+          note: incorrect.note,
+          incorrectKind: incorrect.incorrectKind,
+          suggestedAnswer: incorrect.suggestedAnswer,
+        },
+      };
+    }
+    return view;
+  });
 }
 
 export async function hasUserAuthoredAnyQuestion(userId: string): Promise<boolean> {

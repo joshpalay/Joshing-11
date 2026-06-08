@@ -63,6 +63,8 @@ export function MyQuestionCard({
           </p>
         ) : null}
 
+        {question.reportState ? <ReportStateNotice state={question.reportState} /> : null}
+
         {cardError ? <p className="text-destructive mt-1.5 text-[13px]">{cardError}</p> : null}
 
         {confirming ? (
@@ -106,6 +108,61 @@ export function MyQuestionCard({
         )}
       </div>
     </article>
+  );
+}
+
+// B-Report-4: the quiet author-facing report state. Deliberately muted — no red,
+// no badge, no reporter identity. "needs attention" carries the correction so the
+// author can fix it; "removed" is the read-only upheld-inappropriate terminal state.
+function ReportStateNotice({ state }: { state: NonNullable<QuestionView['reportState']> }) {
+  if (state.kind === 'removed') {
+    return (
+      <div
+        className="mt-2 rounded-md border px-2.5 py-2 text-[13px] leading-snug"
+        style={{ borderColor: 'var(--border)', color: 'var(--ink)', opacity: 0.8 }}
+      >
+        <p className="font-medium">This question was removed.</p>
+        <p className="mt-0.5" style={{ opacity: 0.75 }}>
+          It was found inappropriate after review.
+        </p>
+      </div>
+    );
+  }
+
+  const concern =
+    state.incorrectKind === 'answer_key'
+      ? 'A reader thinks the answer key is wrong.'
+      : state.incorrectKind === 'premise'
+        ? 'A reader thinks the question itself is off.'
+        : 'A reader raised a concern about this one.';
+
+  return (
+    <div
+      className="mt-2 rounded-md border px-2.5 py-2 text-[13px] leading-snug"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'color-mix(in srgb, var(--ink) 3%, transparent)',
+        color: 'var(--ink)',
+      }}
+    >
+      <p className="font-medium" style={{ opacity: 0.85 }}>
+        Needs a second look
+      </p>
+      <p className="mt-0.5" style={{ opacity: 0.7 }}>
+        {concern}
+      </p>
+      <p className="mt-0.5 italic" style={{ opacity: 0.7 }}>
+        &ldquo;{state.note}&rdquo;
+      </p>
+      {state.suggestedAnswer ? (
+        <p className="mt-0.5" style={{ opacity: 0.7 }}>
+          They suggested: {state.suggestedAnswer}
+        </p>
+      ) : null}
+      <p className="mt-1" style={{ opacity: 0.6 }}>
+        Update the answer key to clear this.
+      </p>
+    </div>
   );
 }
 

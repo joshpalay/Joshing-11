@@ -1,7 +1,7 @@
-import { and, eq, gte, inArray, notExists, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, ne, notExists, or, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
-import { contentReports, db } from '@/server/db';
+import { contentReports, db, questions } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 
 // B-Report-2: write + read helpers for ContentReport. Mirrors the house style in
@@ -178,4 +178,118 @@ export async function getViewerHiddenQuestionIds(
     }
   }
   return hidden;
+}
+
+// ─── B-Report-4: author-facing state ────────────────────────────────────────
+//
+// The author of a curated Question can see report state on their own bank rows,
+// per the rule "a correction reaches the author immediately; an accusation only
+// after a human validates it":
+//   * open incorrect       → quiet "needs attention" (the note, never the reporter)
+//   * upheld inappropriate → read-only "this was removed" + category
+//   * open/dismissed inappropriate → invisible to the author
+// HOUSE/machine content is NEVER author-facing: every read below joins Question
+// and filters `creator_id = author AND source <> 'house_authored'`, so a house
+// question can never surface an author-facing state (the load-bearing honesty
+// guard, enforced server-side).
+
+export type AuthorIncorrectReport = {
+  questionId: string;
+  note: string;
+  incorrectKind: ContentReportIncorrectKind | null;
+  suggestedAnswer: string | null;
+};
+
+// Reporter identity is intentionally NOT selected here — the author must never see
+// who reported. Returns the most recent open incorrect report per question.
+export async function getOpenIncorrectReportsForAuthor(
+  authorUserId: string,
+  questionIds: string[],
+): Promise<Map<string, AuthorIncorrectReport>> {
+  const byQuestion = new Map<string, AuthorIncorrectReport>();
+  if (questionIds.length === 0) return byQuestion;
+
+  const rows = await db
+    .select({
+      questionId: contentReports.questionId,
+      note: contentReports.note,
+      incorrectKind: contentReports.incorrectKind,
+      suggestedAnswer: contentReports.suggestedAnswer,
+    })
+    .from(contentReports)
+    .innerJoin(questions, eq(contentReports.questionId, questions.id))
+    .where(
+      and(
+        inArray(contentReports.questionId, questionIds),
+        eq(contentReports.category, 'incorrect'),
+        eq(contentReports.status, 'open'),
+        eq(questions.creatorId, authorUserId),
+        ne(questions.source, 'house_authored'),
+      ),
+    )
+    .orderBy(desc(contentReports.createdAt));
+
+  for (const row of rows) {
+    if (!row.questionId || byQuestion.has(row.questionId)) continue; // most recent wins
+    byQuestion.set(row.questionId, {
+      questionId: row.questionId,
+      note: row.note,
+      incorrectKind: row.incorrectKind,
+      suggestedAnswer: row.suggestedAnswer,
+    });
+  }
+  return byQuestion;
+}
+
+// Upheld inappropriate only — an accusation reaches the author solely after a human
+// validates it. open/dismissed inappropriate are never read, so they stay invisible.
+export async function getUpheldInappropriateForAuthor(
+  authorUserId: string,
+  questionIds: string[],
+): Promise<Set<string>> {
+  const removed = new Set<string>();
+  if (questionIds.length === 0) return removed;
+
+  const rows = await db
+    .select({ questionId: contentReports.questionId })
+    .from(contentReports)
+    .innerJoin(questions, eq(contentReports.questionId, questions.id))
+    .where(
+      and(
+        inArray(contentReports.questionId, questionIds),
+        eq(contentReports.category, 'inappropriate'),
+        eq(contentReports.status, 'upheld'),
+        eq(questions.creatorId, authorUserId),
+        ne(questions.source, 'house_authored'),
+      ),
+    );
+
+  for (const row of rows) {
+    if (row.questionId) removed.add(row.questionId);
+  }
+  return removed;
+}
+
+// B-Report-4 / B-Report-3 bridge: an author fixing the answer key resolves their
+// open incorrect reports. status → 'dismissed' lifts B-Report-3 suppression (which
+// reads open|upheld); reviewDecision='author_edited' distinguishes this from a
+// moderator dismissal. Returns the number of reports resolved.
+export async function resolveOpenIncorrectReportsForQuestion(questionId: string): Promise<number> {
+  const updated = await db
+    .update(contentReports)
+    .set({
+      status: 'dismissed',
+      reviewDecision: 'author_edited',
+      reviewReason: 'Author edited the answer key',
+      reviewedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(contentReports.questionId, questionId),
+        eq(contentReports.category, 'incorrect'),
+        eq(contentReports.status, 'open'),
+      ),
+    )
+    .returning({ id: contentReports.id });
+  return updated.length;
 }
