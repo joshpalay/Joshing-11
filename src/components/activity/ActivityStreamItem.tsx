@@ -1,5 +1,6 @@
 'use client';
 
+import { Send } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type KeyboardEvent } from 'react';
 
@@ -522,6 +523,9 @@ function SendOnwardExpansion({
           type="button"
           onClick={() => setSendOpen(true)}
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
             background: INK,
             color: 'var(--brand-cream-page)',
             border: 'none',
@@ -532,7 +536,8 @@ function SendOnwardExpansion({
             cursor: 'pointer',
           }}
         >
-          SEND IT ONWARD →
+          SEND TO A FRIEND
+          <Send size={12} aria-hidden />
         </button>
 
         {expand.kind === 'niche_match' && expand.strangerId ? (
