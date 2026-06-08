@@ -91,7 +91,7 @@ export function QuestionRatingButtons({ questionId }: { questionId: string }) {
         className={cn(
           'inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition',
           myRating === 'down'
-            ? 'border-stone-400 bg-stone-200 text-stone-800'
+            ? 'border-stone-400 bg-stone-200 text-[var(--warm-ink)]'
             : 'border-border bg-background hover:bg-muted hover:text-foreground',
         )}
         disabled={isPending}
