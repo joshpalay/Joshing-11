@@ -135,8 +135,9 @@ export function TerritorySetupClient({
   // "Create your own" lives at the top of the Add-a-Territory box and toggles
   // open into an inline topic field on tap.
   const [creating, setCreating] = useState(false);
-  // Lightweight confirmation toast shown when a territory is added.
-  const [toast, setToast] = useState<string | null>(null);
+  // Lightweight confirmation toast shown when a territory is added, with an
+  // optional one-tap undo that removes the territory it just announced.
+  const [toast, setToast] = useState<{ message: string; undoDomain?: string } | null>(null);
   // Suggestions rotate so the box doesn't feel stale on repeat visits — see
   // visibleNearbyTerritories below.
   const [suggestionOffset, setSuggestionOffset] = useState(0);
@@ -167,10 +168,11 @@ export function TerritorySetupClient({
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  // Auto-dismiss the confirmation toast.
+  // Auto-dismiss the confirmation toast. Linger a little longer so the undo
+  // affordance is reachable.
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 2200);
+    const timer = window.setTimeout(() => setToast(null), 4500);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
@@ -333,8 +335,8 @@ export function TerritorySetupClient({
       setAddError(null);
       setAddLimitReached(false);
       try {
-        await adoptTopic(territory.domain, territory.broadCategory);
-        setToast(`Added “${territory.domain}”`);
+        const row = await adoptTopic(territory.domain, territory.broadCategory);
+        setToast({ message: `Added “${row.domain}”`, undoDomain: row.domain });
       } catch (caught) {
         const coded = caught as Error & { code?: string };
         setAddLimitReached(coded?.code === 'limit_reached');
@@ -600,8 +602,8 @@ export function TerritorySetupClient({
                   </Link>
                 }
                 onAdd={async (topic) => {
-                  await adoptTopic(topic.label, topic.broadCategory ?? null);
-                  setToast(`Added “${topic.label}”`);
+                  const row = await adoptTopic(topic.label, topic.broadCategory ?? null);
+                  setToast({ message: `Added “${row.domain}”`, undoDomain: row.domain });
                 }}
               />
               <button
@@ -710,13 +712,25 @@ export function TerritorySetupClient({
       ) : null}
 
       {toast ? (
-        <div className="pointer-events-none fixed bottom-24 left-1/2 z-[80] -translate-x-1/2">
+        <div className="fixed bottom-24 left-1/2 z-[80] -translate-x-1/2">
           <div
             role="status"
             aria-live="polite"
-            className="rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-medium text-[var(--cream)] shadow-[0_12px_28px_rgba(26,18,8,0.28)] motion-safe:animate-[territory-settle_300ms_ease-out]"
+            className="flex items-center gap-3 rounded-full bg-[var(--ink)] py-2.5 pr-2.5 pl-5 text-sm font-medium text-[var(--cream)] shadow-[0_12px_28px_rgba(26,18,8,0.28)] motion-safe:animate-[territory-settle_300ms_ease-out]"
           >
-            {toast}
+            <span>{toast.message}</span>
+            {toast.undoDomain ? (
+              <button
+                type="button"
+                className="rounded-full bg-[var(--cream)]/15 px-3 py-1 text-xs font-semibold tracking-[0.08em] text-[var(--cream)] uppercase transition hover:bg-[var(--cream)]/25"
+                onClick={() => {
+                  if (toast.undoDomain) removeDomain(toast.undoDomain);
+                  setToast(null);
+                }}
+              >
+                Undo
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
