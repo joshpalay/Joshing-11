@@ -148,7 +148,7 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-serif text-lg font-semibold">SMS reminders</h3>
-              <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+              <span className="inline-flex items-center rounded-full border border-[var(--warning-border)] bg-[var(--warning-surface)] px-2 py-0.5 text-xs font-medium text-[var(--warning)]">
                 Coming soon
               </span>
             </div>

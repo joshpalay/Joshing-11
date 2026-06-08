@@ -86,8 +86,8 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
               <span
                 className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
                   isCorrect
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-rose-200 bg-rose-50 text-rose-700'
+                    ? 'border-[var(--success-border)] bg-[var(--success-surface)] text-[var(--success)]'
+                    : 'border-[var(--destructive-border)] bg-[var(--destructive-surface)] text-destructive'
                 }`}
               >
                 {isCorrect ? 'CORRECT' : 'WRONG'}

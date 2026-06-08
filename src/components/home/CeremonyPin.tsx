@@ -22,7 +22,7 @@ export function CeremonyPin({ status }: { status: CeremonyPinStatus | null }) {
     return (
       <Link
         href={`/ceremony/${status.latestUnviewed.id}`}
-        className="block rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-stone-950 shadow-sm"
+        className="block rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-4 py-4 text-[var(--warm-ink)] shadow-sm"
       >
         <div className="flex items-start gap-3">
           <span className="mt-0.5 text-lg" aria-hidden>

@@ -145,6 +145,20 @@
     --success: #178245;
     --danger: var(--destructive);
     --wrong: var(--destructive);
+    /* Status surfaces — banner/chip fills + hairlines for the success / warning /
+       error roles. Formalizes the raw amber-50/300/700/900 + emerald/red/rose
+       50–200 utilities the 2026-05-30 audit flagged (DESIGN-SYSTEM.md §1.7).
+       Warning is a new hue (no prior accent), so its three values are explicit;
+       success/error tints derive from their existing accent via color-mix — the
+       same proportions already used inline in GameplayChat/ReplaySummary, so the
+       tints track the accent if it ever moves. */
+    --warning:             #b45309;  /* amber/700 — caution text / accent      */
+    --warning-surface:     #fdf6e6;  /* pale caution banner fill               */
+    --warning-border:      #e6c15a;  /* caution hairline                       */
+    --success-surface:     color-mix(in srgb, var(--success) 10%, var(--card));
+    --success-border:      color-mix(in srgb, var(--success) 30%, var(--border));
+    --destructive-surface: color-mix(in srgb, var(--destructive) 8%, var(--card));
+    --destructive-border:  color-mix(in srgb, var(--destructive) 28%, var(--border));
     /* Legacy editorial aliases — re-pointed at the brand tokens so older
        surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
        Knowledge page, replay/catch-up) render with navy ink instead of warm

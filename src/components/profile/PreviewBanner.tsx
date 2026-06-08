@@ -20,7 +20,7 @@ type Props = {
 // you exit, not a permanent setting.
 export function PreviewBanner({ label, exitHref }: Props) {
   return (
-    <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-[var(--warning-border)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning)]">
       <div className="flex min-w-0 items-center gap-2">
         <Eye className="size-4 flex-none" />
         <span className="truncate">
@@ -29,7 +29,7 @@ export function PreviewBanner({ label, exitHref }: Props) {
       </div>
       <Link
         href={exitHref}
-        className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-900 transition hover:bg-amber-100"
+        className="inline-flex items-center gap-1 rounded-md border border-[var(--warning-border)] bg-[var(--brand-card)] px-2 py-1 text-xs font-medium text-[var(--warning)] transition hover:bg-[var(--warning-surface)]"
       >
         <X className="size-3" />
         Exit preview

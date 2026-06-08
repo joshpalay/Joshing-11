@@ -202,7 +202,7 @@ export function AuthoredQuestionsFeed({
       </div>
 
       {error ? (
-        <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="mb-3 rounded-md border border-[var(--destructive-border)] bg-[var(--destructive-surface)] px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       ) : null}

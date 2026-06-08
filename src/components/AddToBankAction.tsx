@@ -75,7 +75,7 @@ export function AddToBankAction({
         onClick={toggle}
         className={cn(
           'inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-60',
-          inBank ? 'border-amber-300 bg-amber-50 text-amber-700' : '',
+          inBank ? 'border-[var(--warning-border)] bg-[var(--warning-surface)] text-[var(--warning)]' : '',
           className,
         )}
       >
