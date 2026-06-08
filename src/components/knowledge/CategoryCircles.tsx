@@ -36,8 +36,6 @@ export function getDomainColor(broadCategory: string): string {
 const MIN_SIZE = 30;
 const MAX_SIZE = 72;
 const MIN_OPACITY = 0.22;
-const SUMMARY_MIN_OPACITY = 0.5;
-const SUMMARY_MAX_OPACITY = 0.68;
 const SEED = 0.08;
 const DURATION = 800;
 
@@ -49,23 +47,6 @@ function getCircleSize(pts: number, maxPts: number): number {
 function getCircleOpacity(pts: number, maxPts: number): number {
   const n = pts / Math.max(maxPts, 1);
   return MIN_OPACITY + n * (1 - MIN_OPACITY);
-}
-
-function getSummaryCircleOpacity(pts: number, maxPts: number): number {
-  const n = pts / Math.max(maxPts, 1);
-  return SUMMARY_MIN_OPACITY + n * (SUMMARY_MAX_OPACITY - SUMMARY_MIN_OPACITY);
-}
-
-type KnowledgeCircleVariant = 'default' | 'summary';
-
-function summaryCircleBackground(primary: string): string {
-  return `radial-gradient(circle at 34% 28%, color-mix(in srgb, ${primary} 18%, white 82%) 0%, color-mix(in srgb, ${primary} 78%, white 22%) 40%, color-mix(in srgb, ${primary} 92%, black 8%) 100%)`;
-}
-
-function summaryCircleShadow(primary: string, diameter: number): string {
-  const outer = Math.max(40, Math.round(diameter * 0.9));
-  const halo = Math.max(64, Math.round(diameter * 1.35));
-  return `0 0 ${outer}px color-mix(in srgb, ${primary} 50%, transparent), 0 0 ${halo}px color-mix(in srgb, ${primary} 24%, transparent), inset -10px -12px 22px rgba(0,0,0,0.2), inset 8px 8px 18px rgba(255,255,255,0.22)`;
 }
 
 // ── Tier helpers ──────────────────────────────────────────────────────────────
@@ -100,22 +81,17 @@ export function KnowledgeCircle({
   maxPoints,
   animate,
   size,
-  variant = 'default',
 }: {
   broadCategory: string;
   pointsAfter: number;
   maxPoints: number;
   animate: boolean;
   size?: number;
-  variant?: KnowledgeCircleVariant;
 }) {
   const dc = getPortraitDomainColor(broadCategory);
   const resolvedSize = size ?? getCircleSize(pointsAfter, maxPoints);
   const slotSize = size ?? MAX_SIZE;
-  const finalOpacity =
-    variant === 'summary'
-      ? getSummaryCircleOpacity(pointsAfter, maxPoints)
-      : getCircleOpacity(pointsAfter, maxPoints);
+  const finalOpacity = getCircleOpacity(pointsAfter, maxPoints);
   const [opacity, setOpacity] = useState(animate ? MIN_OPACITY : finalOpacity);
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number | null>(null);
@@ -187,17 +163,7 @@ export function KnowledgeCircle({
         diameter={displaySize}
         light={dc.light}
         opacity={opacity}
-        background={variant === 'summary' ? summaryCircleBackground(dc.primary) : undefined}
-        border={
-          variant === 'summary'
-            ? `1px solid color-mix(in srgb, ${dc.primary} 72%, white 28%)`
-            : undefined
-        }
-        style={{
-          transition: animate ? undefined : 'none',
-          boxShadow:
-            variant === 'summary' ? summaryCircleShadow(dc.primary, displaySize) : undefined,
-        }}
+        style={{ transition: animate ? undefined : 'none' }}
       />
     </div>
   );
@@ -244,7 +210,6 @@ function GameCircleRow({
         pointsAfter={item.points_after}
         maxPoints={maxPoints}
         animate={visible}
-        variant="summary"
       />
       <div style={{ flex: 1, minWidth: 0 }}>
         {item.new_territory && (
@@ -355,7 +320,6 @@ function RoundCircleRow({
         pointsAfter={item.points_gained_this_round}
         maxPoints={maxPoints}
         animate={visible}
-        variant="summary"
       />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
