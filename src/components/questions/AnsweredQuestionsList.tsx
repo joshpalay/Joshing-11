@@ -1,5 +1,6 @@
 'use client';
 
+import { answerHeadingStyle } from '@/components/answer-heading';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 
@@ -71,24 +72,28 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
                 <p className="line-clamp-3 text-foreground">{item.questionText}</p>
               </div>
               <div className="text-sm">
-                <span
-                  className={
-                    answer.muted
-                      ? 'italic text-muted-foreground'
-                      : correct
-                        ? 'text-foreground'
-                        : skipped
+                {correct ? (
+                  <p style={{ ...answerHeadingStyle, color: 'var(--game-correct)' }}>
+                    {answer.text}
+                  </p>
+                ) : (
+                  <>
+                    <span
+                      className={
+                        answer.muted || skipped
                           ? 'italic text-muted-foreground'
                           : 'text-foreground line-through decoration-muted-foreground/60'
-                  }
-                >
-                  {answer.text}
-                </span>
-                {!answer.muted && !correct && !skipped ? (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    correct: {item.correctAnswer}
-                  </span>
-                ) : null}
+                      }
+                    >
+                      {answer.text}
+                    </span>
+                    {item.correctAnswer ? (
+                      <p style={{ ...answerHeadingStyle, color: 'var(--brand-ink)' }}>
+                        {item.correctAnswer}
+                      </p>
+                    ) : null}
+                  </>
+                )}
                 <p className="mt-0.5 text-xs text-muted-foreground sm:hidden">
                   Asked by {askerDisplay(item)}
                   {item.authorIsHouse ? <EditorialBadge style={{ marginLeft: 4 }} /> : null}

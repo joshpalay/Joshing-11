@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Check, MoreHorizontal, Sparkles, X } from 'lucide-react'
 
+import { answerHeadingStyle } from '@/components/answer-heading'
 import { FeedActionLink } from './FeedActionLink'
 import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
@@ -242,26 +243,26 @@ export function AnswerFeedbackSheet({
           </p>
 
           <div className="space-y-1 pb-2">
-            <p
-              className="text-[13px] italic"
-              style={{
-                fontFamily: 'var(--font-literata)',
-                color: 'var(--ink)',
-                opacity: 0.7,
-              }}
-            >
-              Your answer: {submittedAnswer}
-            </p>
-            {!isCorrect && correctAnswer ? (
+            {correctAnswer ? (
+              <p
+                style={{
+                  ...answerHeadingStyle,
+                  color: isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)',
+                }}
+              >
+                {correctAnswer}
+              </p>
+            ) : null}
+            {!isCorrect ? (
               <p
                 className="text-[13px] italic"
                 style={{
                   fontFamily: 'var(--font-literata)',
                   color: 'var(--ink)',
-                  opacity: 0.85,
+                  opacity: 0.7,
                 }}
               >
-                Correct answer: {correctAnswer}
+                Your answer: {submittedAnswer}
               </p>
             ) : null}
           </div>
