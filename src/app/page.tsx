@@ -120,6 +120,22 @@ async function CeremonyPinSection({ userId }: { userId: string }) {
   )
 }
 
+// At most one discovery graphic (common-ground OR world-expanding) per feed.
+// When both qualify, a coin flip drops one so neither dominates and the feed
+// isn't doubled up with two graphics. Kept at module scope (not in the server
+// component body) so the Math.random call isn't flagged as render-impure.
+function pickOneGraphicPromo<T>(
+  commonGround: T | null,
+  recentlyExpanding: T | null,
+): { commonGround: T | null; recentlyExpanding: T | null } {
+  if (commonGround && recentlyExpanding) {
+    return Math.random() < 0.5
+      ? { commonGround, recentlyExpanding: null }
+      : { commonGround: null, recentlyExpanding }
+  }
+  return { commonGround, recentlyExpanding }
+}
+
 async function FromYourFriendsSection({ userId }: { userId: string }) {
   // The unified "What's Happening" home feed: the question feed merged with the
   // full activity/Lately stream, interleaved chronologically inside FeedList.
@@ -136,20 +152,24 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
     getRecentlyExpandingPromo(userId),
     getAddFriendsPromo(userId),
   ])
+  // One discovery graphic per session: showing BOTH the common-ground circles
+  // and the world-expanding badges in a single feed is too much, and the two
+  // compete. When both are available, keep one at random so neither dominates;
+  // the survivor is pinned a few rows down by FeedList (never at the very top).
+  // The coin flip lives in pickOneGraphicPromo (module scope) so it isn't a
+  // render-impure Math.random call in this server component body.
+  const { commonGround, recentlyExpanding } = pickOneGraphicPromo(
+    commonGroundPromo,
+    recentlyExpandingPromo,
+  )
   // The weekly reflection lives in the dedicated CeremonyPin editorial marker
   // above this feed (calm, gold, no CTA). Drop the redundant 'ceremony_ready'
   // activity card here so the reflection doesn't double up / compete with social
   // activity in the home stream. It's the only activity that links to /ceremony/;
   // the card still appears in the full /activities log.
-  const homeActivityItems = [
-    // Home-only common-ground discovery promo at the head of the activity rows
-    // (see getCommonGroundPromo). Null when the viewer has no untested shared
-    // ground with any probed friend.
-    ...(commonGroundPromo ? [commonGroundPromo] : []),
-    ...activityItems.filter(
-      (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
-    ),
-  ]
+  const homeActivityItems = activityItems.filter(
+    (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
+  )
   return (
     <>
       {/* Sit the header on the feed's left gutter — the same 2px the activity
@@ -166,7 +186,8 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
         showContributeFooter
         unifiedHome
         activityItems={homeActivityItems}
-        expandingPromo={recentlyExpandingPromo}
+        commonGroundPromo={commonGround}
+        expandingPromo={recentlyExpanding}
         addFriendsPromo={addFriendsPromo}
       />
     </>

@@ -446,17 +446,26 @@ type FeedListProps = {
    */
   activityItems?: StreamItem[]
   /**
+   * Home-only "You share ground" common-ground promo. Like `expandingPromo`,
+   * this is pinned at a fixed offset a few rows down (NOT sorted into the
+   * chronological union) so it never lands at the very top. The page enforces
+   * that at most one of `commonGroundPromo` / `expandingPromo` is set per
+   * visit — the two discovery graphics never appear together. See
+   * getCommonGroundPromo / displayRows.
+   */
+  commonGroundPromo?: StreamItem | null
+  /**
    * Home-only "Your world is expanding" promo. Unlike `activityItems` (which
    * interleave chronologically), this is spliced in at a fixed offset a few rows
-   * down so it never lands at the very top or adjacent to the common-ground
-   * promo (which sorts to row 0). Null on most visits — it shows ~1 in 5. See
+   * down so it never lands at the very top. Mutually exclusive with
+   * `commonGroundPromo` (see above). Null on most visits — it shows ~1 in 5. See
    * getRecentlyExpandingPromo / displayRows.
    */
   expandingPromo?: StreamItem | null
   /**
    * Home-only "add friends" promo (contact-match suggestions, or an invite
-   * nudge). Spliced in at its own fixed offset, separated from `expandingPromo`
-   * so the two promos are never adjacent. See getAddFriendsPromo / displayRows.
+   * nudge). Spliced in at its own fixed offset, separated from the graphic promo
+   * so the two are never adjacent. See getAddFriendsPromo / displayRows.
    */
   addFriendsPromo?: StreamItem | null
 }
@@ -464,11 +473,12 @@ type FeedListProps = {
 type QuestionCardState = 'unanswered' | 'answered'
 
 // Where the home-only pinned promos land in the rendered row list: a few rows
-// down (so they're never the very first thing, and never adjacent to the common-
-// ground promo at row 0), and spaced apart from each other. Each offset is
-// measured against the original feed length; a promo only appears once the feed
-// has at least that many rows.
-const EXPANDING_PROMO_OFFSET = 3
+// down (so they're never the very first thing), and spaced apart from each
+// other. Each offset is measured against the original feed length; a promo only
+// appears once the feed has at least that many rows. The single discovery
+// graphic (common-ground OR world-expanding — the page guarantees at most one)
+// sits at GRAPHIC_PROMO_OFFSET; the add-friends promo sits further down.
+const GRAPHIC_PROMO_OFFSET = 3
 const ADD_FRIENDS_PROMO_OFFSET = 6
 
 // One row of the unified-home feed: either a paginated question card or an
@@ -704,6 +714,7 @@ function FeedListContent({
   showContributeFooter = false,
   unifiedHome = false,
   activityItems = [],
+  commonGroundPromo = null,
   expandingPromo = null,
   addFriendsPromo = null,
 }: FeedListProps) {
@@ -914,13 +925,15 @@ function FeedListContent({
 
   // Splice the home-only pinned promos in at fixed offsets a few rows down. They
   // are deliberately NOT part of the chronological union above: pinning them to
-  // indices keeps them off the very top and never adjacent to the common-ground
-  // promo (which sorts to row 0). Each is only inserted once the feed has enough
-  // rows above its offset; offsets are measured against the original feed so the
-  // two promos stay spaced apart even when both are present.
+  // indices keeps them off the very top. The single discovery graphic (common-
+  // ground OR world-expanding — at most one is non-null per the page's
+  // mutual-exclusivity guard) takes GRAPHIC_PROMO_OFFSET; the add-friends promo
+  // sits further down so the two stay spaced apart. Each is only inserted once
+  // the feed has enough rows above its offset.
   const displayRows = useMemo<UnifiedRow[]>(() => {
     const pinned = [
-      { offset: EXPANDING_PROMO_OFFSET, item: expandingPromo },
+      { offset: GRAPHIC_PROMO_OFFSET, item: commonGroundPromo },
+      { offset: GRAPHIC_PROMO_OFFSET, item: expandingPromo },
       { offset: ADD_FRIENDS_PROMO_OFFSET, item: addFriendsPromo },
     ]
       .filter((p): p is { offset: number; item: StreamItem } => p.item !== null)
@@ -946,7 +959,7 @@ function FeedListContent({
       inserted++
     }
     return next
-  }, [unifiedRows, expandingPromo, addFriendsPromo])
+  }, [unifiedRows, commonGroundPromo, expandingPromo, addFriendsPromo])
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'

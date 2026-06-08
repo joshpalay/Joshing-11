@@ -55,6 +55,12 @@ const EXPANDING_ROW_ACCENTS = [
   { border: '#65a8bb', fill: 'rgba(101, 168, 187, 0.20)' },
 ] as const;
 
+// Home discovery promos (common-ground circles, world-expanding badges, add-
+// friends) sit on a subtly warmer panel than the cream page so they read as a
+// distinct editorial moment without a loud card shadow — a faint parchment tint
+// + soft rounding + hairline, in the spirit of the "opened" milestone state.
+const PROMO_BG = '#f7f1e6';
+
 // An opened reveal indents to sit UNDER the row's header text, not flush to the
 // far-left edge below the icon. This is exactly the ActivityIcon column width —
 // MARK_W (24) + GAP (8) — so the expansion's left rule lines up with where the
@@ -206,21 +212,35 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   // and header text don't shift sideways when the card opens.
   const opened = expandable && open;
 
+  // Discovery promos carry an embed (common-ground / world-expanding / add-
+  // friends); ordinary activity rows never do. Promos get the warm panel and
+  // drop the row timestamp (it's a borrowed/meaningless "just now" on a pinned
+  // card, not a real event time).
+  const isPromo = item.embed != null;
+
   return (
     <div
       id={item.anchorId ?? undefined}
       style={
-        opened
+        isPromo
           ? {
-              borderTop: `1px solid ${RULE}`,
-              borderBottom: `1px solid ${RULE}`,
-              padding: '18px 2px',
-              background: PAPER,
+              border: `1px solid ${RULE}`,
+              borderRadius: 12,
+              padding: '14px 12px',
+              margin: '8px 0',
+              background: PROMO_BG,
             }
-          : {
-              borderBottom: `1px solid ${RULE}`,
-              padding: '12px 2px',
-            }
+          : opened
+            ? {
+                borderTop: `1px solid ${RULE}`,
+                borderBottom: `1px solid ${RULE}`,
+                padding: '18px 2px',
+                background: PAPER,
+              }
+            : {
+                borderBottom: `1px solid ${RULE}`,
+                padding: '12px 2px',
+              }
       }
     >
       <div
@@ -269,17 +289,19 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
           ) : null}
         </div>
 
-        <div
-          style={{
-            flexShrink: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            gap: 4,
-          }}
-        >
-          <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap' }}>{timestamp}</span>
-        </div>
+        {isPromo ? null : (
+          <div
+            style={{
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              gap: 4,
+            }}
+          >
+            <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap' }}>{timestamp}</span>
+          </div>
+        )}
       </div>
 
       {item.embed?.kind === 'common_ground' ? (
