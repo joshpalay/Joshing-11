@@ -536,7 +536,7 @@ function SendOnwardExpansion({
             cursor: 'pointer',
           }}
         >
-          SEND IT ONWARD
+          SEND TO A FRIEND
           <Send size={12} aria-hidden />
         </button>
 
