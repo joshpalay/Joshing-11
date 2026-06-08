@@ -45,15 +45,25 @@ const GAP = 8;
 const LINE_H = 22.5; // first text line: 15px × 1.5
 // The stacked single-shape marks (diamond / hourglass / domain) are a vertical
 // pair of triangles. Each half is base=height (24×24) so the triangles stay
-// isosceles and un-smushed — matching the BundleMark invariant below. The pair
-// is therefore 24×48; we render it at 70% so it isn't too tall next to the text,
-// centered horizontally in the 24px column. (Drawing the halves shorter than
-// base=height squishes the rhombus/hourglass/domain and was reverted.)
-const LARGE_SCALE = 0.7;
+// isosceles and un-smushed — matching the BundleMark invariant below. The pair's
+// viewBox is therefore 24×48 (a 1:2 aspect). We render it at LARGE_SCALE so its
+// HEIGHT lands at ~the text line height (48 × 0.5 = 24 ≈ LINE_H 22.5) and the
+// mark sits TUCKED INSIDE the first line when vertically centered (see
+// ActivityIcon) instead of drooping far below it. Width = 24 × 0.5 = 12, which
+// matches a single BundleMark triangle, so the two icon families read as one set.
+// (Keep the halves base=height — drawing them shorter squishes the rhombus and
+// was reverted; the fix for "too tall" is the scale + centering here, not the
+// geometry.)
+const LARGE_SCALE = 0.5;
 // Height of each half of a stacked mark, and the total viewBox height of the
 // pair. base=height (= MARK_W) keeps the triangles un-smushed.
 const STACK_HALF = 24;
 const STACK_H = STACK_HALF * 2; // 48
+// Cluster-only vertical nudge: the BundleMark anchors its apex to the first
+// line's cap height (the top of "R"), not the line-box top above it. Equal to
+// the line's half-leading ((22.5 − 15) / 2 ≈ 3.75) plus the gap from the em-box
+// top down to the cap; tuned to 7 against Montserrat at 15px.
+const CLUSTER_CAP_NUDGE = 7;
 
 export type ActivityIconSpec =
   | { kind: 'bundle'; total: number; unanswered: number }
@@ -256,9 +266,20 @@ function Mark({ spec, seed }: { spec: ActivityIconSpec; seed: string }) {
 }
 
 // The fixed icon column: exactly MARK_W wide (+ GAP) for EVERY row, even iconless
-// ones, so text alignment never shifts. The mark centers on the first text line.
-// `seed` (the row id) makes the per-triangle palette pick stable and per-row.
+// ones, so text alignment never shifts. `seed` (the row id) makes the per-triangle
+// palette pick stable and per-row.
+//
+// Vertical placement is split by mark kind, because they mean different things:
+//   - The BUNDLE is a 2–2–1 CLUSTER standing in for a whole stack of questions.
+//     It is intentionally tall, so it anchors its apex to the first line's cap
+//     height and GROWS DOWNWARD through the milestone row's second line.
+//   - The single stacked marks (diamond / hourglass / domain) sit beside a
+//     ONE-LINE row, so they VERTICALLY CENTER on that first line — sized (via
+//     LARGE_SCALE) to the line height so they tuck neatly inside it. Centering,
+//     not top-anchoring, is what keeps them aligned: top-anchoring a 1:2 mark
+//     made it hang ~half a line below a single line of copy and read as broken.
 export function ActivityIcon({ spec, seed }: { spec: ActivityIconSpec | null; seed: string }) {
+  const isCluster = spec?.kind === 'bundle';
   return (
     <div
       aria-hidden
@@ -266,12 +287,12 @@ export function ActivityIcon({ spec, seed }: { spec: ActivityIconSpec | null; se
         width: MARK_W,
         marginRight: GAP,
         height: LINE_H,
-        // Nudge down by the line's half-leading so the mark's top meets the
-        // glyph cap height (the top of "R"), not the line-box top above it.
-        paddingTop: 7,
         flexShrink: 0,
         display: 'flex',
-        alignItems: 'flex-start',
+        // Cluster: top-anchor at the cap and grow down. Single mark: center on
+        // the first line so it never droops below a one-line row.
+        alignItems: isCluster ? 'flex-start' : 'center',
+        paddingTop: isCluster ? CLUSTER_CAP_NUDGE : 0,
         justifyContent: 'center',
         overflow: 'visible',
       }}
