@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
+import { answerHeadingStyle } from '@/components/answer-heading';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
@@ -335,8 +336,13 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       <span className="font-medium text-foreground">You:</span>{' '}
                       {response?.submittedAnswer?.trim() || 'No answer submitted'}
                     </p>
-                    <p className="text-muted-foreground">
-                      <span className="font-medium text-foreground">Answer:</span> {gameQuestion.question.answerText}
+                    <p
+                      style={{
+                        ...answerHeadingStyle,
+                        color: correct ? 'var(--game-correct)' : 'var(--brand-ink)',
+                      }}
+                    >
+                      {gameQuestion.question.answerText}
                     </p>
                   </div>
                   {briefForDisplay ? (
