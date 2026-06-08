@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The home-only add-friends promo: suggestions (addable contact matches) take
-// priority and are always shown; otherwise an invite nudge is gated ~1 in 5. We
-// mock the one query it reads so we can assert the filter, the cap, the variant
-// selection, and the gate without a DB.
+// The home-only add-friends promo: gated ~1 in 5 first, then either suggestions
+// (addable contact matches) or an invite nudge — never both. We mock the one
+// query it reads so we can assert the gate, the filter, the cap, and the variant
+// selection without a DB.
 const { listContactMatchesMock } = vi.hoisted(() => ({
   listContactMatchesMock: vi.fn(),
 }));
@@ -33,7 +33,13 @@ describe('getAddFriendsPromo', () => {
     listContactMatchesMock.mockReset();
   });
 
-  it('suggests up to three addable matches and shows them regardless of the gate', async () => {
+  it('returns null without reading contacts when the visit is gated out', async () => {
+    const item = await getAddFriendsPromo('user-1', NOW, () => 0.9);
+    expect(item).toBeNull();
+    expect(listContactMatchesMock).not.toHaveBeenCalled();
+  });
+
+  it('suggests up to three addable matches when shown', async () => {
     listContactMatchesMock.mockResolvedValue([
       match('a', 'none'),
       match('b', 'follows_you'),
@@ -42,8 +48,7 @@ describe('getAddFriendsPromo', () => {
       match('e', 'none'),
     ]);
 
-    // random() that would gate OUT the invite path; suggestions ignore it.
-    const item = await getAddFriendsPromo('user-1', NOW, () => 0.99);
+    const item = await getAddFriendsPromo('user-1', NOW, () => 0.1);
     expect(item).not.toBeNull();
     const embed = item!.embed as Extract<NonNullable<typeof item.embed>, { kind: 'add_friends' }>;
     expect(embed.kind).toBe('add_friends');
@@ -53,17 +58,11 @@ describe('getAddFriendsPromo', () => {
     expect(embed.href).toBe('/friends/find');
   });
 
-  it('falls back to the invite nudge when no match is addable and the gate passes', async () => {
+  it('falls back to the invite nudge when shown but no match is addable', async () => {
     listContactMatchesMock.mockResolvedValue([match('c', 'following'), match('f', 'friends')]);
     const item = await getAddFriendsPromo('user-1', NOW, () => 0.0);
     expect(item).not.toBeNull();
     const embed = item!.embed as Extract<NonNullable<typeof item.embed>, { kind: 'add_friends' }>;
     expect(embed.variant).toBe('invite');
-  });
-
-  it('returns null when there is nothing to suggest and the invite gate fails', async () => {
-    listContactMatchesMock.mockResolvedValue([]);
-    const item = await getAddFriendsPromo('user-1', NOW, () => 0.9);
-    expect(item).toBeNull();
   });
 });
