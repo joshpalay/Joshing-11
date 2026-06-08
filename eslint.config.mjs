@@ -50,7 +50,6 @@ const TOKEN_LINT_GRANDFATHERED = [
   "src/components/friends/ContactMatchBlock.tsx",
   "src/components/friends/FindFriendsSearch.tsx",
   "src/components/games/QuestionRatingButtons.tsx",
-  "src/components/home/CeremonyPin.tsx",
   "src/components/knowledge/AskFriendForDomain.tsx",
   "src/components/profile/AuthoredQuestionsFeed.tsx",
   "src/components/profile/InlineHandleField.tsx",
