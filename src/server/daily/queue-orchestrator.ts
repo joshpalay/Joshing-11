@@ -59,15 +59,20 @@ type SubcategoryDiversityGate = {
 };
 
 // Shared across all three core sources (authored → house → generated) so the cap is
-// enforced over the WHOLE queue, not per-source. See DAILY_QUEUE_MAX_PER_SUBCATEGORY.
-function makeSubcategoryDiversityGate(maxPerSubcategory: number): SubcategoryDiversityGate {
+// enforced over the WHOLE queue, not per-source. The cap is resolved PER subcategory
+// (capForSubcategory receives the normalized key) so an explicit "often" preference
+// from the Game settings page can lift the default cap for that subcategory — see
+// DAILY_QUEUE_MAX_PER_SUBCATEGORY and the capForSubcategory builder in the caller.
+function makeSubcategoryDiversityGate(
+  capForSubcategory: (normalizedSubcategory: string) => number,
+): SubcategoryDiversityGate {
   const counts = new Map<string, number>();
   return {
     admit(subcategory) {
       const key = (subcategory ?? '').trim().toLowerCase();
       if (!key) return true;
       const current = counts.get(key) ?? 0;
-      if (current >= maxPerSubcategory) return false;
+      if (current >= capForSubcategory(key)) return false;
       counts.set(key, current + 1);
       return true;
     },
@@ -208,19 +213,35 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
 
   // Intra-day diversity cap (D: "5-question botany run" / "3-Hamlet day"). One
   // shared gate enforces DAILY_QUEUE_MAX_PER_SUBCATEGORY across all three core
-  // sources. Scale the cap up when too few distinct subcategories are available to
-  // field five under it, so a narrow knowledge base doesn't trigger pointless
+  // sources. Scale the BASE cap up when too few distinct subcategories are available
+  // to field five under it, so a narrow knowledge base doesn't trigger pointless
   // top-up generation that can only ever come back over-cap; the reserve backfill
   // further down is the final safety net regardless of this estimate.
   const distinctAllowed = allowedSubcategories.size;
-  const diversityCap =
+  const baseDiversityCap =
     distinctAllowed > 0
       ? Math.max(
           DAILY_QUEUE_MAX_PER_SUBCATEGORY,
           Math.ceil(DAILY_QUEUE_SIZE / distinctAllowed),
         )
       : DAILY_QUEUE_SIZE;
-  const diversityGate = makeSubcategoryDiversityGate(diversityCap);
+
+  // In concert with the Game settings page: a subcategory the player explicitly
+  // marked "often" is EXEMPT from the diversity cap (bounded only by the queue
+  // size), so the cap never throttles a topic the player deliberately asked to see
+  // a lot of. The cap exists to break up runs the player did NOT request — and an
+  // explicit "often" IS that request, so it wins. ("resting" is already removed from
+  // allowedSubcategories upstream; "sometimes"/"blue_moon"/unset keep the base cap.)
+  // Keys are lowercased to match how restingDomains is built above and how the gate
+  // normalizes each subcategory.
+  const oftenDomains = new Set(
+    Object.entries(preferences.domainPreferenceFrequency ?? {})
+      .filter(([, frequency]) => frequency === 'often')
+      .map(([domain]) => domain.toLowerCase()),
+  );
+  const capForSubcategory = (normalizedSubcategory: string): number =>
+    oftenDomains.has(normalizedSubcategory) ? DAILY_QUEUE_SIZE : baseDiversityCap;
+  const diversityGate = makeSubcategoryDiversityGate(capForSubcategory);
 
   const socialGraph = await getFriendAndFoFUserIds(userId);
   const authoredAll = await pickEligibleAuthoredQuestions(
@@ -458,7 +479,8 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       topUpRounds,
       droppedDuplicates,
       droppedGeneric,
-      diversityCap,
+      baseDiversityCap,
+      oftenDomains: oftenDomains.size,
       deflectedForDiversity,
       diversityBackfilled,
       domainMode: preferences.domainMode,
@@ -486,7 +508,8 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       topUpRounds,
       droppedDuplicates,
       droppedGeneric,
-      diversityCap,
+      baseDiversityCap,
+      oftenDomains: oftenDomains.size,
       deflectedForDiversity,
       diversityBackfilled,
       knowledgeBaseDomains: knowledgeBase.length,

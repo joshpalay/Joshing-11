@@ -219,6 +219,65 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     expect(totalSlots).toBe(DAILY_QUEUE_SIZE);
   });
 
+  it('exempts an "often"-marked subcategory from the cap (Game settings honored)', async () => {
+    // The player explicitly asked to see lots of Botany. The diversity cap must NOT
+    // throttle a topic the player deliberately requested — "often" is exempt, so a
+    // botany-heavy day the player asked for is delivered in full.
+    mocks.getDailyPreferences.mockResolvedValue({
+      difficulty: 'adaptive',
+      domainMode: 'random',
+      selectedDomains: [],
+      domainPreferenceFrequency: { Botany: 'often' },
+    });
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('b1', 'Botany'),
+      genq('b2', 'Botany'),
+      genq('b3', 'Botany'),
+      genq('b4', 'Botany'),
+      genq('b5', 'Botany'),
+    ]);
+
+    await fillDailyQueueForUser(USER);
+
+    // All five botany slots persisted — not capped at DAILY_QUEUE_MAX_PER_SUBCATEGORY.
+    expect(mocks.createDailyQueueItem).toHaveBeenCalledTimes(DAILY_QUEUE_SIZE);
+  });
+
+  it('still caps OTHER subcategories while an "often" one runs free', async () => {
+    // Botany is "often" (exempt); Jazz is unset (base cap). A mixed batch should let
+    // botany exceed the base cap while jazz is still spaced out — the cap and the
+    // frequency preference coexist.
+    mocks.getDailyPreferences.mockResolvedValue({
+      difficulty: 'adaptive',
+      domainMode: 'random',
+      selectedDomains: [],
+      domainPreferenceFrequency: { Botany: 'often' },
+    });
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('b1', 'Botany'),
+      genq('b2', 'Botany'),
+      genq('b3', 'Botany'),
+      genq('j1', 'Jazz'),
+      genq('j2', 'Jazz'),
+      genq('j3', 'Jazz'),
+    ]);
+
+    await fillDailyQueueForUser(USER);
+
+    expect(mocks.createDailyQueueItem).toHaveBeenCalledTimes(DAILY_QUEUE_SIZE);
+    const domains = mocks.createDailyQueueItem.mock.calls.map((call) => {
+      const id = call[1] as string;
+      return id.startsWith('b') ? 'Botany' : 'Jazz';
+    });
+    // Botany (often) exceeds the base cap; Jazz (unset) is held at it.
+    expect(domains.filter((d) => d === 'Botany').length).toBeGreaterThan(
+      DAILY_QUEUE_MAX_PER_SUBCATEGORY,
+    );
+    expect(domains.filter((d) => d === 'Jazz').length).toBeLessThanOrEqual(
+      DAILY_QUEUE_MAX_PER_SUBCATEGORY,
+    );
+  });
+
   it('does not shorten a queue when only one subcategory is available (soft cap)', async () => {
     // Single-domain knowledge base: the cap can never diversify, so it must NOT
     // turn a previously-full queue into a short one or a 503. The effective cap
