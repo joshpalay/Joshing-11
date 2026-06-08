@@ -1,11 +1,13 @@
 'use client';
 
 import { EditorialBadge } from '@/components/EditorialBadge';
+import { SendQuestionAction } from '@/components/SendQuestionAction';
 
 export type AnsweredQuestionItem = {
   id: string;
   questionId: string;
   questionText: string;
+  domainDisplayName: string;
   submittedAnswer: string | null;
   correctAnswer: string;
   result: 'correct' | 'incorrect' | 'skipped' | null;
@@ -48,11 +50,12 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
 
   return (
     <section>
-      <div className="hidden grid-cols-[2fr_2fr_1fr_1fr] gap-3 border-b px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
+      <div className="hidden grid-cols-[2fr_2fr_1fr_1fr_auto] gap-3 border-b px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
         <div>Question</div>
         <div>Your answer</div>
         <div>Asked by</div>
         <div>Date answered</div>
+        <div className="sr-only">Send to friend</div>
       </div>
       <ul className="divide-y">
         {items.map((item) => {
@@ -62,7 +65,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
           return (
             <li
               key={item.id}
-              className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[2fr_2fr_1fr_1fr] sm:items-start sm:gap-3"
+              className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[2fr_2fr_1fr_1fr_auto] sm:items-start sm:gap-3"
             >
               <div className="text-sm">
                 <p className="line-clamp-3 text-foreground">{item.questionText}</p>
@@ -98,6 +101,26 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
               </div>
               <div className="hidden text-sm text-muted-foreground sm:block">
                 {formatDate(item.answeredAt)}
+              </div>
+              <div className="hidden sm:flex sm:justify-end">
+                <SendQuestionAction
+                  question={{
+                    id: item.questionId,
+                    text: item.questionText,
+                    domain: item.domainDisplayName,
+                  }}
+                  label=""
+                  className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground"
+                />
+              </div>
+              <div className="sm:hidden">
+                <SendQuestionAction
+                  question={{
+                    id: item.questionId,
+                    text: item.questionText,
+                    domain: item.domainDisplayName,
+                  }}
+                />
               </div>
             </li>
           );
