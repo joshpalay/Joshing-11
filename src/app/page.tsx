@@ -11,6 +11,7 @@ import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { getSession } from '@/server/auth/session'
 import { buildActivityStream } from '@/server/activity/build-stream'
 import { getCommonGroundPromo } from '@/server/activity/common-ground-promo'
+import { getRecentlyExpandingPromo } from '@/server/activity/recently-expanding-promo'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
@@ -123,7 +124,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
   // full activity/Lately stream, interleaved chronologically inside FeedList.
   // Filter 'all' (not 'from-friends') so directly-sent questions thread in; the
   // prefetch matches FeedList's unifiedHome seeding for a no-round-trip paint.
-  const [feedPage, activityItems, commonGroundPromo] = await Promise.all([
+  const [feedPage, activityItems, commonGroundPromo, recentlyExpandingPromo] = await Promise.all([
     getFeedPagePayload(userId, {
       limit: FEED_PAGE_SIZE,
       cursor: null,
@@ -131,6 +132,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
     }),
     buildActivityStream(userId),
     getCommonGroundPromo(userId),
+    getRecentlyExpandingPromo(userId),
   ])
   // The weekly reflection lives in the dedicated CeremonyPin editorial marker
   // above this feed (calm, gold, no CTA). Drop the redundant 'ceremony_ready'
@@ -162,6 +164,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
         showContributeFooter
         unifiedHome
         activityItems={homeActivityItems}
+        expandingPromo={recentlyExpandingPromo}
       />
     </>
   )

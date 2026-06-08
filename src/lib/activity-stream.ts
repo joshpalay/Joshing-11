@@ -123,13 +123,33 @@ export type CommonGroundPromoDomain = {
   friend: { points: number; tier: MasteryTier };
 };
 
-export type StreamEmbed = {
-  kind: 'common_ground';
-  friendId: string;
-  friendFirstName: string;
-  friendHref: string;
-  domains: CommonGroundPromoDomain[];
+export type RecentlyExpandingPromoDomain = {
+  // The domain display name, its short supporting line, and the letter shown in
+  // the row's colored badge — all precomputed server-side so the embed stays a
+  // pure render (mirrors the /knowledge "Recently Expanding" module rows).
+  label: string;
+  caption: string;
+  initial: string;
 };
+
+// Inline embeds rendered under a stream row's one-liner. A discriminated union
+// so each promo carries only its own payload; ActivityStreamItem switches on
+// `kind`. `common_ground` draws the overlapping-circle motif with a link to a
+// friend; `recently_expanding` lists the viewer's fastest-growing territories
+// with a link to /knowledge.
+export type StreamEmbed =
+  | {
+      kind: 'common_ground';
+      friendId: string;
+      friendFirstName: string;
+      friendHref: string;
+      domains: CommonGroundPromoDomain[];
+    }
+  | {
+      kind: 'recently_expanding';
+      href: string;
+      domains: RecentlyExpandingPromoDomain[];
+    };
 
 export type StreamItem = {
   id: string;
@@ -605,7 +625,7 @@ export function convergenceToStreamItem(
 // expands; the embed carries everything ActivityStreamItem needs to render the
 // circles plus a link through to the friend's profile.
 export function commonGroundPromoToStreamItem(
-  embed: StreamEmbed,
+  embed: Extract<StreamEmbed, { kind: 'common_ground' }>,
   sortAt: Date,
   id: string,
 ): StreamItem {
@@ -615,6 +635,30 @@ export function commonGroundPromoToStreamItem(
     tier: LATELY_TIER.OTHER,
     homeEligible: true,
     line: [txt('You and '), act(embed.friendFirstName, embed.friendId), txt(' share ground worth testing')],
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'domain',
+    expand: null,
+    embed,
+  };
+}
+
+// A homepage-only knowledge nudge: "Your world is expanding", with the viewer's
+// fastest-growing territories listed in the same row style as the /knowledge
+// "Recently Expanding" module. Question-free, so it never expands; the embed
+// carries the (capped) domain rows plus a link through to the knowledge page.
+export function recentlyExpandingPromoToStreamItem(
+  embed: Extract<StreamEmbed, { kind: 'recently_expanding' }>,
+  sortAt: Date,
+  id: string,
+): StreamItem {
+  return {
+    id,
+    sortAt,
+    tier: LATELY_TIER.OTHER,
+    homeEligible: true,
+    line: [txt('Your world is expanding')],
     secondLine: null,
     anchorId: null,
     action: null,

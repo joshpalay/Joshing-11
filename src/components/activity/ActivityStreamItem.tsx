@@ -29,6 +29,29 @@ import { assertNever } from '@/lib/assert-never';
 // linked or not, so the actor reads as the warm social anchor of the row.
 const ACTOR_BLUE = 'var(--brand-link)';
 
+// Promo embed CTA link ("See what you share" / "See your knowledge"): a plain
+// underlined text link in the body font, NOT the old monospace letterspaced caps
+// treatment, so it reads unmistakably as a link.
+const EMBED_LINK_STYLE = {
+  display: 'inline-block',
+  marginTop: 12,
+  fontFamily: FF,
+  fontSize: 13,
+  fontWeight: 600,
+  color: ACTOR_BLUE,
+  textDecoration: 'underline',
+  textUnderlineOffset: 3,
+} as const;
+
+// Badge accents for the recently-expanding embed rows — the reds / golds / blues
+// from the /knowledge "Recently Expanding" module (ROW_ACCENTS), trimmed to the
+// three we ever render.
+const EXPANDING_ROW_ACCENTS = [
+  { border: '#c9564d', fill: 'rgba(201, 86, 77, 0.16)' },
+  { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)' },
+  { border: '#65a8bb', fill: 'rgba(101, 168, 187, 0.20)' },
+] as const;
+
 // An opened reveal indents to sit UNDER the row's header text, not flush to the
 // far-left edge below the icon. This is exactly the ActivityIcon column width —
 // MARK_W (24) + GAP (8) — so the expansion's left rule lines up with where the
@@ -258,6 +281,8 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
 
       {item.embed?.kind === 'common_ground' ? (
         <CommonGroundEmbed embed={item.embed} />
+      ) : item.embed?.kind === 'recently_expanding' ? (
+        <RecentlyExpandingEmbed embed={item.embed} />
       ) : null}
 
       {item.action ? <ItemAction action={item.action} /> : null}
@@ -334,19 +359,78 @@ function CommonGroundEmbed({
           </div>
         ))}
       </div>
-      <Link
-        href={embed.friendHref}
-        style={{
-          display: 'inline-block',
-          marginTop: 12,
-          fontFamily: FM,
-          fontSize: 10,
-          letterSpacing: 2,
-          color: ACTOR_BLUE,
-          textDecoration: 'none',
-        }}
-      >
-        SEE WHAT YOU SHARE →
+      <Link href={embed.friendHref} style={EMBED_LINK_STYLE}>
+        See what you share →
+      </Link>
+    </div>
+  );
+}
+
+// The homepage recently-expanding promo embed: the viewer's fastest-growing
+// territories listed in the /knowledge "Recently Expanding" row style (colored
+// letter badge + serif title + supporting line), indented to sit under the row's
+// one-liner, with a link through to the knowledge page. Read-only and
+// non-expanding — it stops click propagation so taps never toggle a (non-
+// existent) expansion.
+function RecentlyExpandingEmbed({
+  embed,
+}: {
+  embed: Extract<StreamEmbed, { kind: 'recently_expanding' }>;
+}) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{ marginLeft: EXPANSION_INDENT, marginTop: 12 }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {embed.domains.map((d, i) => {
+          const accent = EXPANDING_ROW_ACCENTS[i % EXPANDING_ROW_ACCENTS.length]!;
+          return (
+            <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
+                aria-hidden="true"
+                style={{
+                  width: 30,
+                  height: 30,
+                  flexShrink: 0,
+                  borderRadius: 999,
+                  border: `1px solid ${accent.border}`,
+                  background: accent.fill,
+                  color: INK,
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                }}
+              >
+                {d.initial}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontFamily: 'Georgia, serif',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                    color: INK,
+                  }}
+                >
+                  {d.label}
+                </p>
+                {d.caption ? (
+                  <p style={{ margin: '2px 0 0', fontSize: 12, lineHeight: 1.3, color: INK2 }}>
+                    {d.caption}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Link href={embed.href} style={EMBED_LINK_STYLE}>
+        See your knowledge →
       </Link>
     </div>
   );

@@ -445,9 +445,23 @@ type FeedListProps = {
    * row is de-duped against its richer direct_sent feed card (see unifiedRows).
    */
   activityItems?: StreamItem[]
+  /**
+   * Home-only "Your world is expanding" promo. Unlike `activityItems` (which
+   * interleave chronologically), this is spliced in at a fixed offset a few rows
+   * down so it never lands at the very top or adjacent to the common-ground
+   * promo (which sorts to row 0). Null on most visits — it shows ~1 in 5. See
+   * getRecentlyExpandingPromo / displayRows.
+   */
+  expandingPromo?: StreamItem | null
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
+
+// Where the home-only "Your world is expanding" promo lands in the rendered row
+// list: a few rows down (so it's never the very first thing, and never adjacent
+// to the common-ground promo at row 0). The feed must have at least this many
+// rows for it to appear at all.
+const EXPANDING_PROMO_OFFSET = 3
 
 // One row of the unified-home feed: either a paginated question card or an
 // interleaved activity (Lately) one-liner. Both carry `source_event_at` so the
@@ -682,6 +696,7 @@ function FeedListContent({
   showContributeFooter = false,
   unifiedHome = false,
   activityItems = [],
+  expandingPromo = null,
 }: FeedListProps) {
   const searchParams = useSearchParams()
   const initialFilterParam =
@@ -887,6 +902,29 @@ function FeedListContent({
     }
     return [...feedRows, ...activityRows].sort((a, b) => b.sortMs - a.sortMs)
   }, [items, activityItems, unifiedHome])
+
+  // Splice the "Your world is expanding" promo in at a fixed offset a few rows
+  // down. It is deliberately NOT part of the chronological union above: pinning
+  // it to an index keeps it off the very top and never adjacent to the common-
+  // ground promo (which sorts to row 0). Only inserted once the feed has enough
+  // rows above it; otherwise it's dropped so it can't float up next to row 0.
+  const displayRows = useMemo<UnifiedRow[]>(() => {
+    if (!expandingPromo || unifiedRows.length < EXPANDING_PROMO_OFFSET) {
+      return unifiedRows
+    }
+    const anchor = unifiedRows[EXPANDING_PROMO_OFFSET - 1]!
+    const promoRow: UnifiedRow = {
+      kind: 'activity',
+      item: expandingPromo,
+      // Borrow the preceding row's timestamp so recency grouping keeps the promo
+      // in place rather than floating it into its own day bucket.
+      source_event_at: anchor.source_event_at,
+      sortMs: anchor.sortMs,
+    }
+    const next = [...unifiedRows]
+    next.splice(EXPANDING_PROMO_OFFSET, 0, promoRow)
+    return next
+  }, [unifiedRows, expandingPromo])
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
@@ -1424,7 +1462,7 @@ function FeedListContent({
         )
       ) : (
         <section className="space-y-3 pb-8">
-          {groupItemsByRecency(unifiedRows).map((group) => (
+          {groupItemsByRecency(displayRows).map((group) => (
             <Fragment key={group.key}>
               <h2
                 className={`text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0 ${
