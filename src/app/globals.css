@@ -89,6 +89,14 @@
     --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
     --game-wrong:         #c96b4a;  /* text/wrong — terracotta result accent     */
     --game-wrong-strong:  #c33d14;  /* game/wrong/in-question — strong terracotta */
+    /* Shared width for every left-aligned card in the play thread (question,
+       bonus, result, reflection, session-close) so the column reads as one
+       coherent conversation with a consistent left + right edge. A percentage of
+       the already max-width-capped content column: fills narrow screens with
+       equal margins, and shares one max-width on wide screens. The only
+       intentional exceptions are centered system lines, the right-aligned
+       answer bubble, and global/header chrome. */
+    --play-thread-card-width: 88%;
     /* ──────────────────────────────────────────────────────────────────────
        Conventions:
        • Cream tones — `--brand-cream-page` (#fcf8f2) is the app background;
