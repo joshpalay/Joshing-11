@@ -19,6 +19,7 @@ type Beat2 = {
 type Beat3 = { userId: string; displayName: string; contributionCount: number }[];
 type Beat4 = { userId: string; displayName: string; sharedDomains: string[] };
 type Beat5 = { totalCreatorPoints: number; topQuestion: { text: string; answeredCount: number } | null };
+type Beat6 = { domain: string; questionText: string; correctAnswer: string }[];
 type Beat1FriendFallback = { friendName: string; count: number; domains: string[] };
 type Beat5FriendFallback = { friendName: string; totalCreatorPoints: number };
 
@@ -35,6 +36,7 @@ type BeatsPayload = {
   beat4: Beat4 | null;
   beat5: Beat5 | null;
   beat5FriendFallback?: Beat5FriendFallback | null;
+  beat6?: Beat6 | null;
 };
 
 type CeremonyRow = {
@@ -49,7 +51,8 @@ type BeatView =
   | { id: 3; content: Beat3 }
   | { id: 4; content: Beat4 }
   | { id: 5; content: Beat5 }
-  | { id: '5-friend'; content: Beat5FriendFallback };
+  | { id: '5-friend'; content: Beat5FriendFallback }
+  | { id: 6; content: Beat6 };
 
 function joinList(values: string[]) {
   if (values.length <= 2) return values.join(' and ');
@@ -102,6 +105,7 @@ function beatViews(payload: BeatsPayload): BeatView[] {
   if (payload.beat1) views.push({ id: 1, content: payload.beat1 });
   else if (payload.beat1FriendFallback) views.push({ id: '1-friend', content: payload.beat1FriendFallback });
   if (payload.beat2) views.push({ id: 2, content: payload.beat2 });
+  if (payload.beat6) views.push({ id: 6, content: payload.beat6 });
   if (payload.beat3) views.push({ id: 3, content: payload.beat3 });
   if (payload.beat4) views.push({ id: 4, content: payload.beat4 });
   if (payload.beat5) views.push({ id: 5, content: payload.beat5 });
@@ -218,6 +222,28 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
             </div>
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (beat.id === 6) {
+    return (
+      <div className="mx-auto max-w-3xl text-center">
+        <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">Something you learned this week.</h1>
+        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+          You missed {beat.content.length === 1 ? 'this' : 'these'}, came back, and got {beat.content.length === 1 ? 'it' : 'them'} right.
+        </p>
+        <div className="mx-auto mt-10 grid max-w-2xl gap-5 text-left">
+          {beat.content.map((item, index) => (
+            <div key={`${item.domain}-${index}`} className="flex items-start gap-4">
+              <CeremonyCircle domain={item.domain} size={56} scale={0.85} />
+              <div className="min-w-0">
+                <p className="font-serif text-lg font-semibold leading-7 text-stone-50">{item.questionText}</p>
+                <p className="mt-1 text-base text-stone-300">{item.correctAnswer}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
