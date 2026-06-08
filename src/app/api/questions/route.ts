@@ -25,7 +25,7 @@ import { sendSms } from '@/server/sms';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import { readCreateQuestionPayload } from '@/server/questions/create-payload';
 import { textContainsAnswer } from '@/server/questions/self-answering';
-import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
+import { assessQuestionDifficulty, fallbackQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export const dynamic = 'force-dynamic';
@@ -151,44 +151,68 @@ export async function POST(request: NextRequest) {
   // inputs (question + answer + category) and don't depend on each other's
   // output — run them in parallel so the route's wall-clock is ~1× a single
   // LLM call instead of 3×. Categorization upstream is the only true
-  // sequencing dependency in this handler. Haiku-vet failure is meant to be
-  // non-fatal (the /api/cron/vet-questions sweep retries), but bundling it
-  // here is fine because Promise.all rejects fast and we treat the trio as
-  // a single enrichment stage.
-  try {
-    [difficultyAssessment, insideJoke, verdict] = await Promise.all([
-      assessQuestionDifficulty({
-        questionText: questionFields.text,
-        correctAnswer: questionFields.correctAnswer,
-        broadCategory: questionFields.broadCategory,
-        canonicalSubcategory: questionFields.canonicalSubcategory,
-        explanation: questionFields.explanation,
-      }),
-      generateInsideJoke({
-        questionText: questionFields.text,
-        correctAnswer: questionFields.correctAnswer,
-        broadCategory: questionFields.broadCategory,
-        canonicalSubcategory: questionFields.canonicalSubcategory,
-      }),
-      vetQuestion({
-        questionText: questionFields.text,
-        answer: questionFields.correctAnswer,
-        alternateAnswers: questionFields.alternateAnswers,
-        explanation: questionFields.explanation ?? null,
-        broadCategory: questionFields.broadCategory,
-        canonicalSubcategory: questionFields.canonicalSubcategory,
-      }),
-    ]);
-  } catch (error) {
-    console.error('[questions/create] unexpected_failure', {
-      stage: 'enrichment',
+  // sequencing dependency in this handler.
+  //
+  // Each of these is *optional* enrichment with its own degraded fallback
+  // (difficulty → fallbackQuestionDifficulty(); inside joke → null; vet →
+  // needs_review, which the /api/cron/vet-questions sweep retries). We use
+  // allSettled rather than Promise.all so a single enrichment outage degrades
+  // that one signal instead of rejecting the whole batch and 500ing the save.
+  // The structural guarantee lives here, not in each helper's internal
+  // try/catch discipline.
+  const [difficultyResult, insideJokeResult, verdictResult] = await Promise.allSettled([
+    assessQuestionDifficulty({
+      questionText: questionFields.text,
+      correctAnswer: questionFields.correctAnswer,
+      broadCategory: questionFields.broadCategory,
+      canonicalSubcategory: questionFields.canonicalSubcategory,
+      explanation: questionFields.explanation,
+    }),
+    generateInsideJoke({
+      questionText: questionFields.text,
+      correctAnswer: questionFields.correctAnswer,
+      broadCategory: questionFields.broadCategory,
+      canonicalSubcategory: questionFields.canonicalSubcategory,
+    }),
+    vetQuestion({
+      questionText: questionFields.text,
+      answer: questionFields.correctAnswer,
+      alternateAnswers: questionFields.alternateAnswers,
+      explanation: questionFields.explanation ?? null,
+      broadCategory: questionFields.broadCategory,
+      canonicalSubcategory: questionFields.canonicalSubcategory,
+    }),
+  ]);
+
+  const logEnrichmentFailure = (stage: string, reason: unknown) => {
+    console.error('[questions/create] enrichment_degraded', {
+      stage,
       userId: session.userId,
-      message: error instanceof Error ? error.message : String(error),
+      message: reason instanceof Error ? reason.message : String(reason),
     });
-    return NextResponse.json(
-      { error: 'server_error', message: 'Something went wrong saving that question. Try again.' },
-      { status: 500 },
-    );
+  };
+
+  if (difficultyResult.status === 'fulfilled') {
+    difficultyAssessment = difficultyResult.value;
+  } else {
+    logEnrichmentFailure('difficulty', difficultyResult.reason);
+    difficultyAssessment = fallbackQuestionDifficulty();
+  }
+
+  if (insideJokeResult.status === 'fulfilled') {
+    insideJoke = insideJokeResult.value;
+  } else {
+    logEnrichmentFailure('inside_joke', insideJokeResult.reason);
+    insideJoke = null;
+  }
+
+  if (verdictResult.status === 'fulfilled') {
+    verdict = verdictResult.value;
+  } else {
+    // Failed vet falls back to needs_review (never auto-publishes) — the cron
+    // sweep re-vets these. This mirrors vetQuestion's own internal llm_error path.
+    logEnrichmentFailure('vet', verdictResult.reason);
+    verdict = { status: 'needs_review' as const, score: null, reason: 'llm_error' };
   }
   let publicScoring = verdictToPublicStatus(verdict);
   // Safety-fail verdicts are hard-blocked from every surface: we override the
