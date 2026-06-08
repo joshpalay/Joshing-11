@@ -2,10 +2,13 @@
 
 import { Send } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, type KeyboardEvent } from 'react';
 
 import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
+import { AddFriendButton } from '@/components/friends/AddFriendButton';
+import { colorForUser, initialsFor, isDarkColor } from '@/components/feed/visual';
 import { SendQuestionDrawer } from '@/components/SendQuestionDrawer';
 import type {
   StreamEmbed,
@@ -283,6 +286,8 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
         <CommonGroundEmbed embed={item.embed} />
       ) : item.embed?.kind === 'recently_expanding' ? (
         <RecentlyExpandingEmbed embed={item.embed} />
+      ) : item.embed?.kind === 'add_friends' ? (
+        <AddFriendsEmbed embed={item.embed} />
       ) : null}
 
       {item.action ? <ItemAction action={item.action} /> : null}
@@ -432,6 +437,89 @@ function RecentlyExpandingEmbed({
       <Link href={embed.href} style={EMBED_LINK_STYLE}>
         See your knowledge →
       </Link>
+    </div>
+  );
+}
+
+// The homepage add-friends promo embed: either a few contact-match people the
+// viewer can follow (each row reuses the canonical AddFriendButton state machine
+// + a refresh on change) or, when there's no one to suggest, a copy-only nudge
+// toward /friends/find. Indented to sit under the row's one-liner; stops click
+// propagation so taps never toggle a (non-existent) expansion.
+function AddFriendsEmbed({
+  embed,
+}: {
+  embed: Extract<StreamEmbed, { kind: 'add_friends' }>;
+}) {
+  const router = useRouter();
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{ marginLeft: EXPANSION_INDENT, marginTop: 12 }}
+    >
+      {embed.variant === 'suggestions' ? (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {embed.people.map((p) => {
+              const bg = p.avatarColor ?? colorForUser(p.id);
+              return (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Link
+                    href={`/users/${p.id}`}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      flexShrink: 0,
+                      borderRadius: 999,
+                      background: bg,
+                      color: isDarkColor(bg) ? '#fff' : INK,
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    {initialsFor(p.displayName)}
+                  </Link>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <Link
+                      href={`/users/${p.id}`}
+                      style={{ color: INK, fontWeight: 600, fontSize: 14, textDecoration: 'none' }}
+                    >
+                      {p.displayName}
+                    </Link>
+                    {p.handle ? (
+                      <span style={{ display: 'block', fontSize: 12, lineHeight: 1.3, color: INK3 }}>
+                        @{p.handle}
+                      </span>
+                    ) : null}
+                  </div>
+                  <AddFriendButton
+                    targetUserId={p.id}
+                    targetDisplayName={p.displayName}
+                    relationship={p.relationship}
+                    onChange={() => router.refresh()}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <Link href={embed.href} style={EMBED_LINK_STYLE}>
+            Find more friends →
+          </Link>
+        </>
+      ) : (
+        <>
+          <p style={{ margin: 0, fontFamily: 'Georgia, serif', fontSize: 14, lineHeight: 1.45, color: INK2 }}>
+            Know someone who would enjoy the questions and discoveries happening here?
+          </p>
+          <Link href={embed.href} style={EMBED_LINK_STYLE}>
+            Find friends →
+          </Link>
+        </>
+      )}
     </div>
   );
 }

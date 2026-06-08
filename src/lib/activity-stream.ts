@@ -25,6 +25,7 @@ import type { LatelyMoment } from '@/server/db/queries/lately';
 import { LATELY_TIER, latelyTierForMomentDir } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
 import type { Convergence } from '@/lib/convergence';
+import type { RelationshipResult } from '@/server/db/queries/friend-requests';
 
 // --- Serializable model ------------------------------------------------------
 
@@ -132,11 +133,22 @@ export type RecentlyExpandingPromoDomain = {
   initial: string;
 };
 
+export type AddFriendsPromoPerson = {
+  // A contact-match suggestion. avatarColor / handle may be null; relationship
+  // drives the AddFriendButton state machine (so the embed stays a pure render).
+  id: string;
+  displayName: string;
+  handle: string | null;
+  avatarColor: string | null;
+  relationship: RelationshipResult;
+};
+
 // Inline embeds rendered under a stream row's one-liner. A discriminated union
 // so each promo carries only its own payload; ActivityStreamItem switches on
 // `kind`. `common_ground` draws the overlapping-circle motif with a link to a
 // friend; `recently_expanding` lists the viewer's fastest-growing territories
-// with a link to /knowledge.
+// with a link to /knowledge; `add_friends` either suggests people to follow or
+// (when there are none) nudges toward inviting someone.
 export type StreamEmbed =
   | {
       kind: 'common_ground';
@@ -149,6 +161,17 @@ export type StreamEmbed =
       kind: 'recently_expanding';
       href: string;
       domains: RecentlyExpandingPromoDomain[];
+    }
+  | {
+      kind: 'add_friends';
+      variant: 'suggestions';
+      href: string;
+      people: AddFriendsPromoPerson[];
+    }
+  | {
+      kind: 'add_friends';
+      variant: 'invite';
+      href: string;
     };
 
 export type StreamItem = {
@@ -659,6 +682,30 @@ export function recentlyExpandingPromoToStreamItem(
     tier: LATELY_TIER.OTHER,
     homeEligible: true,
     line: [txt('Your world is expanding')],
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'domain',
+    expand: null,
+    embed,
+  };
+}
+
+// A homepage-only "grow your circle" nudge. With `suggestions` it lists a few
+// contact-match people to follow (each row carries its relationship so the
+// embed's AddFriendButton can act); with `invite` it's a copy-only prompt toward
+// /friends/find. Question-free, so it never expands.
+export function addFriendsPromoToStreamItem(
+  embed: Extract<StreamEmbed, { kind: 'add_friends' }>,
+  sortAt: Date,
+  id: string,
+): StreamItem {
+  return {
+    id,
+    sortAt,
+    tier: LATELY_TIER.OTHER,
+    homeEligible: true,
+    line: [txt(embed.variant === 'suggestions' ? 'People you may know' : 'Grow your circle')],
     secondLine: null,
     anchorId: null,
     action: null,

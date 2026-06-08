@@ -453,15 +453,23 @@ type FeedListProps = {
    * getRecentlyExpandingPromo / displayRows.
    */
   expandingPromo?: StreamItem | null
+  /**
+   * Home-only "add friends" promo (contact-match suggestions, or an invite
+   * nudge). Spliced in at its own fixed offset, separated from `expandingPromo`
+   * so the two promos are never adjacent. See getAddFriendsPromo / displayRows.
+   */
+  addFriendsPromo?: StreamItem | null
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
 
-// Where the home-only "Your world is expanding" promo lands in the rendered row
-// list: a few rows down (so it's never the very first thing, and never adjacent
-// to the common-ground promo at row 0). The feed must have at least this many
-// rows for it to appear at all.
+// Where the home-only pinned promos land in the rendered row list: a few rows
+// down (so they're never the very first thing, and never adjacent to the common-
+// ground promo at row 0), and spaced apart from each other. Each offset is
+// measured against the original feed length; a promo only appears once the feed
+// has at least that many rows.
 const EXPANDING_PROMO_OFFSET = 3
+const ADD_FRIENDS_PROMO_OFFSET = 6
 
 // One row of the unified-home feed: either a paginated question card or an
 // interleaved activity (Lately) one-liner. Both carry `source_event_at` so the
@@ -697,6 +705,7 @@ function FeedListContent({
   unifiedHome = false,
   activityItems = [],
   expandingPromo = null,
+  addFriendsPromo = null,
 }: FeedListProps) {
   const searchParams = useSearchParams()
   const initialFilterParam =
@@ -903,28 +912,41 @@ function FeedListContent({
     return [...feedRows, ...activityRows].sort((a, b) => b.sortMs - a.sortMs)
   }, [items, activityItems, unifiedHome])
 
-  // Splice the "Your world is expanding" promo in at a fixed offset a few rows
-  // down. It is deliberately NOT part of the chronological union above: pinning
-  // it to an index keeps it off the very top and never adjacent to the common-
-  // ground promo (which sorts to row 0). Only inserted once the feed has enough
-  // rows above it; otherwise it's dropped so it can't float up next to row 0.
+  // Splice the home-only pinned promos in at fixed offsets a few rows down. They
+  // are deliberately NOT part of the chronological union above: pinning them to
+  // indices keeps them off the very top and never adjacent to the common-ground
+  // promo (which sorts to row 0). Each is only inserted once the feed has enough
+  // rows above its offset; offsets are measured against the original feed so the
+  // two promos stay spaced apart even when both are present.
   const displayRows = useMemo<UnifiedRow[]>(() => {
-    if (!expandingPromo || unifiedRows.length < EXPANDING_PROMO_OFFSET) {
-      return unifiedRows
-    }
-    const anchor = unifiedRows[EXPANDING_PROMO_OFFSET - 1]!
-    const promoRow: UnifiedRow = {
-      kind: 'activity',
-      item: expandingPromo,
-      // Borrow the preceding row's timestamp so recency grouping keeps the promo
-      // in place rather than floating it into its own day bucket.
-      source_event_at: anchor.source_event_at,
-      sortMs: anchor.sortMs,
-    }
+    const pinned = [
+      { offset: EXPANDING_PROMO_OFFSET, item: expandingPromo },
+      { offset: ADD_FRIENDS_PROMO_OFFSET, item: addFriendsPromo },
+    ]
+      .filter((p): p is { offset: number; item: StreamItem } => p.item !== null)
+      .sort((a, b) => a.offset - b.offset)
+    if (pinned.length === 0) return unifiedRows
+
     const next = [...unifiedRows]
-    next.splice(EXPANDING_PROMO_OFFSET, 0, promoRow)
+    let inserted = 0
+    for (const { offset, item } of pinned) {
+      if (offset > unifiedRows.length) continue
+      // Account for promos already spliced in ahead of this one so each keeps its
+      // intended distance from the others.
+      const spliceAt = offset + inserted
+      const anchor = next[spliceAt - 1]!
+      next.splice(spliceAt, 0, {
+        kind: 'activity',
+        item,
+        // Borrow the preceding row's timestamp so recency grouping keeps the
+        // promo in place rather than floating it into its own day bucket.
+        source_event_at: anchor.source_event_at,
+        sortMs: anchor.sortMs,
+      })
+      inserted++
+    }
     return next
-  }, [unifiedRows, expandingPromo])
+  }, [unifiedRows, expandingPromo, addFriendsPromo])
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
