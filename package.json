@@ -10,7 +10,7 @@
     "start": "next start",
     "test": "vitest run",
     "test:evals": "RUN_LLM_EVALS=1 vitest run src/lib/llm.grading.eval.test.ts",
-    "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings 44",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings 33",
     "smoke:daily-catchup": "tsx scripts/daily-catchup.smoke.ts",
     "smoke:question-vetting": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/question-vetting.smoke.mjs",
     "smoke:invite-first-five": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/invite-first-five.smoke.mjs",

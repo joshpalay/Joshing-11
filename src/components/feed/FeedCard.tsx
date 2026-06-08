@@ -27,7 +27,7 @@ type FeedCardProps = {
 // display/card/update — category line in Cormorant SemiBold (Figma 16/24/0.64px/black).
 function CategoryLine({ category }: { category: string }) {
   return (
-    <p className="font-serif text-base font-semibold leading-[24px] tracking-[0.04em] text-black">
+    <p className="font-serif text-base font-semibold leading-[24px] tracking-[0.04em] text-[var(--brand-ink)]">
       {category}
     </p>
   )
@@ -114,7 +114,7 @@ export function FeedCard({
               headerContent
             ) : (
               <>
-                <p className="text-[15px] leading-[23px] tracking-[0.05em] text-black">
+                <p className="text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
                   {item.authorHref ? (
                     <Link href={item.authorHref} className="font-medium" style={{ color: nameColor }}>
                       {authorName}
