@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
 import { answerHeadingStyle } from '@/components/answer-heading';
 import { EditorialBadge } from '@/components/EditorialBadge';
+import { ThreadCard } from '@/components/play/ThreadCard';
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
 import { NewTerritoryUndo } from '@/components/feed/NewTerritoryUndo';
 import {
@@ -90,8 +91,6 @@ export type ChatMessage =
       copyVariant: number;
       /** Creator display name — used in wrong-answer copy variant 2 */
       creatorName: string | null;
-      /** B12 — short line under correct reveal; fades after 2.5s */
-      relationalFeedbackLine?: string | null;
       /** Domain exclusion — canonical subcategory for "remove from rotation" affordance */
       canonicalSubcategory?: string | null;
       /** B-1 — domain newly opened in the KB by this correct answer; surfaces the "Added [Domain] — remove?" undo. */
@@ -130,12 +129,13 @@ export type ChatMessage =
       onDecline: () => void;
     };
 
-const CORRECT_COPY: Array<{ headline: string }> = [
-  { headline: 'Nice pull.' },
-  { headline: 'Right on.' },
-  { headline: 'Locked in.' },
-  { headline: 'Exactly.' },
-];
+// Shared width for every left-aligned card in the play thread so the column
+// reads as one coherent conversation — question, bonus, result, reflection, and
+// session-close cards all share a left + right edge. Sourced from a single CSS
+// token so no card type defines its own one-off width. The only intentional
+// exceptions are centered system lines, the right-aligned answer bubble, and
+// global/header chrome.
+const THREAD_CARD_MAX_WIDTH = 'var(--play-thread-card-width)';
 
 function wrongHeadline(variant: number): string {
   switch (variant % 3) {
@@ -157,6 +157,20 @@ const monoStyle: CSSProperties = {
   letterSpacing: '0.06em',
 };
 
+// The quiet eyebrow label that opens a result/answer-reveal card — small, mono,
+// letter-spaced (e.g. "✓ Locked in", "The answer"). Tone color is applied per
+// card so the answer beneath it stays the focal point.
+const verdictLabelStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '0.7rem',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.12em',
+};
+
 // The answer, repeated as a prominent serif headline on the result card —
 // mirrors the feed reveal treatment ("eyebrow → answer as headline →
 // explanation"). Shared via `answer-heading.ts` so every answer-reveal surface
@@ -172,6 +186,15 @@ const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
   (name) => `${name} carries this one`,
   (name) => `${name} thought you might`,
 ];
+
+// Trim an explainer to its first sentence for the live thread — the full text
+// still lives in the End of Session Review. Keeps the thread moving while giving
+// a one-line "why" directly under the answer.
+function firstSentence(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^.*?[.!?](?=\s|$)/);
+  return match ? match[0] : trimmed;
+}
 
 function firstNameFrom(creatorName: string): string {
   const trimmed = creatorName.trim();
@@ -385,7 +408,7 @@ function QuestionRow({
       <div
         style={{
           alignSelf: 'flex-start',
-          maxWidth: '81%',
+          maxWidth: THREAD_CARD_MAX_WIDTH,
           width: '100%',
         }}
       >
@@ -591,95 +614,19 @@ function UserRow({ text }: { text: string }) {
   );
 }
 
-function BreadcrumbLine({
-  text,
-  creatorName,
-  creatorIsHouse = false,
-}: {
-  text: string;
-  creatorName: string | null;
-  creatorIsHouse?: boolean;
-}) {
-  const author = creatorName?.trim() ?? null;
-  // House is non-relational like the LLM origin: no "From {firstName}." line.
-  const isBot = creatorIsHouse || isLlmAttribution(author);
-  const showAuthor = author && !isBot;
-  return (
-    <div
-      style={{
-        marginTop: '9px',
-        borderLeft: '2px solid color-mix(in srgb, var(--text) 20%, transparent)',
-        paddingLeft: '8px',
-      }}
-    >
-      {showAuthor ? (
-        <p
-          style={{
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-            fontSize: '0.7rem',
-            fontStyle: 'italic',
-            color: 'var(--text-muted)',
-          }}
-        >
-          From {firstNameFrom(author!)}.
-        </p>
-      ) : null}
-      <p
-        style={{
-          marginTop: showAuthor ? '2px' : '0',
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.782rem',
-          fontStyle: 'italic',
-          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          opacity: 0.78,
-          lineHeight: 1.46,
-        }}
-      >
-        &ldquo;{text}&rdquo;
-      </p>
-    </div>
-  );
-}
-
-function ExplanationLine({ text }: { text: string }) {
-  return (
-    <div
-      style={{
-        marginTop: '9px',
-        borderLeft: '2px solid color-mix(in srgb, var(--text) 20%, transparent)',
-        paddingLeft: '8px',
-      }}
-    >
-      <p
-        style={{
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.765rem',
-          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          opacity: 0.78,
-          lineHeight: 1.51,
-        }}
-      >
-        {text}
-      </p>
-    </div>
-  );
-}
-
-function RelationalFeedbackFade({ text }: { text: string }) {
-  const [faded, setFaded] = useState(false);
-  useEffect(() => {
-    const t = window.setTimeout(() => setFaded(true), 2500);
-    return () => window.clearTimeout(t);
-  }, []);
+// The explainer that sits directly beneath the revealed answer. Plain, readable
+// secondary text — no quote-block inset, no decorative italics — so the answer
+// stays the focal point and the card reads as a thread object, not an article
+// (mirrors the screenshot treatment: label → answer → plain explainer).
+function ExplainerLine({ text }: { text: string }) {
   return (
     <p
       style={{
         marginTop: '8px',
-        fontSize: '0.78rem',
-        color: 'var(--text-muted)',
-        lineHeight: 1.35,
-        opacity: faded ? 0 : 1,
-        transition: 'opacity 0.45s ease',
+        fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+        fontSize: '0.92rem',
+        color: 'color-mix(in srgb, var(--text-muted) 35%, var(--text))',
+        lineHeight: 1.5,
       }}
     >
       {text}
@@ -907,17 +854,7 @@ function AuthorNoteCard({
   creatorIsHouse?: boolean;
 }) {
   return (
-    <div
-      style={{
-        marginTop: '8px',
-        width: '100%',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border)',
-        background: 'var(--surface-2)',
-        padding: '10px 14px',
-        color: 'var(--text)',
-      }}
-    >
+    <ThreadCard border="var(--border)" fill="var(--surface-2)" style={{ marginTop: '8px' }}>
       <p
         style={{
           ...monoStyle,
@@ -944,13 +881,15 @@ function AuthorNoteCard({
         style={{
           marginTop: '4px',
           fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.92rem',
-          lineHeight: 1.45,
+          // Reflection/creator-note body bumped ~14% for readability (D-5);
+          // the eyebrow label above stays small and secondary.
+          fontSize: '1.05rem',
+          lineHeight: 1.5,
         }}
       >
         {text}
       </p>
-    </div>
+    </ThreadCard>
   );
 }
 
@@ -993,7 +932,6 @@ function ResultRow({
   copyVariant,
   creatorName,
   creatorIsHouse = false,
-  relationalFeedbackLine,
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
@@ -1014,7 +952,6 @@ function ResultRow({
   copyVariant: number;
   creatorName: string | null;
   creatorIsHouse?: boolean;
-  relationalFeedbackLine?: string | null;
   canonicalSubcategory?: string | null;
   reactionPrompt?: ReactionPromptData | null;
   pointsAwarded?: number | null;
@@ -1030,7 +967,18 @@ function ResultRow({
   const expired = result === 'expired';
   const correct = result === 'correct';
   const gaveUp = result === 'gave_up';
-  const copy = CORRECT_COPY[copyVariant % 4];
+  // Every reveal shows a one-sentence explainer directly under the answer; the
+  // full text always remains in the End of Session Review, so nothing is lost.
+  const explainerText = breadcrumb ?? explanation ?? null;
+  const explainerSentence = explainerText ? firstSentence(explainerText) : null;
+  // Correct keeps its explainer inline within the verdict block (before the
+  // "common ground" beat); the other reveals render it after the discovery copy.
+  const showDiscoveryExplainer = !correct && Boolean(explainerSentence);
+  // One reflection card beneath the result: the lighter "Between us!" wink is
+  // preferred over the creator note, which otherwise falls back in on correct
+  // answers. The fuller creator note lives in the review.
+  const showJokeCard = Boolean(insideJoke);
+  const showNoteCard = correct && !insideJoke && Boolean(authorNote);
   const requestRecheck = useCallback(async () => {
     if (!recheckAction || recheckState === 'submitting') return;
     setRecheckState('submitting');
@@ -1048,94 +996,90 @@ function ResultRow({
     }
   }, [recheckAction, recheckState]);
 
-  // Color-coded left border per the Figma result cards (green "nailed it",
-  // red "not quite"); neutral for expired/gave-up.
-  const resultToneStyle: CSSProperties = expired
-    ? {
-        background: 'var(--surface-2)',
-        border: '1px solid var(--border)',
-        borderLeft: '3px solid var(--border)',
-      }
+  // Verdict tone as accent only — the shared ThreadCard shell supplies the
+  // radius/padding/border family; the result card varies by a color-coded left
+  // rail (green "nailed it", terracotta "not quite") and a faint matching tint.
+  const tone = expired
+    ? { rail: 'var(--border)', border: 'var(--border)', fill: 'var(--surface-2)' }
     : correct
       ? {
-          // Figma Correct (#366045) — forest green, lighter card body than the
-          // vivid --success used elsewhere.
-          background: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
-          border: '1px solid color-mix(in srgb, var(--game-correct) 26%, var(--border))',
-          borderLeft: '3px solid var(--game-correct)',
+          rail: 'var(--game-correct)',
+          border: 'color-mix(in srgb, var(--game-correct) 26%, var(--border))',
+          fill: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
         }
       : gaveUp
         ? {
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-            borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
+            rail: 'color-mix(in srgb, var(--brand-ink) 35%, transparent)',
+            border: 'var(--border)',
+            fill: 'var(--surface-2)',
           }
         : {
-            // Figma text/wrong (#c96b4a) body + game/wrong/in-question (#c33d14) bar.
-            background: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
-            border: '1px solid color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
-            borderLeft: '3px solid var(--game-wrong-strong)',
+            rail: 'var(--game-wrong-strong)',
+            border: 'color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
+            fill: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
           };
 
   return (
     <div
       className="flex flex-col gap-0 pt-0.5"
-      style={{ alignItems: 'flex-start', maxWidth: '88%' }}
+      style={{ alignItems: 'flex-start', maxWidth: THREAD_CARD_MAX_WIDTH }}
     >
-      <div
-        style={{
-          ...resultToneStyle,
-          borderRadius: 'var(--radius-md)',
-          padding: '10px 14px',
-          fontSize: '0.81rem',
-          color: 'var(--text)',
-          opacity: 0.92,
-          lineHeight: 1.36,
-          width: '100%',
-        }}
+      <ThreadCard
+        rail={tone.rail}
+        border={tone.border}
+        fill={tone.fill}
+        style={{ fontSize: '0.81rem', lineHeight: 1.36 }}
       >
         {expired ? (
           <span style={{ color: 'var(--text-muted)' }}>This one wasn&apos;t recorded in time.</span>
         ) : correct ? (
           <>
-            <p
-              style={{
-                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-                color: 'var(--game-correct)',
-                fontWeight: 600,
-              }}
-            >
-              <span style={{ color: 'var(--game-correct)', marginRight: '6px' }}>✓</span>
-              {copy.headline}
-            </p>
-            {correctAnswer ? (
-              <p style={{ ...answerHeadingStyle, marginTop: '8px', color: 'var(--game-correct)' }}>
-                {correctAnswer}
-              </p>
-            ) : null}
-            {relationalFeedbackLine ? (
-              <RelationalFeedbackFade text={relationalFeedbackLine} />
-            ) : null}
-          </>
-        ) : gaveUp ? (
-          <>
-            <p
-              style={{
-                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-                fontSize: '0.82rem',
-                color: 'var(--text-muted)',
-              }}
-            >
-              <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>—</span>
-              For the record.
+            {/* Compact, calm success moment: quiet verdict label, the correct
+                answer repeated immediately (even on a right answer) as the focal
+                point, then the light "common ground" beat. The fuller
+                explanation lives in the End of Session Review. */}
+            <p style={{ ...verdictLabelStyle, color: 'var(--game-correct)' }}>
+              <span aria-hidden>✓</span>
+              Locked in.
             </p>
             {correctAnswer ? (
               <p
                 style={{
-                  marginTop: '6px',
-                  fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-                  fontSize: '0.95rem',
-                  color: 'var(--text)',
+                  ...answerHeadingStyle,
+                  marginTop: '8px',
+                  fontSize: '1.85rem',
+                  color: 'var(--game-correct)',
+                }}
+              >
+                {correctAnswer}
+              </p>
+            ) : null}
+            {explainerSentence ? <ExplainerLine text={explainerSentence} /> : null}
+            <p
+              style={{
+                marginTop: '8px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.62rem',
+                letterSpacing: '0.04em',
+                color: 'color-mix(in srgb, var(--game-correct) 70%, var(--text-muted))',
+              }}
+            >
+              common ground ++
+            </p>
+          </>
+        ) : gaveUp ? (
+          <>
+            {/* Answer-reveal after "show me the answer": quiet label, the answer
+                as the focal point, then a plain explainer below (no quote-block,
+                no editorial italics). */}
+            <p style={{ ...verdictLabelStyle, color: 'var(--text-muted)' }}>The answer</p>
+            {correctAnswer ? (
+              <p
+                style={{
+                  ...answerHeadingStyle,
+                  marginTop: '8px',
+                  fontSize: '1.85rem',
+                  color: 'var(--brand-ink)',
                 }}
               >
                 {correctAnswer}
@@ -1151,7 +1095,9 @@ function ResultRow({
                 fontWeight: 600,
               }}
             >
-              <span style={{ color: 'var(--game-wrong-strong)', marginRight: '6px' }}>✕</span>
+              <span aria-hidden style={{ marginRight: '6px' }}>
+                ✕
+              </span>
               {wrongHeadline(copyVariant)}
             </p>
             {correctAnswer ? (
@@ -1159,7 +1105,9 @@ function ResultRow({
                 style={{
                   ...answerHeadingStyle,
                   marginTop: '8px',
-                  // Figma question/game/answer — Cormorant Bold, scaled to match question text.
+                  // Figma question/game/answer — Cormorant Bold, scaled to match
+                  // question text; bumped ~12% so the repeated answer reads clearly.
+                  fontSize: '1.85rem',
                   color: 'var(--brand-ink)',
                 }}
               >
@@ -1272,14 +1220,8 @@ function ResultRow({
             ) : null}
           </>
         )}
-        {breadcrumb ? (
-          <BreadcrumbLine
-            text={breadcrumb}
-            creatorName={creatorName}
-            creatorIsHouse={creatorIsHouse}
-          />
-        ) : explanation ? (
-          <ExplanationLine text={explanation} />
+        {showDiscoveryExplainer && explainerSentence ? (
+          <ExplainerLine text={explainerSentence} />
         ) : null}
         {typeof pointsAwarded === 'number' ? (
           <p
@@ -1294,18 +1236,12 @@ function ResultRow({
             {pointsLabel ? ` - ${pointsLabel}` : ''}
           </p>
         ) : null}
-      </div>
-      {insideJoke ? (
-        <div
-          style={{
-            marginTop: '8px',
-            width: '100%',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid color-mix(in srgb, var(--tri-amber) 40%, var(--border))',
-            background: 'color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))',
-            padding: '10px 14px',
-            color: 'var(--text)',
-          }}
+      </ThreadCard>
+      {showJokeCard && insideJoke ? (
+        <ThreadCard
+          border="color-mix(in srgb, var(--tri-amber) 40%, var(--border))"
+          fill="color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))"
+          style={{ marginTop: '8px' }}
         >
           <p
             style={{
@@ -1322,15 +1258,17 @@ function ResultRow({
             style={{
               marginTop: '4px',
               fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-              fontSize: '0.92rem',
-              lineHeight: 1.45,
+              // Reflection body bumped ~14% for readability (D-5); the small,
+              // letter-spaced label above stays secondary.
+              fontSize: '1.05rem',
+              lineHeight: 1.5,
             }}
           >
             {insideJoke}
           </p>
-        </div>
+        </ThreadCard>
       ) : null}
-      {authorNote ? (
+      {showNoteCard && authorNote ? (
         <AuthorNoteCard
           text={authorNote}
           creatorName={creatorName}
@@ -1355,16 +1293,11 @@ function SessionCloseRow({
   summaryHref?: string;
 }) {
   return (
-    <div
+    <ThreadCard
       className="mt-4"
-      style={{
-        alignSelf: 'flex-start',
-        maxWidth: '88%',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border)',
-        background: 'var(--surface-2)',
-        padding: '14px 16px',
-      }}
+      border="var(--border)"
+      fill="var(--surface-2)"
+      style={{ maxWidth: THREAD_CARD_MAX_WIDTH }}
     >
       <SessionCloseMessage scoreLine={scoreLine} interpretiveLine={interpretiveLine} />
       {summaryHref ? (
@@ -1374,7 +1307,7 @@ function SessionCloseRow({
           </Link>
         </div>
       ) : null}
-    </div>
+    </ThreadCard>
   );
 }
 
@@ -1600,7 +1533,6 @@ export function GameplayChatThread({
                 copyVariant={m.copyVariant}
                 creatorName={m.creatorName}
                 creatorIsHouse={m.creatorIsHouse}
-                relationalFeedbackLine={m.relationalFeedbackLine}
                 canonicalSubcategory={m.canonicalSubcategory}
                 reactionPrompt={m.reactionPrompt}
                 pointsAwarded={m.pointsAwarded}

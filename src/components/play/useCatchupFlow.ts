@@ -79,6 +79,12 @@ export type CatchupBatchRecord = {
   domainDisplayName: string;
   authorName: string | null;
   authorIsHouse: boolean;
+  /**
+   * Author's "why I asked" commentary. The live thread defers this to keep its
+   * momentum (it shows at most one light reflection), so the round recap carries
+   * the fuller note here so it is never lost.
+   */
+  authorNote: string | null;
 };
 
 /**
@@ -360,6 +366,7 @@ export function useCatchupFlow() {
         domainDisplayName: item.domainDisplayName,
         authorName: item.authorName ?? null,
         authorIsHouse: item.authorIsHouse ?? false,
+        authorNote: null,
       });
     }, 1200);
   }, [currentItem, finishTurn, isResolvingTurn, submitting]);
@@ -507,6 +514,7 @@ export function useCatchupFlow() {
           domainDisplayName: item.domainDisplayName,
           authorName: item.authorName ?? null,
           authorIsHouse: item.authorIsHouse ?? false,
+          authorNote: data.creatorNote ?? null,
         });
       }, 1200);
     } catch (caught) {
