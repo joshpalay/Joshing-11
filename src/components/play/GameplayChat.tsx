@@ -183,6 +183,11 @@ function wrongNamedSubLabel(creatorName: string | null, variant: number, isHouse
   return WRONG_NAMED_SUBLABEL[variant % WRONG_NAMED_SUBLABEL.length]!(firstName);
 }
 
+function bonusSourceLabel(sourceName: string, extraCount: number): string {
+  const source = firstNameFrom(sourceName).toUpperCase();
+  return extraCount > 0 ? `FROM ${source} + OTHERS’ KNOWLEDGE` : `FROM ${source}’S KNOWLEDGE`;
+}
+
 function SystemRow({ text }: { text: string }) {
   return (
     <div className="flex justify-center py-0.5">
@@ -344,91 +349,96 @@ function QuestionRow({
           )}
         </p>
       ) : null}
-      {presenceSourceName ? (
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            gap: '8px',
-            paddingLeft: '2px',
-            paddingBottom: '4px',
-          }}
-        >
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.55rem',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.18em',
-              color: GOLD_INK,
-              border: '1px solid color-mix(in srgb, var(--tri-amber) 55%, var(--border))',
-              background: 'color-mix(in srgb, var(--tri-amber) 16%, var(--surface))',
-              borderRadius: '999px',
-              padding: '3px 10px',
-              lineHeight: 1.4,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <span aria-hidden style={{ fontSize: '0.72rem', lineHeight: 1 }}>
-              ✦
-            </span>
-            Bonus
-          </span>
-          <span
-            style={{
-              fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-              fontSize: '0.88rem',
-              color: 'var(--text)',
-              opacity: 0.85,
-              lineHeight: 1.3,
-            }}
-          >
-            <span style={{ opacity: 0.6, fontStyle: 'italic', marginRight: '4px' }}>from</span>
-            <span style={{ fontWeight: 600 }}>
-              {firstNameFrom(presenceSourceName)}
-              {presenceSourceExtraCount > 0 ? '' : '’s'}
-            </span>
-            <span style={{ marginLeft: '5px', opacity: 0.6, fontStyle: 'italic' }}>
-              {presenceSourceExtraCount > 0 ? 'and others’ knowledge' : 'knowledge'}
-            </span>
-          </span>
-        </div>
-      ) : null}
       <div
         style={{
           alignSelf: 'flex-start',
           maxWidth: '81%',
-          // Bonus questions get a warm amber tint + gold left-edge accent so the
-          // gifted-from-a-friend card reads as distinct from an ordinary prompt.
-          background: isBonus
-            ? 'color-mix(in srgb, var(--tri-amber) 8%, var(--game-card-question))'
-            : 'var(--game-card-question)',
-          border: isBonus
-            ? '1px solid color-mix(in srgb, var(--tri-amber) 45%, var(--brand-rule))'
-            : '1px solid var(--brand-rule)',
-          borderRadius: 'var(--radius-md)',
-          // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
-          boxShadow: isBonus
-            ? '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06), inset 3px 0 0 color-mix(in srgb, var(--tri-amber) 65%, transparent)'
-            : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
-          padding: '14px 18px',
-          fontFamily: 'var(--font-cormorant), Georgia, serif',
-          fontSize: '1.4875rem',
-          fontWeight: 700,
-          letterSpacing: 0,
-          color: 'var(--brand-ink)',
-          lineHeight: 1.14,
+          width: '100%',
         }}
       >
-        <p style={{ margin: 0 }}>{questionText}</p>
-        {badges.length > 0 ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
-            {badges.map((badge) => (
+        {presenceSourceName ? (
+          <div
+            style={{
+              borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
+              border: '1px solid var(--brand-navy)',
+              borderBottom: 'none',
+              background: 'linear-gradient(135deg, var(--brand-navy), color-mix(in srgb, var(--brand-navy) 82%, var(--accent)))',
+              boxShadow: '0 8px 20px rgba(13, 31, 58, 0.18)',
+              color: 'var(--primary-foreground)',
+              padding: '9px 13px 8px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '6px 10px',
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.64rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.16em',
+                  lineHeight: 1.25,
+                }}
+              >
+                <span aria-hidden style={{ color: 'var(--tri-amber)', fontSize: '0.8rem', lineHeight: 1 }}>
+                  ✦
+                </span>
+                Bonus item
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.6rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  lineHeight: 1.25,
+                  color: 'color-mix(in srgb, var(--tri-amber) 35%, white)',
+                }}
+              >
+                {bonusSourceLabel(presenceSourceName, presenceSourceExtraCount)}
+              </span>
+            </div>
+          </div>
+        ) : null}
+        <div
+          style={{
+            // Bonus questions get a navy banner plus warm card tint so the
+            // gifted-from-a-friend item reads as an extra, not an ordinary prompt.
+            background: isBonus
+              ? 'color-mix(in srgb, var(--tri-amber) 10%, var(--game-card-question))'
+              : 'var(--game-card-question)',
+            border: isBonus
+              ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--tri-amber))'
+              : '1px solid var(--brand-rule)',
+            borderRadius: isBonus ? '0 0 var(--radius-md) var(--radius-md)' : 'var(--radius-md)',
+            // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
+            boxShadow: isBonus
+              ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--tri-amber)'
+              : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
+            padding: '14px 18px',
+            fontFamily: 'var(--font-cormorant), Georgia, serif',
+            fontSize: '1.4875rem',
+            fontWeight: 700,
+            letterSpacing: 0,
+            color: 'var(--brand-ink)',
+            lineHeight: 1.14,
+          }}
+        >
+          <p style={{ margin: 0 }}>{questionText}</p>
+          {badges.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
+              {badges.map((badge) => (
               <span
                 key={badge.label}
                 style={{
@@ -450,9 +460,10 @@ function QuestionRow({
               >
                 {badge.label}
               </span>
-            ))}
-          </div>
-        ) : null}
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
       {!faded && (onGiveUp || onDismiss) ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '4px', paddingLeft: '2px' }}>
