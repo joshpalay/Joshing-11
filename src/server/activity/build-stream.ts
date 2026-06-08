@@ -27,7 +27,7 @@ import {
   getLatelyMilestones,
   getLatelyMoments,
   getMilestoneQuestionText,
-  getViewerCorrectlyAnsweredIds,
+  getViewerPriorAnswerResults,
 } from '@/server/db/queries/lately';
 
 export async function buildActivityStream(userId: string): Promise<StreamItem[]> {
@@ -40,7 +40,8 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
 
   // Resolve every milestone's first ≤5 literal questions and every
   // convergence's 3 cluster questions in one batch (text + display domain), and
-  // which of them the viewer already answered correctly.
+  // the viewer's prior result on each (right OR wrong) — so a question the
+  // viewer already attempted stays locked in the expansion across reloads.
   const cappedIdsByMilestone = milestones.map((m) => ({
     id: m.id,
     ids: m.questionIds.slice(0, MILESTONE_CARD_QUESTION_CAP),
@@ -51,9 +52,9 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
       ...convergences.flatMap((c) => c.questionIds),
     ]),
   ];
-  const [textById, answeredIds] = await Promise.all([
+  const [textById, priorById] = await Promise.all([
     getMilestoneQuestionText(allQuestionIds),
-    getViewerCorrectlyAnsweredIds(userId, allQuestionIds),
+    getViewerPriorAnswerResults(userId, allQuestionIds),
   ]);
 
   const utilityItems = filterUtilityActivities(items, moments).map(
@@ -68,7 +69,7 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
         questionId: q.questionId,
         text: q.text,
         domain: q.domain,
-        answered: answeredIds.has(q.questionId),
+        priorResult: priorById.get(q.questionId) ?? null,
       }));
     return milestoneToStreamItem(m, questions);
   });
@@ -80,7 +81,7 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
         questionId: q.questionId,
         text: q.text,
         domain: q.domain,
-        answered: true, // read-only reveal: both already answered correctly
+        priorResult: 'correct' as const, // read-only reveal: both already answered correctly
       }));
     return convergenceToStreamItem(c, questions, convergenceCaptionTemplate(c.id));
   });

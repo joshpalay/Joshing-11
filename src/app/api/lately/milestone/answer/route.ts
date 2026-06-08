@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { computeAnswerState } from '@/server/answer-state';
 import { readPriorAnswersForQuestion } from '@/server/answer-history';
 import { getSession } from '@/server/auth/session';
-import { db, playerMastery, questions } from '@/server/db';
+import { db, feedItems, playerMastery, questions } from '@/server/db';
 import { getSeededPlayQuestions } from '@/server/db/queries/lately';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { gradeAnswer } from '@/server/grading';
@@ -183,6 +183,43 @@ export async function POST(request: NextRequest) {
       'correct',
       `milestone:${question.id}:${session.userId}`,
     ));
+  } else {
+    // A milestone is a read-derived roll-up, not a feed card, so a wrong answer
+    // here leaves no FeedItem — and catch up only surfaces incorrect, unresolved
+    // FeedItem rows (getFeedCatchupItems). Write a synthetic answered/incorrect
+    // row so the existing feed catch-up pipeline gives the viewer a second swing.
+    // state='answered' keeps it OUT of the actionable feed (which only shows
+    // active/skipped), and the deterministic sourceAnswerId + onConflictDoNothing
+    // guarantees one row per (viewer, question): re-missing never resets the
+    // catch-up clock or resurrects an already-resolved miss. A failure here must
+    // never fail the answer itself.
+    try {
+      await db
+        .insert(feedItems)
+        .values({
+          recipientUserId: session.userId,
+          questionId: question.id,
+          sourceType: 'milestone_missed',
+          // sourceUserId is NOT NULL + FK; the friend whose milestone surfaced
+          // this isn't reliably in scope here, so attribute to the question
+          // author (the natural "source"), falling back to the viewer for
+          // author-less LLM questions. Catch up does not read this field.
+          sourceUserId: question.creatorId ?? session.userId,
+          sourceResult: 'incorrect',
+          sourceEventAt: new Date(),
+          submittedAnswer,
+          answerResult: 'incorrect',
+          sourceAnswerId: `milestone-miss:${question.id}`,
+          state: 'answered',
+        })
+        .onConflictDoNothing({
+          target: [feedItems.recipientUserId, feedItems.sourceAnswerId],
+        });
+    } catch (error) {
+      console.warn('[lately/milestone/answer] failed to write catch-up feed item', {
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+    }
   }
 
   const explanation = isCorrect
