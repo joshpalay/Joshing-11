@@ -1,4 +1,5 @@
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, notExists, or, sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
 import { contentReports, db } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
@@ -81,4 +82,100 @@ export async function countContentReportsToday(reporterUserId: string): Promise<
       ),
     );
   return row?.count ?? 0;
+}
+
+// ─── B-Report-3: suppression ────────────────────────────────────────────────
+//
+// A question is "suppressed" while it has an open OR upheld report from anyone —
+// it stops entering NEW surfaces (daily queues, feed propagation, sends). This is
+// the reversible, pre-review layer: a `dismissed` report does NOT suppress, so a
+// resolution that clears the report automatically lifts suppression. (The terminal
+// hard-block — visibility='blocked' on upheld-offensive — is admin action in
+// B-Report-5 and is intentionally separate.) Existing copies on other players are
+// never touched; these helpers only gate entry into new surfaces.
+
+const SUPPRESSING_STATUSES = ['open', 'upheld'] as const;
+
+// A correlated NOT EXISTS predicate for SQL selection paths, mirroring the
+// `exists` style of questionVisibilityPredicate. Pass the candidate table's id
+// column and which ContentReport FK targets it. Add it to an existing `and(...)`
+// where-clause so suppressed rows are never drawn into a new queue.
+export function notSuppressedByContentReport(
+  targetIdColumn: AnyPgColumn,
+  kind: 'question' | 'generated',
+) {
+  const reportColumn =
+    kind === 'question' ? contentReports.questionId : contentReports.generatedQuestionId;
+  return notExists(
+    db
+      .select({ one: sql`1` })
+      .from(contentReports)
+      .where(
+        and(
+          eq(reportColumn, targetIdColumn),
+          inArray(contentReports.status, [...SUPPRESSING_STATUSES]),
+        ),
+      ),
+  );
+}
+
+// Runtime check for JS paths (feed propagation, direct send) where we hold a raw
+// id whose table may be either. Matches the id against both FK columns so a report
+// on a GeneratedQuestion still blocks a send that would mint it into a curated
+// Question.
+export async function isQuestionReportSuppressed(targetId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: contentReports.id })
+    .from(contentReports)
+    .where(
+      and(
+        or(
+          eq(contentReports.questionId, targetId),
+          eq(contentReports.generatedQuestionId, targetId),
+        ),
+        inArray(contentReports.status, [...SUPPRESSING_STATUSES]),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+// Durable self-hide (inappropriate only). Of the given candidate ids, returns the
+// subset the viewer has personally reported as inappropriate and that is still
+// open|upheld — so their recap / Lately render can drop those cards on refresh by
+// reading the existing ContentReport row (no new state). Incorrect reports never
+// self-hide.
+export async function getViewerHiddenQuestionIds(
+  viewerUserId: string,
+  candidateIds: string[],
+): Promise<Set<string>> {
+  const hidden = new Set<string>();
+  if (candidateIds.length === 0) return hidden;
+
+  const rows = await db
+    .select({
+      questionId: contentReports.questionId,
+      generatedQuestionId: contentReports.generatedQuestionId,
+    })
+    .from(contentReports)
+    .where(
+      and(
+        eq(contentReports.reporterUserId, viewerUserId),
+        eq(contentReports.category, 'inappropriate'),
+        inArray(contentReports.status, [...SUPPRESSING_STATUSES]),
+        or(
+          inArray(contentReports.questionId, candidateIds),
+          inArray(contentReports.generatedQuestionId, candidateIds),
+        ),
+      ),
+    );
+
+  const candidateSet = new Set(candidateIds);
+  for (const row of rows) {
+    if (row.questionId && candidateSet.has(row.questionId)) hidden.add(row.questionId);
+    if (row.generatedQuestionId && candidateSet.has(row.generatedQuestionId)) {
+      hidden.add(row.generatedQuestionId);
+    }
+  }
+  return hidden;
 }

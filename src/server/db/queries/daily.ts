@@ -15,6 +15,7 @@ import {
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { notSuppressedByContentReport } from '@/server/db/queries/content-reports';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { CATEGORIES, categoryLabel, HOUSE_AUTHOR, resolveAuthorDisplay } from '@/lib/questions-types';
 import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
@@ -1002,6 +1003,8 @@ export async function pickEligibleAuthoredQuestions(
       isNotNull(canonicalQuestions.canonicalSubcategory),
       inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
       isNull(canonicalQuestions.deletedAt),
+      // B-Report-3: never draw a reported question into a new daily queue.
+      notSuppressedByContentReport(canonicalQuestions.id, 'question'),
     ))
     .orderBy(
       desc(canonicalQuestions.publicEligibilityScore),
@@ -1244,6 +1247,8 @@ export async function pickHouseQuestions(
       isNotNull(canonicalQuestions.canonicalSubcategory),
       inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
       isNull(canonicalQuestions.deletedAt),
+      // B-Report-3: a reported house question is suppressed from new queues too.
+      notSuppressedByContentReport(canonicalQuestions.id, 'question'),
     ))
     .orderBy(desc(canonicalQuestions.createdAt))
     .limit(Math.max(limit * 4, 20));
@@ -1458,6 +1463,8 @@ export async function pickBankSource(
         isNotNull(generatedQuestions.factKey),
         sql`${generatedQuestions.userId} <> ${userId}`,
         eq(generatedQuestions.isDuplicate, false),
+        // B-Report-3: skip generated questions under an open/upheld report.
+        notSuppressedByContentReport(generatedQuestions.id, 'generated'),
       ))
       .orderBy(desc(generatedQuestions.createdAt))
       .limit(BANK_RECENCY_WINDOW);

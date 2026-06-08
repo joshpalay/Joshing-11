@@ -74,6 +74,11 @@ vi.mock('@/server/db/queries/feed', () => ({
 }));
 vi.mock('@/server/db/queries/friends', () => ({ getFriends: vi.fn() }));
 vi.mock('@/server/sms', () => ({ sendSms: vi.fn() }));
+// B-Report-3 added a suppression guard to POST; this suite is about resolution, so
+// stub the check off (the dedicated suppression.test.ts covers the gate itself).
+vi.mock('@/server/db/queries/content-reports', () => ({
+  isQuestionReportSuppressed: vi.fn(async () => false),
+}));
 
 import { POST, resolveQuestionIdForSend } from '@/app/api/questions/send/route';
 import { getSession } from '@/server/auth/session';
