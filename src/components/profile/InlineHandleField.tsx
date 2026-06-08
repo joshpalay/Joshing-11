@@ -116,12 +116,12 @@ export function InlineHandleField({
         />
       </div>
       {confirming ? (
-        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="mt-3 rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
           <p>You can change your handle once every {cooldownDays} days. Continue?</p>
           <div className="mt-2 flex gap-2">
             <button
               type="button"
-              className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+              className="rounded-md bg-[var(--warning)] px-3 py-1 text-xs font-medium text-[var(--primary-foreground)] transition hover:opacity-90 disabled:opacity-60"
               onClick={() => void confirmSave()}
               disabled={status === 'saving'}
             >
@@ -129,7 +129,7 @@ export function InlineHandleField({
             </button>
             <button
               type="button"
-              className="rounded-md border border-amber-300 px-3 py-1 text-xs"
+              className="rounded-md border border-[var(--warning-border)] px-3 py-1 text-xs"
               onClick={cancel}
               disabled={status === 'saving'}
             >

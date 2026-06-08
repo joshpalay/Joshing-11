@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B-VISUAL-TOKEN-BUDGET-01 — Bucket B color comparison</title>
+<style>
+:root {
+  --bg: #f7f7f8;
+  --text: #111827;
+  --muted: #6b7280;
+  --card: #ffffff;
+  --header: #f3f4f6;
+  --border: #e5e7eb;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.intro {
+  margin: 0 0 18px;
+  color: var(--muted);
+  max-width: 1100px;
+}
+
+.section {
+  margin-top: 28px;
+}
+
+.section h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.section p.note {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.matrix {
+  display: grid;
+  grid-template-columns: 120px minmax(320px, 1fr) minmax(320px, 1fr);
+  gap: 12px 16px;
+  align-items: stretch;
+}
+
+.cell {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.header {
+  background: var(--header);
+  font-weight: 700;
+  min-height: auto;
+}
+
+.want {
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.want label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.swatch {
+  width: 100%;
+  height: 72px;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.meta {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.meta code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  background: #f3f4f6;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.row-label {
+  font-weight: 700;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+}
+
+.divider {
+  grid-column: 1 / -1;
+  height: 8px;
+}
+
+.no-token {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ── Added: per-row code example ─────────────────────────────────────────── */
+.example-label {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.example {
+  margin: 4px 0 0;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #0f172a;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Added: "where each color appears" overview ──────────────────────────── */
+.overview {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.overview th,
+.overview td {
+  text-align: left;
+  vertical-align: top;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.overview tr:last-child td { border-bottom: none; }
+
+.overview th {
+  background: var(--header);
+  font-weight: 700;
+}
+
+.overview td code,
+.overview th code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  background: #f3f4f6;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.overview .file { white-space: nowrap; font-weight: 600; }
+
+.legend-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,.12);
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>B-VISUAL-TOKEN-BUDGET-01 — Bucket B color comparison</h1>
+  <p class="intro">
+    Side-by-side of every <strong>bucket B</strong> off-system color flagged by the
+    <code>no-restricted-syntax</code> token-lint rule, with the resolved hex of the flagged
+    Tailwind utility next to the resolved hex of the <strong>nearest existing token</strong> in
+    <code>src/app/globals.css</code>. Bucket B is, by definition, the set where the remap is
+    <em>not</em> 1:1 — every row shifts the rendered color by some amount. Tailwind palette hex
+    are the standard reference values; this project renders them via <code>oklch</code> in v4, so
+    on-screen sRGB can differ by a sub-perceptual amount. <code>--destructive</code> is stored as
+    <code>oklch(0.577 0.245 27.325)</code> (exactly v4 <code>red-600</code>), shown as
+    <code>≈#dc2626</code>.
+  </p>
+
+  <!-- ── OVERVIEW: where each color appears ───────────────────────────────── -->
+  <div class="section">
+    <h2>Overview — where each color appears</h2>
+    <p class="note">
+      Every component surface that carries a bucket-B off-system color, the utilities it uses, and
+      what the color is doing there. The <strong>Example</strong> column under each swatch below
+      shows the exact flagged source line.
+    </p>
+    <table class="overview">
+      <thead>
+        <tr>
+          <th style="width:230px">Component &amp; lines</th>
+          <th style="width:160px">Bucket</th>
+          <th>Off-system colors → what they render</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="file">AddToBankAction.tsx:78</td>
+          <td>Warning (amber)</td>
+          <td><code>border-amber-300 bg-amber-50 text-amber-700</code> — the “in bank” state chip</td>
+        </tr>
+        <tr>
+          <td class="file">QuestionForm.tsx:528, 611, 617, 620, 625</td>
+          <td>Warning + Success</td>
+          <td><code>amber-200/50/500/700/950</code> + <code>emerald-700</code> — LLM-verify / unverified validation banners and the “Verified” line</td>
+        </tr>
+        <tr>
+          <td class="file">TodaysFiveCard.tsx:334, 374</td>
+          <td>White</td>
+          <td><code>text-white</code> — primary CTA button label (on <code>bg-[var(--brand-link)]</code>)</td>
+        </tr>
+        <tr>
+          <td class="file">AnswerFeedbackSheet.tsx:202</td>
+          <td>White</td>
+          <td><code>text-white</code> — result pill label</td>
+        </tr>
+        <tr>
+          <td class="file">ContactMatchBlock.tsx:228</td>
+          <td>White</td>
+          <td><code>text-white</code> — contact avatar initials</td>
+        </tr>
+        <tr>
+          <td class="file">FindFriendsSearch.tsx:135</td>
+          <td>White</td>
+          <td><code>text-white</code> — search-result avatar initials</td>
+        </tr>
+        <tr>
+          <td class="file">FeedCard.tsx:30, 117</td>
+          <td>Black</td>
+          <td><code>text-black</code> — category line + body text <span class="small">(remapped to <code>var(--brand-ink)</code>)</span></td>
+        </tr>
+        <tr>
+          <td class="file">SparkleEnvelope.tsx:49</td>
+          <td>Black</td>
+          <td><code>text-black</code> — signal headline <span class="small">(remapped to <code>var(--brand-ink)</code>)</span></td>
+        </tr>
+        <tr>
+          <td class="file">QuestionRatingButtons.tsx:78, 94</td>
+          <td>Warning + Neutral</td>
+          <td><code>amber-300/100/700</code> (selected) and <code>stone-400/200/800</code> (alt-selected) rating button states</td>
+        </tr>
+        <tr>
+          <td class="file">CeremonyPin.tsx:25, 33</td>
+          <td>Warning + Neutral</td>
+          <td><code>amber-300/50</code> card + <code>stone-950/700</code> text on the ceremony pin</td>
+        </tr>
+        <tr>
+          <td class="file">AuthoredQuestionsFeed.tsx:205</td>
+          <td>Error (red)</td>
+          <td><code>border-red-200 bg-red-50 text-red-700</code> — error banner</td>
+        </tr>
+        <tr>
+          <td class="file">InlineEditableField.tsx:257</td>
+          <td>Success</td>
+          <td><code>text-emerald-600</code> — the “Saved” indicator <span class="small">(remapped to <code>var(--success)</code>)</span></td>
+        </tr>
+        <tr>
+          <td class="file">InlineHandleField.tsx:119, 124, 132, 224</td>
+          <td>Warning + White + Success</td>
+          <td><code>amber-300/50/600/700/900</code> + <code>text-white</code> handle-change warning; <code>emerald-600</code> “Saved” <span class="small">(remapped to <code>var(--success)</code>)</span></td>
+        </tr>
+        <tr>
+          <td class="file">PreviewBanner.tsx:23, 32</td>
+          <td>Warning + White</td>
+          <td><code>amber-300/50/900/100</code> banner + <code>bg-white</code> button</td>
+        </tr>
+        <tr>
+          <td class="file">NotificationsForm.tsx:151, 242, 245</td>
+          <td>Warning + Success + Error</td>
+          <td><code>amber-300/50/800</code> verify badge; <code>emerald-700</code> + <code>rose-700</code> status messages <span class="small">(both remapped)</span></td>
+        </tr>
+        <tr>
+          <td class="file">ReplaySummary.tsx:70, 89, 90</td>
+          <td>Special + Success + Error</td>
+          <td><code>text-[#111111]</code> score number <span class="small">(remapped to <code>var(--warm-ink)</code>)</span>; <code>emerald-200/50/700</code> + <code>rose-200/50/700</code> correct/wrong rows</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── FREQUENCY: how often each color appears ──────────────────────────── -->
+  <div class="section">
+    <h2>Frequency — how often each color appears</h2>
+    <p class="note">
+      Two numbers per remap target: <strong>Flagged uses</strong> = how many of the off-system
+      sites in this audit would land on that token; <strong>Already in codebase</strong> = how many
+      times that token is <em>already</em> referenced across <code>src/</code> today. A target with
+      a big “already” number is a well-trodden token — remapping onto it is low-risk and consistent.
+      <br><br>
+      <strong>Direct answer on <code>≈#dc2626</code> (<code>--destructive</code>):</strong> only
+      <strong>3</strong> flagged sites map to it (<code>text-red-700</code> ×1,
+      <code>text-rose-700</code> ×2), but it is the app’s <strong>canonical error color</strong> —
+      already referenced <strong>~57×</strong> across the codebase (<code>text-destructive</code> ×50,
+      <code>var(--destructive)</code> ×4, plus variants). So those 3 stragglers just join a token
+      that already shows up a lot.
+    </p>
+    <table class="overview">
+      <thead>
+        <tr>
+          <th style="width:280px">Off-system color(s) → target token</th>
+          <th style="width:160px">Flagged uses</th>
+          <th style="width:170px">Already in codebase</th>
+          <th>Read</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="legend-dot" style="background:#fbf4e3"></span><code>text-white</code> → <code>--primary-foreground</code></td>
+          <td>6 <span style="display:inline-block;height:9px;width:60px;background:#cbd5e1;border-radius:2px;vertical-align:1px"></span></td>
+          <td>~12×</td>
+          <td>Button / avatar / chip labels — small Δ, safe.</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#178245"></span><code>text-emerald-600/700</code> → <code>--success</code></td>
+          <td>5 <span style="display:inline-block;height:9px;width:50px;background:#cbd5e1;border-radius:2px;vertical-align:1px"></span></td>
+          <td>23×</td>
+          <td>Already the success color elsewhere — clean.</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#dc2626"></span><code>text-red-700 / text-rose-700</code> → <code>--destructive</code> <code>≈#dc2626</code></td>
+          <td>3 <span style="display:inline-block;height:9px;width:30px;background:#cbd5e1;border-radius:2px;vertical-align:1px"></span></td>
+          <td><strong>~57×</strong></td>
+          <td>Few flagged, but the token itself is everywhere.</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#1a1208"></span><code>text-[#111111] / text-stone-950/800</code> → <code>--warm-ink</code></td>
+          <td>3 <span style="display:inline-block;height:9px;width:30px;background:#cbd5e1;border-radius:2px;vertical-align:1px"></span></td>
+          <td>17×</td>
+          <td>Near-black warm ink; documented collapse for <code>#111111</code>.</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#0a1f3d"></span><code>text-black</code> → <code>--brand-ink</code> <span class="small">(or <code>--warm-ink</code>)</span></td>
+          <td>3 <span style="display:inline-block;height:9px;width:30px;background:#cbd5e1;border-radius:2px;vertical-align:1px"></span></td>
+          <td>53× <span class="small">(--brand-ink)</span></td>
+          <td>Two candidate tokens — the judgment call of bucket B.</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#fdfcfb"></span><code>bg-white</code> → <code>--brand-card</code></td>
+          <td>1 <span style="display:inline-block;height:9px;width:10px;background:#cbd5e1;border-radius:2px;vertical-align:1px"></span></td>
+          <td>23×</td>
+          <td>≈match; one straggler onto a common surface token.</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#696257"></span><code>text-stone-700</code> → <code>--warm-ink-700</code></td>
+          <td>1 <span style="display:inline-block;height:9px;width:10px;background:#cbd5e1;border-radius:2px;vertical-align:1px"></span></td>
+          <td>—</td>
+          <td>One-off neutral text.</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#8a8070"></span><code>border-stone-400</code> → <code>--warm-ink-400</code></td>
+          <td>1 <span style="display:inline-block;height:9px;width:10px;background:#cbd5e1;border-radius:2px;vertical-align:1px"></span></td>
+          <td>—</td>
+          <td>One-off neutral border.</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#e8e2d6"></span><code>bg-stone-200</code> → <code>--warm-border</code></td>
+          <td>1 <span style="display:inline-block;height:9px;width:10px;background:#cbd5e1;border-radius:2px;vertical-align:1px"></span></td>
+          <td>—</td>
+          <td>≈match; one-off.</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#fcd34d"></span><strong>Amber / warning family</strong> → <span class="no-token">no semantic token</span></td>
+          <td><strong>31</strong> <span style="display:inline-block;height:9px;width:140px;background:#f59e0b;border-radius:2px;vertical-align:1px"></span></td>
+          <td>n/a</td>
+          <td><strong>By far the largest cluster</strong> — 31 utility uses across 13 className literals. Strongly argues for inventing a <code>--warning*</code> token (bucket C).</td>
+        </tr>
+        <tr>
+          <td><span class="legend-dot" style="background:#a7f3d0"></span><strong>Pale tint backgrounds/borders</strong> (emerald/red/rose 50–200) → <span class="no-token">no semantic token</span></td>
+          <td>6 <span style="display:inline-block;height:9px;width:60px;background:#86efac;border-radius:2px;vertical-align:1px"></span></td>
+          <td>n/a</td>
+          <td>6 uses across 3 banner literals; need pale success/error tokens (bucket C).</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="note">
+      Most-used single utility overall is <code>border-amber-300</code> (8 sites), then
+      <code>bg-amber-50</code> (7) and <code>text-white</code> (6). The whole amber family (31 uses)
+      dwarfs every clean-mappable color combined — the warning role is the real gap in the token set.
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>Success / green</h2>
+    <div class="matrix">
+      <div class="cell header">I want</div>
+      <div class="cell header">Utility color</div>
+      <div class="cell header">Nearest token color</div>
+
+      <div class="cell want">
+        <label><input type="checkbox"> utility</label>
+        <label><input type="checkbox"> nearest</label>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#047857"></div>
+        <div class="meta"><code>text-emerald-700</code><br><code>#047857</code><br><span class="small">QuestionForm:617, NotificationsForm:242, ReplaySummary:89</span></div>
+        <div class="example-label">Example · QuestionForm.tsx:617</div>
+        <pre class="example">&lt;p className="text-sm text-emerald-700"&gt;✓ Verified — matches LLM suggestion&lt;/p&gt;</pre>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#178245"></div>
+        <div class="meta"><code>--success</code><br><code>#178245</code><br><span class="small">Δ: small</span></div>
+      </div>
+
+      <div class="cell want">
+        <label><input type="checkbox"> utility</label>
+        <label><input type="checkbox"> nearest</label>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#059669"></div>
+        <div class="meta"><code>text-emerald-600</code><br><code>#059669</code><br><span class="small">InlineEditableField:257, InlineHandleField:224</span></div>
+        <div class="example-label">Example · InlineEditableField.tsx:257</div>
+        <pre class="example">&lt;span className="inline-flex items-center gap-1 text-xs text-emerald-600"&gt;</pre>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#178245"></div>
+        <div class="meta"><code>--success</code><br><code>#178245</code><br><span class="small">Δ: moderate</span></div>
+      </div>
+
+      <div class="cell want">
+        <label><input type="checkbox"> utility</label>
+        <label><input type="checkbox"> nearest</label>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#ecfdf5"></div>
+        <div class="meta"><code>bg-emerald-50</code><br><code>#ecfdf5</code><br><span class="small">ReplaySummary:89</span></div>
+        <div class="example-label">Example · ReplaySummary.tsx:89</div>
+        <pre class="example">? 'border-emerald-200 bg-emerald-50 text-emerald-700'</pre>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#ffffff"></div>
+        <div class="meta no-token">no pale-green token</div>
+      </div>
+
+      <div class="cell want">
+        <label><input type="checkbox"> utility</label>
+        <label><input type="checkbox"> nearest</label>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#a7f3d0"></div>
+        <div class="meta"><code>border-emerald-200</code><br><code>#a7f3d0</code><br><span class="small">ReplaySummary:89</span></div>
+        <div class="example-label">Example · ReplaySummary.tsx:89</div>
+        <pre class="example">? 'border-emerald-200 bg-emerald-50 text-emerald-700'</pre>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#ffffff"></div>
+        <div class="meta no-token">no pale-green token</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Error / red / rose</h2>
+    <div class="matrix">
+      <div class="cell header">I want</div>
+      <div class="cell header">Utility color</div>
+      <div class="cell header">Nearest token color</div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#b91c1c"></div>
+        <div class="meta"><code>text-red-700</code><br><code>#b91c1c</code><br><span class="small">AuthoredQuestionsFeed:205</span></div>
+        <div class="example-label">Example · AuthoredQuestionsFeed.tsx:205</div>
+        <pre class="example">&lt;p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"&gt;</pre>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#dc2626"></div>
+        <div class="meta"><code>--destructive</code><br><code>≈#dc2626</code><br><span class="small">Δ: small</span></div>
+      </div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#be123c"></div>
+        <div class="meta"><code>text-rose-700</code><br><code>#be123c</code><br><span class="small">NotificationsForm:245, ReplaySummary:90</span></div>
+        <div class="example-label">Example · NotificationsForm.tsx:245</div>
+        <pre class="example">&lt;p className="mt-2 text-xs text-rose-700"&gt;{emailError}&lt;/p&gt;</pre>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#dc2626"></div>
+        <div class="meta"><code>--destructive</code><br><code>≈#dc2626</code><br><span class="small">Δ: moderate</span></div>
+      </div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#fef2f2"></div>
+        <div class="meta"><code>bg-red-50</code><br><code>#fef2f2</code><br><span class="small">AuthoredQuestionsFeed:205</span></div>
+        <div class="example-label">Example · AuthoredQuestionsFeed.tsx:205</div>
+        <pre class="example">&lt;p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#ffffff"></div><div class="meta no-token">no pale-red token</div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#fecaca"></div>
+        <div class="meta"><code>border-red-200</code><br><code>#fecaca</code><br><span class="small">AuthoredQuestionsFeed:205</span></div>
+        <div class="example-label">Example · AuthoredQuestionsFeed.tsx:205</div>
+        <pre class="example">&lt;p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#ffffff"></div><div class="meta no-token">no pale-red token</div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#fff1f2"></div>
+        <div class="meta"><code>bg-rose-50</code><br><code>#fff1f2</code><br><span class="small">ReplaySummary:90</span></div>
+        <div class="example-label">Example · ReplaySummary.tsx:90</div>
+        <pre class="example">: 'border-rose-200 bg-rose-50 text-rose-700'</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#ffffff"></div><div class="meta no-token">no pale-red token</div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#fecdd3"></div>
+        <div class="meta"><code>border-rose-200</code><br><code>#fecdd3</code><br><span class="small">ReplaySummary:90</span></div>
+        <div class="example-label">Example · ReplaySummary.tsx:90</div>
+        <pre class="example">: 'border-rose-200 bg-rose-50 text-rose-700'</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#ffffff"></div><div class="meta no-token">no pale-red token</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Warning / amber</h2>
+    <p class="note">No semantic warning token exists; these are approximate decorative matches.</p>
+    <div class="matrix">
+      <div class="cell header">I want</div>
+      <div class="cell header">Utility color</div>
+      <div class="cell header">Nearest token color</div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#fcd34d"></div>
+        <div class="meta"><code>border-amber-300</code><br><code>#fcd34d</code><br><span class="small">AddToBankAction:78, CeremonyPin:25, InlineHandleField:119/132, PreviewBanner:23/32, NotificationsForm:151, QuestionRatingButtons:78</span></div>
+        <div class="example-label">Example · AddToBankAction.tsx:78</div>
+        <pre class="example">inBank ? 'border-amber-300 bg-amber-50 text-amber-700' : '',</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#deae5c"></div><div class="meta"><code>--tri-darkyellow</code><br><code>#deae5c</code><br><span class="small">Δ: moderate</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#fde68a"></div>
+        <div class="meta"><code>border-amber-200</code><br><code>#fde68a</code><br><span class="small">QuestionForm:528</span></div>
+        <div class="example-label">Example · QuestionForm.tsx:528</div>
+        <pre class="example">&lt;div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#edd2a3"></div><div class="meta"><code>--tri-lighttan</code><br><code>#edd2a3</code><br><span class="small">Δ: moderate</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#fffbeb"></div>
+        <div class="meta"><code>bg-amber-50</code><br><code>#fffbeb</code><br><span class="small">AddToBankAction:78, CeremonyPin:25, InlineHandleField:119, PreviewBanner:23/32, NotificationsForm:151, QuestionForm:528/625</span></div>
+        <div class="example-label">Example · InlineHandleField.tsx:119</div>
+        <pre class="example">&lt;div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#fbf5e9"></div><div class="meta"><code>--brand-cream-card</code><br><code>#fbf5e9</code><br><span class="small">Δ: small</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#fef3c7"></div>
+        <div class="meta"><code>bg-amber-100</code><br><code>#fef3c7</code><br><span class="small">QuestionRatingButtons:78, PreviewBanner:32</span></div>
+        <div class="example-label">Example · QuestionRatingButtons.tsx:78</div>
+        <pre class="example">? 'border-amber-300 bg-amber-100 text-amber-700'</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#f8e6c7"></div><div class="meta"><code>--brand-cream</code><br><code>#f8e6c7</code><br><span class="small">Δ: small</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#b45309"></div>
+        <div class="meta"><code>text-amber-700</code><br><code>#b45309</code><br><span class="small">AddToBankAction:78, QuestionForm:620/625, QuestionRatingButtons:78</span></div>
+        <div class="example-label">Example · QuestionForm.tsx:620</div>
+        <pre class="example">&lt;p className="text-sm text-amber-700"&gt;⚠ Unverified — your answer differs from the LLM&apos;s suggestion. Recipients will see this.&lt;/p&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#d15e36"></div><div class="meta"><code>--brand-orange</code><br><code>#d15e36</code><br><span class="small">Δ: large</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#92400e"></div>
+        <div class="meta"><code>text-amber-800</code><br><code>#92400e</code><br><span class="small">NotificationsForm:151</span></div>
+        <div class="example-label">Example · NotificationsForm.tsx:151</div>
+        <pre class="example">&lt;span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#d15e36"></div><div class="meta"><code>--brand-orange</code><br><code>#d15e36</code><br><span class="small">Δ: large</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#78350f"></div>
+        <div class="meta"><code>text-amber-900</code><br><code>#78350f</code><br><span class="small">InlineHandleField:119, PreviewBanner:23/32</span></div>
+        <div class="example-label">Example · PreviewBanner.tsx:23</div>
+        <pre class="example">&lt;div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#1a1208"></div><div class="meta"><code>--warm-ink</code><br><code>#1a1208</code><br><span class="small">Δ: large</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#451a03"></div>
+        <div class="meta"><code>text-amber-950</code><br><code>#451a03</code><br><span class="small">QuestionForm:528</span></div>
+        <div class="example-label">Example · QuestionForm.tsx:528</div>
+        <pre class="example">&lt;div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#1a1208"></div><div class="meta"><code>--warm-ink</code><br><code>#1a1208</code><br><span class="small">Δ: large</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#f59e0b"></div>
+        <div class="meta"><code>decoration-amber-500</code><br><code>#f59e0b</code><br><span class="small">QuestionForm:611</span></div>
+        <div class="example-label">Example · QuestionForm.tsx:611</div>
+        <pre class="example">&lt;p className="mt-1 line-through decoration-amber-500"&gt;{state.llmSuggestedAnswer}&lt;/p&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#d9a82e"></div><div class="meta"><code>--tri-amber</code><br><code>#d9a82e</code><br><span class="small">Δ: moderate</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#d97706"></div>
+        <div class="meta"><code>bg-amber-600</code> / <code>hover:bg-amber-700</code><br><code>#d97706</code> / <code>#b45309</code><br><span class="small">InlineHandleField:124</span></div>
+        <div class="example-label">Example · InlineHandleField.tsx:124</div>
+        <pre class="example">className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#d15e36"></div><div class="meta"><code>--brand-orange</code><br><code>#d15e36</code><br><span class="small">Δ: moderate–large</span></div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Neutral / stone</h2>
+    <div class="matrix">
+      <div class="cell header">I want</div>
+      <div class="cell header">Utility color</div>
+      <div class="cell header">Nearest token color</div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#0c0a09"></div>
+        <div class="meta"><code>text-stone-950</code><br><code>#0c0a09</code><br><span class="small">CeremonyPin:25</span></div>
+        <div class="example-label">Example · CeremonyPin.tsx:25</div>
+        <pre class="example">className="block rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-stone-950 shadow-sm"</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#1a1208"></div><div class="meta"><code>--warm-ink</code><br><code>#1a1208</code><br><span class="small">Δ: small</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#292524"></div>
+        <div class="meta"><code>text-stone-800</code><br><code>#292524</code><br><span class="small">QuestionRatingButtons:94</span></div>
+        <div class="example-label">Example · QuestionRatingButtons.tsx:94</div>
+        <pre class="example">? 'border-stone-400 bg-stone-200 text-stone-800'</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#1a1208"></div><div class="meta"><code>--warm-ink</code><br><code>#1a1208</code><br><span class="small">Δ: small</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#44403c"></div>
+        <div class="meta"><code>text-stone-700</code><br><code>#44403c</code><br><span class="small">CeremonyPin:33</span></div>
+        <div class="example-label">Example · CeremonyPin.tsx:33</div>
+        <pre class="example">&lt;p className="mt-1 text-sm text-stone-700"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#696257"></div><div class="meta"><code>--warm-ink-700</code><br><code>#696257</code><br><span class="small">Δ: moderate</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#a8a29e"></div>
+        <div class="meta"><code>border-stone-400</code><br><code>#a8a29e</code><br><span class="small">QuestionRatingButtons:94</span></div>
+        <div class="example-label">Example · QuestionRatingButtons.tsx:94</div>
+        <pre class="example">? 'border-stone-400 bg-stone-200 text-stone-800'</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#8a8070"></div><div class="meta"><code>--warm-ink-400</code><br><code>#8a8070</code><br><span class="small">Δ: moderate</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#e7e5e4"></div>
+        <div class="meta"><code>bg-stone-200</code><br><code>#e7e5e4</code><br><span class="small">QuestionRatingButtons:94</span></div>
+        <div class="example-label">Example · QuestionRatingButtons.tsx:94</div>
+        <pre class="example">? 'border-stone-400 bg-stone-200 text-stone-800'</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#e8e2d6"></div><div class="meta"><code>--warm-border</code><br><code>#e8e2d6</code><br><span class="small">Δ: ≈match</span></div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>White / black</h2>
+    <div class="matrix">
+      <div class="cell header">I want</div>
+      <div class="cell header">Utility color</div>
+      <div class="cell header">Nearest token color</div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#ffffff"></div>
+        <div class="meta"><code>bg-white</code><br><code>#ffffff</code><br><span class="small">PreviewBanner:32</span></div>
+        <div class="example-label">Example · PreviewBanner.tsx:32</div>
+        <pre class="example">className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-900 transition hover:bg-amber-100"</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#fdfcfb"></div><div class="meta"><code>--brand-card</code><br><code>#fdfcfb</code><br><span class="small">Δ: ≈match</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#ffffff"></div>
+        <div class="meta"><code>text-white</code><br><code>#ffffff</code><br><span class="small">TodaysFiveCard:334/374, AnswerFeedbackSheet:202, ContactMatchBlock:228, FindFriendsSearch:135, InlineHandleField:124</span></div>
+        <div class="example-label">Example · TodaysFiveCard.tsx:334</div>
+        <pre class="example">className="btn-primary flex min-h-12 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#fbf4e3"></div><div class="meta"><code>--primary-foreground</code><br><code>#fbf4e3</code><br><span class="small">Δ: small</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#000000"></div>
+        <div class="meta"><code>text-black</code><br><code>#000000</code><br><span class="small">FeedCard:30/117, SparkleEnvelope:49</span></div>
+        <div class="example-label">Example · FeedCard.tsx:30</div>
+        <pre class="example">&lt;p className="font-serif text-base font-semibold leading-[24px] tracking-[0.04em] text-black"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#1a1208"></div><div class="meta"><code>--warm-ink</code><br><code>#1a1208</code><br><span class="small">Δ: small</span></div></div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#000000"></div>
+        <div class="meta"><code>text-black</code><br><code>#000000</code><br><span class="small">FeedCard:30/117, SparkleEnvelope:49</span></div>
+        <div class="example-label">Example · SparkleEnvelope.tsx:49</div>
+        <pre class="example">&lt;p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-black"&gt;</pre>
+      </div>
+      <div class="cell"><div class="swatch" style="background:#0a1f3d"></div><div class="meta"><code>--brand-ink</code><br><code>#0a1f3d</code><br><span class="small">Δ: moderate</span></div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Special case — documented near-duplicate black</h2>
+    <div class="matrix">
+      <div class="cell header">I want</div>
+      <div class="cell header">Utility color</div>
+      <div class="cell header">Nearest token color</div>
+
+      <div class="cell want"><label><input type="checkbox"> utility</label><label><input type="checkbox"> nearest</label></div>
+      <div class="cell">
+        <div class="swatch" style="background:#111111"></div>
+        <div class="meta"><code>text-[#111111]</code><br><code>#111111</code><br><span class="small">ReplaySummary:70</span></div>
+        <div class="example-label">Example · ReplaySummary.tsx:70</div>
+        <pre class="example">&lt;p className="mt-2 font-mono text-5xl font-bold leading-none text-[#111111]"&gt;</pre>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background:#1a1208"></div>
+        <div class="meta"><code>--warm-ink</code><br><code>#1a1208</code><br><span class="small">Δ: small · globals.css documents #111111 collapsing onto --warm-ink</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

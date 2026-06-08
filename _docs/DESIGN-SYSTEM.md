@@ -115,11 +115,19 @@ Defined in `globals.css` lines 96-103. Hex approximations are authored as commen
 
 Worth holding as named Figma swatches because they appear directly in component classes:
 
-`amber-50, amber-100, amber-700, amber-800, amber-900, amber-950`  
-`emerald-50, emerald-100, emerald-600, emerald-700`  
 `stone-50, stone-100, stone-200, stone-800, stone-950`  
-`rose-50, rose-200`  
 `sky-200`
+
+**Now tokenized** (no longer reach for the raw utility): the amber/warning and the
+success/error status colors below resolved into semantic tokens in `globals.css :root`.
+
+| Was (raw utility) | Now (token) |
+|---|---|
+| `amber-50/100` fills, `amber-300` borders, `amber-700/800/900/950` text | `--warning-surface` / `--warning-border` / `--warning` |
+| `emerald-600/700` text | `--success` |
+| `emerald-50` fill, `emerald-200` border | `--success-surface` / `--success-border` |
+| `red-700 / rose-700` text | `--destructive` |
+| `red-50 / rose-50` fill, `red-200 / rose-200` border | `--destructive-surface` / `--destructive-border` |
 
 ---
 

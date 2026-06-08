@@ -525,7 +525,7 @@ export function QuestionForm({
       </div>
 
       {state.stage === 'CRITIQUED' && critique && !critique.ok ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+        <div className="rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
           <p className="font-medium">⚠ This question might be unclear:</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             {critique.issues.map((issue) => <li key={issue}>{issue}</li>)}
@@ -608,7 +608,7 @@ export function QuestionForm({
           {state.llmSuggestedAnswer && !answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (
             <div className="rounded-md border bg-muted/40 p-3 text-sm">
               <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">LLM suggestion</p>
-              <p className="mt-1 line-through decoration-amber-500">{state.llmSuggestedAnswer}</p>
+              <p className="mt-1 line-through decoration-[var(--warning)]">{state.llmSuggestedAnswer}</p>
             </div>
           ) : null}
 
@@ -617,12 +617,12 @@ export function QuestionForm({
               <p className="text-sm text-[var(--success)]">✓ Verified — matches LLM suggestion</p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
-                <p className="text-sm text-amber-700">⚠ Unverified — your answer differs from the LLM&apos;s suggestion. Recipients will see this.</p>
+                <p className="text-sm text-[var(--warning)]">⚠ Unverified — your answer differs from the LLM&apos;s suggestion. Recipients will see this.</p>
                 <button
                   type="button"
                   onClick={() => dispatch({ type: 'FIELD', field: 'userAnswer', value: state.llmSuggestedAnswer ?? '' })}
                   disabled={state.stage === 'SUBMITTING'}
-                  className="rounded-md border border-amber-700 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-md border border-[var(--warning)] px-3 py-1 text-xs font-medium text-[var(--warning)] hover:bg-[var(--warning-surface)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Use LLM answer
                 </button>
