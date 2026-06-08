@@ -5,6 +5,7 @@ import { db, questions } from '@/server/db';
 import { runWithConcurrency } from '@/server/lib/concurrency';
 import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
 import { verdictToBlockedVisibility } from '@/server/llm/vet-verdict';
+import { isCronAuthorized } from '@/server/auth/cron';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -15,13 +16,6 @@ const BATCH_SIZE = 25;
 // become binding before DB does.
 const VET_CONCURRENCY = 4;
 
-function isAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET;
-  if (!secret) return true;
-  const authHeader = request.headers.get('authorization');
-  return authHeader === `Bearer ${secret}`;
-}
-
 /**
  * Sweeps `Question` rows that are still at `publicStatus = 'not_scored'`
  * (the default) and re-runs the Haiku vetter. The submit route also vets
@@ -29,7 +23,7 @@ function isAuthorized(request: NextRequest): boolean {
  * error or returned `factual: 'unknown'`.
  */
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
