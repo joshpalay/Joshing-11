@@ -83,7 +83,8 @@ export const CONVERGENCE_CAPTIONS = [
   'Turns out you and {Name} think alike.',
   'You and {Name} are on the same wavelength lately.',
   'You and {Name} both knew these.',
-  'The people who get you, getting you — you and {Name}.',
+  'You and {Name} just get each other.',
+  'You and {Name} are clearly on the same page.',
 ] as const;
 
 export function convergenceCaptionTemplate(momentId: string): string {
