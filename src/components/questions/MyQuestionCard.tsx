@@ -1,11 +1,9 @@
 'use client';
 
-import { Lock, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Lock, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
-import { FeedCard } from '@/components/feed/FeedCard';
 import { visibleFeedCategory } from '@/components/feed/category';
-import type { FeedCardBaseItem } from '@/components/feed/types';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { difficultyCopyFromValue } from '@/lib/questions/difficulty-copy';
 import type { QuestionView } from '@/server/db/queries/questions';
@@ -26,7 +24,6 @@ export function MyQuestionCard({
   confirming,
   cardError,
   deleting,
-  onEdit,
   onDeleteRequest,
   onConfirmDelete,
   onCancelConfirm,
@@ -38,26 +35,11 @@ export function MyQuestionCard({
     ? formatAnswerersLine(question.answerers)
     : null;
 
-  const item: FeedCardBaseItem = {
-    id: question.id,
-    metadata: null,
-    question: question.text,
-    category: question.domainDisplayName,
-    viewerIsAuthor: true,
-  };
-
   return (
-    <FeedCard
-      item={item}
-      className={`transition duration-200 ${deleting ? 'scale-[0.98] opacity-0' : 'opacity-100'}`}
-      overflow={
-        <CardOverflowMenu
-          inUse={inUse}
-          onEdit={onEdit}
-          onDelete={onDeleteRequest}
-        />
-      }
-      headerContent={
+    <article
+      className={`flex items-start gap-3 py-4 transition duration-200 ${deleting ? 'scale-[0.98] opacity-0' : 'opacity-100'}`}
+    >
+      <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {visibleCategory ? (
             <span
@@ -79,75 +61,81 @@ export function MyQuestionCard({
             {difficultyLabel}
           </span>
         </div>
-      }
-      footer={
-        <>
+
+        <p className="mt-2 font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
+          <span aria-hidden className="opacity-60">
+            &ldquo;
+          </span>
+          {question.text}
+          <span aria-hidden className="opacity-60">
+            &rdquo;
+          </span>
+        </p>
+
+        <p
+          className="mt-2 text-[13px] leading-snug"
+          style={{ color: 'var(--ink)', opacity: 0.65 }}
+        >
+          {question.timesAnswered} answers · {question.correctRate}% correct · {question.usedInGamesCount} games
+        </p>
+        {answerersLine ? (
           <p
-            className="text-[13px] leading-snug"
+            className="mt-1 text-[13px] leading-snug"
             style={{ color: 'var(--ink)', opacity: 0.65 }}
           >
-            {question.timesAnswered} answers · {question.correctRate}% correct · {question.usedInGamesCount} games
+            {answerersLine}
           </p>
-          {answerersLine ? (
-            <p
-              className="mt-1 text-[13px] leading-snug"
-              style={{ color: 'var(--ink)', opacity: 0.65 }}
-            >
-              {answerersLine}
-            </p>
-          ) : null}
-          {cardError ? (
-            <p className="mt-2 text-[13px] text-destructive">{cardError}</p>
-          ) : null}
+        ) : null}
+        {cardError ? (
+          <p className="mt-2 text-[13px] text-destructive">{cardError}</p>
+        ) : null}
+        {confirming ? (
           <div className="mt-3 flex items-center gap-2">
-            {confirming ? (
-              <>
-                <span
-                  className="mr-auto text-[13px] font-medium"
-                  style={{ color: 'var(--ink)' }}
-                >
-                  Delete this question?
-                </span>
-                <button
-                  className="rounded-md border border-destructive px-3 py-2 text-sm text-destructive"
-                  type="button"
-                  onClick={onConfirmDelete}
-                >
-                  Confirm
-                </button>
-                <button
-                  className="rounded-md border px-3 py-2 text-sm"
-                  type="button"
-                  onClick={onCancelConfirm}
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <div className="ml-auto">
-                <SendQuestionAction
-                  question={{
-                    id: question.id,
-                    text: question.text,
-                    domain: question.domainDisplayName,
-                  }}
-                />
-              </div>
-            )}
+            <span
+              className="mr-auto text-[13px] font-medium"
+              style={{ color: 'var(--ink)' }}
+            >
+              Delete this question?
+            </span>
+            <button
+              className="rounded-md border border-destructive px-3 py-2 text-sm text-destructive"
+              type="button"
+              onClick={onConfirmDelete}
+            >
+              Confirm
+            </button>
+            <button
+              className="rounded-md border px-3 py-2 text-sm"
+              type="button"
+              onClick={onCancelConfirm}
+            >
+              Cancel
+            </button>
           </div>
-        </>
-      }
-    />
+        ) : null}
+      </div>
+
+      <div className="flex shrink-0 flex-col items-center gap-1">
+        <CardOverflowMenu inUse={inUse} onDelete={onDeleteRequest} />
+        <SendQuestionAction
+          question={{
+            id: question.id,
+            text: question.text,
+            domain: question.domainDisplayName,
+          }}
+          label=""
+          className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        />
+      </div>
+    </article>
   );
 }
 
 function CardOverflowMenu({
   inUse,
-  onEdit,
   onDelete,
 }: {
   inUse: boolean;
-  onEdit: () => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -170,7 +158,7 @@ function CardOverflowMenu({
     };
   }, [open]);
 
-  const lockedTitle = 'Used in a game — cannot be edited';
+  const lockedTitle = 'Used in a game — cannot be deleted';
 
   return (
     <div className="relative" ref={containerRef}>
@@ -181,7 +169,7 @@ function CardOverflowMenu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((current) => !current)}
-        className="-mr-1 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
         <MoreHorizontal className="size-4" />
       </button>
@@ -191,20 +179,6 @@ function CardOverflowMenu({
           role="menu"
           className="absolute right-0 top-full z-30 mt-1 w-44 rounded-md border bg-background p-1 shadow-md"
         >
-          <button
-            type="button"
-            role="menuitem"
-            disabled={inUse}
-            title={inUse ? lockedTitle : undefined}
-            onClick={() => {
-              setOpen(false);
-              onEdit();
-            }}
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {inUse ? <Lock className="size-4" /> : <Pencil className="size-4" />}
-            Edit
-          </button>
           <button
             type="button"
             role="menuitem"

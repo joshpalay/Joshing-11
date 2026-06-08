@@ -363,7 +363,7 @@ function QuestionsPageContent() {
               </button>
             </section>
           ) : (
-            <section className="space-y-3">
+            <section className="divide-y divide-border border-t border-border">
               {filteredQuestions.map((question) => (
                 <MyQuestionCard
                   key={question.id}
