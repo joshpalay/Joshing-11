@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
 import { answerHeadingStyle } from '@/components/answer-heading';
 import { EditorialBadge } from '@/components/EditorialBadge';
+import { ThreadCard } from '@/components/play/ThreadCard';
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
 import { NewTerritoryUndo } from '@/components/feed/NewTerritoryUndo';
 import {
@@ -144,6 +145,20 @@ const monoStyle: CSSProperties = {
   fontSize: '0.65rem',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
+};
+
+// The quiet eyebrow label that opens a result/answer-reveal card — small, mono,
+// letter-spaced (e.g. "✓ Locked in", "The answer"). Tone color is applied per
+// card so the answer beneath it stays the focal point.
+const verdictLabelStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '0.7rem',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.12em',
 };
 
 // The answer, repeated as a prominent serif headline on the result card —
@@ -519,69 +534,23 @@ function UserRow({ text }: { text: string }) {
   );
 }
 
-function BreadcrumbLine({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
-  const author = creatorName?.trim() ?? null;
-  // House is non-relational like the LLM origin: no "From {firstName}." line.
-  const isBot = creatorIsHouse || isLlmAttribution(author);
-  const showAuthor = author && !isBot;
+// The explainer that sits directly beneath the revealed answer. Plain, readable
+// secondary text — no quote-block inset, no decorative italics — so the answer
+// stays the focal point and the card reads as a thread object, not an article
+// (mirrors the screenshot treatment: label → answer → plain explainer).
+function ExplainerLine({ text }: { text: string }) {
   return (
-    <div
+    <p
       style={{
-        marginTop: '9px',
-        borderLeft: '2px solid color-mix(in srgb, var(--text) 20%, transparent)',
-        paddingLeft: '8px',
+        marginTop: '8px',
+        fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+        fontSize: '0.92rem',
+        color: 'color-mix(in srgb, var(--text-muted) 35%, var(--text))',
+        lineHeight: 1.5,
       }}
     >
-      {showAuthor ? (
-        <p
-          style={{
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-            fontSize: '0.7rem',
-            fontStyle: 'italic',
-            color: 'var(--text-muted)',
-          }}
-        >
-          From {firstNameFrom(author!)}.
-        </p>
-      ) : null}
-      <p
-        style={{
-          marginTop: showAuthor ? '2px' : '0',
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.782rem',
-          fontStyle: 'italic',
-          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          opacity: 0.78,
-          lineHeight: 1.46,
-        }}
-      >
-        &ldquo;{text}&rdquo;
-      </p>
-    </div>
-  );
-}
-
-function ExplanationLine({ text }: { text: string }) {
-  return (
-    <div
-      style={{
-        marginTop: '9px',
-        borderLeft: '2px solid color-mix(in srgb, var(--text) 20%, transparent)',
-        paddingLeft: '8px',
-      }}
-    >
-      <p
-        style={{
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.765rem',
-          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          opacity: 0.78,
-          lineHeight: 1.51,
-        }}
-      >
-        {text}
-      </p>
-    </div>
+      {text}
+    </p>
   );
 }
 
@@ -760,17 +729,7 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
 
 function AuthorNoteCard({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
   return (
-    <div
-      style={{
-        marginTop: '8px',
-        width: '100%',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border)',
-        background: 'var(--surface-2)',
-        padding: '10px 14px',
-        color: 'var(--text)',
-      }}
-    >
+    <ThreadCard border="var(--border)" fill="var(--surface-2)" style={{ marginTop: '8px' }}>
       <p
         style={{
           ...monoStyle,
@@ -805,7 +764,7 @@ function AuthorNoteCard({ text, creatorName, creatorIsHouse = false }: { text: s
       >
         {text}
       </p>
-    </div>
+    </ThreadCard>
   );
 }
 
@@ -881,20 +840,17 @@ function ResultRow({
   const expired = result === 'expired';
   const correct = result === 'correct';
   const gaveUp = result === 'gave_up';
-  const hasExplainer = Boolean(breadcrumb || explanation);
-  // The live thread shows at most ONE supplementary card beneath the verdict, so
-  // the conversation keeps momentum and never stacks repetitive explanation. The
-  // fuller creator note + factual explainer always remain in the End of Session
-  // Review, so nothing is lost.
-  //   • Correct  → a light reflection only — the social "Between us!" wink is
-  //                preferred over the creator note, and the long explainer is
-  //                deferred entirely to the review.
-  //   • Wrong/etc → discovery is preserved: the wink still wins when present,
-  //                 otherwise the explainer carries the teaching moment, with the
-  //                 creator note as the final fallback.
-  const liveSupplement: 'joke' | 'note' | 'explainer' | null = correct
-    ? (insideJoke ? 'joke' : authorNote ? 'note' : null)
-    : (insideJoke ? 'joke' : hasExplainer ? 'explainer' : authorNote ? 'note' : null);
+  const explainerText = breadcrumb ?? explanation ?? null;
+  // What sits beneath the revealed answer in the live thread:
+  //   • Correct  → keep momentum: one light reflection only (the "Between us!"
+  //                wink preferred over the creator note), explainer deferred to
+  //                the End of Session Review.
+  //   • Wrong / gave-up / expired → discovery: a plain one-sentence explainer
+  //                directly under the answer, with the "Between us!" wink below
+  //                it when one exists. The longer creator note goes to review.
+  const showInlineExplainer = !correct && Boolean(explainerText);
+  const showJokeCard = Boolean(insideJoke);
+  const showNoteCard = correct && !insideJoke && Boolean(authorNote);
   const requestRecheck = useCallback(async () => {
     if (!recheckAction || recheckState === 'submitting') return;
     setRecheckState('submitting');
@@ -912,58 +868,47 @@ function ResultRow({
     }
   }, [recheckAction, recheckState]);
 
-  // Color-coded left border per the Figma result cards (green "nailed it",
-  // red "not quite"); neutral for expired/gave-up.
-  const resultToneStyle: CSSProperties = expired
-    ? {
-      background: 'var(--surface-2)',
-      border: '1px solid var(--border)',
-      borderLeft: '3px solid var(--border)',
-    }
+  // Verdict tone as accent only — the shared ThreadCard shell supplies the
+  // radius/padding/border family; the result card varies by a color-coded left
+  // rail (green "nailed it", terracotta "not quite") and a faint matching tint.
+  const tone = expired
+    ? { rail: 'var(--border)', border: 'var(--border)', fill: 'var(--surface-2)' }
     : correct
       ? {
-        // Figma Correct (#366045) — forest green, lighter card body than the
-        // vivid --success used elsewhere.
-        background: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
-        border: '1px solid color-mix(in srgb, var(--game-correct) 26%, var(--border))',
-        borderLeft: '3px solid var(--game-correct)',
+        rail: 'var(--game-correct)',
+        border: 'color-mix(in srgb, var(--game-correct) 26%, var(--border))',
+        fill: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
       }
       : gaveUp
         ? {
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
-          borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
+          rail: 'color-mix(in srgb, var(--brand-ink) 35%, transparent)',
+          border: 'var(--border)',
+          fill: 'var(--surface-2)',
         }
         : {
-          // Figma text/wrong (#c96b4a) body + game/wrong/in-question (#c33d14) bar.
-          background: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
-          border: '1px solid color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
-          borderLeft: '3px solid var(--game-wrong-strong)',
+          rail: 'var(--game-wrong-strong)',
+          border: 'color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
+          fill: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
         };
 
   return (
     <div className="flex flex-col gap-0 pt-0.5" style={{ alignItems: 'flex-start', maxWidth: THREAD_CARD_MAX_WIDTH }}>
-      <div
-        style={{
-          ...resultToneStyle,
-          borderRadius: 'var(--radius-md)',
-          padding: '10px 14px',
-          fontSize: '0.81rem',
-          color: 'var(--text)',
-          opacity: 0.92,
-          lineHeight: 1.36,
-          width: '100%',
-        }}
+      <ThreadCard
+        rail={tone.rail}
+        border={tone.border}
+        fill={tone.fill}
+        style={{ fontSize: '0.81rem', lineHeight: 1.36 }}
       >
         {expired ? (
           <span style={{ color: 'var(--text-muted)' }}>This one wasn&apos;t recorded in time.</span>
         ) : correct ? (
           <>
-            {/* Compact, calm success moment: verdict line, the correct answer
-                repeated immediately (even on a right answer), then the light
-                "common ground" beat. The fuller explanation lives in review. */}
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-correct)', fontWeight: 600 }}>
-              <span style={{ color: 'var(--game-correct)', marginRight: '6px' }}>✓</span>
+            {/* Compact, calm success moment: quiet verdict label, the correct
+                answer repeated immediately (even on a right answer) as the focal
+                point, then the light "common ground" beat. The fuller
+                explanation lives in the End of Session Review. */}
+            <p style={{ ...verdictLabelStyle, color: 'var(--game-correct)' }}>
+              <span aria-hidden>✓</span>
               Locked in.
             </p>
             {correctAnswer ? (
@@ -973,7 +918,7 @@ function ResultRow({
             ) : null}
             <p
               style={{
-                marginTop: '6px',
+                marginTop: '8px',
                 fontFamily: 'var(--font-mono)',
                 fontSize: '0.62rem',
                 letterSpacing: '0.04em',
@@ -985,25 +930,14 @@ function ResultRow({
           </>
         ) : gaveUp ? (
           <>
-            <p
-              style={{
-                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-                fontSize: '0.82rem',
-                color: 'var(--text-muted)',
-              }}
-            >
-              <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>—</span>
-              For the record.
+            {/* Answer-reveal after "show me the answer": quiet label, the answer
+                as the focal point, then a plain explainer below (no quote-block,
+                no editorial italics). */}
+            <p style={{ ...verdictLabelStyle, color: 'var(--text-muted)' }}>
+              The answer
             </p>
             {correctAnswer ? (
-              <p
-                style={{
-                  marginTop: '6px',
-                  fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-                  fontSize: '0.95rem',
-                  color: 'var(--text)',
-                }}
-              >
+              <p style={{ ...answerHeadingStyle, marginTop: '8px', fontSize: '1.85rem', color: 'var(--brand-ink)' }}>
                 {correctAnswer}
               </p>
             ) : null}
@@ -1011,7 +945,7 @@ function ResultRow({
         ) : (
           <>
             <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-wrong-strong)', fontWeight: 600 }}>
-              <span style={{ color: 'var(--game-wrong-strong)', marginRight: '6px' }}>✕</span>
+              <span aria-hidden style={{ marginRight: '6px' }}>✕</span>
               {wrongHeadline(copyVariant)}
             </p>
             {correctAnswer ? (
@@ -1098,29 +1032,19 @@ function ResultRow({
             ) : null}
           </>
         )}
-        {liveSupplement === 'explainer'
-          ? (breadcrumb
-              ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
-              : explanation ? <ExplanationLine text={explanation} /> : null)
-          : null}
+        {showInlineExplainer && explainerText ? <ExplainerLine text={explainerText} /> : null}
         {typeof pointsAwarded === 'number' ? (
           <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
             {pointsLabel ? ` - ${pointsLabel}` : ''}
           </p>
         ) : null}
-      </div>
-      {liveSupplement === 'joke' && insideJoke ? (
-        <div
-          style={{
-            marginTop: '8px',
-            width: '100%',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid color-mix(in srgb, var(--tri-amber) 40%, var(--border))',
-            background: 'color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))',
-            padding: '10px 14px',
-            color: 'var(--text)',
-          }}
+      </ThreadCard>
+      {showJokeCard && insideJoke ? (
+        <ThreadCard
+          border="color-mix(in srgb, var(--tri-amber) 40%, var(--border))"
+          fill="color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))"
+          style={{ marginTop: '8px' }}
         >
           <p
             style={{
@@ -1145,9 +1069,9 @@ function ResultRow({
           >
             {insideJoke}
           </p>
-        </div>
+        </ThreadCard>
       ) : null}
-      {liveSupplement === 'note' && authorNote
+      {showNoteCard && authorNote
         ? <AuthorNoteCard text={authorNote} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
         : null}
       {correct && openedTerritoryDomain ? (
@@ -1168,16 +1092,11 @@ function SessionCloseRow({
   summaryHref?: string;
 }) {
   return (
-    <div
+    <ThreadCard
       className="mt-4"
-      style={{
-        alignSelf: 'flex-start',
-        maxWidth: THREAD_CARD_MAX_WIDTH,
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border)',
-        background: 'var(--surface-2)',
-        padding: '14px 16px',
-      }}
+      border="var(--border)"
+      fill="var(--surface-2)"
+      style={{ maxWidth: THREAD_CARD_MAX_WIDTH }}
     >
       <SessionCloseMessage scoreLine={scoreLine} interpretiveLine={interpretiveLine} />
       {summaryHref ? (
@@ -1187,7 +1106,7 @@ function SessionCloseRow({
           </Link>
         </div>
       ) : null}
-    </div>
+    </ThreadCard>
   );
 }
 

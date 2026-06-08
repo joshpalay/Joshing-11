@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 
+import { ThreadCard } from '@/components/play/ThreadCard';
 import {
   TERRITORY_FREQUENCIES,
   TERRITORY_FREQUENCY_LABEL,
@@ -67,70 +68,83 @@ export function NewTerritoryUndo({
   };
 
   return (
-    <div
-      className="mt-3 rounded-2xl border px-4 py-3"
-      style={{
-        backgroundColor: 'color-mix(in srgb, var(--tri-amber) 10%, var(--brand-card))',
-        borderColor: 'color-mix(in srgb, var(--tri-amber) 40%, var(--brand-border))',
-      }}
+    <ThreadCard
+      rail="var(--tri-amber)"
+      border="color-mix(in srgb, var(--tri-amber) 32%, var(--brand-rule))"
+      fill="color-mix(in srgb, var(--tri-amber) 7%, var(--brand-card))"
+      style={{ marginTop: '8px' }}
     >
-      <div className="flex items-start gap-2.5">
-        <span
-          className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full"
-          style={{
-            backgroundColor: 'color-mix(in srgb, var(--tri-amber) 18%, var(--brand-card))',
-            color: GOLD_INK,
-          }}
-          aria-hidden
-        >
-          <Sparkles className="size-3.5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="font-serif text-sm leading-snug font-semibold" style={{ color: GOLD_INK }}>
-            Added {label} to your knowledge base.
-          </p>
-          <p className="mt-1 text-[13px] text-[var(--brand-ink)]">How often should it come up?</p>
+      {/* Quiet label — same eyebrow rhythm as the result cards. */}
+      <p
+        className="flex items-center gap-1.5"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.6rem',
+          fontWeight: 700,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          color: GOLD_INK,
+        }}
+      >
+        <Sparkles className="size-3" aria-hidden />
+        Knowledge updated
+      </p>
 
-          <div
-            className="mt-2 flex flex-wrap gap-1.5"
-            role="group"
-            aria-label={`How often to ask about ${label}`}
-          >
-            {TERRITORY_FREQUENCIES.map((frequency) => {
-              const isSelected = frequency === selected;
-              return (
-                <button
-                  key={frequency}
-                  type="button"
-                  onClick={() => void handleSelect(frequency)}
-                  disabled={busy}
-                  aria-pressed={isSelected}
-                  className="rounded-full border px-3 py-1 text-[13px] font-semibold transition-opacity disabled:opacity-60"
-                  style={{
-                    color: isSelected ? 'var(--brand-card)' : GOLD_INK,
-                    backgroundColor: isSelected
-                      ? GOLD_INK
-                      : 'color-mix(in srgb, var(--tri-amber) 12%, var(--brand-card))',
-                    borderColor: 'color-mix(in srgb, var(--tri-amber) 40%, var(--brand-border))',
-                  }}
-                >
-                  {TERRITORY_FREQUENCY_LABEL[frequency]}
-                </button>
-              );
-            })}
-          </div>
+      {/* Primary message — the dominant, clearest line in the card. */}
+      <p
+        className="mt-1.5 font-serif font-semibold"
+        style={{ fontSize: '1.02rem', lineHeight: 1.35, color: 'var(--brand-ink)' }}
+      >
+        Added {label} to your knowledge base.
+      </p>
 
-          <p className="mt-1.5 text-[13px] text-[var(--brand-ink-400)]">
-            {busy ? 'Saving…' : FREQUENCY_HINT[selected]}
-          </p>
+      {/* Secondary prompt — clearly subordinate to the message above. */}
+      <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+        How often should this show up?
+      </p>
 
-          {error ? (
-            <p className="mt-1.5 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>
-              Could not update it. Try again.
-            </p>
-          ) : null}
-        </div>
+      <div
+        className="mt-2 flex flex-wrap gap-1.5"
+        role="group"
+        aria-label={`How often to ask about ${label}`}
+      >
+        {TERRITORY_FREQUENCIES.map((frequency) => {
+          const isSelected = frequency === selected;
+          return (
+            <button
+              key={frequency}
+              type="button"
+              onClick={() => void handleSelect(frequency)}
+              disabled={busy}
+              aria-pressed={isSelected}
+              className="inline-flex min-h-9 items-center rounded-full border px-3.5 text-[13px] transition-colors disabled:opacity-60"
+              style={{
+                fontWeight: isSelected ? 700 : 500,
+                color: isSelected ? GOLD_INK : 'var(--text-muted)',
+                backgroundColor: isSelected
+                  ? 'color-mix(in srgb, var(--tri-amber) 20%, var(--brand-card))'
+                  : 'transparent',
+                borderColor: isSelected
+                  ? 'color-mix(in srgb, var(--tri-amber) 55%, var(--brand-border))'
+                  : 'var(--brand-rule)',
+              }}
+            >
+              {TERRITORY_FREQUENCY_LABEL[frequency]}
+            </button>
+          );
+        })}
       </div>
-    </div>
+
+      {/* Helper text — clearly tertiary: small, quiet, but not faint. */}
+      <p className="mt-2 text-xs" style={{ color: 'var(--brand-ink-400)' }}>
+        {busy ? 'Saving…' : FREQUENCY_HINT[selected]}
+      </p>
+
+      {error ? (
+        <p className="mt-1.5 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>
+          Could not update it. Try again.
+        </p>
+      ) : null}
+    </ThreadCard>
   );
 }

@@ -72,6 +72,37 @@ describe('GameplayChat correct-answer treatment (D-5 live thread)', () => {
     expect(rendered).toContain('Bach wrote it for harpsichord around 1741.');
   });
 
+  it('renders the answer-reveal card with a quiet label, the answer, and a plain explainer', () => {
+    const rendered = html([
+      resultMessage({
+        result: 'gave_up',
+        submitted: '',
+        explanation: 'Angiosperms are divided into monocots and dicots.',
+      }),
+    ]);
+    // Quiet label instead of the old editorial "For the record." intro.
+    expect(rendered).toContain('The answer');
+    expect(rendered).not.toContain('For the record.');
+    expect(rendered).toContain('Johann Sebastian Bach');
+    // Plain explainer, not wrapped in the old quote-block curly quotes.
+    expect(rendered).toContain('Angiosperms are divided into monocots and dicots.');
+    expect(rendered).not.toContain('“Angiosperms');
+  });
+
+  it('keeps the explainer and shows the "Between us!" wink below it on a discovery reveal', () => {
+    const rendered = html([
+      resultMessage({
+        result: 'wrong',
+        submitted: 'Handel',
+        explanation: 'Bach wrote it around 1741.',
+        insideJoke: 'Told you to study.',
+        insideJokeKind: 'editorial',
+      }),
+    ]);
+    expect(rendered).toContain('Bach wrote it around 1741.');
+    expect(rendered).toContain('Told you to study.');
+  });
+
   it('left-aligned cards share the single play-thread width token', () => {
     const rendered = html([
       { id: 'q1', kind: 'question', assignmentId: 'a1', questionText: 'Q?', creatorName: null },
