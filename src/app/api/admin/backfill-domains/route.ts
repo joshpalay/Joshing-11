@@ -3,18 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { db, users } from '@/server/db';
 import { runAggressiveDomainBackfillForUser } from '@/server/mastery/ceremony';
+import { isCronAuthorized } from '@/server/auth/cron';
 
 export const dynamic = 'force-dynamic';
-
-function isAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET;
-  if (!secret) return true;
-  return (
-    request.headers.get('cron_secret') === secret ||
-    request.headers.get('x-cron-secret') === secret ||
-    request.headers.get('authorization') === `Bearer ${secret}`
-  );
-}
 
 type PerUserResult = {
   userId: string;
@@ -24,7 +15,7 @@ type PerUserResult = {
 };
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

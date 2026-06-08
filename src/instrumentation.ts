@@ -1176,6 +1176,23 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0072 (B-FirstRecap-1) adds the nullable
+    // User.first_session_recap_seen_at timestamp. The first-session recap
+    // orchestrator (GET /api/daily/first-session-recap) and the seen-marker
+    // (POST .../seen) both read/write it on the post-summary path, so a
+    // preview/production database with the migration recorded but the column
+    // missing would 42703 before migrate() could repair it. Additive nullable
+    // column with no default — pre-apply it idempotently.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "first_session_recap_seen_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),

@@ -239,10 +239,10 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
           </p>
         ) : null}
         {resendNotice ? (
-          <p className="mt-2 text-xs text-emerald-700">{resendNotice}</p>
+          <p className="mt-2 text-xs text-[var(--success)]">{resendNotice}</p>
         ) : null}
         {emailError ? (
-          <p className="mt-2 text-xs text-rose-700">{emailError}</p>
+          <p className="mt-2 text-xs text-destructive">{emailError}</p>
         ) : null}
       </section>
 

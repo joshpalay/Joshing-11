@@ -614,7 +614,7 @@ export function QuestionForm({
 
           {state.llmSuggestedAnswer ? (
             verified ? (
-              <p className="text-sm text-emerald-700">✓ Verified — matches LLM suggestion</p>
+              <p className="text-sm text-[var(--success)]">✓ Verified — matches LLM suggestion</p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-sm text-amber-700">⚠ Unverified — your answer differs from the LLM&apos;s suggestion. Recipients will see this.</p>

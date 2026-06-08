@@ -18,7 +18,11 @@ type Beat2 = {
 };
 type Beat3 = { userId: string; displayName: string; contributionCount: number }[];
 type Beat4 = { userId: string; displayName: string; sharedDomains: string[] };
-type Beat5 = { totalCreatorPoints: number; topQuestion: { text: string; answeredCount: number } | null };
+type Beat5 = {
+  totalCreatorPoints: number;
+  topQuestion: { text: string; answeredCount: number } | null;
+};
+type Beat6 = { domain: string; questionText: string; correctAnswer: string }[];
 type Beat1FriendFallback = { friendName: string; count: number; domains: string[] };
 type Beat5FriendFallback = { friendName: string; totalCreatorPoints: number };
 
@@ -35,6 +39,7 @@ type BeatsPayload = {
   beat4: Beat4 | null;
   beat5: Beat5 | null;
   beat5FriendFallback?: Beat5FriendFallback | null;
+  beat6?: Beat6 | null;
 };
 
 type CeremonyRow = {
@@ -49,7 +54,8 @@ type BeatView =
   | { id: 3; content: Beat3 }
   | { id: 4; content: Beat4 }
   | { id: 5; content: Beat5 }
-  | { id: '5-friend'; content: Beat5FriendFallback };
+  | { id: '5-friend'; content: Beat5FriendFallback }
+  | { id: 6; content: Beat6 };
 
 function joinList(values: string[]) {
   if (values.length <= 2) return values.join(' and ');
@@ -67,6 +73,32 @@ const TIER_SCALE: Record<MasteryTier, number> = {
   mastery: 1,
 };
 
+type CeremonyCircleColor = {
+  core: string;
+  mid: string;
+  rim: string;
+  glow: string;
+};
+
+const CEREMONY_CIRCLE_COLORS: CeremonyCircleColor[] = [
+  { core: '#ffe6a3', mid: '#f6b94a', rim: '#c96f1e', glow: '#f6b94a' },
+  { core: '#c6f4ff', mid: '#56c7e8', rim: '#137ca7', glow: '#56c7e8' },
+  { core: '#f0d0ff', mid: '#b675f0', rim: '#7143bc', glow: '#b675f0' },
+  { core: '#c8ffd8', mid: '#5fd38a', rim: '#23865a', glow: '#5fd38a' },
+  { core: '#ffd2df', mid: '#f06d94', rim: '#b72f62', glow: '#f06d94' },
+  { core: '#d9e5ff', mid: '#779df2', rim: '#355cb8', glow: '#779df2' },
+  { core: '#ffe2c3', mid: '#f29a4b', rim: '#b95b21', glow: '#f29a4b' },
+  { core: '#d8fff8', mid: '#5bd4c5', rim: '#208a80', glow: '#5bd4c5' },
+];
+
+function ceremonyCircleColor(domain: string): CeremonyCircleColor {
+  let hash = 0;
+  for (let i = 0; i < domain.length; i += 1) {
+    hash = ((hash << 5) - hash + domain.charCodeAt(i)) | 0;
+  }
+  return CEREMONY_CIRCLE_COLORS[Math.abs(hash) % CEREMONY_CIRCLE_COLORS.length]!;
+}
+
 function CeremonyCircle({
   domain,
   size = 72,
@@ -76,7 +108,8 @@ function CeremonyCircle({
   size?: number;
   scale?: number;
 }) {
-  const color = getPortraitDomainColor(domain);
+  const color = ceremonyCircleColor(domain);
+  const fallbackColor = getPortraitDomainColor(domain);
   const circleSize = Math.round(size * scale);
   return (
     <span
@@ -89,8 +122,9 @@ function CeremonyCircle({
         style={{
           width: circleSize,
           height: circleSize,
-          background: `radial-gradient(circle at 38% 38%, ${color.light.replace('0.12', '0.3')}, ${color.light})`,
-          border: `1px solid ${color.primary}55`,
+          background: `radial-gradient(circle at 34% 28%, ${color.core} 0%, ${color.mid} 44%, ${color.rim} 100%)`,
+          border: `1px solid color-mix(in srgb, ${color.core} 62%, ${fallbackColor.primary} 38%)`,
+          boxShadow: `0 0 ${Math.max(42, Math.round(circleSize * 0.95))}px ${color.glow}88, 0 0 ${Math.max(68, Math.round(circleSize * 1.45))}px ${color.glow}44, inset -10px -12px 22px rgba(0,0,0,0.22), inset 7px 7px 18px rgba(255,255,255,0.3)`,
         }}
       />
     </span>
@@ -100,12 +134,15 @@ function CeremonyCircle({
 function beatViews(payload: BeatsPayload): BeatView[] {
   const views: BeatView[] = [];
   if (payload.beat1) views.push({ id: 1, content: payload.beat1 });
-  else if (payload.beat1FriendFallback) views.push({ id: '1-friend', content: payload.beat1FriendFallback });
+  else if (payload.beat1FriendFallback)
+    views.push({ id: '1-friend', content: payload.beat1FriendFallback });
   if (payload.beat2) views.push({ id: 2, content: payload.beat2 });
+  if (payload.beat6) views.push({ id: 6, content: payload.beat6 });
   if (payload.beat3) views.push({ id: 3, content: payload.beat3 });
   if (payload.beat4) views.push({ id: 4, content: payload.beat4 });
   if (payload.beat5) views.push({ id: 5, content: payload.beat5 });
-  else if (payload.beat5FriendFallback) views.push({ id: '5-friend', content: payload.beat5FriendFallback });
+  else if (payload.beat5FriendFallback)
+    views.push({ id: '5-friend', content: payload.beat5FriendFallback });
   return views;
 }
 
@@ -118,7 +155,8 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
           {friendName} leveled up this week.
         </h1>
         <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-          You didn&rsquo;t cross a tier this week. {friendName} crossed {count} in {joinList(domains)}.
+          You didn&rsquo;t cross a tier this week. {friendName} crossed {count} in{' '}
+          {joinList(domains)}.
         </p>
       </div>
     );
@@ -131,7 +169,8 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
           {beat.content.friendName} taught the room.
         </h1>
         <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-          You didn&rsquo;t earn author credit this week. {beat.content.friendName}&rsquo;s questions earned {beat.content.totalCreatorPoints} points for others.
+          You didn&rsquo;t earn author credit this week. {beat.content.friendName}&rsquo;s questions
+          earned {beat.content.totalCreatorPoints} points for others.
         </p>
       </div>
     );
@@ -140,15 +179,22 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
   if (beat.id === 1) {
     return (
       <div className="mx-auto max-w-2xl text-center">
-        <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">You leveled up.</h1>
+        <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
+          You leveled up.
+        </h1>
         <div className="mx-auto mt-10 grid max-w-xl gap-4 text-left">
           {beat.content.map((crossing) => (
             <div key={`${crossing.domain}-${crossing.toTier}`} className="flex items-center gap-4">
-              <CeremonyCircle domain={crossing.domain} size={74} scale={TIER_SCALE[crossing.toTier]} />
+              <CeremonyCircle
+                domain={crossing.domain}
+                size={74}
+                scale={TIER_SCALE[crossing.toTier]}
+              />
               <div>
                 <p className="font-serif text-xl font-semibold text-stone-50">{crossing.domain}</p>
-                <p className="mt-1 text-xs uppercase tracking-[0.16em] text-stone-400">
-                  {KNOWLEDGE_TIER_LABEL[crossing.fromTier]} {'->'} {KNOWLEDGE_TIER_LABEL[crossing.toTier]}
+                <p className="mt-1 text-xs tracking-[0.16em] text-stone-400 uppercase">
+                  {KNOWLEDGE_TIER_LABEL[crossing.fromTier]} {'->'}{' '}
+                  {KNOWLEDGE_TIER_LABEL[crossing.toTier]}
                 </p>
               </div>
             </div>
@@ -165,17 +211,29 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
       <div className="mx-auto max-w-3xl space-y-16 text-center">
         {friendMediated.length > 0 && (
           <div>
-            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">You went somewhere new.</h1>
+            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
+              You went somewhere new.
+            </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-              Through your friends, you picked up {friendTotal} {questionLabel(friendTotal)} in {joinList(friendMediated.map((item) => item.domain))}.
+              Through your friends, you picked up {friendTotal} {questionLabel(friendTotal)} in{' '}
+              {joinList(friendMediated.map((item) => item.domain))}.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-5">
               {friendMediated.map((item) => (
                 <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
-                  <CeremonyCircle domain={item.domain} size={88} scale={Math.min(1, 0.45 + item.correctCount / Math.max(item.questionCount, 1) * 0.45)} />
+                  <CeremonyCircle
+                    domain={item.domain}
+                    size={88}
+                    scale={Math.min(
+                      1,
+                      0.45 + (item.correctCount / Math.max(item.questionCount, 1)) * 0.45,
+                    )}
+                  />
                   <div>
-                    <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.14em] text-stone-400">
+                    <p className="font-serif text-base font-semibold text-stone-50">
+                      {item.domain}
+                    </p>
+                    <p className="mt-1 text-xs tracking-[0.14em] text-stone-400 uppercase">
                       {item.correctCount}/{item.questionCount}
                     </p>
                   </div>
@@ -186,16 +244,22 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
         )}
         {authored.length > 0 && (
           <div>
-            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">You staked new territory.</h1>
+            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
+              You staked new territory.
+            </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-              You wrote questions that opened {authored.length === 1 ? 'a new domain' : `${authored.length} new domains`}: {joinList(authored.map((item) => item.domain))}.
+              You wrote questions that opened{' '}
+              {authored.length === 1 ? 'a new domain' : `${authored.length} new domains`}:{' '}
+              {joinList(authored.map((item) => item.domain))}.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-5">
               {authored.map((item) => (
                 <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
                   <CeremonyCircle domain={item.domain} size={88} scale={0.35} />
                   <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
-                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-stone-400">Declared</p>
+                  <p className="mt-1 text-xs tracking-[0.14em] text-stone-400 uppercase">
+                    Declared
+                  </p>
                 </div>
               ))}
             </div>
@@ -203,16 +267,21 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
         )}
         {promoted.length > 0 && (
           <div>
-            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">Your territory came to life.</h1>
+            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
+              Your territory came to life.
+            </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-              A friend answered your questions and proved your knowledge in {joinList(promoted.map((item) => item.domain))}.
+              A friend answered your questions and proved your knowledge in{' '}
+              {joinList(promoted.map((item) => item.domain))}.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-5">
               {promoted.map((item) => (
                 <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
                   <CeremonyCircle domain={item.domain} size={88} scale={0.7} />
                   <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
-                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-stone-400">Demonstrated</p>
+                  <p className="mt-1 text-xs tracking-[0.14em] text-stone-400 uppercase">
+                    Demonstrated
+                  </p>
                 </div>
               ))}
             </div>
@@ -222,17 +291,46 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
     );
   }
 
+  if (beat.id === 6) {
+    return (
+      <div className="mx-auto max-w-3xl text-center">
+        <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
+          Something you learned this week.
+        </h1>
+        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+          You missed {beat.content.length === 1 ? 'this' : 'these'}, came back, and got{' '}
+          {beat.content.length === 1 ? 'it' : 'them'} right.
+        </p>
+        <div className="mx-auto mt-10 grid max-w-2xl gap-5 text-left">
+          {beat.content.map((item, index) => (
+            <div key={`${item.domain}-${index}`} className="flex items-start gap-4">
+              <CeremonyCircle domain={item.domain} size={56} scale={0.85} />
+              <div className="min-w-0">
+                <p className="font-serif text-lg leading-7 font-semibold text-stone-50">
+                  {item.questionText}
+                </p>
+                <p className="mt-1 text-base text-stone-300">{item.correctAnswer}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (beat.id === 3) {
-    const heading = mode === 'solo'
-      ? 'Questions that shaped your cycle.'
-      : 'These people gave you a chance to learn more.';
+    const heading =
+      mode === 'solo'
+        ? 'Questions that shaped your cycle.'
+        : 'These people gave you a chance to learn more.';
     return (
       <div className="mx-auto max-w-2xl text-center">
         <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">{heading}</h1>
         <div className="mt-10 space-y-4 text-lg text-stone-200 sm:text-xl">
           {beat.content.map((contributor) => (
             <p key={contributor.userId}>
-              {contributor.displayName} contributed {contributor.contributionCount} {questionLabel(contributor.contributionCount)}.
+              {contributor.displayName} contributed {contributor.contributionCount}{' '}
+              {questionLabel(contributor.contributionCount)}.
             </p>
           ))}
         </div>
@@ -255,7 +353,9 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
 
   return (
     <div className="mx-auto max-w-2xl text-center">
-      <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">You taught people things.</h1>
+      <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
+        You taught people things.
+      </h1>
       <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
         Your questions earned {beat.content.totalCreatorPoints} points for others this week.
       </p>
@@ -294,16 +394,19 @@ export default function CeremonyPage() {
         if (!cancelled) setCeremony(body.ceremony);
       })
       .catch((caught) => {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : 'Could not load this ceremony.');
+        if (!cancelled)
+          setError(caught instanceof Error ? caught.message : 'Could not load this ceremony.');
       });
 
-    fetch(`/api/ceremony/${ceremonyId}/viewed`, { method: 'POST', credentials: 'include' }).catch(() => undefined);
+    fetch(`/api/ceremony/${ceremonyId}/viewed`, { method: 'POST', credentials: 'include' }).catch(
+      () => undefined,
+    );
     return () => {
       cancelled = true;
     };
   }, [ceremonyId]);
 
-  const beats = useMemo(() => ceremony ? beatViews(ceremony.beatsPayload) : [], [ceremony]);
+  const beats = useMemo(() => (ceremony ? beatViews(ceremony.beatsPayload) : []), [ceremony]);
   const isEnd = currentIndex >= beats.length;
 
   function advance() {
@@ -385,7 +488,7 @@ export default function CeremonyPage() {
       <button
         type="button"
         aria-label="Exit"
-        className="absolute right-5 top-[max(1.25rem,env(safe-area-inset-top))] z-20 grid size-11 place-items-center rounded-full text-stone-300 transition hover:bg-white/10 hover:text-stone-50"
+        className="absolute top-[max(1.25rem,env(safe-area-inset-top))] right-5 z-20 grid size-11 place-items-center rounded-full text-stone-300 transition hover:bg-white/10 hover:text-stone-50"
         onClick={(event) => {
           event.stopPropagation();
           exit();
@@ -396,7 +499,9 @@ export default function CeremonyPage() {
       <div className="relative z-10 w-full">
         {isEnd ? (
           <div className="mx-auto max-w-2xl text-center">
-            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">That&rsquo;s your week.</h1>
+            <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
+              That&rsquo;s your week.
+            </h1>
             <p className="mt-8 text-lg text-stone-200 sm:text-xl">See you next Sunday.</p>
             <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
               <button
@@ -490,13 +595,17 @@ export default function CeremonyPage() {
 
       {!isEnd && beats.length > 0 ? (
         <div
-          className="absolute left-0 right-0 z-10 flex justify-center gap-2"
+          className="absolute right-0 left-0 z-10 flex justify-center gap-2"
           style={{ bottom: 'max(1.75rem, env(safe-area-inset-bottom))' }}
         >
           {beats.map((beat, index) => (
             <span
               key={beat.id}
-              className={index === currentIndex ? 'h-2 w-8 rounded-full bg-stone-50' : 'h-2 w-2 rounded-full bg-stone-500'}
+              className={
+                index === currentIndex
+                  ? 'h-2 w-8 rounded-full bg-stone-50'
+                  : 'h-2 w-2 rounded-full bg-stone-500'
+              }
             />
           ))}
         </div>

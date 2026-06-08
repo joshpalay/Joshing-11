@@ -7,16 +7,13 @@ import TodaysFiveCard, {
   type SlotOutcome,
 } from '@/components/TodaysFiveCard'
 import { CeremonyPin } from '@/components/home/CeremonyPin'
-import { LearnedThisWeekCard } from '@/components/home/LearnedThisWeekCard'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
-import { RecentActivitySection } from '@/components/home/RecentActivitySection'
 import { getSession } from '@/server/auth/session'
 import { buildActivityStream } from '@/server/activity/build-stream'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
-import { getLearnedThisWeek } from '@/server/db/queries/learned'
 import { getFeedPagePayload } from '@/server/feed/get-feed-page'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 
@@ -54,18 +51,6 @@ export default async function Home() {
       {session ? (
         <Suspense fallback={null}>
           <CeremonyPinSection userId={session.userId} />
-        </Suspense>
-      ) : null}
-
-      {session ? (
-        <Suspense fallback={null}>
-          <LearnedThisWeekSection userId={session.userId} />
-        </Suspense>
-      ) : null}
-
-      {session ? (
-        <Suspense fallback={null}>
-          <RecentActivityServerSection userId={session.userId} />
         </Suspense>
       ) : null}
 
@@ -132,45 +117,41 @@ async function CeremonyPinSection({ userId }: { userId: string }) {
   )
 }
 
-async function LearnedThisWeekSection({ userId }: { userId: string }) {
-  const learned = await getLearnedThisWeek(userId)
-  return <LearnedThisWeekCard count={learned.length} />
-}
-
-// How many of the unified stream's home-eligible items the homepage head shows.
-const HOME_HEAD_LIMIT = 3
-
-async function RecentActivityServerSection({ userId }: { userId: string }) {
-  // The homepage head is the curated top of the one unified stream (same source
-  // as Lately): take the home-eligible items. Lately's prominence sort puts
-  // higher tiers before recency, which let older "got your question" moments
-  // outrank genuinely newer home-eligible items (e.g. a recent milestone) and
-  // hide them below the head's slice. The homepage is a "what's happening NOW"
-  // surface, so re-sort the home-eligible items by recency before taking the
-  // head — Lately keeps its prominence ordering.
-  const stream = await buildActivityStream(userId)
-  const items = stream
-    .filter((item) => item.homeEligible)
-    .sort((a, b) => b.sortAt.getTime() - a.sortAt.getTime())
-    .slice(0, HOME_HEAD_LIMIT)
-  return <RecentActivitySection items={items} />
-}
-
 async function FromYourFriendsSection({ userId }: { userId: string }) {
-  // D-1 Stage 5: Broadcasts ('from-friends') is the default feed surface, so the
-  // server pre-fetch must match it for FeedList's no-round-trip first paint.
-  const feedPage = await getFeedPagePayload(userId, {
-    limit: FEED_PAGE_SIZE,
-    cursor: null,
-    filter: 'from-friends',
-  })
+  // The unified "What's Happening" home feed: the question feed merged with the
+  // full activity/Lately stream, interleaved chronologically inside FeedList.
+  // Filter 'all' (not 'from-friends') so directly-sent questions thread in; the
+  // prefetch matches FeedList's unifiedHome seeding for a no-round-trip paint.
+  const [feedPage, activityItems] = await Promise.all([
+    getFeedPagePayload(userId, {
+      limit: FEED_PAGE_SIZE,
+      cursor: null,
+      filter: 'all',
+    }),
+    buildActivityStream(userId),
+  ])
+  // The weekly reflection lives in the dedicated CeremonyPin editorial marker
+  // above this feed (calm, gold, no CTA). Drop the redundant 'ceremony_ready'
+  // activity card here so the reflection doesn't double up / compete with social
+  // activity in the home stream. It's the only activity that links to /ceremony/;
+  // the card still appears in the full /activities log.
+  const homeActivityItems = activityItems.filter(
+    (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
+  )
   return (
-    <FeedList
-      pageSize={FEED_PAGE_SIZE}
-      infinite
-      initialPage={feedPage}
-      showContributeFooter
-    />
+    <>
+      <p className="mb-2 px-3 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+        What&rsquo;s happening
+      </p>
+      <FeedList
+        pageSize={FEED_PAGE_SIZE}
+        infinite
+        initialPage={feedPage}
+        showContributeFooter
+        unifiedHome
+        activityItems={homeActivityItems}
+      />
+    </>
   )
 }
 

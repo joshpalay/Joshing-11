@@ -28,6 +28,8 @@ import type {
   QuestionRecap,
 } from '@/server/db/queries/daily-summary'
 import { RoundReminderCard } from './RoundReminderCard'
+import { FirstSessionRecap } from './FirstSessionRecap'
+import type { FirstSessionRecapView } from '@/server/daily/first-session-recap'
 
 // useSyncExternalStore inputs for the client-only reset-time label. Hoisted so
 // the subscribe/snapshot functions are stable across renders.
@@ -141,6 +143,10 @@ export default function DailySummaryPage() {
   const [summary, setSummary] = useState<DailySummaryView | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // B-FirstRecap-1: the one-time cinematic recap that fires AFTER this summary on
+  // the user's first completed Daily Five. Null unless eligible + not yet seen.
+  const [firstSessionRecap, setFirstSessionRecap] =
+    useState<FirstSessionRecapView | null>(null)
   // Client-only reset-time label; null during SSR to keep hydration stable.
   const resetTime = useSyncExternalStore(
     subscribeNoop,
@@ -172,6 +178,28 @@ export default function DailySummaryPage() {
       }
     }
     void load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // B-FirstRecap-1: fetch the first-session recap. The endpoint returns
+  // { recap: null } unless this is the user's first completed round and the
+  // recap has not been seen, so this is a no-op for everyone else.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/daily/first-session-recap', {
+      credentials: 'include',
+      cache: 'no-store',
+    })
+      .then(async (response) => {
+        if (!response.ok) return
+        const body = await response.json().catch(() => null)
+        if (!cancelled && body?.recap) {
+          setFirstSessionRecap(body.recap as FirstSessionRecapView)
+        }
+      })
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
@@ -301,6 +329,13 @@ export default function DailySummaryPage() {
           See your knowledge map
         </Link>
       </div>
+
+      {firstSessionRecap ? (
+        <FirstSessionRecap
+          recap={firstSessionRecap}
+          onDismiss={() => setFirstSessionRecap(null)}
+        />
+      ) : null}
     </main>
   )
 }

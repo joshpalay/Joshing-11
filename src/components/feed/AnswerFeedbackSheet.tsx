@@ -144,12 +144,12 @@ export function AnswerFeedbackSheet({
       <div
         className={
           showNewTerritory
-            ? 'relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-2xl ring-2'
-            : 'relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl'
+            ? 'relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-2xl ring-2'
+            : 'relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl'
         }
         style={showNewTerritory ? { '--tw-ring-color': 'color-mix(in srgb, var(--tri-amber) 55%, transparent)' } as CSSProperties : undefined}
       >
-        <div className="flex items-center justify-between px-5 pt-5 pb-2">
+        <div className="flex items-center justify-between px-5 pt-4 pb-1">
           {showNewTerritory ? (
             <p
               className="inline-flex items-center gap-1.5 text-[0.68rem] font-semibold tracking-[0.18em] uppercase"
@@ -178,7 +178,7 @@ export function AnswerFeedbackSheet({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-2">
-          <div className="flex items-center gap-3 pb-3">
+          <div className="flex items-center gap-3 pb-2">
             <span
               className="inline-flex size-9 items-center justify-center rounded-full"
               style={{
@@ -214,11 +214,11 @@ export function AnswerFeedbackSheet({
             />
           ) : null}
 
-          <p className="pb-3 font-serif text-lg leading-7 text-[var(--brand-ink)]">
+          <p className="pb-2 font-serif text-lg leading-6 text-[var(--brand-ink)]">
             {question}
           </p>
 
-          <div className="space-y-1.5 pb-3">
+          <div className="space-y-1 pb-2">
             <p
               className="text-[13px] italic"
               style={{
@@ -244,8 +244,8 @@ export function AnswerFeedbackSheet({
           </div>
 
           {explanation ? (
-            <div className="rounded-2xl bg-muted p-4">
-              <p className="font-serif text-[15px] leading-7 text-[var(--brand-ink-700)]">
+            <div className="rounded-2xl bg-muted p-3.5">
+              <p className="font-serif text-[15px] leading-6 text-[var(--brand-ink-700)]">
                 {explanation}
               </p>
             </div>
@@ -253,7 +253,7 @@ export function AnswerFeedbackSheet({
 
           {insideJoke ? (
             <div
-              className="mt-3 rounded-2xl border p-4"
+              className="mt-2.5 rounded-2xl border p-3.5"
               style={{
                 backgroundColor: 'color-mix(in srgb, var(--tri-amber) 12%, var(--brand-card))',
                 borderColor: 'color-mix(in srgb, var(--tri-amber) 40%, var(--brand-border))',
@@ -265,18 +265,18 @@ export function AnswerFeedbackSheet({
               >
                 {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
               </p>
-              <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
+              <p className="mt-1 font-serif text-[15px] leading-6 text-[var(--brand-ink)]">
                 {insideJoke}
               </p>
             </div>
           ) : null}
 
           {creatorNote ? (
-            <div className="mt-3 rounded-2xl border bg-muted p-4">
+            <div className="mt-2.5 rounded-2xl border bg-muted p-3.5">
               <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
                 Why they asked
               </p>
-              <p className="mt-1.5 font-serif text-[15px] leading-7 text-[var(--brand-ink)]">
+              <p className="mt-1 font-serif text-[15px] leading-6 text-[var(--brand-ink)]">
                 {creatorNote}
               </p>
             </div>
@@ -357,7 +357,7 @@ export function AnswerFeedbackSheet({
           ) : null}
         </div>
 
-        <div className="px-5 pt-2 pb-8">
+        <div className="px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           <button type="button" onClick={onClose} className="btn-primary w-full">
             Done
           </button>

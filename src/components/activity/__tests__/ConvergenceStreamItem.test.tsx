@@ -52,9 +52,9 @@ const CONVERGENCE: Convergence = {
 };
 
 const QUESTIONS = [
-  { questionId: 'q1', text: 'Who painted Guernica?', domain: 'Cubism', answered: true },
-  { questionId: 'q2', text: 'What is the capital of Mongolia?', domain: 'Geography', answered: true },
-  { questionId: 'q3', text: 'Who composed The Rite of Spring?', domain: 'Composers', answered: true },
+  { questionId: 'q1', text: 'Who painted Guernica?', domain: 'Cubism', priorResult: 'correct' as const },
+  { questionId: 'q2', text: 'What is the capital of Mongolia?', domain: 'Geography', priorResult: 'correct' as const },
+  { questionId: 'q3', text: 'Who composed The Rite of Spring?', domain: 'Composers', priorResult: 'correct' as const },
 ];
 
 const CAPTION = 'You and {Name} keep landing in the same place.';

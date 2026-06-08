@@ -191,7 +191,7 @@ export default function TodaysFiveCard({
   // Editorial serif headline (display/Body-Serif), contextual to round state.
   // Completed splits on whether there are misses to revisit: Branch A turns the
   // "Today, done." beat into the forward "learn from your misses" nudge that the
-  // Play Missed Questions outline button answers; Branch B keeps "Today, done."
+  // Play Missed Questions sage button answers; Branch B keeps "Today, done."
   const headline = isComplete
     ? missedCount > 0
       ? 'Nice going — now learn from your misses'
@@ -316,11 +316,12 @@ export default function TodaysFiveCard({
           {missedCount > 0 ? (
             // Branch A — outstanding catch-up questions own the only button here;
             // the home page suppresses the standalone Catch up card to match.
-            // Outline (orange border / link-slate text) per the Figma "Play
-            // Missed Questions" treatment — secondary to the day's primary Play.
+            // Faded-sage fill (sage border / forest-green text) — calmer and more
+            // inviting than the old orange outline, still clearly secondary to the
+            // day's primary Play. Built from --domain-science / --game-correct.
             <Link
               href="/daily/catchup"
-              className="flex min-h-12 w-full items-center justify-center rounded-[4px] border border-[var(--brand-orange)] bg-transparent text-base font-bold tracking-[0.04em] text-[var(--brand-link)] transition-colors hover:bg-[color-mix(in_srgb,var(--brand-orange)_8%,transparent)]"
+              className="flex min-h-12 w-full items-center justify-center rounded-[4px] border border-[color-mix(in_srgb,var(--domain-science)_55%,transparent)] bg-[color-mix(in_srgb,var(--domain-science)_22%,transparent)] text-base font-bold tracking-[0.04em] text-[var(--game-correct)] transition-colors hover:bg-[color-mix(in_srgb,var(--domain-science)_32%,transparent)]"
             >
               Play Missed Questions
             </Link>

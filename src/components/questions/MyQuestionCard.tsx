@@ -1,11 +1,9 @@
 'use client';
 
-import { Lock, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { ChevronUp, Lock, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
-import { visibleFeedCategory } from '@/components/feed/category';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
-import { difficultyCopyFromValue } from '@/lib/questions/difficulty-copy';
 import { cn } from '@/lib/utils';
 import type { QuestionView } from '@/server/db/queries/questions';
 
@@ -31,104 +29,81 @@ export function MyQuestionCard({
   onCancelConfirm,
 }: MyQuestionCardProps) {
   const inUse = question.usedInGamesCount > 0;
-  const difficultyLabel = difficultyCopyFromValue(question.difficulty) ?? 'Unrated';
-  const visibleCategory = visibleFeedCategory(question.domainDisplayName);
+  const hasAnswers = question.timesAnswered > 0;
   const answerersLine =
     question.isOwnAuthored && question.answerers ? formatAnswerersLine(question.answerers) : null;
 
   return (
     <article
       className={cn(
-        'bg-card rounded-md border px-4 py-3 transition duration-200',
+        'bg-card relative rounded-md border px-3 py-2 transition duration-200',
         deleting ? 'scale-[0.98] opacity-0' : 'opacity-100',
       )}
     >
-      <div className="flex items-start gap-3 sm:gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 pr-2">
-            {visibleCategory ? (
-              <span
-                className="truncate text-xs leading-tight italic"
-                style={{
-                  fontFamily: 'var(--font-literata)',
-                  color: 'var(--ink)',
-                  opacity: 0.7,
-                }}
-              >
-                {visibleCategory}
-              </span>
-            ) : null}
-            <span
-              className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase"
-              style={{ color: 'var(--ink)', opacity: 0.7 }}
-              aria-label={`LLM-rated difficulty: ${difficultyLabel}`}
-            >
-              {difficultyLabel}
-            </span>
-          </div>
+      {/* Overflow menu is associated with the whole card — pinned top-right, visually quiet. */}
+      <div className="absolute top-1.5 right-1.5">
+        <CardOverflowMenu inUse={inUse} onEdit={onEdit} onDelete={onDeleteRequest} />
+      </div>
 
+      <div className="min-w-0">
+        <p
+          className="pr-8 font-serif text-lg leading-6 font-semibold tracking-[0.02em]"
+          style={{ color: 'var(--ink)' }}
+        >
+          {question.text}
+        </p>
+
+        {answerersLine ? (
           <p
-            className="mt-1.5 font-serif text-lg leading-6 font-semibold tracking-[0.02em]"
-            style={{ color: 'var(--ink)' }}
+            className="mt-1 inline-flex items-center gap-1 text-xs leading-tight"
+            style={{ color: 'var(--ink)', opacity: 0.65 }}
           >
-            {question.text}
+            <ChevronUp className="size-3 shrink-0" />
+            {answerersLine}
           </p>
+        ) : null}
 
-          <div className="mt-2 flex flex-col gap-1 text-[13px] leading-snug sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3">
-            <p style={{ color: 'var(--ink)', opacity: 0.65 }}>
-              {question.timesAnswered} answers · {question.correctRate}% correct ·{' '}
-              {question.usedInGamesCount} games
-            </p>
-            {question.nobody_correct_flag ? (
-              // "Nobody got it" review smell (B4 Phase 2): a QA signal that enough
-              // players have tried with none correct — likely a bad answer, not a
-              // hard question. Flagged for review, never auto-removed.
-              <p
-                className="inline-flex items-center gap-1 font-medium"
-                style={{ color: 'var(--ink)', opacity: 0.8 }}
+        {cardError ? <p className="text-destructive mt-1.5 text-[13px]">{cardError}</p> : null}
+
+        {confirming ? (
+          <DeleteConfirmation onConfirmDelete={onConfirmDelete} onCancelConfirm={onCancelConfirm} />
+        ) : (
+          // Single compact analytics row: metrics align in columns across cards (tabular-nums
+          // + a fixed-width Answers segment) so creators can scan answer/correct rates
+          // vertically. Metrics are omitted entirely when nobody has answered yet; the send
+          // icon stays (subdued) so the question is still shareable.
+          <div className="mt-1.5 flex items-center text-[13px] leading-snug">
+            {hasAnswers ? (
+              <div
+                className="flex items-center gap-x-6"
+                style={{ color: 'var(--ink)', opacity: 0.65 }}
               >
-                ⚠ Nobody&apos;s gotten this right — flagged for review
-              </p>
+                <span className="inline-flex min-w-[5.5rem] items-center gap-1.5">
+                  <span>Answers</span>
+                  <span className="font-medium tabular-nums">{question.timesAnswered}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span>Correct</span>
+                  <span className="font-medium tabular-nums">{question.correctRate}%</span>
+                </span>
+              </div>
             ) : null}
-            {answerersLine ? (
-              <p style={{ color: 'var(--ink)', opacity: 0.65 }}>{answerersLine}</p>
-            ) : null}
+            <div className="ml-auto">
+              <SendQuestionAction
+                question={{
+                  id: question.id,
+                  text: question.text,
+                  domain: question.domainDisplayName,
+                }}
+                label=""
+                className={cn(
+                  'hover:bg-muted -mr-1 inline-flex size-8 items-center justify-center rounded-md transition',
+                  hasAnswers ? 'text-[color:var(--brand-navy)]' : 'text-muted-foreground',
+                )}
+              />
+            </div>
           </div>
-
-          {cardError ? <p className="text-destructive mt-2 text-[13px]">{cardError}</p> : null}
-
-          {confirming ? (
-            <DeleteConfirmation
-              onConfirmDelete={onConfirmDelete}
-              onCancelConfirm={onCancelConfirm}
-            />
-          ) : (
-            <div className="mt-3 sm:hidden">
-              <SendQuestionAction
-                question={{
-                  id: question.id,
-                  text: question.text,
-                  domain: question.domainDisplayName,
-                }}
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-start gap-2">
-          {!confirming ? (
-            <div className="hidden sm:block">
-              <SendQuestionAction
-                question={{
-                  id: question.id,
-                  text: question.text,
-                  domain: question.domainDisplayName,
-                }}
-              />
-            </div>
-          ) : null}
-          <CardOverflowMenu inUse={inUse} onEdit={onEdit} onDelete={onDeleteRequest} />
-        </div>
+        )}
       </div>
     </article>
   );

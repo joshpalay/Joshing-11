@@ -6,6 +6,7 @@ import { db, users } from '@/server/db';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { type QueueSlot } from '@/server/daily/types';
 import { runWithConcurrency } from '@/server/lib/concurrency';
+import { isCronAuthorized } from '@/server/auth/cron';
 import { sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
@@ -37,15 +38,8 @@ function getBaseUrl(request: NextRequest): string {
   return host ? `${protocol}://${host}` : 'http://localhost:3000';
 }
 
-function isAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET ?? process.env.VERCEL_CRON_SECRET;
-  if (!secret) return true;
-  const authHeader = request.headers.get('authorization');
-  return authHeader === `Bearer ${secret}`;
-}
-
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

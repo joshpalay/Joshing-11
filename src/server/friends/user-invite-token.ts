@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { and, eq, sql } from 'drizzle-orm'
 
 import { db, follows, users } from '@/server/db'
+import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
 
 // Match the prior-art token primitive used for FriendInvitation tokens at
@@ -165,6 +166,12 @@ export async function acceptUserInviteLink({
       inviterUserId: inviter.inviterUserId,
       inviteeUserId,
       formedAt: now,
+    })
+    // One-time inviter feed backfill (B-HomeSeed-1). Best-effort internally so
+    // it can't throw — a backfill hiccup must never fail the link acceptance.
+    await backfillInviterFeedItems({
+      inviterUserId: inviter.inviterUserId,
+      inviteeUserId,
     })
     return { accepted: true }
   } catch {

@@ -12,10 +12,18 @@ export type DomainPreferenceFrequency = Record<string, TerritoryFrequency>;
 
 export const TERRITORY_FREQUENCIES = ['often', 'sometimes', 'blue_moon', 'resting'] as const;
 
+// Player-facing labels for each frequency tier. Single source of truth shared by
+// the Territory Setup zones and the "New territory" reveal card so the wording
+// stays consistent. The enum values are internal; only these strings are shown.
+export const TERRITORY_FREQUENCY_LABEL: Record<TerritoryFrequency, string> = {
+  often: 'Often',
+  sometimes: 'Sometimes',
+  blue_moon: 'Blue Moon',
+  resting: 'Never',
+};
+
 export function isTerritoryFrequency(value: unknown): value is TerritoryFrequency {
-  return (
-    value === 'often' || value === 'sometimes' || value === 'blue_moon' || value === 'resting'
-  );
+  return value === 'often' || value === 'sometimes' || value === 'blue_moon' || value === 'resting';
 }
 
 function normalizeDomainKey(domain: string): string {

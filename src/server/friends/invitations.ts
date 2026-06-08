@@ -4,6 +4,7 @@ import { and, desc, eq, gt, isNotNull, isNull, or } from 'drizzle-orm'
 
 import { maskPhoneE164 } from '@/lib/phone-e164'
 import { db, friendInvitations, users } from '@/server/db'
+import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
 import { hashTelemetryValue, logTelemetry } from '@/server/telemetry'
 
@@ -585,6 +586,15 @@ export async function acceptFriendInvitation({
     inviter_user_id: invitation.inviterUserId,
     invitee_user_id: inviteeUserId,
     suggested_interest_count: parseInvitationInterests(invitation.preSeededInterests).length,
+  })
+
+  // One-time inviter feed backfill (B-HomeSeed-1). Runs AFTER the acceptance tx
+  // commits and only on a successful claim, so it fires exactly once per
+  // invitation and never on subsequent logins. Best-effort internally — it
+  // cannot throw, so it can't affect the accepted result.
+  await backfillInviterFeedItems({
+    inviterUserId: invitation.inviterUserId,
+    inviteeUserId,
   })
 
   return { accepted: true }

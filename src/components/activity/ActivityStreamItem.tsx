@@ -1,5 +1,6 @@
 'use client';
 
+import { Send } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type KeyboardEvent } from 'react';
 
@@ -96,19 +97,27 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
 
-  // CORRECTION 3 (revised): the answered-of-total counter lives on the LINE
-  // (collapsed and expanded), so the answered-state is held HERE — not inside
-  // the expansion — and ticks up + persists as the viewer answers, even after
-  // the result pop-up closes or the line is collapsed and reopened. We also keep
-  // each in-session resolution (submitted answer + correctness) here so the
-  // expanded "Answered" history can read it back. Milestone lines only.
+  // CORRECTION 3 (revised): the answered-of-total state is conveyed by the
+  // bundle triangle mark (solid → hollow as questions are answered), so the
+  // answered-state is held HERE — not inside the expansion — and ticks up +
+  // persists as the viewer answers, even after the result pop-up closes or the
+  // line is collapsed and reopened. We also keep each in-session resolution
+  // (submitted answer + correctness) here so the expanded "Answered" history can
+  // read it back. Milestone lines only.
   const expand = item.expand;
   const milestoneQuestions = expand && expand.kind === 'milestone' ? expand.questions : null;
-  // Questions the server already records as answered (correctly) on load. We
-  // don't have the original submitted text for these, so the history shows a
-  // calm "Correct" without the "You answered:" clause for them.
+  // Questions the server already records as attempted on load — right OR wrong.
+  // A single attempt is the viewer's only swing in the feed, so any prior
+  // result locks the question here. We don't have the original submitted text
+  // for these, so the history shows a calm "Correct" / "Not this time" (per the
+  // server-recorded result) without the "You answered:" clause for them.
   const [serverAnswered] = useState<Set<string>>(
-    () => new Set((milestoneQuestions ?? []).filter((q) => q.answered).map((q) => q.questionId)),
+    () =>
+      new Set(
+        (milestoneQuestions ?? [])
+          .filter((q) => q.priorResult !== null)
+          .map((q) => q.questionId),
+      ),
   );
   // Resolutions captured this session — both correct and "not this time" — keyed
   // by questionId, carrying what the viewer typed so the history can echo it. A
@@ -133,11 +142,6 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   }
 
   const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;
-
-  const milestoneProgress =
-    milestoneQuestions && milestoneQuestions.length > 0
-      ? { answered: answeredCount, total: milestoneQuestions.length }
-      : null;
 
   // The bundle mark (milestone) shares the row's live answered-state: as the
   // viewer answers questions inline, solid triangles flip to hollow. Caps at 5
@@ -165,9 +169,10 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   }
 
   // Opened milestone clusters read as a distinct, quiet "opened" state: a touch
-  // more vertical room, a faint inset (slightly lifted paper + a gentle inset of
-  // the side padding) and top/bottom hairlines — never a heavy card shadow or
-  // loud fill, so the item still sits inside the feed.
+  // more vertical room, a slightly lifted paper fill, and top/bottom hairlines —
+  // never a heavy card shadow or loud fill, so the item still sits inside the
+  // feed. Horizontal padding stays constant with the collapsed state so the icon
+  // and header text don't shift sideways when the card opens.
   const opened = expandable && open;
 
   return (
@@ -178,7 +183,7 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
           ? {
               borderTop: `1px solid ${RULE}`,
               borderBottom: `1px solid ${RULE}`,
-              padding: '18px 10px',
+              padding: '18px 2px',
               background: PAPER,
             }
           : {
@@ -229,19 +234,6 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
               }}
             >
               {item.secondLine}
-            </p>
-          ) : null}
-          {milestoneProgress ? (
-            <p
-              style={{
-                margin: '4px 0 0',
-                fontFamily: FM,
-                fontSize: 10,
-                letterSpacing: 1,
-                color: INK3,
-              }}
-            >
-              {milestoneProgress.answered} of {milestoneProgress.total} questions
             </p>
           ) : null}
         </div>
@@ -316,9 +308,9 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
 // promised ("{answered} of {total} questions") rather than one question at a
 // time. Each settled question (right OR wrong) drops out of the stack and into
 // the quiet "Answered" history below, so what remains above is always exactly
-// the work left to do. The answered-state is owned by the parent so the line's
-// quiet "{answered} of {total}" counter and the triangle mark stay in lockstep.
-function MilestoneExpansion({
+// the work left to do. The answered-state is owned by the parent so the bundle
+// triangle mark ticks from solid to hollow in lockstep as questions settle.
+export function MilestoneExpansion({
   expand,
   isResolved,
   resolutions,
@@ -388,10 +380,12 @@ function AnsweredHistory({
       >
         {questions.map((q) => {
           const r = resolutions.get(q.questionId);
-          // No in-session resolution means the server already had it on load as
-          // a correct answer; we lack the original text, so we show a calm
-          // "Correct" without the answer clause rather than invent one.
-          const isCorrect = r ? r.isCorrect : true;
+          // No in-session resolution means the server already had this attempt on
+          // load; we lack the original text, so we show a calm "Correct" / "Not
+          // this time" from the server-recorded result without inventing an
+          // answer clause. priorResult is non-null here (it's why the question
+          // sits in this answered list); treat anything but 'incorrect' as right.
+          const isCorrect = r ? r.isCorrect : q.priorResult !== 'incorrect';
           // Result reads in the app's semantic answer colors: green for correct,
           // red for "not this time" — same tokens the AnswerFeedbackSheet uses.
           const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)';
@@ -521,6 +515,9 @@ function SendOnwardExpansion({
           type="button"
           onClick={() => setSendOpen(true)}
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
             background: INK,
             color: 'var(--brand-cream-page)',
             border: 'none',
@@ -531,7 +528,8 @@ function SendOnwardExpansion({
             cursor: 'pointer',
           }}
         >
-          SEND IT ONWARD →
+          SEND TO A FRIEND
+          <Send size={12} aria-hidden />
         </button>
 
         {expand.kind === 'niche_match' && expand.strangerId ? (
