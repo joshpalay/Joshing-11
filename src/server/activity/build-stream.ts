@@ -65,19 +65,30 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
     activityToStreamItem,
   );
   const momentItems = moments.map(momentToStreamItem);
-  const milestoneItems = milestones.map((m, i) => {
-    const questions: StreamQuestion[] = cappedIdsByMilestone[i].ids
-      .map((id) => textById.get(id))
-      .filter((q): q is NonNullable<typeof q> => Boolean(q))
-      .filter((q) => !hiddenIds.has(q.questionId))
-      .map((q) => ({
-        questionId: q.questionId,
-        text: q.text,
-        domain: q.domain,
-        priorResult: priorById.get(q.questionId) ?? null,
-      }));
-    return milestoneToStreamItem(m, questions);
-  });
+  const milestoneItems = milestones
+    .map((m, i) => {
+      const questions: StreamQuestion[] = cappedIdsByMilestone[i].ids
+        .map((id) => textById.get(id))
+        .filter((q): q is NonNullable<typeof q> => Boolean(q))
+        .filter((q) => !hiddenIds.has(q.questionId))
+        // The triangle row is for NEW questions only. Anything the viewer has
+        // already attempted on ANY surface (priorById carries every prior
+        // answer, right or wrong) is dropped here: questions you and the friend
+        // both got right surface in the convergence ("you both knew these")
+        // row, and your own misses live in Catch-Up. priorResult is therefore
+        // always null for what survives.
+        .filter((q) => !priorById.has(q.questionId))
+        .map((q) => ({
+          questionId: q.questionId,
+          text: q.text,
+          domain: q.domain,
+          priorResult: null,
+        }));
+      // A milestone whose questions all collapse out is a contentless streak
+      // card — suppress it rather than render an empty triangle.
+      return questions.length > 0 ? milestoneToStreamItem(m, questions) : null;
+    })
+    .filter((item): item is StreamItem => item !== null);
   const convergenceItems = convergences.map((c) => {
     const questions: StreamQuestion[] = c.questionIds
       .map((id) => textById.get(id))
