@@ -18,7 +18,7 @@
  * action — friend-request approve, reaction ack, a link — but they don't expand).
  */
 
-import { HOME_TOP3_ELIGIBLE_TYPES } from '@/server/activity/write-activity';
+import { HOME_TOP3_ELIGIBLE_TYPES } from '@/lib/activity-types';
 import type { ActivityItemView } from '@/server/db/queries/activity';
 import type { MasteryTier } from '@/types/db';
 import type { LatelyMoment } from '@/server/db/queries/lately';
@@ -626,10 +626,12 @@ function breadthTail(domains: string[]): StreamLinePart[] {
 // independently got the same shared questions right. The headline is
 // PERSON-FIRST and names no domain — the caption template (assigned
 // deterministically by moment id) carries a `{Name}` token that becomes the
-// friend's first name as an actor link. It is Lately-ONLY (homeEligible: false,
-// the same slow-burn treatment as niche-match) and READ-ONLY: expanding reveals
-// the cluster's questions (domains may appear there as texture) with no answer,
-// send, or reaction affordance.
+// friend's first name as an actor link. It is the read-only counterpart to the
+// milestone triangle: the triangle row carries questions you have NOT answered
+// (answerable), while this row carries the ones you and the friend BOTH already
+// got right. Home-eligible so both rows surface together on Home, not just in
+// Lately. READ-ONLY: expanding reveals the cluster's questions (domains may
+// appear there as texture) with no answer, send, or reaction affordance.
 export function convergenceToStreamItem(
   convergence: Convergence,
   questions: StreamQuestion[],
@@ -646,7 +648,7 @@ export function convergenceToStreamItem(
     tier: LATELY_TIER.MILESTONE,
     // High-signal "same-correct overlap" — protected micro-tier.
     signal: 'micro',
-    homeEligible: false,
+    homeEligible: true,
     line,
     secondLine: null,
     anchorId: null,

@@ -63,7 +63,7 @@ function build() {
   return convergenceToStreamItem(CONVERGENCE, QUESTIONS, CAPTION);
 }
 
-describe('convergenceToStreamItem — person-first, Lately-only, read-only', () => {
+describe('convergenceToStreamItem — person-first, Home-eligible, read-only', () => {
   it('builds a person-first headline that names no domain', () => {
     const item = build();
     // The friend is an actor (link) part; the rest is plain copy. No domain
@@ -78,9 +78,9 @@ describe('convergenceToStreamItem — person-first, Lately-only, read-only', () 
     }
   });
 
-  it('is excluded from the homepage top-few (homeEligible false) and read-only', () => {
+  it('is Home-eligible (surfaces alongside the triangle rows) and read-only', () => {
     const item = build();
-    expect(item.homeEligible).toBe(false);
+    expect(item.homeEligible).toBe(true);
     expect(item.action).toBeNull();
     expect(item.expand?.kind).toBe('same_correct');
   });
