@@ -1,13 +1,18 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import type { StreamItem } from '@/lib/activity-stream';
-import { FF, INK, RULE } from '@/components/lately/tokens';
+import { FF, INK, INK2, INK3, RULE } from '@/components/lately/tokens';
 
-import { ActivityStreamItem, Line } from './ActivityStreamItem';
+import { Line } from './ActivityStreamItem';
+import { ActivityIcon } from './ActivityIcon';
 
-// The friend's first name, pulled from the first actor part of any of their
-// rows (convergence uses the first name already; moments/activities carry the
-// display name). Falls back to a warm neutral if no actor part is present.
+// Width of the shape column (mark 24 + gap 8), so the rolled-up lines indent to
+// sit directly under the heading statement's text.
+const HEADING_INDENT = 32;
+
+// The friend's first name, pulled from the first actor part of any of their rows.
 function firstNameFromRows(rows: StreamItem[]): string {
   for (const row of rows) {
     for (const part of row.line) {
@@ -20,12 +25,51 @@ function firstNameFromRows(rows: StreamItem[]): string {
   return 'They';
 }
 
-// Tier 2 + 3 of the home hierarchy: one card gathering everything a single friend
-// did. The heading (tier 2) is driven by the strongest relationship signal — a
-// convergence ("you and {friend} keep landing in the same place") leads when
-// present, otherwise a warm generic line — and the friend's events stack beneath
-// it (tier 3). Built only when a friend has ≥2 groupable events in a day bucket
-// (see groupActivityByFriend in FeedList); lone events stay ordinary one-liners.
+// Distinct topics across a set of rows, first-seen order, nulls dropped.
+function topicsOf(rows: StreamItem[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of rows) {
+    const t = r.topic?.trim();
+    if (t && !seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+  }
+  return out;
+}
+
+// The human predicate of a convergence caption ("keep landing in the same
+// place") with the "You and {Name}" lead stripped — the cluster header already
+// names the pair, so the echo is removed (v2 §3).
+function convergencePredicate(row: StreamItem): string {
+  const parts = row.line;
+  const actorIdx = parts.findIndex((p) => p.t === 'actor');
+  const after = parts.slice(actorIdx + 1).find((p) => p.t === 'text');
+  if (after && 'v' in after && after.v.trim()) return after.v.trim();
+  const before = [...parts.slice(0, actorIdx)].reverse().find((p) => p.t === 'text');
+  if (before && 'v' in before) {
+    const stripped = before.v.replace(/\b(you\s+and|and)\s*$/i, '').trim();
+    if (stripped) return stripped;
+  }
+  return 'both knew these';
+}
+
+// One quiet rolled-up line beneath the cluster header. No bold, no shape, no
+// timestamp — the texture layer (v2 §4).
+function SubLine({ children }: { children: ReactNode }) {
+  return (
+    <p style={{ margin: '4px 0 0', fontFamily: FF, fontSize: 14, lineHeight: 1.4, color: INK2 }}>
+      {children}
+    </p>
+  );
+}
+
+// Tier 2 + 3 of the home hierarchy (D-FEED-TIER v2 §3): one quiet per-person
+// cluster. The header is the relationship pair ("You & Robyn") with the single
+// diamond; the friend's events roll up beneath it by direction — "got {Name} —
+// topics", "{Name} got yours — topics", a folded convergence line — names said
+// once, topics on few lines, per-event timestamps/actions dropped.
 export function PersonActivityCard({
   rows,
   timestampFor,
@@ -34,38 +78,71 @@ export function PersonActivityCard({
   rows: StreamItem[];
   timestampFor: (item: StreamItem) => string;
 }) {
-  // A convergence, when present, becomes the headline and drops out of the
-  // sub-items below (it IS the heading, not a duplicate line).
-  const convergence = rows.find((r) => r.expand?.kind === 'same_correct') ?? null;
-  const subItems = convergence ? rows.filter((r) => r !== convergence) : rows;
-  const firstName = firstNameFromRows(rows);
+  const name = firstNameFromRows(rows);
+  const youGot = rows.filter((r) => r.relationship === 'you_got');
+  const gotYou = rows.filter((r) => r.relationship === 'got_you');
+  const saved = rows.filter((r) => r.relationship === 'saved');
+  const reacted = rows.filter((r) => r.relationship === 'reacted');
+  const convergence = rows.find((r) => r.relationship === 'convergence') ?? null;
+  // Anything without a relationship kind (mastery, opened a domain, follows…)
+  // keeps its own quiet one-liner as a fallback.
+  const others = rows.filter((r) => !r.relationship);
+
+  const youGotTopics = topicsOf(youGot);
+  const gotYouTopics = topicsOf(gotYou);
+  const seed = rows[0]?.id ?? 'person';
 
   return (
-    <div
-      style={{
-        border: `1px solid ${RULE}`,
-        borderRadius: 4,
-        padding: '10px 12px',
-        background: 'var(--brand-card)',
-      }}
-    >
-      <p
-        style={{
-          margin: 0,
-          fontFamily: FF,
-          fontSize: 15,
-          fontWeight: 600,
-          lineHeight: 1.4,
-          color: INK,
-        }}
-      >
-        {convergence ? <Line parts={convergence.line} /> : `${firstName} gets you!`}
-      </p>
-      <div style={{ marginTop: 2 }}>
-        {subItems.map((item, idx) => (
-          <div key={item.id} style={idx > 0 ? { borderTop: `1px solid ${RULE}` } : undefined}>
-            <ActivityStreamItem item={item} timestamp={timestampFor(item)} inCard />
-          </div>
+    <div style={{ padding: '12px 2px', borderBottom: `1px solid ${RULE}` }}>
+      {/* No flex `gap`: ActivityIcon already reserves mark 24 + 8px marginRight,
+          so the heading lands at the same 32px x as the lines below it. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+        <ActivityIcon spec={{ kind: 'diamond' }} seed={seed} />
+        <p
+          style={{
+            margin: 0,
+            flex: 1,
+            minWidth: 0,
+            fontFamily: FF,
+            fontSize: 15,
+            fontWeight: 600,
+            lineHeight: 1.4,
+            letterSpacing: 0.2,
+            color: INK,
+          }}
+        >
+          You &amp; {name}
+        </p>
+        {rows[0] ? (
+          <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap', marginLeft: 8 }}>
+            {timestampFor(rows[0])}
+          </span>
+        ) : null}
+      </div>
+      <div style={{ marginLeft: HEADING_INDENT, marginTop: 2 }}>
+        {youGot.length ? (
+          <SubLine>
+            got {name}
+            {youGotTopics.length ? ` — ${youGotTopics.join(', ')}` : ''}
+          </SubLine>
+        ) : null}
+        {gotYou.length ? (
+          <SubLine>
+            {name} got yours
+            {gotYouTopics.length ? ` — ${gotYouTopics.join(', ')}` : ''}
+          </SubLine>
+        ) : null}
+        {saved.length ? (
+          <SubLine>
+            {name} saved {saved.length > 1 ? `${saved.length} of your questions` : 'your question'}
+          </SubLine>
+        ) : null}
+        {reacted.length ? <SubLine>{name} reacted to your question</SubLine> : null}
+        {convergence ? <SubLine>{convergencePredicate(convergence)}</SubLine> : null}
+        {others.map((row) => (
+          <SubLine key={row.id}>
+            <Line parts={row.line} />
+          </SubLine>
         ))}
       </div>
     </div>

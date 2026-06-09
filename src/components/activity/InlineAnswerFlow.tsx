@@ -7,7 +7,7 @@ import { AnswerSheet } from '@/components/feed/AnswerSheet';
 import type { StreamQuestion } from '@/lib/activity-stream';
 import type { InsideJokeKind } from '@/lib/questions-types';
 
-import { FM, INK, INK2 } from '@/components/lately/tokens';
+import { FM, INK } from '@/components/lately/tokens';
 
 type Feedback = {
   isCorrect: boolean;
@@ -87,12 +87,7 @@ export function InlineAnswerFlow({
   }
 
   return (
-    <div
-      style={{
-        borderLeft: `2px solid ${INK2}`,
-        paddingLeft: 14,
-      }}
-    >
+    <div>
       <p
         style={{
           margin: 0,
@@ -124,7 +119,7 @@ export function InlineAnswerFlow({
           cursor: 'pointer',
         }}
       >
-        ANSWER THIS ONE →
+        ANSWER →
       </button>
 
       {phase === 'input' ? (

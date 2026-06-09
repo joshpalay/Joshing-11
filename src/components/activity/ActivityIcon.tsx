@@ -194,6 +194,33 @@ function BundleMark({
   );
 }
 
+// A single milestone-question marker, sharing the bundle's vocabulary: a SOLID
+// palette triangle for a question still to play, a HOLLOW outline once it's been
+// answered. Used per-row in the milestone expansion so each question reads as
+// solid→hollow in lockstep with the bundle mark above it.
+export function QuestionTriangle({ solid, seed }: { solid: boolean; seed: string }) {
+  const S = 11; // base = height, matches one BundleMark triangle
+  return (
+    <svg
+      width={S}
+      height={S}
+      viewBox={`0 0 ${S} ${S}`}
+      fill="none"
+      aria-hidden="true"
+      style={{ display: 'block', flexShrink: 0 }}
+    >
+      <path
+        d={solid ? upTri(0, 0, S, S) : hollowTri(0, 0, S, S)}
+        fill={solid ? colorFor(seed, 0) : 'none'}
+        fillOpacity={solid ? FILL_OPACITY : undefined}
+        stroke={solid ? 'none' : HOLLOW}
+        strokeWidth={solid ? 0 : 1.4}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 // Rhombus: upward triangle over downward triangle, shared base. Each half a
 // random palette colour.
 function DiamondMark({ seed }: { seed: string }) {

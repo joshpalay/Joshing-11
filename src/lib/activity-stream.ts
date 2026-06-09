@@ -184,6 +184,17 @@ export type StreamItem = {
   // viewer-only promos). Set at construction so the grouping never re-parses the
   // line parts.
   friendId?: string | null;
+  // How this row reads inside a per-person relationship cluster, so the cluster
+  // can roll events up by direction without re-parsing copy (D-FEED-TIER v2 §3):
+  //   you_got     — you answered THEIR question right ("got {Name} — topics")
+  //   got_you     — they answered YOUR question ("{Name} got yours — topics")
+  //   convergence — you both knew the same shared questions (folded, one line)
+  //   saved       — they saved your question
+  //   reacted     — they reacted to your question
+  // Undefined = not a per-person relationship event (renders as a plain line).
+  relationship?: 'you_got' | 'got_you' | 'convergence' | 'saved' | 'reacted';
+  // The topic/category this event is about, for the cluster's rolled-up lists.
+  topic?: string | null;
   // Whether this item is eligible for the homepage's curated head.
   homeEligible: boolean;
   line: StreamLinePart[];
@@ -249,6 +260,8 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         line: [a, txt(got ? ' got your question' : ' answered your question')],
         secondLine: domain,
         icon: 'diamond',
+        relationship: 'got_you',
+        topic: domain,
         action: null,
         expand:
           item.referenceId && faq?.questionText
@@ -356,6 +369,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' reacted to your question')],
         secondLine: label,
+        relationship: 'reacted',
         action: {
           kind: 'reaction_got_it',
           reactionId: reaction?.id ?? item.referenceId ?? '',
@@ -370,6 +384,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' saved your question')],
         secondLine: item.reference.curatedQuestion?.questionText ?? null,
+        relationship: 'saved',
         action: null,
         expand: null,
       };
@@ -554,6 +569,8 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
     // home-eligible. you_got_them is quieter; keep it to the full list.
     homeEligible: theyGotYou,
     friendId: moment.friendId,
+    relationship: theyGotYou ? 'got_you' : 'you_got',
+    topic: moment.category,
     line: theyGotYou
       ? [friend, txt(' got your question')]
       : [txt('You got '), friend, txt(' on '), cat(moment.category)],
@@ -583,10 +600,21 @@ export function milestoneToStreamItem(
   questions: StreamQuestion[],
 ): StreamItem {
   const friend = act(milestone.friendName, milestone.friendId);
-  const tail =
-    milestone.kind === 'milestone_deep'
-      ? [txt(' went deep on '), cat(milestone.domain)]
-      : breadthTail(milestone.domains.map((d) => d.domain));
+  let tail: StreamLinePart[];
+  if (milestone.kind === 'milestone_deep') {
+    tail = [txt(' went deep on '), cat(milestone.domain)];
+  } else {
+    // Name only the domains whose questions actually survived resolution — a
+    // question can be deleted/hidden after the friend answered it, and the
+    // header must not claim a domain the expansion can't show. Fall back to all
+    // domains if nothing resolved (the line then isn't expandable anyway).
+    const survivingIds = new Set(questions.map((q) => q.questionId));
+    const surviving = milestone.domains.filter((d) =>
+      d.questionIds.some((id) => survivingIds.has(id)),
+    );
+    const named = (surviving.length > 0 ? surviving : milestone.domains).map((d) => d.domain);
+    tail = breadthTail(named);
+  }
   return {
     id: milestone.id,
     sortAt: milestone.sortAt,
@@ -647,6 +675,7 @@ export function convergenceToStreamItem(
     sortAt: convergence.sortAt,
     tier: LATELY_TIER.MILESTONE,
     friendId: convergence.friendId,
+    relationship: 'convergence',
     homeEligible: true,
     line,
     secondLine: null,
