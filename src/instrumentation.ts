@@ -1,5 +1,12 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // Per-process guard: register() runs once at startup, but guard against any
+    // double-invocation (e.g. dev hot-reload) so the boot DB work below can
+    // never run twice within a single process.
+    const globalForBoot = globalThis as unknown as { __joshingBootRan?: boolean };
+    if (globalForBoot.__joshingBootRan) return;
+    globalForBoot.__joshingBootRan = true;
+
     // PHONE_HASH_SALT seeds the SHA-256 used by hashPhoneNumber()
     // (src/server/lib/phone-hashing.ts) and the client-side hashing path
     // B-Friends-4 will add. hashPhoneNumber() already throws at call time if
@@ -44,6 +51,26 @@ export async function register() {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const db = drizzle(pool);
 
+    // The idempotent guard blocks below pre-repair partially-recorded preview/
+    // production databases so migrate() can succeed on them (additive columns,
+    // enum values, and tables that a recorded-but-not-fully-applied migration
+    // may be missing). On a database that already carries every change they are
+    // pure overhead: ~70 sequential round-trips on every cold start, which
+    // dominates cold-start latency — the first request after a boot (e.g.
+    // POST /api/auth/request-otp) waits behind the whole chain.
+    //
+    // Set SKIP_BOOT_DB_GUARDS=1 in an environment whose database is known to
+    // already carry every guard-applied change to skip the chain. migrate()
+    // still runs afterwards, so journaled migrations are always applied.
+    //
+    // CAUTION: migrations 0070–0073 are NOT in drizzle/meta/_journal.json, so
+    // migrate() does not apply them — the guards below are currently their ONLY
+    // application path. Do not set this flag on a database that has not already
+    // been booted with the guards (i.e. that lacks those objects), and journal
+    // future migrations rather than relying on a guard. Leave the flag unset in
+    // preview/dev so the auto-repair guards keep running. See CLAUDE.md.
+    const runBootGuards = process.env.SKIP_BOOT_DB_GUARDS !== '1';
+    if (runBootGuards) {
     // Migration 0006 sets NOT NULL on senderUserId/recipientUserId after adding them
     // as nullable columns. If any rows have NULL values (from a partial migration or
     // data predating those columns), the SET NOT NULL fails and blocks all subsequent
@@ -1327,6 +1354,7 @@ export async function register() {
       // User, Question, or GeneratedQuestion may not exist yet on a fresh
       // database — migrate() creates them before this migration runs.
     }
+    } // end if (runBootGuards)
 
     try {
       await migrate(db, {
