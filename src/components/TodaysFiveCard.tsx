@@ -94,8 +94,6 @@ export default function TodaysFiveCard({
 }: TodaysFiveCardProps = {}) {
   const [status, setStatus] = useState<DailyStatus | null>(initialStatus)
   const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences)
-  const [resetting, setResetting] = useState(false)
-  const [resetError, setResetError] = useState<string | null>(null)
   // Client-only reset-time label; null during SSR to keep hydration stable.
   const resetTime = useSyncExternalStore(
     subscribeNoop,
@@ -199,29 +197,6 @@ export default function TodaysFiveCard({
     : hasStartedRound
       ? 'Pick up where you left off'
       : 'Ready when you are!'
-
-  const resetForToday = async () => {
-    if (resetting) return
-    setResetError(null)
-    setResetting(true)
-    try {
-      const response = await fetch('/api/daily/reset', {
-        method: 'POST',
-        credentials: 'include',
-      })
-      const body = await response.json().catch(() => null)
-      if (!response.ok)
-        throw new Error(body?.message ?? 'Could not reset daily round.')
-      window.location.assign('/daily')
-    } catch (caught) {
-      setResetError(
-        caught instanceof Error
-          ? caught.message
-          : 'Could not reset daily round.'
-      )
-      setResetting(false)
-    }
-  }
 
   return (
     <div className="bg-card text-card-foreground w-full rounded-[4px] border border-[var(--brand-border)] px-4 py-5 shadow-[0_4px_12px_rgba(40,32,30,0.04)]">
@@ -353,21 +328,6 @@ export default function TodaysFiveCard({
           >
             See today&apos;s recap
           </Link>
-
-          {/* Quiet tertiary reset link in both branches. */}
-          <button
-            type="button"
-            onClick={() => {
-              void resetForToday()
-            }}
-            disabled={resetting}
-            className="block text-xs font-medium tracking-[0.08em] text-[var(--brand-ink-400)] uppercase underline underline-offset-4 disabled:opacity-60"
-          >
-            {resetting ? 'Resetting…' : 'Reset game for today and play again'}
-          </button>
-          {resetError ? (
-            <p className="text-destructive text-xs">{resetError}</p>
-          ) : null}
         </div>
       ) : (
         <Link
