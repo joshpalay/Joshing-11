@@ -451,10 +451,18 @@ type FeedListProps = {
    */
   activityItems?: StreamItem[]
   /**
+   * Home-only "Shared Ground" common-ground promo (the overlapping-circle
+   * editorial feature). Like the other promos it is pinned at a fixed offset
+   * rather than interleaved chronologically, so it is never the very first feed
+   * item when there is other activity to lead with — it only falls to row 0 when
+   * the feed is otherwise empty. Null on most visits. See displayRows.
+   */
+  commonGroundPromo?: StreamItem | null
+  /**
    * Home-only "Your world is expanding" promo. Unlike `activityItems` (which
    * interleave chronologically), this is spliced in at a fixed offset a few rows
    * down so it never lands at the very top or adjacent to the common-ground
-   * promo (which sorts to row 0). Null on most visits — it shows ~1 in 5. See
+   * promo. Null on most visits — it shows ~1 in 5. See
    * getRecentlyExpandingPromo / displayRows.
    */
   expandingPromo?: StreamItem | null
@@ -469,10 +477,12 @@ type FeedListProps = {
 type QuestionCardState = 'unanswered' | 'answered'
 
 // Where the home-only pinned promos land in the rendered row list: a few rows
-// down (so they're never the very first thing, and never adjacent to the common-
-// ground promo at row 0), and spaced apart from each other. Each offset is
-// measured against the original feed length; a promo only appears once the feed
-// has at least that many rows.
+// down (so they're never the very first thing) and spaced apart from each other.
+// Each offset is measured against the original feed length; the `expanding` /
+// `add_friends` promos only appear once the feed has at least that many rows,
+// while the common-ground promo always renders (clamping to the feed's end on a
+// short feed, and falling to row 0 only when the feed is otherwise empty).
+const COMMON_GROUND_PROMO_OFFSET = 2
 const EXPANDING_PROMO_OFFSET = 3
 const ADD_FRIENDS_PROMO_OFFSET = 6
 
@@ -688,6 +698,7 @@ function FeedListContent({
   showContributeFooter = false,
   unifiedHome = false,
   activityItems = [],
+  commonGroundPromo = null,
   expandingPromo = null,
   addFriendsPromo = null,
 }: FeedListProps) {
@@ -898,39 +909,56 @@ function FeedListContent({
 
   // Splice the home-only pinned promos in at fixed offsets a few rows down. They
   // are deliberately NOT part of the chronological union above: pinning them to
-  // indices keeps them off the very top and never adjacent to the common-ground
-  // promo (which sorts to row 0). Each is only inserted once the feed has enough
-  // rows above its offset; offsets are measured against the original feed so the
-  // two promos stay spaced apart even when both are present.
+  // indices keeps them off the very top so a promo never leads the feed when
+  // there's real activity to show. The common-ground promo `alwaysShow`s — it
+  // clamps to the feed's end on a short feed and only falls to row 0 when the
+  // feed is otherwise empty — while the others are skipped until the feed has
+  // enough rows. Offsets are measured against the original feed so the promos
+  // stay spaced apart even when several are present.
   const displayRows = useMemo<UnifiedRow[]>(() => {
+    // Common-ground must always render but must never be FIRST when other rows
+    // exist: clamp its offset to the feed length (so a 1-row feed puts it at
+    // index 1, not 0), and let it sit at row 0 only when the feed is empty.
+    const commonGroundOffset =
+      unifiedRows.length === 0
+        ? 0
+        : Math.min(COMMON_GROUND_PROMO_OFFSET, unifiedRows.length)
     const pinned = [
-      { offset: EXPANDING_PROMO_OFFSET, item: expandingPromo },
-      { offset: ADD_FRIENDS_PROMO_OFFSET, item: addFriendsPromo },
+      { offset: commonGroundOffset, item: commonGroundPromo, alwaysShow: true },
+      { offset: EXPANDING_PROMO_OFFSET, item: expandingPromo, alwaysShow: false },
+      { offset: ADD_FRIENDS_PROMO_OFFSET, item: addFriendsPromo, alwaysShow: false },
     ]
-      .filter((p): p is { offset: number; item: StreamItem } => p.item !== null)
+      .filter(
+        (p): p is { offset: number; item: StreamItem; alwaysShow: boolean } =>
+          p.item !== null,
+      )
       .sort((a, b) => a.offset - b.offset)
     if (pinned.length === 0) return unifiedRows
 
     const next = [...unifiedRows]
     let inserted = 0
-    for (const { offset, item } of pinned) {
-      if (offset > unifiedRows.length) continue
+    for (const { offset, item, alwaysShow } of pinned) {
+      if (!alwaysShow && offset > unifiedRows.length) continue
       // Account for promos already spliced in ahead of this one so each keeps its
       // intended distance from the others.
       const spliceAt = offset + inserted
-      const anchor = next[spliceAt - 1]!
+      // Borrow the preceding row's timestamp so recency grouping keeps the promo
+      // in place rather than floating it into its own day bucket. At index 0 (an
+      // otherwise-empty feed) there's nothing ahead, so fall back to the promo's
+      // own sortAt.
+      const anchor = spliceAt > 0 ? next[spliceAt - 1]! : null
+      const sortAt =
+        item.sortAt instanceof Date ? item.sortAt : new Date(item.sortAt)
       next.splice(spliceAt, 0, {
         kind: 'activity',
         item,
-        // Borrow the preceding row's timestamp so recency grouping keeps the
-        // promo in place rather than floating it into its own day bucket.
-        source_event_at: anchor.source_event_at,
-        sortMs: anchor.sortMs,
+        source_event_at: anchor ? anchor.source_event_at : sortAt.toISOString(),
+        sortMs: anchor ? anchor.sortMs : sortAt.getTime(),
       })
       inserted++
     }
     return next
-  }, [unifiedRows, expandingPromo, addFriendsPromo])
+  }, [unifiedRows, commonGroundPromo, expandingPromo, addFriendsPromo])
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
@@ -1472,10 +1500,12 @@ function FeedListContent({
             <Fragment key={group.key}>
               <h2
                 className={`text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0 ${
-                  // On the unified-home feed, the day label aligns to where the
-                  // activity-row copy starts — past the fixed icon column
-                  // (MARK_W 24 + GAP 8) plus the row's 2px horizontal padding.
-                  unifiedHome ? 'pl-[34px]' : ''
+                  // On the unified-home feed, the day label sits flush left on
+                  // the feed's left gutter — the same 2px the activity rows pad
+                  // in (where the shape column begins) and where the
+                  // "What's happening" header aligns — rather than indenting past
+                  // the icon column to meet the row copy.
+                  unifiedHome ? 'pl-[2px]' : ''
                 }`}
               >
                 {group.label}

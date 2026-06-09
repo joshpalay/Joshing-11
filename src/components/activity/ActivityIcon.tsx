@@ -59,12 +59,13 @@ const LARGE_SCALE = 0.5;
 // pair. base=height (= MARK_W) keeps the triangles un-smushed.
 const STACK_HALF = 24;
 const STACK_H = STACK_HALF * 2; // 48
-// Every mark TOP-ANCHORS its top to the first line's cap height (the top of
+// Every mark TOP-ANCHORS its top near the first line's cap height (the top of
 // "R"), not the line-box top above it — so the top of the shape lines up with
-// the top of the letter beside it. Equal to the line's half-leading
-// ((22.5 − 15) / 2 ≈ 3.75) plus the gap from the em-box top down to the cap;
-// tuned to 7 against Montserrat at 15px.
-const CAP_NUDGE = 7;
+// the top of the letter beside it. The line's half-leading is ((22.5 − 15) / 2
+// ≈ 3.75); we keep the nudge just under that so the single marks sit a hair
+// higher and stop drooping below a one-line row, which re-centers the row's
+// content between its hairline borders.
+const CAP_NUDGE = 3;
 
 export type ActivityIconSpec =
   | { kind: 'bundle'; total: number; unanswered: number }
