@@ -1,6 +1,6 @@
 'use client';
 
-import { Send } from 'lucide-react';
+import { ChevronDown, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type KeyboardEvent } from 'react';
 
@@ -242,13 +242,30 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
         <div
           style={{
             flexShrink: 0,
+            alignSelf: 'stretch',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'flex-end',
+            justifyContent: 'space-between',
             gap: 4,
           }}
         >
           <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap' }}>{timestamp}</span>
+          {/* Cards backed by answerable questions get a chevron in the bottom-
+              right corner that signals (and reflects) the expand/collapse state.
+              The row itself is the button (aria-expanded above), so this stays
+              decorative. */}
+          {expandable ? (
+            <ChevronDown
+              size={18}
+              aria-hidden
+              style={{
+                color: INK3,
+                transition: 'transform 150ms ease',
+                transform: open ? 'rotate(180deg)' : 'none',
+              }}
+            />
+          ) : null}
         </div>
       </div>
 
