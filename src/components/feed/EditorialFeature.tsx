@@ -63,8 +63,10 @@ export function EditorialFeature({
     <section
       // -mx-4 escapes the home <main>'s px-4 gutter so the wash reaches the feed
       // column edges; -my-1.5 absorbs the feed's space-y-3 so the band meets its
-      // neighbors edge to edge. Inner content is re-padded with px-4.
-      className={cn('-mx-4 -my-1.5 px-4 py-12 md:py-14', TONE_BG[tone])}
+      // neighbors edge to edge. Inner content is re-padded with px-[30px] (not
+      // px-4) so the eyebrow/headline/artwork line up with the feed cards' text,
+      // which sits at the 16px gutter + the card's own 14px padding = 30px.
+      className={cn('-mx-4 -my-1.5 px-[30px] py-12 md:py-14', TONE_BG[tone])}
     >
       <p
         className={cn(
