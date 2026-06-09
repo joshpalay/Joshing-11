@@ -23,8 +23,33 @@ export function AccountActions() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [resettingGame, setResettingGame] = useState(false);
+  const [resetGameError, setResetGameError] = useState<string | null>(null);
 
   const canDeleteAccount = deleteConfirmation === 'DELETE';
+
+  async function createTestGame() {
+    if (resettingGame) return;
+    setResetGameError(null);
+    setResettingGame(true);
+
+    try {
+      const response = await fetch('/api/daily/reset', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const body = (await response.json().catch(() => null)) as { message?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(body?.message ?? 'Could not reset daily round.');
+      }
+
+      router.push('/daily');
+    } catch (caught) {
+      setResetGameError(caught instanceof Error ? caught.message : 'Could not reset daily round.');
+      setResettingGame(false);
+    }
+  }
 
   async function confirmLogout() {
     setLoggingOut(true);
@@ -78,9 +103,10 @@ export function AccountActions() {
         <SettingsGroup>
           <SettingsRow
             icon={<FlaskConical className="size-5" />}
-            title="Create test game"
-            subtitle="Spin up a test game instantly"
-            href="/dev/test-game"
+            title={resettingGame ? 'Resetting…' : 'Create test game'}
+            subtitle="Reset today's game and play again"
+            onClick={() => void createTestGame()}
+            disabled={resettingGame}
           />
           <SettingsRow
             icon={<RefreshCw className="size-5" />}
@@ -107,6 +133,7 @@ export function AccountActions() {
             href="/dev/points-diagnostic"
           />
         </SettingsGroup>
+        {resetGameError ? <p className="mt-2 text-sm text-destructive">{resetGameError}</p> : null}
       </section>
 
       <section className="mb-8">
