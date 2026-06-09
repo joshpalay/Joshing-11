@@ -59,16 +59,14 @@ export async function register() {
     // dominates cold-start latency — the first request after a boot (e.g.
     // POST /api/auth/request-otp) waits behind the whole chain.
     //
-    // Set SKIP_BOOT_DB_GUARDS=1 in an environment whose database is known to
-    // already carry every guard-applied change to skip the chain. migrate()
-    // still runs afterwards, so journaled migrations are always applied.
-    //
-    // CAUTION: migrations 0070–0073 are NOT in drizzle/meta/_journal.json, so
-    // migrate() does not apply them — the guards below are currently their ONLY
-    // application path. Do not set this flag on a database that has not already
-    // been booted with the guards (i.e. that lacks those objects), and journal
-    // future migrations rather than relying on a guard. Leave the flag unset in
-    // preview/dev so the auto-repair guards keep running. See CLAUDE.md.
+    // Set SKIP_BOOT_DB_GUARDS=1 to skip the chain; migrate() still runs
+    // afterwards, and every migration through the head is journaled in
+    // drizzle/meta/_journal.json, so migrate() applies them all on a fresh DB
+    // and the guards are now purely defensive redundancy. Leave the flag unset
+    // in preview/dev so the auto-repair guards keep running. Always journal new
+    // migrations (keep _journal.json in lockstep with drizzle/*.sql) rather
+    // than relying on a guard as a migration's only application path. See
+    // CLAUDE.md.
     const runBootGuards = process.env.SKIP_BOOT_DB_GUARDS !== '1';
     if (runBootGuards) {
     // Migration 0006 sets NOT NULL on senderUserId/recipientUserId after adding them
