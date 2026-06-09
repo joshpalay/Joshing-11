@@ -19,7 +19,10 @@ import {
 import { getCommonGround } from '@/server/db/queries/common-ground';
 import { getFriends } from '@/server/db/queries/friends';
 
-const MAX_PROMO_DOMAINS = 3;
+// The editorial "Shared Ground" feature shows only the two strongest shared-but-
+// untested areas, so the circles stay the hero artwork (more than two crowds the
+// motif). See CommonGroundFeature.
+const MAX_PROMO_DOMAINS = 2;
 // Cap the per-render getCommonGround probes so the homepage stays cheap even for
 // users with many friends; the rotation still cycles through everyone over time.
 const MAX_CANDIDATES = 4;

@@ -73,6 +73,7 @@ export function DomainCircleSvg({
   friendTier,
   datasetMax,
   ariaLabel,
+  scale = 1,
 }: {
   viewerPoints: number
   friendPoints: number
@@ -80,6 +81,10 @@ export function DomainCircleSvg({
   friendTier: MasteryTier
   datasetMax: number
   ariaLabel: string
+  // Renders the motif larger (or smaller) without touching the geometry: the
+  // viewBox is unchanged, only the rendered width/height scale. The editorial
+  // "Shared Ground" feature uses this to make the circles the hero artwork.
+  scale?: number
 }) {
   const { svgWidth, svgHeight, cy, rA, rB, gap, offsetX } = circleGeometry(
     viewerPoints,
@@ -90,8 +95,8 @@ export function DomainCircleSvg({
   )
   return (
     <svg
-      width={svgWidth}
-      height={svgHeight}
+      width={svgWidth * scale}
+      height={svgHeight * scale}
       viewBox={`0 0 ${svgWidth} ${svgHeight}`}
       role="img"
       aria-label={ariaLabel}

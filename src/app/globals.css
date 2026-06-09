@@ -167,6 +167,14 @@
     --success-border:      color-mix(in srgb, var(--success) 30%, var(--border));
     --destructive-surface: color-mix(in srgb, var(--destructive) 8%, var(--card));
     --destructive-border:  color-mix(in srgb, var(--destructive) 28%, var(--border));
+    /* Editorial feature washes — full-bleed "featured moment" bands in the feed
+       (Shared Ground / Grow Your Circle / Your World Is Expanding). Subtle tints
+       derived from the page cream so they read as a calm change in surface, not a
+       card or banner. The per-tone eyebrow accent reuses an existing brand token
+       (orange / success-green / link-slate). */
+    --editorial-parchment: color-mix(in srgb, var(--brand-border) 22%, var(--brand-cream-page));
+    --editorial-sage:      color-mix(in srgb, var(--success) 8%, var(--brand-cream-page));
+    --editorial-slate:     color-mix(in srgb, var(--brand-link) 8%, var(--brand-cream-page));
     /* Legacy editorial aliases — re-pointed at the brand tokens so older
        surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
        Knowledge page, replay/catch-up) render with navy ink instead of warm
@@ -238,6 +246,11 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    /* Editorial feature washes — tinted off the dark card so the bands stay
+       legible as a featured surface in dark mode. */
+    --editorial-parchment: color-mix(in srgb, var(--brand-border) 10%, var(--card));
+    --editorial-sage:      color-mix(in srgb, var(--success) 12%, var(--card));
+    --editorial-slate:     color-mix(in srgb, var(--brand-link) 14%, var(--card));
 }
 
 @layer base {
