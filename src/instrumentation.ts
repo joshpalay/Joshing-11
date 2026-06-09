@@ -14,6 +14,25 @@ export async function register() {
       );
     }
 
+    // RESEND_API_KEY + EMAIL_FROM back the email-verification confirm-link
+    // (src/server/email/client.ts). The client never throws — if either is
+    // missing it silently logs to stdout and returns missing_config, so a
+    // misconfigured production deploy drops every verification email with no
+    // user-visible error. Warn loudly at boot so the gap surfaces here rather
+    // than as silently-undelivered mail. (Warning only, like PHONE_HASH_SALT
+    // above — throwing would 500 every request via the instrumentation hook.)
+    if (process.env.NODE_ENV === 'production') {
+      const missingEmailVars = [
+        !process.env.RESEND_API_KEY && 'RESEND_API_KEY',
+        !process.env.EMAIL_FROM && 'EMAIL_FROM',
+      ].filter(Boolean);
+      if (missingEmailVars.length > 0) {
+        console.error(
+          `[instrumentation] ${missingEmailVars.join(' and ')} not set in production; email verification will silently no-op. Set both, and ensure EMAIL_FROM's domain matches a Verified domain in Resend.`,
+        );
+      }
+    }
+
     const { migrate } = await import('drizzle-orm/node-postgres/migrator');
     const { drizzle } = await import('drizzle-orm/node-postgres');
     const { Pool } = await import('pg');
