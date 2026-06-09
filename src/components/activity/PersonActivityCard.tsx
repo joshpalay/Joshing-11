@@ -45,7 +45,10 @@ export function PersonActivityCard({
 
   return (
     <div style={{ padding: '12px 2px', borderBottom: `1px solid ${RULE}` }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+      {/* No flex `gap` here: ActivityIcon already reserves the 24px mark + 8px
+          marginRight, so the heading text lands at the same 32px x as the nested
+          events and every other feed row. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
         <ActivityIcon spec={{ kind: 'diamond' }} seed={seed} />
         <p
           style={{
