@@ -10,9 +10,19 @@ export type SendVerificationEmailResult =
   | { ok: true }
   | { ok: false; reason: 'no_pending_email' | 'rate_limited' | 'send_failed'; retryAfterMs?: number };
 
+// Mirrors the fallback chain in getBaseUrl() (src/app/api/friend-invitations/
+// route.ts) so a forgotten NEXT_PUBLIC_APP_URL can't silently emit localhost
+// confirm-links in production. VERCEL_PROJECT_PRODUCTION_URL is auto-injected
+// on every Vercel deployment (hostname only, no scheme) and points at the
+// stable production host. localhost remains the last-resort dev default.
 function appBaseUrl(): string {
-  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const fromEnv =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.APP_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/+$/, '');
+
+  const vercelProd = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (vercelProd) return `https://${vercelProd.replace(/\/+$/, '')}`;
+
   return 'http://localhost:3000';
 }
 

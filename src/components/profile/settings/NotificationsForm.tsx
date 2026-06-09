@@ -77,11 +77,17 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
   const [resending, setResending] = useState(false);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [editingEmail, setEditingEmail] = useState(false);
 
   const smsOn = state.smsOptIn === 'opted_in';
   const emailOn = state.emailOptIn === 'opted_in';
   const hasPendingEmail = Boolean(state.pendingEmail);
   const hasVerifiedEmail = state.emailVerified && Boolean(state.email);
+  // Show the address input for a brand-new email, or when a verified user has
+  // tapped "Change email". A pending change to an already-verified address
+  // leaves the old one in force until the new link is confirmed.
+  const showEmailInput = !hasVerifiedEmail || editingEmail;
+  const pendingIsChange = hasPendingEmail && hasVerifiedEmail;
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -95,6 +101,10 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
       setEmailError('Please enter an email address.');
       return;
     }
+    if (trimmed.toLowerCase() === (state.email ?? '').toLowerCase()) {
+      setEmailError('That’s already your confirmed email.');
+      return;
+    }
     setSavingEmail(true);
     setEmailError(null);
     setResendNotice(null);
@@ -105,10 +115,24 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
       return;
     }
     setState(result.state);
+    setEditingEmail(false);
     if (result.verificationEmailSent) {
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
       setResendNotice('Confirmation email sent.');
     }
+  }
+
+  function startEditingEmail() {
+    setEmailDraft('');
+    setEmailError(null);
+    setResendNotice(null);
+    setEditingEmail(true);
+  }
+
+  function cancelEditingEmail() {
+    setEditingEmail(false);
+    setEmailDraft(state.pendingEmail ?? '');
+    setEmailError(null);
   }
 
   async function toggleEmail() {
@@ -177,6 +201,15 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
                 ? `Email ${state.email} when a new round opens.`
                 : 'Add an email address to enable email reminders.'}
             </p>
+            {hasVerifiedEmail && !editingEmail ? (
+              <button
+                type="button"
+                className="mt-2 self-start text-xs font-medium underline-offset-2 hover:underline"
+                onClick={startEditingEmail}
+              >
+                Change email
+              </button>
+            ) : null}
           </div>
           {hasVerifiedEmail ? (
             <Switch
@@ -188,13 +221,13 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
           ) : null}
         </div>
 
-        {!hasVerifiedEmail ? (
+        {showEmailInput ? (
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               type="email"
               inputMode="email"
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder={hasVerifiedEmail ? 'new@example.com' : 'you@example.com'}
               value={emailDraft}
               disabled={savingEmail}
               onChange={(event) => {
@@ -209,15 +242,33 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
               onClick={() => void saveEmail()}
               disabled={savingEmail}
             >
-              {savingEmail ? 'Saving…' : hasPendingEmail ? 'Update' : 'Save'}
+              {savingEmail
+                ? 'Saving…'
+                : hasVerifiedEmail
+                  ? 'Send confirmation'
+                  : hasPendingEmail
+                    ? 'Update'
+                    : 'Save'}
             </button>
+            {editingEmail ? (
+              <button
+                type="button"
+                className="text-sm text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                onClick={cancelEditingEmail}
+                disabled={savingEmail}
+              >
+                Cancel
+              </button>
+            ) : null}
           </div>
         ) : null}
 
-        {hasPendingEmail && !hasVerifiedEmail ? (
+        {hasPendingEmail ? (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">
-              Check {state.pendingEmail} for a confirmation link. It expires in 24 hours.
+              {pendingIsChange
+                ? `Confirm ${state.pendingEmail} to switch your reminder address. Until then, we’ll keep emailing ${state.email}.`
+                : `Check ${state.pendingEmail} for a confirmation link. It expires in 24 hours.`}
             </p>
             <button
               type="button"

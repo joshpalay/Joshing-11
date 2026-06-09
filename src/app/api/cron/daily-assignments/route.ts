@@ -8,6 +8,8 @@ import { type QueueSlot } from '@/server/daily/types';
 import { runWithConcurrency } from '@/server/lib/concurrency';
 import { isCronAuthorized } from '@/server/auth/cron';
 import { sendSms } from '@/server/sms';
+import { sendEmail } from '@/server/email/client';
+import { buildDailyReminderTemplate } from '@/server/email/templates/daily-reminder';
 
 export const dynamic = 'force-dynamic';
 // Scheduled at 17:05 UTC (vercel.json) to fire just after the 17:00 UTC daily
@@ -49,6 +51,9 @@ export async function GET(request: NextRequest) {
       id: users.id,
       phoneNumber: users.phoneNumber,
       smsOptIn: users.smsOptIn,
+      email: users.email,
+      emailOptIn: users.emailOptIn,
+      emailVerified: users.emailVerified,
     })
     .from(users)
     .where(eq(users.onboardingComplete, true));
@@ -67,6 +72,7 @@ export async function GET(request: NextRequest) {
     failedGeneration: 0,
     failedOther: 0,
     smsSent: 0,
+    emailSent: 0,
   };
 
   await runWithConcurrency(onboardedUsers, USER_CONCURRENCY, async (user) => {
@@ -90,6 +96,36 @@ export async function GET(request: NextRequest) {
           user.id,
         );
         results.smsSent += 1;
+      }
+
+      // Email reminder — mirrors the SMS nudge for opted-in + verified users,
+      // but previews today's first question as a no-spoiler teaser. sendEmail
+      // never throws (returns a discriminated union), so a provider failure
+      // counts as a skipped email, not a failed user.
+      if (queue && user.emailOptIn === 'opted_in' && user.emailVerified && user.email) {
+        const teaserSlot = asQueueSlots(queue.slots).find(
+          (slot) => !slot.answered && !slot.skipped && slot.question_text,
+        );
+        const template = buildDailyReminderTemplate({
+          dailyUrl: `${baseUrl}/daily`,
+          teaser: teaserSlot
+            ? { questionText: teaserSlot.question_text, domain: teaserSlot.domain }
+            : null,
+        });
+        const emailResult = await sendEmail({
+          to: user.email,
+          subject: template.subject,
+          html: template.html,
+          text: template.text,
+        });
+        if (emailResult.ok) {
+          results.emailSent += 1;
+        } else {
+          console.warn('[cron/daily-assignments] reminder email failed', {
+            userId: user.id,
+            reason: emailResult.reason,
+          });
+        }
       }
     } catch (error) {
       results.failed += 1;
