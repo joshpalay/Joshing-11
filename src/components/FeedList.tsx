@@ -30,7 +30,7 @@ import {
   GrowYourCircleFeature,
   RecentlyExpandingFeature,
 } from '@/components/feed/EditorialPromos'
-import type { StreamItem } from '@/lib/activity-stream'
+import { mergeLowSignalLines, type StreamItem } from '@/lib/activity-stream'
 import type { InsideJokeKind, QuestionSource } from '@/lib/questions-types'
 
 type FriendResult = {
@@ -492,6 +492,46 @@ const ADD_FRIENDS_PROMO_OFFSET = 6
 type UnifiedRow =
   | { kind: 'feed'; sortMs: number; source_event_at: string; item: FeedApiItem }
   | { kind: 'activity'; sortMs: number; source_event_at: string; item: StreamItem }
+
+// D-FEED-TIER §3: collapse low-signal ambient repeats (mastery, streaks) onto a
+// single "·"-joined line. Operates on the FINAL merged display order so a run is
+// only folded when its members are genuinely ADJACENT — never reaching across a
+// playable feed card or a protected micro-tier row, which preserves chronology
+// and keeps a streak line sitting under the card it followed. The synthetic row
+// inherits the newest (first, since rows are newest-first) member's slot.
+function collapseLowSignalActivityRuns(rows: UnifiedRow[]): UnifiedRow[] {
+  const out: UnifiedRow[] = []
+  let i = 0
+  while (i < rows.length) {
+    const row = rows[i]!
+    if (row.kind !== 'activity' || row.item.signal !== 'low') {
+      out.push(row)
+      i++
+      continue
+    }
+    let j = i
+    const run: StreamItem[] = []
+    while (j < rows.length) {
+      const next = rows[j]!
+      if (next.kind !== 'activity' || next.item.signal !== 'low') break
+      run.push(next.item)
+      j++
+    }
+    if (run.length <= 1) {
+      out.push(row)
+    } else {
+      out.push({
+        kind: 'activity',
+        item: mergeLowSignalLines(run),
+        // Newest member's slot (rows are newest-first, so this is rows[i]).
+        source_event_at: row.source_event_at,
+        sortMs: row.sortMs,
+      })
+    }
+    i = j
+  }
+  return out
+}
 
 export default function FeedList(props: FeedListProps) {
   return (
@@ -959,6 +999,15 @@ function FeedListContent({
     }
     return next
   }, [unifiedRows, commonGroundPromo, expandingPromo, addFriendsPromo])
+
+  // Fold adjacent runs of low-signal ambient rows into single "·"-joined lines
+  // (D-FEED-TIER §3). Runs after promos are spliced and the union is sorted, so
+  // adjacency reflects the true on-screen order; feed cards and micro-tier rows
+  // break runs. Only meaningful on unified home (activity rows render there).
+  const collapsedRows = useMemo<UnifiedRow[]>(
+    () => collapseLowSignalActivityRuns(displayRows),
+    [displayRows],
+  )
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
@@ -1496,7 +1545,7 @@ function FeedListContent({
         )
       ) : (
         <section className="space-y-3 pb-8">
-          {groupItemsByRecency(displayRows).map((group) => (
+          {groupItemsByRecency(collapsedRows).map((group) => (
             <Fragment key={group.key}>
               <h2
                 className={`text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0 ${
@@ -1628,6 +1677,11 @@ function FeedListContent({
                 const dismissible = !item.viewer_is_author
                 const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
                 const onDismiss = dismissible ? () => requestDismiss(item) : undefined
+                // Tier 1 "playable" lift (D-FEED-TIER): only on the unified home
+                // feed, and only for an unanswered, non-authored card the viewer
+                // can actually answer. Answered results and the standalone Feed
+                // tab keep the soft resting chrome.
+                const elevated = unifiedHome && !isAnswered && dismissible
 
                 let card: ReactNode
                 if (typedItem.type === 'direct_sent') {
@@ -1637,6 +1691,7 @@ function FeedListContent({
                       overflow={overflow}
                       onAnswer={onAnswer}
                       onDismiss={onDismiss}
+                      elevated={elevated}
                     />
                   )
                 } else if (typedItem.type === 'friend_liked') {
@@ -1646,6 +1701,7 @@ function FeedListContent({
                       overflow={overflow}
                       onAnswer={onAnswer}
                       onDismiss={onDismiss}
+                      elevated={elevated}
                     />
                   )
                 } else {
@@ -1656,6 +1712,7 @@ function FeedListContent({
                       onAnswer={onAnswer}
                       onDismiss={onDismiss}
                       onHideCategory={() => void hideCategory(item)}
+                      elevated={elevated}
                     />
                   )
                 }

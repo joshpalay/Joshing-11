@@ -178,6 +178,15 @@ export type StreamItem = {
   id: string;
   sortAt: Date;
   tier: number;
+  // Visual register for the two-tier home feed (D-FEED-TIER), independent of the
+  // numeric `tier` above (which only drives sortByProminence — do NOT conflate
+  // them or sort order corrupts). `'micro'` = a protected high-signal connection
+  // event (Convergence, Common Ground, "got your question") that renders one
+  // notch above ambient and is exempt from the low-signal collapse; `'low'` = a
+  // collapsible ambient repeat (mastery, streaks); `undefined` = the default
+  // ambient one-liner. Set once at construction so the collapse and the renderer
+  // share a single source of truth.
+  signal?: 'micro' | 'low';
   // Whether this item is eligible for the homepage's curated head.
   homeEligible: boolean;
   line: StreamLinePart[];
@@ -240,6 +249,9 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         line: [a, txt(got ? ' got your question' : ' answered your question')],
         secondLine: domain,
         icon: 'diamond',
+        // High-signal connection event — your authored question was answered.
+        // Protected micro-tier (never swept into the low-signal collapse).
+        signal: 'micro',
         action: null,
         expand:
           item.referenceId && faq?.questionText
@@ -333,6 +345,8 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(` reached ${m?.tier ?? 'a new tier'}`)],
         secondLine: m?.domain ?? null,
+        // Ambient texture — collapsible into a single line with adjacent repeats.
+        signal: 'low',
         action: null,
         expand: null,
       };
@@ -536,6 +550,9 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
     // they_got_you ("Robyn got your question") is the headline social signal —
     // home-eligible. you_got_them is quieter; keep it to the full list.
     homeEligible: theyGotYou,
+    // they_got_you is a protected high-signal connection event (micro-tier);
+    // you_got_them is quieter ambient texture that can collapse with repeats.
+    signal: theyGotYou ? 'micro' : 'low',
     line: theyGotYou
       ? [friend, txt(' got your question')]
       : [txt('You got '), friend, txt(' on '), cat(moment.category)],
@@ -573,6 +590,8 @@ export function milestoneToStreamItem(
     id: milestone.id,
     sortAt: milestone.sortAt,
     tier: LATELY_TIER.MILESTONE,
+    // Ambient roll-up (streaks / went-deep) — collapsible with adjacent repeats.
+    signal: 'low',
     homeEligible: true,
     line: [friend, ...tail],
     secondLine: null,
@@ -625,6 +644,8 @@ export function convergenceToStreamItem(
     id: convergence.id,
     sortAt: convergence.sortAt,
     tier: LATELY_TIER.MILESTONE,
+    // High-signal "same-correct overlap" — protected micro-tier.
+    signal: 'micro',
     homeEligible: false,
     line,
     secondLine: null,
@@ -656,6 +677,8 @@ export function commonGroundPromoToStreamItem(
     id,
     sortAt,
     tier: LATELY_TIER.OTHER,
+    // High-signal overlap discovery — protected micro-tier.
+    signal: 'micro',
     homeEligible: true,
     line: [txt('You and '), act(embed.friendFirstName, embed.friendId), txt(' share ground worth testing')],
     secondLine: null,
@@ -712,5 +735,52 @@ export function addFriendsPromoToStreamItem(
     icon: 'domain',
     expand: null,
     embed,
+  };
+}
+
+// --- Low-signal collapse (D-FEED-TIER §3) ------------------------------------
+
+// How many constituent one-liners a collapsed row shows before rolling the rest
+// into a "+N more" tail.
+export const LOW_SIGNAL_COLLAPSE_CAP = 3;
+
+// A `signal: 'low'` item is collapsible ambient texture (mastery, streaks). The
+// caller (FeedList) merges only ADJACENT runs of these — never reaching across a
+// playable card or a micro-tier row — so chronology is preserved.
+export function isLowSignalAmbient(item: StreamItem): boolean {
+  return item.signal === 'low';
+}
+
+// Fold an adjacent run of low-signal one-liners into ONE synthetic row whose
+// `line` joins the constituents with a middot (the same separator the feed cards
+// use), preserving each actor link. Caps at LOW_SIGNAL_COLLAPSE_CAP shown lines
+// with a "+N more" tail. The synthetic row inherits the newest constituent's
+// `sortAt` (so it keeps that chronological slot) and the lowest `tier`, stays
+// `signal: 'low'`, and carries no icon/expand/action/embed so it renders as a
+// plain ambient line. Returns the lone item unchanged when the run is length 1.
+export function mergeLowSignalLines(run: StreamItem[]): StreamItem {
+  if (run.length === 1) return run[0]!;
+  const shown = run.slice(0, LOW_SIGNAL_COLLAPSE_CAP);
+  const overflow = run.length - shown.length;
+  const line: StreamLinePart[] = [];
+  shown.forEach((item, idx) => {
+    if (idx > 0) line.push(txt(' · '));
+    line.push(...item.line);
+  });
+  if (overflow > 0) line.push(txt(` · +${overflow} more`));
+  const newest = run.reduce((a, b) => (a.sortAt >= b.sortAt ? a : b));
+  return {
+    id: `collapsed-${run[0]!.id}`,
+    sortAt: newest.sortAt,
+    tier: Math.min(...run.map((r) => r.tier)),
+    signal: 'low',
+    homeEligible: true,
+    line,
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: null,
+    expand: null,
+    embed: null,
   };
 }

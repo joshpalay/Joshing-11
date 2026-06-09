@@ -176,6 +176,14 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   // and header text don't shift sideways when the card opens.
   const opened = expandable && open;
 
+  // D-FEED-TIER §4 micro-tier: protected high-signal connection events
+  // (Convergence, Common Ground, "got your question") read one notch above the
+  // flat ambient one-liner — a left INK hairline rule over a barely-lifted PAPER
+  // fill — while staying well below the playable card. The INK rule sits in the
+  // row's existing 2px left gutter (border 2px + paddingLeft 0 == the ambient
+  // 0 + 2px), so the icon column never shifts sideways. Opened state wins.
+  const micro = item.signal === 'micro' && !opened;
+
   return (
     <div
       id={item.anchorId ?? undefined}
@@ -187,10 +195,17 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
               padding: '18px 2px',
               background: PAPER,
             }
-          : {
-              borderBottom: `1px solid ${RULE}`,
-              padding: '12px 2px',
-            }
+          : micro
+            ? {
+                borderBottom: `1px solid ${RULE}`,
+                borderLeft: `2px solid ${INK}`,
+                padding: '12px 2px 12px 0',
+                background: PAPER,
+              }
+            : {
+                borderBottom: `1px solid ${RULE}`,
+                padding: '12px 2px',
+              }
       }
     >
       <div

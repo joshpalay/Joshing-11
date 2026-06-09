@@ -12,6 +12,7 @@ type FriendAddedCardProps = {
   onDismiss?: () => void
   onHideCategory?: () => void
   className?: string
+  elevated?: boolean
 }
 
 export function FriendAddedCard({
@@ -21,6 +22,7 @@ export function FriendAddedCard({
   onDismiss,
   onHideCategory,
   className,
+  elevated,
 }: FriendAddedCardProps) {
   const visibleCategory = visibleFeedCategory(item.category)
   const friendName = item.friendName || item.avatarName || 'A friend'
@@ -64,6 +66,7 @@ export function FriendAddedCard({
       onAnswer={item.viewerIsAuthor ? undefined : onAnswer}
       onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
       className={className}
+      elevated={elevated}
     />
   )
 }
