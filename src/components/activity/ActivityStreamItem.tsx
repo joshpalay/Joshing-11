@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Send } from 'lucide-react';
+import { ChevronDown, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type KeyboardEvent } from 'react';
 
@@ -31,7 +31,7 @@ const ACTOR_BLUE = 'var(--brand-link)';
 // actor name / update copy begins, reading as a clear child of the update.
 const EXPANSION_INDENT = 32;
 
-function ActorLink({ name, userId }: { name: string; userId: string | null }) {
+export function ActorLink({ name, userId }: { name: string; userId: string | null }) {
   if (!userId) return <b style={{ fontWeight: 600, color: ACTOR_BLUE }}>{name}</b>;
   return (
     <Link
@@ -50,7 +50,7 @@ function ActorLink({ name, userId }: { name: string; userId: string | null }) {
   );
 }
 
-function Line({ parts }: { parts: StreamLinePart[] }) {
+export function Line({ parts }: { parts: StreamLinePart[] }) {
   return (
     <>
       {parts.map((part, i) => {
@@ -94,7 +94,17 @@ function questionBacked(expand: StreamExpand | null): boolean {
 // whether it was scored correct. Drives the calm "Answered" history copy.
 type Resolution = { submitted: string; isCorrect: boolean };
 
-export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; timestamp: string }) {
+export function ActivityStreamItem({
+  item,
+  timestamp,
+  inCard = false,
+}: {
+  item: StreamItem;
+  timestamp: string;
+  // When the row is wrapped in a card (the milestone standout card), drop its own
+  // hairline border + paper fill so the card's surface shows through.
+  inCard?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
 
@@ -176,30 +186,19 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
   // and header text don't shift sideways when the card opens.
   const opened = expandable && open;
 
-  // D-FEED-TIER §4 micro-tier: protected high-signal connection events
-  // (Convergence, Common Ground, "got your question") read one notch above the
-  // flat ambient one-liner — a left INK hairline rule over a barely-lifted PAPER
-  // fill — while staying well below the playable card. The INK rule sits in the
-  // row's existing 2px left gutter (border 2px + paddingLeft 0 == the ambient
-  // 0 + 2px), so the icon column never shifts sideways. Opened state wins.
-  const micro = item.signal === 'micro' && !opened;
-
   return (
     <div
       id={item.anchorId ?? undefined}
       style={
-        opened
-          ? {
-              borderTop: `1px solid ${RULE}`,
-              borderBottom: `1px solid ${RULE}`,
-              padding: '18px 2px',
-              background: PAPER,
-            }
-          : micro
+        inCard
+          ? // Inside the milestone standout card: the shell owns the surface, so
+            // the row drops its own border/fill and just keeps light padding.
+            { padding: opened ? '6px 0' : '4px 0' }
+          : opened
             ? {
+                borderTop: `1px solid ${RULE}`,
                 borderBottom: `1px solid ${RULE}`,
-                borderLeft: `2px solid ${INK}`,
-                padding: '12px 2px 12px 0',
+                padding: '18px 2px',
                 background: PAPER,
               }
             : {
@@ -543,26 +542,25 @@ function SendOnwardExpansion({
         &ldquo;{question.text}&rdquo;
       </p>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+        {/* Quiet, standard share icon (matches KnowledgeCard / RecentlyExpanding)
+            — no oversized labeled button. Opens the same SendQuestionDrawer. */}
         <button
           type="button"
           onClick={() => setSendOpen(true)}
+          aria-label="Send to a friend"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
-            background: INK,
-            color: 'var(--brand-cream-page)',
+            justifyContent: 'center',
+            background: 'transparent',
             border: 'none',
-            fontFamily: FM,
-            fontSize: 10,
-            letterSpacing: 2,
-            padding: '8px 14px',
+            padding: 4,
+            color: INK,
             cursor: 'pointer',
           }}
         >
-          SEND TO A FRIEND
-          <Send size={12} aria-hidden />
+          <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
         </button>
 
         {expand.kind === 'niche_match' && expand.strangerId ? (

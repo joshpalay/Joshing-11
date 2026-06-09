@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The home-only add-friends promo: gated ~1 in 5 first, then either suggestions
-// (addable contact matches) or an invite nudge — never both. We mock the one
-// query it reads so we can assert the gate, the filter, the cap, and the variant
-// selection without a DB.
+// The home-only add-friends promo: a first-class module that renders whenever it
+// has data — either suggestions (addable contact matches) or an invite nudge,
+// never both. We mock the one query it reads so we can assert the filter, the
+// cap, and the variant selection without a DB.
 const { listContactMatchesMock } = vi.hoisted(() => ({
   listContactMatchesMock: vi.fn(),
 }));
@@ -33,12 +33,6 @@ describe('getAddFriendsPromo', () => {
     listContactMatchesMock.mockReset();
   });
 
-  it('returns null without reading contacts when the visit is gated out', async () => {
-    const item = await getAddFriendsPromo('user-1', NOW, () => 0.9);
-    expect(item).toBeNull();
-    expect(listContactMatchesMock).not.toHaveBeenCalled();
-  });
-
   it('suggests up to three addable matches when shown', async () => {
     listContactMatchesMock.mockResolvedValue([
       match('a', 'none'),
@@ -48,7 +42,7 @@ describe('getAddFriendsPromo', () => {
       match('e', 'none'),
     ]);
 
-    const item = await getAddFriendsPromo('user-1', NOW, () => 0.1);
+    const item = await getAddFriendsPromo('user-1', NOW);
     expect(item).not.toBeNull();
     const embed = item!.embed as Extract<NonNullable<typeof item.embed>, { kind: 'add_friends' }>;
     expect(embed.kind).toBe('add_friends');
@@ -60,7 +54,7 @@ describe('getAddFriendsPromo', () => {
 
   it('falls back to the invite nudge when shown but no match is addable', async () => {
     listContactMatchesMock.mockResolvedValue([match('c', 'following'), match('f', 'friends')]);
-    const item = await getAddFriendsPromo('user-1', NOW, () => 0.0);
+    const item = await getAddFriendsPromo('user-1', NOW);
     expect(item).not.toBeNull();
     const embed = item!.embed as Extract<NonNullable<typeof item.embed>, { kind: 'add_friends' }>;
     expect(embed.variant).toBe('invite');
