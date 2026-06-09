@@ -1,0 +1,104 @@
+import Link from 'next/link'
+import type { ReactNode } from 'react'
+
+import { cn } from '@/lib/utils'
+
+// The three feed "featured moment" treatments. Each maps to a subtle full-bleed
+// background wash (--editorial-* in globals.css) plus an eyebrow accent color
+// borrowed from the brand palette. Add a tone here (and the matching CSS var +
+// accent) when a new editorial module joins the feed.
+export type EditorialTone = 'parchment' | 'sage' | 'slate'
+
+const TONE_BG: Record<EditorialTone, string> = {
+  parchment: 'bg-[var(--editorial-parchment)]',
+  sage: 'bg-[var(--editorial-sage)]',
+  slate: 'bg-[var(--editorial-slate)]',
+}
+
+const TONE_ACCENT: Record<EditorialTone, string> = {
+  parchment: 'text-[var(--brand-orange)]',
+  sage: 'text-[var(--success)]',
+  slate: 'text-[var(--brand-link)]',
+}
+
+interface EditorialFeatureProps {
+  tone: EditorialTone
+  // Small uppercase label (e.g. "Shared Ground"). Rendered uppercase; pass it in
+  // natural case.
+  eyebrow: string
+  // Optional mark beside the eyebrow (e.g. a filled bookmark), inheriting the
+  // tone accent color.
+  eyebrowIcon?: ReactNode
+  // Large editorial headline. A node, so callers can weave an inline link (e.g.
+  // the friend's name) into it.
+  headline: ReactNode
+  // The hero artwork slot (circles, avatar cluster, territory rows…).
+  artwork: ReactNode
+  // One short supporting line under the artwork (e.g. "2 shared interests").
+  supporting?: ReactNode
+  // A single text-link call to action. The arrow is part of `label`.
+  cta: { label: string; href: string }
+}
+
+/**
+ * A full-bleed editorial feature section for the home feed.
+ *
+ * Replaces the old promo "cards": no border, radius, or shadow — a subtle
+ * background wash bleeds edge to edge of the feed column (escaping the page
+ * gutter via `-mx-4`) and generous vertical space creates a calm "featured
+ * moment" that breaks the scrolling rhythm. This is the reusable editorial
+ * language for feed modules; new modules (milestones, ceremonies, summaries)
+ * should compose this rather than re-rolling their own chrome.
+ */
+export function EditorialFeature({
+  tone,
+  eyebrow,
+  eyebrowIcon,
+  headline,
+  artwork,
+  supporting,
+  cta,
+}: EditorialFeatureProps) {
+  return (
+    <section
+      // -mx-4 escapes the home <main>'s px-4 gutter so the wash reaches the feed
+      // column edges; -my-1.5 absorbs the feed's space-y-3 so the band meets its
+      // neighbors edge to edge. Inner content is re-padded with px-4.
+      className={cn('-mx-4 -my-1.5 px-4 py-12 md:py-14', TONE_BG[tone])}
+    >
+      <p
+        className={cn(
+          'flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.14em] uppercase',
+          TONE_ACCENT[tone],
+        )}
+      >
+        {eyebrowIcon ? (
+          <span aria-hidden="true" className="inline-flex">
+            {eyebrowIcon}
+          </span>
+        ) : null}
+        {eyebrow}
+      </p>
+
+      <h2 className="mt-4 max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)] md:text-[32px]">
+        {headline}
+      </h2>
+
+      <div className="mt-8">{artwork}</div>
+
+      {supporting ? (
+        <p className="mt-6 text-[13px] text-[var(--brand-ink-400)]">{supporting}</p>
+      ) : null}
+
+      <Link
+        href={cta.href}
+        className={cn(
+          'mt-5 inline-flex min-h-11 items-center font-serif text-lg font-semibold tracking-[0.05em] underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
+          TONE_ACCENT[tone],
+        )}
+      >
+        {cta.label}
+      </Link>
+    </section>
+  )
+}
