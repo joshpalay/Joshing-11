@@ -141,15 +141,13 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
   // activity card here so the reflection doesn't double up / compete with social
   // activity in the home stream. It's the only activity that links to /ceremony/;
   // the card still appears in the full /activities log.
-  const homeActivityItems = [
-    // Home-only common-ground discovery promo at the head of the activity rows
-    // (see getCommonGroundPromo). Null when the viewer has no untested shared
-    // ground with any probed friend.
-    ...(commonGroundPromo ? [commonGroundPromo] : []),
-    ...activityItems.filter(
-      (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
-    ),
-  ]
+  // The common-ground discovery promo is no longer prepended into the activity
+  // rows (which would float it to row 0 on its `now` timestamp). It's passed
+  // separately as a pinned promo so it never leads the feed when there's other
+  // activity to show — see FeedList's displayRows.
+  const homeActivityItems = activityItems.filter(
+    (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
+  )
   return (
     <>
       {/* Sit the header on the feed's left gutter — the same 2px the activity
@@ -166,6 +164,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
         showContributeFooter
         unifiedHome
         activityItems={homeActivityItems}
+        commonGroundPromo={commonGroundPromo}
         expandingPromo={recentlyExpandingPromo}
         addFriendsPromo={addFriendsPromo}
       />

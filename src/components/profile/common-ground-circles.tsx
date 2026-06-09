@@ -100,6 +100,12 @@ export function DomainCircleSvg({
       viewBox={`0 0 ${svgWidth} ${svgHeight}`}
       role="img"
       aria-label={ariaLabel}
+      // The viewBox hugs both circles exactly (see circleGeometry), so each
+      // circle's outer edge lands ON the viewBox boundary. An outer <svg>
+      // defaults to overflow:hidden, which shaves those edge pixels and reads as
+      // a flat "cut off" side — most visible on the large editorial scale. Let
+      // the boundary pixels paint.
+      style={{ overflow: 'visible' }}
     >
       {/* fill via style (not the SVG attribute) to keep parity with OverlapMap */}
       <circle
