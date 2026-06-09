@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The home-only "Your world is expanding" promo: gated ~1 in 5 visits, mirrors
+// The home-only "Your world is expanding" promo: a first-class module mirroring
 // the /knowledge Recently Expanding module (capped at 3 rows) with a link to
-// /knowledge. We mock the one query it reads so we can assert the gate, the cap,
-// and the empty-state short-circuit without a DB.
+// /knowledge. We mock the one query it reads so we can assert the cap and the
+// empty-state short-circuit without a DB.
 const { getExpandingDomainsMock } = vi.hoisted(() => ({
   getExpandingDomainsMock: vi.fn(),
 }));
@@ -27,16 +27,9 @@ describe('getRecentlyExpandingPromo', () => {
     getExpandingDomainsMock.mockReset();
   });
 
-  it('returns null without reading the DB when the visit is gated out', async () => {
-    // random() >= 0.2 means "skip"; nothing should be read.
-    const result = await getRecentlyExpandingPromo('user-1', NOW, () => 0.9);
-    expect(result).toBeNull();
-    expect(getExpandingDomainsMock).not.toHaveBeenCalled();
-  });
-
   it('returns null when the viewer has no expanding territories', async () => {
     getExpandingDomainsMock.mockResolvedValue([]);
-    const result = await getRecentlyExpandingPromo('user-1', NOW, () => 0.0);
+    const result = await getRecentlyExpandingPromo('user-1', NOW);
     expect(result).toBeNull();
   });
 
@@ -48,7 +41,7 @@ describe('getRecentlyExpandingPromo', () => {
       domain('John Milton Paradise Lost', 'active-play'),
     ]);
 
-    const item = await getRecentlyExpandingPromo('user-1', NOW, () => 0.1);
+    const item = await getRecentlyExpandingPromo('user-1', NOW);
     expect(item).not.toBeNull();
     expect(item!.embed?.kind).toBe('recently_expanding');
     const embed = item!.embed as Extract<NonNullable<typeof item.embed>, { kind: 'recently_expanding' }>;
@@ -67,7 +60,7 @@ describe('getRecentlyExpandingPromo', () => {
     getExpandingDomainsMock.mockResolvedValue([
       domain('Wagner Ring Cycle', 'mastery-shift', 'This territory moved recently.'),
     ]);
-    const item = await getRecentlyExpandingPromo('user-1', NOW, () => 0.1);
+    const item = await getRecentlyExpandingPromo('user-1', NOW);
     const embed = item!.embed as Extract<NonNullable<typeof item.embed>, { kind: 'recently_expanding' }>;
     expect(embed.domains[0]!.caption).toBe('Leveling up');
   });

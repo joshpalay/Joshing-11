@@ -26,10 +26,6 @@ const MAX_PROMO_DOMAINS = 2;
 // Cap the per-render getCommonGround probes so the homepage stays cheap even for
 // users with many friends; the rotation still cycles through everyone over time.
 const MAX_CANDIDATES = 4;
-// The promo should read as an occasional nudge, not a fixture — show it on only
-// ~2 in 5 visits (roughly once every two to three times on the site). Gating is
-// probabilistic (stateless) so it needs no per-user counter cookie or DB row.
-const PROMO_SHOW_PROBABILITY = 0.4;
 
 function firstName(displayName: string | null): string {
   const trimmed = (displayName ?? '').trim();
@@ -47,13 +43,9 @@ function daySeed(now: Date): number {
 export async function getCommonGroundPromo(
   userId: string,
   now: Date = new Date(),
-  // Injectable for tests; defaults to Math.random in [0, 1).
-  random: () => number = Math.random,
 ): Promise<StreamItem | null> {
-  // Gate first so the visits we won't show the promo skip the friend and
-  // common-ground reads entirely.
-  if (random() >= PROMO_SHOW_PROBABILITY) return null;
-
+  // First-class module: render deterministically whenever there's latent common
+  // ground to surface (the data-existence guards below are the only gate).
   const friends = await getFriends(userId);
   if (friends.length === 0) return null;
 

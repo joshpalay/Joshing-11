@@ -20,8 +20,6 @@ import {
 import { getExpandingDomains, type ExpandingDomain } from '@/server/db/queries/knowledge';
 
 const MAX_PROMO_DOMAINS = 3;
-// Show on ~1 in 5 home visits so it reads as an occasional nudge, not a fixture.
-const PROMO_SHOW_PROBABILITY = 0.2;
 
 // The letter shown in the row's colored badge: the first meaningful character of
 // the domain name (mirrors getDomainInitial in the RecentlyExpanding module).
@@ -58,12 +56,9 @@ function captionFor(domain: ExpandingDomain): string {
 export async function getRecentlyExpandingPromo(
   userId: string,
   now: Date = new Date(),
-  // Injectable for tests; defaults to Math.random in [0, 1).
-  random: () => number = Math.random,
 ): Promise<StreamItem | null> {
-  // Gate first so the visits we won't show the promo skip the read entirely.
-  if (random() >= PROMO_SHOW_PROBABILITY) return null;
-
+  // First-class module: render deterministically whenever the viewer has
+  // expanding territories to show (the data-existence guard below is the gate).
   const expanding = await getExpandingDomains(userId);
   if (expanding.length === 0) return null;
 

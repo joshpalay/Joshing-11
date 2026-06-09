@@ -25,12 +25,15 @@ import { SparkleDivider, SpeechBubbleIllustration } from '@/components/home/Feed
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
+import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
+import { FeedCardShell } from '@/components/feed/FeedCardShell'
+import { groupActivityByFriend, type GroupInputRow } from '@/components/feed/person-grouping'
 import {
   CommonGroundFeature,
   GrowYourCircleFeature,
   RecentlyExpandingFeature,
 } from '@/components/feed/EditorialPromos'
-import { mergeLowSignalLines, type StreamItem } from '@/lib/activity-stream'
+import type { StreamItem } from '@/lib/activity-stream'
 import type { InsideJokeKind, QuestionSource } from '@/lib/questions-types'
 
 type FriendResult = {
@@ -452,86 +455,39 @@ type FeedListProps = {
   activityItems?: StreamItem[]
   /**
    * Home-only "Shared Ground" common-ground promo (the overlapping-circle
-   * editorial feature). Like the other promos it is pinned at a fixed offset
-   * rather than interleaved chronologically, so it is never the very first feed
-   * item when there is other activity to lead with — it only falls to row 0 when
-   * the feed is otherwise empty. Null on most visits. See displayRows.
+   * editorial feature). A first-class module: rendered whenever there's latent
+   * shared ground to surface, spliced a couple rows down so it's never the very
+   * first feed item when there's other activity (it falls to row 0 only on an
+   * empty feed). Null when the viewer has no shared ground. See displayRows.
    */
   commonGroundPromo?: StreamItem | null
   /**
-   * Home-only "Your world is expanding" promo. Unlike `activityItems` (which
-   * interleave chronologically), this is spliced in at a fixed offset a few rows
-   * down so it never lands at the very top or adjacent to the common-ground
-   * promo. Null on most visits — it shows ~1 in 5. See
-   * getRecentlyExpandingPromo / displayRows.
+   * Home-only "Your world is expanding" promo. A first-class module anchored to
+   * the feed tail — rendered whenever the viewer has expanding territories. Null
+   * otherwise. See getRecentlyExpandingPromo / displayRows.
    */
   expandingPromo?: StreamItem | null
   /**
    * Home-only "add friends" promo (contact-match suggestions, or an invite
-   * nudge). Spliced in at its own fixed offset, separated from `expandingPromo`
-   * so the two promos are never adjacent. See getAddFriendsPromo / displayRows.
+   * nudge). A first-class module anchored to the feed tail next to the expanding
+   * promo. See getAddFriendsPromo / displayRows.
    */
   addFriendsPromo?: StreamItem | null
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
 
-// Where the home-only pinned promos land in the rendered row list: a few rows
-// down (so they're never the very first thing) and spaced apart from each other.
-// Each offset is measured against the original feed length; the `expanding` /
-// `add_friends` promos only appear once the feed has at least that many rows,
-// while the common-ground promo always renders (clamping to the feed's end on a
-// short feed, and falling to row 0 only when the feed is otherwise empty).
+// Where the common-ground module lands: a couple rows down so it's never the very
+// first thing when there's real activity (it falls to row 0 only on an empty
+// feed). The other two discovery modules render as first-class sections at the
+// feed tail (see displayRows), so they need no offset.
 const COMMON_GROUND_PROMO_OFFSET = 2
-const EXPANDING_PROMO_OFFSET = 3
-const ADD_FRIENDS_PROMO_OFFSET = 6
 
 // One row of the unified-home feed: either a paginated question card or an
 // interleaved activity (Lately) one-liner. Both carry `source_event_at` so the
-// existing recency grouping works over the merged list unchanged.
-type UnifiedRow =
-  | { kind: 'feed'; sortMs: number; source_event_at: string; item: FeedApiItem }
-  | { kind: 'activity'; sortMs: number; source_event_at: string; item: StreamItem }
-
-// D-FEED-TIER §3: collapse low-signal ambient repeats (mastery, streaks) onto a
-// single "·"-joined line. Operates on the FINAL merged display order so a run is
-// only folded when its members are genuinely ADJACENT — never reaching across a
-// playable feed card or a protected micro-tier row, which preserves chronology
-// and keeps a streak line sitting under the card it followed. The synthetic row
-// inherits the newest (first, since rows are newest-first) member's slot.
-function collapseLowSignalActivityRuns(rows: UnifiedRow[]): UnifiedRow[] {
-  const out: UnifiedRow[] = []
-  let i = 0
-  while (i < rows.length) {
-    const row = rows[i]!
-    if (row.kind !== 'activity' || row.item.signal !== 'low') {
-      out.push(row)
-      i++
-      continue
-    }
-    let j = i
-    const run: StreamItem[] = []
-    while (j < rows.length) {
-      const next = rows[j]!
-      if (next.kind !== 'activity' || next.item.signal !== 'low') break
-      run.push(next.item)
-      j++
-    }
-    if (run.length <= 1) {
-      out.push(row)
-    } else {
-      out.push({
-        kind: 'activity',
-        item: mergeLowSignalLines(run),
-        // Newest member's slot (rows are newest-first, so this is rows[i]).
-        source_event_at: row.source_event_at,
-        sortMs: row.sortMs,
-      })
-    }
-    i = j
-  }
-  return out
-}
+// existing recency grouping works over the merged list unchanged. The per-person
+// grouping helpers live in ./feed/person-grouping (pure + unit-tested).
+type UnifiedRow = GroupInputRow<FeedApiItem>
 
 export default function FeedList(props: FeedListProps) {
   return (
@@ -947,67 +903,39 @@ function FeedListContent({
     return [...feedRows, ...activityRows].sort((a, b) => b.sortMs - a.sortMs)
   }, [items, activityItems, unifiedHome])
 
-  // Splice the home-only pinned promos in at fixed offsets a few rows down. They
-  // are deliberately NOT part of the chronological union above: pinning them to
-  // indices keeps them off the very top so a promo never leads the feed when
-  // there's real activity to show. The common-ground promo `alwaysShow`s — it
-  // clamps to the feed's end on a short feed and only falls to row 0 when the
-  // feed is otherwise empty — while the others are skipped until the feed has
-  // enough rows. Offsets are measured against the original feed so the promos
-  // stay spaced apart even when several are present.
+  // Place the home-only discovery modules. They are NOT part of the chronological
+  // union above; each renders as a first-class section whenever its data exists.
+  // Common-ground sits a couple rows down (never first when there's activity);
+  // recently-expanding + add-friends anchor to the feed tail. Each borrows a
+  // neighbouring row's timestamp so recency grouping keeps it in that bucket
+  // rather than floating it into one of its own.
   const displayRows = useMemo<UnifiedRow[]>(() => {
-    // Common-ground must always render but must never be FIRST when other rows
-    // exist: clamp its offset to the feed length (so a 1-row feed puts it at
-    // index 1, not 0), and let it sit at row 0 only when the feed is empty.
-    const commonGroundOffset =
-      unifiedRows.length === 0
-        ? 0
-        : Math.min(COMMON_GROUND_PROMO_OFFSET, unifiedRows.length)
-    const pinned = [
-      { offset: commonGroundOffset, item: commonGroundPromo, alwaysShow: true },
-      { offset: EXPANDING_PROMO_OFFSET, item: expandingPromo, alwaysShow: false },
-      { offset: ADD_FRIENDS_PROMO_OFFSET, item: addFriendsPromo, alwaysShow: false },
-    ]
-      .filter(
-        (p): p is { offset: number; item: StreamItem; alwaysShow: boolean } =>
-          p.item !== null,
-      )
-      .sort((a, b) => a.offset - b.offset)
-    if (pinned.length === 0) return unifiedRows
-
     const next = [...unifiedRows]
-    let inserted = 0
-    for (const { offset, item, alwaysShow } of pinned) {
-      if (!alwaysShow && offset > unifiedRows.length) continue
-      // Account for promos already spliced in ahead of this one so each keeps its
-      // intended distance from the others.
-      const spliceAt = offset + inserted
-      // Borrow the preceding row's timestamp so recency grouping keeps the promo
-      // in place rather than floating it into its own day bucket. At index 0 (an
-      // otherwise-empty feed) there's nothing ahead, so fall back to the promo's
-      // own sortAt.
-      const anchor = spliceAt > 0 ? next[spliceAt - 1]! : null
-      const sortAt =
-        item.sortAt instanceof Date ? item.sortAt : new Date(item.sortAt)
-      next.splice(spliceAt, 0, {
+
+    const toRow = (item: StreamItem, anchor: UnifiedRow | null): UnifiedRow => {
+      const sortAt = item.sortAt instanceof Date ? item.sortAt : new Date(item.sortAt)
+      return {
         kind: 'activity',
         item,
         source_event_at: anchor ? anchor.source_event_at : sortAt.toISOString(),
         sortMs: anchor ? anchor.sortMs : sortAt.getTime(),
-      })
-      inserted++
+      }
     }
+
+    if (commonGroundPromo) {
+      const offset = next.length === 0 ? 0 : Math.min(COMMON_GROUND_PROMO_OFFSET, next.length)
+      const anchor = offset > 0 ? next[offset - 1]! : null
+      next.splice(offset, 0, toRow(commonGroundPromo, anchor))
+    }
+
+    for (const promo of [expandingPromo, addFriendsPromo]) {
+      if (!promo) continue
+      const anchor = next.length > 0 ? next[next.length - 1]! : null
+      next.push(toRow(promo, anchor))
+    }
+
     return next
   }, [unifiedRows, commonGroundPromo, expandingPromo, addFriendsPromo])
-
-  // Fold adjacent runs of low-signal ambient rows into single "·"-joined lines
-  // (D-FEED-TIER §3). Runs after promos are spliced and the union is sorted, so
-  // adjacency reflects the true on-screen order; feed cards and micro-tier rows
-  // break runs. Only meaningful on unified home (activity rows render there).
-  const collapsedRows = useMemo<UnifiedRow[]>(
-    () => collapseLowSignalActivityRuns(displayRows),
-    [displayRows],
-  )
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
@@ -1545,7 +1473,7 @@ function FeedListContent({
         )
       ) : (
         <section className="space-y-3 pb-8">
-          {groupItemsByRecency(collapsedRows).map((group) => (
+          {groupItemsByRecency(displayRows).map((group) => (
             <Fragment key={group.key}>
               <h2
                 className={`text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0 ${
@@ -1559,7 +1487,20 @@ function FeedListContent({
               >
                 {group.label}
               </h2>
-              {group.items.map((row) => {
+              {groupActivityByFriend(group.items).map((row) => {
+                // A friend's relationship activity, gathered into one per-person
+                // card (heading + their events). Grouped per bucket so it never
+                // spans a day label.
+                if (row.kind === 'person') {
+                  return (
+                    <PersonActivityCard
+                      key={`p-${row.friendId}-${row.rows[0]?.id ?? ''}`}
+                      friendId={row.friendId}
+                      rows={row.rows}
+                      timestampFor={(item) => formatRelativeTime(item.sortAt)}
+                    />
+                  )
+                }
                 // Interleaved activity (Lately) one-liner: self-contained,
                 // renders its own row (no swipe/overflow/answer-sheet chrome).
                 if (row.kind === 'activity') {
@@ -1575,6 +1516,23 @@ function FeedListContent({
                   }
                   if (embed?.kind === 'recently_expanding') {
                     return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
+                  }
+                  // The milestone "match your friend's wins" bundle is THE
+                  // standout playable card: wrap it in the elevated shell (cream
+                  // fill + hard ink offset) so it steps forward. The 5-triangle
+                  // mark + tap-to-answer expansion live inside ActivityStreamItem.
+                  if (row.item.expand?.kind === 'milestone') {
+                    return (
+                      <FeedCardShell key={`m-${row.item.id}`} elevated>
+                        <div className="px-3 py-1">
+                          <ActivityStreamItem
+                            item={row.item}
+                            timestamp={formatRelativeTime(row.item.sortAt)}
+                            inCard
+                          />
+                        </div>
+                      </FeedCardShell>
+                    )
                   }
                   return (
                     <ActivityStreamItem
@@ -1677,11 +1635,6 @@ function FeedListContent({
                 const dismissible = !item.viewer_is_author
                 const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
                 const onDismiss = dismissible ? () => requestDismiss(item) : undefined
-                // Tier 1 "playable" lift (D-FEED-TIER): only on the unified home
-                // feed, and only for an unanswered, non-authored card the viewer
-                // can actually answer. Answered results and the standalone Feed
-                // tab keep the soft resting chrome.
-                const elevated = unifiedHome && !isAnswered && dismissible
 
                 let card: ReactNode
                 if (typedItem.type === 'direct_sent') {
@@ -1691,7 +1644,6 @@ function FeedListContent({
                       overflow={overflow}
                       onAnswer={onAnswer}
                       onDismiss={onDismiss}
-                      elevated={elevated}
                     />
                   )
                 } else if (typedItem.type === 'friend_liked') {
@@ -1701,7 +1653,6 @@ function FeedListContent({
                       overflow={overflow}
                       onAnswer={onAnswer}
                       onDismiss={onDismiss}
-                      elevated={elevated}
                     />
                   )
                 } else {
@@ -1712,7 +1663,6 @@ function FeedListContent({
                       onAnswer={onAnswer}
                       onDismiss={onDismiss}
                       onHideCategory={() => void hideCategory(item)}
-                      elevated={elevated}
                     />
                   )
                 }
