@@ -16,7 +16,7 @@ import type {
 
 import { DirectQuestionAnswer } from './DirectQuestionAnswer';
 import { InlineAnswerFlow } from './InlineAnswerFlow';
-import { ActivityIcon, specForIcon } from './ActivityIcon';
+import { ActivityIcon, QuestionTriangle, specForIcon } from './ActivityIcon';
 import { FF, FM, INK, INK2, INK3, PAPER, RULE } from '@/components/lately/tokens';
 import { assertNever } from '@/lib/assert-never';
 
@@ -97,13 +97,14 @@ type Resolution = { submitted: string; isCorrect: boolean };
 export function ActivityStreamItem({
   item,
   timestamp,
-  inCard = false,
+  nested = false,
 }: {
   item: StreamItem;
   timestamp: string;
-  // When the row is wrapped in a card (the milestone standout card), drop its own
-  // hairline border + paper fill so the card's surface shows through.
-  inCard?: boolean;
+  // When nested beneath a per-person heading, the row drops its own shape mark
+  // (the heading carries the only shape) and its hairline/padding chrome, so the
+  // sub-items read as a quiet indented list under the statement.
+  nested?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
@@ -154,6 +155,14 @@ export function ActivityStreamItem({
 
   const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;
 
+  // The plain "{answered} of {total} questions" progress label that rides under a
+  // milestone line, in lockstep with the bundle triangle mark — so the viewer can
+  // read their progress at a glance whether or not the card is open.
+  const milestoneProgress =
+    milestoneQuestions && milestoneQuestions.length > 0
+      ? { answered: answeredCount, total: milestoneQuestions.length }
+      : null;
+
   // The bundle mark (milestone) shares the row's live answered-state: as the
   // viewer answers questions inline, solid triangles flip to hollow. Caps at 5
   // triangles silently (the questions array is already ≤5); copy stays truthful.
@@ -190,9 +199,8 @@ export function ActivityStreamItem({
     <div
       id={item.anchorId ?? undefined}
       style={
-        inCard
-          ? // Inside the milestone standout card: the shell owns the surface, so
-            // the row drops its own border/fill and just keeps light padding.
+        nested
+          ? // Nested under a per-person heading: no border/fill, light padding.
             { padding: opened ? '6px 0' : '4px 0' }
           : opened
             ? {
@@ -220,7 +228,9 @@ export function ActivityStreamItem({
           WebkitTapHighlightColor: 'transparent',
         }}
       >
-        <ActivityIcon spec={iconSpec} seed={item.id} />
+        {/* Nested rows carry no shape — the per-person heading holds the one
+            diamond; everything beneath it is a plain indented line. */}
+        {nested ? null : <ActivityIcon spec={iconSpec} seed={item.id} />}
 
         <div style={{ minWidth: 0, flex: 1, paddingRight: 12 }}>
           <p
@@ -249,6 +259,19 @@ export function ActivityStreamItem({
               }}
             >
               {item.secondLine}
+            </p>
+          ) : null}
+          {milestoneProgress ? (
+            <p
+              style={{
+                margin: '4px 0 0',
+                fontFamily: FM,
+                fontSize: 10,
+                letterSpacing: 1,
+                color: INK3,
+              }}
+            >
+              {milestoneProgress.answered} of {milestoneProgress.total} questions
             </p>
           ) : null}
         </div>
@@ -363,11 +386,20 @@ export function MilestoneExpansion({
         marginTop: 14,
         display: 'flex',
         flexDirection: 'column',
-        gap: 20,
+        gap: 18,
       }}
     >
       {unanswered.map((q) => (
-        <InlineAnswerFlow key={q.questionId} question={q} onResolved={onResolved} />
+        // Solid triangle = still to play. It leads each answerable question so the
+        // per-question marks read solid→hollow in step with the bundle mark above.
+        <div key={q.questionId} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <span style={{ marginTop: 6 }}>
+            <QuestionTriangle solid seed={q.questionId} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <InlineAnswerFlow question={q} onResolved={onResolved} />
+          </div>
+        </div>
       ))}
       {answered.length > 0 ? (
         <AnsweredHistory questions={answered} resolutions={resolutions} />
@@ -422,34 +454,41 @@ function AnsweredHistory({
           // red for "not this time" — same tokens the AnswerFeedbackSheet uses.
           const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)';
           return (
-            <div key={q.questionId}>
-              <p
-                style={{
-                  margin: 0,
-                  fontFamily: FF,
-                  fontSize: 12.5,
-                  lineHeight: 1.45,
-                  letterSpacing: 0.2,
-                  fontWeight: 600,
-                  color: resultColor,
-                }}
-              >
-                {isCorrect ? 'Correct' : 'Not this time'}
-                {r ? ` - ${r.submitted}` : null}
-              </p>
-              <p
-                style={{
-                  margin: '3px 0 0',
-                  paddingRight: 24,
-                  fontFamily: 'Georgia, serif',
-                  fontStyle: 'italic',
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                  color: INK3,
-                }}
-              >
-                &ldquo;{q.text}&rdquo;
-              </p>
+            // Hollow triangle = already answered (spent), matching the bundle
+            // mark's hollow state, so the viewer sees which ones they've done.
+            <div key={q.questionId} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ marginTop: 4 }}>
+                <QuestionTriangle solid={false} seed={q.questionId} />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontFamily: FF,
+                    fontSize: 12.5,
+                    lineHeight: 1.45,
+                    letterSpacing: 0.2,
+                    fontWeight: 600,
+                    color: resultColor,
+                  }}
+                >
+                  {isCorrect ? 'Correct' : 'Not this time'}
+                  {r ? ` - ${r.submitted}` : null}
+                </p>
+                <p
+                  style={{
+                    margin: '3px 0 0',
+                    paddingRight: 24,
+                    fontFamily: 'Georgia, serif',
+                    fontStyle: 'italic',
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: INK3,
+                  }}
+                >
+                  &ldquo;{q.text}&rdquo;
+                </p>
+              </div>
             </div>
           );
         })}

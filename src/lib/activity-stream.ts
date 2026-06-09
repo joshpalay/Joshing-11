@@ -583,10 +583,21 @@ export function milestoneToStreamItem(
   questions: StreamQuestion[],
 ): StreamItem {
   const friend = act(milestone.friendName, milestone.friendId);
-  const tail =
-    milestone.kind === 'milestone_deep'
-      ? [txt(' went deep on '), cat(milestone.domain)]
-      : breadthTail(milestone.domains.map((d) => d.domain));
+  let tail: StreamLinePart[];
+  if (milestone.kind === 'milestone_deep') {
+    tail = [txt(' went deep on '), cat(milestone.domain)];
+  } else {
+    // Name only the domains whose questions actually survived resolution — a
+    // question can be deleted/hidden after the friend answered it, and the
+    // header must not claim a domain the expansion can't show. Fall back to all
+    // domains if nothing resolved (the line then isn't expandable anyway).
+    const survivingIds = new Set(questions.map((q) => q.questionId));
+    const surviving = milestone.domains.filter((d) =>
+      d.questionIds.some((id) => survivingIds.has(id)),
+    );
+    const named = (surviving.length > 0 ? surviving : milestone.domains).map((d) => d.domain);
+    tail = breadthTail(named);
+  }
   return {
     id: milestone.id,
     sortAt: milestone.sortAt,

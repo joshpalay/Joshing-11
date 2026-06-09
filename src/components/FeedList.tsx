@@ -21,12 +21,11 @@ import {
   type FriendLikedFeedItem,
 } from '@/components/feed'
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
-import { SparkleDivider, SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
+import { SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
-import { FeedCardShell } from '@/components/feed/FeedCardShell'
 import { groupActivityByFriend, type GroupInputRow } from '@/components/feed/person-grouping'
 import {
   CommonGroundFeature,
@@ -477,12 +476,6 @@ type FeedListProps = {
 
 type QuestionCardState = 'unanswered' | 'answered'
 
-// Where the common-ground module lands: a couple rows down so it's never the very
-// first thing when there's real activity (it falls to row 0 only on an empty
-// feed). The other two discovery modules render as first-class sections at the
-// feed tail (see displayRows), so they need no offset.
-const COMMON_GROUND_PROMO_OFFSET = 2
-
 // One row of the unified-home feed: either a paginated question card or an
 // interleaved activity (Lately) one-liner. Both carry `source_event_at` so the
 // existing recency grouping works over the merged list unchanged. The per-person
@@ -630,7 +623,6 @@ function FeedContributeFooter() {
 
   return (
     <footer className="pt-6 pb-8">
-      <SparkleDivider />
       {/* Add-a-Question prompt — the same full-bleed editorial wash language as
           the feed's other featured moments (no card, border, or triangle
           mosaic): a parchment band that bleeds to the feed edges, with an
@@ -904,11 +896,10 @@ function FeedListContent({
   }, [items, activityItems, unifiedHome])
 
   // Place the home-only discovery modules. They are NOT part of the chronological
-  // union above; each renders as a first-class section whenever its data exists.
-  // Common-ground sits a couple rows down (never first when there's activity);
-  // recently-expanding + add-friends anchor to the feed tail. Each borrows a
-  // neighbouring row's timestamp so recency grouping keeps it in that bucket
-  // rather than floating it into one of its own.
+  // union above; each renders whenever its data exists. Rather than clump them at
+  // the top or tail, SPREAD the present modules evenly through the feed so they
+  // read as occasional interludes, not a wall at the bottom. Each borrows a
+  // neighbouring row's timestamp so recency grouping keeps it in that bucket.
   const displayRows = useMemo<UnifiedRow[]>(() => {
     const next = [...unifiedRows]
 
@@ -922,17 +913,19 @@ function FeedListContent({
       }
     }
 
-    if (commonGroundPromo) {
-      const offset = next.length === 0 ? 0 : Math.min(COMMON_GROUND_PROMO_OFFSET, next.length)
-      const anchor = offset > 0 ? next[offset - 1]! : null
-      next.splice(offset, 0, toRow(commonGroundPromo, anchor))
-    }
-
-    for (const promo of [expandingPromo, addFriendsPromo]) {
-      if (!promo) continue
-      const anchor = next.length > 0 ? next[next.length - 1]! : null
-      next.push(toRow(promo, anchor))
-    }
+    const promos = [commonGroundPromo, expandingPromo, addFriendsPromo].filter(
+      (p): p is StreamItem => p !== null && p !== undefined,
+    )
+    const baseLen = unifiedRows.length
+    promos.forEach((promo, i) => {
+      // Even fractions through the ORIGINAL feed (1/(k+1), 2/(k+1), …), never the
+      // very first row; +i accounts for the promos already spliced in ahead.
+      const target =
+        baseLen === 0 ? 0 : Math.max(1, Math.round(((i + 1) * baseLen) / (promos.length + 1)))
+      const spliceAt = Math.min(target + i, next.length)
+      const anchor = spliceAt > 0 ? next[spliceAt - 1]! : null
+      next.splice(spliceAt, 0, toRow(promo, anchor))
+    })
 
     return next
   }, [unifiedRows, commonGroundPromo, expandingPromo, addFriendsPromo])
@@ -1517,23 +1510,9 @@ function FeedListContent({
                   if (embed?.kind === 'recently_expanding') {
                     return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
                   }
-                  // The milestone "match your friend's wins" bundle is THE
-                  // standout playable card: wrap it in the elevated shell (cream
-                  // fill + hard ink offset) so it steps forward. The 5-triangle
-                  // mark + tap-to-answer expansion live inside ActivityStreamItem.
-                  if (row.item.expand?.kind === 'milestone') {
-                    return (
-                      <FeedCardShell key={`m-${row.item.id}`} elevated>
-                        <div className="px-3 py-1">
-                          <ActivityStreamItem
-                            item={row.item}
-                            timestamp={formatRelativeTime(row.item.sortAt)}
-                            inCard
-                          />
-                        </div>
-                      </FeedCardShell>
-                    )
-                  }
+                  // Everything else — including the milestone bundle — renders as a
+                  // plain flat row (its bundle triangle mark + tap-to-answer
+                  // expansion live inside ActivityStreamItem). No card treatment.
                   return (
                     <ActivityStreamItem
                       key={`a-${row.item.id}`}
