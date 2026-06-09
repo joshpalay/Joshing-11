@@ -1,7 +1,11 @@
 'use client';
 
+import type { CSSProperties } from 'react';
+
+import { answerHeadingStyle } from '@/components/answer-heading';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
+import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 
 export type AnsweredQuestionItem = {
   id: string;
@@ -15,7 +19,18 @@ export type AnsweredQuestionItem = {
   authorIsHouse: boolean;
   answeredAt: string | null;
   sourceLabel: string;
+  // B-Report-2: the content row to flag from the ⋯ menu. Null when there's no
+  // reportable row (a synthetic daily slot), in which case the menu is hidden.
+  reportTarget:
+    | { questionId: string; generatedQuestionId?: undefined }
+    | { generatedQuestionId: string; questionId?: undefined }
+    | null;
 };
+
+// The answered-history list packs answers into a narrow table column, so it
+// renders the shared "answer as headline" treatment a notch smaller than the
+// full-bleed reveal surfaces while keeping the same serif/weight.
+const answeredAnswerStyle: CSSProperties = { ...answerHeadingStyle, fontSize: '1.3rem' };
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -50,7 +65,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
 
   return (
     <section>
-      <div className="hidden grid-cols-[2fr_2fr_1fr_1fr_auto] gap-3 border-b px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
+      <div className="hidden grid-cols-[2fr_2fr_1fr_1fr_5rem] gap-3 border-b px-3 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
         <div>Question</div>
         <div>Your answer</div>
         <div>Asked by</div>
@@ -65,30 +80,34 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
           return (
             <li
               key={item.id}
-              className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[2fr_2fr_1fr_1fr_auto] sm:items-start sm:gap-3"
+              className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[2fr_2fr_1fr_1fr_5rem] sm:items-start sm:gap-3"
             >
               <div className="text-sm">
                 <p className="line-clamp-3 text-foreground">{item.questionText}</p>
               </div>
               <div className="text-sm">
-                <span
-                  className={
-                    answer.muted
-                      ? 'italic text-muted-foreground'
-                      : correct
-                        ? 'text-foreground'
-                        : skipped
+                {correct ? (
+                  <p style={{ ...answeredAnswerStyle, color: 'var(--game-correct)' }}>
+                    {answer.text}
+                  </p>
+                ) : (
+                  <>
+                    <span
+                      className={
+                        answer.muted || skipped
                           ? 'italic text-muted-foreground'
                           : 'text-foreground line-through decoration-muted-foreground/60'
-                  }
-                >
-                  {answer.text}
-                </span>
-                {!answer.muted && !correct && !skipped ? (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    correct: {item.correctAnswer}
-                  </span>
-                ) : null}
+                      }
+                    >
+                      {answer.text}
+                    </span>
+                    {item.correctAnswer ? (
+                      <p style={{ ...answeredAnswerStyle, color: 'var(--brand-ink)' }}>
+                        {item.correctAnswer}
+                      </p>
+                    ) : null}
+                  </>
+                )}
                 <p className="mt-0.5 text-xs text-muted-foreground sm:hidden">
                   Asked by {askerDisplay(item)}
                   {item.authorIsHouse ? <EditorialBadge style={{ marginLeft: 4 }} /> : null}
@@ -102,7 +121,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
               <div className="hidden text-sm text-muted-foreground sm:block">
                 {formatDate(item.answeredAt)}
               </div>
-              <div className="hidden sm:flex sm:justify-end">
+              <div className="hidden sm:flex sm:justify-end sm:gap-2">
                 <SendQuestionAction
                   question={{
                     id: item.questionId,
@@ -112,8 +131,9 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
                   label=""
                   className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground"
                 />
+                {item.reportTarget ? <AnsweredRowActions target={item.reportTarget} /> : null}
               </div>
-              <div className="sm:hidden">
+              <div className="flex items-center gap-2 sm:hidden">
                 <SendQuestionAction
                   question={{
                     id: item.questionId,
@@ -121,6 +141,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
                     domain: item.domainDisplayName,
                   }}
                 />
+                {item.reportTarget ? <AnsweredRowActions target={item.reportTarget} /> : null}
               </div>
             </li>
           );

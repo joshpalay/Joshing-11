@@ -272,6 +272,20 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
           {record.explanation}
         </p>
       ) : null}
+      {/* The fuller creator note the live thread defers to keep its momentum —
+          surfaced here in the recap so it is never lost. */}
+      {record.authorNote ? (
+        <p className="mt-3 rounded-[var(--radius-sm)] border p-3 text-sm leading-6 text-[var(--text)]" style={{ borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--border) 12%, var(--surface))' }}>
+          <span className="font-medium">
+            {record.authorIsHouse
+              ? 'Editor’s note:'
+              : record.authorName
+                ? `Why ${record.authorName} asked:`
+                : 'Why they asked:'}
+          </span>{' '}
+          {record.authorNote}
+        </p>
+      ) : null}
     </article>
   );
 }

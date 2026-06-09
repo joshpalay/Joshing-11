@@ -27,7 +27,7 @@ function TitleCard() {
         JOSHING
       </h1>
       <div className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--tri-amber)]" aria-hidden="true" />
-      <p className="mt-4 text-center font-inter text-lg font-normal uppercase leading-6 tracking-[3.6px] text-black">
+      <p className="mt-4 text-center font-inter text-lg font-normal uppercase leading-6 tracking-[3.6px] text-[var(--warm-ink)]">
         Trivia you wish you were asked
       </p>
     </section>

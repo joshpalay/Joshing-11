@@ -7,24 +7,29 @@ import type { SectionVisibility } from '@/server/profile/visibility';
 // the profile enforces. These tests exercise the DB-backed
 // `getFriendDomainsForBonus` with the REAL `canViewSection` predicate, mocking
 // only the data-fetching helpers it composes.
-const { getFollowingMock, getMutualFollowsMock, getKnowledgePageDataMock, getSectionVisibilitiesMock, state } =
-  vi.hoisted(() => {
-    const state = {
-      // friendId -> that friend's knowledge_base section visibility.
-      sectionByFriend: new Map<string, SectionVisibility>(),
-    };
-    return {
-      getFollowingMock: vi.fn(),
-      getMutualFollowsMock: vi.fn(async () => [] as Array<{ id: string }>),
-      getKnowledgePageDataMock: vi.fn(),
-      getSectionVisibilitiesMock: vi.fn(async (userId: string) => ({
-        knowledge_base: state.sectionByFriend.get(userId) ?? 'public',
-        friends_list: 'friends' as SectionVisibility,
-        authored_questions: 'public' as SectionVisibility,
-      })),
-      state,
-    };
-  });
+const {
+  getFollowingMock,
+  getMutualFollowsMock,
+  getKnowledgePageDataMock,
+  getSectionVisibilitiesMock,
+  state,
+} = vi.hoisted(() => {
+  const state = {
+    // friendId -> that friend's knowledge_base section visibility.
+    sectionByFriend: new Map<string, SectionVisibility>(),
+  };
+  return {
+    getFollowingMock: vi.fn(),
+    getMutualFollowsMock: vi.fn(async () => [] as Array<{ id: string }>),
+    getKnowledgePageDataMock: vi.fn(),
+    getSectionVisibilitiesMock: vi.fn(async (userId: string) => ({
+      knowledge_base: state.sectionByFriend.get(userId) ?? 'public',
+      friends_list: 'friends' as SectionVisibility,
+      authored_questions: 'public' as SectionVisibility,
+    })),
+    state,
+  };
+});
 
 vi.mock('@/server/db/queries/friends', () => ({
   getFollowing: getFollowingMock,
@@ -126,5 +131,28 @@ describe('getFriendDomainsForBonus — knowledge_base section visibility gate', 
 
     const result = await getFriendDomainsForBonus('viewer', 2);
     expect(result.map((c) => c.domain)).toEqual(['pub-domain']);
+  });
+});
+
+describe('getFriendDomainsForBonus — resting-domain opt-out', () => {
+  it('drops a rested domain from the +2 pool ("This is {Name}’s bag but not mine")', async () => {
+    getFollowingMock.mockResolvedValue([{ id: 'pub', displayName: 'Pub' }]);
+    state.sectionByFriend.set('pub', 'public');
+    // The viewer parked this exact friend-presence domain in "Resting".
+    const result = await getFriendDomainsForBonus('viewer', 2, new Set(['pub-domain']));
+    expect(result).toEqual([]);
+  });
+
+  it('matches rested domains case-insensitively and keeps the non-rested ones', async () => {
+    getFollowingMock.mockResolvedValue([{ id: 'pub', displayName: 'Pub' }]);
+    state.sectionByFriend.set('pub', 'public');
+    getKnowledgePageDataMock.mockImplementation(async () => ({
+      allDomains: [territoryDomain('Jazz'), territoryDomain('Opera')],
+      declaredInterests: [],
+      expandingDomains: [],
+    }));
+    // 'JAZZ' rested (different case) should still be excluded; 'Opera' remains.
+    const result = await getFriendDomainsForBonus('viewer', 2, new Set(['jazz']));
+    expect(result.map((c) => c.domain)).toEqual(['Opera']);
   });
 });

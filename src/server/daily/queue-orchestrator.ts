@@ -22,14 +22,23 @@ import {
   generateBonusQuestionsForDomains,
   generateDailyQuestionsFromKnowledgeBase,
 } from '@/server/daily/generate-questions';
-import { DAILY_BONUS_SLOT_MAX, DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import {
+  DAILY_BONUS_SLOT_MAX,
+  DAILY_QUEUE_MAX_PER_SUBCATEGORY,
+  DAILY_QUEUE_MIN_SIZE,
+  DAILY_QUEUE_SIZE,
+  type QueueSlot,
+} from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { commitPendingRefineDecisions } from '@/server/refine/commit';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
 
 export class DailyQueueFillError extends Error {
-  constructor(readonly code: DailyQueueFillErrorCode, message: string) {
+  constructor(
+    readonly code: DailyQueueFillErrorCode,
+    message: string,
+  ) {
     super(message);
     this.name = 'DailyQueueFillError';
   }
@@ -37,6 +46,37 @@ export class DailyQueueFillError extends Error {
 
 function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
+}
+
+type SubcategoryDiversityGate = {
+  /**
+   * Records and admits a pick while its canonical subcategory is still under the
+   * cap; returns false (without recording) once the subcategory is full. A blank or
+   * absent label is never blocked — the generic-subcategory gate owns those — and is
+   * not counted toward any cap. Matching is case- and whitespace-insensitive.
+   */
+  admit: (subcategory: string | null | undefined) => boolean;
+};
+
+// Shared across all three core sources (authored → house → generated) so the cap is
+// enforced over the WHOLE queue, not per-source. The cap is resolved PER subcategory
+// (capForSubcategory receives the normalized key) so an explicit "often" preference
+// from the Game settings page can lift the default cap for that subcategory — see
+// DAILY_QUEUE_MAX_PER_SUBCATEGORY and the capForSubcategory builder in the caller.
+function makeSubcategoryDiversityGate(
+  capForSubcategory: (normalizedSubcategory: string) => number,
+): SubcategoryDiversityGate {
+  const counts = new Map<string, number>();
+  return {
+    admit(subcategory) {
+      const key = (subcategory ?? '').trim().toLowerCase();
+      if (!key) return true;
+      const current = counts.get(key) ?? 0;
+      if (current >= capForSubcategory(key)) return false;
+      counts.set(key, current + 1);
+      return true;
+    },
+  };
 }
 
 // Quality-first completeness loop. Rather than a single recovery pass, we keep
@@ -171,28 +211,80 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
           .filter((domain) => !restingDomains.has(domain.toLowerCase())),
   );
 
+  // Intra-day diversity cap (D: "5-question botany run" / "3-Hamlet day"). One
+  // shared gate enforces DAILY_QUEUE_MAX_PER_SUBCATEGORY across all three core
+  // sources. Scale the BASE cap up when too few distinct subcategories are available
+  // to field five under it, so a narrow knowledge base doesn't trigger pointless
+  // top-up generation that can only ever come back over-cap; the reserve backfill
+  // further down is the final safety net regardless of this estimate.
+  const distinctAllowed = allowedSubcategories.size;
+  const baseDiversityCap =
+    distinctAllowed > 0
+      ? Math.max(
+          DAILY_QUEUE_MAX_PER_SUBCATEGORY,
+          Math.ceil(DAILY_QUEUE_SIZE / distinctAllowed),
+        )
+      : DAILY_QUEUE_SIZE;
+
+  // In concert with the Game settings page: a subcategory the player explicitly
+  // marked "often" is EXEMPT from the diversity cap (bounded only by the queue
+  // size), so the cap never throttles a topic the player deliberately asked to see
+  // a lot of. The cap exists to break up runs the player did NOT request — and an
+  // explicit "often" IS that request, so it wins. ("resting" is already removed from
+  // allowedSubcategories upstream; "sometimes"/"blue_moon"/unset keep the base cap.)
+  // Keys are lowercased to match how restingDomains is built above and how the gate
+  // normalizes each subcategory.
+  const oftenDomains = new Set(
+    Object.entries(preferences.domainPreferenceFrequency ?? {})
+      .filter(([, frequency]) => frequency === 'often')
+      .map(([domain]) => domain.toLowerCase()),
+  );
+  const capForSubcategory = (normalizedSubcategory: string): number =>
+    oftenDomains.has(normalizedSubcategory) ? DAILY_QUEUE_SIZE : baseDiversityCap;
+  const diversityGate = makeSubcategoryDiversityGate(capForSubcategory);
+
   const socialGraph = await getFriendAndFoFUserIds(userId);
-  const authored = await pickEligibleAuthoredQuestions(
+  const authoredAll = await pickEligibleAuthoredQuestions(
     userId,
     socialGraph,
     DAILY_QUEUE_SIZE,
     allowedSubcategories,
   );
+  // Cap authored picks first (highest trust → first claim on each subcategory's
+  // slots); deflected picks go to a reserve the backfill can draw on if the cap
+  // would otherwise leave the queue short.
+  const authoredReserve: typeof authoredAll = [];
+  const authored = authoredAll.filter((pick) => {
+    if (diversityGate.admit(pick.canonicalSubcategory)) return true;
+    authoredReserve.push(pick);
+    return false;
+  });
 
   // D-3: seed curated house/editorial questions into the core for the niches
   // friend content didn't cover, before falling back to LLM generation. Matched
   // by domain (the viewer's knowledge base), never the +2 friend-answer ranking.
   // House content does not enter the Feed and never occupies a +2 bonus slot.
-  const housePicks = await pickHouseQuestions(
+  // Request against the CAPPED authored count so house can fill any slot the cap
+  // freed, then run house through the same shared diversity gate.
+  const housePicksAll = await pickHouseQuestions(
     userId,
     DAILY_QUEUE_SIZE - authored.length,
     allowedSubcategories,
   );
+  const houseReserve: typeof housePicksAll = [];
+  const housePicks = housePicksAll.filter((pick) => {
+    if (diversityGate.admit(pick.canonicalSubcategory)) return true;
+    houseReserve.push(pick);
+    return false;
+  });
 
   const remaining = DAILY_QUEUE_SIZE - authored.length - housePicks.length;
-  const generated = remaining > 0
-    ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining), { firstRun: isFirstRun })
-    : [];
+  const generated =
+    remaining > 0
+      ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining), {
+          firstRun: isFirstRun,
+        })
+      : [];
 
   // Cross-source dedup by normalized question text. The authored picker
   // dedupes by question_id against past queues, and the generator has its
@@ -208,8 +300,14 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     seenTexts.add(normalize(pick.questionText));
   }
   const dedupedGenerated: typeof generated = [];
+  // Generated questions deflected ONLY by the intra-day diversity cap (not generic,
+  // not duplicate). Held — not discarded — so the top-up loop can try to replace
+  // them with a different subcategory, and the soft-cap backfill can restore them if
+  // nothing diverse materializes rather than serving a short queue.
+  const generatedReserve: typeof generated = [];
   let droppedDuplicates = 0;
   let droppedGeneric = 0;
+  let deflectedForDiversity = 0;
   for (const question of generated) {
     // Drop bucket-level domains ("general"/"trivia"/short labels) BEFORE the
     // shortfall count below, so a generic pick is treated as a missing slot the
@@ -225,6 +323,14 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       continue;
     }
     seenTexts.add(key);
+    // Intra-day diversity cap, applied AFTER the generic + dedup gates so a deflected
+    // pick is a genuine, distinct question we're merely spacing out — see the reserve
+    // backfill below.
+    if (!diversityGate.admit(question.canonicalSubcategory)) {
+      deflectedForDiversity += 1;
+      generatedReserve.push(question);
+      continue;
+    }
     dedupedGenerated.push(question);
   }
   if (droppedDuplicates > 0) {
@@ -253,14 +359,21 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   const topUpGenerated: typeof dedupedGenerated = [];
   let topUpRounds = 0;
   while (
-    DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length) > 0 &&
+    DAILY_QUEUE_SIZE -
+      (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length) >
+      0 &&
     topUpRounds < MAX_TOP_UP_ROUNDS &&
     Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS
   ) {
     topUpRounds += 1;
     const roundShortfall =
-      DAILY_QUEUE_SIZE - (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length);
-    const extra = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(roundShortfall), { firstRun: isFirstRun });
+      DAILY_QUEUE_SIZE -
+      (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length);
+    const extra = await generateDailyQuestionsFromKnowledgeBase(
+      userId,
+      overRequest(roundShortfall),
+      { firstRun: isFirstRun },
+    );
     let recoveredThisRound = 0;
     for (const question of extra) {
       if (isGenericSubcategory(question.canonicalSubcategory)) {
@@ -270,6 +383,11 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       const key = normalize(question.questionText);
       if (seenTexts.has(key)) continue;
       seenTexts.add(key);
+      if (!diversityGate.admit(question.canonicalSubcategory)) {
+        deflectedForDiversity += 1;
+        generatedReserve.push(question);
+        continue;
+      }
       topUpGenerated.push(question);
       recoveredThisRound += 1;
     }
@@ -295,7 +413,43 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   }
 
   const generatedForQueue = [...dedupedGenerated, ...topUpGenerated];
-  const achieved = authored.length + housePicks.length + generatedForQueue.length;
+
+  // Soft-cap relaxation. If the diversity cap (on top of any honest under-yield)
+  // left the core short of DAILY_QUEUE_SIZE, backfill from the reserve of
+  // cap-deflected picks — authored first (vetted, highest trust), then house, then
+  // generated — until we're full or the reserve runs dry. This is what makes the cap
+  // SOFT: it only ever DIVERSIFIES a queue that had the material to stay full. A
+  // knowledge base too narrow to field five distinct subcategories degrades to
+  // exactly the queue it would have built without the cap — never shorter, and never
+  // a spurious generation_failed below the floor.
+  const authoredBackfill: typeof authored = [];
+  const houseBackfill: typeof housePicks = [];
+  const generatedBackfill: typeof generatedForQueue = [];
+  let backfillShortfall =
+    DAILY_QUEUE_SIZE - (authored.length + housePicks.length + generatedForQueue.length);
+  for (const pick of authoredReserve) {
+    if (backfillShortfall <= 0) break;
+    authoredBackfill.push(pick);
+    backfillShortfall -= 1;
+  }
+  for (const pick of houseReserve) {
+    if (backfillShortfall <= 0) break;
+    houseBackfill.push(pick);
+    backfillShortfall -= 1;
+  }
+  for (const question of generatedReserve) {
+    if (backfillShortfall <= 0) break;
+    generatedBackfill.push(question);
+    backfillShortfall -= 1;
+  }
+  const diversityBackfilled =
+    authoredBackfill.length + houseBackfill.length + generatedBackfill.length;
+
+  const coreAuthored = [...authored, ...authoredBackfill];
+  const coreHouse = [...housePicks, ...houseBackfill];
+  const coreGenerated = [...generatedForQueue, ...generatedBackfill];
+
+  const achieved = coreAuthored.length + coreHouse.length + coreGenerated.length;
 
   // Graceful degrade WITH A FLOOR. Some niche domains have very low generation
   // yield — the quality/factual/dedup gates correctly reject most of each batch —
@@ -325,6 +479,10 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       topUpRounds,
       droppedDuplicates,
       droppedGeneric,
+      baseDiversityCap,
+      oftenDomains: oftenDomains.size,
+      deflectedForDiversity,
+      diversityBackfilled,
       domainMode: preferences.domainMode,
       selectedDomains: preferences.selectedDomains.length,
       elapsedMs: Date.now() - startedAt,
@@ -350,6 +508,10 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
       topUpRounds,
       droppedDuplicates,
       droppedGeneric,
+      baseDiversityCap,
+      oftenDomains: oftenDomains.size,
+      deflectedForDiversity,
+      diversityBackfilled,
       knowledgeBaseDomains: knowledgeBase.length,
       domainMode: preferences.domainMode,
       selectedDomains: preferences.selectedDomains.length,
@@ -357,16 +519,19 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     });
   }
 
+  // Persist in source order (authored → house → generated), each group already
+  // diversity-capped and reserve-backfilled above. Slice defensively so the core
+  // never exceeds DAILY_QUEUE_SIZE even if a source over-supplied.
   let position = 0;
-  for (const pick of authored) {
+  for (const pick of coreAuthored.slice(0, DAILY_QUEUE_SIZE - position)) {
     await createDailyQueueItemFromAuthored(userId, pick, position);
     position += 1;
   }
-  for (const pick of housePicks.slice(0, DAILY_QUEUE_SIZE - position)) {
+  for (const pick of coreHouse.slice(0, DAILY_QUEUE_SIZE - position)) {
     await createDailyQueueItemFromHouse(userId, pick, position);
     position += 1;
   }
-  for (const question of generatedForQueue.slice(0, DAILY_QUEUE_SIZE - position)) {
+  for (const question of coreGenerated.slice(0, DAILY_QUEUE_SIZE - position)) {
     await createDailyQueueItem(userId, question.id, position);
     position += 1;
   }
@@ -381,7 +546,10 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   // fewer slots (graceful shrink), yielding a 5–7 slot queue. The +2 serves only
   // fresh questions — never a friend's literal answered question (those live
   // behind the Lately milestone click-through, D-4 §A).
-  const bonusDomains = await getFriendDomainsForBonus(userId, DAILY_BONUS_SLOT_MAX);
+  // Resting domains are excluded from the +2 pool too, so "This is {Name}'s bag
+  // but not mine" (which parks the domain in Resting) stops it surfacing as a
+  // bonus, not just in the core five.
+  const bonusDomains = await getFriendDomainsForBonus(userId, DAILY_BONUS_SLOT_MAX, restingDomains);
   if (bonusDomains.length > 0) {
     const presenceByDomain = new Map(
       bonusDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
@@ -392,7 +560,12 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     );
     for (const { domain, question } of generatedBonus) {
       const candidate = presenceByDomain.get(domain.toLowerCase());
-      await createDailyQueueItemFromPresence(userId, question.id, toBonusPresence(candidate), position);
+      await createDailyQueueItemFromPresence(
+        userId,
+        question.id,
+        toBonusPresence(candidate),
+        position,
+      );
       position += 1;
     }
   }

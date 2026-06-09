@@ -11,6 +11,7 @@ import {
 } from '@/server/db';
 import { resolveTier } from '@/server/mastery/tiers';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
+import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { buildRefineSection } from '@/server/db/queries/refine';
 import { getFeedPagePayload } from '@/server/feed/get-feed-page';
@@ -259,6 +260,22 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     };
   });
 
+  // B-Report-3: durable self-hide. A recap card the viewer reported as
+  // inappropriate (open|upheld) stays gone across refreshes — read straight from
+  // the ContentReport row, no new state. Incorrect reports do not self-hide.
+  // Totals stay computed from slots (below), matching B-Report-2's card-only removal.
+  const reportTargetIds = recaps
+    .map((recap) => recap.reportTarget?.questionId ?? recap.reportTarget?.generatedQuestionId)
+    .filter((id): id is string => Boolean(id));
+  const hiddenIds = await getViewerHiddenQuestionIds(userId, reportTargetIds);
+  const visibleRecaps =
+    hiddenIds.size === 0
+      ? recaps
+      : recaps.filter((recap) => {
+          const targetId = recap.reportTarget?.questionId ?? recap.reportTarget?.generatedQuestionId;
+          return !(targetId && hiddenIds.has(targetId));
+        });
+
   const totalSkipped = slots.filter((slot) => slot.skipped).length;
   const totalAnswered = slots.filter((slot) => slot.answered).length;
   const totalCorrect = slots.filter((slot) => slot.answer_state === 'correct').length;
@@ -279,7 +296,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     totalSkipped,
     pointsEarned,
     difficultyMode: prefs.difficulty,
-    questions: recaps,
+    questions: visibleRecaps,
     domainGains: gainedDomains
       .map((domain) => ({
         domain,

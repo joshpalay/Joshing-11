@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type ReactNode } from 'react'
 
+import { answerHeadingStyle } from '@/components/answer-heading'
 import { KnowledgeCircle } from '@/components/knowledge/CategoryCircles'
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
@@ -162,13 +163,11 @@ function AnsweredResult({
         </p>
         {item.isCorrect ? <KnowledgeGainIndicator item={item} /> : null}
       </div>
-      {!item.isCorrect && item.correctAnswer ? (
+      {item.correctAnswer ? (
         <p
-          className="text-[13px] italic"
           style={{
-            fontFamily: 'var(--font-literata)',
-            color: 'var(--ink)',
-            opacity: 0.7,
+            ...answerHeadingStyle,
+            color: item.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)',
           }}
         >
           {item.correctAnswer}

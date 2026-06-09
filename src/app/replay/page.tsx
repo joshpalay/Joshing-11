@@ -161,7 +161,7 @@ export default function ReplayPage() {
           questionText: currentItem.questionText,
           result: body.isCorrect ? 'correct' : 'wrong',
           submitted: submittedAnswer,
-          correctAnswer: body.isCorrect ? null : body.correctAnswer,
+          correctAnswer: body.correctAnswer,
           consolation: body.consolation ?? null,
           breadcrumb: body.breadcrumb ?? null,
           copyVariant: currentIndex,

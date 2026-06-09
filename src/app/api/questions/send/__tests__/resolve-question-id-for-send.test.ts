@@ -74,6 +74,17 @@ vi.mock('@/server/db/queries/feed', () => ({
 }));
 vi.mock('@/server/db/queries/friends', () => ({ getFriends: vi.fn() }));
 vi.mock('@/server/sms', () => ({ sendSms: vi.fn() }));
+// B-Report-3 added a suppression guard to POST; this suite is about resolution, so
+// stub the check off (the dedicated suppression.test.ts covers the gate itself).
+vi.mock('@/server/db/queries/content-reports', () => ({
+  isQuestionReportSuppressed: vi.fn(async () => false),
+}));
+// The reuse lookup that prevents a sent GeneratedQuestion from forking into a
+// second canonical Question. Stubbed to "no existing row" by default so the mint
+// path is exercised; individual tests override it to assert reuse.
+vi.mock('@/server/questions/persist-generated-question', () => ({
+  findCanonicalQuestionIdForGenerated: vi.fn(async () => null),
+}));
 
 import { POST, resolveQuestionIdForSend } from '@/app/api/questions/send/route';
 import { getSession } from '@/server/auth/session';
@@ -83,6 +94,7 @@ import {
   userAnsweredQuestionCorrectly,
   userHasQuestionInBlockingFeed,
 } from '@/server/db/queries/feed';
+import { findCanonicalQuestionIdForGenerated } from '@/server/questions/persist-generated-question';
 
 describe('resolveQuestionIdForSend', () => {
   beforeEach(() => {
@@ -90,6 +102,29 @@ describe('resolveQuestionIdForSend', () => {
     state.generated = null;
     state.insertedValues = null;
     dbMock.insert.mockClear();
+    vi.mocked(findCanonicalQuestionIdForGenerated).mockResolvedValue(null);
+  });
+
+  it('reuses an existing canonical Question for a generated id without minting a duplicate', async () => {
+    // The loop fix: the sender passes a GeneratedQuestion id they already answered
+    // in their daily, which persisted a canonical Question. Reuse that row instead
+    // of forking a second curated_sent row (which broke question_id-keyed dedup).
+    state.generated = {
+      id: 'gen-1',
+      questionText: 'What is the capital of France?',
+      answer: 'Paris',
+      explainer: null,
+      broadCategory: 'Geography',
+      canonicalSubcategory: 'European Capitals',
+      difficultyEstimate: 'accessible',
+    };
+    vi.mocked(findCanonicalQuestionIdForGenerated).mockResolvedValue('existing-canonical-q');
+
+    const result = await resolveQuestionIdForSend('gen-1');
+
+    expect(result).toBe('existing-canonical-q');
+    expect(findCanonicalQuestionIdForGenerated).toHaveBeenCalledWith('gen-1');
+    expect(dbMock.insert).not.toHaveBeenCalled();
   });
 
   it('returns a real Question id unchanged without inserting', async () => {
@@ -153,6 +188,7 @@ describe('POST /api/questions/send — house guard (D-3)', () => {
     vi.mocked(userAnsweredQuestionCorrectly).mockResolvedValue(false as never);
     vi.mocked(userHasQuestionInBlockingFeed).mockResolvedValue(false as never);
     vi.mocked(createFeedItem).mockResolvedValue({ id: 'feed-1' } as never);
+    vi.mocked(findCanonicalQuestionIdForGenerated).mockResolvedValue(null);
     dbMock.insert.mockClear();
   });
 

@@ -22,6 +22,7 @@ import {
 import { convergenceCaptionTemplate, sortByProminence } from '@/lib/lately';
 import { MILESTONE_CARD_QUESTION_CAP } from '@/lib/lately-milestones';
 import { getActivitiesForUser } from '@/server/db/queries/activity';
+import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
 import {
   getLatelyConvergences,
   getLatelyMilestones,
@@ -52,9 +53,12 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
       ...convergences.flatMap((c) => c.questionIds),
     ]),
   ];
-  const [textById, priorById] = await Promise.all([
+  const [textById, priorById, hiddenIds] = await Promise.all([
     getMilestoneQuestionText(allQuestionIds),
     getViewerPriorAnswerResults(userId, allQuestionIds),
+    // B-Report-3: durable self-hide — a question the viewer reported as
+    // inappropriate (open|upheld) stays out of their Lately stack across reloads.
+    getViewerHiddenQuestionIds(userId, allQuestionIds),
   ]);
 
   const utilityItems = filterUtilityActivities(items, moments).map(
@@ -65,6 +69,7 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
     const questions: StreamQuestion[] = cappedIdsByMilestone[i].ids
       .map((id) => textById.get(id))
       .filter((q): q is NonNullable<typeof q> => Boolean(q))
+      .filter((q) => !hiddenIds.has(q.questionId))
       .map((q) => ({
         questionId: q.questionId,
         text: q.text,
@@ -77,6 +82,7 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
     const questions: StreamQuestion[] = c.questionIds
       .map((id) => textById.get(id))
       .filter((q): q is NonNullable<typeof q> => Boolean(q))
+      .filter((q) => !hiddenIds.has(q.questionId))
       .map((q) => ({
         questionId: q.questionId,
         text: q.text,

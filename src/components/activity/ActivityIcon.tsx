@@ -44,10 +44,27 @@ const MARK_W = 24;
 const GAP = 8;
 const LINE_H = 22.5; // first text line: 15px × 1.5
 // The stacked single-shape marks (diamond / hourglass / domain) are a vertical
-// pair of base=height triangles, so at full width they're 24×48 — too tall next
-// to the text. Render them at 70% (the cluster, made of small triangles, stays
-// full size). They center horizontally in the 24px column.
-const LARGE_SCALE = 0.7;
+// pair of triangles. Each half is base=height (24×24) so the triangles stay
+// isosceles and un-smushed — matching the BundleMark invariant below. The pair's
+// viewBox is therefore 24×48 (a 1:2 aspect). We render it at LARGE_SCALE so its
+// HEIGHT lands at ~the text line height (48 × 0.5 = 24 ≈ LINE_H 22.5) and the
+// mark sits TUCKED INSIDE the first line when vertically centered (see
+// ActivityIcon) instead of drooping far below it. Width = 24 × 0.5 = 12, which
+// matches a single BundleMark triangle, so the two icon families read as one set.
+// (Keep the halves base=height — drawing them shorter squishes the rhombus and
+// was reverted; the fix for "too tall" is the scale + centering here, not the
+// geometry.)
+const LARGE_SCALE = 0.5;
+// Height of each half of a stacked mark, and the total viewBox height of the
+// pair. base=height (= MARK_W) keeps the triangles un-smushed.
+const STACK_HALF = 24;
+const STACK_H = STACK_HALF * 2; // 48
+// Every mark TOP-ANCHORS its top to the first line's cap height (the top of
+// "R"), not the line-box top above it — so the top of the shape lines up with
+// the top of the letter beside it. Equal to the line's half-leading
+// ((22.5 − 15) / 2 ≈ 3.75) plus the gap from the em-box top down to the cap;
+// tuned to 7 against Montserrat at 15px.
+const CAP_NUDGE = 7;
 
 export type ActivityIconSpec =
   | { kind: 'bundle'; total: number; unanswered: number }
@@ -180,9 +197,17 @@ function BundleMark({
 // random palette colour.
 function DiamondMark({ seed }: { seed: string }) {
   return (
-    <MarkSvg h={48} scale={LARGE_SCALE}>
-      <path d="M12,0 L0,24 L24,24 Z" fill={colorFor(seed, 0)} fillOpacity={FILL_OPACITY} />
-      <path d="M0,24 L24,24 L12,48 Z" fill={colorFor(seed, 1)} fillOpacity={FILL_OPACITY} />
+    <MarkSvg h={STACK_H} scale={LARGE_SCALE}>
+      <path
+        d={`M12,0 L0,${STACK_HALF} L24,${STACK_HALF} Z`}
+        fill={colorFor(seed, 0)}
+        fillOpacity={FILL_OPACITY}
+      />
+      <path
+        d={`M0,${STACK_HALF} L24,${STACK_HALF} L12,${STACK_H} Z`}
+        fill={colorFor(seed, 1)}
+        fillOpacity={FILL_OPACITY}
+      />
     </MarkSvg>
   );
 }
@@ -191,9 +216,17 @@ function DiamondMark({ seed }: { seed: string }) {
 // sent your way.
 function HourglassMark({ seed }: { seed: string }) {
   return (
-    <MarkSvg h={48} scale={LARGE_SCALE}>
-      <path d="M0,0 L24,0 L12,24 Z" fill={colorFor(seed, 0)} fillOpacity={FILL_OPACITY} />
-      <path d="M12,24 L0,48 L24,48 Z" fill={colorFor(seed, 1)} fillOpacity={FILL_OPACITY} />
+    <MarkSvg h={STACK_H} scale={LARGE_SCALE}>
+      <path
+        d={`M0,0 L24,0 L12,${STACK_HALF} Z`}
+        fill={colorFor(seed, 0)}
+        fillOpacity={FILL_OPACITY}
+      />
+      <path
+        d={`M12,${STACK_HALF} L0,${STACK_H} L24,${STACK_H} Z`}
+        fill={colorFor(seed, 1)}
+        fillOpacity={FILL_OPACITY}
+      />
     </MarkSvg>
   );
 }
@@ -205,9 +238,17 @@ function HourglassMark({ seed }: { seed: string }) {
 // they still split on the same diagonal and stay rotationally symmetric.
 function DomainMark({ seed }: { seed: string }) {
   return (
-    <MarkSvg h={48} scale={LARGE_SCALE}>
-      <path d="M18,0 L6,0 L18,24 Z" fill={colorFor(seed, 0)} fillOpacity={FILL_OPACITY} />
-      <path d="M6,24 L18,48 L6,48 Z" fill={colorFor(seed, 1)} fillOpacity={FILL_OPACITY} />
+    <MarkSvg h={STACK_H} scale={LARGE_SCALE}>
+      <path
+        d={`M18,0 L6,0 L18,${STACK_HALF} Z`}
+        fill={colorFor(seed, 0)}
+        fillOpacity={FILL_OPACITY}
+      />
+      <path
+        d={`M6,${STACK_HALF} L18,${STACK_H} L6,${STACK_H} Z`}
+        fill={colorFor(seed, 1)}
+        fillOpacity={FILL_OPACITY}
+      />
     </MarkSvg>
   );
 }
@@ -226,8 +267,17 @@ function Mark({ spec, seed }: { spec: ActivityIconSpec; seed: string }) {
 }
 
 // The fixed icon column: exactly MARK_W wide (+ GAP) for EVERY row, even iconless
-// ones, so text alignment never shifts. The mark centers on the first text line.
-// `seed` (the row id) makes the per-triangle palette pick stable and per-row.
+// ones, so text alignment never shifts. `seed` (the row id) makes the per-triangle
+// palette pick stable and per-row.
+//
+// Every mark TOP-ANCHORS at the first line's cap height, so the top of the shape
+// lines up with the top of the letter beside it, then extends downward:
+//   - The BUNDLE is a 2–2–1 CLUSTER standing in for a whole stack of questions;
+//     it is tall and grows down through the milestone row's second line.
+//   - The single stacked marks (diamond / hourglass / domain) are sized (via
+//     LARGE_SCALE) to roughly the line height, so anchored at the cap they sit
+//     beside the first line with only a small tail below it — no longer the
+//     ~half-line droop that the 0.7-scale top-anchor produced.
 export function ActivityIcon({ spec, seed }: { spec: ActivityIconSpec | null; seed: string }) {
   return (
     <div
@@ -236,12 +286,12 @@ export function ActivityIcon({ spec, seed }: { spec: ActivityIconSpec | null; se
         width: MARK_W,
         marginRight: GAP,
         height: LINE_H,
-        // Nudge down by the line's half-leading so the mark's top meets the
-        // glyph cap height (the top of "R"), not the line-box top above it.
-        paddingTop: 7,
         flexShrink: 0,
         display: 'flex',
+        // Top-anchor every mark at the cap height (top of the letter); taller
+        // marks extend downward past the first line.
         alignItems: 'flex-start',
+        paddingTop: CAP_NUDGE,
         justifyContent: 'center',
         overflow: 'visible',
       }}

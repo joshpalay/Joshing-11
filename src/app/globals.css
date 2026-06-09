@@ -89,6 +89,14 @@
     --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
     --game-wrong:         #c96b4a;  /* text/wrong — terracotta result accent     */
     --game-wrong-strong:  #c33d14;  /* game/wrong/in-question — strong terracotta */
+    /* Shared width for every left-aligned card in the play thread (question,
+       bonus, result, reflection, session-close) so the column reads as one
+       coherent conversation with a consistent left + right edge. A percentage of
+       the already max-width-capped content column: fills narrow screens with
+       equal margins, and shares one max-width on wide screens. The only
+       intentional exceptions are centered system lines, the right-aligned
+       answer bubble, and global/header chrome. */
+    --play-thread-card-width: 88%;
     /* ──────────────────────────────────────────────────────────────────────
        Conventions:
        • Cream tones — `--brand-cream-page` (#fcf8f2) is the app background;
@@ -145,6 +153,28 @@
     --success: #178245;
     --danger: var(--destructive);
     --wrong: var(--destructive);
+    /* Status surfaces — banner/chip fills + hairlines for the success / warning /
+       error roles. Formalizes the raw amber-50/300/700/900 + emerald/red/rose
+       50–200 utilities the 2026-05-30 audit flagged (DESIGN-SYSTEM.md §1.7).
+       Warning is a new hue (no prior accent), so its three values are explicit;
+       success/error tints derive from their existing accent via color-mix — the
+       same proportions already used inline in GameplayChat/ReplaySummary, so the
+       tints track the accent if it ever moves. */
+    --warning:             #b45309;  /* amber/700 — caution text / accent      */
+    --warning-surface:     #fdf6e6;  /* pale caution banner fill               */
+    --warning-border:      #e6c15a;  /* caution hairline                       */
+    --success-surface:     color-mix(in srgb, var(--success) 10%, var(--card));
+    --success-border:      color-mix(in srgb, var(--success) 30%, var(--border));
+    --destructive-surface: color-mix(in srgb, var(--destructive) 8%, var(--card));
+    --destructive-border:  color-mix(in srgb, var(--destructive) 28%, var(--border));
+    /* Editorial feature washes — full-bleed "featured moment" bands in the feed
+       (Shared Ground / Grow Your Circle / Your World Is Expanding). Subtle tints
+       derived from the page cream so they read as a calm change in surface, not a
+       card or banner. The per-tone eyebrow accent reuses an existing brand token
+       (orange / success-green / link-slate). */
+    --editorial-parchment: color-mix(in srgb, var(--brand-border) 22%, var(--brand-cream-page));
+    --editorial-sage:      color-mix(in srgb, var(--success) 8%, var(--brand-cream-page));
+    --editorial-slate:     color-mix(in srgb, var(--brand-link) 8%, var(--brand-cream-page));
     /* Legacy editorial aliases — re-pointed at the brand tokens so older
        surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
        Knowledge page, replay/catch-up) render with navy ink instead of warm
@@ -216,6 +246,11 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    /* Editorial feature washes — tinted off the dark card so the bands stay
+       legible as a featured surface in dark mode. */
+    --editorial-parchment: color-mix(in srgb, var(--brand-border) 10%, var(--card));
+    --editorial-sage:      color-mix(in srgb, var(--success) 12%, var(--card));
+    --editorial-slate:     color-mix(in srgb, var(--brand-link) 14%, var(--card));
 }
 
 @layer base {

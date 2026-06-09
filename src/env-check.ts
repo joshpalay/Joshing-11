@@ -7,7 +7,10 @@ const REQUIRED_ENV_VARS = [
   'TWILIO_MESSAGING_SERVICE_SID',
 ] as const;
 
-const OPTIONAL_ENV_VARS = ['NEXT_PUBLIC_APP_URL'] as const;
+// ADMIN_USER_IDS (B-Report-5): comma-separated users.id allowlist for the content-
+// report review queue. Optional by design — unset ⇒ the queue is unreachable and the
+// app boots fine. Never promote to REQUIRED.
+const OPTIONAL_ENV_VARS = ['NEXT_PUBLIC_APP_URL', 'ADMIN_USER_IDS'] as const;
 
 export default function checkEnv() {
   const jwtSecret = process.env.JWT_SECRET?.trim() || process.env.AUTH_SECRET?.trim();

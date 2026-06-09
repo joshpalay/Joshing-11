@@ -10,7 +10,7 @@
     "start": "next start",
     "test": "vitest run",
     "test:evals": "RUN_LLM_EVALS=1 vitest run src/lib/llm.grading.eval.test.ts",
-    "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings 31",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings 16",
     "smoke:daily-catchup": "tsx scripts/daily-catchup.smoke.ts",
     "smoke:question-vetting": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/question-vetting.smoke.mjs",
     "smoke:invite-first-five": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/invite-first-five.smoke.mjs",
@@ -21,6 +21,8 @@
     "smoke:niche-match-dedup": "tsx scripts/niche-match-dedup.smoke.ts",
     "smoke:gameplay": "tsx scripts/playtest/playtest.ts",
     "pool:health": "tsx scripts/pool-health.ts",
+    "pool:embed-backfill": "tsx scripts/backfill-pool-embeddings.ts",
+    "pool:embed-backfill:apply": "tsx scripts/backfill-pool-embeddings.ts --apply",
     "format": "node scripts/format-changed.mjs",
     "format:all": "prettier --write ."
   },

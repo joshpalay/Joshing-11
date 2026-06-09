@@ -126,6 +126,22 @@ export const DAILY_QUEUE_SIZE = 5;
 export const DAILY_QUEUE_MIN_SIZE = 3;
 
 /**
+ * Intra-day diversity cap. Within a SINGLE daily queue, one canonical subcategory
+ * may fill at most this many of the DAILY_QUEUE_SIZE core slots before further
+ * same-subcategory picks are deflected. This is the lever that breaks up a
+ * "5-question botany run" or a "3-Hamlet day" — where one niche crowds the rest of
+ * the five out — without changing how individual questions are chosen.
+ *
+ * It is deliberately SOFT. The orchestrator holds cap-deflected picks in a reserve
+ * and uses them to backfill only if the cap would otherwise leave the queue short,
+ * and it scales the effective cap up when too few distinct subcategories are
+ * available to field five under it (DAILY_QUEUE_SIZE / distinct-domain-count). So a
+ * thin, single-subcategory knowledge base degrades to exactly the queue it would
+ * have built without the cap — never shorter, never a spurious generation_failed.
+ */
+export const DAILY_QUEUE_MAX_PER_SUBCATEGORY = 2;
+
+/**
  * Daily Five +2 — up to this many bonus slots are appended after the core
  * DAILY_QUEUE_SIZE, each a freshly generated accessible question in a domain
  * drawn from the territory ∪ activity of people the viewer follows (D-4 §B; see

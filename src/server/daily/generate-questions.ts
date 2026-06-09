@@ -37,6 +37,7 @@ import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
+import { domainKey } from '@/lib/knowledge/domain-key';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
@@ -1195,8 +1196,13 @@ export function orderCustomDomainsByLeastRecent(
   domains: string[],
   recentDomainCounts: ReadonlyMap<string, number>,
 ): string[] {
+  // recentDomainCounts is keyed by domainKey() (see getRecentDomainCounts), so
+  // fold each domain to the same canonical key before looking up its count —
+  // otherwise spelling variants miss the bucket and read as fresh (count 0).
   return [...domains].sort(
-    (a, b) => (recentDomainCounts.get(a) ?? 0) - (recentDomainCounts.get(b) ?? 0),
+    (a, b) =>
+      (recentDomainCounts.get(domainKey(a)) ?? 0) -
+      (recentDomainCounts.get(domainKey(b)) ?? 0),
   );
 }
 
@@ -1208,8 +1214,10 @@ function selectDiverseDomains(
   // Apply the soft cap: drop any domain that has already produced
   // DOMAIN_PER_WEEK_CAP questions in the last 7 days. If every domain is
   // over cap, fall back to the full set rather than starve the queue.
+  // recentCounts is keyed by domainKey() (see getRecentDomainCounts); fold the
+  // KB domain to the same key so spelling variants share one weekly tally.
   const overCap = (d: { domain: string }): boolean =>
-    (recentCounts.get(d.domain) ?? 0) >= DOMAIN_PER_WEEK_CAP;
+    (recentCounts.get(domainKey(d.domain)) ?? 0) >= DOMAIN_PER_WEEK_CAP;
   const eligibleKb = knowledgeBase.some((d) => !overCap(d))
     ? knowledgeBase.filter((d) => !overCap(d))
     : knowledgeBase;

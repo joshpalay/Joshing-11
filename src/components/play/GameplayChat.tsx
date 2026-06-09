@@ -5,7 +5,9 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
+import { answerHeadingStyle } from '@/components/answer-heading';
 import { EditorialBadge } from '@/components/EditorialBadge';
+import { ThreadCard } from '@/components/play/ThreadCard';
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
 import { NewTerritoryUndo } from '@/components/feed/NewTerritoryUndo';
 import {
@@ -89,8 +91,6 @@ export type ChatMessage =
       copyVariant: number;
       /** Creator display name — used in wrong-answer copy variant 2 */
       creatorName: string | null;
-      /** B12 — short line under correct reveal; fades after 2.5s */
-      relationalFeedbackLine?: string | null;
       /** Domain exclusion — canonical subcategory for "remove from rotation" affordance */
       canonicalSubcategory?: string | null;
       /** B-1 — domain newly opened in the KB by this correct answer; surfaces the "Added [Domain] — remove?" undo. */
@@ -114,7 +114,13 @@ export type ChatMessage =
       roundsRemaining: number;
       nextRoundOpensAt: string | null;
     }
-  | { id: string; kind: 'session_close'; scoreLine: string; interpretiveLine: string | null; summaryHref?: string }
+  | {
+      id: string;
+      kind: 'session_close';
+      scoreLine: string;
+      interpretiveLine: string | null;
+      summaryHref?: string;
+    }
   | {
       id: string;
       kind: 'bonus_offer';
@@ -123,19 +129,24 @@ export type ChatMessage =
       onDecline: () => void;
     };
 
-const CORRECT_COPY: Array<{ headline: string; subLabel: string }> = [
-  { headline: 'Nice pull.', subLabel: 'common ground' },
-  { headline: 'Right on.', subLabel: 'common ground +' },
-  { headline: 'Locked in.', subLabel: 'common ground ++' },
-  { headline: 'Exactly.', subLabel: 'common ground +++' },
-];
+// Shared width for every left-aligned card in the play thread so the column
+// reads as one coherent conversation — question, bonus, result, reflection, and
+// session-close cards all share a left + right edge. Sourced from a single CSS
+// token so no card type defines its own one-off width. The only intentional
+// exceptions are centered system lines, the right-aligned answer bubble, and
+// global/header chrome.
+const THREAD_CARD_MAX_WIDTH = 'var(--play-thread-card-width)';
 
 function wrongHeadline(variant: number): string {
   switch (variant % 3) {
-    case 0: return 'Not this time — here\u2019s the answer.';
-    case 1: return 'You\u2019ll know this one next time.';
-    case 2: return 'Close, but not quite.';
-    default: return 'Not this time — here\u2019s the answer.';
+    case 0:
+      return 'Not this time — here\u2019s the answer.';
+    case 1:
+      return 'You\u2019ll know this one next time.';
+    case 2:
+      return 'Close, but not quite.';
+    default:
+      return 'Not this time — here\u2019s the answer.';
   }
 }
 
@@ -146,16 +157,24 @@ const monoStyle: CSSProperties = {
   letterSpacing: '0.06em',
 };
 
+// The quiet eyebrow label that opens a result/answer-reveal card — small, mono,
+// letter-spaced (e.g. "✓ Locked in", "The answer"). Tone color is applied per
+// card so the answer beneath it stays the focal point.
+const verdictLabelStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '0.7rem',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.12em',
+};
+
 // The answer, repeated as a prominent serif headline on the result card —
 // mirrors the feed reveal treatment ("eyebrow → answer as headline →
-// explanation"). Shared by the correct and wrong cards so the two stay in
-// sync; bumped up from the previous 1.4875rem so the answer reads clearly.
-const answerHeadingStyle: CSSProperties = {
-  fontFamily: 'var(--font-cormorant), Georgia, serif',
-  fontSize: '1.65rem',
-  fontWeight: 700,
-  lineHeight: 1.14,
-};
+// explanation"). Shared via `answer-heading.ts` so every answer-reveal surface
+// (this card, the feed sheet, the summary recap, the history list) stays in sync.
 
 // Darkened triangle-gold so warning/inside-joke labels clear AA on the cream
 // surface (raw --tri-amber #d9a82e is too light for small text). Mirrors the
@@ -168,13 +187,26 @@ const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
   (name) => `${name} thought you might`,
 ];
 
+// Trim an explainer to its first sentence for the live thread — the full text
+// still lives in the End of Session Review. Keeps the thread moving while giving
+// a one-line "why" directly under the answer.
+function firstSentence(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^.*?[.!?](?=\s|$)/);
+  return match ? match[0] : trimmed;
+}
+
 function firstNameFrom(creatorName: string): string {
   const trimmed = creatorName.trim();
   const space = trimmed.indexOf(' ');
   return space === -1 ? trimmed : trimmed.slice(0, space);
 }
 
-function wrongNamedSubLabel(creatorName: string | null, variant: number, isHouse = false): string | null {
+function wrongNamedSubLabel(
+  creatorName: string | null,
+  variant: number,
+  isHouse = false,
+): string | null {
   if (!creatorName) return null;
   // House and LLM origins are non-relational: no "{name} carries this one".
   if (isHouse || isLlmAttribution(creatorName)) return null;
@@ -228,7 +260,14 @@ function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
 
   return (
     <div className="flex flex-col items-center gap-0.5 py-0.5">
-      <p style={{ ...monoStyle, fontSize: '0.58rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+      <p
+        style={{
+          ...monoStyle,
+          fontSize: '0.58rem',
+          color: 'var(--text-muted)',
+          textAlign: 'center',
+        }}
+      >
         <span>Dismissed</span>
         <span style={{ margin: '0 6px', opacity: 0.6 }}>·</span>
         {state === 'undoing' ? (
@@ -254,7 +293,9 @@ function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
         )}
       </p>
       {state === 'error' ? (
-        <p style={{ ...monoStyle, fontSize: '0.54rem', color: 'var(--danger)', textAlign: 'center' }}>
+        <p
+          style={{ ...monoStyle, fontSize: '0.54rem', color: 'var(--danger)', textAlign: 'center' }}
+        >
           Could not undo. Try again.
         </p>
       ) : null}
@@ -276,6 +317,8 @@ function QuestionRow({
   giveUpDisabled = false,
   onDismiss,
   dismissDisabled = false,
+  onMutePresence,
+  muteDisabled = false,
 }: {
   subhead?: string | null;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
@@ -290,6 +333,10 @@ function QuestionRow({
   giveUpDisabled?: boolean;
   onDismiss?: () => void;
   dismissDisabled?: boolean;
+  // Bonus slots only (D-4 §B): "This is {Name}'s bag but not mine" — rests the
+  // slot's domain so the category stops surfacing, and closes this question.
+  onMutePresence?: () => void;
+  muteDisabled?: boolean;
 }) {
   const [visible, setVisible] = useState(!isNew);
   // A bonus slot is one drawn from a followed friend's knowledge (D-4 §B). It
@@ -300,7 +347,7 @@ function QuestionRow({
     if (!isNew) return;
     const t = window.setTimeout(() => setVisible(true), 30);
     return () => window.clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -339,20 +386,29 @@ function QuestionRow({
             lineHeight: 1.3,
           }}
         >
-          <span style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginRight: '6px' }}>
+          <span
+            style={{
+              ...monoStyle,
+              fontSize: '0.55rem',
+              color: 'var(--text-muted)',
+              marginRight: '6px',
+            }}
+          >
             FROM
           </span>
           <span style={{ fontWeight: 600 }}>{creatorName}</span>
           {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
           {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
-            <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>gave you this</span>
+            <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
+              gave you this
+            </span>
           )}
         </p>
       ) : null}
       <div
         style={{
           alignSelf: 'flex-start',
-          maxWidth: '81%',
+          maxWidth: THREAD_CARD_MAX_WIDTH,
           width: '100%',
         }}
       >
@@ -362,7 +418,8 @@ function QuestionRow({
               borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
               border: '1px solid var(--brand-navy)',
               borderBottom: 'none',
-              background: 'linear-gradient(135deg, var(--brand-navy), color-mix(in srgb, var(--brand-navy) 82%, var(--accent)))',
+              background:
+                'linear-gradient(135deg, var(--brand-navy), color-mix(in srgb, var(--brand-navy) 82%, var(--accent)))',
               boxShadow: '0 8px 20px rgba(13, 31, 58, 0.18)',
               color: 'var(--primary-foreground)',
               padding: '9px 13px 8px',
@@ -390,7 +447,10 @@ function QuestionRow({
                   lineHeight: 1.25,
                 }}
               >
-                <span aria-hidden style={{ color: 'var(--tri-amber)', fontSize: '0.8rem', lineHeight: 1 }}>
+                <span
+                  aria-hidden
+                  style={{ color: 'var(--tri-amber)', fontSize: '0.8rem', lineHeight: 1 }}
+                >
                   ✦
                 </span>
                 Bonus item
@@ -439,41 +499,70 @@ function QuestionRow({
           {badges.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
               {badges.map((badge) => (
-              <span
-                key={badge.label}
-                style={{
-                  // Figma display/pill/sans — Georgia, 12px, title-case (not the
-                  // mono uppercase used elsewhere).
-                  fontFamily: 'Georgia, "Times New Roman", serif',
-                  fontSize: '0.675rem',
-                  lineHeight: 1.1,
-                  letterSpacing: '0.01em',
-                  borderRadius: '999px',
-                  border: '1px solid var(--border)',
-                  background: badge.tone === 'warning'
-                    ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
-                    : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
-                  color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
-                  opacity: 0.9,
-                  padding: '3px 9px',
-                }}
-              >
-                {badge.label}
-              </span>
+                <span
+                  key={badge.label}
+                  style={{
+                    // Figma display/pill/sans — Georgia, 12px, title-case (not the
+                    // mono uppercase used elsewhere).
+                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    fontSize: '0.675rem',
+                    lineHeight: 1.1,
+                    letterSpacing: '0.01em',
+                    borderRadius: '999px',
+                    border: '1px solid var(--border)',
+                    background:
+                      badge.tone === 'warning'
+                        ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
+                        : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                    color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
+                    opacity: 0.9,
+                    padding: '3px 9px',
+                  }}
+                >
+                  {badge.label}
+                </span>
               ))}
             </div>
           ) : null}
         </div>
       </div>
-      {!faded && (onGiveUp || onDismiss) ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '4px', paddingLeft: '2px' }}>
+      {!faded && (onGiveUp || onDismiss || onMutePresence) ? (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '14px',
+            marginTop: '4px',
+            paddingLeft: '2px',
+          }}
+        >
           {onGiveUp ? (
-            <button type="button" onClick={onGiveUp} disabled={giveUpDisabled} style={questionActionLinkStyle}>
+            <button
+              type="button"
+              onClick={onGiveUp}
+              disabled={giveUpDisabled}
+              style={questionActionLinkStyle}
+            >
               Show me the answer
             </button>
           ) : null}
+          {onMutePresence && presenceSourceName ? (
+            <button
+              type="button"
+              onClick={onMutePresence}
+              disabled={muteDisabled}
+              style={questionActionLinkStyle}
+            >
+              This is {firstNameFrom(presenceSourceName)}&rsquo;s bag but not mine
+            </button>
+          ) : null}
           {onDismiss ? (
-            <button type="button" onClick={onDismiss} disabled={dismissDisabled} style={questionActionLinkStyle}>
+            <button
+              type="button"
+              onClick={onDismiss}
+              disabled={dismissDisabled}
+              style={questionActionLinkStyle}
+            >
               Dismiss
             </button>
           ) : null}
@@ -525,87 +614,19 @@ function UserRow({ text }: { text: string }) {
   );
 }
 
-function BreadcrumbLine({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
-  const author = creatorName?.trim() ?? null;
-  // House is non-relational like the LLM origin: no "From {firstName}." line.
-  const isBot = creatorIsHouse || isLlmAttribution(author);
-  const showAuthor = author && !isBot;
-  return (
-    <div
-      style={{
-        marginTop: '9px',
-        borderLeft: '2px solid color-mix(in srgb, var(--text) 20%, transparent)',
-        paddingLeft: '8px',
-      }}
-    >
-      {showAuthor ? (
-        <p
-          style={{
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-            fontSize: '0.7rem',
-            fontStyle: 'italic',
-            color: 'var(--text-muted)',
-          }}
-        >
-          From {firstNameFrom(author!)}.
-        </p>
-      ) : null}
-      <p
-        style={{
-          marginTop: showAuthor ? '2px' : '0',
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.782rem',
-          fontStyle: 'italic',
-          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          opacity: 0.78,
-          lineHeight: 1.46,
-        }}
-      >
-        &ldquo;{text}&rdquo;
-      </p>
-    </div>
-  );
-}
-
-function ExplanationLine({ text }: { text: string }) {
-  return (
-    <div
-      style={{
-        marginTop: '9px',
-        borderLeft: '2px solid color-mix(in srgb, var(--text) 20%, transparent)',
-        paddingLeft: '8px',
-      }}
-    >
-      <p
-        style={{
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.765rem',
-          color: 'color-mix(in srgb, var(--text-muted) 50%, var(--text))',
-          opacity: 0.78,
-          lineHeight: 1.51,
-        }}
-      >
-        {text}
-      </p>
-    </div>
-  );
-}
-
-function RelationalFeedbackFade({ text }: { text: string }) {
-  const [faded, setFaded] = useState(false);
-  useEffect(() => {
-    const t = window.setTimeout(() => setFaded(true), 2500);
-    return () => window.clearTimeout(t);
-  }, []);
+// The explainer that sits directly beneath the revealed answer. Plain, readable
+// secondary text — no quote-block inset, no decorative italics — so the answer
+// stays the focal point and the card reads as a thread object, not an article
+// (mirrors the screenshot treatment: label → answer → plain explainer).
+function ExplainerLine({ text }: { text: string }) {
   return (
     <p
       style={{
         marginTop: '8px',
-        fontSize: '0.78rem',
-        color: 'var(--text-muted)',
-        lineHeight: 1.35,
-        opacity: faded ? 0 : 1,
-        transition: 'opacity 0.45s ease',
+        fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+        fontSize: '0.92rem',
+        color: 'color-mix(in srgb, var(--text-muted) 35%, var(--text))',
+        lineHeight: 1.5,
       }}
     >
       {text}
@@ -615,17 +636,28 @@ function RelationalFeedbackFade({ text }: { text: string }) {
 
 function reactionEmoji(value: string): string {
   switch (value) {
-    case ':exploding_head:': return '🤯';
-    case ':ok_hand:': return '👌';
-    case ':smirk:': return '😏';
-    case ':face_palm:': return '🤦';
-    case ':sunny:': return '☀️';
-    case ':thought_balloon:': return '💭';
-    case ':thinking_face:': return '🤔';
-    case ':open_book:': return '📖';
-    case ':memo:': return '📝';
-    case ':sweat_smile:': return '😅';
-    default: return value;
+    case ':exploding_head:':
+      return '🤯';
+    case ':ok_hand:':
+      return '👌';
+    case ':smirk:':
+      return '😏';
+    case ':face_palm:':
+      return '🤦';
+    case ':sunny:':
+      return '☀️';
+    case ':thought_balloon:':
+      return '💭';
+    case ':thinking_face:':
+      return '🤔';
+    case ':open_book:':
+      return '📖';
+    case ':memo:':
+      return '📝';
+    case ':sweat_smile:':
+      return '😅';
+    default:
+      return value;
   }
 }
 
@@ -652,29 +684,38 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
     return () => window.clearTimeout(timer);
   }, [status]);
 
-  const sendReaction = useCallback(async (reactionType: ReactionKey) => {
-    setStatus('sending');
-    try {
-      const response = await fetch('/api/reactions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          questionId: prompt.questionId,
-          contextType: prompt.contextType,
-          contextId: prompt.contextId,
-          reactionType,
-          customMessage: customMessage.trim() || null,
-          includeSubmittedAnswer:
-            includeSubmittedAnswer && isWrongAnswerReactionKey(reactionType),
-        }),
-      });
-      if (!response.ok) throw new Error('Could not send reaction');
-      setStatus('sent');
-    } catch {
-      setStatus('error');
-    }
-  }, [customMessage, includeSubmittedAnswer, prompt.contextId, prompt.contextType, prompt.questionId]);
+  const sendReaction = useCallback(
+    async (reactionType: ReactionKey) => {
+      setStatus('sending');
+      try {
+        const response = await fetch('/api/reactions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            questionId: prompt.questionId,
+            contextType: prompt.contextType,
+            contextId: prompt.contextId,
+            reactionType,
+            customMessage: customMessage.trim() || null,
+            includeSubmittedAnswer:
+              includeSubmittedAnswer && isWrongAnswerReactionKey(reactionType),
+          }),
+        });
+        if (!response.ok) throw new Error('Could not send reaction');
+        setStatus('sent');
+      } catch {
+        setStatus('error');
+      }
+    },
+    [
+      customMessage,
+      includeSubmittedAnswer,
+      prompt.contextId,
+      prompt.contextType,
+      prompt.questionId,
+    ],
+  );
 
   if (status === 'hidden') return null;
 
@@ -688,7 +729,14 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
 
   return (
     <div style={{ marginTop: '10px', maxWidth: '100%' }}>
-      <p style={{ ...monoStyle, marginBottom: '6px', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+      <p
+        style={{
+          ...monoStyle,
+          marginBottom: '6px',
+          fontSize: '0.6rem',
+          color: 'var(--text-muted)',
+        }}
+      >
         React to {prompt.senderName}?
       </p>
       {customOpen ? (
@@ -730,7 +778,15 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
           Include what I wrote
         </label>
       ) : null}
-      <div style={{ display: 'flex', gap: '6px', maxWidth: '100%', overflowX: 'auto', paddingBottom: '3px' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '6px',
+          maxWidth: '100%',
+          overflowX: 'auto',
+          paddingBottom: '3px',
+        }}
+      >
         {cannedSet.map((reaction) => (
           <button
             key={reaction.key}
@@ -751,7 +807,9 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
               cursor: status === 'sending' ? 'default' : 'pointer',
             }}
           >
-            <span aria-hidden style={{ marginRight: '5px' }}>{reactionEmoji(reaction.emoji)}</span>
+            <span aria-hidden style={{ marginRight: '5px' }}>
+              {reactionEmoji(reaction.emoji)}
+            </span>
             {reaction.label}
           </button>
         ))}
@@ -786,19 +844,17 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   );
 }
 
-function AuthorNoteCard({ text, creatorName, creatorIsHouse = false }: { text: string; creatorName: string | null; creatorIsHouse?: boolean }) {
+function AuthorNoteCard({
+  text,
+  creatorName,
+  creatorIsHouse = false,
+}: {
+  text: string;
+  creatorName: string | null;
+  creatorIsHouse?: boolean;
+}) {
   return (
-    <div
-      style={{
-        marginTop: '8px',
-        width: '100%',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border)',
-        background: 'var(--surface-2)',
-        padding: '10px 14px',
-        color: 'var(--text)',
-      }}
-    >
+    <ThreadCard border="var(--border)" fill="var(--surface-2)" style={{ marginTop: '8px' }}>
       <p
         style={{
           ...monoStyle,
@@ -825,13 +881,15 @@ function AuthorNoteCard({ text, creatorName, creatorIsHouse = false }: { text: s
         style={{
           marginTop: '4px',
           fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-          fontSize: '0.92rem',
-          lineHeight: 1.45,
+          // Reflection/creator-note body bumped ~14% for readability (D-5);
+          // the eyebrow label above stays small and secondary.
+          fontSize: '1.05rem',
+          lineHeight: 1.5,
         }}
       >
         {text}
       </p>
-    </div>
+    </ThreadCard>
   );
 }
 
@@ -868,13 +926,11 @@ function ResultRow({
   consolation,
   insideJoke,
   insideJokeKind,
-  breadcrumb,
   authorNote,
   explanation,
   copyVariant,
   creatorName,
   creatorIsHouse = false,
-  relationalFeedbackLine,
   reactionPrompt,
   pointsAwarded,
   pointsLabel,
@@ -895,7 +951,6 @@ function ResultRow({
   copyVariant: number;
   creatorName: string | null;
   creatorIsHouse?: boolean;
-  relationalFeedbackLine?: string | null;
   canonicalSubcategory?: string | null;
   reactionPrompt?: ReactionPromptData | null;
   pointsAwarded?: number | null;
@@ -903,13 +958,28 @@ function ResultRow({
   recheckAction?: RecheckAction | null;
   openedTerritoryDomain?: string | null;
 }) {
-  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
+  const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>(
+    'idle',
+  );
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
   const [recheckAccepted, setRecheckAccepted] = useState(false);
   const expired = result === 'expired';
   const correct = result === 'correct';
   const gaveUp = result === 'gave_up';
-  const copy = CORRECT_COPY[copyVariant % 4];
+  // Every reveal shows a one-sentence explainer directly under the answer; the
+  // full text always remains in the End of Session Review, so nothing is lost.
+  // Sourced from the stored explainer that arrives with the answer response —
+  // not the async breadcrumb — so the line is shown once and never swaps in
+  // longer/replacement content after the fact.
+  const explainerSentence = explanation ? firstSentence(explanation) : null;
+  // Correct keeps its explainer inline within the verdict block (before the
+  // "common ground" beat); the other reveals render it after the discovery copy.
+  const showDiscoveryExplainer = !correct && Boolean(explainerSentence);
+  // One reflection card beneath the result: the lighter "Between us!" wink is
+  // preferred over the creator note, which otherwise falls back in on correct
+  // answers. The fuller creator note lives in the review.
+  const showJokeCard = Boolean(insideJoke);
+  const showNoteCard = correct && !insideJoke && Boolean(authorNote);
   const requestRecheck = useCallback(async () => {
     if (!recheckAction || recheckState === 'submitting') return;
     setRecheckState('submitting');
@@ -927,86 +997,90 @@ function ResultRow({
     }
   }, [recheckAction, recheckState]);
 
-  // Color-coded left border per the Figma result cards (green "nailed it",
-  // red "not quite"); neutral for expired/gave-up.
-  const resultToneStyle: CSSProperties = expired
-    ? {
-      background: 'var(--surface-2)',
-      border: '1px solid var(--border)',
-      borderLeft: '3px solid var(--border)',
-    }
+  // Verdict tone as accent only — the shared ThreadCard shell supplies the
+  // radius/padding/border family; the result card varies by a color-coded left
+  // rail (green "nailed it", terracotta "not quite") and a faint matching tint.
+  const tone = expired
+    ? { rail: 'var(--border)', border: 'var(--border)', fill: 'var(--surface-2)' }
     : correct
       ? {
-        // Figma Correct (#366045) — forest green, lighter card body than the
-        // vivid --success used elsewhere.
-        background: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
-        border: '1px solid color-mix(in srgb, var(--game-correct) 26%, var(--border))',
-        borderLeft: '3px solid var(--game-correct)',
-      }
+          rail: 'var(--game-correct)',
+          border: 'color-mix(in srgb, var(--game-correct) 26%, var(--border))',
+          fill: 'color-mix(in srgb, var(--game-correct) 6%, var(--surface))',
+        }
       : gaveUp
         ? {
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
-          borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
-        }
+            rail: 'color-mix(in srgb, var(--brand-ink) 35%, transparent)',
+            border: 'var(--border)',
+            fill: 'var(--surface-2)',
+          }
         : {
-          // Figma text/wrong (#c96b4a) body + game/wrong/in-question (#c33d14) bar.
-          background: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
-          border: '1px solid color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
-          borderLeft: '3px solid var(--game-wrong-strong)',
-        };
+            rail: 'var(--game-wrong-strong)',
+            border: 'color-mix(in srgb, var(--game-wrong) 30%, var(--border))',
+            fill: 'color-mix(in srgb, var(--game-wrong) 12%, var(--surface))',
+          };
 
   return (
-    <div className="flex flex-col gap-0 pt-0.5" style={{ alignItems: 'flex-start', maxWidth: '88%' }}>
-      <div
-        style={{
-          ...resultToneStyle,
-          borderRadius: 'var(--radius-md)',
-          padding: '10px 14px',
-          fontSize: '0.81rem',
-          color: 'var(--text)',
-          opacity: 0.92,
-          lineHeight: 1.36,
-          width: '100%',
-        }}
+    <div
+      className="flex flex-col gap-0 pt-0.5"
+      style={{ alignItems: 'flex-start', maxWidth: THREAD_CARD_MAX_WIDTH }}
+    >
+      <ThreadCard
+        rail={tone.rail}
+        border={tone.border}
+        fill={tone.fill}
+        style={{ fontSize: '0.81rem', lineHeight: 1.36 }}
       >
         {expired ? (
           <span style={{ color: 'var(--text-muted)' }}>This one wasn&apos;t recorded in time.</span>
         ) : correct ? (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-correct)', fontWeight: 600 }}>
-              <span style={{ color: 'var(--game-correct)', marginRight: '6px' }}>✓</span>
-              {copy.headline}
-            </p>
-            {correctAnswer ? (
-              <p style={{ ...answerHeadingStyle, marginTop: '8px', color: 'var(--game-correct)' }}>
-                {correctAnswer}
-              </p>
-            ) : null}
-            <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-              {copy.subLabel}
-            </p>
-            {relationalFeedbackLine ? <RelationalFeedbackFade text={relationalFeedbackLine} /> : null}
-          </>
-        ) : gaveUp ? (
-          <>
-            <p
-              style={{
-                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-                fontSize: '0.82rem',
-                color: 'var(--text-muted)',
-              }}
-            >
-              <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>—</span>
-              For the record.
+            {/* Compact, calm success moment: quiet verdict label, the correct
+                answer repeated immediately (even on a right answer) as the focal
+                point, then the light "common ground" beat. The fuller
+                explanation lives in the End of Session Review. */}
+            <p style={{ ...verdictLabelStyle, color: 'var(--game-correct)' }}>
+              <span aria-hidden>✓</span>
+              Locked in.
             </p>
             {correctAnswer ? (
               <p
                 style={{
-                  marginTop: '6px',
-                  fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-                  fontSize: '0.95rem',
-                  color: 'var(--text)',
+                  ...answerHeadingStyle,
+                  marginTop: '8px',
+                  fontSize: '1.85rem',
+                  color: 'var(--game-correct)',
+                }}
+              >
+                {correctAnswer}
+              </p>
+            ) : null}
+            {explainerSentence ? <ExplainerLine text={explainerSentence} /> : null}
+            <p
+              style={{
+                marginTop: '8px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.62rem',
+                letterSpacing: '0.04em',
+                color: 'color-mix(in srgb, var(--game-correct) 70%, var(--text-muted))',
+              }}
+            >
+              common ground ++
+            </p>
+          </>
+        ) : gaveUp ? (
+          <>
+            {/* Answer-reveal after "show me the answer": quiet label, the answer
+                as the focal point, then a plain explainer below (no quote-block,
+                no editorial italics). */}
+            <p style={{ ...verdictLabelStyle, color: 'var(--text-muted)' }}>The answer</p>
+            {correctAnswer ? (
+              <p
+                style={{
+                  ...answerHeadingStyle,
+                  marginTop: '8px',
+                  fontSize: '1.85rem',
+                  color: 'var(--brand-ink)',
                 }}
               >
                 {correctAnswer}
@@ -1015,8 +1089,16 @@ function ResultRow({
           </>
         ) : (
           <>
-            <p style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', color: 'var(--game-wrong-strong)', fontWeight: 600 }}>
-              <span style={{ color: 'var(--game-wrong-strong)', marginRight: '6px' }}>✕</span>
+            <p
+              style={{
+                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+                color: 'var(--game-wrong-strong)',
+                fontWeight: 600,
+              }}
+            >
+              <span aria-hidden style={{ marginRight: '6px' }}>
+                ✕
+              </span>
               {wrongHeadline(copyVariant)}
             </p>
             {correctAnswer ? (
@@ -1024,26 +1106,49 @@ function ResultRow({
                 style={{
                   ...answerHeadingStyle,
                   marginTop: '8px',
-                  // Figma question/game/answer — Cormorant Bold, scaled to match question text.
+                  // Figma question/game/answer — Cormorant Bold, scaled to match
+                  // question text; bumped ~12% so the repeated answer reads clearly.
+                  fontSize: '1.85rem',
                   color: 'var(--brand-ink)',
                 }}
               >
                 {correctAnswer}
               </p>
             ) : null}
-            <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            <p
+              style={{
+                ...monoStyle,
+                fontSize: '0.55rem',
+                color: 'var(--text-muted)',
+                marginTop: '4px',
+              }}
+            >
               Now it&rsquo;s in yours too
             </p>
             {(() => {
               const namedSubLabel = wrongNamedSubLabel(creatorName, copyVariant, creatorIsHouse);
               return namedSubLabel ? (
-                <p style={{ ...monoStyle, fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                <p
+                  style={{
+                    ...monoStyle,
+                    fontSize: '0.6rem',
+                    color: 'var(--text-muted)',
+                    marginTop: '4px',
+                  }}
+                >
                   {namedSubLabel}
                 </p>
               ) : null;
             })()}
             {consolation ? (
-              <p style={{ marginTop: '8px', fontSize: '0.88rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              <p
+                style={{
+                  marginTop: '8px',
+                  fontSize: '0.88rem',
+                  color: 'var(--text-muted)',
+                  fontStyle: 'italic',
+                }}
+              >
                 {consolation}
               </p>
             ) : null}
@@ -1058,7 +1163,10 @@ function ResultRow({
                     border: '1px solid var(--border)',
                     background: 'var(--surface)',
                     color: 'var(--text)',
-                    cursor: recheckState === 'submitting' || recheckState === 'done' ? 'default' : 'pointer',
+                    cursor:
+                      recheckState === 'submitting' || recheckState === 'done'
+                        ? 'default'
+                        : 'pointer',
                     fontFamily: 'var(--font-mono)',
                     fontSize: '0.58rem',
                     letterSpacing: '0.06em',
@@ -1079,7 +1187,8 @@ function ResultRow({
                         alignItems: 'center',
                         gap: '8px',
                         borderRadius: 'var(--radius-md)',
-                        border: '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
+                        border:
+                          '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
                         background: 'color-mix(in srgb, var(--game-correct) 12%, var(--surface))',
                         color: 'var(--game-correct)',
                         padding: '8px 12px',
@@ -1088,11 +1197,22 @@ function ResultRow({
                         lineHeight: 1.35,
                       }}
                     >
-                      <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>✓</span>
+                      <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>
+                        ✓
+                      </span>
                       <span>{recheckMessage}</span>
                     </div>
                   ) : (
-                    <p role="status" aria-live="polite" style={{ marginTop: '6px', fontSize: '0.78rem', color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)', lineHeight: 1.35 }}>
+                    <p
+                      role="status"
+                      aria-live="polite"
+                      style={{
+                        marginTop: '6px',
+                        fontSize: '0.78rem',
+                        color: recheckState === 'error' ? 'var(--danger)' : 'var(--text-muted)',
+                        lineHeight: 1.35,
+                      }}
+                    >
                       {recheckMessage}
                     </p>
                   )
@@ -1101,27 +1221,28 @@ function ResultRow({
             ) : null}
           </>
         )}
-        {breadcrumb
-          ? <BreadcrumbLine text={breadcrumb} creatorName={creatorName} creatorIsHouse={creatorIsHouse} />
-          : explanation ? <ExplanationLine text={explanation} /> : null}
+        {showDiscoveryExplainer && explainerSentence ? (
+          <ExplainerLine text={explainerSentence} />
+        ) : null}
         {typeof pointsAwarded === 'number' ? (
-          <p style={{ ...monoStyle, fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '10px' }}>
+          <p
+            style={{
+              ...monoStyle,
+              fontSize: '0.55rem',
+              color: 'var(--text-muted)',
+              marginTop: '10px',
+            }}
+          >
             +{pointsAwarded} {pointsAwarded === 1 ? 'point' : 'points'}
             {pointsLabel ? ` - ${pointsLabel}` : ''}
           </p>
         ) : null}
-      </div>
-      {insideJoke ? (
-        <div
-          style={{
-            marginTop: '8px',
-            width: '100%',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid color-mix(in srgb, var(--tri-amber) 40%, var(--border))',
-            background: 'color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))',
-            padding: '10px 14px',
-            color: 'var(--text)',
-          }}
+      </ThreadCard>
+      {showJokeCard && insideJoke ? (
+        <ThreadCard
+          border="color-mix(in srgb, var(--tri-amber) 40%, var(--border))"
+          fill="color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))"
+          style={{ marginTop: '8px' }}
         >
           <p
             style={{
@@ -1138,15 +1259,23 @@ function ResultRow({
             style={{
               marginTop: '4px',
               fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-              fontSize: '0.92rem',
-              lineHeight: 1.45,
+              // Reflection body bumped ~14% for readability (D-5); the small,
+              // letter-spaced label above stays secondary.
+              fontSize: '1.05rem',
+              lineHeight: 1.5,
             }}
           >
             {insideJoke}
           </p>
-        </div>
+        </ThreadCard>
       ) : null}
-      {authorNote ? <AuthorNoteCard text={authorNote} creatorName={creatorName} creatorIsHouse={creatorIsHouse} /> : null}
+      {showNoteCard && authorNote ? (
+        <AuthorNoteCard
+          text={authorNote}
+          creatorName={creatorName}
+          creatorIsHouse={creatorIsHouse}
+        />
+      ) : null}
       {correct && openedTerritoryDomain ? (
         <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
@@ -1165,16 +1294,11 @@ function SessionCloseRow({
   summaryHref?: string;
 }) {
   return (
-    <div
+    <ThreadCard
       className="mt-4"
-      style={{
-        alignSelf: 'flex-start',
-        maxWidth: '88%',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border)',
-        background: 'var(--surface-2)',
-        padding: '14px 16px',
-      }}
+      border="var(--border)"
+      fill="var(--surface-2)"
+      style={{ maxWidth: THREAD_CARD_MAX_WIDTH }}
     >
       <SessionCloseMessage scoreLine={scoreLine} interpretiveLine={interpretiveLine} />
       {summaryHref ? (
@@ -1184,7 +1308,7 @@ function SessionCloseRow({
           </Link>
         </div>
       ) : null}
-    </div>
+    </ThreadCard>
   );
 }
 
@@ -1253,7 +1377,11 @@ function SessionCompleteRow({
         <Link
           href={detailsHref}
           className="mt-2 inline-flex text-sm"
-          style={{ color: 'var(--text-muted)', textDecoration: 'underline', textUnderlineOffset: '2px' }}
+          style={{
+            color: 'var(--text-muted)',
+            textDecoration: 'underline',
+            textUnderlineOffset: '2px',
+          }}
         >
           Game details
         </Link>
@@ -1304,7 +1432,9 @@ function BonusOfferRow({
       >
         {available} more {available === 1 ? 'question' : 'questions'} in the pool.
       </p>
-      <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Untimed. Counts toward your score.</p>
+      <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+        Untimed. Counts toward your score.
+      </p>
       <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
         <button type="button" className="btn-primary" onClick={onAccept}>
           Keep going
@@ -1323,12 +1453,17 @@ export function GameplayChatThread({
   giveUpDisabled,
   onDismiss,
   dismissDisabled,
+  onMutePresence,
+  muteDisabled,
 }: {
   messages: ChatMessage[];
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
   onDismiss?: () => void;
   dismissDisabled?: boolean;
+  // Bonus-slot opt-out (D-4 §B). Wired only to the active bonus question.
+  onMutePresence?: () => void;
+  muteDisabled?: boolean;
 }) {
   // "Show me the answer" and "Dismiss" belong only under the active (still-
   // unanswered) question — the last question message with no result after it.
@@ -1370,6 +1505,12 @@ export function GameplayChatThread({
                 giveUpDisabled={giveUpDisabled}
                 onDismiss={onDismiss && m.id === activeQuestionId ? onDismiss : undefined}
                 dismissDisabled={dismissDisabled}
+                onMutePresence={
+                  onMutePresence && m.id === activeQuestionId && m.presenceSourceName
+                    ? onMutePresence
+                    : undefined
+                }
+                muteDisabled={muteDisabled}
               />
             );
           case 'user':
@@ -1393,7 +1534,6 @@ export function GameplayChatThread({
                 copyVariant={m.copyVariant}
                 creatorName={m.creatorName}
                 creatorIsHouse={m.creatorIsHouse}
-                relationalFeedbackLine={m.relationalFeedbackLine}
                 canonicalSubcategory={m.canonicalSubcategory}
                 reactionPrompt={m.reactionPrompt}
                 pointsAwarded={m.pointsAwarded}

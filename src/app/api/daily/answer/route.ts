@@ -16,7 +16,6 @@ import { awardAuthorCredit, isAuthorCreditEligible } from '@/server/mastery/auth
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
-import { generateBreadcrumb } from '@/server/daily/generate-breadcrumb';
 import { type QueueSlot } from '@/server/daily/types';
 import { asQueueSlots } from '@/server/daily/catchup';
 import { resolveDailyBasePoints } from '@/server/daily/types';
@@ -406,54 +405,6 @@ export async function POST(request: NextRequest) {
     ).catch((err) => {
       console.warn('[daily/answer] updateDomainDifficultyOnAnswer failed', err);
     });
-
-    // Precompute the reveal breadcrumb in the background so the client's
-    // follow-up POST /api/breadcrumb hits the slot-cache short-circuit
-    // (handleDaily at src/app/api/breadcrumb/route.ts:52) instead of waiting
-    // on Haiku. Skipped for give-ups to match the breadcrumb route's own
-    // gaveUp gate. Race window: if the client POST lands before this finishes,
-    // both paths generate independently; the second persist wins (same input
-    // → same output, so functionally identical), at the cost of one extra
-    // Haiku call per occurrence.
-    if (!parsed.gaveUp) {
-      void (async () => {
-        try {
-          const breadcrumb = await generateBreadcrumb({
-            questionId: question.generatedId ?? question.canonicalId ?? undefined,
-            questionText: question.questionText,
-            correctAnswer: canonicalAnswer,
-            submittedAnswer: parsed.submittedAnswer,
-            isCorrect,
-            domain: question.canonicalSubcategory,
-          });
-          if (!breadcrumb) return;
-
-          const [freshQueue] = await db
-            .select()
-            .from(dailyQueues)
-            .where(eq(dailyQueues.id, queue.id))
-            .limit(1);
-          if (!freshQueue) return;
-
-          const freshSlots = asQueueSlots(freshQueue.slots);
-          const updatedSlots = freshSlots.map((s) =>
-            s.slot_index === parsed.slotIndex
-              ? ({ ...s, reveal_breadcrumb: breadcrumb } satisfies QueueSlot)
-              : s,
-          );
-          await db
-            .update(dailyQueues)
-            .set({ slots: updatedSlots })
-            .where(eq(dailyQueues.id, queue.id));
-        } catch (error) {
-          console.warn('[daily/answer] precompute breadcrumb failed', {
-            queueId: queue.id,
-            slotIndex: parsed.slotIndex,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      })();
-    }
 
     if (canonicalQuestionId && !parsed.gaveUp) {
       const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;

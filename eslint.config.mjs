@@ -34,14 +34,12 @@ const TOKEN_LINT_RULE = {
 // a warning so the build stays green while the backlog is worked down — new files
 // (and any cleaned file removed from this list) are held at error. Shrink this
 // list; don't add to it. These warnings are the *only* ones `npm run lint`
-// tolerates: the script pins `--max-warnings` to their current count (33), so the
+// tolerates: the script pins `--max-warnings` to their current count (16), so the
 // warning lane can't silently grow. When you clean a file off this list, drop the
 // `--max-warnings` ceiling in package.json by the number of warnings it removed.
 const TOKEN_LINT_GRANDFATHERED = [
-  "src/components/AddToBankAction.tsx",
   "src/components/CreateChooser.tsx",
   "src/components/LoadingScreen.tsx",
-  "src/components/QuestionForm.tsx",
   "src/components/SendQuestionDrawer.tsx",
   "src/components/TodaysFiveCard.tsx",
   "src/components/feed/AnswerFeedbackSheet.tsx",
@@ -51,12 +49,7 @@ const TOKEN_LINT_GRANDFATHERED = [
   "src/components/friends/FindFriendsSearch.tsx",
   "src/components/games/QuestionRatingButtons.tsx",
   "src/components/knowledge/AskFriendForDomain.tsx",
-  "src/components/profile/AuthoredQuestionsFeed.tsx",
-  "src/components/profile/InlineHandleField.tsx",
-  "src/components/profile/PreviewBanner.tsx",
   "src/components/profile/SharedInterestsOverlap.tsx",
-  "src/components/profile/settings/NotificationsForm.tsx",
-  "src/components/replay/ReplaySummary.tsx",
 ];
 
 const eslintConfig = defineConfig([
