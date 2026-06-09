@@ -26,7 +26,7 @@ import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visua
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
-import { groupActivityByFriend, type GroupInputRow } from '@/components/feed/person-grouping'
+import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
 import {
   CommonGroundFeature,
   GrowYourCircleFeature,
@@ -679,6 +679,31 @@ function FeedContributeFooter() {
   )
 }
 
+// The uppercase eyebrow that labels a feed section — the recency day labels
+// ("Today", "This week") and the home-only "For You" / "From Friends" splits all
+// share this register. `first:pt-0` lets whichever heading renders first sit
+// flush to the top of the feed.
+function FeedSectionHeading({
+  unifiedHome,
+  children,
+}: {
+  unifiedHome: boolean
+  children: ReactNode
+}) {
+  return (
+    <h2
+      className={`text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0 ${
+        // On the unified-home feed, the label sits flush left on the feed's left
+        // gutter — the same 2px the activity rows pad in (where the shape column
+        // begins) — rather than indenting past the icon column to the row copy.
+        unifiedHome ? 'pl-[2px]' : ''
+      }`}
+    >
+      {children}
+    </h2>
+  )
+}
+
 function FeedListContent({
   pageSize = 20,
   infinite = false,
@@ -929,6 +954,43 @@ function FeedListContent({
 
     return next
   }, [unifiedRows, commonGroundPromo, expandingPromo, addFriendsPromo])
+
+  // Home-only sectioning (D-FEED): split the answerable rows out of the
+  // chronological stream into two pinned sections at the top —
+  //   • "For You"      — questions sent to you directly or via broadcast (the
+  //                      kind:'feed' question cards you can answer); and
+  //   • "From Friends" — friends' milestone bundles (the up-to-5-triangle cards),
+  //                      i.e. activity rows whose expand is a non-empty milestone.
+  // Everything else (ambient activity, per-person roll-ups, promos) falls through
+  // to `restRows` and keeps the existing recency grouping below. Off the unified
+  // home (the standalone Feed tab), both sections are empty and restRows is the
+  // whole list, so that surface renders exactly as before.
+  const { forYouRows, fromFriendsRows, restRows } = useMemo(() => {
+    if (!unifiedHome) {
+      return {
+        forYouRows: [] as UnifiedRow[],
+        fromFriendsRows: [] as UnifiedRow[],
+        restRows: displayRows,
+      }
+    }
+    const forYou: UnifiedRow[] = []
+    const fromFriends: UnifiedRow[] = []
+    const rest: UnifiedRow[] = []
+    for (const row of displayRows) {
+      if (row.kind === 'feed') {
+        forYou.push(row)
+      } else if (
+        row.kind === 'activity' &&
+        row.item.expand?.kind === 'milestone' &&
+        row.item.expand.questions.length > 0
+      ) {
+        fromFriends.push(row)
+      } else {
+        rest.push(row)
+      }
+    }
+    return { forYouRows: forYou, fromFriendsRows: fromFriends, restRows: rest }
+  }, [displayRows, unifiedHome])
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
@@ -1391,6 +1453,198 @@ function FeedListContent({
     []
   )
 
+  // One row of the rendered feed, shared by every section (the home-only "For
+  // You" / "From Friends" splits and the recency groups all call this). Closes
+  // over the card state + handlers, so each section just maps its rows through it.
+  const renderRow = (row: GroupedRow<FeedApiItem>): ReactNode => {
+    // A friend's relationship activity, gathered into one per-person
+    // card (heading + their events). Grouped per bucket so it never
+    // spans a day label.
+    if (row.kind === 'person') {
+      return (
+        <PersonActivityCard
+          key={`p-${row.friendId}-${row.rows[0]?.id ?? ''}`}
+          friendId={row.friendId}
+          rows={row.rows}
+          timestampFor={(item) => formatRelativeTime(item.sortAt)}
+        />
+      )
+    }
+    // Interleaved activity (Lately) one-liner: self-contained,
+    // renders its own row (no swipe/overflow/answer-sheet chrome).
+    if (row.kind === 'activity') {
+      // Home-only promos render as full-bleed editorial feature
+      // sections (a calm "featured moment" wash) rather than ordinary
+      // activity rows; everything else is a normal one-liner.
+      const embed = row.item.embed
+      if (embed?.kind === 'common_ground') {
+        return <CommonGroundFeature key={`e-${row.item.id}`} embed={embed} />
+      }
+      if (embed?.kind === 'add_friends') {
+        return <GrowYourCircleFeature key={`e-${row.item.id}`} embed={embed} />
+      }
+      if (embed?.kind === 'recently_expanding') {
+        return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
+      }
+      // Everything else — including the milestone bundle — renders as a
+      // plain flat row (its bundle triangle mark + tap-to-answer
+      // expansion live inside ActivityStreamItem). No card treatment.
+      return (
+        <ActivityStreamItem
+          key={`a-${row.item.id}`}
+          item={row.item}
+          timestamp={formatRelativeTime(row.item.sortAt)}
+        />
+      )
+    }
+    const item = row.item
+    const result = results[item.id]
+    const cardState =
+      cardStates[item.id] ??
+      (item.state === 'answered' ? 'answered' : 'unanswered')
+    const isAnswered = cardState === 'answered'
+    const isBusy = busyId === item.id
+    const confirmPhase = thumbsdownConfirm[item.id]
+
+    if (confirmPhase) {
+      return (
+        <ThumbsdownConfirmRow
+          key={item.id}
+          phase={confirmPhase}
+          onDismiss={() => dismissThumbsdownConfirm(item.id)}
+          onUndo={() => void undoThumbsdown(item.id)}
+          disabled={isBusy}
+        />
+      )
+    }
+
+    // Left-swipe / Dismiss collapses the card to this inline bar.
+    // Undo restores it; "Not into {category}?" is the one mute path
+    // here, reusing the existing category-mute handler.
+    if (dismissPhase[item.id] === 'dismissed') {
+      const dismissedAnswer = dismissedAnswers[item.id]
+      return (
+        <DismissedFeedBar
+          key={item.id}
+          category={visibleFeedCategory(item.domain_pill)}
+          answer={
+            dismissedAnswer?.status === 'loaded'
+              ? dismissedAnswer.answer
+              : undefined
+          }
+          answerLoading={!dismissedAnswer || dismissedAnswer.status === 'loading'}
+          answerError={dismissedAnswer?.status === 'error'}
+          onUndo={() => undoDismiss(item.id)}
+          onMute={() => void hideCategory(item)}
+          disabled={isBusy}
+        />
+      )
+    }
+
+    const overflow = (
+      <FeedOverflowMenu
+        sourceName={item.source_friend_display_name}
+        category={item.domain_pill}
+        question={
+          item.question_id && item.question_text
+            ? {
+                id: item.question_id,
+                text: item.question_text,
+                domain: item.domain_pill,
+              }
+            : null
+        }
+        isInBank={item.is_in_bank}
+        disabled={isBusy}
+        onHideCategory={() => void hideCategory(item)}
+        onHidePerson={() => void hidePerson(item)}
+        onReport={() => void reportItem(item)}
+      />
+    )
+
+    if (isAnswered) {
+      const answeredItem = toAnsweredByYouItem(item, result)
+      const isIncorrect = answeredItem.isCorrect === false
+      const recheckAction: FeedRecheckAction | null = isIncorrect
+        ? { onSubmit: () => submitRecheck(item) }
+        : null
+      // direct_sent wrong answers stay re-attemptable (server
+      // allows the re-grade; clicking reopens the same answer
+      // sheet). Other source types still close on answer.
+      const onRetry =
+        isIncorrect && item.source_type === 'direct_sent'
+          ? () => setAnswerSheetId(item.id)
+          : undefined
+      return (
+        <AnsweredByYouCard
+          key={item.id}
+          item={answeredItem}
+          recheckAction={recheckAction}
+          onRetry={onRetry}
+          overflow={overflow}
+        />
+      )
+    }
+
+    const typedItem = toTypedFeedItem(item)
+    const dismissible = !item.viewer_is_author
+    const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
+    const onDismiss = dismissible ? () => requestDismiss(item) : undefined
+
+    let card: ReactNode
+    if (typedItem.type === 'direct_sent') {
+      card = (
+        <DirectSentCard
+          item={typedItem}
+          overflow={overflow}
+          onAnswer={onAnswer}
+          onDismiss={onDismiss}
+        />
+      )
+    } else if (typedItem.type === 'friend_liked') {
+      card = (
+        <FriendLikedCard
+          item={typedItem}
+          overflow={overflow}
+          onAnswer={onAnswer}
+          onDismiss={onDismiss}
+        />
+      )
+    } else {
+      card = (
+        <FriendAddedCard
+          item={typedItem}
+          overflow={overflow}
+          onAnswer={onAnswer}
+          onDismiss={onDismiss}
+          onHideCategory={() => void hideCategory(item)}
+        />
+      )
+    }
+
+    if (!dismissible) {
+      return <Fragment key={item.id}>{card}</Fragment>
+    }
+
+    // Right-swipe answers, left-swipe dismisses (same handler as the
+    // Dismiss button). The collapse on commit animates here.
+    const collapsing = dismissPhase[item.id] === 'collapsing'
+    return (
+      <div
+        key={item.id}
+        className={collapsing ? 'feed-card-collapsing' : undefined}
+      >
+        <FeedCardSwipe
+          onSwipeLeft={() => requestDismiss(item)}
+          onSwipeRight={onAnswer}
+          disabled={isBusy || collapsing}
+        >
+          {card}
+        </FeedCardSwipe>
+      </div>
+    )
+  }
+
   return (
     <>
       {/* Surface switcher shows whenever either surface has content, so the
@@ -1466,208 +1720,27 @@ function FeedListContent({
         )
       ) : (
         <section className="space-y-3 pb-8">
-          {groupItemsByRecency(displayRows).map((group) => (
+          {/* Home-only: the answerable rows are lifted into two pinned sections
+              at the top — "For You" (questions sent/broadcast to you) then
+              "From Friends" (friends' milestone bundles). Each renders only when
+              it has rows. groupActivityByFriend is a pass-through here (feed and
+              milestone rows never group), keeping the render path uniform. */}
+          {forYouRows.length > 0 ? (
+            <Fragment key="for-you">
+              <FeedSectionHeading unifiedHome={unifiedHome}>For You</FeedSectionHeading>
+              {groupActivityByFriend(forYouRows).map(renderRow)}
+            </Fragment>
+          ) : null}
+          {fromFriendsRows.length > 0 ? (
+            <Fragment key="from-friends">
+              <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
+              {groupActivityByFriend(fromFriendsRows).map(renderRow)}
+            </Fragment>
+          ) : null}
+          {groupItemsByRecency(restRows).map((group) => (
             <Fragment key={group.key}>
-              <h2
-                className={`text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0 ${
-                  // On the unified-home feed, the day label sits flush left on
-                  // the feed's left gutter — the same 2px the activity rows pad
-                  // in (where the shape column begins) and where the
-                  // "What's happening" header aligns — rather than indenting past
-                  // the icon column to meet the row copy.
-                  unifiedHome ? 'pl-[2px]' : ''
-                }`}
-              >
-                {group.label}
-              </h2>
-              {groupActivityByFriend(group.items).map((row) => {
-                // A friend's relationship activity, gathered into one per-person
-                // card (heading + their events). Grouped per bucket so it never
-                // spans a day label.
-                if (row.kind === 'person') {
-                  return (
-                    <PersonActivityCard
-                      key={`p-${row.friendId}-${row.rows[0]?.id ?? ''}`}
-                      friendId={row.friendId}
-                      rows={row.rows}
-                      timestampFor={(item) => formatRelativeTime(item.sortAt)}
-                    />
-                  )
-                }
-                // Interleaved activity (Lately) one-liner: self-contained,
-                // renders its own row (no swipe/overflow/answer-sheet chrome).
-                if (row.kind === 'activity') {
-                  // Home-only promos render as full-bleed editorial feature
-                  // sections (a calm "featured moment" wash) rather than ordinary
-                  // activity rows; everything else is a normal one-liner.
-                  const embed = row.item.embed
-                  if (embed?.kind === 'common_ground') {
-                    return <CommonGroundFeature key={`e-${row.item.id}`} embed={embed} />
-                  }
-                  if (embed?.kind === 'add_friends') {
-                    return <GrowYourCircleFeature key={`e-${row.item.id}`} embed={embed} />
-                  }
-                  if (embed?.kind === 'recently_expanding') {
-                    return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
-                  }
-                  // Everything else — including the milestone bundle — renders as a
-                  // plain flat row (its bundle triangle mark + tap-to-answer
-                  // expansion live inside ActivityStreamItem). No card treatment.
-                  return (
-                    <ActivityStreamItem
-                      key={`a-${row.item.id}`}
-                      item={row.item}
-                      timestamp={formatRelativeTime(row.item.sortAt)}
-                    />
-                  )
-                }
-                const item = row.item
-                const result = results[item.id]
-                const cardState =
-                  cardStates[item.id] ??
-                  (item.state === 'answered' ? 'answered' : 'unanswered')
-                const isAnswered = cardState === 'answered'
-                const isBusy = busyId === item.id
-                const confirmPhase = thumbsdownConfirm[item.id]
-
-                if (confirmPhase) {
-                  return (
-                    <ThumbsdownConfirmRow
-                      key={item.id}
-                      phase={confirmPhase}
-                      onDismiss={() => dismissThumbsdownConfirm(item.id)}
-                      onUndo={() => void undoThumbsdown(item.id)}
-                      disabled={isBusy}
-                    />
-                  )
-                }
-
-                // Left-swipe / Dismiss collapses the card to this inline bar.
-                // Undo restores it; "Not into {category}?" is the one mute path
-                // here, reusing the existing category-mute handler.
-                if (dismissPhase[item.id] === 'dismissed') {
-                  const dismissedAnswer = dismissedAnswers[item.id]
-                  return (
-                    <DismissedFeedBar
-                      key={item.id}
-                      category={visibleFeedCategory(item.domain_pill)}
-                      answer={
-                        dismissedAnswer?.status === 'loaded'
-                          ? dismissedAnswer.answer
-                          : undefined
-                      }
-                      answerLoading={!dismissedAnswer || dismissedAnswer.status === 'loading'}
-                      answerError={dismissedAnswer?.status === 'error'}
-                      onUndo={() => undoDismiss(item.id)}
-                      onMute={() => void hideCategory(item)}
-                      disabled={isBusy}
-                    />
-                  )
-                }
-
-                const overflow = (
-                  <FeedOverflowMenu
-                    sourceName={item.source_friend_display_name}
-                    category={item.domain_pill}
-                    question={
-                      item.question_id && item.question_text
-                        ? {
-                            id: item.question_id,
-                            text: item.question_text,
-                            domain: item.domain_pill,
-                          }
-                        : null
-                    }
-                    isInBank={item.is_in_bank}
-                    disabled={isBusy}
-                    onHideCategory={() => void hideCategory(item)}
-                    onHidePerson={() => void hidePerson(item)}
-                    onReport={() => void reportItem(item)}
-                  />
-                )
-
-                if (isAnswered) {
-                  const answeredItem = toAnsweredByYouItem(item, result)
-                  const isIncorrect = answeredItem.isCorrect === false
-                  const recheckAction: FeedRecheckAction | null = isIncorrect
-                    ? { onSubmit: () => submitRecheck(item) }
-                    : null
-                  // direct_sent wrong answers stay re-attemptable (server
-                  // allows the re-grade; clicking reopens the same answer
-                  // sheet). Other source types still close on answer.
-                  const onRetry =
-                    isIncorrect && item.source_type === 'direct_sent'
-                      ? () => setAnswerSheetId(item.id)
-                      : undefined
-                  return (
-                    <AnsweredByYouCard
-                      key={item.id}
-                      item={answeredItem}
-                      recheckAction={recheckAction}
-                      onRetry={onRetry}
-                      overflow={overflow}
-                    />
-                  )
-                }
-
-                const typedItem = toTypedFeedItem(item)
-                const dismissible = !item.viewer_is_author
-                const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
-                const onDismiss = dismissible ? () => requestDismiss(item) : undefined
-
-                let card: ReactNode
-                if (typedItem.type === 'direct_sent') {
-                  card = (
-                    <DirectSentCard
-                      item={typedItem}
-                      overflow={overflow}
-                      onAnswer={onAnswer}
-                      onDismiss={onDismiss}
-                    />
-                  )
-                } else if (typedItem.type === 'friend_liked') {
-                  card = (
-                    <FriendLikedCard
-                      item={typedItem}
-                      overflow={overflow}
-                      onAnswer={onAnswer}
-                      onDismiss={onDismiss}
-                    />
-                  )
-                } else {
-                  card = (
-                    <FriendAddedCard
-                      item={typedItem}
-                      overflow={overflow}
-                      onAnswer={onAnswer}
-                      onDismiss={onDismiss}
-                      onHideCategory={() => void hideCategory(item)}
-                    />
-                  )
-                }
-
-                if (!dismissible) {
-                  return <Fragment key={item.id}>{card}</Fragment>
-                }
-
-                // Right-swipe answers, left-swipe dismisses (same handler as the
-                // Dismiss button). The collapse on commit animates here.
-                const collapsing = dismissPhase[item.id] === 'collapsing'
-                return (
-                  <div
-                    key={item.id}
-                    className={collapsing ? 'feed-card-collapsing' : undefined}
-                  >
-                    <FeedCardSwipe
-                      onSwipeLeft={() => requestDismiss(item)}
-                      onSwipeRight={onAnswer}
-                      disabled={isBusy || collapsing}
-                    >
-                      {card}
-                    </FeedCardSwipe>
-                  </div>
-                )
-              })}
+              <FeedSectionHeading unifiedHome={unifiedHome}>{group.label}</FeedSectionHeading>
+              {groupActivityByFriend(group.items).map(renderRow)}
             </Fragment>
           ))}
         </section>
