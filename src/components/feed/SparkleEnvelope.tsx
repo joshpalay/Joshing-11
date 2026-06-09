@@ -23,6 +23,8 @@ type SparkleEnvelopeProps = {
    * keep the identical inner layout (divider, dismiss, Answer link).
    */
   variant?: 'triangle' | 'bordered'
+  /** Tier 1 "playable" lift on the unified home feed. Forwarded to FeedCardShell. */
+  elevated?: boolean
 }
 
 /**
@@ -41,9 +43,10 @@ export function SparkleEnvelope({
   answerLabel = 'Answer →',
   className,
   variant = 'triangle',
+  elevated = false,
 }: SparkleEnvelopeProps) {
   return (
-    <FeedCardShell variant={variant} className={className}>
+    <FeedCardShell variant={variant} className={className} elevated={elevated}>
       <div className="flex flex-col items-center gap-5 p-[14px]">
         <div className="flex w-full items-start justify-between gap-3">
           <p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
