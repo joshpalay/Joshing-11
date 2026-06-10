@@ -1,18 +1,19 @@
-'use client'
+'use client';
 
-import { Bookmark } from 'lucide-react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { Bookmark } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-import { EditorialFeature } from '@/components/feed/EditorialFeature'
-import { colorForUser, initialsFor, isDarkColor } from '@/components/feed/visual'
-import { AddFriendButton } from '@/components/friends/AddFriendButton'
-import { circleDatasetMax, DomainCircleSvg } from '@/components/profile/common-ground-circles'
-import type { StreamEmbed } from '@/lib/activity-stream'
+import { EditorialCarousel } from '@/components/feed/EditorialCarousel';
+import { EditorialFeature } from '@/components/feed/EditorialFeature';
+import { colorForUser, initialsFor, isDarkColor } from '@/components/feed/visual';
+import { AddFriendButton } from '@/components/friends/AddFriendButton';
+import { circleDatasetMax, DomainCircleSvg } from '@/components/profile/common-ground-circles';
+import type { StreamEmbed } from '@/lib/activity-stream';
 
 // The "Shared Ground" circles render larger here than on the profile page — the
 // motif is the hero artwork, so it should catch the eye before the copy.
-const SHARED_GROUND_CIRCLE_SCALE = 1.35
+const SHARED_GROUND_CIRCLE_SCALE = 1.35;
 
 // Badge accents for the "Your World Is Expanding" territory rows — the
 // reds / golds / blues from the /knowledge "Recently Expanding" module, trimmed
@@ -21,12 +22,12 @@ const EXPANDING_ROW_ACCENTS = [
   { border: '#c9564d', fill: 'rgba(201, 86, 77, 0.16)' },
   { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)' },
   { border: '#65a8bb', fill: 'rgba(101, 168, 187, 0.2)' },
-] as const
+] as const;
 
 // A faded decorative cluster of overlapping avatar circles for the
 // "Grow Your Circle" invite state — purely decorative (aria-hidden, no
 // initials, no buttons), softened into the sage wash.
-const INVITE_CLUSTER_SEEDS = ['circle-a', 'circle-b', 'circle-c', 'circle-d']
+const INVITE_CLUSTER_SEEDS = ['circle-a', 'circle-b', 'circle-c', 'circle-d'];
 
 /**
  * "Shared Ground" — the overlapping-circle motif as a full-bleed editorial
@@ -36,12 +37,12 @@ const INVITE_CLUSTER_SEEDS = ['circle-a', 'circle-b', 'circle-c', 'circle-d']
 export function CommonGroundFeature({
   embed,
 }: {
-  embed: Extract<StreamEmbed, { kind: 'common_ground' }>
+  embed: Extract<StreamEmbed, { kind: 'common_ground' }>;
 }) {
   const datasetMax = circleDatasetMax(
     embed.domains.flatMap((d) => [d.viewer.points, d.friend.points]),
-  )
-  const count = embed.domains.length
+  );
+  const count = embed.domains.length;
   return (
     <EditorialFeature
       tone="parchment"
@@ -60,29 +61,49 @@ export function CommonGroundFeature({
         </>
       }
       artwork={
-        <div className="flex flex-wrap items-end gap-x-12 gap-y-8">
-          {embed.domains.map((d) => (
-            <div key={d.label} className="flex flex-col gap-4">
-              <DomainCircleSvg
-                viewerPoints={d.viewer.points}
-                friendPoints={d.friend.points}
-                viewerTier={d.viewer.tier}
-                friendTier={d.friend.tier}
-                datasetMax={datasetMax}
-                scale={SHARED_GROUND_CIRCLE_SCALE}
-                ariaLabel={`${d.label}: shared with ${embed.friendFirstName}, still untested`}
-              />
-              <span className="max-w-[150px] font-serif text-[14px] leading-snug text-[var(--brand-ink-700)]">
-                {d.label}
+        <EditorialCarousel
+          ariaLabel="Shared interests"
+          slides={[
+            ...embed.domains.map((d) => (
+              <div key={d.label} className="flex flex-col gap-4">
+                <DomainCircleSvg
+                  viewerPoints={d.viewer.points}
+                  friendPoints={d.friend.points}
+                  viewerTier={d.viewer.tier}
+                  friendTier={d.friend.tier}
+                  datasetMax={datasetMax}
+                  scale={SHARED_GROUND_CIRCLE_SCALE}
+                  ariaLabel={`${d.label}: shared with ${embed.friendFirstName}, still untested`}
+                />
+                <span className="max-w-[150px] font-serif text-[14px] leading-snug text-[var(--brand-ink-700)]">
+                  {d.label}
+                </span>
+              </div>
+            )),
+            // Final slide: a gentle nudge to widen the circle. The personal-invite
+            // modal isn't mounted on the home feed, so this routes to the Find
+            // Friends hub (where the invite flows live).
+            <Link key="invite" href="/friends/find" className="flex flex-col gap-4 no-underline">
+              <span aria-hidden="true" className="flex h-[76px] items-center">
+                {INVITE_CLUSTER_SEEDS.map((seed, i) => (
+                  <span
+                    key={seed}
+                    className="size-12 rounded-full ring-4 ring-[var(--editorial-parchment)]"
+                    style={{ background: colorForUser(seed), marginLeft: i === 0 ? 0 : -16 }}
+                  />
+                ))}
               </span>
-            </div>
-          ))}
-        </div>
+              <span className="max-w-[150px] font-serif text-[14px] leading-snug text-[var(--brand-ink-700)]">
+                Invite someone
+              </span>
+            </Link>,
+          ]}
+        />
       }
       supporting={`${count} shared interest${count === 1 ? '' : 's'}`}
       cta={{ label: 'Explore your overlap →', href: embed.friendHref }}
     />
-  )
+  );
 }
 
 /**
@@ -93,9 +114,9 @@ export function CommonGroundFeature({
 export function GrowYourCircleFeature({
   embed,
 }: {
-  embed: Extract<StreamEmbed, { kind: 'add_friends' }>
+  embed: Extract<StreamEmbed, { kind: 'add_friends' }>;
 }) {
-  const router = useRouter()
+  const router = useRouter();
   return (
     <EditorialFeature
       tone="sage"
@@ -105,7 +126,7 @@ export function GrowYourCircleFeature({
         embed.variant === 'suggestions' ? (
           <div className="flex flex-col gap-3">
             {embed.people.map((p) => {
-              const bg = p.avatarColor ?? colorForUser(p.id)
+              const bg = p.avatarColor ?? colorForUser(p.id);
               return (
                 <div key={p.id} className="flex items-center gap-3">
                   <Link
@@ -135,7 +156,7 @@ export function GrowYourCircleFeature({
                     onChange={() => router.refresh()}
                   />
                 </div>
-              )
+              );
             })}
           </div>
         ) : (
@@ -152,7 +173,7 @@ export function GrowYourCircleFeature({
       }
       cta={{ label: 'Find friends →', href: embed.href }}
     />
-  )
+  );
 }
 
 /**
@@ -162,7 +183,7 @@ export function GrowYourCircleFeature({
 export function RecentlyExpandingFeature({
   embed,
 }: {
-  embed: Extract<StreamEmbed, { kind: 'recently_expanding' }>
+  embed: Extract<StreamEmbed, { kind: 'recently_expanding' }>;
 }) {
   return (
     <EditorialFeature
@@ -172,7 +193,7 @@ export function RecentlyExpandingFeature({
       artwork={
         <div className="flex flex-col gap-3">
           {embed.domains.map((d, i) => {
-            const accent = EXPANDING_ROW_ACCENTS[i % EXPANDING_ROW_ACCENTS.length]!
+            const accent = EXPANDING_ROW_ACCENTS[i % EXPANDING_ROW_ACCENTS.length]!;
             return (
               <div key={d.label} className="flex items-center gap-3">
                 <span
@@ -183,7 +204,7 @@ export function RecentlyExpandingFeature({
                   {d.initial}
                 </span>
                 <div className="min-w-0">
-                  <p className="font-serif text-sm font-bold leading-tight text-[var(--brand-ink)]">
+                  <p className="font-serif text-sm leading-tight font-bold text-[var(--brand-ink)]">
                     {d.label}
                   </p>
                   {d.caption ? (
@@ -193,11 +214,11 @@ export function RecentlyExpandingFeature({
                   ) : null}
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       }
       cta={{ label: 'See your knowledge →', href: embed.href }}
     />
-  )
+  );
 }
