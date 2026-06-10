@@ -57,27 +57,41 @@ describe('CommonGroundFeature carousel', () => {
     friendId: 'sadie',
     friendFirstName: 'Sadie',
     friendHref: '/users/sadie',
-    domains: [
+    friends: [
       {
-        label: 'Simpsons Catchphrases',
-        viewer: { points: 40, tier: 'solid' },
-        friend: { points: 30, tier: 'familiar' },
+        friendId: 'sadie',
+        friendFirstName: 'Sadie',
+        friendHref: '/users/sadie',
+        domain: {
+          label: 'Simpsons Catchphrases',
+          viewer: { points: 40, tier: 'solid' },
+          friend: { points: 30, tier: 'familiar' },
+        },
       },
       {
-        label: 'Bikini Bottom',
-        viewer: { points: 20, tier: 'familiar' },
-        friend: { points: 20, tier: 'familiar' },
+        friendId: 'theo',
+        friendFirstName: 'Theo',
+        friendHref: '/users/theo',
+        domain: {
+          label: 'Bikini Bottom',
+          viewer: { points: 20, tier: 'familiar' },
+          friend: { points: 20, tier: 'familiar' },
+        },
       },
     ],
   };
 
-  it('renders a slide per domain plus a final "Invite someone" slide linking to /friends/find', () => {
+  it('renders a slide per friend plus a final "Invite someone" slide linking to /friends/find', () => {
     const html = renderToStaticMarkup(<CommonGroundFeature embed={embed} />);
+    // Each friend slide shows the friend's name and their shared domain.
+    expect(html).toContain('Sadie');
     expect(html).toContain('Simpsons Catchphrases');
+    expect(html).toContain('Theo');
     expect(html).toContain('Bikini Bottom');
+    expect(html).toContain('href="/users/theo"');
     expect(html).toContain('Invite someone');
     expect(html).toContain('href="/friends/find"');
-    // Two domains + invite = three pagination dots.
+    // Two friends + invite = three pagination dots.
     const dots = html.match(/aria-label="Go to item \d+ of 3"/g) ?? [];
     expect(dots).toHaveLength(3);
   });
