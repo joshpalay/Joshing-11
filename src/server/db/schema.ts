@@ -585,6 +585,12 @@ export const generatedQuestions = pgTable(
     id: id(),
     userId: text('user_id').notNull().references(() => users.id),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
+    // domainKey() fold of canonical_subcategory (apostrophes folded, whitespace
+    // collapsed, lowercased), written by the TS fold at insert time. The bank
+    // lookup matches on this so spelling variants of one domain share stock
+    // (migration 0074, BP-7 / audit C5). Nullable: rows pre-dating the column
+    // match via the legacy exact predicate until backfilled.
+    domainKey: text('domain_key'),
     broadCategory: text('broad_category').notNull(),
     questionText: text('question_text').notNull(),
     answer: text('answer').notNull(),
@@ -645,6 +651,9 @@ export const generatedQuestions = pgTable(
     // bank pick. Not gated on any live surface yet (B4 owns enforcement).
     index('GeneratedQuestion_trust_tier_idx').on(table.trustTier),
     index('GeneratedQuestion_is_duplicate_idx').on(table.isDuplicate),
+    // Bank lookup path (BP-7 / C5): pickBankSource matches folded domain +
+    // difficulty tier.
+    index('GeneratedQuestion_domain_key_difficulty_idx').on(table.domainKey, table.difficultyEstimate),
   ],
 );
 

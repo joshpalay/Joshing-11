@@ -119,8 +119,12 @@ caller-supplied advisory texts rather than rationing one shared window.
 with a fact_key and `is_duplicate=false`, so per-domain "pool depth" counts (e.g. retrieval
 demand's thin-domain threshold) count the same question once per serve. Pre-dates this series
 (copies always existed); becomes material when `RETRIEVAL_GROUNDING_ENABLED` flips on — a
-domain can look deep because it was *served* a lot, not because it has distinct facts. Owner/
-trigger: BP-7 (pool-as-primary) should make depth count distinct fact_keys, not rows.
+domain can look deep because it was *served* a lot, not because it has distinct facts.
+**Resolved by BP-7 (2026-06-10):** the flip-decision metric (`depthByDomain` on
+`/api/dev/pool-report`) counts **distinct fact_keys** grouped by folded domain — and on
+verification, `getThinActiveDomains`' refill threshold already counted
+`count(distinct fact_key)` (`retrieval-demand.ts:32`), so the demand side was never
+row-inflated; only the reporting lacked the honest number, and now has it.
 
 ---
 
