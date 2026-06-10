@@ -4,12 +4,14 @@ import Link from 'next/link'
 import { Settings } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
-import { formatNextResetTimeLocal } from '@/lib/games/timezone'
+import { formatNextResetDayTimeLocal } from '@/lib/games/timezone'
 
 // useSyncExternalStore inputs for the client-only reset-time label. Hoisted so
-// the subscribe/snapshot functions are stable across renders.
+// the subscribe/snapshot functions are stable across renders. The label is
+// day-aware ("today at 1 PM" / "tomorrow at 1 PM"), so it stays correct when
+// the next reset falls later on the current local day.
 const subscribeNoop = () => () => {}
-const getResetTimeSnapshot = () => formatNextResetTimeLocal()
+const getResetTimeSnapshot = () => formatNextResetDayTimeLocal()
 const getResetTimeServerSnapshot = (): string | null => null
 
 export type SlotOutcome = 'correct' | 'incorrect' | 'skipped' | 'unanswered'
@@ -95,7 +97,7 @@ export default function TodaysFiveCard({
   const [status, setStatus] = useState<DailyStatus | null>(initialStatus)
   const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences)
   // Client-only reset-time label; null during SSR to keep hydration stable.
-  const resetTime = useSyncExternalStore(
+  const resetDayTime = useSyncExternalStore(
     subscribeNoop,
     getResetTimeSnapshot,
     getResetTimeServerSnapshot,
@@ -182,8 +184,8 @@ export default function TodaysFiveCard({
   const missedCount = Math.max(0, initialMissedCount)
   // The session-end forward beat — rendered as its own quiet line in both
   // completed branches so it survives even an all-skipped (answered === 0) round.
-  const forwardBeat = resetTime
-    ? `Five new at ${resetTime} tomorrow`
+  const forwardBeat = resetDayTime
+    ? `Five new ${resetDayTime}`
     : 'Five new tomorrow'
   const subtext = answered > 0 ? `${answered} of 5 answered` : 'Ready when you are'
   // Editorial serif headline (display/Body-Serif), contextual to round state.
@@ -298,7 +300,7 @@ export default function TodaysFiveCard({
               href="/daily/catchup"
               className="flex min-h-12 w-full items-center justify-center rounded-[4px] border border-[color-mix(in_srgb,var(--domain-science)_55%,transparent)] bg-[color-mix(in_srgb,var(--domain-science)_22%,transparent)] text-base font-bold tracking-[0.04em] text-[var(--game-correct)] transition-colors hover:bg-[color-mix(in_srgb,var(--domain-science)_32%,transparent)]"
             >
-              Play Missed Questions
+              {`Play (${missedCount}) Missed Question${missedCount === 1 ? '' : 's'}`}
             </Link>
           ) : (
             // Branch B — nothing left to catch up on; turn the player outward.

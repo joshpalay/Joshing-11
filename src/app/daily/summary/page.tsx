@@ -22,7 +22,7 @@ import MasteryMoment from '@/components/review/MasteryMoment'
 import { RefineYourGame } from '@/components/review/RefineYourGame'
 import { cn } from '@/lib/utils'
 import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types'
-import { formatNextResetTimeLocal } from '@/lib/games/timezone'
+import { formatNextResetTimeLocal, getNextResetDayLabelLocal } from '@/lib/games/timezone'
 import type {
   DailySummaryView,
   QuestionRecap,
@@ -37,6 +37,10 @@ import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/
 const subscribeNoop = () => () => {}
 const getResetTimeSnapshot = () => formatNextResetTimeLocal()
 const getResetTimeServerSnapshot = (): string | null => null
+// Day-aware label ("today"/"tomorrow"/weekday) for the next-round heading, so
+// it never hardcodes "Tomorrow" when the reset actually falls later today.
+const getResetDaySnapshot = () => getNextResetDayLabelLocal()
+const getResetDayServerSnapshot = (): string | null => null
 
 // The heart is the only feedback signal on the recap now; the negative surface is
 // the ⋯ report items (B-Report-2). The /api/daily/feedback route still accepts the
@@ -161,6 +165,11 @@ export default function DailySummaryPage() {
     subscribeNoop,
     getResetTimeSnapshot,
     getResetTimeServerSnapshot,
+  )
+  const resetDay = useSyncExternalStore(
+    subscribeNoop,
+    getResetDaySnapshot,
+    getResetDayServerSnapshot,
   )
 
   useEffect(() => {
@@ -324,7 +333,9 @@ export default function DailySummaryPage() {
       {summary.reminderPromptState === 'show' ? <RoundReminderCard /> : null}
 
       <section className="card mt-5 px-5 py-4">
-        <h2 style={titleStyle}>Tomorrow</h2>
+        <h2 style={titleStyle}>
+          {resetDay ? resetDay.charAt(0).toUpperCase() + resetDay.slice(1) : 'Tomorrow'}
+        </h2>
         <p className="text-foreground mt-2 text-sm leading-6">
           {resetTime ? `Five new at ${resetTime}.` : 'Five new tomorrow.'}
         </p>

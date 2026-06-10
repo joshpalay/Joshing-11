@@ -130,4 +130,25 @@ describe('ConvergenceExpansion — the expanded reveal', () => {
     expect(html).not.toContain('DISCOVER');
     expect(html.toLowerCase()).not.toContain('<button');
   });
+
+  it('marks house/LLM questions honestly and leaves human questions unmarked (§4)', () => {
+    const expand: Extract<StreamExpand, { kind: 'same_correct' }> = {
+      kind: 'same_correct',
+      friendId: 'friend-1',
+      friendName: 'Robyn Fielding',
+      questions: [
+        // House/editorial question — must be marked, never read as person-written.
+        { questionId: 'h1', text: 'A house question', domain: 'History', priorResult: 'correct', authorName: 'Joshing', authorIsHouse: true },
+        // LLM-origin question — marked "Generated".
+        { questionId: 'g1', text: 'A generated question', domain: 'Science', priorResult: 'correct', authorName: null, authorIsHouse: false },
+        // Human-authored — no machine-honesty marker needed.
+        { questionId: 'p1', text: 'A human question', domain: 'Music', priorResult: 'correct', authorName: 'Sadie', authorIsHouse: false },
+      ],
+    };
+    const html = renderToStaticMarkup(<ConvergenceExpansion expand={expand} />);
+    expect(html).toContain('JOSHING · EDITORIAL');
+    expect(html).toContain('GENERATED');
+    // The human author is not surfaced as a provenance marker.
+    expect(html).not.toContain('SADIE');
+  });
 });

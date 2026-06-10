@@ -2,7 +2,7 @@
 
 import { ChevronDown, Share2 } from 'lucide-react';
 import Link from 'next/link';
-import { useState, type KeyboardEvent } from 'react';
+import { useState, type CSSProperties, type KeyboardEvent } from 'react';
 
 import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
@@ -19,6 +19,7 @@ import { InlineAnswerFlow } from './InlineAnswerFlow';
 import { ActivityIcon, QuestionTriangle, specForIcon } from './ActivityIcon';
 import { FF, FM, INK, INK2, INK3, PAPER, RULE } from '@/components/lately/tokens';
 import { assertNever } from '@/lib/assert-never';
+import { HOUSE_AUTHOR, LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 
 // Friend names render in the activity-blue from Figma (--brand-link #4a5d75),
 // linked or not, so the actor reads as the warm social anchor of the row.
@@ -93,6 +94,38 @@ function questionBacked(expand: StreamExpand | null): boolean {
 // One in-session answer to a milestone question: what the viewer typed and
 // whether it was scored correct. Drives the calm "Answered" history copy.
 type Resolution = { submitted: string; isCorrect: boolean };
+
+// D-FEED-GROUP3-01 §4 (honesty, load-bearing): when a row expands to reveal its
+// question, a house/LLM-authored question MUST be marked — never rendered as if
+// a person wrote it. Returns the marker text, or null when no marker is needed:
+//   - authorIsHouse        → the house identity ("Joshing · Editorial")
+//   - authorName === null  → a non-person LLM-origin question ("Generated")
+//   - human name / undefined → null (the row frame already attributes it; a
+//                              human author needs no machine-honesty marker)
+function questionProvenance(q: StreamQuestion): string | null {
+  if (q.authorIsHouse) return `${HOUSE_AUTHOR.displayName} · ${HOUSE_AUTHOR.label}`;
+  if (q.authorName === null) return LLM_QUESTION_ATTRIBUTION;
+  return null;
+}
+
+function QuestionProvenance({ q, style }: { q: StreamQuestion; style?: CSSProperties }) {
+  const label = questionProvenance(q);
+  if (!label) return null;
+  return (
+    <p
+      style={{
+        margin: '4px 0 0',
+        fontFamily: FM,
+        fontSize: 10,
+        letterSpacing: 1,
+        color: INK3,
+        ...style,
+      }}
+    >
+      {label.toUpperCase()}
+    </p>
+  );
+}
 
 export function ActivityStreamItem({
   item,
@@ -545,6 +578,9 @@ export function ConvergenceExpansion({
               {q.domain.toUpperCase()}
             </p>
           ) : null}
+          {/* Honest authorship (§4): mark a house/LLM question even in the
+              read-only convergence reveal. */}
+          <QuestionProvenance q={q} />
         </div>
       ))}
     </div>
@@ -570,7 +606,7 @@ function SendOnwardExpansion({
     >
       <p
         style={{
-          margin: '0 0 12px',
+          margin: '0 0 4px',
           fontFamily: 'Georgia, serif',
           fontStyle: 'italic',
           fontSize: 14,
@@ -580,6 +616,9 @@ function SendOnwardExpansion({
       >
         &ldquo;{question.text}&rdquo;
       </p>
+      {/* Honest authorship (§4): house/LLM questions are marked so the reveal
+          never implies a person wrote machine content. */}
+      <QuestionProvenance q={question} style={{ margin: '0 0 12px' }} />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
         {/* Quiet, standard share icon (matches KnowledgeCard / RecentlyExpanding)

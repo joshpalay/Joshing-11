@@ -68,14 +68,16 @@ export async function getRecentlyExpandingPromo(
     initial: initialFor(domain.domain),
   }));
 
+  // Stable id within a UTC day so the row's React key doesn't churn across
+  // re-renders, but advances day to day. Also seeds the headline rotation (Pool
+  // 4) so the headline cycles day to day instead of always showing line 1.
+  const daySeed = Math.floor(now.getTime() / 86_400_000);
   const embed: Extract<StreamEmbed, { kind: 'recently_expanding' }> = {
     kind: 'recently_expanding',
     href: '/knowledge',
     domains,
+    headlineIndex: daySeed,
   };
 
-  // Stable id within a UTC day so the row's React key doesn't churn across
-  // re-renders, but advances day to day.
-  const daySeed = Math.floor(now.getTime() / 86_400_000);
   return recentlyExpandingPromoToStreamItem(embed, now, `recently-expanding-promo-${daySeed}`);
 }
