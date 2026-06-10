@@ -1774,7 +1774,17 @@ function FeedListContent({
           {groupItemsByRecency(restRows).map((group) => (
             <Fragment key={group.key}>
               <FeedSectionHeading unifiedHome={unifiedHome}>{group.label}</FeedSectionHeading>
-              {groupActivityByFriend(group.items).map(renderRow)}
+              {/* D-FEED-GROUP3-01 §2 — "everything else" renders as a calm straight
+                  chronological stream of full-sentence LONE events. Per-person
+                  clustering (PersonActivityCard) is deliberately DROPPED for this
+                  zone in cut 1: the cluster form was the source of the
+                  subject-stripped "wording is weird" copy, and density now comes
+                  from visual quiet, not copy compression. Clustering is a gated
+                  follow-up (re-introduce groupActivityByFriend here only if the
+                  straight stream still reads busy with real content). On the
+                  standalone Feed tab restRows is just question cards, which never
+                  grouped anyway, so this is a pure pass-through there. */}
+              {group.items.map(renderRow)}
             </Fragment>
           ))}
         </section>

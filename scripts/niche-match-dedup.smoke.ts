@@ -61,12 +61,12 @@ const items: ActivityItemView[] = [
   mk('nm-collide', 'niche_match_you_answered', { directQuestion: { feedItemId: 'fi', questionId: 'q-shared', questionText: 'Q?', personalMessage: null, category: null } }),
 
   // Utility types that the Lately moments already narrate — should be dropped.
-  mk('drop-friend-correct', 'friend_answered_your_question', { friendAnsweredQuestion: { domain: 'Music', questionText: 'Q?', result: 'correct' } }),
+  mk('drop-friend-correct', 'friend_answered_your_question', { friendAnsweredQuestion: { domain: 'Music', questionText: 'Q?', result: 'correct', authorName: null, authorIsHouse: false } }),
   mk('drop-declared', 'declared_promoted'),
   mk('drop-direct-covered', 'received_direct_question', { directQuestion: { feedItemId: 'fi', questionId: 'q-shared', questionText: 'Q?', personalMessage: null, category: null } }),
 
   // Same families, but NOT covered by a moment — should survive.
-  mk('keep-friend-incorrect', 'friend_answered_your_question', { friendAnsweredQuestion: { domain: 'Music', questionText: 'Q?', result: 'incorrect' } }),
+  mk('keep-friend-incorrect', 'friend_answered_your_question', { friendAnsweredQuestion: { domain: 'Music', questionText: 'Q?', result: 'incorrect', authorName: null, authorIsHouse: false } }),
   mk('keep-direct-uncovered', 'received_direct_question', { directQuestion: { feedItemId: 'fi', questionId: 'q-other', questionText: 'Q?', personalMessage: null, category: null } }),
 ];
 

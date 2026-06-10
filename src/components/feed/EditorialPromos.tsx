@@ -29,6 +29,35 @@ const EXPANDING_ROW_ACCENTS = [
 // initials, no buttons), softened into the sage wash.
 const INVITE_CLUSTER_SEEDS = ['circle-a', 'circle-b', 'circle-c', 'circle-d'];
 
+// Promo HEADLINE pools (D-FEED-GROUP3-01 Pool 4). Only the headline rotates —
+// eyebrow, CTA, and supporting copy stay fixed (functional wayfinding). The
+// rotation is by the embed's day-seeded `headlineIndex`, not an event hash, so
+// a promo that recurs as the same type still varies day to day. `{friend}` in
+// the common-ground pool is rendered as a link (see CommonGroundFeature).
+const RECENTLY_EXPANDING_HEADLINES = [
+  "The places you've been exploring lately.",
+  "New ground you've been covering.",
+  "Where your curiosity's been wandering.",
+] as const;
+
+const ADD_FRIENDS_HEADLINES = [
+  'Know someone who belongs here?',
+  'Who else should be in your circle?',
+  'There’s room for the people who get you.',
+] as const;
+
+// Common-ground headlines split into the copy AROUND the friend link so the
+// friend's name stays a link wherever it falls in the line.
+const COMMON_GROUND_HEADLINES = [
+  { before: 'You and ', after: ' keep finding one another here.' },
+  { before: 'You and ', after: ' keep meeting in the same places.' },
+  { before: 'The ground you and ', after: ' share.' },
+] as const;
+
+function rotate<T>(pool: readonly T[], index: number | undefined): T {
+  return pool[(index ?? 0) % pool.length]!;
+}
+
 /**
  * "Shared Ground" — the overlapping-circle motif as a full-bleed editorial
  * feature: the two strongest shared-but-untested domains the viewer holds with
@@ -43,6 +72,7 @@ export function CommonGroundFeature({
     embed.domains.flatMap((d) => [d.viewer.points, d.friend.points]),
   );
   const count = embed.domains.length;
+  const headline = rotate(COMMON_GROUND_HEADLINES, embed.headlineIndex);
   return (
     <EditorialFeature
       tone="parchment"
@@ -50,14 +80,14 @@ export function CommonGroundFeature({
       eyebrowIcon={<Bookmark size={13} strokeWidth={0} fill="currentColor" />}
       headline={
         <>
-          You and{' '}
+          {headline.before}
           <Link
             href={embed.friendHref}
             className="text-[var(--brand-ink)] underline-offset-4 hover:underline"
           >
             {embed.friendFirstName}
-          </Link>{' '}
-          keep finding one another here.
+          </Link>
+          {headline.after}
         </>
       }
       artwork={
@@ -121,7 +151,7 @@ export function GrowYourCircleFeature({
     <EditorialFeature
       tone="sage"
       eyebrow="Grow Your Circle"
-      headline="Know someone who belongs here?"
+      headline={rotate(ADD_FRIENDS_HEADLINES, embed.headlineIndex)}
       artwork={
         embed.variant === 'suggestions' ? (
           <div className="flex flex-col gap-3">
@@ -189,7 +219,7 @@ export function RecentlyExpandingFeature({
     <EditorialFeature
       tone="slate"
       eyebrow="Your World Is Expanding"
-      headline="The places you've been exploring lately."
+      headline={rotate(RECENTLY_EXPANDING_HEADLINES, embed.headlineIndex)}
       artwork={
         <div className="flex flex-col gap-3">
           {embed.domains.map((d, i) => {
