@@ -326,11 +326,14 @@ export default function DailySummaryPage() {
         </section>
       ) : null}
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <Link className="btn-primary sm:flex-1" href="/">
+      <div className="mt-6 flex flex-col items-center gap-3">
+        <Link className="btn-primary w-full" href="/">
           Back home
         </Link>
-        <Link className="btn-ghost sm:flex-1" href="/knowledge">
+        <Link
+          className="text-muted-foreground text-sm font-medium underline underline-offset-4 transition hover:text-foreground"
+          href="/knowledge"
+        >
           See your knowledge map
         </Link>
       </div>
