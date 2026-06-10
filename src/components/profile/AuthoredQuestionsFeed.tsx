@@ -41,6 +41,15 @@ type AnswerResult = {
   submittedAnswer: string
 }
 
+// A question counts as answered by the viewer if they answered it in this
+// session (local `results`) or had a persisted answer when the page loaded.
+function isAnsweredByViewer(
+  item: AuthoredQuestionItem,
+  results: Record<string, AnswerResult>,
+) {
+  return Boolean(results[item.id]) || item.viewerAnswered !== null
+}
+
 type AuthoredQuestionsFeedProps = {
   questions: AuthoredQuestionItem[]
   friendDisplayName: string
@@ -100,6 +109,9 @@ export function AuthoredQuestionsFeed({
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [selectedDifficulty, setSelectedDifficulty] = useState('')
+  const [selectedAnswered, setSelectedAnswered] = useState<
+    '' | 'answered' | 'unanswered'
+  >('')
 
   const categoryOptions = useMemo(() => {
     const seen = new Set<string>()
@@ -120,6 +132,20 @@ export function AuthoredQuestionsFeed({
     }))
   }, [questions])
 
+  // Only surface the answered/unanswered filter when the viewer actually has
+  // a mix to sort through, mirroring how the category/difficulty selects only
+  // appear when there's more than one option.
+  const showAnsweredFilter = useMemo(() => {
+    let hasAnswered = false
+    let hasUnanswered = false
+    for (const question of questions) {
+      if (isAnsweredByViewer(question, results)) hasAnswered = true
+      else hasUnanswered = true
+      if (hasAnswered && hasUnanswered) return true
+    }
+    return false
+  }, [questions, results])
+
   const visibleQuestions = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     return questions.filter((question) => {
@@ -132,9 +158,21 @@ export function AuthoredQuestionsFeed({
       if (selectedDifficulty && question.difficulty !== selectedDifficulty) {
         return false
       }
+      if (selectedAnswered) {
+        const answered = isAnsweredByViewer(question, results)
+        if (selectedAnswered === 'answered' && !answered) return false
+        if (selectedAnswered === 'unanswered' && answered) return false
+      }
       return true
     })
-  }, [questions, searchQuery, selectedCategory, selectedDifficulty])
+  }, [
+    questions,
+    searchQuery,
+    selectedCategory,
+    selectedDifficulty,
+    selectedAnswered,
+    results,
+  ])
 
   const submitAnswer = useCallback(
     async (item: AuthoredQuestionItem, submittedAnswer: string) => {
@@ -224,8 +262,26 @@ export function AuthoredQuestionsFeed({
                 aria-label="Search questions"
               />
             </label>
-            {categoryOptions.length > 1 || difficultyOptions.length > 1 ? (
+            {categoryOptions.length > 1 ||
+            difficultyOptions.length > 1 ||
+            showAnsweredFilter ? (
               <div className="flex flex-wrap gap-2">
+                {showAnsweredFilter ? (
+                  <select
+                    className="bg-background text-foreground h-10 flex-1 rounded-md border px-3 text-sm"
+                    value={selectedAnswered}
+                    onChange={(event) =>
+                      setSelectedAnswered(
+                        event.target.value as '' | 'answered' | 'unanswered',
+                      )
+                    }
+                    aria-label="Filter by answered status"
+                  >
+                    <option value="">All questions</option>
+                    <option value="answered">Answered by you</option>
+                    <option value="unanswered">Unanswered</option>
+                  </select>
+                ) : null}
                 {categoryOptions.length > 1 ? (
                   <select
                     className="bg-background text-foreground h-10 flex-1 rounded-md border px-3 text-sm"
