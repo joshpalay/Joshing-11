@@ -35,6 +35,7 @@ import {
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { getCulturalAnchor, type CulturalAnchor } from '@/server/db/queries/account';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
@@ -275,6 +276,15 @@ type AvoidFactKeyEntry = RecentFactKeyEntry;
 
 type TerritoryType = 'declared' | 'demonstrated';
 
+// Per-domain mastery strength threaded into the prompt as SALIENCE context
+// (BP-5 / audit Q3c). Shape matches the fields getKnowledgeBase already
+// returns — no extra query is needed to populate it.
+export type DomainStrength = {
+  tier: 'establishing' | 'familiar' | 'solid' | 'mastery';
+  totalPoints: number;
+  correctAnswerCount: number;
+};
+
 export function buildUserPrompt(
   domains: string[],
   count: number,
@@ -286,6 +296,8 @@ export function buildUserPrompt(
   adaptiveLevel?: number | null,
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
+  domainStrengths?: ReadonlyMap<string, DomainStrength>,
+  culturalAnchor?: CulturalAnchor | null,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -361,6 +373,44 @@ ${lines.join('\n')}`;
     }
   }
 
+  // Player strength per domain (BP-5 / Q3c) — salience context, NOT difficulty.
+  // The fan-salience rule asks for "the thing a devoted fan would be delighted
+  // to be recognized for knowing"; knowing how deep THIS player actually is in
+  // the domain lets the model pitch that recognition honestly. The difficulty
+  // instruction above stays authoritative — this block must never move it.
+  let strengthHint = '';
+  if (domainStrengths && domainStrengths.size > 0) {
+    const lines: string[] = [];
+    for (const domain of domains) {
+      const strength = domainStrengths.get(domain);
+      if (!strength) continue;
+      lines.push(
+        `- ${domain}: ${strength.tier} tier, ${strength.totalPoints} pts, ${strength.correctAnswerCount} correct so far`,
+      );
+    }
+    if (lines.length > 0) {
+      strengthHint = `\n\nPlayer strength in this round's domains. Use it to pitch FAN-SALIENCE — choose the angle a player at that depth would be delighted to be asked. Do NOT use it to change difficulty; the difficulty instruction above is authoritative:\n${lines.join('\n')}`;
+    }
+  }
+
+  // Cultural anchor (BP-5 / Q3d) — era/regional salience only. Captured at
+  // onboarding for interest proposal; reused here for the same purpose class
+  // (shaping content for this player). Hard rule in the prose: never assume
+  // knowledge from it and never let it move difficulty.
+  let anchorHint = '';
+  if (
+    culturalAnchor &&
+    (culturalAnchor.birthYear !== null || culturalAnchor.grewUpCountry || culturalAnchor.grewUpRegion)
+  ) {
+    const parts: string[] = [];
+    if (culturalAnchor.birthYear !== null) parts.push(`born ${culturalAnchor.birthYear}`);
+    const place = [culturalAnchor.grewUpRegion, culturalAnchor.grewUpCountry]
+      .filter((value): value is string => Boolean(value))
+      .join(', ');
+    if (place) parts.push(`grew up in ${place}`);
+    anchorHint = `\n\nPlayer background (salience only — NEVER difficulty): ${parts.join('; ')}. When two candidate facts are otherwise equally good, prefer the angle this era or regional background makes resonant. Do not assume knowledge from it, do not steer away from the domain to localize, and never make a question easier or harder because of it.`;
+  }
+
   const domainSection =
     domains.length === count && count > 1
       ? `Generate exactly one trivia question for each of the following ${count} domains:\n${domains.map((d, i) => `${i + 1}. ${d}`).join('\n')}`
@@ -381,7 +431,7 @@ ${perDomain.join('\n')}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${subAnglesHint}
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -844,6 +894,8 @@ async function callLlmOnce(
   adaptiveLevel?: number | null,
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
+  domainStrengths?: ReadonlyMap<string, DomainStrength>,
+  culturalAnchor?: CulturalAnchor | null,
 ): Promise<LlmQuestion[]> {
   const client = getAnthropicClient();
   if (!client) return [];
@@ -875,6 +927,8 @@ async function callLlmOnce(
           adaptiveLevel,
           subAnglesByDomain,
           domainTerritoryTypes,
+          domainStrengths,
+          culturalAnchor,
         ),
       },
     ],
@@ -897,6 +951,8 @@ export async function generateDailyQuestions(
   previousFactKeys: AvoidFactKeyEntry[] = [],
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
+  domainStrengths?: ReadonlyMap<string, DomainStrength>,
+  culturalAnchor?: CulturalAnchor | null,
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
 
@@ -931,6 +987,8 @@ export async function generateDailyQuestions(
         adaptiveLevel,
         subAnglesByDomain,
         domainTerritoryTypes,
+        domainStrengths,
+        culturalAnchor,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -947,6 +1005,8 @@ export async function generateDailyQuestions(
         adaptiveLevel,
         subAnglesByDomain,
         domainTerritoryTypes,
+        domainStrengths,
+        culturalAnchor,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -1306,6 +1366,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     previousFactKeys,
     recentDomainCounts,
     recentSkipCounts,
+    culturalAnchor,
   ] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
@@ -1313,6 +1374,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     getRecentFactKeys(userId),
     getRecentDomainCounts(userId).catch(() => new Map<string, number>()),
     getRecentSkipCountsByDomain(userId).catch(() => new Map<string, number>()),
+    // Era/regional salience hint (BP-5 / Q3d); resilient — a miss just means
+    // the prompt carries no background block.
+    getCulturalAnchor(userId).catch(() => null),
   ]);
   const adaptiveLevel = preferences.difficulty === 'adaptive'
     ? await updateAdaptiveLevel(userId)
@@ -1397,9 +1461,17 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   // territoryType (declared | demonstrated) per selected domain — threaded into
   // the generation prompt so its register matches the difficulty floor (PRD-D-5
   // §5.2): declared domains read for an enthusiast, demonstrated for a newcomer.
+  // strengthByDomain rides the same knowledgeBase read (BP-5 / Q3c): mastery
+  // tier/points/correct-count as fan-salience context — never difficulty.
   const territoryByDomain = new Map<string, TerritoryType>();
+  const strengthByDomain = new Map<string, DomainStrength>();
   for (const entry of knowledgeBase) {
     territoryByDomain.set(entry.domain, entry.territoryType);
+    strengthByDomain.set(entry.domain, {
+      tier: entry.tier,
+      totalPoints: entry.totalPoints,
+      correctAnswerCount: entry.correctAnswerCount,
+    });
   }
 
   const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
@@ -1451,6 +1523,8 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       previousFactKeys,
       subAnglesByDomain,
       territoryByDomain,
+      strengthByDomain,
+      culturalAnchor,
     );
   }
 
