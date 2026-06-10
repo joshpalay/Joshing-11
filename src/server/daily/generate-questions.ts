@@ -1100,15 +1100,26 @@ export async function generateDailyQuestions(
     });
   }
 
+  // Memoize domain reconciliation within the batch: reconcileProposedDomain is
+  // an LLM-backed lookup, and a pool-mode batch often emits several questions
+  // under the same proposed domain. One call per distinct string saves the
+  // duplicate Haiku calls AND guarantees identical proposals can't reconcile
+  // to different canonical domains within one batch.
+  const reconciledByProposed = new Map<string, string>();
+
   for (let persistIndex = 0; persistIndex < toPersist.length; persistIndex += 1) {
     const question = toPersist[persistIndex];
     // Drop ask-to-answer failures: the cold solver contradicted the stored answer.
     if (askResult.toDrop.has(persistIndex)) continue;
 
-    const { canonicalDomain } = await reconcileProposedDomain(
-      question.canonical_subcategory,
-      userId,
-    ).catch(() => ({ canonicalDomain: question.canonical_subcategory, reconciled: false }));
+    const proposed = question.canonical_subcategory;
+    let canonicalDomain = reconciledByProposed.get(proposed);
+    if (canonicalDomain === undefined) {
+      ({ canonicalDomain } = await reconcileProposedDomain(proposed, userId).catch(
+        () => ({ canonicalDomain: proposed, reconciled: false }),
+      ));
+      reconciledByProposed.set(proposed, canonicalDomain);
+    }
 
     if (isGenericSubcategory(canonicalDomain)) {
       console.warn('[daily/generate-questions] skipping question with generic canonical subcategory', {
