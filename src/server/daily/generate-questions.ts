@@ -747,6 +747,97 @@ export function findAnswerLeaks(generated: LlmQuestion[]): {
   return { toDrop, reasons };
 }
 
+// Tier ladder shared by the difficulty-floor gate. Index = how hard, ascending.
+const DIFFICULTY_TIER_LADDER: LlmQuestion['difficulty_estimate'][] = [
+  'accessible',
+  'moderate',
+  'specialist',
+];
+
+// One rung of slack: the adaptive target is a soft aim and the tiers overlap, so
+// a single-rung miss (e.g. specialist requested, moderate returned) is tolerated.
+// A two-rung miss is not — it's a question that doesn't belong in the slot.
+const MAX_TIER_SHORTFALL = 1;
+
+// Map a requested difficulty preference — either a per-domain adaptive override
+// or the player's fixed global preference — to a ladder index. Keys with no
+// enforceable floor ('adaptive' sentinel left unresolved, or anything
+// unexpected) return null so the gate skips them rather than guessing.
+function requestedDifficultyTierIndex(preference: string | undefined): number | null {
+  switch (preference) {
+    case 'normal':
+      return 0; // accessible
+    case 'moderate':
+      return 1; // moderate
+    case 'challenging':
+    case 'ridiculous':
+      return 2; // specialist
+    default:
+      return null;
+  }
+}
+
+/**
+ * Difficulty-floor gate. The per-domain difficulty target (adaptive mode) and
+ * the player's fixed difficulty preference are only ever PROMPT HINTS: the model
+ * self-reports `difficulty_estimate` on whatever question it actually wrote, and
+ * until this gate nothing re-checked that self-report against what was asked
+ * for. So a "specialist" Sesame Street request could come back as a tourist-
+ * level "what color is Elmo?" self-labeled 'accessible', and every other gate
+ * (quality, factual, dedup, answer-leak) waved it through because it is well-
+ * formed and factually correct.
+ *
+ * This deterministic gate closes that gap: drop any question whose self-reported
+ * tier lands MORE THAN ONE rung below the requested tier for its domain. The
+ * requested tier is the per-domain override when present (adaptive mode), else
+ * the global fixed preference. When neither resolves to a concrete floor (e.g.
+ * an unresolved 'adaptive' with no override for that domain) the question is
+ * left alone — we can't enforce a floor we don't know. Dropping is safe: the
+ * orchestrator over-provisions and tops up, so this just forces a regen the same
+ * way the dedup/quality gates do.
+ */
+export function findUnderDifficultyQuestions(
+  generated: LlmQuestion[],
+  domainDifficultyOverrides: ReadonlyMap<string, string> | undefined,
+  difficultyPreference: string | undefined,
+): { toDrop: Set<number>; reasons: Record<number, string> } {
+  const toDrop = new Set<number>();
+  const reasons: Record<number, string> = {};
+
+  // Normalize override keys so a returned canonical_subcategory differing only by
+  // case/whitespace from the requested domain still resolves its override.
+  const normalize = (value: string) => value.trim().toLowerCase();
+  const normalizedOverrides = new Map<string, string>();
+  if (domainDifficultyOverrides) {
+    for (const [domain, preference] of domainDifficultyOverrides) {
+      normalizedOverrides.set(normalize(domain), preference);
+    }
+  }
+
+  for (let i = 0; i < generated.length; i += 1) {
+    const q = generated[i];
+    const requestedPreference =
+      normalizedOverrides.get(normalize(q.canonical_subcategory)) ?? difficultyPreference;
+    const requestedIdx = requestedDifficultyTierIndex(requestedPreference);
+    if (requestedIdx === null) continue;
+
+    const estimateIdx = DIFFICULTY_TIER_LADDER.indexOf(q.difficulty_estimate);
+    if (estimateIdx < 0) continue; // unrecognized estimate — not ours to judge.
+
+    const shortfall = requestedIdx - estimateIdx;
+    if (shortfall > MAX_TIER_SHORTFALL) {
+      toDrop.add(i);
+      reasons[i] =
+        `difficulty "${q.difficulty_estimate}" is ${shortfall} tiers below requested "${DIFFICULTY_TIER_LADDER[requestedIdx]}" for ${q.canonical_subcategory}`.slice(
+          0,
+          200,
+        );
+    }
+  }
+
+  return { toDrop, reasons };
+}
+
 const RECENT_HISTORY_GATE_LIMIT = 30;
 
 const RECENT_HISTORY_GATE_SYSTEM_PROMPT = `You are reviewing newly-generated trivia questions against a list of questions this same user has already been asked. For each NEW question, decide whether it probes the same underlying fact as ANY of the RECENT questions.
@@ -1041,12 +1132,31 @@ export async function generateDailyQuestions(
     });
   }
 
+  // Difficulty-floor backstop: the per-domain target / fixed preference is only a
+  // prompt hint, and difficulty_estimate is the model's own label of what it
+  // wrote. Drop questions that came back more than one tier below what was asked
+  // for (the "specialist Sesame Street → accessible 'what color is Elmo'" case).
+  const underDifficulty = findUnderDifficultyQuestions(
+    generated,
+    domainDifficultyOverrides,
+    difficultyPreference,
+  );
+  if (underDifficulty.toDrop.size > 0) {
+    console.warn('[daily/generate-questions] dropping under-difficulty questions', {
+      droppedCount: underDifficulty.toDrop.size,
+      droppedIndices: [...underDifficulty.toDrop].sort((a, b) => a - b),
+      reasons: underDifficulty.reasons,
+      originalCount: generated.length,
+    });
+  }
+
   const allDrops = new Set<number>([
     ...batchDuplicates,
     ...recentDuplicates,
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
+    ...underDifficulty.toDrop,
   ]);
   if (allDrops.size > 0) {
     generated = generated.filter((_, i) => !allDrops.has(i));
