@@ -10,6 +10,8 @@
 // Shape vocabulary (Figma JOSHING-DESIGN-SYSTEM2 is the source for shape):
 //   bundle   → 2–2–1 cluster      a friend's questions for you (milestone).
 //                                 Unanswered = filled, answered = hollow outline.
+//   cluster  → 2–2–1 cluster, static + all-solid, scaled to line height: a
+//                                 friend played their first five (a settled set).
 //   diamond  → rhombus             someone answered ("got") a question.
 //   hourglass→ two triangles apex-to-apex   someone sends you a question.
 //   domain   → half-triangles split on a diagonal   a new domain opened.
@@ -55,6 +57,11 @@ const LINE_H = 22.5; // first text line: 15px × 1.5
 // was reverted; the fix for "too tall" is the scale + centering here, not the
 // geometry.)
 const LARGE_SCALE = 0.5;
+// The static 'cluster' mark (a friend's settled first five) reuses the tall
+// BundleMark (viewBox height 33) but shrinks it to ~the text line height
+// (33 × 0.7 ≈ 23 ≈ LINE_H) so it sits on a single-line row like the diamond,
+// instead of drooping the way the full milestone bundle does into its 2nd line.
+const CLUSTER_SCALE = 0.7;
 // Height of each half of a stacked mark, and the total viewBox height of the
 // pair. base=height (= MARK_W) keeps the triangles un-smushed.
 const STACK_HALF = 24;
@@ -69,6 +76,7 @@ const CAP_NUDGE = 3;
 
 export type ActivityIconSpec =
   | { kind: 'bundle'; total: number; unanswered: number }
+  | { kind: 'cluster' }
   | { kind: 'diamond' }
   | { kind: 'hourglass' }
   | { kind: 'domain' };
@@ -83,6 +91,8 @@ export function specForIcon(
   switch (icon) {
     case 'bundle':
       return bundle && bundle.total > 0 ? { kind: 'bundle', ...bundle } : null;
+    case 'cluster':
+      return { kind: 'cluster' };
     case 'diamond':
       return { kind: 'diamond' };
     case 'hourglass':
@@ -159,10 +169,15 @@ function BundleMark({
   total,
   unanswered,
   seed,
+  scale = 1,
 }: {
   total: number;
   unanswered: number;
   seed: string;
+  // The full milestone bundle renders at scale 1 (tall, growing down through the
+  // row's second line). The static 'cluster' mark passes a sub-1 scale so the
+  // same shape shrinks to roughly the single text line, matching the diamond.
+  scale?: number;
 }) {
   const B = 11; // triangle base
   const TH = 11; // triangle height — isosceles, base = height (not smushed)
@@ -175,7 +190,7 @@ function BundleMark({
     [13, 22],
   ];
   return (
-    <MarkSvg h={33}>
+    <MarkSvg h={33} scale={scale}>
       {pos.slice(0, total).map(([x, y], i) => {
         const solid = i < unanswered;
         return (
@@ -285,6 +300,11 @@ function Mark({ spec, seed }: { spec: ActivityIconSpec; seed: string }) {
   switch (spec.kind) {
     case 'bundle':
       return <BundleMark total={spec.total} unanswered={spec.unanswered} seed={seed} />;
+    case 'cluster':
+      // A friend's first five, settled: the bundle shape, all five solid, scaled
+      // down to line height so it reads as a quiet sibling of the diamond rather
+      // than the tall interactive milestone bundle.
+      return <BundleMark total={5} unanswered={5} seed={seed} scale={CLUSTER_SCALE} />;
     case 'diamond':
       return <DiamondMark seed={seed} />;
     case 'hourglass':

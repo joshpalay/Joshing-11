@@ -118,11 +118,19 @@ export type StreamAction =
 //   - 'bundle'    → 2–2–1 cluster: a friend's questions for you (milestone).
 //                   Solid = unanswered, hollow = already played. Live count
 //                   comes from the row's answered-state; caps at 5 silently.
+//   - 'cluster'   → the bundle shape rendered static + all-solid at line size: a
+//                   friend played their first five (a settled set, not playable).
 //   - 'diamond'   → tan/darkyellow rhombus: someone answered ("got") a question.
 //   - 'hourglass' → orange/teal triangles apex-to-apex: someone sends you a Q.
 //   - 'domain'    → orange/teal half-triangles split on a diagonal: a new
 //                   domain opened (expansion).
-export type StreamIconKind = 'bundle' | 'diamond' | 'hourglass' | 'domain' | null;
+export type StreamIconKind =
+  | 'bundle'
+  | 'cluster'
+  | 'diamond'
+  | 'hourglass'
+  | 'domain'
+  | null;
 
 // An optional rich embed rendered inline beneath a row's one-liner. Almost no
 // rows carry one. The common-ground promo (homepage "What's happening" ONLY)
@@ -655,6 +663,10 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' played their first five questions')],
         secondLine: null,
+        // A settled milestone: the static all-solid cluster mark (the bundle
+        // shape, not playable) so this row sits in the triangle family without
+        // borrowing the diamond the relationship rows use.
+        icon: 'cluster',
         action: null,
         expand: null,
       };

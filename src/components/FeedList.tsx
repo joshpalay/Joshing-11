@@ -285,7 +285,10 @@ function feedMetadata(item: FeedApiItem, answered = false) {
   )
 }
 
-function baseTypedFields(item: FeedApiItem, answered = false) {
+// `hideTimestamp` blanks the relative "1d ago" on the home "What's Happening"
+// feed (unifiedHome), so its question cards match the timestamp-free activity
+// rows; the Broadcasts/Sent surfaces leave it on.
+function baseTypedFields(item: FeedApiItem, answered = false, hideTimestamp = false) {
   return {
     id: item.id,
     metadata: feedMetadata(item, answered),
@@ -296,13 +299,13 @@ function baseTypedFields(item: FeedApiItem, answered = false) {
     avatarName: item.source_friend_display_name,
     avatarUserId: item.source_user_id,
     authorHref: item.source_profile_href ?? profileHref(item.source_user_id),
-    timestamp: formatRelativeTime(item.source_event_at),
+    timestamp: hideTimestamp ? '' : formatRelativeTime(item.source_event_at),
     viewerIsAuthor: item.viewer_is_author === true,
   }
 }
 
-function toTypedFeedItem(item: FeedApiItem) {
-  const base = baseTypedFields(item)
+function toTypedFeedItem(item: FeedApiItem, hideTimestamp = false) {
+  const base = baseTypedFields(item, false, hideTimestamp)
 
   if (item.card_type === 'direct_sent') {
     return {
@@ -384,11 +387,12 @@ function pickPairedFriend(
 
 function toAnsweredByYouItem(
   item: FeedApiItem,
-  result?: ResultState
+  result?: ResultState,
+  hideTimestamp = false
 ): AnsweredByYouFeedItem {
   const masteryDeltaRaw = result?.masteryDelta ?? item.mastery_delta
   return {
-    ...baseTypedFields(item, true),
+    ...baseTypedFields(item, true, hideTimestamp),
     avatarName: null,
     avatarUserId: null,
     type: 'answered_by_you',
@@ -1508,6 +1512,9 @@ function FeedListContent({
           key={`a-${row.item.id}`}
           item={row.item}
           timestamp={formatRelativeTime(row.item.sortAt)}
+          // The home "What's Happening" feed reads calmer without the per-row
+          // "1d ago" ledger; the full /activities log keeps its timestamps.
+          showTimestamp={!unifiedHome}
         />
       )
     }
@@ -1577,7 +1584,7 @@ function FeedListContent({
     )
 
     if (isAnswered) {
-      const answeredItem = toAnsweredByYouItem(item, result)
+      const answeredItem = toAnsweredByYouItem(item, result, unifiedHome)
       const isIncorrect = answeredItem.isCorrect === false
       const recheckAction: FeedRecheckAction | null = isIncorrect
         ? { onSubmit: () => submitRecheck(item) }
@@ -1600,7 +1607,7 @@ function FeedListContent({
       )
     }
 
-    const typedItem = toTypedFeedItem(item)
+    const typedItem = toTypedFeedItem(item, unifiedHome)
     const dismissible = !item.viewer_is_author
     const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
     const onDismiss = dismissible ? () => requestDismiss(item) : undefined
