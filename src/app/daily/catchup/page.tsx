@@ -220,10 +220,10 @@ const RECAP_TONE = {
     accent: 'var(--success)',
   },
   wrong: {
-    label: 'WRONG',
-    border: 'color-mix(in srgb, var(--danger) 28%, var(--border))',
-    background: 'color-mix(in srgb, var(--danger) 7%, var(--surface-2))',
-    accent: 'var(--danger)',
+    label: 'Not this time',
+    border: 'var(--border)',
+    background: 'color-mix(in srgb, var(--muted) 42%, var(--surface-2))',
+    accent: 'var(--text-muted)',
   },
   revealed: {
     label: 'REVEALED',
@@ -246,7 +246,7 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
     >
       <div className="flex flex-wrap items-center gap-2">
         <span
-          className="rounded-sm border px-2 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
+          className="rounded-sm border px-2 py-1 text-[0.6rem] font-semibold tracking-[0.08em]"
           style={{ borderColor: tone.border, color: tone.accent }}
         >
           {tone.label}

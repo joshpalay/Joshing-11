@@ -523,15 +523,15 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
                 borderLeft: '3px solid var(--success)',
               }
             : {
-                background: 'color-mix(in srgb, #b42318 7%, var(--brand-card))',
-                borderColor: 'color-mix(in srgb, #b42318 24%, var(--brand-border))',
-                borderLeft: '3px solid #b42318',
+                background: 'color-mix(in srgb, var(--muted) 36%, var(--brand-card))',
+                borderColor: 'var(--brand-border)',
+                borderLeft: '3px solid var(--brand-border)',
               }
       }
     >
       <div className="flex flex-wrap items-start gap-2 pr-11">
         <span
-          className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em] uppercase"
+          className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em]"
           style={
             question.isSkipped
               ? { borderColor: 'var(--brand-border)', background: 'var(--secondary)', color: 'var(--brand-ink-400)' }
@@ -542,9 +542,9 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
                     color: '#0f5c30',
                   }
                 : {
-                    borderColor: 'color-mix(in srgb, #b42318 35%, var(--brand-border))',
-                    background: 'color-mix(in srgb, #b42318 12%, var(--brand-card))',
-                    color: '#8b1f16',
+                    borderColor: 'var(--brand-border)',
+                    background: 'color-mix(in srgb, var(--muted) 44%, var(--brand-card))',
+                    color: 'var(--text-muted)',
                   }
           }
         >
@@ -552,7 +552,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             ? 'SKIPPED'
             : question.isCorrect
               ? 'CORRECT'
-              : 'WRONG'}
+              : 'Not this time'}
         </span>
         <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
           {question.authorName ? null : `${LLM_QUESTION_ATTRIBUTION.toUpperCase()} · ${question.domainDisplayName.toUpperCase()}`}
