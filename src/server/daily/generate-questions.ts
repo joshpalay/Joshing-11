@@ -1576,6 +1576,20 @@ async function pickBankPicksForDomains(
           basePoints: source.basePoints,
           factKey: source.factKey,
           subAngles: source.subAngles,
+          // Carry the source row's earned quality/verification fields onto the
+          // serving copy (verify-once-reuse-many, PRD-D-5 §3). Without these
+          // the copy regressed to defaults: aside lost, acceptable_variants
+          // lost (a right-but-rephrased answer graded wrong again on reuse —
+          // the exact betrayal B4 fixed), trust tier reset to unverified,
+          // provenance dropped (audit 2026-06-10, finding Q4). Play stats
+          // (n_answered / empirical_correct_rate) are deliberately NOT copied
+          // — they accrue per row.
+          insideJoke: source.insideJoke,
+          trustTier: source.trustTier,
+          askToAnswerVerified: source.askToAnswerVerified,
+          acceptableVariants: source.acceptableVariants,
+          sourceRefs: source.sourceRefs,
+          perishable: source.perishable,
           expiresAt,
           usedInQueue: false,
         })

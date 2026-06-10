@@ -1383,6 +1383,18 @@ export type BankSource = {
   basePoints: number;
   factKey: string;
   subAngles: string[];
+  // Quality/verification fields earned once at generation time (PRD-D-5
+  // "verify-once-reuse-many"). Carried so the per-viewer serving copy keeps
+  // the aside, the right-but-rephrased grading leniency (acceptable_variants
+  // is what /api/daily/answer grades against), the earned trust tier, and the
+  // retrieval provenance, instead of silently resetting them on every reuse
+  // (audit 2026-06-10, finding Q4).
+  insideJoke: string | null;
+  trustTier: TrustTier;
+  askToAnswerVerified: boolean;
+  acceptableVariants: string[];
+  sourceRefs: string[];
+  perishable: boolean;
 };
 
 export type BankDifficulty = 'accessible' | 'moderate' | 'specialist';
@@ -1508,6 +1520,12 @@ export async function pickBankSource(
       basePoints: row.basePoints,
       factKey: row.factKey,
       subAngles: Array.isArray(row.subAngles) ? row.subAngles : [],
+      insideJoke: row.insideJoke ?? null,
+      trustTier: row.trustTier as TrustTier,
+      askToAnswerVerified: row.askToAnswerVerified ?? false,
+      acceptableVariants: Array.isArray(row.acceptableVariants) ? row.acceptableVariants : [],
+      sourceRefs: Array.isArray(row.sourceRefs) ? row.sourceRefs : [],
+      perishable: row.perishable ?? false,
     };
   }
   return null;
