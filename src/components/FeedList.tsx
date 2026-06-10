@@ -679,6 +679,13 @@ function FeedContributeFooter() {
   )
 }
 
+// "From Friends" shows at most this many of the most-recent milestone cards
+// before collapsing the rest behind a "View more" control; each tap of "View
+// more" then reveals another FROM_FRIENDS_STEP cards (and keeps the control
+// while more remain).
+const FROM_FRIENDS_COLLAPSED_COUNT = 5
+const FROM_FRIENDS_STEP = 10
+
 // The uppercase eyebrow that labels a feed section — the recency day labels
 // ("Today", "This week") and the home-only "For You" / "From Friends" splits all
 // share this register. `first:pt-0` lets whichever heading renders first sit
@@ -786,6 +793,11 @@ function FeedListContent({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hideToast, setHideToast] = useState<{ category: string } | null>(null)
+  // "From Friends" starts capped to its most recent few milestone cards; each
+  // "View more" reveals another batch. View-state only — never persisted.
+  const [fromFriendsVisibleCount, setFromFriendsVisibleCount] = useState(
+    FROM_FRIENDS_COLLAPSED_COUNT,
+  )
   // True for the very first render path when we already have server-rendered
   // data; the initial-fetch useEffect skips its work once.
   const skipInitialFetchRef = useRef(initialPageMatchesFilter)
@@ -991,6 +1003,15 @@ function FeedListContent({
     }
     return { forYouRows: forYou, fromFriendsRows: fromFriends, restRows: rest }
   }, [displayRows, unifiedHome])
+
+  // "From Friends" reveals its most recent cards in batches (fromFriendsRows is
+  // newest-first, so slicing the head keeps the latest). The "View more" control
+  // appears while cards remain hidden; each tap reveals up to FROM_FRIENDS_STEP
+  // more, and the label names how many that next tap will show.
+  const visibleFromFriendsRows = fromFriendsRows.slice(0, fromFriendsVisibleCount)
+  const fromFriendsHiddenCount =
+    fromFriendsRows.length - visibleFromFriendsRows.length
+  const fromFriendsNextBatch = Math.min(fromFriendsHiddenCount, FROM_FRIENDS_STEP)
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
@@ -1734,7 +1755,20 @@ function FeedListContent({
           {fromFriendsRows.length > 0 ? (
             <Fragment key="from-friends">
               <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
-              {groupActivityByFriend(fromFriendsRows).map(renderRow)}
+              {groupActivityByFriend(visibleFromFriendsRows).map(renderRow)}
+              {fromFriendsHiddenCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFromFriendsVisibleCount((count) => count + FROM_FRIENDS_STEP)
+                  }
+                  className={`flex min-h-11 items-center text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
+                    unifiedHome ? 'pl-[2px]' : ''
+                  }`}
+                >
+                  View {fromFriendsNextBatch} more
+                </button>
+              ) : null}
             </Fragment>
           ) : null}
           {groupItemsByRecency(restRows).map((group) => (
