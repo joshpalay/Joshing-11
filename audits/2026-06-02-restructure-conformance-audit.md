@@ -92,6 +92,12 @@ src/app/api/questions/send/route.ts:179-181
 ## 3. Divergences
 
 ### 3.1 House / editorial author — 🔴 UNBUILT
+
+> **STALE (2026-06-10):** the house author has since shipped — `source='house_authored'`
+> questions exist, `pickHouseQuestions` serves them into the Daily Five
+> (`src/server/db/queries/daily.ts:1194`), and a `house-authorship` smoke script exists.
+> The finding below is preserved as the historical record; re-verify Invariant H-1 (§5)
+> against the shipped implementation rather than treating this section as current.
 D-3 specifies a first-class, labeled house author. None of it is implemented:
 - No house identity constant (D-3 expects a single `{ id, displayName: 'Joshing', label: 'Editorial' }` source of truth) — absent from `src/`.
 - `source` enum is **not** widened to include `'house_authored'` (`schema.ts:254` lists only the three).

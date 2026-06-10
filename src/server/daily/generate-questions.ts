@@ -23,17 +23,21 @@ import {
 import {
   getAuthoredQuestionTexts,
   getKnowledgeBase,
+  getRecentAnsweredCanonicalTexts,
   getRecentDailyQuestionTexts,
   getRecentDomainCounts,
   getRecentFactKeys,
+  getRecentSkipCountsByDomain,
   getRecentSubAnglesByDomain,
   normalizeQuestionText,
   pickBankSource,
+  type AnsweredCanonicalTextEntry,
   type BankDifficulty,
   type RecentDailyQuestionEntry,
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { getCulturalAnchor, type CulturalAnchor } from '@/server/db/queries/account';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
@@ -59,6 +63,25 @@ const RECENT_FACT_KEY_LIMIT = 200;
 // history-gate windows. The bank pick guards against the FULL authored set
 // separately (avoidAuthoredTexts), so the literal-reuse path stays fully covered.
 const AUTHORED_AVOID_TEXT_LIMIT = 40;
+// How many recently-answered CANONICAL question texts (feed sends, milestone
+// click-throughs, house questions — rows with no fact_key, invisible to the
+// fact-key avoid set; BP-6 / audit Q8) to seed into the Sonnet avoid list.
+// Domain-scoped by the caller and bounded for the same flush reason as above.
+const ANSWERED_CANONICAL_AVOID_TEXT_LIMIT = 25;
+
+// Domain-scope an answered-canonical read to the round's domains (domainKey
+// fold, so spelling variants match) and cap it. Advisory only — the entries
+// join the same avoid list the prompt block and Haiku history gate already
+// consume; no enforcement gate changes.
+function scopeAnsweredCanonicalTexts(
+  entries: AnsweredCanonicalTextEntry[],
+  domains: string[],
+): AvoidQuestionEntry[] {
+  const roundKeys = new Set(domains.map((domain) => domainKey(domain)));
+  return entries
+    .filter((entry) => roundKeys.has(domainKey(entry.domain)))
+    .slice(0, ANSWERED_CANONICAL_AVOID_TEXT_LIMIT);
+}
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
 
@@ -274,6 +297,15 @@ type AvoidFactKeyEntry = RecentFactKeyEntry;
 
 type TerritoryType = 'declared' | 'demonstrated';
 
+// Per-domain mastery strength threaded into the prompt as SALIENCE context
+// (BP-5 / audit Q3c). Shape matches the fields getKnowledgeBase already
+// returns — no extra query is needed to populate it.
+export type DomainStrength = {
+  tier: 'establishing' | 'familiar' | 'solid' | 'mastery';
+  totalPoints: number;
+  correctAnswerCount: number;
+};
+
 export function buildUserPrompt(
   domains: string[],
   count: number,
@@ -285,6 +317,8 @@ export function buildUserPrompt(
   adaptiveLevel?: number | null,
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
+  domainStrengths?: ReadonlyMap<string, DomainStrength>,
+  culturalAnchor?: CulturalAnchor | null,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -360,6 +394,44 @@ ${lines.join('\n')}`;
     }
   }
 
+  // Player strength per domain (BP-5 / Q3c) — salience context, NOT difficulty.
+  // The fan-salience rule asks for "the thing a devoted fan would be delighted
+  // to be recognized for knowing"; knowing how deep THIS player actually is in
+  // the domain lets the model pitch that recognition honestly. The difficulty
+  // instruction above stays authoritative — this block must never move it.
+  let strengthHint = '';
+  if (domainStrengths && domainStrengths.size > 0) {
+    const lines: string[] = [];
+    for (const domain of domains) {
+      const strength = domainStrengths.get(domain);
+      if (!strength) continue;
+      lines.push(
+        `- ${domain}: ${strength.tier} tier, ${strength.totalPoints} pts, ${strength.correctAnswerCount} correct so far`,
+      );
+    }
+    if (lines.length > 0) {
+      strengthHint = `\n\nPlayer strength in this round's domains. Use it to pitch FAN-SALIENCE — choose the angle a player at that depth would be delighted to be asked. Do NOT use it to change difficulty; the difficulty instruction above is authoritative:\n${lines.join('\n')}`;
+    }
+  }
+
+  // Cultural anchor (BP-5 / Q3d) — era/regional salience only. Captured at
+  // onboarding for interest proposal; reused here for the same purpose class
+  // (shaping content for this player). Hard rule in the prose: never assume
+  // knowledge from it and never let it move difficulty.
+  let anchorHint = '';
+  if (
+    culturalAnchor &&
+    (culturalAnchor.birthYear !== null || culturalAnchor.grewUpCountry || culturalAnchor.grewUpRegion)
+  ) {
+    const parts: string[] = [];
+    if (culturalAnchor.birthYear !== null) parts.push(`born ${culturalAnchor.birthYear}`);
+    const place = [culturalAnchor.grewUpRegion, culturalAnchor.grewUpCountry]
+      .filter((value): value is string => Boolean(value))
+      .join(', ');
+    if (place) parts.push(`grew up in ${place}`);
+    anchorHint = `\n\nPlayer background (salience only — NEVER difficulty): ${parts.join('; ')}. When two candidate facts are otherwise equally good, prefer the angle this era or regional background makes resonant. Do not assume knowledge from it, do not steer away from the domain to localize, and never make a question easier or harder because of it.`;
+  }
+
   const domainSection =
     domains.length === count && count > 1
       ? `Generate exactly one trivia question for each of the following ${count} domains:\n${domains.map((d, i) => `${i + 1}. ${d}`).join('\n')}`
@@ -380,7 +452,7 @@ ${perDomain.join('\n')}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${subAnglesHint}
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -550,12 +622,13 @@ async function findBatchDuplicates(questions: LlmQuestion[]): Promise<Set<number
   }
 }
 
-const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-generated trivia questions for quality before they are served to a player. For each question, decide whether it has any of these defects:
+const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-generated trivia questions for quality before they are served to a player. Each item carries its difficulty tier (tier=accessible | moderate | specialist). For each question, decide whether it has any of these defects:
 
 1. ANSWER_LEAKED — the question setup contains the answer, near-paraphrase, or a tell that gives the answer away. E.g. "Mrs. Lovett bakes meat pies using a secret ingredient from Sweeney's victims. What does she put in the pies?" — the setup tells you it's the victims.
 2. OPINION_OR_VAGUE — asks for a preference, value judgment, or has no single clear answer.
 3. FALSE_PREMISE — the setup contains a factual error or assumes something incorrect.
 4. SELF_ANSWERING — the question names the answer in its own text ("Who wrote the 1922 poem 'The Waste Land' by T. S. Eliot?").
+5. GENERIC_AT_TIER — tier-gated: judge this defect ONLY for items whose tier is moderate or specialist. NEVER flag an accessible-tier item with this defect, and never flag any item merely for resembling a simply-phrased question. At moderate/specialist, a question is defective when it is generic trivia: mentally remove the work/domain title from the question — if what remains could appear in any generic trivia app (name-the-character/title/location roster questions, what-year/what-number lookups with no significance to a fan), it does not clear the tier's bar. E.g. "In Gilmore Girls, what is the name of Rory's first boyfriend?" at specialist is GENERIC_AT_TIER. A question probing a specific scene, running joke, exact wording, object, technique, or second-order fact is NOT generic, however plainly it is phrased — "In American Psycho, what color is Paul Allen's business card?" passes. Flag ONLY clear-cut cases; when uncertain, do not flag — at these tiers a missed generic question is cheaper than suppressing a good one.
 
 A high bar applies — flag a question only when one of these defects is clearly present. Subtle wordsmithing concerns are NOT defects.
 
@@ -570,7 +643,10 @@ Return JSON only:
 
 If no questions are defective, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
-async function findQualityFailures(generated: LlmQuestion[]): Promise<{
+// Exported for the opt-in live evals (quality-gate.eval.test.ts), mirroring the
+// parseFactualGateResponse / findAnswerLeaks precedent. Production callers are
+// generateDailyQuestions and screenGroundedBatch in this module.
+export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   toDrop: Set<number>;
   reasons: Record<number, string>;
 }> {
@@ -578,10 +654,14 @@ async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   const client = getAnthropicClient();
   if (!client) return { toDrop: new Set(), reasons: {} };
 
+  // tier= feeds the GENERIC_AT_TIER defect (judged only at moderate/specialist).
+  // difficulty_estimate is the same field serving and scoring treat as the
+  // question's tier (resolveDailyBasePoints, bank matching), so the gate and the
+  // serving path agree on what tier a question is.
   const body = generated
     .map(
       (q, i) =>
-        `[${i}] domain=${q.canonical_subcategory}\n    q=${q.question_text}\n    a=${q.answer}`,
+        `[${i}] domain=${q.canonical_subcategory} tier=${q.difficulty_estimate}\n    q=${q.question_text}\n    a=${q.answer}`,
     )
     .join('\n\n');
   const userMessage = wrapUserInput('batch', body);
@@ -835,14 +915,20 @@ async function callLlmOnce(
   adaptiveLevel?: number | null,
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
+  domainStrengths?: ReadonlyMap<string, DomainStrength>,
+  culturalAnchor?: CulturalAnchor | null,
 ): Promise<LlmQuestion[]> {
   const client = getAnthropicClient();
   if (!client) return [];
 
-  // SYSTEM_PROMPT is ~1500 tokens — above the 1024-token Sonnet cache
-  // threshold. The cron fans out with USER_CONCURRENCY=4, so concurrent
-  // batches hit the cache. The 5-min TTL means later sequential batches
-  // miss, but the concurrent slice is worth the surcharge.
+  // SYSTEM_PROMPT is ~3-4k tokens (rules + 44 exemplars + schema) — above the
+  // 2048-token minimum cacheable prefix on claude-sonnet-4-6. The cron fans
+  // out with USER_CONCURRENCY=4, so concurrent batches hit the cache. The
+  // 5-min TTL means later sequential batches miss, but the concurrent slice
+  // is worth the surcharge. NOTE: the Haiku gates below carry NO cache_control
+  // on purpose — claude-haiku-4-5's minimum cacheable prefix is 4096 tokens
+  // and every gate system prompt (even the exemplar-bearing quality gate at
+  // ~2k) is under it, so a marker would be a silent no-op.
   const response = await loggedMessagesCreate(client, 'generate-questions', {
     model: ANTHROPIC_MODEL,
     max_tokens: 2000,
@@ -862,6 +948,8 @@ async function callLlmOnce(
           adaptiveLevel,
           subAnglesByDomain,
           domainTerritoryTypes,
+          domainStrengths,
+          culturalAnchor,
         ),
       },
     ],
@@ -884,6 +972,8 @@ export async function generateDailyQuestions(
   previousFactKeys: AvoidFactKeyEntry[] = [],
   subAnglesByDomain?: ReadonlyMap<string, string[]>,
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
+  domainStrengths?: ReadonlyMap<string, DomainStrength>,
+  culturalAnchor?: CulturalAnchor | null,
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
 
@@ -918,6 +1008,8 @@ export async function generateDailyQuestions(
         adaptiveLevel,
         subAnglesByDomain,
         domainTerritoryTypes,
+        domainStrengths,
+        culturalAnchor,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -934,6 +1026,8 @@ export async function generateDailyQuestions(
         adaptiveLevel,
         subAnglesByDomain,
         domainTerritoryTypes,
+        domainStrengths,
+        culturalAnchor,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -1099,15 +1193,26 @@ export async function generateDailyQuestions(
     });
   }
 
+  // Memoize domain reconciliation within the batch: reconcileProposedDomain is
+  // an LLM-backed lookup, and a pool-mode batch often emits several questions
+  // under the same proposed domain. One call per distinct string saves the
+  // duplicate Haiku calls AND guarantees identical proposals can't reconcile
+  // to different canonical domains within one batch.
+  const reconciledByProposed = new Map<string, string>();
+
   for (let persistIndex = 0; persistIndex < toPersist.length; persistIndex += 1) {
     const question = toPersist[persistIndex];
     // Drop ask-to-answer failures: the cold solver contradicted the stored answer.
     if (askResult.toDrop.has(persistIndex)) continue;
 
-    const { canonicalDomain } = await reconcileProposedDomain(
-      question.canonical_subcategory,
-      userId,
-    ).catch(() => ({ canonicalDomain: question.canonical_subcategory, reconciled: false }));
+    const proposed = question.canonical_subcategory;
+    let canonicalDomain = reconciledByProposed.get(proposed);
+    if (canonicalDomain === undefined) {
+      ({ canonicalDomain } = await reconcileProposedDomain(proposed, userId).catch(
+        () => ({ canonicalDomain: proposed, reconciled: false }),
+      ));
+      reconciledByProposed.set(proposed, canonicalDomain);
+    }
 
     if (isGenericSubcategory(canonicalDomain)) {
       console.warn('[daily/generate-questions] skipping question with generic canonical subcategory', {
@@ -1281,12 +1386,22 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     previousQuestionTexts,
     previousFactKeys,
     recentDomainCounts,
+    recentSkipCounts,
+    culturalAnchor,
+    answeredCanonicalTexts,
   ] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
     getRecentDailyQuestionTexts(userId),
     getRecentFactKeys(userId),
     getRecentDomainCounts(userId).catch(() => new Map<string, number>()),
+    getRecentSkipCountsByDomain(userId).catch(() => new Map<string, number>()),
+    // Era/regional salience hint (BP-5 / Q3d); resilient — a miss just means
+    // the prompt carries no background block.
+    getCulturalAnchor(userId).catch(() => null),
+    // Cross-table repetition guard (BP-6 / Q8); resilient — a miss just means
+    // the avoid list carries no answered-canonical entries this round.
+    getRecentAnsweredCanonicalTexts(userId).catch(() => [] as AnsweredCanonicalTextEntry[]),
   ]);
   const adaptiveLevel = preferences.difficulty === 'adaptive'
     ? await updateAdaptiveLevel(userId)
@@ -1371,12 +1486,42 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   // territoryType (declared | demonstrated) per selected domain — threaded into
   // the generation prompt so its register matches the difficulty floor (PRD-D-5
   // §5.2): declared domains read for an enthusiast, demonstrated for a newcomer.
+  // strengthByDomain rides the same knowledgeBase read (BP-5 / Q3c): mastery
+  // tier/points/correct-count as fan-salience context — never difficulty.
   const territoryByDomain = new Map<string, TerritoryType>();
+  const strengthByDomain = new Map<string, DomainStrength>();
   for (const entry of knowledgeBase) {
     territoryByDomain.set(entry.domain, entry.territoryType);
+    strengthByDomain.set(entry.domain, {
+      tier: entry.tier,
+      totalPoints: entry.totalPoints,
+      correctAnswerCount: entry.correctAnswerCount,
+    });
   }
 
   const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
+
+  // Fold recently-answered canonical texts (domain-scoped, capped) into the
+  // avoid list ahead of the generated history, so a fact the player answered
+  // yesterday on a friend's / house / forwarded question isn't re-created as a
+  // fresh generated question today (BP-6 / Q8). Canonical rows have no
+  // fact_key, so this text signal is their only route into avoidance.
+  previousQuestionTexts.unshift(
+    ...scopeAnsweredCanonicalTexts(answeredCanonicalTexts, domainsForRound),
+  );
+
+  // Skip ("pass") calibration — buildUserPrompt's domainSkips block tells the
+  // model which of this round's domains the player has recently passed on, so
+  // it reaches for a different sub-angle / kind of fact instead of more of the
+  // same. recentSkipCounts is keyed by domainKey() (spelling-variant fold);
+  // translate to this round's exact domain strings, which is what the prompt
+  // builder looks up by. Only >0 entries are kept so the block stays absent
+  // for players who never skip.
+  const domainSkips = new Map<string, number>();
+  for (const domain of domainsForRound) {
+    const skipCount = recentSkipCounts.get(domainKey(domain)) ?? 0;
+    if (skipCount > 0) domainSkips.set(domain, skipCount);
+  }
 
   // Try to fill slots from the cross-user bank (previously-generated questions
   // for the same domain AND difficulty tier) before burning fresh Sonnet calls.
@@ -1405,13 +1550,15 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       userId,
       previousQuestionTexts,
       [],
-      undefined,
+      domainSkips.size > 0 ? domainSkips : undefined,
       preferences.difficulty,
       domainDifficultyOverrides,
       adaptiveLevel,
       previousFactKeys,
       subAnglesByDomain,
       territoryByDomain,
+      strengthByDomain,
+      culturalAnchor,
     );
   }
 
@@ -1442,10 +1589,15 @@ export async function generateBonusQuestionsForDomains(
   const results: Array<{ domain: string; question: GeneratedQuestionRow }> = [];
   if (domains.length === 0) return results;
 
-  const [previousQuestionTexts, previousFactKeys, authoredTexts] = await Promise.all([
+  const [previousQuestionTexts, previousFactKeys, authoredTexts, answeredCanonicalTexts] = await Promise.all([
     getRecentDailyQuestionTexts(userId),
     getRecentFactKeys(userId),
     getAuthoredQuestionTexts(userId),
+    // Cross-table repetition guard (BP-6 / Q8): a +2 domain is often exactly
+    // the domain a milestone click-through just played in, so the bonus is the
+    // likeliest surface to re-create a just-answered canonical fact. Advisory
+    // fold below, mirroring the authored-texts fold; resilient on failure.
+    getRecentAnsweredCanonicalTexts(userId).catch(() => [] as AnsweredCanonicalTextEntry[]),
   ]);
 
   // A +2 bonus must never hand the viewer a question they themselves authored.
@@ -1456,6 +1608,7 @@ export async function generateBonusQuestionsForDomains(
   // normalized-text guard the bank pick honors verbatim.
   const avoidAuthoredTexts = new Set(authoredTexts.map((entry) => normalizeQuestionText(entry.text)));
   previousQuestionTexts.unshift(...authoredTexts.slice(0, AUTHORED_AVOID_TEXT_LIMIT));
+  previousQuestionTexts.unshift(...scopeAnsweredCanonicalTexts(answeredCanonicalTexts, domains));
 
   for (const domain of domains) {
     // Bank-first. resolveDomainDifficulty maps 'normal' → accessible, so the
@@ -1576,6 +1729,20 @@ async function pickBankPicksForDomains(
           basePoints: source.basePoints,
           factKey: source.factKey,
           subAngles: source.subAngles,
+          // Carry the source row's earned quality/verification fields onto the
+          // serving copy (verify-once-reuse-many, PRD-D-5 §3). Without these
+          // the copy regressed to defaults: aside lost, acceptable_variants
+          // lost (a right-but-rephrased answer graded wrong again on reuse —
+          // the exact betrayal B4 fixed), trust tier reset to unverified,
+          // provenance dropped (audit 2026-06-10, finding Q4). Play stats
+          // (n_answered / empirical_correct_rate) are deliberately NOT copied
+          // — they accrue per row.
+          insideJoke: source.insideJoke,
+          trustTier: source.trustTier,
+          askToAnswerVerified: source.askToAnswerVerified,
+          acceptableVariants: source.acceptableVariants,
+          sourceRefs: source.sourceRefs,
+          perishable: source.perishable,
           expiresAt,
           usedInQueue: false,
         })

@@ -24,6 +24,13 @@ name: External crons (Hobby workaround)
 # as fallback. To restore the Vercel scheduler for it, re-add to vercel.json
 # "crons":  { "path": "/api/cron/daily-assignments", "schedule": "5 17 * * *" }
 # and remove the '5 17 * * *' entry below to avoid duplicate runs/SMS.
+#
+# UPDATE (2026-06-10): the route now gates its SMS/email nudge on having
+# freshly built the user's queue in that invocation, so curl's retries below
+# (which replay the whole run if the request times out while the function is
+# still working) can no longer double-text users nudged by a previous attempt.
+# Keep the single-scheduler rule above anyway — two schedulers racing the
+# same minute could still both see "no queue yet" for the same user.
 
 on:
   schedule:
@@ -83,8 +90,17 @@ jobs:
           fail=0
           for r in ${{ steps.select.outputs.routes }}; do
             echo "==> /api/cron/${r}"
+            # --max-time must exceed the route's maxDuration (300s): when the two
+            # were equal, a slow-but-SUCCEEDING run hit the client timeout while
+            # the function was still finishing, curl counted it as a failure, and
+            # --retry replayed the whole run (curl retries timeouts even without
+            # --retry-all-errors). 330s lets the function's real status come back.
+            # --retry-all-errors is dropped so only conventionally-transient
+            # failures (connect errors, 429/5xx) retry — and the daily-assignments
+            # nudge is now freshly-generated-gated (2026-06-10), so a retry that
+            # does happen re-texts no one.
             code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
-              --max-time 300 --retry 2 --retry-delay 30 --retry-all-errors \
+              --max-time 330 --retry 2 --retry-delay 30 \
               -H "Authorization: Bearer ${CRON_SECRET}" \
               "${BASE_URL}/api/cron/${r}")
             echo "HTTP ${code}"

@@ -407,3 +407,42 @@ describe('POST /api/daily/answer grader outage (#6 — never score wrong on LLM 
     )
   })
 })
+
+describe('POST /api/daily/answer — acceptable variants reach the grader (B4 Phase 4 / Q4)', () => {
+  // The generated-question row's acceptable_variants must flow into gradeAnswer
+  // as acceptedAlternatives — this is the route half of the Q4 reuse chain (the
+  // bank-copy half lives in bank-pick-field-preservation.test.ts, and grading's
+  // variant fast-path in grading-fail-toward-player.test.ts). Before the Q4 fix,
+  // reused bank rows arrived here with the column reset to [], so a right-but-
+  // rephrased answer graded wrong on exactly the questions most likely to be
+  // served at scale.
+  it('passes the row acceptable_variants to gradeAnswer as acceptedAlternatives', async () => {
+    selectCallChain.length = 0
+    selectCallChain.push(async () => [dbState.queue])
+    selectCallChain.push(async () => [
+      { ...dbState.question, acceptableVariants: ['Answer A', 'The A'] },
+    ])
+    selectCallChain.push(async () => [dbState.persistedQuestion])
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+
+    const res = await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(res.status).toBe(200)
+    expect(gradeAnswerMock).toHaveBeenCalledWith(
+      'A',
+      'A',
+      ['Answer A', 'The A'],
+      'q?',
+      'factual',
+    )
+  })
+
+  it('defaults to no alternatives when the row has none (null column)', async () => {
+    setupDbChain()
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+
+    await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(gradeAnswerMock).toHaveBeenCalledWith('A', 'A', [], 'q?', 'factual')
+  })
+})

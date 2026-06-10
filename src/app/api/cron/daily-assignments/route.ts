@@ -12,8 +12,10 @@ import { sendEmail } from '@/server/email/client';
 import { buildDailyReminderTemplate } from '@/server/email/templates/daily-reminder';
 
 export const dynamic = 'force-dynamic';
-// Scheduled at 17:05 UTC (vercel.json) to fire just after the 17:00 UTC daily
-// reset (DAILY_RESET_HOUR_UTC), so it pre-builds the window users are about to
+// Scheduled at 17:05 UTC by GitHub Actions (.github/workflows/external-crons.yml)
+// — NOT vercel.json, where it was removed 2026-05-30 so only one scheduler can
+// fire the SMS nudge — timed just after the 17:00 UTC daily reset
+// (DAILY_RESET_HOUR_UTC), so it pre-builds the window users are about to
 // play. The previous 06:00 UTC schedule built the window that expired at 17:00
 // UTC and left the 17:00→06:00 UTC span uncovered, forcing evening-US / APAC
 // users onto the synchronous /api/daily/queue generation path.
@@ -80,15 +82,25 @@ export async function GET(request: NextRequest) {
       let queue = await getTodaysDailyQueue(user.id);
       const existingSlots = queue ? asQueueSlots(queue.slots) : [];
 
+      // Nudges below are gated on THIS invocation having built the queue.
+      // The workflow curls this route with retries and a timeout equal to
+      // maxDuration, so a client-side timeout (function still running) replays
+      // the whole run; skipping users whose queue already exists makes the
+      // route idempotent for SMS/email — a retry can never re-text someone the
+      // previous attempt already nudged. Side effect (accepted): a user who
+      // built their own queue between the 17:00 reset and this cron gets no
+      // reminder — they're already playing today.
+      let freshlyGenerated = false;
       if (!queue || existingSlots.length === 0) {
         await fillDailyQueueForUser(user.id);
         queue = await getTodaysDailyQueue(user.id);
         results.generated += 1;
+        freshlyGenerated = true;
       } else {
         results.existing += 1;
       }
 
-      if (queue && user.smsOptIn === 'opted_in' && user.phoneNumber) {
+      if (freshlyGenerated && queue && user.smsOptIn === 'opted_in' && user.phoneNumber) {
         await sendSms(
           user.phoneNumber,
           `Your five for today. ${baseUrl}/daily`,
@@ -101,8 +113,9 @@ export async function GET(request: NextRequest) {
       // Email reminder — mirrors the SMS nudge for opted-in + verified users,
       // but previews today's first question as a no-spoiler teaser. sendEmail
       // never throws (returns a discriminated union), so a provider failure
-      // counts as a skipped email, not a failed user.
-      if (queue && user.emailOptIn === 'opted_in' && user.emailVerified && user.email) {
+      // counts as a skipped email, not a failed user. Same freshly-generated
+      // gate as SMS (there is no email-send log to dedupe against).
+      if (freshlyGenerated && queue && user.emailOptIn === 'opted_in' && user.emailVerified && user.email) {
         const teaserSlot = asQueueSlots(queue.slots).find(
           (slot) => !slot.answered && !slot.skipped && slot.question_text,
         );
