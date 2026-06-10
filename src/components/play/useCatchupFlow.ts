@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { newMessageId, type ChatMessage } from '@/components/play/GameplayChat';
+import {
+  newMessageId,
+  type ChatMessage,
+  type RecheckAction,
+  type RecheckActionResult,
+} from '@/components/play/GameplayChat';
+import { parseCatchupItemId } from '@/server/daily/catchup';
 import { CATCH_UP_BATCH_SIZE } from '@/lib/game-constants';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { LLM_QUESTION_ATTRIBUTION, type InsideJokeKind } from '@/lib/questions-types';
@@ -62,6 +68,18 @@ type CatchupLoadResponse = {
   introCopy?: string;
 };
 
+// Shape returned by POST /api/daily/recheck. Catch-up reuses that route for
+// daily-queue-backed items (their dailyQueueItemId is `${queueId}:${slotIndex}`,
+// exactly the route's inputs); feed-backed catch-up items are not rechecked here.
+type DailyRecheckResponse = {
+  accepted?: boolean;
+  status?: string;
+  reason?: string | null;
+  pointsAwarded?: number;
+  correctAnswer?: string;
+  message?: string;
+};
+
 export type CatchupStats = {
   answered: number;
   correct: number;
@@ -116,8 +134,11 @@ export function buildCatchupResultMessage(params: {
   isCorrect: boolean;
   submittedAnswer: string;
   pointsAwarded: number;
+  // Wrong daily-slot answers carry a recheck affordance (reused from the live
+  // Daily Five thread). Correct answers and feed-backed items pass null.
+  recheckAction?: RecheckAction | null;
 }): Extract<ChatMessage, { kind: 'result' }> {
-  const { id, item, data, isCorrect, submittedAnswer, pointsAwarded } = params;
+  const { id, item, data, isCorrect, submittedAnswer, pointsAwarded, recheckAction } = params;
   return {
     id,
     kind: 'result',
@@ -142,6 +163,7 @@ export function buildCatchupResultMessage(params: {
     canonicalSubcategory: item.domain,
     pointsAwarded,
     pointsLabel: 'Catch-up - 0.25x points',
+    recheckAction: recheckAction ?? null,
   };
 }
 
@@ -420,6 +442,56 @@ export function useCatchupFlow() {
     }
   }, [advancePast, currentItem, isResolvingTurn, submitting, undismissItem]);
 
+  // Re-grade a wrong daily-slot answer via the shared /api/daily/recheck route.
+  // On accept we flip this turn's tally + recap entry to correct; GameplayChat's
+  // ResultRow surfaces the returned message inline. Feed-backed items never reach
+  // here (their recheckAction is null), so the daily route's queue lookup holds.
+  const requestRecheck = useCallback(
+    async (item: CatchupQueueItem): Promise<RecheckActionResult> => {
+      const parsed = parseCatchupItemId(item.dailyQueueItemId);
+      if (!parsed || parsed.surface !== 'daily') {
+        return { accepted: false, message: 'Recheck isn’t available for this question.' };
+      }
+
+      let response: Response;
+      try {
+        response = await fetch('/api/daily/recheck', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ queue_id: parsed.queueId, slot_index: parsed.slotIndex }),
+        });
+      } catch {
+        return { accepted: false, message: 'Could not recheck that answer.' };
+      }
+
+      const raw = (await response.json().catch(() => null)) as DailyRecheckResponse | null;
+      if (!response.ok || !raw) {
+        return { accepted: false, message: raw?.message ?? 'Could not recheck that answer.' };
+      }
+      if (!raw.accepted) {
+        return { accepted: false, message: raw.reason ?? 'Rechecked and still marked wrong.' };
+      }
+
+      const pointsAwarded = Number(raw.pointsAwarded ?? 0);
+      // Reflect the flip in the round tally + recap so the summary doesn't still
+      // read this turn as a miss. The recap entry is keyed by questionId.
+      setStats((existing) => ({ ...existing, correct: existing.correct + 1 }));
+      setBatchRecords((existing) =>
+        existing.map((record) =>
+          record.questionId === item.questionId && record.outcome === 'wrong'
+            ? { ...record, outcome: 'correct' }
+            : record,
+        ),
+      );
+      return {
+        accepted: true,
+        message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
+      };
+    },
+    [],
+  );
+
   const submitCurrent = useCallback(async (submittedAnswer: string) => {
     if (!currentItem || submitting || !submittedAnswer.trim()) return;
 
@@ -447,6 +519,12 @@ export function useCatchupFlow() {
       const pointsAwarded = Number(data.pointsAwarded ?? data.awarded_points ?? 0);
       const resultMessageId = newMessageId();
       resultPostedItemIdsRef.current.add(item.dailyQueueItemId);
+      // Only wrong, daily-queue-backed answers get a recheck button — feed-backed
+      // catch-up items aren't supported by /api/daily/recheck.
+      const recheckAction: RecheckAction | null =
+        !isCorrect && parseCatchupItemId(item.dailyQueueItemId)?.surface === 'daily'
+          ? { onSubmit: () => requestRecheck(item) }
+          : null;
       setStats((existing) => ({
         answered: existing.answered + 1,
         correct: existing.correct + (isCorrect ? 1 : 0),
@@ -462,6 +540,7 @@ export function useCatchupFlow() {
           isCorrect,
           submittedAnswer: trimmedAnswer,
           pointsAwarded,
+          recheckAction,
         }),
       ]);
 
@@ -486,7 +565,7 @@ export function useCatchupFlow() {
     } finally {
       setSubmitting(false);
     }
-  }, [currentItem, finishTurn, submitting]);
+  }, [currentItem, finishTurn, requestRecheck, submitting]);
 
   const remainingLabel = useMemo(() => {
     const total = initialTotal || items.length;
