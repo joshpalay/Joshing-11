@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Heart, MoreHorizontal, X } from 'lucide-react'
+import { Flag, Heart, MessageCircle, MoreHorizontal, Share2, X } from 'lucide-react'
 import LoadingScreen from '@/components/LoadingScreen'
 import {
   type CSSProperties,
@@ -16,9 +16,6 @@ import {
 import { SendQuestionAction } from '@/components/SendQuestionAction'
 import { AddToBankAction } from '@/components/AddToBankAction'
 import { EditorialBadge } from '@/components/EditorialBadge'
-import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
-import MasteryMoment from '@/components/review/MasteryMoment'
-import { RefineYourGame } from '@/components/review/RefineYourGame'
 import { cn } from '@/lib/utils'
 import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types'
 import type {
@@ -36,26 +33,6 @@ import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/
 type FeedbackSignal = 'thumbs_up'
 
 
-const DAILY_DIFFICULTY_LABELS: Record<string, string> = {
-  normal: 'Establishing',
-  moderate: 'Familiar',
-  challenging: 'Solid',
-  ridiculous: 'Mastery',
-  adaptive: 'Adaptive',
-}
-
-function dailyDifficultyLabel(value: string | null | undefined): string | null {
-  if (!value) return null
-  return DAILY_DIFFICULTY_LABELS[value] ?? value
-}
-
-const monoStyle: CSSProperties = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: '0.62rem',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-}
-
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   fontSize: '0.8rem',
@@ -63,76 +40,6 @@ const titleStyle: CSSProperties = {
   color: 'var(--brand-ink)',
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
-}
-
-function formatDate(value: string) {
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date)
-}
-
-function formatTier(tier: string) {
-  return tier.replace(/_/g, ' ').toUpperCase()
-}
-
-function interpretiveLine(summary: DailySummaryView): string | null {
-  // 1. Tier crossing
-  const crossing = summary.tierCrossings[0]
-  if (crossing) {
-    const domain =
-      summary.domainGains.find((gain) => gain.domain === crossing.domain)
-        ?.displayName ?? crossing.domain
-    return `You moved to ${formatTier(crossing.toTier).toLowerCase()} in ${domain}.`
-  }
-
-  // 2. First correct in new demonstrated domain
-  const newDomain = summary.domainGains.find((gain) => gain.isNewTerritory)
-  if (newDomain) return `You found new ground in ${newDomain.displayName}.`
-
-  const answered = summary.questions.filter((q) => !q.isSkipped)
-  const total = answered.length
-
-  // 3. 5/5
-  if (total > 0 && summary.totalCorrect === total && total === 5)
-    return 'Clean sweep.'
-
-  // 4. 0/5
-  if (total > 0 && summary.totalCorrect === 0 && total === 5)
-    return 'Every one of them. Tomorrow.'
-
-  // 5. 3+ correct in a row
-  let streak = 0
-  let maxStreak = 0
-  for (const q of answered) {
-    if (q.isCorrect) {
-      streak += 1
-      if (streak > maxStreak) maxStreak = streak
-    } else {
-      streak = 0
-    }
-  }
-  if (maxStreak >= 3) return 'Three in a row at one point.'
-
-  // 6. All wrong in a single domain
-  const domainGroups = new Map<string, { total: number; wrong: number }>()
-  for (const q of answered) {
-    const key = q.domainDisplayName
-    const entry = domainGroups.get(key) ?? { total: 0, wrong: 0 }
-    entry.total += 1
-    if (!q.isCorrect) entry.wrong += 1
-    domainGroups.set(key, entry)
-  }
-  for (const [domain, counts] of domainGroups) {
-    if (counts.total >= 2 && counts.wrong === counts.total) {
-      return `${domain} is worth a deeper look.`
-    }
-  }
-
-  return null
 }
 
 export default function DailySummaryPage() {
@@ -199,21 +106,10 @@ export default function DailySummaryPage() {
     }
   }, [])
 
-  const line = useMemo(
-    () => (summary ? interpretiveLine(summary) : null),
+  const headerDomain = useMemo(
+    () => (summary ? summaryHeadlineDomain(summary) : 'today’s questions'),
     [summary]
   )
-  const growthCircleItems = useMemo(() => {
-    if (!summary) return []
-    return summary.domainGains.map((gain) => ({
-      canonical_subcategory: gain.displayName,
-      broad_category: gain.broadCategory,
-      points_total: gain.totalPoints,
-      points_gained_this_round: gain.pointsGained,
-      tier_current: gain.currentTier,
-    }))
-  }, [summary])
-  const firstTierCrossing = summary?.tierCrossings[0] ?? null
 
   if (loading) {
     return <LoadingScreen fullScreen label="Loading summary" />
@@ -233,118 +129,176 @@ export default function DailySummaryPage() {
   }
 
   return (
-    <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
-      <header>
-        <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          <Link href="/" className="underline underline-offset-2">
-            HOME
+    <main className="min-h-dvh bg-[var(--brand-cream-page)] px-4 py-6 text-[var(--brand-ink)]">
+      <div className="mx-auto max-w-3xl">
+        <header className="pb-2">
+          <Link
+            href="/"
+            className="text-muted-foreground inline-flex min-h-9 items-center text-sm font-medium underline-offset-4 transition hover:text-foreground hover:underline"
+          >
+            Session recap
           </Link>
-          {' / DAILY FIVE / SUMMARY'}
-        </p>
-        <h1 className="mt-2 font-serif text-[2rem] leading-tight text-[var(--brand-ink)]">
-          How you did
-        </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {formatDate(summary.date)}
-        </p>
-        <p
-          style={{
-            ...monoStyle,
-            marginTop: '8px',
-            color: 'var(--text-muted)',
-          }}
-        >
-          {dailyDifficultyLabel(summary.difficultyMode)
-            ? `${dailyDifficultyLabel(summary.difficultyMode)} · `
-            : ''}
-          {summary.totalCorrect}/{summary.questions.length} correct
-          {summary.totalSkipped > 0 ? ` · ${summary.totalSkipped} skipped` : ''}
-        </p>
-      </header>
+          <div className="mt-4 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="font-serif text-[2.75rem] leading-[0.95] tracking-[-0.03em] text-[var(--brand-ink)] sm:text-5xl">
+                Today&rsquo;s Five
+              </h1>
+              <p className="mt-4 max-w-xl text-[1.02rem] leading-7 text-[var(--brand-ink-700)]">
+                You found common ground in {headerDomain} and opened a few new
+                edges of the map.
+              </p>
+            </div>
+            <p
+              className="shrink-0 pt-2 text-sm font-medium text-[var(--brand-ink-400)]"
+              aria-label={`${summary.totalCorrect} out of ${summary.questions.length} correct`}
+            >
+              {summary.totalCorrect} / {summary.questions.length}
+            </p>
+          </div>
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <ResultDots questions={summary.questions} />
+            <ShareResultsButton correct={summary.totalCorrect} total={summary.questions.length} />
+          </div>
+        </header>
 
-      <section className="card mt-5 px-5 py-4">
-        <h2 style={titleStyle}>Your Growth Recap</h2>
-        <CategoryGainsDisplay
-          roundItems={growthCircleItems}
-          emptyMessage="No mastery movement was recorded today."
-        />
-      </section>
-
-      {summary.refine ? <RefineYourGame refine={summary.refine} /> : null}
-
-      {firstTierCrossing ? (
-        <MasteryMoment
-          subcategory={
-            summary.domainGains.find(
-              (gain) => gain.domain === firstTierCrossing.domain
-            )?.displayName ?? firstTierCrossing.domain
-          }
-          newTier={firstTierCrossing.toTier}
-        />
-      ) : null}
-
-      {line ? <InterpretiveLine text={line} /> : null}
-
-      <section className="mt-6">
-        <h2 style={titleStyle}>Round Recap</h2>
-        <div className="mt-3 space-y-3">
-          {summary.questions
-            .filter((question) => !hiddenQuestionIds.has(question.questionId))
-            .map((question) => (
-              <QuestionCard
-                key={question.questionId}
-                question={question}
-                onHide={() =>
-                  setHiddenQuestionIds((prev) => {
-                    const next = new Set(prev)
-                    next.add(question.questionId)
-                    return next
-                  })
-                }
-              />
-            ))}
-        </div>
-      </section>
-
-      {summary.reminderPromptState === 'show' ? <RoundReminderCard /> : null}
-
-      <section className="card mt-5 px-5 py-4">
-        <p className="text-muted-foreground text-sm leading-6">
-          Tomorrow’s five arrive at noon.
-        </p>
-      </section>
-
-      {summary.recentFriendBridge ? (
-        <section className="card mt-5 px-5 py-4">
-          <h2 style={titleStyle}>Meanwhile</h2>
-          <p className="text-foreground mt-2 text-sm leading-6">
-            {bridgeSentence(summary.recentFriendBridge)}
-          </p>
-          <Link className="btn-ghost mt-3" href="/#feed">
-            See what they&apos;re up to →
-          </Link>
+        <section className="mt-8">
+          <div className="mb-4">
+            <h2 className="font-serif text-2xl leading-tight text-[var(--brand-ink)]">
+              Today&rsquo;s questions
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              A few were yours. A few were new.
+            </p>
+          </div>
+          <div className="space-y-4">
+            {summary.questions
+              .filter((question) => !hiddenQuestionIds.has(question.questionId))
+              .map((question) => (
+                <QuestionCard
+                  key={question.questionId}
+                  question={question}
+                  onHide={() =>
+                    setHiddenQuestionIds((prev) => {
+                      const next = new Set(prev)
+                      next.add(question.questionId)
+                      return next
+                    })
+                  }
+                />
+              ))}
+          </div>
         </section>
-      ) : null}
 
-      <div className="mt-6 flex flex-col items-center gap-3">
-        <Link className="btn-primary w-full" href="/">
-          Back home
-        </Link>
-        <Link
-          className="text-muted-foreground text-sm font-medium underline underline-offset-4 transition hover:text-foreground"
-          href="/knowledge"
-        >
-          See your knowledge map
-        </Link>
+        {summary.reminderPromptState === 'show' ? <RoundReminderCard /> : null}
+
+        {summary.recentFriendBridge ? (
+          <section className="mt-6 rounded-3xl border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
+            <h2 style={titleStyle}>Meanwhile</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+              {bridgeSentence(summary.recentFriendBridge)}
+            </p>
+            <Link
+              className="mt-3 inline-flex text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
+              href="/#feed"
+            >
+              See what they&apos;re up to →
+            </Link>
+          </section>
+        ) : null}
+
+        <section className="mt-8 rounded-[2rem] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-6 text-center">
+          <p className="text-[1.05rem] leading-7 text-[var(--brand-ink-700)]">
+            Tomorrow’s five arrive at noon.
+          </p>
+          <div className="mt-5 flex flex-col items-center gap-3">
+            <Link className="btn-primary w-full rounded-full sm:w-auto sm:min-w-56" href="/">
+              Back home
+            </Link>
+            <Link
+              className="text-muted-foreground text-sm font-medium underline underline-offset-4 transition hover:text-foreground"
+              href="/knowledge"
+            >
+              See your knowledge map
+            </Link>
+          </div>
+        </section>
+
+        {firstSessionRecap ? (
+          <FirstSessionRecap
+            recap={firstSessionRecap}
+            onDismiss={() => setFirstSessionRecap(null)}
+          />
+        ) : null}
       </div>
-
-      {firstSessionRecap ? (
-        <FirstSessionRecap
-          recap={firstSessionRecap}
-          onDismiss={() => setFirstSessionRecap(null)}
-        />
-      ) : null}
     </main>
+  )
+}
+
+
+function summaryHeadlineDomain(summary: DailySummaryView): string {
+  const correctDomain = summary.questions.find(
+    (question) => question.isCorrect && question.domainDisplayName.trim(),
+  )?.domainDisplayName
+  if (correctDomain) return correctDomain
+
+  const gainedDomain = summary.domainGains[0]?.displayName
+  if (gainedDomain) return gainedDomain
+
+  return summary.questions[0]?.domainDisplayName || 'today’s questions'
+}
+
+function ResultDots({ questions }: { questions: QuestionRecap[] }) {
+  return (
+    <div className="flex items-center gap-2" aria-label="Question results">
+      {questions.map((question, index) => (
+        <span
+          key={question.questionId}
+          className="size-2.5 rounded-full border"
+          style={{
+            backgroundColor: question.isSkipped
+              ? 'color-mix(in srgb, var(--brand-ink) 24%, transparent)'
+              : question.isCorrect
+                ? 'color-mix(in srgb, var(--game-correct) 88%, var(--brand-card))'
+                : 'color-mix(in srgb, var(--game-wrong) 78%, var(--brand-card))',
+            borderColor: 'color-mix(in srgb, var(--brand-border) 72%, transparent)',
+            boxShadow: '0 0 0 2px var(--brand-card)',
+          }}
+          aria-label={`Question ${index + 1}: ${
+            question.isSkipped ? 'skipped' : question.isCorrect ? 'correct' : 'not this time'
+          }`}
+        />
+      ))}
+    </div>
+  )
+}
+
+function ShareResultsButton({ correct, total }: { correct: number; total: number }) {
+  const [copied, setCopied] = useState(false)
+
+  const share = useCallback(async () => {
+    const text = `I got ${correct}/${total} on today’s Joshing Five.`
+    if (typeof navigator === 'undefined') return
+    if ('share' in navigator) {
+      await navigator.share({ title: 'Today’s Five', text }).catch(() => undefined)
+      return
+    }
+    const clipboard = (navigator as Navigator & { clipboard?: Clipboard }).clipboard
+    if (clipboard) {
+      await clipboard.writeText(text)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    }
+  }, [correct, total])
+
+  return (
+    <button
+      type="button"
+      onClick={() => void share()}
+      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--brand-border)] bg-[var(--brand-card)] px-3 text-sm font-medium text-[var(--brand-ink-700)] transition hover:bg-[var(--brand-cream-card)] hover:text-[var(--brand-ink)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      <Share2 className="size-4" />
+      {copied ? 'Copied' : 'Share your results'}
+    </button>
   )
 }
 
@@ -393,21 +347,6 @@ export function AuthorName({
   )
 }
 
-function InterpretiveLine({ text }: { text: string }) {
-  const [visible, setVisible] = useState(false)
-  useEffect(() => {
-    const t = window.setTimeout(() => setVisible(true), 300)
-    return () => window.clearTimeout(t)
-  }, [])
-  return (
-    <p
-      className="text-muted-foreground mt-4 text-sm leading-6 italic"
-      style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.4s ease' }}
-    >
-      {text}
-    </p>
-  )
-}
 
 function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: () => void }) {
   const [isOverflowOpen, setIsOverflowOpen] = useState(false)
@@ -486,135 +425,145 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
     }
   }, [])
 
+  const [isExplainerOpen, setIsExplainerOpen] = useState(false)
+  const statusLabel = question.isSkipped
+    ? 'Skipped'
+    : question.isCorrect
+      ? 'Correct'
+      : 'Not this time'
+  const authorLabel = question.authorName ?? LLM_QUESTION_ATTRIBUTION
+  const creatorNoteLabel = question.authorName
+    ? `${question.authorName.split(/\s+/)[0]}’s note`
+    : question.authorIsHouse
+      ? 'Editor’s note'
+      : 'Creator’s note'
+
   return (
-    <article
-      className="card relative p-5"
-      style={
-        question.isSkipped
-          ? { borderLeft: '3px solid color-mix(in srgb, var(--brand-ink) 30%, transparent)' }
-          : question.isCorrect
-            ? {
-                background: 'color-mix(in srgb, var(--success) 9%, var(--brand-card))',
-                borderColor: 'color-mix(in srgb, var(--success) 30%, var(--brand-border))',
-                borderLeft: '3px solid var(--success)',
-              }
-            : {
-                background: 'color-mix(in srgb, var(--muted) 36%, var(--brand-card))',
-                borderColor: 'var(--brand-border)',
-                borderLeft: '3px solid var(--brand-border)',
-              }
-      }
-    >
-      <div className="flex flex-wrap items-start gap-2 pr-11">
-        <span
-          className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em]"
-          style={
-            question.isSkipped
-              ? { borderColor: 'var(--brand-border)', background: 'var(--secondary)', color: 'var(--brand-ink-400)' }
-              : question.isCorrect
-                ? {
-                    borderColor: 'color-mix(in srgb, var(--success) 35%, var(--brand-border))',
-                    background: 'color-mix(in srgb, var(--success) 14%, var(--brand-card))',
-                    color: '#0f5c30',
-                  }
-                : {
-                    borderColor: 'var(--brand-border)',
-                    background: 'color-mix(in srgb, var(--muted) 44%, var(--brand-card))',
-                    color: 'var(--text-muted)',
-                  }
-          }
-        >
-          {question.isSkipped
-            ? 'SKIPPED'
+    <article className="relative overflow-hidden rounded-[1.45rem] border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
+      <div
+        className="absolute inset-y-0 left-0 w-1"
+        style={{
+          backgroundColor: question.isSkipped
+            ? 'color-mix(in srgb, var(--brand-ink) 26%, var(--brand-card))'
             : question.isCorrect
-              ? 'CORRECT'
-              : 'Not this time'}
-        </span>
-        <p className="pt-1" style={{ ...monoStyle, color: 'var(--text-muted)' }}>
-          {question.authorName ? null : `${LLM_QUESTION_ATTRIBUTION.toUpperCase()} · ${question.domainDisplayName.toUpperCase()}`}
-        </p>
-        {question.authorName ? (
-          <p
-            className="pt-1"
-            style={{
-              fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
-              fontSize: '0.86rem',
-              color: 'var(--text)',
-              lineHeight: 1.3,
-              opacity: 0.92,
-            }}
-          >
+              ? 'var(--game-correct)'
+              : 'color-mix(in srgb, var(--game-wrong) 76%, var(--brand-card))',
+        }}
+      />
+
+      <div className="flex items-start justify-between gap-3 pl-1">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
             <span
+              className="rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold tracking-[0.05em]"
               style={{
-                ...monoStyle,
-                fontSize: '0.55rem',
-                color: 'var(--text-muted)',
-                marginRight: '6px',
+                borderColor: question.isCorrect
+                  ? 'color-mix(in srgb, var(--game-correct) 28%, var(--brand-border))'
+                  : 'var(--brand-border)',
+                backgroundColor: question.isCorrect
+                  ? 'color-mix(in srgb, var(--game-correct) 8%, var(--brand-card))'
+                  : 'color-mix(in srgb, var(--brand-cream-card) 62%, var(--brand-card))',
+                color: question.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink-700)',
               }}
             >
-              FROM
+              {statusLabel}
             </span>
-            <AuthorName name={question.authorName} authorId={question.authorId} weight={600} />
-            {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
-            <span
-              style={{
-                ...monoStyle,
-                color: 'var(--text-muted)',
-                marginLeft: '8px',
-              }}
-            >
-              · {question.domainDisplayName.toUpperCase()}
-            </span>
-          </p>
-        ) : null}
+            <p className="text-xs leading-5 text-muted-foreground">
+              <span>{question.domainDisplayName}</span>
+              <span aria-hidden="true"> · </span>
+              <span>by </span>
+              {question.authorName ? (
+                <AuthorName name={question.authorName} authorId={question.authorId} weight={500} />
+              ) : (
+                <span>{authorLabel}</span>
+              )}
+              {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          aria-label="More actions"
+          aria-expanded={isOverflowOpen}
+          onClick={() => setIsOverflowOpen(true)}
+          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:ring-ring -mr-2 -mt-2 inline-flex size-10 shrink-0 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <MoreHorizontal className="size-5" />
+        </button>
       </div>
 
-      <button
-        type="button"
-        aria-label="More actions"
-        aria-expanded={isOverflowOpen}
-        onClick={() => setIsOverflowOpen(true)}
-        className="text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground focus-visible:ring-ring absolute top-3 right-3 inline-flex size-11 items-center justify-center rounded-full border border-transparent transition focus-visible:ring-2 focus-visible:outline-none"
-      >
-        <MoreHorizontal className="size-5" />
-      </button>
-
-      <p className="text-foreground mt-4 leading-snug font-medium">
+      <p className="mt-4 pl-1 text-[1.12rem] leading-7 font-medium tracking-[-0.01em] text-[var(--brand-ink)]">
         {question.questionText}
       </p>
-      <div className="mt-4 space-y-1 text-sm">
-        <p className="text-muted-foreground">
-          <span className="text-foreground font-medium">You:</span>{' '}
-          {question.isSkipped
-            ? 'skipped'
-            : question.submittedAnswer?.trim() || 'No answer submitted'}
-        </p>
-        <p className="text-muted-foreground">
-          <span className="text-foreground font-medium">Answer:</span>{' '}
-          {question.correctAnswer || 'No answer available'}
-        </p>
+
+      <div className="mt-5 grid gap-3 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-cream-page)] p-3 sm:grid-cols-2">
+        <div>
+          <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+            You said
+          </p>
+          <p className="mt-1 text-sm leading-6 text-[var(--brand-ink)]">
+            {question.isSkipped
+              ? 'Skipped'
+              : question.submittedAnswer?.trim() || 'No answer submitted'}
+          </p>
+        </div>
+        <div className="border-t border-[var(--brand-border)] pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-3">
+          <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+            Answer
+          </p>
+          <p
+            className="mt-1 text-sm leading-6 font-medium"
+            style={{ color: question.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)' }}
+          >
+            {question.correctAnswer || 'No answer available'}
+          </p>
+        </div>
       </div>
+
       {question.explanation ? (
-        <p className="bg-muted/35 text-muted-foreground mt-5 rounded-xl px-4 py-3 text-sm leading-6">
-          {question.explanation}
-        </p>
+        <section className="mt-5 pl-1">
+          <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+            Why this is the answer
+          </h3>
+          <p
+            className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]"
+            style={
+              isExplainerOpen
+                ? undefined
+                : {
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }
+            }
+          >
+            {question.explanation}
+          </p>
+          {!isExplainerOpen ? (
+            <button
+              type="button"
+              onClick={() => setIsExplainerOpen(true)}
+              className="mt-2 text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
+            >
+              More context →
+            </button>
+          ) : null}
+        </section>
       ) : null}
+
       {question.authorNote ? (
-        <p className="bg-muted/40 text-foreground mt-4 rounded-xl border p-3 text-sm leading-6">
-          <span className="font-medium">
-            {question.authorIsHouse ? (
-              'Editor’s note:'
-            ) : question.authorName ? (
-              <>
-                <AuthorName name={question.authorName} authorId={question.authorId} />’s note
-              </>
-            ) : (
-              'Their note'
-            )}
-          </span>{' '}
-          {question.authorNote}
-        </p>
+        <section className="mt-5 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-cream-card)] px-4 py-3">
+          <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+            {creatorNoteLabel}
+          </h3>
+          <p className="mt-1 text-sm leading-6 text-[var(--brand-ink-700)]">
+            {question.authorNote}
+          </p>
+        </section>
       ) : null}
+
       {exclusionState.kind === 'confirmed' ? (
         <div className="bg-muted/35 text-muted-foreground mt-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs">
           <span>
@@ -630,24 +579,38 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           </button>
         </div>
       ) : null}
-      <div className="border-border/50 mt-5 flex items-center justify-between border-t pt-3">
+
+      <div className="mt-5 flex flex-wrap items-center gap-1 border-t border-[var(--brand-border)] pt-3 text-muted-foreground">
+        {question.bankQuestionId ? (
+          <AddToBankAction
+            questionId={question.bankQuestionId}
+            initialInBank={question.isInBank}
+            contextType="manual"
+            label="Save"
+            className="min-h-9 rounded-full border-0 bg-transparent px-2.5 text-xs hover:bg-muted"
+          />
+        ) : null}
         <button
           aria-label="Love this question"
           aria-pressed={rating === 'thumbs_up'}
           className={cn(
-            'text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex size-11 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none',
-            rating === 'thumbs_up' ? 'bg-rose-50 text-rose-600' : ''
+            'inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            rating === 'thumbs_up' ? 'bg-[var(--brand-cream-card)] text-[var(--brand-orange)]' : ''
           )}
           disabled={isFeedbackPending}
           type="button"
           onClick={() => updateFeedback('thumbs_up')}
         >
-          <Heart
-            className={cn(
-              'size-5 transition-transform',
-              rating === 'thumbs_up' ? 'scale-110 fill-current' : ''
-            )}
-          />
+          <Heart className={cn('size-4', rating === 'thumbs_up' ? 'fill-current' : '')} />
+          React
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsOverflowOpen(true)}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <MessageCircle className="size-4" />
+          Discuss
         </button>
         <SendQuestionAction
           question={{
@@ -655,9 +618,19 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             text: question.questionText,
             domain: question.domainDisplayName,
           }}
-          label=""
-          className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex size-11 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none"
+          label="Share"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         />
+        {question.reportTarget ? (
+          <button
+            type="button"
+            onClick={() => setReportCategory('incorrect')}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <Flag className="size-4" />
+            Dispute
+          </button>
+        ) : null}
       </div>
 
       {isOverflowOpen ? (
