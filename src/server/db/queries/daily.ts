@@ -10,6 +10,7 @@ import {
   masteryEvents,
   playerMastery,
   questions as canonicalQuestions,
+  skippedDailyQuestions,
   userDomainExclusions,
   users,
 } from '@/server/db';
@@ -1562,6 +1563,41 @@ export async function getRecentDomainCounts(
 
   // SQL groups by the raw column, so two spelling variants arrive as separate
   // rows; sum them into the one canonical key here.
+  const result = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.domain) continue;
+    const key = domainKey(row.domain);
+    result.set(key, (result.get(key) ?? 0) + (Number(row.count) || 0));
+  }
+  return result;
+}
+
+// Counts of recent SKIPS ("passes") per canonical_subcategory for a user,
+// scoped to a lookback window. Feeds the generation prompt's skip-calibration
+// block (buildUserPrompt's `domainSkips`): a domain the player keeps passing
+// on gets a "use a different sub-angle / kind of fact" instruction rather
+// than more of the same. The block existed since the prompt was written but
+// was never wired to this data (audit 2026-06-10, finding Q3a).
+//
+// Keyed by domainKey() — same fold as getRecentDomainCounts above, for the
+// same spelling-variant reason. Callers must look up with domainKey(domain).
+export async function getRecentSkipCountsByDomain(
+  userId: string,
+  lookbackDays = 7,
+): Promise<Map<string, number>> {
+  const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      domain: skippedDailyQuestions.canonicalSubcategory,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(skippedDailyQuestions)
+    .where(and(
+      eq(skippedDailyQuestions.userId, userId),
+      gte(skippedDailyQuestions.skippedAt, since),
+    ))
+    .groupBy(skippedDailyQuestions.canonicalSubcategory);
+
   const result = new Map<string, number>();
   for (const row of rows) {
     if (!row.domain) continue;

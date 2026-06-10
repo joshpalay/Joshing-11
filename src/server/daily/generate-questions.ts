@@ -26,6 +26,7 @@ import {
   getRecentDailyQuestionTexts,
   getRecentDomainCounts,
   getRecentFactKeys,
+  getRecentSkipCountsByDomain,
   getRecentSubAnglesByDomain,
   normalizeQuestionText,
   pickBankSource,
@@ -1281,12 +1282,14 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     previousQuestionTexts,
     previousFactKeys,
     recentDomainCounts,
+    recentSkipCounts,
   ] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
     getRecentDailyQuestionTexts(userId),
     getRecentFactKeys(userId),
     getRecentDomainCounts(userId).catch(() => new Map<string, number>()),
+    getRecentSkipCountsByDomain(userId).catch(() => new Map<string, number>()),
   ]);
   const adaptiveLevel = preferences.difficulty === 'adaptive'
     ? await updateAdaptiveLevel(userId)
@@ -1378,6 +1381,19 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
 
+  // Skip ("pass") calibration — buildUserPrompt's domainSkips block tells the
+  // model which of this round's domains the player has recently passed on, so
+  // it reaches for a different sub-angle / kind of fact instead of more of the
+  // same. recentSkipCounts is keyed by domainKey() (spelling-variant fold);
+  // translate to this round's exact domain strings, which is what the prompt
+  // builder looks up by. Only >0 entries are kept so the block stays absent
+  // for players who never skip.
+  const domainSkips = new Map<string, number>();
+  for (const domain of domainsForRound) {
+    const skipCount = recentSkipCounts.get(domainKey(domain)) ?? 0;
+    if (skipCount > 0) domainSkips.set(domain, skipCount);
+  }
+
   // Try to fill slots from the cross-user bank (previously-generated questions
   // for the same domain AND difficulty tier) before burning fresh Sonnet calls.
   // The bank only ever returns rows the viewer hasn't seen — an empty bank for
@@ -1405,7 +1421,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       userId,
       previousQuestionTexts,
       [],
-      undefined,
+      domainSkips.size > 0 ? domainSkips : undefined,
       preferences.difficulty,
       domainDifficultyOverrides,
       adaptiveLevel,
