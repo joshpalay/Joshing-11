@@ -298,7 +298,7 @@ export default function TodaysFiveCard({
               href="/daily/catchup"
               className="flex min-h-12 w-full items-center justify-center rounded-[4px] border border-[color-mix(in_srgb,var(--domain-science)_55%,transparent)] bg-[color-mix(in_srgb,var(--domain-science)_22%,transparent)] text-base font-bold tracking-[0.04em] text-[var(--game-correct)] transition-colors hover:bg-[color-mix(in_srgb,var(--domain-science)_32%,transparent)]"
             >
-              Play Missed Questions
+              {`Play (${missedCount}) Missed Question${missedCount === 1 ? '' : 's'}`}
             </Link>
           ) : (
             // Branch B — nothing left to catch up on; turn the player outward.
