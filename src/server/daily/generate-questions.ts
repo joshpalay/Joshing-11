@@ -551,12 +551,13 @@ async function findBatchDuplicates(questions: LlmQuestion[]): Promise<Set<number
   }
 }
 
-const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-generated trivia questions for quality before they are served to a player. For each question, decide whether it has any of these defects:
+const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-generated trivia questions for quality before they are served to a player. Each item carries its difficulty tier (tier=accessible | moderate | specialist). For each question, decide whether it has any of these defects:
 
 1. ANSWER_LEAKED — the question setup contains the answer, near-paraphrase, or a tell that gives the answer away. E.g. "Mrs. Lovett bakes meat pies using a secret ingredient from Sweeney's victims. What does she put in the pies?" — the setup tells you it's the victims.
 2. OPINION_OR_VAGUE — asks for a preference, value judgment, or has no single clear answer.
 3. FALSE_PREMISE — the setup contains a factual error or assumes something incorrect.
 4. SELF_ANSWERING — the question names the answer in its own text ("Who wrote the 1922 poem 'The Waste Land' by T. S. Eliot?").
+5. GENERIC_AT_TIER — tier-gated: judge this defect ONLY for items whose tier is moderate or specialist. NEVER flag an accessible-tier item with this defect, and never flag any item merely for resembling a simply-phrased question. At moderate/specialist, a question is defective when it is generic trivia: mentally remove the work/domain title from the question — if what remains could appear in any generic trivia app (name-the-character/title/location roster questions, what-year/what-number lookups with no significance to a fan), it does not clear the tier's bar. E.g. "In Gilmore Girls, what is the name of Rory's first boyfriend?" at specialist is GENERIC_AT_TIER. A question probing a specific scene, running joke, exact wording, object, technique, or second-order fact is NOT generic, however plainly it is phrased — "In American Psycho, what color is Paul Allen's business card?" passes. Flag ONLY clear-cut cases; when uncertain, do not flag — at these tiers a missed generic question is cheaper than suppressing a good one.
 
 A high bar applies — flag a question only when one of these defects is clearly present. Subtle wordsmithing concerns are NOT defects.
 
@@ -571,7 +572,10 @@ Return JSON only:
 
 If no questions are defective, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
-async function findQualityFailures(generated: LlmQuestion[]): Promise<{
+// Exported for the opt-in live evals (quality-gate.eval.test.ts), mirroring the
+// parseFactualGateResponse / findAnswerLeaks precedent. Production callers are
+// generateDailyQuestions and screenGroundedBatch in this module.
+export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   toDrop: Set<number>;
   reasons: Record<number, string>;
 }> {
@@ -579,10 +583,14 @@ async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   const client = getAnthropicClient();
   if (!client) return { toDrop: new Set(), reasons: {} };
 
+  // tier= feeds the GENERIC_AT_TIER defect (judged only at moderate/specialist).
+  // difficulty_estimate is the same field serving and scoring treat as the
+  // question's tier (resolveDailyBasePoints, bank matching), so the gate and the
+  // serving path agree on what tier a question is.
   const body = generated
     .map(
       (q, i) =>
-        `[${i}] domain=${q.canonical_subcategory}\n    q=${q.question_text}\n    a=${q.answer}`,
+        `[${i}] domain=${q.canonical_subcategory} tier=${q.difficulty_estimate}\n    q=${q.question_text}\n    a=${q.answer}`,
     )
     .join('\n\n');
   const userMessage = wrapUserInput('batch', body);
