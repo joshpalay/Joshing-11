@@ -24,6 +24,36 @@ export type EditableProfile = {
 
 export const HANDLE_CHANGE_COOLDOWN_DAYS = 30;
 
+// The onboarding cultural anchor (PRD-D-0 §19): birth year + where the player
+// grew up. Captured at onboarding for interest proposal; also consumed by daily
+// generation as an era/regional SALIENCE hint (BP-5 / audit Q3d) — same purpose
+// class (shaping LLM content for this player), never surfaced to other users
+// and never used to adjust difficulty.
+export type CulturalAnchor = {
+  birthYear: number | null;
+  grewUpCountry: string | null;
+  grewUpRegion: string | null;
+};
+
+export async function getCulturalAnchor(userId: string): Promise<CulturalAnchor | null> {
+  const [row] = await db
+    .select({
+      birthYear: users.birthYear,
+      grewUpCountry: users.grewUpCountry,
+      grewUpRegion: users.grewUpRegion,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!row) return null;
+  if (row.birthYear === null && !row.grewUpCountry && !row.grewUpRegion) return null;
+  return {
+    birthYear: row.birthYear ?? null,
+    grewUpCountry: row.grewUpCountry ?? null,
+    grewUpRegion: row.grewUpRegion ?? null,
+  };
+}
+
 function formatPhoneNumber(value: string): string {
   const digits = value.replace(/\D/g, '');
 

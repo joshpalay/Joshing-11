@@ -47,5 +47,5 @@ Execution scaffolding (kept separate, not product spec): [`docs/build-prompts/`]
 - **Option B (live thread): should the aside amplify a human's `creatorNote` when one exists?** Aside and creator note are independent surfaces today; no code merges them. (`PRD-D-0` §5.)
 - **Niche-match production default.** Ships `false`, test-phase `true`; production default is an open decision to revisit after the test. (`PRD-D-2`; `PRD-D-0` §3.)
 - **Thumbs-up → surface priority.** No effect on feed ordering yet; computation model and weighting formula undecided. (`PRD-D-0` §3.)
-- **House author (Capability 23) + Invariant H-1 guard.** D-3 is spec-only; when built, replace the `'A friend'` fallback for house-origin questions and lock H-1 with a regression test. (Conformance audit §3.1, §5.)
+- **House author (Capability 23) + Invariant H-1 guard.** ~~D-3 is spec-only~~ **Update 2026-06-10: the house author has shipped** (`source='house_authored'`, `pickHouseQuestions`, house smoke script) — the conformance audit's §3.1 "UNBUILT" is stale. Remaining open item: verify the `'A friend'` fallback was replaced for house-origin questions and lock Invariant H-1 with a regression test. (Conformance audit §3.1, §5.)
 - **Feed verb `'wrote this'` on broadcast.** The `authored_shared` branch claims authorship unconditionally; resolve before D-3. (Conformance audit §3.2.)
