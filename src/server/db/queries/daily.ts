@@ -1572,6 +1572,56 @@ export async function getRecentDomainCounts(
   return result;
 }
 
+// Recently-answered CANONICAL question texts for a user (BP-6 / audit Q8).
+// Canonical questions reached socially — a friend's authored question via a
+// feed send or a milestone click-through, a forwarded curated question, a
+// house question — carry NO fact_key, so they never enter the fact-key avoid
+// set and the generator can re-create the same fact the player answered
+// yesterday. This read feeds those texts into the ADVISORY avoid list (the
+// prompt block + the Haiku history gate window); it does not add any new hard
+// enforcement path. Rows with source='daily_generated' are excluded: their
+// texts are the persisted twins of generated rows the viewer's existing
+// avoid list already covers.
+//
+// Windowed and capped (C3: the avoid lists are already the prompt's biggest
+// cost); callers additionally scope the fold to the round's domains.
+export type AnsweredCanonicalTextEntry = { domain: string; text: string };
+
+export async function getRecentAnsweredCanonicalTexts(
+  userId: string,
+  windowDays = 30,
+  limit = 100,
+): Promise<AnsweredCanonicalTextEntry[]> {
+  const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      domain: canonicalQuestions.canonicalSubcategory,
+      text: canonicalQuestions.questionText,
+    })
+    .from(masteryEvents)
+    .innerJoin(canonicalQuestions, eq(masteryEvents.questionId, canonicalQuestions.id))
+    .where(and(
+      eq(masteryEvents.answeredByUserId, userId),
+      isNotNull(masteryEvents.questionId),
+      gte(masteryEvents.createdAt, since),
+      sql`${canonicalQuestions.source} <> 'daily_generated'`,
+      isNull(canonicalQuestions.deletedAt),
+    ))
+    .orderBy(desc(masteryEvents.createdAt))
+    .limit(limit);
+
+  const out: AnsweredCanonicalTextEntry[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (!row.text) continue;
+    const key = normalizeQuestionText(row.text);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ domain: row.domain ?? 'unknown', text: row.text });
+  }
+  return out;
+}
+
 // Counts of recent SKIPS ("passes") per canonical_subcategory for a user,
 // scoped to a lookback window. Feeds the generation prompt's skip-calibration
 // block (buildUserPrompt's `domainSkips`): a domain the player keeps passing

@@ -23,6 +23,7 @@ import {
 import {
   getAuthoredQuestionTexts,
   getKnowledgeBase,
+  getRecentAnsweredCanonicalTexts,
   getRecentDailyQuestionTexts,
   getRecentDomainCounts,
   getRecentFactKeys,
@@ -30,6 +31,7 @@ import {
   getRecentSubAnglesByDomain,
   normalizeQuestionText,
   pickBankSource,
+  type AnsweredCanonicalTextEntry,
   type BankDifficulty,
   type RecentDailyQuestionEntry,
   type RecentFactKeyEntry,
@@ -61,6 +63,25 @@ const RECENT_FACT_KEY_LIMIT = 200;
 // history-gate windows. The bank pick guards against the FULL authored set
 // separately (avoidAuthoredTexts), so the literal-reuse path stays fully covered.
 const AUTHORED_AVOID_TEXT_LIMIT = 40;
+// How many recently-answered CANONICAL question texts (feed sends, milestone
+// click-throughs, house questions — rows with no fact_key, invisible to the
+// fact-key avoid set; BP-6 / audit Q8) to seed into the Sonnet avoid list.
+// Domain-scoped by the caller and bounded for the same flush reason as above.
+const ANSWERED_CANONICAL_AVOID_TEXT_LIMIT = 25;
+
+// Domain-scope an answered-canonical read to the round's domains (domainKey
+// fold, so spelling variants match) and cap it. Advisory only — the entries
+// join the same avoid list the prompt block and Haiku history gate already
+// consume; no enforcement gate changes.
+function scopeAnsweredCanonicalTexts(
+  entries: AnsweredCanonicalTextEntry[],
+  domains: string[],
+): AvoidQuestionEntry[] {
+  const roundKeys = new Set(domains.map((domain) => domainKey(domain)));
+  return entries
+    .filter((entry) => roundKeys.has(domainKey(entry.domain)))
+    .slice(0, ANSWERED_CANONICAL_AVOID_TEXT_LIMIT);
+}
 
 export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
 
@@ -1367,6 +1388,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     recentDomainCounts,
     recentSkipCounts,
     culturalAnchor,
+    answeredCanonicalTexts,
   ] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
@@ -1377,6 +1399,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     // Era/regional salience hint (BP-5 / Q3d); resilient — a miss just means
     // the prompt carries no background block.
     getCulturalAnchor(userId).catch(() => null),
+    // Cross-table repetition guard (BP-6 / Q8); resilient — a miss just means
+    // the avoid list carries no answered-canonical entries this round.
+    getRecentAnsweredCanonicalTexts(userId).catch(() => [] as AnsweredCanonicalTextEntry[]),
   ]);
   const adaptiveLevel = preferences.difficulty === 'adaptive'
     ? await updateAdaptiveLevel(userId)
@@ -1476,6 +1501,15 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
 
+  // Fold recently-answered canonical texts (domain-scoped, capped) into the
+  // avoid list ahead of the generated history, so a fact the player answered
+  // yesterday on a friend's / house / forwarded question isn't re-created as a
+  // fresh generated question today (BP-6 / Q8). Canonical rows have no
+  // fact_key, so this text signal is their only route into avoidance.
+  previousQuestionTexts.unshift(
+    ...scopeAnsweredCanonicalTexts(answeredCanonicalTexts, domainsForRound),
+  );
+
   // Skip ("pass") calibration — buildUserPrompt's domainSkips block tells the
   // model which of this round's domains the player has recently passed on, so
   // it reaches for a different sub-angle / kind of fact instead of more of the
@@ -1555,10 +1589,15 @@ export async function generateBonusQuestionsForDomains(
   const results: Array<{ domain: string; question: GeneratedQuestionRow }> = [];
   if (domains.length === 0) return results;
 
-  const [previousQuestionTexts, previousFactKeys, authoredTexts] = await Promise.all([
+  const [previousQuestionTexts, previousFactKeys, authoredTexts, answeredCanonicalTexts] = await Promise.all([
     getRecentDailyQuestionTexts(userId),
     getRecentFactKeys(userId),
     getAuthoredQuestionTexts(userId),
+    // Cross-table repetition guard (BP-6 / Q8): a +2 domain is often exactly
+    // the domain a milestone click-through just played in, so the bonus is the
+    // likeliest surface to re-create a just-answered canonical fact. Advisory
+    // fold below, mirroring the authored-texts fold; resilient on failure.
+    getRecentAnsweredCanonicalTexts(userId).catch(() => [] as AnsweredCanonicalTextEntry[]),
   ]);
 
   // A +2 bonus must never hand the viewer a question they themselves authored.
@@ -1569,6 +1608,7 @@ export async function generateBonusQuestionsForDomains(
   // normalized-text guard the bank pick honors verbatim.
   const avoidAuthoredTexts = new Set(authoredTexts.map((entry) => normalizeQuestionText(entry.text)));
   previousQuestionTexts.unshift(...authoredTexts.slice(0, AUTHORED_AVOID_TEXT_LIMIT));
+  previousQuestionTexts.unshift(...scopeAnsweredCanonicalTexts(answeredCanonicalTexts, domains));
 
   for (const domain of domains) {
     // Bank-first. resolveDomainDifficulty maps 'normal' → accessible, so the
