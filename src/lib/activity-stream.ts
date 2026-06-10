@@ -142,6 +142,18 @@ export type CommonGroundPromoDomain = {
   friend: { points: number; tier: MasteryTier };
 };
 
+// One friend in the common-ground promo carousel: the friend, plus their single
+// strongest shared-but-untested domain (the circle hero). The promo carries a
+// few of these so the carousel is a quiet tour of the viewer's circle — a slide
+// per friend — rather than a single relationship. One domain per slide keeps the
+// overlapping-circle motif uncrowded (more than one circle crowds it).
+export type CommonGroundPromoFriend = {
+  friendId: string;
+  friendFirstName: string;
+  friendHref: string;
+  domain: CommonGroundPromoDomain;
+};
+
 export type RecentlyExpandingPromoDomain = {
   // The domain display name, its short supporting line, and the letter shown in
   // the row's colored badge — all precomputed server-side so the embed stays a
@@ -176,10 +188,12 @@ export type AddFriendsPromoPerson = {
 export type StreamEmbed =
   | {
       kind: 'common_ground';
+      // The featured (first) friend — drives the row's one-liner and the
+      // headline. `friends` carries the full carousel set (featured first).
       friendId: string;
       friendFirstName: string;
       friendHref: string;
-      domains: CommonGroundPromoDomain[];
+      friends: CommonGroundPromoFriend[];
       headlineIndex?: number;
     }
   | {
