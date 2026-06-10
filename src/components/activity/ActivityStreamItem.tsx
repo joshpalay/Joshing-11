@@ -295,7 +295,7 @@ export function ActivityStreamItem({
         }}
       >
         {centeredStar ? (
-          // Celebratory announcement: star — centered line — star.
+          // Celebratory announcement: a single star leading the centered line.
           <>
             <MilestoneStar seed={item.id} />
             <p
@@ -310,7 +310,6 @@ export function ActivityStreamItem({
             >
               <Line parts={item.line} />
             </p>
-            <MilestoneStar seed={item.id} />
           </>
         ) : (
           <>

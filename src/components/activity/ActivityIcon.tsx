@@ -39,6 +39,17 @@ const PALETTE = [
 const FILL_OPACITY = 0.8;
 const HOLLOW = 'var(--brand-ink-400)'; // #8a8a8a — outline of a spent triangle
 
+// The milestone star sits small against cream as five thin triangles, so the
+// washed-out light palette tokens (cream / lighttan / lightteal) disappear into
+// the page. Restrict its points to the saturated tokens and render at full
+// opacity so the star stays legible at line size.
+const STAR_PALETTE = [
+  'var(--tri-orange)', // #d15e36
+  'var(--tri-darkteal)', // #6d837f
+  'var(--tri-darkyellow)', // #deae5c
+];
+const STAR_FILL_OPACITY = 1;
+
 // EVERY mark sits in this fixed-width column, so the left edge of the text never
 // shifts between rows. The TOP of each mark aligns to the top of the first text
 // line; taller marks extend downward past it.
@@ -126,6 +137,12 @@ function hash(s: string): number {
 // Deterministic palette colour for the triangle at position `i` within `seed`.
 function colorFor(seed: string, i: number): string {
   return PALETTE[hash(`${seed}:${i}`) % PALETTE.length];
+}
+
+// Same idea, but over the saturated STAR_PALETTE so the milestone star never
+// picks a wash-out light token.
+function colorForStar(seed: string, i: number): string {
+  return STAR_PALETTE[hash(`${seed}:${i}`) % STAR_PALETTE.length];
 }
 
 // One upward triangle filling its bounding box [x, y, w, h].
@@ -260,8 +277,8 @@ function StarMark({ seed }: { seed: string }) {
         <path
           key={k}
           d={`M${at(STAR_RO, k, 0)} L${at(ri, k, -36)} L${at(ri, k, 36)} Z`}
-          fill={colorFor(seed, k)}
-          fillOpacity={FILL_OPACITY}
+          fill={colorForStar(seed, k)}
+          fillOpacity={STAR_FILL_OPACITY}
           strokeLinejoin="round"
         />
       ))}
@@ -269,9 +286,9 @@ function StarMark({ seed }: { seed: string }) {
   );
 }
 
-// The same five-point star, used as a flanking flourish on each side of the
-// centered "played their first five" announcement (star — line — star) rather
-// than in the left icon column. Decorative; the row copy carries the meaning.
+// The same five-point star, used as a single flourish leading the centered
+// "played their first five" announcement (star — line) rather than a mark in the
+// left icon column. Decorative; the row copy carries the meaning.
 export function MilestoneStar({ seed }: { seed: string }) {
   return (
     <span aria-hidden style={{ display: 'flex', flexShrink: 0 }}>
