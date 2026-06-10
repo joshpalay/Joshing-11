@@ -125,3 +125,43 @@ export function formatNextResetTimeLocal(
   const period = parts.find((p) => p.type === 'dayPeriod')?.value ?? '';
   return minute === '00' ? `${hour} ${period}` : `${hour}:${minute} ${period}`;
 }
+
+/**
+ * Format the next daily reset boundary as a day-aware label in the viewer's
+ * local timezone, e.g. "today at 1 PM", "tomorrow at 1 PM", or — when the
+ * boundary is further out — the weekday name like "Wednesday at 1 PM".
+ *
+ * The boundary is always within 24h, so in practice it resolves to "today" or
+ * "tomorrow"; the weekday fallback exists so the label is never wrong if the
+ * window math ever changes. This replaces hardcoded "tomorrow" copy, which was
+ * incorrect whenever the next reset fell later on the current local day.
+ */
+export function formatNextResetDayTimeLocal(
+  timezone?: string,
+  from: Date = new Date(),
+): string {
+  const next = getNextDailyResetBoundary(from);
+  const tz = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const time = formatNextResetTimeLocal(timezone, from);
+
+  // Compare local calendar days (YYYY-MM-DD) between now and the reset boundary.
+  const dayFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const todayKey = dayFormatter.format(from);
+  const resetKey = dayFormatter.format(next);
+
+  if (resetKey === todayKey) return `today at ${time}`;
+
+  const tomorrow = new Date(from.getTime() + ONE_DAY_MS);
+  if (resetKey === dayFormatter.format(tomorrow)) return `tomorrow at ${time}`;
+
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    timeZone: tz,
+  }).format(next);
+  return `${weekday} at ${time}`;
+}
