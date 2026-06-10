@@ -49,8 +49,8 @@ function resolvedDifficulty(question: JoshingGameView['questions'][number]['ques
 }
 
 // Difficulty pills use the triangle palette (amber/dark-yellow/dark-teal) so the
-// 3-level metadata scale reads as distinct from the green/terracotta CORRECT/WRONG
-// pill beside it. Text is mixed toward --brand-ink so the lighter tones clear AA.
+// 3-level metadata scale reads as distinct from the result pill beside it.
+// Text is mixed toward --brand-ink so the lighter tones clear AA.
 function difficultyPillStyle(level: string): CSSProperties {
   const tone =
     level === 'specialist'
@@ -105,7 +105,7 @@ function responseKey(userId: string, questionId: string) {
 }
 
 function resultLabel(isCorrect: boolean | null | undefined) {
-  return isCorrect ? 'CORRECT' : 'WRONG';
+  return isCorrect ? 'CORRECT' : 'Not this time';
 }
 
 function formatGameDate(value: Date) {
@@ -311,7 +311,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                         ) : null;
                       })()}
                       <span
-                        className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                        className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em]"
                         style={
                           correct
                             ? {
@@ -320,9 +320,9 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                                 color: 'var(--game-correct)',
                               }
                             : {
-                                borderColor: 'color-mix(in srgb, var(--game-wrong-strong) 30%, var(--border))',
-                                backgroundColor: 'color-mix(in srgb, var(--game-wrong-strong) 10%, var(--surface))',
-                                color: 'var(--game-wrong-strong)',
+                                borderColor: 'var(--border)',
+                                backgroundColor: 'color-mix(in srgb, var(--muted) 45%, var(--surface))',
+                                color: 'var(--text-muted)',
                               }
                         }
                       >
@@ -362,7 +362,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                   ) : null}
                   {authorNote ? (
                     <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
-                      <span className="font-medium">{authorName ? `Why ${authorName} asked:` : 'Why they asked:'}</span>{' '}
+                      <span className="font-medium">{authorName ? `${authorName}’s note` : 'Their note'}</span>{' '}
                       {authorNote}
                     </p>
                   ) : null}

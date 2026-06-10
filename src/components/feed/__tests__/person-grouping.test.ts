@@ -50,7 +50,7 @@ const COMMON_GROUND_EMBED: Extract<StreamEmbed, { kind: 'common_ground' }> = {
   friendId: 'f1',
   friendFirstName: 'Robyn',
   friendHref: '/users/f1',
-  domains: [],
+  friends: [],
 }
 
 describe('groupableFriendId', () => {

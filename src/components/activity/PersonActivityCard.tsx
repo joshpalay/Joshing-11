@@ -39,14 +39,22 @@ function topicsOf(rows: StreamItem[]): string[] {
   return out;
 }
 
-// The human predicate of a convergence caption ("keep landing in the same
-// place") with the "You and {Name}" lead stripped — the cluster header already
-// names the pair, so the echo is removed (v2 §3).
+// The human predicate of a convergence caption ("keep landing in the same place
+// — Cubism, Geography") with the "You and {Name}" lead stripped — the cluster
+// header already names the pair, so the echo is removed (v2 §3). Everything
+// after the actor is kept, including the serif category tail, so the folded
+// line carries the same WHAT the ungrouped headline does.
 function convergencePredicate(row: StreamItem): string {
   const parts = row.line;
   const actorIdx = parts.findIndex((p) => p.t === 'actor');
-  const after = parts.slice(actorIdx + 1).find((p) => p.t === 'text');
-  if (after && 'v' in after && after.v.trim()) return after.v.trim();
+  if (actorIdx !== -1) {
+    const tail = parts
+      .slice(actorIdx + 1)
+      .map((p) => ('v' in p ? p.v : ''))
+      .join('')
+      .trim();
+    if (tail) return tail;
+  }
   const before = [...parts.slice(0, actorIdx)].reverse().find((p) => p.t === 'text');
   if (before && 'v' in before) {
     const stripped = before.v.replace(/\b(you\s+and|and)\s*$/i, '').trim();

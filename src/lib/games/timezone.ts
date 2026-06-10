@@ -125,3 +125,55 @@ export function formatNextResetTimeLocal(
   const period = parts.find((p) => p.type === 'dayPeriod')?.value ?? '';
   return minute === '00' ? `${hour} ${period}` : `${hour}:${minute} ${period}`;
 }
+
+/**
+ * Return the day the next daily reset boundary falls on, relative to the
+ * viewer's local timezone: "today", "tomorrow", or — should the boundary ever
+ * be further out — the weekday name like "Wednesday" (a proper noun, so it
+ * stays capitalized; "today"/"tomorrow" are lowercase for mid-sentence use).
+ *
+ * The boundary is always within 24h, so in practice it resolves to "today" or
+ * "tomorrow"; the weekday fallback exists so the label is never wrong if the
+ * window math ever changes. This replaces hardcoded "tomorrow" copy, which was
+ * incorrect whenever the next reset fell later on the current local day.
+ */
+export function getNextResetDayLabelLocal(
+  timezone?: string,
+  from: Date = new Date(),
+): 'today' | 'tomorrow' | string {
+  const next = getNextDailyResetBoundary(from);
+  const tz = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // Compare local calendar days (YYYY-MM-DD) between now and the reset boundary.
+  const dayFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const resetKey = dayFormatter.format(next);
+
+  if (resetKey === dayFormatter.format(from)) return 'today';
+
+  const tomorrow = new Date(from.getTime() + ONE_DAY_MS);
+  if (resetKey === dayFormatter.format(tomorrow)) return 'tomorrow';
+
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    timeZone: tz,
+  }).format(next);
+}
+
+/**
+ * Format the next daily reset boundary as a day-aware label in the viewer's
+ * local timezone, e.g. "today at 1 PM", "tomorrow at 1 PM", or — when the
+ * boundary is further out — the weekday name like "wednesday at 1 PM".
+ */
+export function formatNextResetDayTimeLocal(
+  timezone?: string,
+  from: Date = new Date(),
+): string {
+  const day = getNextResetDayLabelLocal(timezone, from);
+  const time = formatNextResetTimeLocal(timezone, from);
+  return `${day} at ${time}`;
+}

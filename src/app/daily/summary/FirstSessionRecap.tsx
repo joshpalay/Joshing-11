@@ -23,13 +23,15 @@ import {
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 
-import { formatNextResetTimeLocal } from '@/lib/games/timezone';
+import { formatNextResetDayTimeLocal } from '@/lib/games/timezone';
 
 // useSyncExternalStore inputs for the client-only reset-time label, mirroring
 // the daily summary page: null during SSR keeps hydration stable, and the
-// snapshot is read on the client without a setState-in-effect.
+// snapshot is read on the client without a setState-in-effect. The label is
+// day-aware ("today at 1 PM" / "tomorrow at 1 PM") so the close copy stays
+// correct when the next reset falls later on the current local day.
 const subscribeNoop = () => () => {};
-const getResetTimeSnapshot = () => formatNextResetTimeLocal();
+const getResetTimeSnapshot = () => formatNextResetDayTimeLocal();
 const getResetTimeServerSnapshot = (): string | null => null;
 import type {
   FirstSessionRecapBeat2,
@@ -152,8 +154,8 @@ export function FirstSessionRecap({
 }) {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
-  // Client-only local wall-clock reset time for the close copy; null during SSR.
-  const resetLabel = useSyncExternalStore(
+  // Client-only day-aware reset label for the close copy; null during SSR.
+  const resetDayTime = useSyncExternalStore(
     subscribeNoop,
     getResetTimeSnapshot,
     getResetTimeServerSnapshot,
@@ -246,8 +248,7 @@ export function FirstSessionRecap({
         {isEnd ? (
           <div className="mx-auto max-w-2xl text-center">
             <h1 className="font-serif text-4xl font-semibold leading-tight tracking-normal sm:text-6xl">
-              Come back tomorrow
-              {resetLabel ? ` at ${resetLabel}` : ''} for five new questions.
+              Come back {resetDayTime ?? 'tomorrow'} for five new questions.
             </h1>
             <div className="mt-10 flex justify-center">
               <button

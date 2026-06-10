@@ -13,16 +13,18 @@
 
 import {
   commonGroundPromoToStreamItem,
+  type CommonGroundPromoFriend,
   type StreamEmbed,
   type StreamItem,
 } from '@/lib/activity-stream';
 import { getCommonGround } from '@/server/db/queries/common-ground';
 import { getFriends } from '@/server/db/queries/friends';
 
-// The editorial "Shared Ground" feature shows only the two strongest shared-but-
-// untested areas, so the circles stay the hero artwork (more than two crowds the
-// motif). See CommonGroundFeature.
-const MAX_PROMO_DOMAINS = 2;
+// The editorial "Shared Ground" carousel shows a slide per friend (each with
+// their single strongest shared-but-untested domain), so the viewer can rotate
+// through a few of the people they share ground with. One circle per slide keeps
+// the motif the hero (more than one crowds it). See CommonGroundFeature.
+const MAX_PROMO_FRIENDS = 3;
 // Cap the per-render getCommonGround probes so the homepage stays cheap even for
 // users with many friends; the rotation still cycles through everyone over time.
 const MAX_CANDIDATES = 4;
@@ -59,34 +61,46 @@ export async function getCommonGroundPromo(
     candidates.map((friend) => getCommonGround(userId, friend.id)),
   );
 
-  for (let i = 0; i < candidates.length; i++) {
+  // Collect a few friends with latent ground (in day-rotated order), one slide
+  // each, so the carousel tours the viewer's circle instead of a single person.
+  const promoFriends: CommonGroundPromoFriend[] = [];
+  for (let i = 0; i < candidates.length && promoFriends.length < MAX_PROMO_FRIENDS; i++) {
     const friend = candidates[i];
     const latent = grounds[i].latent;
     if (latent.length === 0) continue;
 
-    const domains = latent.slice(0, MAX_PROMO_DOMAINS).map((d) => ({
-      label: d.canonical_subcategory,
-      viewer: { points: d.viewer.mastery_points, tier: d.viewer.current_tier },
-      friend: { points: d.friend.mastery_points, tier: d.friend.current_tier },
-    }));
-
-    const embed: Extract<StreamEmbed, { kind: 'common_ground' }> = {
-      kind: 'common_ground',
+    // The friend's single strongest shared-but-untested domain is the hero.
+    const top = latent[0];
+    promoFriends.push({
       friendId: friend.id,
       friendFirstName: firstName(friend.displayName),
       friendHref: `/users/${friend.id}`,
-      domains,
-      // Rotate the headline by the day seed (Pool 4) so it doesn't always show
-      // line 1; eyebrow / CTA stay fixed.
-      headlineIndex: seed,
-    };
-
-    return commonGroundPromoToStreamItem(
-      embed,
-      now,
-      `common-ground-promo-${friend.id}-${seed}`,
-    );
+      domain: {
+        label: top.canonical_subcategory,
+        viewer: { points: top.viewer.mastery_points, tier: top.viewer.current_tier },
+        friend: { points: top.friend.mastery_points, tier: top.friend.current_tier },
+      },
+    });
   }
 
-  return null;
+  if (promoFriends.length === 0) return null;
+
+  // The featured (first) friend drives the row's one-liner and headline.
+  const featured = promoFriends[0];
+  const embed: Extract<StreamEmbed, { kind: 'common_ground' }> = {
+    kind: 'common_ground',
+    friendId: featured.friendId,
+    friendFirstName: featured.friendFirstName,
+    friendHref: featured.friendHref,
+    friends: promoFriends,
+    // Rotate the headline by the day seed (Pool 4) so it doesn't always show
+    // line 1; eyebrow / CTA stay fixed.
+    headlineIndex: seed,
+  };
+
+  return commonGroundPromoToStreamItem(
+    embed,
+    now,
+    `common-ground-promo-${featured.friendId}-${seed}`,
+  );
 }
