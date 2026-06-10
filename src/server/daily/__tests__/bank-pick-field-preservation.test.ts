@@ -97,6 +97,8 @@ describe('bank-pick serving copy preserves earned quality fields (Q4)', () => {
       acceptableVariants: ['Floria Tosca'],
       sourceRefs: BANK_SOURCE.sourceRefs,
       perishable: false,
+      // BP-7 / C5: every pool write carries the folded lookup key.
+      domainKey: 'puccini operas',
     });
     // The served row (what /api/daily/answer later reads) carries the variants.
     expect(results[0].question.acceptableVariants).toEqual(['Floria Tosca']);

@@ -586,6 +586,20 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0074 (BP-7 / C5) adds GeneratedQuestion.domain_key — the TS
+    // domainKey() fold of canonical_subcategory, matched by the bank lookup so
+    // spelling variants share stock — plus its lookup index. All pool write
+    // paths set it and pickBankSource reads it, so a database that records the
+    // migration without the column present must still boot (precedent: the
+    // 0068 acceptable_variants guard above).
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "domain_key" text`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "GeneratedQuestion_domain_key_difficulty_idx" ON "GeneratedQuestion" ("domain_key", "difficulty_estimate")`);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
     // Migration 0063 (B1) enables pgvector and adds the nullable 1024-dim
     // embedding column + HNSW cosine indexes to both pool tables. The dedup
     // helpers read/write GeneratedQuestion.embedding / Question.embedding, so a

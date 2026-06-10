@@ -33,6 +33,7 @@ import {
   pickBankSource,
   type AnsweredCanonicalTextEntry,
   type BankDifficulty,
+  type BankSource,
   type RecentDailyQuestionEntry,
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
@@ -66,8 +67,13 @@ const AUTHORED_AVOID_TEXT_LIMIT = 40;
 // How many recently-answered CANONICAL question texts (feed sends, milestone
 // click-throughs, house questions — rows with no fact_key, invisible to the
 // fact-key avoid set; BP-6 / audit Q8) to seed into the Sonnet avoid list.
-// Domain-scoped by the caller and bounded for the same flush reason as above.
-const ANSWERED_CANONICAL_AVOID_TEXT_LIMIT = 25;
+// Domain-scoped by the caller and bounded for the same flush reason as above —
+// AND kept well under RECENT_HISTORY_GATE_LIMIT (30): these entries are
+// prepended, so they occupy the front of the semantic history gate's window,
+// and a larger cap could displace the generated history the gate exists to
+// enforce against (re-audit 2026-06-10, finding F2). 12 leaves ≥18 window
+// slots for history in the worst case on the core path.
+const ANSWERED_CANONICAL_AVOID_TEXT_LIMIT = 12;
 
 // Domain-scope an answered-canonical read to the round's domains (domainKey
 // fold, so spelling variants match) and cap it. Advisory only — the entries
@@ -636,7 +642,7 @@ The following styles are explicitly ACCEPTABLE and must NOT be flagged on style 
 
 ${STYLE_EXEMPLAR_BLOCK}
 
-Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, or SELF_ANSWERING.
+Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, SELF_ANSWERING, or — at moderate/specialist tier only — GENERIC_AT_TIER. Style never exempts a question from the tier bar: a concise identification-style question at moderate/specialist must still clear strip-the-domain.
 
 Return JSON only:
 { "drop_indices": [list of zero-based indices to drop], "reasons": { "<index>": "<short reason>" } }
@@ -1249,6 +1255,8 @@ export async function generateDailyQuestions(
       .values({
         userId,
         canonicalSubcategory: canonicalDomain,
+        // Folded lookup key (BP-7 / C5) — all pool write paths set this.
+        domainKey: domainKey(canonicalDomain),
         broadCategory: question.broad_category,
         questionText: question.question_text,
         answer: question.answer,
@@ -1529,6 +1537,14 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   // a domain falls through to LLM generation, which incidentally adds new rows
   // back into the pool. Spans accessible/moderate/specialist so harder slots
   // are reused too, not just warm-ups.
+  // Tier-adjacent fallback floors (BP-7 / C5): declared territory floors at
+  // 'moderate' (the D2/D3 erosion floor — never condescend), demonstrated at
+  // 'accessible'. Derived from the knowledgeBase already in hand.
+  const bankFallbackFloors = new Map<string, BankDifficulty>();
+  for (const entry of knowledgeBase) {
+    bankFallbackFloors.set(entry.domain, entry.territoryType === 'declared' ? 'moderate' : 'accessible');
+  }
+
   const bankPicks = await pickBankPicksForDomains(
     userId,
     domainsForRound,
@@ -1536,6 +1552,8 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     domainDifficultyOverrides,
     adaptiveLevel,
     previousFactKeys,
+    new Set(),
+    bankFallbackFloors,
   );
 
   const bankFilledDomains = new Set(bankPicks.map((row) => row.canonicalSubcategory));
@@ -1687,6 +1705,23 @@ function resolveDomainDifficulty(
   return mapAdaptiveLevelToDifficultyHint(fixedLevel).estimate;
 }
 
+// Tier-adjacent fallback order for a bank lookup (BP-7 / C5, approved rule):
+// exact tier first, then one step UP (floor-safe by construction — the floor
+// means "never condescend", and a one-step stretch cannot condescend), then one
+// step DOWN only when it stays at or above the domain's floor. ±1 step only.
+// The +2 never gets a ladder (D-4 §B: accessibility is a hard target there —
+// a non-accessible pick shrinks the slot), so callers opt in by passing floors.
+const BANK_TIER_ORDER: readonly BankDifficulty[] = ['accessible', 'moderate', 'specialist'];
+
+export function bankTierLadder(target: BankDifficulty, floor: BankDifficulty): BankDifficulty[] {
+  const t = BANK_TIER_ORDER.indexOf(target);
+  const f = BANK_TIER_ORDER.indexOf(floor);
+  const ladder: BankDifficulty[] = [target];
+  if (t + 1 < BANK_TIER_ORDER.length) ladder.push(BANK_TIER_ORDER[t + 1]);
+  if (t - 1 >= 0 && t - 1 >= f) ladder.push(BANK_TIER_ORDER[t - 1]);
+  return ladder;
+}
+
 async function pickBankPicksForDomains(
   userId: string,
   domains: string[],
@@ -1698,6 +1733,10 @@ async function pickBankPicksForDomains(
   // bonus passes the viewer's authored question texts so the bank can't reuse a
   // fact the viewer themselves wrote (see generateBonusQuestionsForDomains).
   avoidQuestionTexts: ReadonlySet<string> = new Set(),
+  // Per-domain difficulty floors enabling tier-adjacent fallback (BP-7 / C5).
+  // Declared territory floors at 'moderate' (the D2/D3 erosion floor),
+  // demonstrated at 'accessible'. Absent (the +2 path) → exact-tier only.
+  tierFallbackFloors?: ReadonlyMap<string, BankDifficulty>,
 ): Promise<GeneratedQuestionRow[]> {
   const avoidFactKeys = new Set(previousFactKeys.map((entry) => entry.factKey));
   const picks: GeneratedQuestionRow[] = [];
@@ -1711,7 +1750,27 @@ async function pickBankPicksForDomains(
       adaptiveLevel,
     );
     if (!difficulty) continue;
-    const source = await pickBankSource(userId, domain, difficulty, avoidFactKeys, avoidQuestionTexts).catch(() => null);
+    const floor = tierFallbackFloors?.get(domain);
+    const ladder = floor ? bankTierLadder(difficulty, floor) : [difficulty];
+
+    let source: BankSource | null = null;
+    let servedTier: BankDifficulty = difficulty;
+    for (const tier of ladder) {
+      source = await pickBankSource(userId, domain, tier, avoidFactKeys, avoidQuestionTexts).catch(() => null);
+      if (source) {
+        servedTier = tier;
+        break;
+      }
+    }
+    // BP-7 Phase-3 telemetry: per-domain hit / fall-through, so bank hit rate
+    // and the value of flipping retrieval refill on are measurable from logs.
+    console.info('[daily/bank-telemetry]', {
+      domain,
+      outcome: source ? 'hit' : 'fall_through',
+      tierRequested: difficulty,
+      tierServed: source ? servedTier : null,
+      fallbackUsed: Boolean(source) && servedTier !== difficulty,
+    });
     if (!source) continue;
     if (isGenericSubcategory(source.canonicalSubcategory)) continue;
 
@@ -1721,6 +1780,8 @@ async function pickBankPicksForDomains(
         .values({
           userId,
           canonicalSubcategory: source.canonicalSubcategory,
+          // Folded lookup key (BP-7 / C5) — all pool write paths set this.
+          domainKey: domainKey(source.canonicalSubcategory),
           broadCategory: source.broadCategory,
           questionText: source.questionText,
           answer: source.answer,

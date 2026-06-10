@@ -1,0 +1,22 @@
+-- BP-7 / audit C5 — folded domain key on the generated-question pool.
+--
+-- The bank lookup (pickBankSource) matched canonical_subcategory by exact
+-- string equality, so spelling variants of one domain — the documented iOS
+-- curly-apostrophe case ("90's" U+2019 vs "90's" U+0027), case and whitespace
+-- differences — silently missed existing stock and paid a fresh Sonnet
+-- generation instead. domain_key stores the TS domainKey() fold (apostrophes
+-- folded, whitespace collapsed, lowercased) of canonical_subcategory, written
+-- at insert time by all three pool write paths; the lookup matches on it with
+-- the legacy exact predicate as a fallback for rows pre-dating the backfill.
+--
+-- Additive nullable column with no default — the safe case — plus a composite
+-- index for the lookup path (folded domain + difficulty tier). Mirrored by a
+-- defensive guard in src/instrumentation.ts (precedent: 0068's
+-- acceptable_variants guard) so a preview/production database that records
+-- this migration without the column present still boots. Backfill is TS-side
+-- (the fold cannot be replicated in SQL without a second implementation).
+--
+-- Rollback: ALTER TABLE "GeneratedQuestion" DROP COLUMN IF EXISTS "domain_key";
+--           DROP INDEX IF EXISTS "GeneratedQuestion_domain_key_difficulty_idx";
+ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "domain_key" text;
+CREATE INDEX IF NOT EXISTS "GeneratedQuestion_domain_key_difficulty_idx" ON "GeneratedQuestion" ("domain_key", "difficulty_estimate");
