@@ -332,12 +332,22 @@ export default function TodaysFiveCard({
           </Link>
         </div>
       ) : (
-        <Link
-          href={playHref}
-          className="btn-primary mt-4 min-h-12 w-full justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
-        >
-          {actionLabel}
-        </Link>
+        <>
+          <Link
+            href={playHref}
+            className="btn-primary mt-4 min-h-12 w-full justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+          >
+            {actionLabel}
+          </Link>
+          {missedCount > 0 ? (
+            <Link
+              href="/daily/catchup"
+              className="mt-3 block text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
+            >
+              Catch up &middot; {missedCount} missed {missedCount === 1 ? 'question' : 'questions'} &rarr;
+            </Link>
+          ) : null}
+        </>
       )}
     </div>
   )

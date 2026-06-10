@@ -90,11 +90,10 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
 
   const missedCount = catchupItems.length
   const expiringCount = catchupItems.filter((item) => item.expiresSoon).length
-  // Suppress the standalone Catch up card in the missed>0 completed state — the
-  // completed hero's Branch A already owns that entry point, so showing both
-  // would be a duplicate. When the round is still in progress (hero is in its
-  // play state, not Branch A), the standalone card stays.
-  const showStandaloneCatchup = missedCount > 0 && !status.isComplete
+  // The standalone Catch up card is suppressed entirely — when the round is in
+  // progress the TodaysFiveCard now shows a small catch-up link under the play
+  // button; when the round is complete, Branch A on the card owns that entry point.
+  const showStandaloneCatchup = false
 
   return (
     <>
