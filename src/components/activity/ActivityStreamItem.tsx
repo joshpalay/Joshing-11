@@ -203,16 +203,14 @@ export function ActivityStreamItem({
           ? // Nested under a per-person heading: no border/fill, light padding.
             { padding: opened ? '6px 0' : '4px 0' }
           : opened
-            ? {
-                borderTop: `1px solid ${RULE}`,
-                borderBottom: `1px solid ${RULE}`,
-                padding: '18px 2px',
+            ? // Opened reveal: a soft paper wash defines the expanded cluster —
+              // no hard hairlines (v2 §4 prefers whitespace over dividers).
+              {
+                padding: '16px 2px',
                 background: PAPER,
               }
-            : {
-                borderBottom: `1px solid ${RULE}`,
-                padding: '12px 2px',
-              }
+            : // Calm default: no row hairline; whitespace separates the rows.
+              { padding: '14px 2px' }
       }
     >
       <div
@@ -287,17 +285,19 @@ export function ActivityStreamItem({
             gap: 4,
           }}
         >
-          <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap' }}>{timestamp}</span>
-          {/* Cards backed by answerable questions get a chevron in the bottom-
-              right corner that signals (and reflects) the expand/collapse state.
-              The row itself is the button (aria-expanded above), so this stays
-              decorative. */}
+          {/* Metadata recedes to near-invisible (v2 §4): quiet, small timestamp. */}
+          <span style={{ fontSize: 12, color: INK3, opacity: 0.6, whiteSpace: 'nowrap' }}>
+            {timestamp}
+          </span>
+          {/* Decorative disclosure chevron — demoted; the row itself is the
+              button (aria-expanded above). */}
           {expandable ? (
             <ChevronDown
-              size={18}
+              size={16}
               aria-hidden
               style={{
                 color: INK3,
+                opacity: 0.5,
                 transition: 'transform 150ms ease',
                 transform: open ? 'rotate(180deg)' : 'none',
               }}

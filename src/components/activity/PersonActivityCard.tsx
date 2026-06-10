@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 
 import type { StreamItem } from '@/lib/activity-stream';
-import { FF, INK, INK2, INK3, RULE } from '@/components/lately/tokens';
+import { FF, INK, INK2, INK3 } from '@/components/lately/tokens';
 
 import { Line } from './ActivityStreamItem';
 import { ActivityIcon } from './ActivityIcon';
@@ -93,7 +93,7 @@ export function PersonActivityCard({
   const seed = rows[0]?.id ?? 'person';
 
   return (
-    <div style={{ padding: '12px 2px', borderBottom: `1px solid ${RULE}` }}>
+    <div style={{ padding: '14px 2px' }}>
       {/* No flex `gap`: ActivityIcon already reserves mark 24 + 8px marginRight,
           so the heading lands at the same 32px x as the lines below it. */}
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
@@ -114,7 +114,9 @@ export function PersonActivityCard({
           You &amp; {name}
         </p>
         {rows[0] ? (
-          <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap', marginLeft: 8 }}>
+          <span
+            style={{ fontSize: 12, color: INK3, opacity: 0.6, whiteSpace: 'nowrap', marginLeft: 8 }}
+          >
             {timestampFor(rows[0])}
           </span>
         ) : null}
