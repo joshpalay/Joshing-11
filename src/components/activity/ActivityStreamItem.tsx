@@ -132,6 +132,7 @@ export function ActivityStreamItem({
   timestamp,
   nested = false,
   showTimestamp = true,
+  elevated = false,
 }: {
   item: StreamItem;
   timestamp: string;
@@ -142,6 +143,12 @@ export function ActivityStreamItem({
   // The home "What's Happening" feed hides the relative timestamp for a calmer,
   // less ledger-like read; the full /activities log keeps it. Defaults on.
   showTimestamp?: boolean;
+  // On the home "What's Happening" feed, the playable milestone bundles (the
+  // "X of 5 questions" rows you can answer inline) read as cream cards — a warm
+  // fill, a light stroke, and a soft drop shadow — so they step forward off the
+  // page as the thing you can play, while the ambient one-liners stay flat. Off
+  // by default (the full /activities log keeps every row flat).
+  elevated?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
@@ -240,24 +247,38 @@ export function ActivityStreamItem({
   // and header text don't shift sideways when the card opens.
   const opened = expandable && open;
 
+  // The playable card treatment (home feed only): a milestone bundle is the
+  // answer-inline row, so on the home feed it reads as a cream card that steps
+  // forward — a warm fill, a light warm-ink stroke, and a soft drop shadow.
+  // Matches the FeedCardShell elevated question cards so the two playable
+  // surfaces share one "liftable" look. Other activity rows (relationship
+  // events, reactions, read-only reveals) stay flat one-liners.
+  const playableCard =
+    elevated && !nested && expandable && expand?.kind === 'milestone';
+
+  const containerStyle: CSSProperties = nested
+    ? // Nested under a per-person heading: no border/fill, light padding.
+      { padding: opened ? '6px 0' : '4px 0' }
+    : playableCard
+      ? {
+          padding: opened ? '16px 14px' : '14px',
+          background: 'var(--game-card-question)',
+          border: '1px solid rgba(40, 32, 30, 0.22)',
+          borderRadius: 4,
+          boxShadow: '0 4px 12px rgba(40, 32, 30, 0.1)',
+        }
+      : opened
+        ? // Opened reveal: a soft paper wash defines the expanded cluster —
+          // no hard hairlines (v2 §4 prefers whitespace over dividers).
+          {
+            padding: '16px 2px',
+            background: PAPER,
+          }
+        : // Calm default: no row hairline; whitespace separates the rows.
+          { padding: '14px 2px' };
+
   return (
-    <div
-      id={item.anchorId ?? undefined}
-      style={
-        nested
-          ? // Nested under a per-person heading: no border/fill, light padding.
-            { padding: opened ? '6px 0' : '4px 0' }
-          : opened
-            ? // Opened reveal: a soft paper wash defines the expanded cluster —
-              // no hard hairlines (v2 §4 prefers whitespace over dividers).
-              {
-                padding: '16px 2px',
-                background: PAPER,
-              }
-            : // Calm default: no row hairline; whitespace separates the rows.
-              { padding: '14px 2px' }
-      }
-    >
+    <div id={item.anchorId ?? undefined} style={containerStyle}>
       <div
         role={expandable ? 'button' : undefined}
         tabIndex={expandable ? 0 : undefined}

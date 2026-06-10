@@ -2,7 +2,7 @@ import type * as React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import type { StreamExpand, StreamQuestion } from '@/lib/activity-stream';
+import type { StreamExpand, StreamItem, StreamQuestion } from '@/lib/activity-stream';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
@@ -30,7 +30,7 @@ vi.mock('@/app/activities/ReactionGotItButton', () => ({
   ReactionGotItButton: () => <div data-mock="reaction" />,
 }));
 
-import { MilestoneExpansion } from '@/components/activity/ActivityStreamItem';
+import { ActivityStreamItem, MilestoneExpansion } from '@/components/activity/ActivityStreamItem';
 
 // q-correct: answered right in a prior session. q-wrong: answered WRONG in a
 // prior session (the bug — must NOT be answerable here, and the ANSWERED
@@ -63,6 +63,45 @@ function renderExpansion() {
     />,
   );
 }
+
+// A whole milestone-bundle row (the "went deep on X — N of 5 questions" line you
+// can answer inline), used to assert the home-feed card treatment.
+const MILESTONE_ITEM: StreamItem = {
+  id: 'm-1',
+  sortAt: new Date('2026-05-20T12:00:00Z'),
+  tier: 0,
+  friendId: 'friend-1',
+  homeEligible: true,
+  line: [
+    { t: 'actor', name: 'Sadie Brooks', userId: 'friend-1' },
+    { t: 'text', v: ' went deep on ' },
+    { t: 'category', v: 'Star Trek' },
+  ],
+  secondLine: null,
+  anchorId: null,
+  action: null,
+  icon: 'bundle',
+  expand: EXPAND,
+};
+
+describe('ActivityStreamItem — playable milestone card on the home feed', () => {
+  it('gives an elevated milestone bundle the cream card chrome (fill + stroke + drop shadow)', () => {
+    const html = renderToStaticMarkup(
+      <ActivityStreamItem item={MILESTONE_ITEM} timestamp="2:00 PM" elevated showTimestamp={false} />,
+    );
+    expect(html).toContain('var(--game-card-question)');
+    expect(html).toContain('rgba(40, 32, 30, 0.22)'); // the light warm-ink stroke
+    expect(html).toContain('rgba(40, 32, 30, 0.1)'); // the soft drop shadow
+  });
+
+  it('keeps the row flat when not elevated (the full /activities log)', () => {
+    const html = renderToStaticMarkup(
+      <ActivityStreamItem item={MILESTONE_ITEM} timestamp="2:00 PM" />,
+    );
+    expect(html).not.toContain('var(--game-card-question)');
+    expect(html).not.toContain('rgba(40, 32, 30, 0.22)');
+  });
+});
 
 describe('MilestoneExpansion — cross-session answer lock', () => {
   it('keeps only never-attempted questions answerable', () => {
