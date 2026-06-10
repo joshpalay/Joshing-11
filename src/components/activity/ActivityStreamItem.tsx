@@ -16,7 +16,7 @@ import type {
 
 import { DirectQuestionAnswer } from './DirectQuestionAnswer';
 import { InlineAnswerFlow } from './InlineAnswerFlow';
-import { ActivityIcon, QuestionTriangle, specForIcon } from './ActivityIcon';
+import { ActivityIcon, MilestoneStar, QuestionTriangle, specForIcon } from './ActivityIcon';
 import { FF, FM, INK, INK2, INK3, PAPER, RULE } from '@/components/lately/tokens';
 import { assertNever } from '@/lib/assert-never';
 import { HOUSE_AUTHOR, LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
@@ -213,6 +213,14 @@ export function ActivityStreamItem({
       : null;
   const iconSpec = specForIcon(item.icon, bundleCounts);
 
+  // The "invited friend played their first five" star is a celebratory
+  // announcement, not a normal left-aligned event row: it renders centered with
+  // a star flourish on each side (star — line — star) instead of a single mark
+  // in the left icon column. It carries no action/expansion/second line, so the
+  // centered branch is a self-contained one-liner. Nested rows keep the plain
+  // indented form.
+  const centeredStar = !nested && item.icon === 'star';
+
   function toggle() {
     if (expandable) setOpen((v) => !v);
   }
@@ -258,11 +266,33 @@ export function ActivityStreamItem({
         onKeyDown={handleKeyDown}
         style={{
           display: 'flex',
-          alignItems: 'flex-start',
+          alignItems: centeredStar ? 'center' : 'flex-start',
+          justifyContent: centeredStar ? 'center' : undefined,
+          gap: centeredStar ? 10 : undefined,
           cursor: expandable ? 'pointer' : 'default',
           WebkitTapHighlightColor: 'transparent',
         }}
       >
+        {centeredStar ? (
+          // Celebratory announcement: star — centered line — star.
+          <>
+            <MilestoneStar seed={item.id} />
+            <p
+              style={{
+                margin: 0,
+                fontSize: 15,
+                lineHeight: 1.5,
+                letterSpacing: 0.2,
+                color: INK,
+                textAlign: 'center',
+              }}
+            >
+              <Line parts={item.line} />
+            </p>
+            <MilestoneStar seed={item.id} />
+          </>
+        ) : (
+          <>
         {/* Nested rows carry no shape — the per-person heading holds the one
             diamond; everything beneath it is a plain indented line. */}
         {nested ? null : <ActivityIcon spec={iconSpec} seed={item.id} />}
@@ -344,6 +374,8 @@ export function ActivityStreamItem({
             />
           ) : null}
         </div>
+          </>
+        )}
       </div>
 
       {item.action ? <ItemAction action={item.action} /> : null}

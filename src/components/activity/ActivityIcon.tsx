@@ -269,6 +269,17 @@ function StarMark({ seed }: { seed: string }) {
   );
 }
 
+// The same five-point star, used as a flanking flourish on each side of the
+// centered "played their first five" announcement (star — line — star) rather
+// than in the left icon column. Decorative; the row copy carries the meaning.
+export function MilestoneStar({ seed }: { seed: string }) {
+  return (
+    <span aria-hidden style={{ display: 'flex', flexShrink: 0 }}>
+      <StarMark seed={seed} />
+    </span>
+  );
+}
+
 // Rhombus: upward triangle over downward triangle, shared base. Each half a
 // random palette colour.
 function DiamondMark({ seed }: { seed: string }) {
