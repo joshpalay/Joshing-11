@@ -26,7 +26,7 @@ import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visua
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
-import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
+import { type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
 import {
   CommonGroundFeature,
   GrowYourCircleFeature,
@@ -679,17 +679,9 @@ function FeedContributeFooter() {
   )
 }
 
-// "From Friends" shows at most this many of the most-recent milestone cards
-// before collapsing the rest behind a "View more" control; each tap of "View
-// more" then reveals another FROM_FRIENDS_STEP cards (and keeps the control
-// while more remain).
-const FROM_FRIENDS_COLLAPSED_COUNT = 5
-const FROM_FRIENDS_STEP = 10
-
 // The uppercase eyebrow that labels a feed section — the recency day labels
-// ("Today", "This week") and the home-only "For You" / "From Friends" splits all
-// share this register. `first:pt-0` lets whichever heading renders first sit
-// flush to the top of the feed.
+// ("Today", "This week") share this register. `first:pt-0` lets whichever
+// heading renders first sit flush to the top of the feed.
 function FeedSectionHeading({
   unifiedHome,
   children,
@@ -793,11 +785,6 @@ function FeedListContent({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hideToast, setHideToast] = useState<{ category: string } | null>(null)
-  // "From Friends" starts capped to its most recent few milestone cards; each
-  // "View more" reveals another batch. View-state only — never persisted.
-  const [fromFriendsVisibleCount, setFromFriendsVisibleCount] = useState(
-    FROM_FRIENDS_COLLAPSED_COUNT,
-  )
   // True for the very first render path when we already have server-rendered
   // data; the initial-fetch useEffect skips its work once.
   const skipInitialFetchRef = useRef(initialPageMatchesFilter)
@@ -967,51 +954,12 @@ function FeedListContent({
     return next
   }, [unifiedRows, commonGroundPromo, expandingPromo, addFriendsPromo])
 
-  // Home-only sectioning (D-FEED): split the answerable rows out of the
-  // chronological stream into two pinned sections at the top —
-  //   • "For You"      — questions sent to you directly or via broadcast (the
-  //                      kind:'feed' question cards you can answer); and
-  //   • "From Friends" — friends' milestone bundles (the up-to-5-triangle cards),
-  //                      i.e. activity rows whose expand is a non-empty milestone.
-  // Everything else (ambient activity, per-person roll-ups, promos) falls through
-  // to `restRows` and keeps the existing recency grouping below. Off the unified
-  // home (the standalone Feed tab), both sections are empty and restRows is the
-  // whole list, so that surface renders exactly as before.
-  const { forYouRows, fromFriendsRows, restRows } = useMemo(() => {
-    if (!unifiedHome) {
-      return {
-        forYouRows: [] as UnifiedRow[],
-        fromFriendsRows: [] as UnifiedRow[],
-        restRows: displayRows,
-      }
-    }
-    const forYou: UnifiedRow[] = []
-    const fromFriends: UnifiedRow[] = []
-    const rest: UnifiedRow[] = []
-    for (const row of displayRows) {
-      if (row.kind === 'feed') {
-        forYou.push(row)
-      } else if (
-        row.kind === 'activity' &&
-        row.item.expand?.kind === 'milestone' &&
-        row.item.expand.questions.length > 0
-      ) {
-        fromFriends.push(row)
-      } else {
-        rest.push(row)
-      }
-    }
-    return { forYouRows: forYou, fromFriendsRows: fromFriends, restRows: rest }
-  }, [displayRows, unifiedHome])
-
-  // "From Friends" reveals its most recent cards in batches (fromFriendsRows is
-  // newest-first, so slicing the head keeps the latest). The "View more" control
-  // appears while cards remain hidden; each tap reveals up to FROM_FRIENDS_STEP
-  // more, and the label names how many that next tap will show.
-  const visibleFromFriendsRows = fromFriendsRows.slice(0, fromFriendsVisibleCount)
-  const fromFriendsHiddenCount =
-    fromFriendsRows.length - visibleFromFriendsRows.length
-  const fromFriendsNextBatch = Math.min(fromFriendsHiddenCount, FROM_FRIENDS_STEP)
+  // The home feed renders as a single flat chronological stream grouped by
+  // recency — no pinned "For You" / "From Friends" tiers. (Reverts the D-FEED
+  // pinned split; the calm full-sentence Group-3 styling below now applies to
+  // the whole feed.) The standalone Feed tab was always a single stream, so
+  // both surfaces now render through the same recency grouping.
+  const restRows = displayRows
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
@@ -1741,49 +1689,16 @@ function FeedListContent({
         )
       ) : (
         <section className="space-y-3 pb-8">
-          {/* Home-only: the answerable rows are lifted into two pinned sections
-              at the top — "For You" (questions sent/broadcast to you) then
-              "From Friends" (friends' milestone bundles). Each renders only when
-              it has rows. groupActivityByFriend is a pass-through here (feed and
-              milestone rows never group), keeping the render path uniform. */}
-          {forYouRows.length > 0 ? (
-            <Fragment key="for-you">
-              <FeedSectionHeading unifiedHome={unifiedHome}>For You</FeedSectionHeading>
-              {groupActivityByFriend(forYouRows).map(renderRow)}
-            </Fragment>
-          ) : null}
-          {fromFriendsRows.length > 0 ? (
-            <Fragment key="from-friends">
-              <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
-              {groupActivityByFriend(visibleFromFriendsRows).map(renderRow)}
-              {fromFriendsHiddenCount > 0 ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFromFriendsVisibleCount((count) => count + FROM_FRIENDS_STEP)
-                  }
-                  className={`flex min-h-11 items-center text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
-                    unifiedHome ? 'pl-[2px]' : ''
-                  }`}
-                >
-                  View {fromFriendsNextBatch} more
-                </button>
-              ) : null}
-            </Fragment>
-          ) : null}
+          {/* The whole feed is a single calm chronological stream grouped by
+              recency. Every row — question cards, friends' milestone bundles,
+              relationship events, promos — renders as a full-sentence LONE event
+              (D-FEED-GROUP3-01 §2 styling, applied feed-wide). Per-person
+              clustering (PersonActivityCard) stays dropped: the cluster form was
+              the source of the subject-stripped "wording is weird" copy, and
+              density now comes from visual quiet, not copy compression. */}
           {groupItemsByRecency(restRows).map((group) => (
             <Fragment key={group.key}>
               <FeedSectionHeading unifiedHome={unifiedHome}>{group.label}</FeedSectionHeading>
-              {/* D-FEED-GROUP3-01 §2 — "everything else" renders as a calm straight
-                  chronological stream of full-sentence LONE events. Per-person
-                  clustering (PersonActivityCard) is deliberately DROPPED for this
-                  zone in cut 1: the cluster form was the source of the
-                  subject-stripped "wording is weird" copy, and density now comes
-                  from visual quiet, not copy compression. Clustering is a gated
-                  follow-up (re-introduce groupActivityByFriend here only if the
-                  straight stream still reads busy with real content). On the
-                  standalone Feed tab restRows is just question cards, which never
-                  grouped anyway, so this is a pure pass-through there. */}
               {group.items.map(renderRow)}
             </Fragment>
           ))}
