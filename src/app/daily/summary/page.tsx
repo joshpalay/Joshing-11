@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Flag, Heart, MessageCircle, MoreHorizontal, Share2, X } from 'lucide-react'
+import { Heart, MoreHorizontal, Share2, X } from 'lucide-react'
 import LoadingScreen from '@/components/LoadingScreen'
 import {
   type CSSProperties,
@@ -16,6 +16,9 @@ import {
 import { SendQuestionAction } from '@/components/SendQuestionAction'
 import { AddToBankAction } from '@/components/AddToBankAction'
 import { EditorialBadge } from '@/components/EditorialBadge'
+import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
+import MasteryMoment from '@/components/review/MasteryMoment'
+import { RefineYourGame } from '@/components/review/RefineYourGame'
 import { cn } from '@/lib/utils'
 import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types'
 import type {
@@ -110,6 +113,21 @@ export default function DailySummaryPage() {
     () => (summary ? summaryHeadlineDomain(summary) : 'today’s questions'),
     [summary]
   )
+  const growthCircleItems = useMemo(() => {
+    if (!summary) return []
+    return summary.domainGains.map((gain) => ({
+      canonical_subcategory: gain.displayName,
+      broad_category: gain.broadCategory,
+      points_total: gain.totalPoints,
+      points_gained_this_round: gain.pointsGained,
+      tier_current: gain.currentTier,
+    }))
+  }, [summary])
+  const firstTierCrossing = summary?.tierCrossings[0] ?? null
+  const line = useMemo(
+    () => (summary ? interpretiveLine(summary) : null),
+    [summary]
+  )
 
   if (loading) {
     return <LoadingScreen fullScreen label="Loading summary" />
@@ -159,7 +177,29 @@ export default function DailySummaryPage() {
             <ResultDots questions={summary.questions} />
             <ShareResultsButton correct={summary.totalCorrect} total={summary.questions.length} />
           </div>
+          {line ? <InterpretiveLine text={line} /> : null}
         </header>
+
+        <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
+          <h2 style={titleStyle}>Your Growth Recap</h2>
+          <CategoryGainsDisplay
+            roundItems={growthCircleItems}
+            emptyMessage="No mastery movement was recorded today."
+          />
+        </section>
+
+        {summary.refine ? <RefineYourGame refine={summary.refine} /> : null}
+
+        {firstTierCrossing ? (
+          <MasteryMoment
+            subcategory={
+              summary.domainGains.find(
+                (gain) => gain.domain === firstTierCrossing.domain
+              )?.displayName ?? firstTierCrossing.domain
+            }
+            newTier={firstTierCrossing.toTier}
+          />
+        ) : null}
 
         <section className="mt-8">
           <div className="mb-4">
@@ -192,7 +232,7 @@ export default function DailySummaryPage() {
         {summary.reminderPromptState === 'show' ? <RoundReminderCard /> : null}
 
         {summary.recentFriendBridge ? (
-          <section className="mt-6 rounded-3xl border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
+          <section className="mt-6 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
             <h2 style={titleStyle}>Meanwhile</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
               {bridgeSentence(summary.recentFriendBridge)}
@@ -206,7 +246,7 @@ export default function DailySummaryPage() {
           </section>
         ) : null}
 
-        <section className="mt-8 rounded-[2rem] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-6 text-center">
+        <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-6 text-center">
           <p className="text-[1.05rem] leading-7 text-[var(--brand-ink-700)]">
             Tomorrow’s five arrive at noon.
           </p>
@@ -245,6 +285,66 @@ function summaryHeadlineDomain(summary: DailySummaryView): string {
   if (gainedDomain) return gainedDomain
 
   return summary.questions[0]?.domainDisplayName || 'today’s questions'
+}
+
+function formatTier(tier: string) {
+  return tier.replace(/_/g, ' ').toUpperCase()
+}
+
+function interpretiveLine(summary: DailySummaryView): string | null {
+  // 1. Tier crossing
+  const crossing = summary.tierCrossings[0]
+  if (crossing) {
+    const domain =
+      summary.domainGains.find((gain) => gain.domain === crossing.domain)
+        ?.displayName ?? crossing.domain
+    return `You moved to ${formatTier(crossing.toTier).toLowerCase()} in ${domain}.`
+  }
+
+  // 2. First correct in new demonstrated domain
+  const newDomain = summary.domainGains.find((gain) => gain.isNewTerritory)
+  if (newDomain) return `You found new ground in ${newDomain.displayName}.`
+
+  const answered = summary.questions.filter((q) => !q.isSkipped)
+  const total = answered.length
+
+  // 3. 5/5
+  if (total > 0 && summary.totalCorrect === total && total === 5)
+    return 'Clean sweep.'
+
+  // 4. 0/5
+  if (total > 0 && summary.totalCorrect === 0 && total === 5)
+    return 'Every one of them. Tomorrow.'
+
+  // 5. 3+ correct in a row
+  let streak = 0
+  let maxStreak = 0
+  for (const q of answered) {
+    if (q.isCorrect) {
+      streak += 1
+      if (streak > maxStreak) maxStreak = streak
+    } else {
+      streak = 0
+    }
+  }
+  if (maxStreak >= 3) return 'Three in a row at one point.'
+
+  // 6. All wrong in a single domain
+  const domainGroups = new Map<string, { total: number; wrong: number }>()
+  for (const q of answered) {
+    const key = q.domainDisplayName
+    const entry = domainGroups.get(key) ?? { total: 0, wrong: 0 }
+    entry.total += 1
+    if (!q.isCorrect) entry.wrong += 1
+    domainGroups.set(key, entry)
+  }
+  for (const [domain, counts] of domainGroups) {
+    if (counts.total >= 2 && counts.wrong === counts.total) {
+      return `${domain} is worth a deeper look.`
+    }
+  }
+
+  return null
 }
 
 function ResultDots({ questions }: { questions: QuestionRecap[] }) {
@@ -294,7 +394,7 @@ function ShareResultsButton({ correct, total }: { correct: number; total: number
     <button
       type="button"
       onClick={() => void share()}
-      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--brand-border)] bg-[var(--brand-card)] px-3 text-sm font-medium text-[var(--brand-ink-700)] transition hover:bg-[var(--brand-cream-card)] hover:text-[var(--brand-ink)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--brand-border)] bg-[var(--brand-card)] px-3 text-sm font-medium text-[var(--brand-ink-700)] transition hover:bg-[var(--brand-cream-page)] hover:text-[var(--brand-ink)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       <Share2 className="size-4" />
       {copied ? 'Copied' : 'Share your results'}
@@ -344,6 +444,22 @@ export function AuthorName({
     >
       {name}
     </Link>
+  )
+}
+
+function InterpretiveLine({ text }: { text: string }) {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const t = window.setTimeout(() => setVisible(true), 300)
+    return () => window.clearTimeout(t)
+  }, [])
+  return (
+    <p
+      className="text-muted-foreground mt-4 text-sm leading-6 italic"
+      style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.4s ease' }}
+    >
+      {text}
+    </p>
   )
 }
 
@@ -439,7 +555,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
       : 'Creator’s note'
 
   return (
-    <article className="relative overflow-hidden rounded-[1.45rem] border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
+    <article className="relative overflow-hidden rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
       <div
         className="absolute inset-y-0 left-0 w-1"
         style={{
@@ -462,7 +578,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
                   : 'var(--brand-border)',
                 backgroundColor: question.isCorrect
                   ? 'color-mix(in srgb, var(--game-correct) 8%, var(--brand-card))'
-                  : 'color-mix(in srgb, var(--brand-cream-card) 62%, var(--brand-card))',
+                  : 'color-mix(in srgb, var(--brand-cream-page) 62%, var(--brand-card))',
                 color: question.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink-700)',
               }}
             >
@@ -497,7 +613,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
         {question.questionText}
       </p>
 
-      <div className="mt-5 grid gap-3 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-cream-page)] p-3 sm:grid-cols-2">
+      <div className="mt-5 grid gap-3 rounded-md border border-[var(--brand-border)] bg-[var(--brand-cream-page)] p-3 sm:grid-cols-2">
         <div>
           <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
             You said
@@ -554,7 +670,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
       ) : null}
 
       {question.authorNote ? (
-        <section className="mt-5 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-cream-card)] px-4 py-3">
+        <section className="mt-5 rounded-md border border-[var(--brand-border)] bg-[var(--brand-cream-page)] px-4 py-3">
           <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
             {creatorNoteLabel}
           </h3>
@@ -565,7 +681,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
       ) : null}
 
       {exclusionState.kind === 'confirmed' ? (
-        <div className="bg-muted/35 text-muted-foreground mt-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs">
+        <div className="bg-muted/35 text-muted-foreground mt-4 flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
           <span>
             {question.domainDisplayName} won&apos;t appear in your daily queue
             anymore.
@@ -595,7 +711,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           aria-pressed={rating === 'thumbs_up'}
           className={cn(
             'inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-            rating === 'thumbs_up' ? 'bg-[var(--brand-cream-card)] text-[var(--brand-orange)]' : ''
+            rating === 'thumbs_up' ? 'bg-[var(--brand-cream-page)] text-[var(--brand-orange)]' : ''
           )}
           disabled={isFeedbackPending}
           type="button"
@@ -603,14 +719,6 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
         >
           <Heart className={cn('size-4', rating === 'thumbs_up' ? 'fill-current' : '')} />
           React
-        </button>
-        <button
-          type="button"
-          onClick={() => setIsOverflowOpen(true)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          <MessageCircle className="size-4" />
-          Discuss
         </button>
         <SendQuestionAction
           question={{
@@ -621,16 +729,6 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           label="Share"
           className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         />
-        {question.reportTarget ? (
-          <button
-            type="button"
-            onClick={() => setReportCategory('incorrect')}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            <Flag className="size-4" />
-            Dispute
-          </button>
-        ) : null}
       </div>
 
       {isOverflowOpen ? (
