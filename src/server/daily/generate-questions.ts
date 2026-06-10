@@ -66,8 +66,13 @@ const AUTHORED_AVOID_TEXT_LIMIT = 40;
 // How many recently-answered CANONICAL question texts (feed sends, milestone
 // click-throughs, house questions — rows with no fact_key, invisible to the
 // fact-key avoid set; BP-6 / audit Q8) to seed into the Sonnet avoid list.
-// Domain-scoped by the caller and bounded for the same flush reason as above.
-const ANSWERED_CANONICAL_AVOID_TEXT_LIMIT = 25;
+// Domain-scoped by the caller and bounded for the same flush reason as above —
+// AND kept well under RECENT_HISTORY_GATE_LIMIT (30): these entries are
+// prepended, so they occupy the front of the semantic history gate's window,
+// and a larger cap could displace the generated history the gate exists to
+// enforce against (re-audit 2026-06-10, finding F2). 12 leaves ≥18 window
+// slots for history in the worst case on the core path.
+const ANSWERED_CANONICAL_AVOID_TEXT_LIMIT = 12;
 
 // Domain-scope an answered-canonical read to the round's domains (domainKey
 // fold, so spelling variants match) and cap it. Advisory only — the entries
@@ -636,7 +641,7 @@ The following styles are explicitly ACCEPTABLE and must NOT be flagged on style 
 
 ${STYLE_EXEMPLAR_BLOCK}
 
-Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, or SELF_ANSWERING.
+Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, SELF_ANSWERING, or — at moderate/specialist tier only — GENERIC_AT_TIER. Style never exempts a question from the tier bar: a concise identification-style question at moderate/specialist must still clear strip-the-domain.
 
 Return JSON only:
 { "drop_indices": [list of zero-based indices to drop], "reasons": { "<index>": "<short reason>" } }
