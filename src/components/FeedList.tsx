@@ -1513,9 +1513,11 @@ function FeedListContent({
       if (embed?.kind === 'recently_expanding') {
         return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
       }
-      // Everything else — including the milestone bundle — renders as a
-      // plain flat row (its bundle triangle mark + tap-to-answer
-      // expansion live inside ActivityStreamItem). No card treatment.
+      // Everything else renders as a one-liner row, with its bundle triangle
+      // mark + tap-to-answer expansion living inside ActivityStreamItem. On the
+      // home feed the playable milestone bundles take the cream card treatment
+      // (elevated) so they step forward from the flat ambient rows; the full
+      // /activities log keeps every row flat.
       return (
         <ActivityStreamItem
           key={`a-${row.item.id}`}
@@ -1524,6 +1526,7 @@ function FeedListContent({
           // The home "What's Happening" feed reads calmer without the per-row
           // "1d ago" ledger; the full /activities log keeps its timestamps.
           showTimestamp={!unifiedHome}
+          elevated={unifiedHome}
         />
       )
     }
