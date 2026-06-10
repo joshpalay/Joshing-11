@@ -1043,7 +1043,7 @@ function QuickMoveTargets({
           key={target.value}
           ref={(element) => setQuickTargetRef(target.value, element)}
           type="button"
-          className={`grid size-14 place-items-center rounded-full border px-1 text-center text-[0.62rem] leading-[0.72rem] font-semibold shadow-sm transition ${
+          className={`grid size-14 place-items-center rounded-full border px-0.5 text-center text-[0.62rem] leading-[0.72rem] font-semibold break-words hyphens-auto shadow-sm transition ${
             hoveredTarget === target.value
               ? 'scale-110 border-[var(--ink)] bg-[var(--ink)] text-[var(--cream)] shadow-[0_10px_24px_rgba(26,18,8,0.24)]'
               : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--ink)]'
