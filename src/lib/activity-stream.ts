@@ -838,8 +838,9 @@ export function convergenceToStreamItem(
   sharedTopic: string | null = null,
 ): StreamItem {
   // Person-first headline: `{Name}` → the friend actor link, `{topic}` → the
-  // serif category (only present in the single-topic pool). No domain ever
-  // reaches the line unless it's the one shared topic.
+  // serif category (only present in the single-topic pool). When the cluster's
+  // topics differ (topic-less pool), the distinct categories are appended as a
+  // serif tail below so the line still says what you converged on.
   const line: StreamLinePart[] = [];
   const re = /\{(Name|topic)\}/g;
   let last = 0;
@@ -854,6 +855,38 @@ export function convergenceToStreamItem(
     last = re.lastIndex;
   }
   if (last < captionTemplate.length) line.push(txt(captionTemplate.slice(last)));
+
+  // Topic-less pool (3b): the headline names no single domain, so on its own the
+  // line ("…keep landing in the same place") says nothing about WHAT you and the
+  // friend converged on. Append the cluster's distinct categories as a quiet
+  // serif tail so the overlap is legible. (The single-topic pool already names
+  // its one topic inline, so when `sharedTopic` is set we add nothing here.)
+  if (!sharedTopic) {
+    const seen = new Set<string>();
+    const categories: string[] = [];
+    for (const q of questions) {
+      const d = q.domain?.trim();
+      if (d && !seen.has(d)) {
+        seen.add(d);
+        categories.push(d);
+      }
+    }
+    if (categories.length) {
+      // Drop a trailing period on the predicate so the tail reads
+      // "…same place — A, B, C" rather than "…same place. — A, B, C".
+      const tailIdx = line.length - 1;
+      const tailPart = line[tailIdx];
+      if (tailPart && tailPart.t === 'text') {
+        line[tailIdx] = txt(tailPart.v.replace(/\.\s*$/, ''));
+      }
+      line.push(txt(' — '));
+      categories.forEach((c, i) => {
+        if (i > 0) line.push(txt(', '));
+        line.push(cat(c));
+      });
+    }
+  }
+
   return {
     id: convergence.id,
     sortAt: convergence.sortAt,
