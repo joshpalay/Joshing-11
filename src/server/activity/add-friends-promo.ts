@@ -22,20 +22,14 @@ import {
 import { listContactMatches } from '@/server/db/queries/contact-hashes';
 
 const MAX_SUGGESTIONS = 3;
-// Show on ~1 in 5 home visits so the promo reads as an occasional nudge, not a
-// fixture — the same stateless gating as the common-ground promo.
-const PROMO_SHOW_PROBABILITY = 0.2;
 const FRIENDS_FIND_HREF = '/friends/find';
 
 export async function getAddFriendsPromo(
   userId: string,
   now: Date = new Date(),
-  // Injectable for tests; defaults to Math.random in [0, 1).
-  random: () => number = Math.random,
 ): Promise<StreamItem | null> {
-  // Gate first so the visits we won't show the promo skip the contact read.
-  if (random() >= PROMO_SHOW_PROBABILITY) return null;
-
+  // First-class module: always render (suggestions when there are addable
+  // matches, otherwise the invite nudge) so the viewer can grow their circle.
   const matches = await listContactMatches(userId);
   // Addable = a NEW follow is the action: 'none' (no edge) or 'follows_you'
   // (they follow me; I can follow back). Anyone already requested / following /

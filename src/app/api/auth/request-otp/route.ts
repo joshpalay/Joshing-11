@@ -105,6 +105,10 @@ export async function POST(request: Request) {
       }
     }
 
+    // TODO: when OTP goes live, send the code via SMS here
+    // (sendSms(phone, ...) from '@/server/sms'). Today requestOtp() only
+    // generates + stores the code; nothing texts it. In non-prod the code is
+    // returned as debugCode below so the flow can be completed manually.
     const { code } = await requestOtp(phone);
 
     return NextResponse.json({

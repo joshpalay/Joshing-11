@@ -4,8 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // (open|upheld) must stay out of their Lately milestone stack across reloads. We
 // mock the upstream lately queries and the pure transforms (echoing the questions
 // they receive) so we can assert the hidden id is filtered before render.
-const { getViewerHiddenQuestionIdsMock } = vi.hoisted(() => ({
+const { getViewerHiddenQuestionIdsMock, getViewerPriorAnswerResultsMock } = vi.hoisted(() => ({
   getViewerHiddenQuestionIdsMock: vi.fn(async () => new Set<string>()),
+  getViewerPriorAnswerResultsMock: vi.fn(
+    async () => new Map<string, 'correct' | 'incorrect'>(),
+  ),
 }));
 
 vi.mock('@/app/activities/filter-utility-activities', () => ({
@@ -33,16 +36,21 @@ vi.mock('@/server/db/queries/lately', () => ({
   getMilestoneQuestionText: vi.fn(async (ids: string[]) =>
     new Map(ids.map((id) => [id, { questionId: id, text: `text ${id}`, domain: 'history' }])),
   ),
-  getViewerPriorAnswerResults: vi.fn(async () => new Map()),
+  getViewerPriorAnswerResults: getViewerPriorAnswerResultsMock,
 }));
 
 import { buildActivityStream } from '@/server/activity/build-stream';
 
-type MilestoneItem = { kind: string; id: string; questions: Array<{ questionId: string }> };
+type MilestoneItem = {
+  kind: string;
+  id: string;
+  questions: Array<{ questionId: string; priorResult: 'correct' | 'incorrect' | null }>;
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   getViewerHiddenQuestionIdsMock.mockResolvedValue(new Set<string>());
+  getViewerPriorAnswerResultsMock.mockResolvedValue(new Map());
 });
 
 describe('buildActivityStream — durable inappropriate self-hide', () => {
@@ -62,5 +70,19 @@ describe('buildActivityStream — durable inappropriate self-hide', () => {
     const milestone = stream.find((item) => item.kind === 'milestone');
 
     expect(milestone!.questions.map((q) => q.questionId)).toEqual(['q-keep', 'q-hidden']);
+  });
+
+  it('keeps an already-answered question in the bundle, carrying its prior result', async () => {
+    // The viewer answered q-keep correctly on some earlier surface. It must stay
+    // in the bundle (as a spent/hollow triangle), not vanish — and the title
+    // stays stable because the question count doesn't shrink.
+    getViewerPriorAnswerResultsMock.mockResolvedValue(new Map([['q-keep', 'correct']]));
+
+    const stream = (await buildActivityStream('viewer-1')) as unknown as MilestoneItem[];
+    const milestone = stream.find((item) => item.kind === 'milestone');
+
+    expect(milestone!.questions.map((q) => q.questionId)).toEqual(['q-keep', 'q-hidden']);
+    expect(milestone!.questions.find((q) => q.questionId === 'q-keep')!.priorResult).toBe('correct');
+    expect(milestone!.questions.find((q) => q.questionId === 'q-hidden')!.priorResult).toBeNull();
   });
 });

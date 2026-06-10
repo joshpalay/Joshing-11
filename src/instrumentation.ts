@@ -1,5 +1,12 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // Per-process guard: register() runs once at startup, but guard against any
+    // double-invocation (e.g. dev hot-reload) so the boot DB work below can
+    // never run twice within a single process.
+    const globalForBoot = globalThis as unknown as { __joshingBootRan?: boolean };
+    if (globalForBoot.__joshingBootRan) return;
+    globalForBoot.__joshingBootRan = true;
+
     // PHONE_HASH_SALT seeds the SHA-256 used by hashPhoneNumber()
     // (src/server/lib/phone-hashing.ts) and the client-side hashing path
     // B-Friends-4 will add. hashPhoneNumber() already throws at call time if
@@ -14,6 +21,25 @@ export async function register() {
       );
     }
 
+    // RESEND_API_KEY + EMAIL_FROM back the email-verification confirm-link
+    // (src/server/email/client.ts). The client never throws — if either is
+    // missing it silently logs to stdout and returns missing_config, so a
+    // misconfigured production deploy drops every verification email with no
+    // user-visible error. Warn loudly at boot so the gap surfaces here rather
+    // than as silently-undelivered mail. (Warning only, like PHONE_HASH_SALT
+    // above — throwing would 500 every request via the instrumentation hook.)
+    if (process.env.NODE_ENV === 'production') {
+      const missingEmailVars = [
+        !process.env.RESEND_API_KEY && 'RESEND_API_KEY',
+        !process.env.EMAIL_FROM && 'EMAIL_FROM',
+      ].filter(Boolean);
+      if (missingEmailVars.length > 0) {
+        console.error(
+          `[instrumentation] ${missingEmailVars.join(' and ')} not set in production; email verification will silently no-op. Set both, and ensure EMAIL_FROM's domain matches a Verified domain in Resend.`,
+        );
+      }
+    }
+
     const { migrate } = await import('drizzle-orm/node-postgres/migrator');
     const { drizzle } = await import('drizzle-orm/node-postgres');
     const { Pool } = await import('pg');
@@ -25,6 +51,24 @@ export async function register() {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const db = drizzle(pool);
 
+    // The idempotent guard blocks below pre-repair partially-recorded preview/
+    // production databases so migrate() can succeed on them (additive columns,
+    // enum values, and tables that a recorded-but-not-fully-applied migration
+    // may be missing). On a database that already carries every change they are
+    // pure overhead: ~70 sequential round-trips on every cold start, which
+    // dominates cold-start latency — the first request after a boot (e.g.
+    // POST /api/auth/request-otp) waits behind the whole chain.
+    //
+    // Set SKIP_BOOT_DB_GUARDS=1 to skip the chain; migrate() still runs
+    // afterwards, and every migration through the head is journaled in
+    // drizzle/meta/_journal.json, so migrate() applies them all on a fresh DB
+    // and the guards are now purely defensive redundancy. Leave the flag unset
+    // in preview/dev so the auto-repair guards keep running. Always journal new
+    // migrations (keep _journal.json in lockstep with drizzle/*.sql) rather
+    // than relying on a guard as a migration's only application path. See
+    // CLAUDE.md.
+    const runBootGuards = process.env.SKIP_BOOT_DB_GUARDS !== '1';
+    if (runBootGuards) {
     // Migration 0006 sets NOT NULL on senderUserId/recipientUserId after adding them
     // as nullable columns. If any rows have NULL values (from a partial migration or
     // data predating those columns), the SET NOT NULL fails and blocks all subsequent
@@ -1308,6 +1352,7 @@ export async function register() {
       // User, Question, or GeneratedQuestion may not exist yet on a fresh
       // database — migrate() creates them before this migration runs.
     }
+    } // end if (runBootGuards)
 
     try {
       await migrate(db, {

@@ -65,19 +65,28 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
     activityToStreamItem,
   );
   const momentItems = moments.map(momentToStreamItem);
-  const milestoneItems = milestones.map((m, i) => {
-    const questions: StreamQuestion[] = cappedIdsByMilestone[i].ids
-      .map((id) => textById.get(id))
-      .filter((q): q is NonNullable<typeof q> => Boolean(q))
-      .filter((q) => !hiddenIds.has(q.questionId))
-      .map((q) => ({
-        questionId: q.questionId,
-        text: q.text,
-        domain: q.domain,
-        priorResult: priorById.get(q.questionId) ?? null,
-      }));
-    return milestoneToStreamItem(m, questions);
-  });
+  const milestoneItems = milestones
+    .map((m, i) => {
+      const questions: StreamQuestion[] = cappedIdsByMilestone[i].ids
+        .map((id) => textById.get(id))
+        .filter((q): q is NonNullable<typeof q> => Boolean(q))
+        .filter((q) => !hiddenIds.has(q.questionId))
+        // Keep EVERY one of the friend's questions in the bundle — including the
+        // ones the viewer already answered. Each carries its prior result, so the
+        // answered ones render as spent (hollow) triangles in the expansion and
+        // the title stays stable across reloads (answered questions don't vanish,
+        // and the triangle count doesn't shrink as you play).
+        .map((q) => ({
+          questionId: q.questionId,
+          text: q.text,
+          domain: q.domain,
+          priorResult: priorById.get(q.questionId) ?? null,
+        }));
+      // A milestone whose questions all collapse out is a contentless streak
+      // card — suppress it rather than render an empty triangle.
+      return questions.length > 0 ? milestoneToStreamItem(m, questions) : null;
+    })
+    .filter((item): item is StreamItem => item !== null);
   const convergenceItems = convergences.map((c) => {
     const questions: StreamQuestion[] = c.questionIds
       .map((id) => textById.get(id))

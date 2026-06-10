@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Send } from 'lucide-react';
+import { ChevronDown, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type KeyboardEvent } from 'react';
 
@@ -16,7 +16,7 @@ import type {
 
 import { DirectQuestionAnswer } from './DirectQuestionAnswer';
 import { InlineAnswerFlow } from './InlineAnswerFlow';
-import { ActivityIcon, specForIcon } from './ActivityIcon';
+import { ActivityIcon, QuestionTriangle, specForIcon } from './ActivityIcon';
 import { FF, FM, INK, INK2, INK3, PAPER, RULE } from '@/components/lately/tokens';
 import { assertNever } from '@/lib/assert-never';
 
@@ -31,7 +31,7 @@ const ACTOR_BLUE = 'var(--brand-link)';
 // actor name / update copy begins, reading as a clear child of the update.
 const EXPANSION_INDENT = 32;
 
-function ActorLink({ name, userId }: { name: string; userId: string | null }) {
+export function ActorLink({ name, userId }: { name: string; userId: string | null }) {
   if (!userId) return <b style={{ fontWeight: 600, color: ACTOR_BLUE }}>{name}</b>;
   return (
     <Link
@@ -50,7 +50,7 @@ function ActorLink({ name, userId }: { name: string; userId: string | null }) {
   );
 }
 
-function Line({ parts }: { parts: StreamLinePart[] }) {
+export function Line({ parts }: { parts: StreamLinePart[] }) {
   return (
     <>
       {parts.map((part, i) => {
@@ -94,7 +94,18 @@ function questionBacked(expand: StreamExpand | null): boolean {
 // whether it was scored correct. Drives the calm "Answered" history copy.
 type Resolution = { submitted: string; isCorrect: boolean };
 
-export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; timestamp: string }) {
+export function ActivityStreamItem({
+  item,
+  timestamp,
+  nested = false,
+}: {
+  item: StreamItem;
+  timestamp: string;
+  // When nested beneath a per-person heading, the row drops its own shape mark
+  // (the heading carries the only shape) and its hairline/padding chrome, so the
+  // sub-items read as a quiet indented list under the statement.
+  nested?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
 
@@ -144,6 +155,14 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
 
   const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;
 
+  // The plain "{answered} of {total} questions" progress label that rides under a
+  // milestone line, in lockstep with the bundle triangle mark — so the viewer can
+  // read their progress at a glance whether or not the card is open.
+  const milestoneProgress =
+    milestoneQuestions && milestoneQuestions.length > 0
+      ? { answered: answeredCount, total: milestoneQuestions.length }
+      : null;
+
   // The bundle mark (milestone) shares the row's live answered-state: as the
   // viewer answers questions inline, solid triangles flip to hollow. Caps at 5
   // triangles silently (the questions array is already ≤5); copy stays truthful.
@@ -180,17 +199,18 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
     <div
       id={item.anchorId ?? undefined}
       style={
-        opened
-          ? {
-              borderTop: `1px solid ${RULE}`,
-              borderBottom: `1px solid ${RULE}`,
-              padding: '18px 2px',
-              background: PAPER,
-            }
-          : {
-              borderBottom: `1px solid ${RULE}`,
-              padding: '12px 2px',
-            }
+        nested
+          ? // Nested under a per-person heading: no border/fill, light padding.
+            { padding: opened ? '6px 0' : '4px 0' }
+          : opened
+            ? // Opened reveal: a soft paper wash defines the expanded cluster —
+              // no hard hairlines (v2 §4 prefers whitespace over dividers).
+              {
+                padding: '16px 2px',
+                background: PAPER,
+              }
+            : // Calm default: no row hairline; whitespace separates the rows.
+              { padding: '14px 2px' }
       }
     >
       <div
@@ -206,7 +226,9 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
           WebkitTapHighlightColor: 'transparent',
         }}
       >
-        <ActivityIcon spec={iconSpec} seed={item.id} />
+        {/* Nested rows carry no shape — the per-person heading holds the one
+            diamond; everything beneath it is a plain indented line. */}
+        {nested ? null : <ActivityIcon spec={iconSpec} seed={item.id} />}
 
         <div style={{ minWidth: 0, flex: 1, paddingRight: 12 }}>
           <p
@@ -237,6 +259,19 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
               {item.secondLine}
             </p>
           ) : null}
+          {milestoneProgress ? (
+            <p
+              style={{
+                margin: '4px 0 0',
+                fontFamily: FM,
+                fontSize: 10,
+                letterSpacing: 1,
+                color: INK3,
+              }}
+            >
+              {milestoneProgress.answered} of {milestoneProgress.total} questions
+            </p>
+          ) : null}
         </div>
 
         <div
@@ -250,17 +285,19 @@ export function ActivityStreamItem({ item, timestamp }: { item: StreamItem; time
             gap: 4,
           }}
         >
-          <span style={{ fontSize: 13, color: INK3, whiteSpace: 'nowrap' }}>{timestamp}</span>
-          {/* Cards backed by answerable questions get a chevron in the bottom-
-              right corner that signals (and reflects) the expand/collapse state.
-              The row itself is the button (aria-expanded above), so this stays
-              decorative. */}
+          {/* Metadata recedes to near-invisible (v2 §4): quiet, small timestamp. */}
+          <span style={{ fontSize: 12, color: INK3, opacity: 0.6, whiteSpace: 'nowrap' }}>
+            {timestamp}
+          </span>
+          {/* Decorative disclosure chevron — demoted; the row itself is the
+              button (aria-expanded above). */}
           {expandable ? (
             <ChevronDown
-              size={18}
+              size={16}
               aria-hidden
               style={{
                 color: INK3,
+                opacity: 0.5,
                 transition: 'transform 150ms ease',
                 transform: open ? 'rotate(180deg)' : 'none',
               }}
@@ -349,11 +386,20 @@ export function MilestoneExpansion({
         marginTop: 14,
         display: 'flex',
         flexDirection: 'column',
-        gap: 20,
+        gap: 18,
       }}
     >
       {unanswered.map((q) => (
-        <InlineAnswerFlow key={q.questionId} question={q} onResolved={onResolved} />
+        // Solid triangle = still to play. It leads each answerable question so the
+        // per-question marks read solid→hollow in step with the bundle mark above.
+        <div key={q.questionId} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <span style={{ marginTop: 6 }}>
+            <QuestionTriangle solid seed={q.questionId} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <InlineAnswerFlow question={q} onResolved={onResolved} />
+          </div>
+        </div>
       ))}
       {answered.length > 0 ? (
         <AnsweredHistory questions={answered} resolutions={resolutions} />
@@ -408,34 +454,41 @@ function AnsweredHistory({
           // red for "not this time" — same tokens the AnswerFeedbackSheet uses.
           const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)';
           return (
-            <div key={q.questionId}>
-              <p
-                style={{
-                  margin: 0,
-                  fontFamily: FF,
-                  fontSize: 12.5,
-                  lineHeight: 1.45,
-                  letterSpacing: 0.2,
-                  fontWeight: 600,
-                  color: resultColor,
-                }}
-              >
-                {isCorrect ? 'Correct' : 'Not this time'}
-                {r ? ` - ${r.submitted}` : null}
-              </p>
-              <p
-                style={{
-                  margin: '3px 0 0',
-                  paddingRight: 24,
-                  fontFamily: 'Georgia, serif',
-                  fontStyle: 'italic',
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                  color: INK3,
-                }}
-              >
-                &ldquo;{q.text}&rdquo;
-              </p>
+            // Hollow triangle = already answered (spent), matching the bundle
+            // mark's hollow state, so the viewer sees which ones they've done.
+            <div key={q.questionId} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ marginTop: 4 }}>
+                <QuestionTriangle solid={false} seed={q.questionId} />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontFamily: FF,
+                    fontSize: 12.5,
+                    lineHeight: 1.45,
+                    letterSpacing: 0.2,
+                    fontWeight: 600,
+                    color: resultColor,
+                  }}
+                >
+                  {isCorrect ? 'Correct' : 'Not this time'}
+                  {r ? ` - ${r.submitted}` : null}
+                </p>
+                <p
+                  style={{
+                    margin: '3px 0 0',
+                    paddingRight: 24,
+                    fontFamily: 'Georgia, serif',
+                    fontStyle: 'italic',
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: INK3,
+                  }}
+                >
+                  &ldquo;{q.text}&rdquo;
+                </p>
+              </div>
             </div>
           );
         })}
@@ -528,26 +581,25 @@ function SendOnwardExpansion({
         &ldquo;{question.text}&rdquo;
       </p>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+        {/* Quiet, standard share icon (matches KnowledgeCard / RecentlyExpanding)
+            — no oversized labeled button. Opens the same SendQuestionDrawer. */}
         <button
           type="button"
           onClick={() => setSendOpen(true)}
+          aria-label="Send to a friend"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
-            background: INK,
-            color: 'var(--brand-cream-page)',
+            justifyContent: 'center',
+            background: 'transparent',
             border: 'none',
-            fontFamily: FM,
-            fontSize: 10,
-            letterSpacing: 2,
-            padding: '8px 14px',
+            padding: 4,
+            color: INK,
             cursor: 'pointer',
           }}
         >
-          SEND TO A FRIEND
-          <Send size={12} aria-hidden />
+          <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
         </button>
 
         {expand.kind === 'niche_match' && expand.strangerId ? (

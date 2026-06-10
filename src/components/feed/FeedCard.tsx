@@ -22,6 +22,8 @@ type FeedCardProps = {
   /** Contextual verb shown after the name, e.g. "knows", "sent you this". */
   verb?: string
   dimQuestion?: boolean
+  /** Tier 1 "playable" lift on the unified home feed. Forwarded to FeedCardShell. */
+  elevated?: boolean
 }
 
 // display/card/update — category line in Cormorant SemiBold (Figma 16/24/0.64px/black).
@@ -63,6 +65,7 @@ export function FeedCard({
   headerContent,
   verb,
   dimQuestion,
+  elevated,
 }: FeedCardProps) {
   const categoryColor = colorForCategory(item.category)
   const visibleCategory = visibleFeedCategory(item.category)
@@ -106,7 +109,7 @@ export function FeedCard({
   }
 
   return (
-    <FeedCardShell accentColor={categoryColor} className={className}>
+    <FeedCardShell accentColor={categoryColor} className={className} elevated={elevated}>
       <div className="p-[14px]">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

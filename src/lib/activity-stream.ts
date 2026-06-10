@@ -18,7 +18,7 @@
  * action — friend-request approve, reaction ack, a link — but they don't expand).
  */
 
-import { HOME_TOP3_ELIGIBLE_TYPES } from '@/server/activity/write-activity';
+import { HOME_TOP3_ELIGIBLE_TYPES } from '@/lib/activity-types';
 import type { ActivityItemView } from '@/server/db/queries/activity';
 import type { MasteryTier } from '@/types/db';
 import type { LatelyMoment } from '@/server/db/queries/lately';
@@ -178,6 +178,23 @@ export type StreamItem = {
   id: string;
   sortAt: Date;
   tier: number;
+  // The single friend this row belongs to, used to group a friend's relationship
+  // activity into one per-person card on the home feed. `null` for friend-less
+  // rows ("You shared…", "Everyone played…", the weekly ceremony, and the
+  // viewer-only promos). Set at construction so the grouping never re-parses the
+  // line parts.
+  friendId?: string | null;
+  // How this row reads inside a per-person relationship cluster, so the cluster
+  // can roll events up by direction without re-parsing copy (D-FEED-TIER v2 §3):
+  //   you_got     — you answered THEIR question right ("got {Name} — topics")
+  //   got_you     — they answered YOUR question ("{Name} got yours — topics")
+  //   convergence — you both knew the same shared questions (folded, one line)
+  //   saved       — they saved your question
+  //   reacted     — they reacted to your question
+  // Undefined = not a per-person relationship event (renders as a plain line).
+  relationship?: 'you_got' | 'got_you' | 'convergence' | 'saved' | 'reacted';
+  // The topic/category this event is about, for the cluster's rolled-up lists.
+  topic?: string | null;
   // Whether this item is eligible for the homepage's curated head.
   homeEligible: boolean;
   line: StreamLinePart[];
@@ -224,6 +241,9 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         : null,
     // Default: no mark, column reserved. Overridden per type below.
     icon: null as StreamIconKind,
+    // Most activity rows are a single friend acting; the friend-less cases
+    // ("You shared…", "Everyone played…", the ceremony) null this out below.
+    friendId: item.actorUserId,
   };
 
   const a = act(actorName(item), item.actorUserId);
@@ -240,6 +260,8 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         line: [a, txt(got ? ' got your question' : ' answered your question')],
         secondLine: domain,
         icon: 'diamond',
+        relationship: 'got_you',
+        topic: domain,
         action: null,
         expand:
           item.referenceId && faq?.questionText
@@ -347,6 +369,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' reacted to your question')],
         secondLine: label,
+        relationship: 'reacted',
         action: {
           kind: 'reaction_got_it',
           reactionId: reaction?.id ?? item.referenceId ?? '',
@@ -361,6 +384,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' saved your question')],
         secondLine: item.reference.curatedQuestion?.questionText ?? null,
+        relationship: 'saved',
         action: null,
         expand: null,
       };
@@ -374,6 +398,8 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         line: [txt(`You shared a question with ${count} ${friendWord}`)],
         secondLine: shared?.domain ?? null,
         icon: 'hourglass',
+        // Friend-less: this is the viewer's own broadcast, not one friend acting.
+        friendId: null,
         action: null,
         expand: null,
       };
@@ -425,6 +451,8 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(` played ${item.reference.game?.title ?? 'a Joshing Game'}`)],
         secondLine: null,
+        // Game events stand on their own (their own link), not in a person card.
+        friendId: null,
         action: item.referenceId
           ? { kind: 'link', href: `/games/${item.referenceId}/summary`, label: 'See so far' }
           : null,
@@ -436,6 +464,8 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [txt(`Everyone played ${item.reference.game?.title ?? 'a Joshing Game'}`)],
         secondLine: null,
+        // Group/ambient event — no single friend to card it under.
+        friendId: null,
         action: item.referenceId
           ? { kind: 'link', href: `/games/${item.referenceId}/summary`, label: 'See results' }
           : null,
@@ -447,6 +477,8 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [txt('Your weekly reflection is ready')],
         secondLine: 'A look at the questions, friends, and territories that defined your week.',
+        // System event — viewer-only, not a friend's activity.
+        friendId: null,
         action: item.referenceId
           ? { kind: 'link', href: `/ceremony/${item.referenceId}`, label: 'See it now' }
           : null,
@@ -536,6 +568,9 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
     // they_got_you ("Robyn got your question") is the headline social signal —
     // home-eligible. you_got_them is quieter; keep it to the full list.
     homeEligible: theyGotYou,
+    friendId: moment.friendId,
+    relationship: theyGotYou ? 'got_you' : 'you_got',
+    topic: moment.category,
     line: theyGotYou
       ? [friend, txt(' got your question')]
       : [txt('You got '), friend, txt(' on '), cat(moment.category)],
@@ -565,14 +600,26 @@ export function milestoneToStreamItem(
   questions: StreamQuestion[],
 ): StreamItem {
   const friend = act(milestone.friendName, milestone.friendId);
-  const tail =
-    milestone.kind === 'milestone_deep'
-      ? [txt(' went deep on '), cat(milestone.domain)]
-      : breadthTail(milestone.domains.map((d) => d.domain));
+  let tail: StreamLinePart[];
+  if (milestone.kind === 'milestone_deep') {
+    tail = [txt(' went deep on '), cat(milestone.domain)];
+  } else {
+    // Name only the domains whose questions actually survived resolution — a
+    // question can be deleted/hidden after the friend answered it, and the
+    // header must not claim a domain the expansion can't show. Fall back to all
+    // domains if nothing resolved (the line then isn't expandable anyway).
+    const survivingIds = new Set(questions.map((q) => q.questionId));
+    const surviving = milestone.domains.filter((d) =>
+      d.questionIds.some((id) => survivingIds.has(id)),
+    );
+    const named = (surviving.length > 0 ? surviving : milestone.domains).map((d) => d.domain);
+    tail = breadthTail(named);
+  }
   return {
     id: milestone.id,
     sortAt: milestone.sortAt,
     tier: LATELY_TIER.MILESTONE,
+    friendId: milestone.friendId,
     homeEligible: true,
     line: [friend, ...tail],
     secondLine: null,
@@ -607,10 +654,12 @@ function breadthTail(domains: string[]): StreamLinePart[] {
 // independently got the same shared questions right. The headline is
 // PERSON-FIRST and names no domain — the caption template (assigned
 // deterministically by moment id) carries a `{Name}` token that becomes the
-// friend's first name as an actor link. It is Lately-ONLY (homeEligible: false,
-// the same slow-burn treatment as niche-match) and READ-ONLY: expanding reveals
-// the cluster's questions (domains may appear there as texture) with no answer,
-// send, or reaction affordance.
+// friend's first name as an actor link. It is the read-only counterpart to the
+// milestone triangle: the triangle row carries questions you have NOT answered
+// (answerable), while this row carries the ones you and the friend BOTH already
+// got right. Home-eligible so both rows surface together on Home, not just in
+// Lately. READ-ONLY: expanding reveals the cluster's questions (domains may
+// appear there as texture) with no answer, send, or reaction affordance.
 export function convergenceToStreamItem(
   convergence: Convergence,
   questions: StreamQuestion[],
@@ -625,7 +674,9 @@ export function convergenceToStreamItem(
     id: convergence.id,
     sortAt: convergence.sortAt,
     tier: LATELY_TIER.MILESTONE,
-    homeEligible: false,
+    friendId: convergence.friendId,
+    relationship: 'convergence',
+    homeEligible: true,
     line,
     secondLine: null,
     anchorId: null,
@@ -656,6 +707,7 @@ export function commonGroundPromoToStreamItem(
     id,
     sortAt,
     tier: LATELY_TIER.OTHER,
+    friendId: embed.friendId,
     homeEligible: true,
     line: [txt('You and '), act(embed.friendFirstName, embed.friendId), txt(' share ground worth testing')],
     secondLine: null,
@@ -680,6 +732,7 @@ export function recentlyExpandingPromoToStreamItem(
     id,
     sortAt,
     tier: LATELY_TIER.OTHER,
+    friendId: null,
     homeEligible: true,
     line: [txt('Your world is expanding')],
     secondLine: null,
@@ -704,6 +757,7 @@ export function addFriendsPromoToStreamItem(
     id,
     sortAt,
     tier: LATELY_TIER.OTHER,
+    friendId: null,
     homeEligible: true,
     line: [txt(embed.variant === 'suggestions' ? 'People you may know' : 'Grow your circle')],
     secondLine: null,
