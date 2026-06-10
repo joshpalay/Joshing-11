@@ -630,12 +630,10 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
               'Editor’s note:'
             ) : question.authorName ? (
               <>
-                Why{' '}
-                <AuthorName name={question.authorName} authorId={question.authorId} />{' '}
-                asked:
+                <AuthorName name={question.authorName} authorId={question.authorId} />’s note
               </>
             ) : (
-              'Why they asked:'
+              'Their note'
             )}
           </span>{' '}
           {question.authorNote}

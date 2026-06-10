@@ -280,8 +280,8 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
             {record.authorIsHouse
               ? 'Editor’s note:'
               : record.authorName
-                ? `Why ${record.authorName} asked:`
-                : 'Why they asked:'}
+                ? `${record.authorName}’s note`
+                : 'Their note'}
           </span>{' '}
           {record.authorNote}
         </p>

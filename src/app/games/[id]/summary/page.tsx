@@ -362,7 +362,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                   ) : null}
                   {authorNote ? (
                     <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
-                      <span className="font-medium">{authorName ? `Why ${authorName} asked:` : 'Why they asked:'}</span>{' '}
+                      <span className="font-medium">{authorName ? `${authorName}’s note` : 'Their note'}</span>{' '}
                       {authorNote}
                     </p>
                   ) : null}
