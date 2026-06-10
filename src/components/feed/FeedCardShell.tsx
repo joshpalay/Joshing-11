@@ -17,13 +17,12 @@ const FEED_CARD_RADIUS = 'rounded-[4px]'
 const FEED_CARD_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
 
 // Elevated ("playable" / Tier 1) treatment for the unified home feed
-// (D-FEED-TIER): the warm pale-cream fill of the real answer card, plus a hard
-// INK offset shadow — the app's native "liftable object" vocabulary (see
-// ShareCard / OverlapMap) — so a playable row visibly steps forward off the
-// cream while the ambient one-liners stay flat. Zero new tokens. The hairline
-// border stays, defining the edge so the offset reads as a deliberate lift.
+// (D-FEED-TIER): the warm light-cream question fill, kept on the same hairline
+// stroke and soft drop shadow as every other card. On the home feed the
+// ambient activity rows render as flat one-liners (no card), so a cream card
+// with a stroke + lift visibly steps forward as the thing you can play, while
+// the chatter stays quiet text. Zero new tokens.
 const FEED_CARD_ELEVATED_FILL = 'bg-[var(--game-card-question)]'
-const FEED_CARD_ELEVATED_SHADOW = 'shadow-[2px_2px_0_var(--brand-ink)]'
 
 export type FeedCardShellProps = {
   children: ReactNode
@@ -39,9 +38,11 @@ export type FeedCardShellProps = {
    */
   variant?: 'bordered' | 'triangle'
   /**
-   * Tier 1 "playable" lift for the unified home feed: pale-cream fill + hard INK
-   * offset shadow so the card steps forward. Defaults to false (the standalone
-   * Feed tab and answered/result cards keep the soft resting chrome).
+   * Tier 1 "playable" lift for the unified home feed: the warm light-cream
+   * question fill (on the same hairline stroke + soft drop shadow as every
+   * card) so a playable card steps forward off the cream while the ambient
+   * activity one-liners stay flat. Defaults to false (the standalone Feed tab
+   * and answered/result cards keep the near-white resting fill).
    */
   elevated?: boolean
 }
@@ -71,9 +72,9 @@ export function FeedCardShell({
         className={cn(
           "overflow-hidden bg-[url('/images/Variant4.png')] bg-[length:300px_auto] bg-center p-3",
           FEED_CARD_RADIUS,
-          // The whole matted card lifts on the offset shadow (mat image intact);
-          // the inset panel below carries the warm cream fill.
-          elevated ? FEED_CARD_ELEVATED_SHADOW : FEED_CARD_SHADOW,
+          // The whole matted card carries the soft drop shadow (mat image
+          // intact); the inset panel below carries the warm cream fill.
+          FEED_CARD_SHADOW,
           className,
         )}
       >
@@ -97,7 +98,7 @@ export function FeedCardShell({
         'relative overflow-hidden border border-[var(--brand-rule)]',
         elevated ? FEED_CARD_ELEVATED_FILL : 'bg-[var(--brand-card)]',
         FEED_CARD_RADIUS,
-        elevated ? FEED_CARD_ELEVATED_SHADOW : FEED_CARD_SHADOW,
+        FEED_CARD_SHADOW,
         className,
       )}
     >

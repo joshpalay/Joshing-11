@@ -489,28 +489,32 @@ describe('FeedCardShell (shared C7 shell)', () => {
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
   })
 
-  it('lifts the bordered card with cream fill + hard ink offset when elevated', () => {
+  it('lifts the bordered card with cream fill on the soft drop shadow + hairline stroke when elevated', () => {
     const rendered = html(
       <FeedCardShell elevated accentColor="#abc123">
         <p>body</p>
       </FeedCardShell>
     )
     expect(rendered).toContain('bg-[var(--game-card-question)]')
-    expect(rendered).toContain('shadow-[2px_2px_0_var(--brand-ink)]')
+    // Same soft drop shadow as every card — the cream fill + stroke do the lift.
+    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
     // The hairline border stays, defining the lifted card's edge.
     expect(rendered).toContain('border-[var(--brand-rule)]')
+    // No hard ink offset shadow.
+    expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     expect(rendered).not.toContain('bg-[var(--brand-card)]')
   })
 
-  it('lifts the triangle variant via the mat offset + cream inner panel when elevated', () => {
+  it('lifts the triangle variant with the soft drop shadow + cream inner panel when elevated', () => {
     const rendered = html(
       <FeedCardShell variant="triangle" elevated>
         <p>body</p>
       </FeedCardShell>
     )
-    // Mat image intact; the whole matted card lifts on the offset shadow.
+    // Mat image intact; the matted card carries the soft drop shadow.
     expect(rendered).toContain('/images/Variant4.png')
-    expect(rendered).toContain('shadow-[2px_2px_0_var(--brand-ink)]')
+    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     // Inner panel carries the warm cream fill instead of brand-card.
     expect(rendered).toContain('bg-[var(--game-card-question)]')
     expect(rendered).not.toContain('bg-[var(--brand-card)]')
