@@ -21,11 +21,14 @@ the B1–B5 quality-floor engine per PRD-D-5 §11; restructure provenance surfac
 
 **Trigger.** `fillDailyQueueForUser` (`src/server/daily/queue-orchestrator.ts:117`) runs either
 (a) synchronously on the user's first `POST /api/daily/queue` of the day (`src/app/api/daily/queue/route.ts`,
-`maxDuration` 90s), or (b) from the `daily-assignments` cron fan-out (all onboarded users,
-concurrency 4). **⚠️ The cron route's comment claims a 17:05 UTC schedule "in vercel.json", but
-`vercel.json` contains no `daily-assignments` entry** (only weekly-ceremony 08:00, vet-questions 07:00,
-expire-friend-requests 06:30, pool-refill 09:00). Either it's configured in the Vercel dashboard
-(verify), or every user is on the synchronous request path — see Cost C1.
+`maxDuration` 90s) — the fallback path for new users and cron failures — or (b) from the
+`daily-assignments` cron fan-out (all onboarded users, concurrency 4), **scheduled at 17:05 UTC by
+GitHub Actions, not Vercel** (`.github/workflows/external-crons.yml:30`). It was deliberately removed
+from `vercel.json` on 2026-05-30 because it also sends SMS (not idempotent) and the Vercel Hobby
+cron firing alongside the workflow could double-text users; GitHub Actions is its sole scheduler by
+design (workflow header, `:20-26`). The route comment's "(vercel.json)" parenthetical is stale. The
+workflow also re-fires weekly-ceremony / vet-questions / expire-friend-requests (idempotent, kept in
+`vercel.json` as fallback); **pool-refill is the one cron scheduled only by Vercel Hobby** — see C1.
 
 **Source priority before any LLM call.** The orchestrator fills authored → house → generated
 (`queue-orchestrator.ts:281-287`), and the generated tranche itself is **bank-first**: for each chosen
@@ -231,7 +234,7 @@ backstop. Slots carry presence attribution (`presence_source_*`). Conforms to D-
 
 | # | Finding | Effort | Re-audit |
 |---|---|---|---|
-| **C1** | **`daily-assignments` is not in `vercel.json`** despite the route comment claiming a 17:05 UTC schedule (comment predates or postdates a config change; repo history is squashed and never shows it journaled there). If it's not configured in the Vercel dashboard either, every user pays the synchronous generation path (latency + retries) and the pre-build batching opportunity is lost. **Verify in the dashboard; re-add or fix the comment.** | S | — |
+| **C1** | **Cron scheduling is split across Vercel and GitHub Actions, with two sharp edges.** `daily-assignments` *is* scheduled — 17:05 UTC via `.github/workflows/external-crons.yml` (sole scheduler by design; removed from `vercel.json` 2026-05-30 to avoid double-SMS) — so the pre-build fan-out runs; only the route comment is stale. The edges: **(a) the workflow curls the one non-idempotent route with `--retry 2 --retry-all-errors --max-time 300`** (`external-crons.yml:86-89`) while the route's `maxDuration` is also 300 and it sends SMS/email **even for `existing` queues** (`daily-assignments/route.ts:91-99`) — a client-side timeout with the function still running retries the run and re-texts every already-processed user, exactly the double-send the 2026-05-30 change tried to prevent. Fix: gate the nudge on freshly-generated queues (or a sent-today marker), or drop `--retry-all-errors` for this route. **(b) `pool-refill` is the only cron left solely on Vercel Hobby best-effort scheduling** — the unreliability the workaround exists for. Moot while retrieval is off (C6); add it to the workflow when C6 flips. | S | — |
 | **C2** | **Per-batch LLM fan-out is wide:** 4 separate Haiku gate calls + 3×N cold answers + judge + N Sonnet asides + N Haiku domain-reconciles per generation batch. Mergeable: the 4 gates share input format and could be 1–2 calls with a combined rubric (also gets Q1's fan-salience check for free); asides are paid even for rows ask-to-answer drops (sequence aside *after* the verdict, or only for rows that will actually serve); `reconcileProposedDomain` is per-row but keyed only on (domain, userId) — memoize per batch. | S–M | 🔁 B4 (gates) |
 | **C3** | **Oversized, repeated user prompt:** ~4–6k tokens of avoid lists (80 texts + 200 fact keys) resent verbatim in *every* chunk and *every* top-up round, uncached. The code itself calls the prompt list "advisory" — the Haiku history gate + persist-time fact-key guard are the enforcement. Levers: trim prompt lists to entries relevant to the chunk's domains; or move the stable avoid block into a cached system segment; or cut limits (80→30 / 200→80) and lean on the gates. | M | 🔁 B2 |
 | **C4** | **No Message Batches API** anywhere, yet three workloads are batch-shaped with no latency requirement: the daily pre-build fan-out (C1), `vet-questions` cron, pool refill. 50% token discount + smoother rate limits. (Per-user on-demand builds must stay synchronous.) | M | — |
@@ -239,7 +242,7 @@ backstop. Slots carry presence attribution (`presence_source_*`). Conforms to D-
 | **C6** | **Retrieval-grounded refill is built, capped at $2/day, and OFF** — so thin domains refill at retail (per-user, ungrounded, unprovenanced Sonnet) instead of wholesale (batched, corroborated, `machine_verified`). Same for Voyage embedding dedup (key not provisioned): the paid path runs while the cheap dedup backstop is off. **Open operational decisions:** provision `VOYAGE_API_KEY`, `RETRIEVAL_SYSTEM_USER_ID`, flip `RETRIEVAL_GROUNDING_ENABLED`. | S (flip) | — |
 | **C7** | **Sonnet on categorization-flavored calls,** against the CLAUDE.md split (Haiku for grading/categorization): `categorizeQuestion`, `suggestTags`, `resolveCanonicalSubcategoryWithLLM`, `cleanQuestion`, `assessQuestionDifficulty` are all Sonnet. Authoring-path volume is low today, so this is a measured-swap candidate (CLAUDE.md: don't swap without measuring), not an urgent leak. | S–M each, after eval | — |
 | **C8** | **Over-request surplus pays full verification:** the ×2 over-request runs asides + ask-to-answer + reconcile on all candidates, then trims. Surplus rows do land in the bank (future value), but a lazy option — verify/aside on first *serve* for surplus rows — would shift that spend to questions that actually surface. | M | 🔁 B4 |
-| **C9** | **Prompt cache yields are fragile:** the generation system block is cached with a 5-min TTL, which pays off only under the cron's concurrent fan-out — scattered on-demand builds (the current reality per C1) mostly miss. Fixing C1 makes the existing caching actually earn. Gate prompts (incl. the exemplar-bearing quality gate) carry no `cache_control` at all. | S | — |
+| **C9** | **Prompt cache coverage is uneven:** the generation system block is cached with a 5-min TTL and does earn during the 17:05 GitHub-Actions fan-out (concurrency 4, continuous use refreshes the TTL); scattered on-demand builds (new users, cron-failure fallbacks) mostly miss — acceptable. The real gap: gate prompts (incl. the exemplar-bearing quality gate) carry no `cache_control` at all, and the gates fire on every batch in the same fan-out. | S | — |
 
 ### 3.3 Generation-vs-selection balance (prioritized)
 
@@ -268,15 +271,18 @@ backstop. Slots carry presence attribution (`presence_source_*`). Conforms to D-
    needs owner sign-off, not a code decision).
 6. **`name_multiple`:** still held back pending multi-answer grading; decide whether to build grading
    support or drop the shape from the prompt.
-7. **`daily-assignments` scheduling:** dashboard-configured, or genuinely unscheduled? (Determines C1
-   and the value of C4/C9.)
+7. ~~**`daily-assignments` scheduling**~~ — **resolved 2026-06-10:** scheduled at 17:05 UTC via GitHub
+   Actions (`.github/workflows/external-crons.yml`), its sole scheduler by design. Residual items
+   folded into C1 (retry-vs-SMS edge; pool-refill left on Vercel Hobby).
 8. **Backstop posture below 3 slots** stays 503-and-retry (never relax gates) — reaffirm or revisit
    at launch traffic.
 
 ## Part 5 — Doc/repo hygiene noted in passing
 
 - `joshing-SESSION-HANDOFF.md` referenced in the task does not exist in-repo.
-- `src/app/api/cron/daily-assignments/route.ts` comment asserts a vercel.json schedule that isn't there.
+- `src/app/api/cron/daily-assignments/route.ts` comment says "Scheduled at 17:05 UTC (vercel.json)" —
+  the schedule is real but lives in `.github/workflows/external-crons.yml` (moved 2026-05-30); update
+  the parenthetical so the next reader doesn't repeat this audit's detour.
 - `generate-questions.ts:843` "~1500 tokens" system-prompt comment is a material undercount.
 - The 2026-06-02 conformance audit's "house author UNBUILT" (§3.1) and `DECISIONS.md`'s matching open
   item are stale — `source='house_authored'` + `pickHouseQuestions` + a house smoke script now exist.
