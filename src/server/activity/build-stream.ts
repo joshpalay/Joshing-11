@@ -71,18 +71,16 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
         .map((id) => textById.get(id))
         .filter((q): q is NonNullable<typeof q> => Boolean(q))
         .filter((q) => !hiddenIds.has(q.questionId))
-        // The triangle row is for NEW questions only. Anything the viewer has
-        // already attempted on ANY surface (priorById carries every prior
-        // answer, right or wrong) is dropped here: questions you and the friend
-        // both got right surface in the convergence ("you both knew these")
-        // row, and your own misses live in Catch-Up. priorResult is therefore
-        // always null for what survives.
-        .filter((q) => !priorById.has(q.questionId))
+        // Keep EVERY one of the friend's questions in the bundle — including the
+        // ones the viewer already answered. Each carries its prior result, so the
+        // answered ones render as spent (hollow) triangles in the expansion and
+        // the title stays stable across reloads (answered questions don't vanish,
+        // and the triangle count doesn't shrink as you play).
         .map((q) => ({
           questionId: q.questionId,
           text: q.text,
           domain: q.domain,
-          priorResult: null,
+          priorResult: priorById.get(q.questionId) ?? null,
         }));
       // A milestone whose questions all collapse out is a contentless streak
       // card — suppress it rather than render an empty triangle.
