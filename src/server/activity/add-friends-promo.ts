@@ -55,6 +55,8 @@ export async function getAddFriendsPromo(
       variant: 'suggestions',
       href: FRIENDS_FIND_HREF,
       people,
+      // Rotate the headline by the day seed (Pool 4); eyebrow / CTA stay fixed.
+      headlineIndex: daySeed,
     };
     return addFriendsPromoToStreamItem(embed, now, `add-friends-suggestions-${daySeed}`);
   }
@@ -64,6 +66,7 @@ export async function getAddFriendsPromo(
     kind: 'add_friends',
     variant: 'invite',
     href: FRIENDS_FIND_HREF,
+    headlineIndex: daySeed,
   };
   return addFriendsPromoToStreamItem(embed, now, `add-friends-invite-${daySeed}`);
 }

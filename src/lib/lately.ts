@@ -52,7 +52,11 @@ export const YOU_GOT_THEM_CAPTIONS = [
   'ON THEIR FREQUENCY',
 ] as const;
 
-function djb2(input: string): number {
+// Stable, dependency-free string hash used to spread copy-pool selection across
+// events (the same event always draws the same line; a feed of the same event
+// type still varies). Exported so the relationship copy pools in
+// `activity-stream.ts` (D-FEED-GROUP3-01 Appendix A) select the same way.
+export function djb2(input: string): number {
   let hash = 5381;
   for (let i = 0; i < input.length; i++) {
     hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
@@ -71,24 +75,40 @@ export function assignCaption(
   return template.replace('{NAME}', friendFirstName.toUpperCase());
 }
 
-// Convergence (B-Convergence-1) headlines are PERSON-FIRST and never name a
-// domain — naming one of a mixed-domain cluster misrepresents the rest, and
-// naming all reads as a stats list (a brand violation). Unlike the moment
-// CAPTIONS above (all-caps chips), these are sentence-case one-liners: the
-// `{Name}` token is replaced with the friend's first name AT RENDER (as an
-// actor link), so the template is returned verbatim here. Assigned
-// deterministically by moment id, the same djb2 mechanism the moments use.
-export const CONVERGENCE_CAPTIONS = [
-  'You and {Name} keep landing in the same place.',
-  'Turns out you and {Name} think alike.',
-  'You and {Name} are on the same wavelength lately.',
-  'You and {Name} both knew these.',
-  'You and {Name} just get each other.',
-  'You and {Name} are clearly on the same page.',
+// Convergence (B-Convergence-1) headlines are PERSON-FIRST. They come in two
+// pools (D-FEED-GROUP3-01 Pool 3): when the cluster's 3 questions share ONE
+// topic, name it via the `{topic}` token (rendered in the serif category
+// register); when the topics differ, fall back to the topic-less set rather
+// than listing all three (listing reintroduces the wordiness we removed). Both
+// carry the `{Name}` token, replaced with the friend's first name AT RENDER (as
+// an actor link). Selection is deterministic by moment id (the same djb2
+// mechanism the moments use). "you both" is accurate here only — convergence is
+// the one mutual event.
+export const CONVERGENCE_SINGLE_TOPIC = [
+  'You and {Name} both know {topic} down',
+  'You and {Name} have {topic} down cold',
+  'You and {Name} both know {topic} inside out',
+  'You and {Name} are right there together on {topic}',
+  'You and {Name} both came through on {topic}',
+  'Turns out you and {Name} both know {topic}',
 ] as const;
 
-export function convergenceCaptionTemplate(momentId: string): string {
-  return CONVERGENCE_CAPTIONS[djb2(momentId) % CONVERGENCE_CAPTIONS.length];
+export const CONVERGENCE_NO_TOPIC = [
+  'You and {Name} keep landing in the same place',
+  'You and {Name} keep meeting in the same corners',
+  'You and {Name} are on the same wavelength lately',
+  'Turns out you and {Name} just get each other',
+] as const;
+
+// Pick a convergence headline template. `sharedTopic` non-null means all three
+// cluster questions resolved to the SAME topic (detected at build time, where
+// the domains are known); null means they differ (or weren't all resolvable),
+// in which case we never name a topic.
+export function convergenceCaptionTemplate(momentId: string, sharedTopic: string | null): string {
+  if (sharedTopic) {
+    return CONVERGENCE_SINGLE_TOPIC[djb2(momentId) % CONVERGENCE_SINGLE_TOPIC.length];
+  }
+  return CONVERGENCE_NO_TOPIC[djb2(momentId) % CONVERGENCE_NO_TOPIC.length];
 }
 
 function ymdInZone(date: Date, tz: string): string {

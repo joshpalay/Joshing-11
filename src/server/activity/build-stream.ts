@@ -81,6 +81,8 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
           text: q.text,
           domain: q.domain,
           priorResult: priorById.get(q.questionId) ?? null,
+          authorName: q.authorName,
+          authorIsHouse: q.authorIsHouse,
         }));
       // A milestone whose questions all collapse out is a contentless streak
       // card — suppress it rather than render an empty triangle.
@@ -97,8 +99,17 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
         text: q.text,
         domain: q.domain,
         priorResult: 'correct' as const, // read-only reveal: both already answered correctly
+        authorName: q.authorName,
+        authorIsHouse: q.authorIsHouse,
       }));
-    return convergenceToStreamItem(c, questions, convergenceCaptionTemplate(c.id));
+    // Single-topic headline (Pool 3a) only when EVERY surviving cluster question
+    // resolved to the same non-null domain; otherwise the topic-less set (3b).
+    const domains = questions.map((q) => q.domain);
+    const sharedTopic =
+      questions.length > 0 && domains.every((d): d is string => Boolean(d)) && new Set(domains).size === 1
+        ? domains[0]
+        : null;
+    return convergenceToStreamItem(c, questions, convergenceCaptionTemplate(c.id, sharedTopic), sharedTopic);
   });
 
   return sortByProminence([

@@ -325,6 +325,11 @@ export type MilestoneCardQuestion = {
   questionId: string;
   text: string;
   domain: string | null;
+  // Honest authorship for the expanded reveal (D-FEED-GROUP3-01 §4). Shared by
+  // milestone bundles and convergence clusters — a house/LLM question in either
+  // reveal must be marked, never rendered as if a person wrote it.
+  authorName: string | null;
+  authorIsHouse: boolean;
 };
 
 export async function getMilestoneQuestionText(
@@ -339,16 +344,24 @@ export async function getMilestoneQuestionText(
       canonicalSubcategory: questions.canonicalSubcategory,
       broadCategory: questions.broadCategory,
       category: questions.category,
+      creatorId: questions.creatorId,
+      source: questions.source,
+      authorDisplayName: users.displayName,
       deletedAt: questions.deletedAt,
     })
     .from(questions)
+    // creator may be null (house/LLM), so the author join is a left join.
+    .leftJoin(users, eq(users.id, questions.creatorId))
     .where(inArray(questions.id, ids));
   for (const row of rows) {
     if (row.deletedAt) continue;
+    const author = resolveAuthorDisplay(row.creatorId, row.source, row.authorDisplayName);
     out.set(row.id, {
       questionId: row.id,
       text: row.questionText,
       domain: resolveMilestoneDomain(row.canonicalSubcategory, row.broadCategory, row.category),
+      authorName: author.authorName,
+      authorIsHouse: author.authorIsHouse,
     });
   }
   return out;

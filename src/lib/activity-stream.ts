@@ -22,7 +22,7 @@ import { HOME_TOP3_ELIGIBLE_TYPES } from '@/lib/activity-types';
 import type { ActivityItemView } from '@/server/db/queries/activity';
 import type { MasteryTier } from '@/types/db';
 import type { LatelyMoment } from '@/server/db/queries/lately';
-import { LATELY_TIER, latelyTierForMomentDir } from '@/lib/lately';
+import { LATELY_TIER, latelyTierForMomentDir, djb2 } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
 import type { Convergence } from '@/lib/convergence';
 import type { RelationshipResult } from '@/server/db/queries/friend-requests';
@@ -51,6 +51,16 @@ export type StreamQuestion = {
   // the feed — and drives the ANSWERED history's "Correct" / "Not this time"
   // copy plus the bundle progress mark.
   priorResult: 'correct' | 'incorrect' | null;
+  // Honest authorship for the expanded reveal (D-FEED-GROUP3-01 §4). Tri-state,
+  // and the distinction is load-bearing for the provenance marker:
+  //   - undefined        — provenance not resolved for this source; show nothing
+  //                        (the row frame already attributes it, e.g. moments are
+  //                        human by construction).
+  //   - null             — a non-person LLM-origin question → render "Generated".
+  //   - string (+isHouse) — a human name, or the house identity when authorIsHouse.
+  // A house/LLM question must NEVER render as if a person wrote it.
+  authorName?: string | null;
+  authorIsHouse?: boolean;
 };
 
 // The action an expanded, question-backed item offers — determined by the
@@ -149,6 +159,12 @@ export type AddFriendsPromoPerson = {
 // friend; `recently_expanding` lists the viewer's fastest-growing territories
 // with a link to /knowledge; `add_friends` either suggests people to follow or
 // (when there are none) nudges toward inviting someone.
+// Promos recur as the same promo TYPE over time, so the hash-by-event-id trick
+// the relationship lines use won't vary them. Each embed instead carries a
+// `headlineIndex` (D-FEED-GROUP3-01 Pool 4) — a day-seeded number the feature
+// component takes `% pool.length` to rotate the HEADLINE only (eyebrow, CTA, and
+// supporting copy stay fixed for wayfinding). Optional so older callers/tests
+// default to the first headline.
 export type StreamEmbed =
   | {
       kind: 'common_ground';
@@ -156,22 +172,26 @@ export type StreamEmbed =
       friendFirstName: string;
       friendHref: string;
       domains: CommonGroundPromoDomain[];
+      headlineIndex?: number;
     }
   | {
       kind: 'recently_expanding';
       href: string;
       domains: RecentlyExpandingPromoDomain[];
+      headlineIndex?: number;
     }
   | {
       kind: 'add_friends';
       variant: 'suggestions';
       href: string;
       people: AddFriendsPromoPerson[];
+      headlineIndex?: number;
     }
   | {
       kind: 'add_friends';
       variant: 'invite';
       href: string;
+      headlineIndex?: number;
     };
 
 export type StreamItem = {
@@ -225,6 +245,70 @@ function actorName(item: ActivityItemView): string {
 
 const HOME_ELIGIBLE = new Set<string>(HOME_TOP3_ELIGIBLE_TYPES);
 
+// --- Relationship copy pools (D-FEED-GROUP3-01 Appendix A) --------------------
+//
+// Full-sentence lone-event copy. Each line is hash-selected per event id (the
+// same djb2 the convergence pool uses) so a feed of the same event type still
+// varies, while a given event always reads the same way. The `{friend}` token
+// becomes the actor link; `{topic}` the serif category. Every line is safe for
+// ANY instance of its type, and the register is connection-only — the banned
+// competition words (beat/called/nailed/crushed/schooled/"had your number") are
+// kept out by construction.
+//
+// Pool 1 — got_you: a friend answered a question YOU wrote (one-way; no "you both").
+const GOT_YOU_LINES = [
+  '{friend} knew your {topic} question',
+  '{friend} knows {topic} down',
+  '{friend} was right there with you on {topic}',
+  '{friend} came through on your {topic} question',
+  '{friend} understood your {topic} question',
+  '{friend} has {topic} down cold',
+] as const;
+// When the event carries no topic, fall back to the calm topic-less baseline
+// rather than dangling an empty category.
+const GOT_YOU_NO_TOPIC = '{friend} got your question';
+
+// Pool 2 — you_got: YOU answered a friend's question (one-way; no "you both").
+const YOU_GOT_LINES = [
+  "You knew {friend}'s {topic} question",
+  'You know {topic} down',
+  'You were right there with {friend} on {topic}',
+  "You came through on {friend}'s {topic} question",
+  "You understood {friend}'s {topic} question",
+  "You've got {topic} down cold",
+] as const;
+const YOU_GOT_NO_TOPIC = "You knew {friend}'s question";
+
+function pickLine(
+  pool: readonly string[],
+  noTopic: string,
+  eventId: string,
+  topic: string | null,
+): string {
+  if (!topic) return noTopic;
+  return pool[djb2(eventId) % pool.length];
+}
+
+// Render a copy template into stream line parts: `{friend}` → actor link,
+// `{topic}` → serif category, everything else plain text.
+function renderTemplate(
+  template: string,
+  friend: { name: string; userId: string | null },
+  topic: string | null,
+): StreamLinePart[] {
+  const parts: StreamLinePart[] = [];
+  const re = /\{(friend|topic)\}/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(template)) !== null) {
+    if (m.index > last) parts.push(txt(template.slice(last, m.index)));
+    parts.push(m[1] === 'friend' ? act(friend.name, friend.userId) : cat(topic ?? ''));
+    last = re.lastIndex;
+  }
+  if (last < template.length) parts.push(txt(template.slice(last)));
+  return parts;
+}
+
 // --- Activity rows -----------------------------------------------------------
 
 // Port of the per-type copy (formerly split across NewsRow.buildCopy and the
@@ -255,10 +339,20 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
       const faq = item.reference.friendAnsweredQuestion;
       const got = faq?.result === 'correct';
       const domain = faq?.domain?.trim() || null;
+      // Correct = the warm "got_you" event: full-sentence Pool 1 copy with the
+      // topic folded into the line (so no echoed second line). A miss keeps the
+      // calm factual "answered your question" with the domain as the second line.
+      const line = got
+        ? renderTemplate(
+            pickLine(GOT_YOU_LINES, GOT_YOU_NO_TOPIC, item.id, domain),
+            { name: actorName(item), userId: item.actorUserId },
+            domain,
+          )
+        : [a, txt(' answered your question')];
       return {
         ...base,
-        line: [a, txt(got ? ' got your question' : ' answered your question')],
-        secondLine: domain,
+        line,
+        secondLine: got ? null : domain,
         icon: 'diamond',
         relationship: 'got_you',
         topic: domain,
@@ -272,6 +366,8 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
                   text: faq.questionText,
                   domain,
                   priorResult: null,
+                  authorName: faq.authorName,
+                  authorIsHouse: faq.authorIsHouse,
                 },
               }
             : null,
@@ -365,29 +461,66 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
       const label = reaction?.reactionLabel
         ? `${reaction.reactionEmoji ? `${reaction.reactionEmoji} ` : ''}${reaction.reactionLabel}`
         : null;
+      const domain = reaction?.domain?.trim() || null;
       return {
         ...base,
         line: [a, txt(' reacted to your question')],
         secondLine: label,
         relationship: 'reacted',
+        topic: domain,
+        // Keep the lightweight "got it" acknowledgement AND let the row expand to
+        // reveal the reacted-to question with honest authorship + send-onward
+        // (D-FEED-GROUP3-01 §4).
         action: {
           kind: 'reaction_got_it',
           reactionId: reaction?.id ?? item.referenceId ?? '',
           replied: Boolean(reaction?.repliedAt),
         },
-        expand: null,
+        expand:
+          reaction?.questionId && reaction.questionText
+            ? {
+                kind: 'your_question',
+                question: {
+                  questionId: reaction.questionId,
+                  text: reaction.questionText,
+                  domain,
+                  priorResult: null,
+                  authorName: reaction.authorName,
+                  authorIsHouse: reaction.authorIsHouse,
+                },
+              }
+            : null,
       };
     }
 
-    case 'question_curated':
+    case 'question_curated': {
+      const cq = item.reference.curatedQuestion;
+      const domain = cq?.domain?.trim() || null;
       return {
         ...base,
         line: [a, txt(' saved your question')],
-        secondLine: item.reference.curatedQuestion?.questionText ?? null,
+        secondLine: cq?.questionText ?? null,
         relationship: 'saved',
+        topic: domain,
         action: null,
-        expand: null,
+        // Expand to reveal the saved question (honest authorship) and send it
+        // onward (D-FEED-GROUP3-01 §4). The question id is the activity referenceId.
+        expand:
+          item.referenceId && cq?.questionText
+            ? {
+                kind: 'your_question',
+                question: {
+                  questionId: item.referenceId,
+                  text: cq.questionText,
+                  domain,
+                  priorResult: null,
+                  authorName: cq.authorName,
+                  authorIsHouse: cq.authorIsHouse,
+                },
+              }
+            : null,
       };
+    }
 
     case 'authored_question_shared': {
       const shared = item.reference.authoredSharedQuestion;
@@ -559,22 +692,28 @@ function nicheTier(type: ActivityItemView['type']): number {
 // it's their question, but you already answered it, so the only forward action
 // is still to send it onward to someone new.
 export function momentToStreamItem(moment: LatelyMoment): StreamItem {
-  const friend = act(moment.friendName, moment.friendId);
   const theyGotYou = moment.dir === 'they_got_you';
+  const topic = moment.category;
+  const friend = { name: moment.friendName, userId: moment.friendId };
+  // Full-sentence lone copy from the relationship pools (Appendix A), with the
+  // topic folded into the line so there's no echoed second line. Moments are
+  // human-authored by query construction (house/LLM questions are excluded), so
+  // the reveal needs no provenance marker — author fields stay undefined.
+  const line = theyGotYou
+    ? renderTemplate(pickLine(GOT_YOU_LINES, GOT_YOU_NO_TOPIC, moment.momentId, topic), friend, topic)
+    : renderTemplate(pickLine(YOU_GOT_LINES, YOU_GOT_NO_TOPIC, moment.momentId, topic), friend, topic);
   return {
     id: moment.momentId,
     sortAt: moment.answeredAt,
     tier: latelyTierForMomentDir(moment.dir),
-    // they_got_you ("Robyn got your question") is the headline social signal —
-    // home-eligible. you_got_them is quieter; keep it to the full list.
+    // they_got_you is the headline social signal — home-eligible. you_got_them is
+    // quieter; keep it to the full list.
     homeEligible: theyGotYou,
     friendId: moment.friendId,
     relationship: theyGotYou ? 'got_you' : 'you_got',
-    topic: moment.category,
-    line: theyGotYou
-      ? [friend, txt(' got your question')]
-      : [txt('You got '), friend, txt(' on '), cat(moment.category)],
-    secondLine: theyGotYou ? moment.category : null,
+    topic,
+    line,
+    secondLine: null,
     anchorId: null,
     action: null,
     icon: 'diamond',
@@ -664,12 +803,28 @@ export function convergenceToStreamItem(
   convergence: Convergence,
   questions: StreamQuestion[],
   captionTemplate: string,
+  // Non-null only when all 3 cluster questions share ONE topic (Pool 3a); drives
+  // the `{topic}` token. Null → the template is from the topic-less set (3b) and
+  // carries no `{topic}` token, so nothing is interpolated.
+  sharedTopic: string | null = null,
 ): StreamItem {
-  const [before, after] = captionTemplate.split('{Name}');
+  // Person-first headline: `{Name}` → the friend actor link, `{topic}` → the
+  // serif category (only present in the single-topic pool). No domain ever
+  // reaches the line unless it's the one shared topic.
   const line: StreamLinePart[] = [];
-  if (before) line.push(txt(before));
-  line.push(act(convergence.friendFirstName, convergence.friendId));
-  if (after) line.push(txt(after));
+  const re = /\{(Name|topic)\}/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(captionTemplate)) !== null) {
+    if (m.index > last) line.push(txt(captionTemplate.slice(last, m.index)));
+    line.push(
+      m[1] === 'Name'
+        ? act(convergence.friendFirstName, convergence.friendId)
+        : cat(sharedTopic ?? ''),
+    );
+    last = re.lastIndex;
+  }
+  if (last < captionTemplate.length) line.push(txt(captionTemplate.slice(last)));
   return {
     id: convergence.id,
     sortAt: convergence.sortAt,

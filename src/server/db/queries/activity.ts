@@ -18,6 +18,7 @@ import {
   users,
 } from '@/server/db';
 import { getCannedReaction } from '@/lib/reactions';
+import { resolveAuthorDisplay } from '@/lib/questions-types';
 import { HOME_TOP3_ELIGIBLE_TYPES, type ActivityItemType } from '@/server/activity/write-activity';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 import type { MasteryTier } from '@/types/db';
@@ -50,7 +51,15 @@ export type ActivityItemView = Pick<
       reactionEmoji: string;
       customMessage: string | null;
       repliedAt: Date | null;
+      // The reacted-to question, surfaced so the row can expand to reveal it and
+      // offer "send onward" (D-FEED-GROUP3-01 §4). domain + author resolve the
+      // honest-authorship reveal: a house/LLM question must never read as if a
+      // person wrote it.
+      questionId: string;
       questionText: string;
+      domain: string | null;
+      authorName: string | null;
+      authorIsHouse: boolean;
       // §8.22 wrong-answer text visibility: populated only when the answerer
       // explicitly opted in (includeSubmittedAnswer=true on a wrong-answer
       // reaction). Null in every other case.
@@ -65,11 +74,20 @@ export type ActivityItemView = Pick<
     };
     curatedQuestion?: {
       questionText: string;
+      // domain + author for the expand-to-send-onward reveal (D-FEED-GROUP3-01
+      // §4). The question id is the activity's referenceId.
+      domain: string | null;
+      authorName: string | null;
+      authorIsHouse: boolean;
     };
     friendAnsweredQuestion?: {
       domain: string | null;
       questionText: string | null;
       result: 'correct' | 'incorrect';
+      // Honest authorship for the expanded "your question" reveal — a forwarded
+      // house/LLM question must not render as if the viewer wrote it.
+      authorName: string | null;
+      authorIsHouse: boolean;
     };
     // D-2 niche-match discovery. Hydrated for both new types
     // (niche_match_answered_your_question / niche_match_you_answered). Reuses
@@ -388,9 +406,18 @@ async function hydrateReactions(items: ActivityItemRow[]) {
       contextType: questionReactions.contextType,
       contextId: questionReactions.contextId,
       includeSubmittedAnswer: questionReactions.includeSubmittedAnswer,
+      // Domain + provenance for the expand-to-send-onward reveal.
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+      category: questions.category,
+      creatorId: questions.creatorId,
+      source: questions.source,
+      authorDisplayName: users.displayName,
     })
     .from(questionReactions)
     .innerJoin(questions, eq(questionReactions.questionId, questions.id))
+    // creator may be null (house/LLM), so the author join is a left join.
+    .leftJoin(users, eq(users.id, questions.creatorId))
     .where(inArray(questionReactions.id, reactionIds));
 
   // §8.22 opt-in resolution: for any reaction the answerer flagged with
@@ -447,6 +474,7 @@ async function hydrateReactions(items: ActivityItemRow[]) {
         submittedAnswer = gameAnswerByKey.get(`${row.contextId}:${row.questionId}:${row.senderUserId}`) ?? null;
       }
     }
+    const author = resolveAuthorDisplay(row.creatorId, row.source, row.authorDisplayName);
     return [
       row.id,
       {
@@ -455,7 +483,11 @@ async function hydrateReactions(items: ActivityItemRow[]) {
         reactionEmoji: reaction?.emoji ?? '',
         customMessage: row.customMessage,
         repliedAt: row.repliedAt,
+        questionId: row.questionId,
         questionText: row.questionText,
+        domain: row.canonicalSubcategory?.trim() || row.broadCategory || row.category || null,
+        authorName: author.authorName,
+        authorIsHouse: author.authorIsHouse,
         submittedAnswer,
       },
     ] as const;
@@ -517,11 +549,27 @@ async function hydrateCuratedQuestions(items: ActivityItemRow[]) {
     .select({
       id: questions.id,
       questionText: questions.questionText,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      broadCategory: questions.broadCategory,
+      category: questions.category,
+      creatorId: questions.creatorId,
+      source: questions.source,
+      authorDisplayName: users.displayName,
     })
     .from(questions)
+    // creator may be null (house/LLM), so the author join is a left join.
+    .leftJoin(users, eq(users.id, questions.creatorId))
     .where(inArray(questions.id, questionIds));
 
-  return new Map(rows.map((row) => [row.id, { questionText: row.questionText }] as const));
+  return new Map(rows.map((row) => {
+    const author = resolveAuthorDisplay(row.creatorId, row.source, row.authorDisplayName);
+    return [row.id, {
+      questionText: row.questionText,
+      domain: row.canonicalSubcategory?.trim() || row.broadCategory || row.category || null,
+      authorName: author.authorName,
+      authorIsHouse: author.authorIsHouse,
+    }] as const;
+  }));
 }
 
 async function hydrateGradeDisputes(items: ActivityItemRow[]) {
@@ -582,8 +630,18 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
 
   const [questionRows, masteryRows] = await Promise.all([
     db
-      .select({ id: questions.id, questionText: questions.questionText, canonicalSubcategory: questions.canonicalSubcategory, broadCategory: questions.broadCategory })
+      .select({
+        id: questions.id,
+        questionText: questions.questionText,
+        canonicalSubcategory: questions.canonicalSubcategory,
+        broadCategory: questions.broadCategory,
+        creatorId: questions.creatorId,
+        source: questions.source,
+        authorDisplayName: users.displayName,
+      })
       .from(questions)
+      // creator may be null (house/LLM), so the author join is a left join.
+      .leftJoin(users, eq(users.id, questions.creatorId))
       .where(inArray(questions.id, questionIds)),
     db
       .select({ userId: masteryEvents.userId, questionId: masteryEvents.questionId })
@@ -602,12 +660,17 @@ async function hydrateFriendAnsweredQuestions(items: ActivityItemRow[]) {
   return new Map(
     relevant.map((item) => {
       const q = questionById.get(item.referenceId!);
+      const author = q
+        ? resolveAuthorDisplay(q.creatorId, q.source, q.authorDisplayName)
+        : { authorName: null, authorIsHouse: false };
       return [
         item.id,
         {
           domain: q ? (q.canonicalSubcategory ?? q.broadCategory ?? null) : null,
           questionText: q?.questionText ?? null,
           result: correctSet.has(`${item.actorUserId}:${item.referenceId}`) ? 'correct' : 'incorrect',
+          authorName: author.authorName,
+          authorIsHouse: author.authorIsHouse,
         } satisfies NonNullable<ActivityItemView['reference']['friendAnsweredQuestion']>,
       ];
     }),

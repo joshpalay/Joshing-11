@@ -6,7 +6,8 @@ import {
   type ConvergenceCoCorrectRow,
 } from '@/lib/convergence';
 import {
-  CONVERGENCE_CAPTIONS,
+  CONVERGENCE_SINGLE_TOPIC,
+  CONVERGENCE_NO_TOPIC,
   convergenceCaptionTemplate,
 } from '@/lib/lately';
 
@@ -124,17 +125,28 @@ describe('deriveConvergences — single owner', () => {
   });
 });
 
-describe('convergenceCaptionTemplate — deterministic, person-first', () => {
-  it('is stable for a given moment id and drawn from the pool', () => {
+describe('convergenceCaptionTemplate — deterministic, person-first, topic-aware', () => {
+  it('is stable for a given moment id and drawn from the matching pool', () => {
     const id = 'converge:F:q1_q2_q3';
-    const first = convergenceCaptionTemplate(id);
-    expect(convergenceCaptionTemplate(id)).toBe(first);
-    expect(CONVERGENCE_CAPTIONS).toContain(first);
+    // No shared topic → the topic-less pool (3b), stably.
+    const noTopic = convergenceCaptionTemplate(id, null);
+    expect(convergenceCaptionTemplate(id, null)).toBe(noTopic);
+    expect(CONVERGENCE_NO_TOPIC).toContain(noTopic);
+    // A shared topic → the single-topic pool (3a), stably, and carries {topic}.
+    const single = convergenceCaptionTemplate(id, 'Jazz');
+    expect(convergenceCaptionTemplate(id, 'Jazz')).toBe(single);
+    expect(CONVERGENCE_SINGLE_TOPIC).toContain(single);
+    expect(single).toContain('{topic}');
   });
 
-  it('every caption is person-first via the {Name} token and names no domain', () => {
-    for (const caption of CONVERGENCE_CAPTIONS) {
+  it('every caption is person-first via the {Name} token', () => {
+    for (const caption of [...CONVERGENCE_SINGLE_TOPIC, ...CONVERGENCE_NO_TOPIC]) {
       expect(caption).toContain('{Name}');
     }
+  });
+
+  it('only the single-topic pool names a topic; the topic-less pool never does', () => {
+    for (const caption of CONVERGENCE_SINGLE_TOPIC) expect(caption).toContain('{topic}');
+    for (const caption of CONVERGENCE_NO_TOPIC) expect(caption).not.toContain('{topic}');
   });
 });

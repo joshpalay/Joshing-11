@@ -76,6 +76,9 @@ export async function getCommonGroundPromo(
       friendFirstName: firstName(friend.displayName),
       friendHref: `/users/${friend.id}`,
       domains,
+      // Rotate the headline by the day seed (Pool 4) so it doesn't always show
+      // line 1; eyebrow / CTA stay fixed.
+      headlineIndex: seed,
     };
 
     return commonGroundPromoToStreamItem(
