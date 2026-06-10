@@ -1621,6 +1621,9 @@ function FeedListContent({
     const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
     const onDismiss = dismissible ? () => requestDismiss(item) : undefined
 
+    // On the home "What's Happening" feed these answerable question cards are
+    // the playable rows, interleaved with flat activity one-liners — give them
+    // the Tier 1 lift (cream fill + stroke + drop shadow) so they step forward.
     let card: ReactNode
     if (typedItem.type === 'direct_sent') {
       card = (
@@ -1629,6 +1632,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          elevated={unifiedHome}
         />
       )
     } else if (typedItem.type === 'friend_liked') {
@@ -1638,6 +1642,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          elevated={unifiedHome}
         />
       )
     } else {
@@ -1648,6 +1653,7 @@ function FeedListContent({
           onAnswer={onAnswer}
           onDismiss={onDismiss}
           onHideCategory={() => void hideCategory(item)}
+          elevated={unifiedHome}
         />
       )
     }
