@@ -691,9 +691,9 @@ const FROM_FRIENDS_COLLAPSED_COUNT = 5
 const FROM_FRIENDS_STEP = 10
 
 // The uppercase eyebrow that labels a feed section — the recency day labels
-// ("Today", "This week") and the home-only pinned "From Friends" section all
-// share this register. `first:pt-0` lets whichever heading renders first sit
-// flush to the top of the feed.
+// ("Today", "This week") and the home-only pinned "For You" / "From Friends"
+// sections all share this register. `first:pt-0` lets whichever heading renders
+// first sit flush to the top of the feed.
 function FeedSectionHeading({
   unifiedHome,
   children,
@@ -971,24 +971,33 @@ function FeedListContent({
     return next
   }, [unifiedRows, commonGroundPromo, expandingPromo, addFriendsPromo])
 
-  // Home-only sectioning: the friends' milestone bundles (the up-to-5-triangle
-  // cards you can answer inline) are lifted out of the chronological stream
-  // into a single pinned "From Friends" section at the top. Everything else —
-  // question cards sent to you, ambient activity, per-person roll-ups, promos —
-  // falls through to `restRows` and keeps the existing recency grouping below.
-  // Off the unified home (the standalone Feed tab) the section is empty and
+  // Home-only sectioning: the answerable question "big boxes" and friends'
+  // milestone bundles are lifted out of the chronological stream into two
+  // pinned sections at the top —
+  //   • "For You"      — question cards a friend sent you directly or broadcast
+  //                      (kind:'feed'); rendered as the full SparkleEnvelope
+  //                      boxes you can answer; uncapped.
+  //   • "From Friends" — friends' playable milestone bundles (the up-to-5-
+  //                      triangle cards), capped to the most recent few.
+  // Everything else — ambient activity, per-person roll-ups, promos — falls
+  // through to `restRows` and keeps the existing recency grouping below. Off
+  // the unified home (the standalone Feed tab) both sections are empty and
   // restRows is the whole list, so that surface renders exactly as before.
-  const { fromFriendsRows, restRows } = useMemo(() => {
+  const { forYouRows, fromFriendsRows, restRows } = useMemo(() => {
     if (!unifiedHome) {
       return {
+        forYouRows: [] as UnifiedRow[],
         fromFriendsRows: [] as UnifiedRow[],
         restRows: displayRows,
       }
     }
+    const forYou: UnifiedRow[] = []
     const fromFriends: UnifiedRow[] = []
     const rest: UnifiedRow[] = []
     for (const row of displayRows) {
-      if (
+      if (row.kind === 'feed') {
+        forYou.push(row)
+      } else if (
         row.kind === 'activity' &&
         row.item.expand?.kind === 'milestone' &&
         row.item.expand.questions.length > 0
@@ -998,7 +1007,7 @@ function FeedListContent({
         rest.push(row)
       }
     }
-    return { fromFriendsRows: fromFriends, restRows: rest }
+    return { forYouRows: forYou, fromFriendsRows: fromFriends, restRows: rest }
   }, [displayRows, unifiedHome])
 
   // "From Friends" reveals its most recent cards in batches (fromFriendsRows is
@@ -1741,11 +1750,22 @@ function FeedListContent({
         )
       ) : (
         <section className="space-y-3 pb-8">
-          {/* Home-only: friends' milestone bundles (the up-to-5-triangle cards
-              you can answer inline) are pinned into a "From Friends" section at
-              the top, capped to the most recent few with a "View more" control.
-              groupActivityByFriend is a pass-through here (milestone rows never
+          {/* Home-only: the answerable question cards a friend sent/broadcast to
+              you (the full-size SparkleEnvelope "big boxes") are pinned into a
+              "For You" section at the very top — above "From Friends".
+              groupActivityByFriend is a pass-through here (feed rows never
               group), keeping the render path uniform. */}
+          {forYouRows.length > 0 ? (
+            <Fragment key="for-you">
+              <FeedSectionHeading unifiedHome={unifiedHome}>For You</FeedSectionHeading>
+              {groupActivityByFriend(forYouRows).map(renderRow)}
+            </Fragment>
+          ) : null}
+          {/* Home-only: friends' milestone bundles (the up-to-5-triangle cards
+              you can answer inline) are pinned into a "From Friends" section
+              below "For You", capped to the most recent few with a "View more"
+              control. groupActivityByFriend is a pass-through here (milestone
+              rows never group), keeping the render path uniform. */}
           {fromFriendsRows.length > 0 ? (
             <Fragment key="from-friends">
               <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
