@@ -840,10 +840,14 @@ async function callLlmOnce(
   const client = getAnthropicClient();
   if (!client) return [];
 
-  // SYSTEM_PROMPT is ~1500 tokens — above the 1024-token Sonnet cache
-  // threshold. The cron fans out with USER_CONCURRENCY=4, so concurrent
-  // batches hit the cache. The 5-min TTL means later sequential batches
-  // miss, but the concurrent slice is worth the surcharge.
+  // SYSTEM_PROMPT is ~3-4k tokens (rules + 44 exemplars + schema) — above the
+  // 2048-token minimum cacheable prefix on claude-sonnet-4-6. The cron fans
+  // out with USER_CONCURRENCY=4, so concurrent batches hit the cache. The
+  // 5-min TTL means later sequential batches miss, but the concurrent slice
+  // is worth the surcharge. NOTE: the Haiku gates below carry NO cache_control
+  // on purpose — claude-haiku-4-5's minimum cacheable prefix is 4096 tokens
+  // and every gate system prompt (even the exemplar-bearing quality gate at
+  // ~2k) is under it, so a marker would be a silent no-op.
   const response = await loggedMessagesCreate(client, 'generate-questions', {
     model: ANTHROPIC_MODEL,
     max_tokens: 2000,
