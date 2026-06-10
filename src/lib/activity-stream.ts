@@ -118,15 +118,17 @@ export type StreamAction =
 //   - 'bundle'    → 2–2–1 cluster: a friend's questions for you (milestone).
 //                   Solid = unanswered, hollow = already played. Live count
 //                   comes from the row's answered-state; caps at 5 silently.
-//   - 'cluster'   → the bundle shape rendered static + all-solid at line size: a
-//                   friend played their first five (a settled set, not playable).
+//   - 'star'      → a five-point star built from five palette triangles (one per
+//                   question): a friend you invited played their first five. The
+//                   five points read as the milestone; distinct from the diamond/
+//                   bundle so it doesn't blur into the rest of the triangle family.
 //   - 'diamond'   → tan/darkyellow rhombus: someone answered ("got") a question.
 //   - 'hourglass' → orange/teal triangles apex-to-apex: someone sends you a Q.
 //   - 'domain'    → orange/teal half-triangles split on a diagonal: a new
 //                   domain opened (expansion).
 export type StreamIconKind =
   | 'bundle'
-  | 'cluster'
+  | 'star'
   | 'diamond'
   | 'hourglass'
   | 'domain'
@@ -663,10 +665,11 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' played their first five questions')],
         secondLine: null,
-        // A settled milestone: the static all-solid cluster mark (the bundle
-        // shape, not playable) so this row sits in the triangle family without
-        // borrowing the diamond the relationship rows use.
-        icon: 'cluster',
+        // A friend you invited cleared their first five: the five-point star mark
+        // (five palette triangles, one per question). Its radial silhouette stands
+        // apart from the diamond/bundle so the milestone doesn't blur into the
+        // rest of the triangle family.
+        icon: 'star',
         action: null,
         expand: null,
       };

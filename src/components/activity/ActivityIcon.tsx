@@ -10,8 +10,8 @@
 // Shape vocabulary (Figma JOSHING-DESIGN-SYSTEM2 is the source for shape):
 //   bundle   → 2–2–1 cluster      a friend's questions for you (milestone).
 //                                 Unanswered = filled, answered = hollow outline.
-//   cluster  → 2–2–1 cluster, static + all-solid, scaled to line height: a
-//                                 friend played their first five (a settled set).
+//   star     → five-point star     a friend you invited played their first five.
+//                                 Five palette triangles, one point per question.
 //   diamond  → rhombus             someone answered ("got") a question.
 //   hourglass→ two triangles apex-to-apex   someone sends you a question.
 //   domain   → half-triangles split on a diagonal   a new domain opened.
@@ -57,11 +57,19 @@ const LINE_H = 22.5; // first text line: 15px × 1.5
 // was reverted; the fix for "too tall" is the scale + centering here, not the
 // geometry.)
 const LARGE_SCALE = 0.5;
-// The static 'cluster' mark (a friend's settled first five) reuses the tall
-// BundleMark (viewBox height 33) but shrinks it to ~the text line height
-// (33 × 0.7 ≈ 23 ≈ LINE_H) so it sits on a single-line row like the diamond,
-// instead of drooping the way the full milestone bundle does into its 2nd line.
-const CLUSTER_SCALE = 0.7;
+// The 'star' mark (a friend you invited cleared their first five) is drawn in a
+// square 24×24 viewBox and rendered at STAR_SCALE so its height lands at ~the
+// text line height, sitting on a single-line row like the diamond. A point-up
+// five-point star is wider than the single stacked marks; this scale keeps its
+// footprint close to the old cluster it replaces (~20px) without dominating.
+const STAR_SCALE = 0.85;
+// Five-point star geometry (centered in the 24×24 viewBox). Outer points touch
+// the box; the inner vertices sit at INNER_RATIO of the outer radius — large
+// enough that the five point-triangles stay chunky (not needle-thin) at 24px.
+const STAR_CX = 12;
+const STAR_CY = 12;
+const STAR_RO = 12;
+const STAR_INNER_RATIO = 0.4;
 // Height of each half of a stacked mark, and the total viewBox height of the
 // pair. base=height (= MARK_W) keeps the triangles un-smushed.
 const STACK_HALF = 24;
@@ -76,7 +84,7 @@ const CAP_NUDGE = 3;
 
 export type ActivityIconSpec =
   | { kind: 'bundle'; total: number; unanswered: number }
-  | { kind: 'cluster' }
+  | { kind: 'star' }
   | { kind: 'diamond' }
   | { kind: 'hourglass' }
   | { kind: 'domain' };
@@ -91,8 +99,8 @@ export function specForIcon(
   switch (icon) {
     case 'bundle':
       return bundle && bundle.total > 0 ? { kind: 'bundle', ...bundle } : null;
-    case 'cluster':
-      return { kind: 'cluster' };
+    case 'star':
+      return { kind: 'star' };
     case 'diamond':
       return { kind: 'diamond' };
     case 'hourglass':
@@ -169,15 +177,10 @@ function BundleMark({
   total,
   unanswered,
   seed,
-  scale = 1,
 }: {
   total: number;
   unanswered: number;
   seed: string;
-  // The full milestone bundle renders at scale 1 (tall, growing down through the
-  // row's second line). The static 'cluster' mark passes a sub-1 scale so the
-  // same shape shrinks to roughly the single text line, matching the diamond.
-  scale?: number;
 }) {
   const B = 11; // triangle base
   const TH = 11; // triangle height — isosceles, base = height (not smushed)
@@ -190,7 +193,7 @@ function BundleMark({
     [13, 22],
   ];
   return (
-    <MarkSvg h={33} scale={scale}>
+    <MarkSvg h={33}>
       {pos.slice(0, total).map(([x, y], i) => {
         const solid = i < unanswered;
         return (
@@ -233,6 +236,36 @@ export function QuestionTriangle({ solid, seed }: { solid: boolean; seed: string
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+// Five-point star, each point its own palette triangle — one triangle per
+// question in the "first five" milestone. The five inner vertices meet at a
+// pentagon core that's left as background, so the mark reads as a star BUILT
+// FROM the triangle vocabulary rather than a solid star. (Deliberately NOT the
+// two-overlapping-triangles hexagram / Star of David: five single-layer points.)
+function StarMark({ seed }: { seed: string }) {
+  const D2R = Math.PI / 180;
+  const ri = STAR_RO * STAR_INNER_RATIO;
+  const f = (n: number) => n.toFixed(2);
+  // The tip of point k, and its two flanking inner vertices (shared with the
+  // neighbouring points), at ±36° off the point's spoke angle.
+  const at = (r: number, k: number, off: number) => {
+    const a = (-90 + 72 * k + off) * D2R;
+    return `${f(STAR_CX + r * Math.cos(a))},${f(STAR_CY + r * Math.sin(a))}`;
+  };
+  return (
+    <MarkSvg h={24} scale={STAR_SCALE}>
+      {[0, 1, 2, 3, 4].map((k) => (
+        <path
+          key={k}
+          d={`M${at(STAR_RO, k, 0)} L${at(ri, k, -36)} L${at(ri, k, 36)} Z`}
+          fill={colorFor(seed, k)}
+          fillOpacity={FILL_OPACITY}
+          strokeLinejoin="round"
+        />
+      ))}
+    </MarkSvg>
   );
 }
 
@@ -300,11 +333,12 @@ function Mark({ spec, seed }: { spec: ActivityIconSpec; seed: string }) {
   switch (spec.kind) {
     case 'bundle':
       return <BundleMark total={spec.total} unanswered={spec.unanswered} seed={seed} />;
-    case 'cluster':
-      // A friend's first five, settled: the bundle shape, all five solid, scaled
-      // down to line height so it reads as a quiet sibling of the diamond rather
-      // than the tall interactive milestone bundle.
-      return <BundleMark total={5} unanswered={5} seed={seed} scale={CLUSTER_SCALE} />;
+    case 'star':
+      // A friend you invited cleared their first five: a five-point star, one
+      // palette triangle per question. Sized to line height so it reads as a
+      // sibling of the diamond, but its radial silhouette sets the milestone
+      // apart from the rest of the triangle family.
+      return <StarMark seed={seed} />;
     case 'diamond':
       return <DiamondMark seed={seed} />;
     case 'hourglass':
