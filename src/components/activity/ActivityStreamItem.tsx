@@ -131,6 +131,7 @@ export function ActivityStreamItem({
   item,
   timestamp,
   nested = false,
+  showTimestamp = true,
 }: {
   item: StreamItem;
   timestamp: string;
@@ -138,6 +139,9 @@ export function ActivityStreamItem({
   // (the heading carries the only shape) and its hairline/padding chrome, so the
   // sub-items read as a quiet indented list under the statement.
   nested?: boolean;
+  // The home "What's Happening" feed hides the relative timestamp for a calmer,
+  // less ledger-like read; the full /activities log keeps it. Defaults on.
+  showTimestamp?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
@@ -318,10 +322,13 @@ export function ActivityStreamItem({
             gap: 4,
           }}
         >
-          {/* Metadata recedes to near-invisible (v2 §4): quiet, small timestamp. */}
-          <span style={{ fontSize: 12, color: INK3, opacity: 0.6, whiteSpace: 'nowrap' }}>
-            {timestamp}
-          </span>
+          {/* Metadata recedes to near-invisible (v2 §4): quiet, small timestamp.
+              Hidden entirely on the home feed (showTimestamp=false). */}
+          {showTimestamp ? (
+            <span style={{ fontSize: 12, color: INK3, opacity: 0.6, whiteSpace: 'nowrap' }}>
+              {timestamp}
+            </span>
+          ) : null}
           {/* Decorative disclosure chevron — demoted; the row itself is the
               button (aria-expanded above). */}
           {expandable ? (
