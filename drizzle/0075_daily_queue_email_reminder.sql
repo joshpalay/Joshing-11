@@ -1,0 +1,24 @@
+-- Daily reminder email idempotency — per-queue (per user/day) sent marker.
+--
+-- The daily-assignments cron used to gate the reminder email on
+-- `freshlyGenerated` (the queue was built by THIS invocation). That doubled as
+-- crude idempotency: the workflow curls the route with `--retry 2` and a
+-- timeout equal to maxDuration, so a client-side timeout replays the whole run,
+-- and the gate stopped a replay from re-emailing. But it also meant any user
+-- who built their own queue before this drift-prone cron (the common case, the
+-- GitHub scheduler runs ~1-2.5h late) never got a reminder.
+--
+-- Decoupling the email from `freshlyGenerated` (so it nudges eligible users
+-- whose queue already exists, as long as an unanswered slot remains) removes
+-- that crude guard. email_reminder_sent_at restores correctness: the cron
+-- claims it atomically (UPDATE ... SET = now() WHERE id = ? AND it IS NULL
+-- RETURNING) before sending, so a retry-replay loses the claim and skips. A
+-- send failure resets it to null so a later run can retry.
+--
+-- Additive nullable column with no default — the safe case. Mirrored by a
+-- defensive guard in src/instrumentation.ts (precedent: 0074's domain_key
+-- guard) so a preview/production database that records this migration without
+-- the column present still boots.
+--
+-- Rollback: ALTER TABLE "DailyQueue" DROP COLUMN IF EXISTS "email_reminder_sent_at";
+ALTER TABLE "DailyQueue" ADD COLUMN IF NOT EXISTS "email_reminder_sent_at" timestamptz;
