@@ -2,6 +2,9 @@ import type { Metadata } from 'next'
 import { Cormorant_Garamond, Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
+// TESTING ONLY — proposed-palette preview bar (see _docs/STYLE-GUIDE-COLOR.md).
+// Remove this import + the <PaletteToggle/> + boot script before shipping.
+import { PaletteToggle } from "@/components/dev/PaletteToggle";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 import { getUserOnboardingProfile } from '@/server/db/queries/users';
 import { getBellBadgeCount } from '@/server/db/queries/activity';
@@ -64,6 +67,14 @@ export default async function RootLayout({
       className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable}`}
     >
       <body className={montserrat.className}>
+        {/* TESTING ONLY — apply the saved palette choice before paint so there's
+            no flash on navigation. Remove with <PaletteToggle/> before shipping. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('joshing-palette')==='proposed')document.documentElement.setAttribute('data-palette','proposed')}catch(e){}`,
+          }}
+        />
+        <PaletteToggle />
         <Nav
           initialUserId={claims?.userId ?? null}
           initialDisplayName={profile?.displayName ?? null}

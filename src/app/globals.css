@@ -212,6 +212,27 @@
     --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
 }
 
+/* ───────────────────────────────────────────────────────────────────────────
+   TESTING ONLY — proposed color palette preview (see _docs/STYLE-GUIDE-COLOR.md).
+   Toggled by <PaletteToggle> via the `data-palette` attribute on <html>. This
+   block repoints color *tokens* to their proposed values, so flipping the
+   attribute re-colors every surface that reads a token — no per-page edits. Any
+   surface still on hardcoded hex (the five category systems, some golds) will
+   NOT flip here; routing those onto tokens is the actual color build (color
+   fix-list steps 3–4). First-pass values — tune them in place.
+   Remove this block and the component before merging to a shipping branch.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root[data-palette="proposed"] {
+    /* §1 GRADING — WRONG leaves the terracotta family for a true red. This is the
+       thesis change: it de-collides wrong from the brand/link orange (#d15e36)
+       and from the solid "still to play" triangle, in one move. */
+    --game-wrong:        #c1121f;  /* was #c96b4a terracotta */
+    --game-wrong-strong: #8c0d17;  /* was #c33d14            */
+    /* CORRECT stays forest green; kept here as the single tuning point and to
+       confirm by eye that it clears the knowledge greens. */
+    --game-correct:      #366045;
+}
+
 .dark {
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
