@@ -81,9 +81,11 @@ export function TerritoryTriangle({ played, color }: { played: boolean; color: s
 // MilestoneExpansion's "Answered" history can echo what the viewer typed.
 type Resolution = { submitted: string; isCorrect: boolean }
 
-// Every card shows the same number of topics (no hero variant); the rest fold
-// into the muted "+N more".
-const TOPIC_LIMIT = 4
+// A card carries at most CARD_QUESTION_CAP (5) questions, so it can surface at
+// most 5 distinct topics — the limit matches that cap, which means a full card
+// shows its whole territory and the "+N more" fold is a safety net that never
+// trips in practice (overflow continues on the next card, not behind a "+N").
+const TOPIC_LIMIT = 5
 
 // A friend's knowledge portrait in the "From Friends" zone: name, a warm
 // discovery-register status line, their recent territory (topic list with
@@ -133,13 +135,14 @@ export function FriendTerritoryCard({ card }: { card: FriendTerritoryCardModel }
 
   return (
     <FeedCardShell elevated className="p-4">
-      {/* Knowledge-portrait masthead: the friend's name large in the brand
-          sans (Montserrat via --font-sans), the discovery status line beneath
-          it in the LARGE editorial serif register (the same font-serif text-lg
-          treatment the feed's primary text actions use) on the brand orange,
-          and a warm yellow rule separating the masthead from the territory
-          list. */}
-      <h3 className="m-0 font-sans text-[22px] leading-[1.2] font-bold text-[var(--brand-ink)]">
+      {/* Knowledge-portrait masthead, read as one sentence ("Robyn keeps
+          finding new corners") in a single Editorial serif voice: the name is
+          the heavier Cormorant weight in full ink; the discovery status line is
+          the same serif a step down — regular weight, a softened ink (ink/700),
+          no italic and no terracotta (the orange is reserved for secondary
+          links). Name vs. descriptor is carried by weight + color, never slant,
+          per STYLE-GUIDE-TYPE. A warm yellow rule closes the masthead. */}
+      <h3 className="m-0 font-serif text-[26px] leading-[1.1] font-bold text-[var(--brand-ink)]">
         <Link
           href={`/users/${card.friendId}`}
           onClick={(e) => e.stopPropagation()}
@@ -148,7 +151,7 @@ export function FriendTerritoryCard({ card }: { card: FriendTerritoryCardModel }
           {card.friendName}
         </Link>
       </h3>
-      <p className="m-0 mt-1 font-serif text-lg leading-[1.35] font-semibold tracking-[0.05em] italic text-[var(--brand-orange)]">
+      <p className="m-0 mt-0.5 font-serif text-[18px] leading-[1.3] font-medium text-[var(--brand-ink-700)]">
         {card.statusLine}
       </p>
       <hr aria-hidden className="my-3 h-[2px] border-0 bg-[var(--tri-darkyellow)]" />

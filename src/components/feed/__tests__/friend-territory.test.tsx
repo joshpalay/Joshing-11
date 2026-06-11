@@ -56,8 +56,8 @@ function milestoneItem(
   }
 }
 
-describe('buildFriendTerritoryCards — one knowledge portrait per friend', () => {
-  it('merges a friend\'s deep + breadth bundles into one card, topics deduped in order, hero order = newest first', () => {
+describe('buildFriendTerritoryCards — one card per milestone bundle, capped at 5', () => {
+  it('emits one card per bundle (deep vs breadth stay distinct); a question across two of a friend\'s bundles plays once', () => {
     const cards = buildFriendTerritoryCards([
       milestoneItem('m1', 'robyn', 'Robyn', [
         question({ questionId: 'q1', domain: 'Star Trek' }),
@@ -72,11 +72,16 @@ describe('buildFriendTerritoryCards — one knowledge portrait per friend', () =
         question({ questionId: 'q1', domain: 'Star Trek' }),
       ]),
     ])
-    expect(cards.map((c) => c.friendId)).toEqual(['robyn', 'shanea'])
-    const robyn = cards[0]!
-    expect(robyn.friendName).toBe('Robyn')
-    expect(robyn.topics.map((t) => t.name)).toEqual(['Star Trek', 'French Herbs'])
-    expect(robyn.questions.map((q) => q.questionId)).toEqual(['q1', 'q2', 'q3'])
+    // Robyn's two bundles → two consecutive cards; Shanea's one bundle → one.
+    expect(cards.map((c) => c.friendId)).toEqual(['robyn', 'robyn', 'shanea'])
+    expect(cards[0]!.friendName).toBe('Robyn')
+    expect(cards[0]!.topics.map((t) => t.name)).toEqual(['Star Trek'])
+    expect(cards[0]!.questions.map((q) => q.questionId)).toEqual(['q1', 'q2'])
+    // q1 already claimed by the first card, so this bundle's card plays only q3.
+    expect(cards[1]!.topics.map((t) => t.name)).toEqual(['French Herbs'])
+    expect(cards[1]!.questions.map((q) => q.questionId)).toEqual(['q3'])
+    // Bundles map to distinct cards (and distinct status seeds).
+    expect(cards[0]!.id).not.toBe(cards[1]!.id)
   })
 
   it('fills on attempt: a wrong answer marks a topic played EXACTLY like a correct one (two states, no third)', () => {
@@ -100,6 +105,26 @@ describe('buildFriendTerritoryCards — one knowledge portrait per friend', () =
     // one a correct answer produces — correctness never reaches this surface.
     expect(incorrect.topics).toEqual(correct.topics)
     expect(untried.topics[0]).toEqual({ name: 'Star Trek', played: false })
+  })
+
+  it('defensively splits an over-cap bundle across consecutive cards (5 max each) rather than "+N more"', () => {
+    const qs = Array.from({ length: 7 }, (_, i) =>
+      question({ questionId: `q${i}`, domain: `Domain ${i}` }),
+    )
+    // A single bundle carrying 7 questions (above the cap) — should not exist in
+    // practice, but the builder splits it instead of overflowing one card.
+    const cards = buildFriendTerritoryCards([milestoneItem('m1', 'robyn', 'Robyn', qs)])
+    expect(cards).toHaveLength(2)
+    expect(cards.map((c) => c.friendId)).toEqual(['robyn', 'robyn'])
+    expect(cards[0]!.questions.map((q) => q.questionId)).toEqual([
+      'q0', 'q1', 'q2', 'q3', 'q4',
+    ])
+    expect(cards[1]!.questions.map((q) => q.questionId)).toEqual(['q5', 'q6'])
+    // Each card's territory is its own slice — no "+N more" spill.
+    expect(cards[0]!.topics).toHaveLength(5)
+    expect(cards[1]!.topics).toHaveLength(2)
+    // Stacked cards draw distinct ids so React keys (and the status seed) differ.
+    expect(cards[0]!.id).not.toBe(cards[1]!.id)
   })
 
   it('suppresses catch-all categories from the territory list but keeps their questions playable', () => {
@@ -170,17 +195,17 @@ describe('FriendTerritoryCard — render', () => {
     expect(html).not.toMatch(/Correct|Not this time/)
   })
 
-  it('every card shows 4 topics + a muted "+N more" — no hero variant', () => {
+  it('shows every topic on a full 5-question card — no "+N more" fold (overflow goes to the next card)', () => {
     const html = renderToStaticMarkup(<FriendTerritoryCard card={card()} />)
     expect(html).toContain('Jazz')
-    expect(html).not.toContain('Cubism')
-    expect(html).toContain('+1 more')
+    expect(html).toContain('Cubism')
+    expect(html).not.toMatch(/\+\d+ more/)
   })
 
   it('renders exactly two triangle states — played (filled) and untried (hollow bordered)', () => {
     const html = renderToStaticMarkup(<FriendTerritoryCard card={card()} />)
     const states = [...html.matchAll(/data-territory-state="(\w+)"/g)].map((m) => m[1])
-    expect(states).toEqual(['played', 'untried', 'untried', 'untried'])
+    expect(states).toEqual(['played', 'untried', 'untried', 'untried', 'untried'])
     expect(new Set(states).size).toBe(2)
   })
 
