@@ -33,13 +33,17 @@ const VIEWBOX_H = 900;
 const SIZE = 56;
 const TRI_H = SIZE * 0.8660254;
 
+// The triangle field draws from the decorative --tri-* palette (globals.css).
+// Each entry is a token reference, not a raw hex: it feeds the per-triangle
+// `--tri-color-a/-b` custom properties, and `fill: var(--tri-color-a)` resolves
+// the nested var() so the animation cross-fades between two token colors.
 const PALETTE = [
-  "#D15E36", // orange
-  "#6D837F", // darkteal
-  "#ADB19E", // lightteal
-  "#F8E6C7", // cream
-  "#DEAE5C", // darkyellow
-  "#EDD2A3", // lighttan
+  "var(--tri-orange)",
+  "var(--tri-darkteal)",
+  "var(--tri-lightteal)",
+  "var(--tri-cream)",
+  "var(--tri-darkyellow)",
+  "var(--tri-lighttan)",
 ];
 
 function rand(seed: number) {
@@ -139,7 +143,7 @@ export default function LoadingScreen({
   const current = rotation[Math.min(index, rotation.length - 1)] ?? rotation[0];
 
   const wrapperClass = [
-    "isolate flex items-center justify-center overflow-hidden bg-[#E8DCC0]",
+    "isolate flex items-center justify-center overflow-hidden bg-[var(--loading-backdrop)]",
     fullScreen
       ? "fixed inset-0 z-[60]"
       : "relative h-full w-full min-h-[480px]",
@@ -188,7 +192,7 @@ export default function LoadingScreen({
         aria-hidden="true"
       />
 
-      <div className="relative z-10 mx-6 w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-[46px] py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5">
+      <div className="relative z-10 mx-6 w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-[46px] py-7 text-center shadow-[var(--shadow-loading-card)] ring-1 ring-black/5">
         <p className="font-sans text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
           JOSHING
         </p>

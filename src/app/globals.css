@@ -268,6 +268,25 @@
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;
     --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
+    /* Card tier shadows/strokes (B-VISUAL-CARD-TIERS-01). The Home feed reads
+       loud→quiet→loud via a named tier set: a Playable tier (direct-question /
+       friend-activity question cards) that steps forward off the cream, and a
+       flat Ambient tier (activity one-liners). These tokenize what used to be
+       arbitrary inline rgba(40,32,30,…) values duplicated in FeedCardShell and
+       ActivityStreamItem — rgb(40,32,30)=#28201E, the same warm-ink shadow color
+       the resting cards already use. --rest is the quiet/answered card shadow;
+       --playable is a deeper soft drop + a visible warm-ink border (rendered at
+       1.5px) so playable is unmistakable next to the flat ambient rows. */
+    --shadow-card-rest:     0 4px 12px rgba(40, 32, 30, 0.04);
+    --shadow-card-playable: 0 6px 16px rgba(40, 32, 30, 0.14);
+    --stroke-card-playable: rgba(40, 32, 30, 0.35);
+    /* LoadingScreen bespoke primitives (B-VISUAL-CARD-TIERS-01, bucket-C). The
+       triangle-field mat is a warm sand darker than every cream token so the
+       --tri-* triangles read against it; the JOSHING card keeps its layered
+       drop shadow. Tokenized here so no bespoke hex/shadow lives in the
+       component. */
+    --loading-backdrop:     #e8dcc0;
+    --shadow-loading-card:  0 4px 4px 0 rgba(0, 0, 0, 0.25), 0 4px 12px 0 rgba(40, 32, 30, 0.04);
 }
 
 /* ───────────────────────────────────────────────────────────────────────────

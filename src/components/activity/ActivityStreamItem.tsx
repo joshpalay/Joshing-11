@@ -320,11 +320,15 @@ export function ActivityStreamItem({
       { padding: opened ? '6px 0' : '4px 0' }
     : playableCard
       ? {
+          // Playable tier (B-VISUAL-CARD-TIERS-01) — same tokens as the
+          // FeedCardShell elevated question cards so the two playable surfaces
+          // read identically: cream fill, a visible 1.5px warm-ink stroke, and
+          // the deeper soft drop shadow that lifts them off the flat ambient rows.
           padding: opened ? '16px 14px' : '14px',
           background: 'var(--game-card-question)',
-          border: '1px solid rgba(40, 32, 30, 0.22)',
+          border: '1.5px solid var(--stroke-card-playable)',
           borderRadius: 4,
-          boxShadow: '0 4px 12px rgba(40, 32, 30, 0.1)',
+          boxShadow: 'var(--shadow-card-playable)',
         }
       : opened
         ? // Opened reveal: a soft paper wash defines the expanded cluster, with

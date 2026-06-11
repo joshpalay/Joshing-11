@@ -35,11 +35,11 @@ const TOKEN_LINT_RULE = {
 // (and any cleaned file removed from this list) are held at error. Shrink this
 // list; don't add to it. These warnings are the *only* ones `npm run lint`
 // tolerates: the script pins `--max-warnings` to their current count (16), so the
-// warning lane can't silently grow. When you clean a file off this list, drop the
-// `--max-warnings` ceiling in package.json by the number of warnings it removed.
+// warning lane can't silently grow (ceiling currently 13). When you clean a file
+// off this list, drop the `--max-warnings` ceiling in package.json by the number
+// of warnings it removed.
 const TOKEN_LINT_GRANDFATHERED = [
   "src/components/CreateChooser.tsx",
-  "src/components/LoadingScreen.tsx",
   "src/components/SendQuestionDrawer.tsx",
   "src/components/TodaysFiveCard.tsx",
   "src/components/feed/AnswerFeedbackSheet.tsx",

@@ -14,19 +14,20 @@ import { cn } from '@/lib/utils'
 // 'triangle' variant for the envelope motif.
 
 const FEED_CARD_RADIUS = 'rounded-[4px]'
-const FEED_CARD_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
+const FEED_CARD_SHADOW = 'shadow-[var(--shadow-card-rest)]'
 
-// Elevated ("playable" / Tier 1) treatment for the unified home feed
-// (D-FEED-TIER): the warm light-cream question fill, a visible — but still
-// light — warm-ink stroke, and a deeper soft drop shadow than the ambient
-// cards carry. On the home feed the activity rows render as flat one-liners
-// (no card), so a playable question card needs more than a 4% lift to read as
-// the thing you can play; the stronger stroke + shadow make it step forward
-// off the cream while the chatter stays quiet text. Shares the shadow color
-// (#28201E warm ink) with the resting cards, just at a higher opacity.
+// Elevated ("Playable" tier) treatment for the unified home feed
+// (B-VISUAL-CARD-TIERS-01): the warm light-cream question fill, a visible
+// warm-ink stroke (rendered at 1.5px), and a deeper soft drop shadow than the
+// ambient cards carry. On the home feed the activity rows render as flat
+// one-liners (no card), so a playable question card needs more than a 4% lift
+// to read as the thing you can play; the stronger stroke + shadow make it step
+// forward off the cream while the chatter stays quiet text. Shares the shadow
+// color (#28201E warm ink) with the resting cards via the tier tokens, just at
+// a higher opacity.
 const FEED_CARD_ELEVATED_FILL = 'bg-[var(--game-card-question)]'
-const FEED_CARD_ELEVATED_STROKE = 'border-[rgba(40,32,30,0.22)]'
-const FEED_CARD_ELEVATED_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.10)]'
+const FEED_CARD_ELEVATED_STROKE = 'border-[1.5px] border-[var(--stroke-card-playable)]'
+const FEED_CARD_ELEVATED_SHADOW = 'shadow-[var(--shadow-card-playable)]'
 
 export type FeedCardShellProps = {
   children: ReactNode
@@ -100,8 +101,8 @@ export function FeedCardShell({
   return (
     <article
       className={cn(
-        'relative overflow-hidden border',
-        elevated ? FEED_CARD_ELEVATED_STROKE : 'border-[var(--brand-rule)]',
+        'relative overflow-hidden',
+        elevated ? FEED_CARD_ELEVATED_STROKE : 'border border-[var(--brand-rule)]',
         elevated ? FEED_CARD_ELEVATED_FILL : 'bg-[var(--brand-card)]',
         FEED_CARD_RADIUS,
         elevated ? FEED_CARD_ELEVATED_SHADOW : FEED_CARD_SHADOW,
