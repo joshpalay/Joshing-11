@@ -289,7 +289,10 @@ function feedMetadata(item: FeedApiItem, answered = false) {
   )
 }
 
-function baseTypedFields(item: FeedApiItem, answered = false) {
+// `hideTimestamp` blanks the relative "1d ago" on the home "What's Happening"
+// feed (unifiedHome), so its question cards match the timestamp-free activity
+// rows; the Broadcasts/Sent surfaces leave it on.
+function baseTypedFields(item: FeedApiItem, answered = false, hideTimestamp = false) {
   return {
     id: item.id,
     metadata: feedMetadata(item, answered),
@@ -300,13 +303,13 @@ function baseTypedFields(item: FeedApiItem, answered = false) {
     avatarName: item.source_friend_display_name,
     avatarUserId: item.source_user_id,
     authorHref: item.source_profile_href ?? profileHref(item.source_user_id),
-    timestamp: formatRelativeTime(item.source_event_at),
+    timestamp: hideTimestamp ? '' : formatRelativeTime(item.source_event_at),
     viewerIsAuthor: item.viewer_is_author === true,
   }
 }
 
-function toTypedFeedItem(item: FeedApiItem) {
-  const base = baseTypedFields(item)
+function toTypedFeedItem(item: FeedApiItem, hideTimestamp = false) {
+  const base = baseTypedFields(item, false, hideTimestamp)
 
   if (item.card_type === 'direct_sent') {
     return {
@@ -388,11 +391,12 @@ function pickPairedFriend(
 
 function toAnsweredByYouItem(
   item: FeedApiItem,
-  result?: ResultState
+  result?: ResultState,
+  hideTimestamp = false
 ): AnsweredByYouFeedItem {
   const masteryDeltaRaw = result?.masteryDelta ?? item.mastery_delta
   return {
-    ...baseTypedFields(item, true),
+    ...baseTypedFields(item, true, hideTimestamp),
     avatarName: null,
     avatarUserId: null,
     type: 'answered_by_you',
@@ -691,9 +695,9 @@ const FROM_FRIENDS_COLLAPSED_COUNT = 5
 const FROM_FRIENDS_STEP = 10
 
 // The uppercase eyebrow that labels a feed section — the recency day labels
-// ("Today", "This week") and the home-only pinned "From Friends" section all
-// share this register. `first:pt-0` lets whichever heading renders first sit
-// flush to the top of the feed.
+// ("Today", "This week") and the home-only pinned "For You" / "From Friends"
+// sections all share this register. `first:pt-0` lets whichever heading renders
+// first sit flush to the top of the feed.
 function FeedSectionHeading({
   unifiedHome,
   children,
@@ -978,24 +982,33 @@ function FeedListContent({
     return next
   }, [unifiedRows, commonGroundPromo, expandingPromo, addFriendsPromo])
 
-  // Home-only sectioning: the friends' milestone bundles (the up-to-5-triangle
-  // cards you can answer inline) are lifted out of the chronological stream
-  // into a single pinned "From Friends" section at the top. Everything else —
-  // question cards sent to you, ambient activity, per-person roll-ups, promos —
-  // falls through to `restRows` and keeps the existing recency grouping below.
-  // Off the unified home (the standalone Feed tab) the section is empty and
+  // Home-only sectioning: the answerable question "big boxes" and friends'
+  // milestone bundles are lifted out of the chronological stream into two
+  // pinned sections at the top —
+  //   • "For You"      — question cards a friend sent you directly or broadcast
+  //                      (kind:'feed'); rendered as the full SparkleEnvelope
+  //                      boxes you can answer; uncapped.
+  //   • "From Friends" — friends' playable milestone bundles (the up-to-5-
+  //                      triangle cards), capped to the most recent few.
+  // Everything else — ambient activity, per-person roll-ups, promos — falls
+  // through to `restRows` and keeps the existing recency grouping below. Off
+  // the unified home (the standalone Feed tab) both sections are empty and
   // restRows is the whole list, so that surface renders exactly as before.
-  const { fromFriendsRows, restRows } = useMemo(() => {
+  const { forYouRows, fromFriendsRows, restRows } = useMemo(() => {
     if (!unifiedHome) {
       return {
+        forYouRows: [] as UnifiedRow[],
         fromFriendsRows: [] as UnifiedRow[],
         restRows: displayRows,
       }
     }
+    const forYou: UnifiedRow[] = []
     const fromFriends: UnifiedRow[] = []
     const rest: UnifiedRow[] = []
     for (const row of displayRows) {
-      if (
+      if (row.kind === 'feed') {
+        forYou.push(row)
+      } else if (
         row.kind === 'activity' &&
         row.item.expand?.kind === 'milestone' &&
         row.item.expand.questions.length > 0
@@ -1005,7 +1018,7 @@ function FeedListContent({
         rest.push(row)
       }
     }
-    return { fromFriendsRows: fromFriends, restRows: rest }
+    return { forYouRows: forYou, fromFriendsRows: fromFriends, restRows: rest }
   }, [displayRows, unifiedHome])
 
   // "From Friends" reveals its most recent cards in batches (fromFriendsRows is
@@ -1516,14 +1529,20 @@ function FeedListContent({
       if (embed?.kind === 'recently_expanding') {
         return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
       }
-      // Everything else — including the milestone bundle — renders as a
-      // plain flat row (its bundle triangle mark + tap-to-answer
-      // expansion live inside ActivityStreamItem). No card treatment.
+      // Everything else renders as a one-liner row, with its bundle triangle
+      // mark + tap-to-answer expansion living inside ActivityStreamItem. On the
+      // home feed the playable milestone bundles take the cream card treatment
+      // (elevated) so they step forward from the flat ambient rows; the full
+      // /activities log keeps every row flat.
       return (
         <ActivityStreamItem
           key={`a-${row.item.id}`}
           item={row.item}
           timestamp={formatRelativeTime(row.item.sortAt)}
+          // The home "What's Happening" feed reads calmer without the per-row
+          // "1d ago" ledger; the full /activities log keeps its timestamps.
+          showTimestamp={!unifiedHome}
+          elevated={unifiedHome}
         />
       )
     }
@@ -1593,7 +1612,7 @@ function FeedListContent({
     )
 
     if (isAnswered) {
-      const answeredItem = toAnsweredByYouItem(item, result)
+      const answeredItem = toAnsweredByYouItem(item, result, unifiedHome)
       const isIncorrect = answeredItem.isCorrect === false
       const recheckAction: FeedRecheckAction | null = isIncorrect
         ? { onSubmit: () => submitRecheck(item) }
@@ -1619,7 +1638,7 @@ function FeedListContent({
       )
     }
 
-    const typedItem = toTypedFeedItem(item)
+    const typedItem = toTypedFeedItem(item, unifiedHome)
     const dismissible = !item.viewer_is_author
     const onAnswer = dismissible
       ? () => {
@@ -1629,6 +1648,9 @@ function FeedListContent({
       : undefined
     const onDismiss = dismissible ? () => requestDismiss(item) : undefined
 
+    // On the home "What's Happening" feed these answerable question cards are
+    // the playable rows, interleaved with flat activity one-liners — give them
+    // the Tier 1 lift (cream fill + stroke + drop shadow) so they step forward.
     let card: ReactNode
     if (typedItem.type === 'direct_sent') {
       card = (
@@ -1637,6 +1659,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          elevated={unifiedHome}
         />
       )
     } else if (typedItem.type === 'friend_liked') {
@@ -1646,6 +1669,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          elevated={unifiedHome}
         />
       )
     } else {
@@ -1656,6 +1680,7 @@ function FeedListContent({
           onAnswer={onAnswer}
           onDismiss={onDismiss}
           onHideCategory={() => void hideCategory(item)}
+          elevated={unifiedHome}
         />
       )
     }
@@ -1758,11 +1783,22 @@ function FeedListContent({
         )
       ) : (
         <section className="space-y-3 pb-8">
-          {/* Home-only: friends' milestone bundles (the up-to-5-triangle cards
-              you can answer inline) are pinned into a "From Friends" section at
-              the top, capped to the most recent few with a "View more" control.
-              groupActivityByFriend is a pass-through here (milestone rows never
+          {/* Home-only: the answerable question cards a friend sent/broadcast to
+              you (the full-size SparkleEnvelope "big boxes") are pinned into a
+              "For You" section at the very top — above "From Friends".
+              groupActivityByFriend is a pass-through here (feed rows never
               group), keeping the render path uniform. */}
+          {forYouRows.length > 0 ? (
+            <Fragment key="for-you">
+              <FeedSectionHeading unifiedHome={unifiedHome}>For You</FeedSectionHeading>
+              {groupActivityByFriend(forYouRows).map(renderRow)}
+            </Fragment>
+          ) : null}
+          {/* Home-only: friends' milestone bundles (the up-to-5-triangle cards
+              you can answer inline) are pinned into a "From Friends" section
+              below "For You", capped to the most recent few with a "View more"
+              control. groupActivityByFriend is a pass-through here (milestone
+              rows never group), keeping the render path uniform. */}
           {fromFriendsRows.length > 0 ? (
             <Fragment key="from-friends">
               <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>

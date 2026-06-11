@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 
 import {
   dailyPreferences,
@@ -291,6 +291,34 @@ export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow
     .limit(1);
 
   return queue ?? null;
+}
+
+/**
+ * Atomically claim the daily reminder email for a queue so concurrent cron
+ * retries can't double-send. The single UPDATE flips email_reminder_sent_at
+ * from null to now() only if it is still null, and RETURNs the row iff this
+ * call won the race. Returns true iff THIS call should send; a losing or
+ * duplicate call returns false and must not send.
+ */
+export async function claimDailyEmailReminder(queueId: string): Promise<boolean> {
+  const claimed = await db
+    .update(dailyQueues)
+    .set({ emailReminderSentAt: new Date() })
+    .where(and(eq(dailyQueues.id, queueId), isNull(dailyQueues.emailReminderSentAt)))
+    .returning({ id: dailyQueues.id });
+
+  return claimed.length > 0;
+}
+
+/**
+ * Release a claim (reset email_reminder_sent_at to null) after a send failure,
+ * so a later cron run can retry the reminder for this queue. Idempotent.
+ */
+export async function releaseDailyEmailReminder(queueId: string): Promise<void> {
+  await db
+    .update(dailyQueues)
+    .set({ emailReminderSentAt: null })
+    .where(eq(dailyQueues.id, queueId));
 }
 
 /**
@@ -1459,6 +1487,43 @@ export function isBankRowServable(
   return true;
 }
 
+// Q5 ranking (BP-7): trust-ranked, dud-excluded candidate ordering for the
+// bank. Exported pure so the rule is unit-testable without a DB.
+// - Excludes "nobody got it" stock (empiricalCorrectRate === 0 with
+//   nAnswered ≥ DUD_MIN_ANSWERS) — the D11 hallucination smell, computed but
+//   previously unused at selection time. Exclusion only ever FILTERS: an
+//   emptied set returns [] and the caller falls through to generation, so dud
+//   stock can never starve a domain toward the 503 path.
+// - Ranks author_confirmed > human_validated > machine_verified > unverified,
+//   shuffling WITHIN each rank (Fisher–Yates then stable sort) so selection
+//   stays varied without becoming quality-blind.
+const DUD_MIN_ANSWERS = 5;
+const TRUST_RANK: Record<TrustTier, number> = {
+  unverified: 0,
+  machine_verified: 1,
+  human_validated: 2,
+  author_confirmed: 3,
+};
+
+export function rankAndFilterBankCandidates<
+  T extends { trustTier: string; empiricalCorrectRate: number | null; nAnswered: number },
+>(rows: readonly T[]): { ranked: T[]; dudsExcluded: number } {
+  const kept = rows.filter(
+    (row) => !(row.empiricalCorrectRate === 0 && row.nAnswered >= DUD_MIN_ANSWERS),
+  );
+  const dudsExcluded = rows.length - kept.length;
+  const ranked = [...kept];
+  for (let i = ranked.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [ranked[i], ranked[j]] = [ranked[j], ranked[i]];
+  }
+  // Array.prototype.sort is stable, so equal-rank rows keep their shuffled order.
+  ranked.sort(
+    (a, b) => (TRUST_RANK[b.trustTier as TrustTier] ?? 0) - (TRUST_RANK[a.trustTier as TrustTier] ?? 0),
+  );
+  return { ranked, dudsExcluded };
+}
+
 export async function pickBankSource(
   userId: string,
   domain: string,
@@ -1472,7 +1537,15 @@ export async function pickBankSource(
       .select()
       .from(generatedQuestions)
       .where(and(
-        eq(generatedQuestions.canonicalSubcategory, domain),
+        // BP-7 / C5: match on the folded domain_key (written by domainKey() at
+        // every pool insert) so spelling variants of one domain share stock —
+        // with the legacy exact-string predicate as the fallback for rows that
+        // pre-date the 0074 backfill. No age predicate: the pool is durable
+        // (D8) — recency only biases the window below, it never excludes.
+        or(
+          eq(generatedQuestions.domainKey, domainKey(domain)),
+          eq(generatedQuestions.canonicalSubcategory, domain),
+        ),
         eq(generatedQuestions.difficultyEstimate, difficulty),
         isNotNull(generatedQuestions.factKey),
         sql`${generatedQuestions.userId} <> ${userId}`,
@@ -1484,8 +1557,9 @@ export async function pickBankSource(
       .limit(BANK_RECENCY_WINDOW);
   } catch (error) {
     // Tolerate the brief window where a newly-added column is missing
-    // (sub_angles in 0055; is_duplicate in 0062): a hard failure here would
-    // silently disable the entire bank-pick path until the migration lands.
+    // (sub_angles in 0055; is_duplicate in 0062; domain_key in 0074): a hard
+    // failure here would silently disable the entire bank-pick path until the
+    // migration lands.
     if (pgErrorCode(error) === '42703') return null;
     throw error;
   }
@@ -1500,14 +1574,20 @@ export async function pickBankSource(
     SELF_PRACTICE_TIERS,
   ).rows;
 
-  // Shuffle the recency window (Fisher–Yates) so selection within it stays
-  // varied; recency already biases which rows land in the window.
-  for (let i = candidates.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  // Q5: dud-excluded, trust-ranked, shuffled within rank (see helper above).
+  // BANK_RECENCY_WINDOW stays 50: duds should be rare, the window is per
+  // domain+tier, and tier-adjacent fallback (BP-7) already widens effective
+  // reach — revisit with the bank-telemetry hit-rate data, not by guessing.
+  const { ranked, dudsExcluded } = rankAndFilterBankCandidates(candidates);
+  if (dudsExcluded > 0) {
+    console.info('[daily/bank] excluded dud stock (nobody-got-it, D11)', {
+      domain,
+      difficulty,
+      dudsExcluded,
+    });
   }
 
-  for (const row of candidates) {
+  for (const row of ranked) {
     if (!isBankRowServable(row, avoidFactKeys, avoidQuestionTexts)) continue;
     // isBankRowServable guarantees a non-null factKey; this narrows it for TS.
     if (!row.factKey) continue;

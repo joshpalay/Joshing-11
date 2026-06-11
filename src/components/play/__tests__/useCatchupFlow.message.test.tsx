@@ -150,6 +150,37 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
     expect(rendered).toContain('Why Dana asked');
   });
 
+  it('renders the recheck button on a wrong daily-slot answer when a recheckAction is wired', () => {
+    const rendered = html([
+      buildCatchupResultMessage({
+        id: 'r-1',
+        item: catchupItem(),
+        data: answerResponse({ result: 'wrong', isCorrect: false }),
+        isCorrect: false,
+        submittedAnswer: 'Handel',
+        pointsAwarded: 0,
+        recheckAction: { onSubmit: async () => ({ accepted: false, message: '' }) },
+      }),
+    ]);
+
+    expect(rendered).toContain('Recheck my answer');
+  });
+
+  it('omits the recheck button when no recheckAction is wired (correct answer / feed-backed item)', () => {
+    const rendered = html([
+      buildCatchupResultMessage({
+        id: 'r-1',
+        item: catchupItem(),
+        data: answerResponse({ result: 'wrong', isCorrect: false }),
+        isCorrect: false,
+        submittedAnswer: 'Handel',
+        pointsAwarded: 0,
+      }),
+    ]);
+
+    expect(rendered).not.toContain('Recheck my answer');
+  });
+
   it('renders no aside when the server gated it out (selectInsideJokeForViewer returned null)', () => {
     const rendered = html([
       buildCatchupResultMessage({

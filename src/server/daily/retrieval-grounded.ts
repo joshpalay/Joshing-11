@@ -7,6 +7,7 @@ import {
   loggedMessagesCreate,
 } from '@/lib/llm';
 import { db, generatedQuestions } from '@/server/db';
+import { domainKey } from '@/lib/knowledge/domain-key';
 import { embedAndResolveDuplicate } from '@/server/pool/dedup';
 import {
   GROUNDING_SYSTEM_ADDENDUM,
@@ -220,6 +221,8 @@ async function refillDomain(
         .values({
           userId: systemUserId,
           canonicalSubcategory: q.canonical_subcategory,
+          // Folded lookup key (BP-7 / C5) — all pool write paths set this.
+          domainKey: domainKey(q.canonical_subcategory),
           broadCategory: q.broad_category,
           questionText: q.question_text,
           answer: q.answer,

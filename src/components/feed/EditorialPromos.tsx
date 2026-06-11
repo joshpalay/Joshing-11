@@ -60,18 +60,21 @@ function rotate<T>(pool: readonly T[], index: number | undefined): T {
 
 /**
  * "Shared Ground" — the overlapping-circle motif as a full-bleed editorial
- * feature: the two strongest shared-but-untested domains the viewer holds with
- * a friend, with a link through to that friend.
+ * feature. A carousel with a slide per friend (each their strongest shared-but-
+ * untested domain), so the viewer can rotate through a few of the people they
+ * share ground with, plus a closing nudge to widen their circle.
  */
 export function CommonGroundFeature({
   embed,
 }: {
   embed: Extract<StreamEmbed, { kind: 'common_ground' }>;
 }) {
+  // One shared scale across every slide so circles are comparable friend to
+  // friend, not re-normalized per slide.
   const datasetMax = circleDatasetMax(
-    embed.domains.flatMap((d) => [d.viewer.points, d.friend.points]),
+    embed.friends.flatMap((f) => [f.domain.viewer.points, f.domain.friend.points]),
   );
-  const count = embed.domains.length;
+  const count = embed.friends.length;
   const headline = rotate(COMMON_GROUND_HEADLINES, embed.headlineIndex);
   return (
     <EditorialFeature
@@ -92,21 +95,29 @@ export function CommonGroundFeature({
       }
       artwork={
         <EditorialCarousel
-          ariaLabel="Shared interests"
+          ariaLabel="Friends you share ground with"
           slides={[
-            ...embed.domains.map((d) => (
-              <div key={d.label} className="flex flex-col gap-4">
+            ...embed.friends.map((f) => (
+              <div key={f.friendId} className="flex flex-col gap-4">
                 <DomainCircleSvg
-                  viewerPoints={d.viewer.points}
-                  friendPoints={d.friend.points}
-                  viewerTier={d.viewer.tier}
-                  friendTier={d.friend.tier}
+                  viewerPoints={f.domain.viewer.points}
+                  friendPoints={f.domain.friend.points}
+                  viewerTier={f.domain.viewer.tier}
+                  friendTier={f.domain.friend.tier}
                   datasetMax={datasetMax}
                   scale={SHARED_GROUND_CIRCLE_SCALE}
-                  ariaLabel={`${d.label}: shared with ${embed.friendFirstName}, still untested`}
+                  ariaLabel={`${f.domain.label}: shared with ${f.friendFirstName}, still untested`}
                 />
-                <span className="max-w-[150px] font-serif text-[14px] leading-snug text-[var(--brand-ink-700)]">
-                  {d.label}
+                <span className="flex max-w-[150px] flex-col gap-0.5">
+                  <Link
+                    href={f.friendHref}
+                    className="font-serif text-[15px] leading-snug font-semibold text-[var(--brand-ink)] no-underline hover:underline"
+                  >
+                    {f.friendFirstName}
+                  </Link>
+                  <span className="font-serif text-[13px] leading-snug text-[var(--brand-ink-400)]">
+                    {f.domain.label}
+                  </span>
                 </span>
               </div>
             )),
@@ -130,7 +141,7 @@ export function CommonGroundFeature({
           ]}
         />
       }
-      supporting={`${count} shared interest${count === 1 ? '' : 's'}`}
+      supporting={`Shared ground with ${count} ${count === 1 ? 'friend' : 'friends'}`}
       cta={{ label: 'Explore your overlap →', href: embed.friendHref }}
     />
   );

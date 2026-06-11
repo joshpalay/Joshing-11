@@ -252,6 +252,20 @@ export async function register() {
       // FeedItem table may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0075 adds DailyQueue.email_reminder_sent_at, the per-queue
+    // idempotency marker the daily-assignments cron claims before sending a
+    // reminder email. A preview/production DB that records 0075 without the
+    // column present would make the cron's claim UPDATE fail; pre-apply it
+    // idempotently (precedent: 0074's domain_key guard above).
+    try {
+      await db.execute(sql`
+        ALTER TABLE "DailyQueue"
+          ADD COLUMN IF NOT EXISTS "email_reminder_sent_at" timestamptz
+      `);
+    } catch {
+      // DailyQueue table may not exist yet — migrate() handles initial creation.
+    }
+
     // Migration 0028 adds the Category.general_knowledge enum value and migration
     // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
     // migrations in one transaction, but Postgres requires a newly-added enum value
@@ -581,6 +595,20 @@ export async function register() {
     // migration without the column present must still boot.
     try {
       await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "acceptable_variants" text[] NOT NULL DEFAULT '{}'`);
+    } catch {
+      // GeneratedQuestion may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
+    // Migration 0074 (BP-7 / C5) adds GeneratedQuestion.domain_key — the TS
+    // domainKey() fold of canonical_subcategory, matched by the bank lookup so
+    // spelling variants share stock — plus its lookup index. All pool write
+    // paths set it and pickBankSource reads it, so a database that records the
+    // migration without the column present must still boot (precedent: the
+    // 0068 acceptable_variants guard above).
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "domain_key" text`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "GeneratedQuestion_domain_key_difficulty_idx" ON "GeneratedQuestion" ("domain_key", "difficulty_estimate")`);
     } catch {
       // GeneratedQuestion may not exist yet on a fresh database — migrate()
       // creates it before this migration runs.

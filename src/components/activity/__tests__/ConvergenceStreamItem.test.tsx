@@ -64,18 +64,32 @@ function build() {
 }
 
 describe('convergenceToStreamItem — person-first, Home-eligible, read-only', () => {
-  it('builds a person-first headline that names no domain', () => {
+  it('builds a person-first headline with the cluster categories appended', () => {
     const item = build();
-    // The friend is an actor (link) part; the rest is plain copy. No domain
-    // ever reaches the headline (no `category` part, no domain string).
+    // The friend is an actor (link) part; the rest is plain copy. With a
+    // topic-less caption the distinct cluster categories are appended as serif
+    // `category` parts so the line says WHAT you converged on.
     const actorPart = item.line.find((p) => p.t === 'actor');
     expect(actorPart).toMatchObject({ name: 'Robyn', userId: 'friend-1' });
-    expect(item.line.some((p) => p.t === 'category')).toBe(false);
+    const categories = item.line.filter((p) => p.t === 'category').map((p) => ('v' in p ? p.v : ''));
+    expect(categories).toEqual(['Cubism', 'Geography', 'Composers']);
     const headlineText = item.line.map((p) => ('v' in p ? p.v : p.name)).join('');
-    expect(headlineText).toBe('You and Robyn keep landing in the same place.');
-    for (const q of QUESTIONS) {
-      expect(headlineText).not.toContain(q.domain);
-    }
+    expect(headlineText).toBe(
+      'You and Robyn keep landing in the same place — Cubism, Geography, Composers',
+    );
+  });
+
+  it('does not re-list categories when the cluster shares one topic (single-topic pool)', () => {
+    // Single-topic pool already names its one topic inline via `{topic}`, so the
+    // tail must not duplicate it.
+    const item = convergenceToStreamItem(
+      CONVERGENCE,
+      QUESTIONS,
+      'You and {Name} both know {topic} down',
+      'Cubism',
+    );
+    const categories = item.line.filter((p) => p.t === 'category').map((p) => ('v' in p ? p.v : ''));
+    expect(categories).toEqual(['Cubism']);
   });
 
   it('is Home-eligible (surfaces alongside the triangle rows) and read-only', () => {
@@ -94,7 +108,7 @@ describe('convergenceToStreamItem — person-first, Home-eligible, read-only', (
 });
 
 describe('ActivityStreamItem — collapsed convergence one-liner', () => {
-  it('renders the person-first line, no expand label, questions hidden', () => {
+  it('renders the person-first line with categories, no expand label, questions hidden', () => {
     const html = renderToStaticMarkup(
       <ActivityStreamItem item={build()} timestamp="2:00 PM" />,
     );
@@ -106,8 +120,8 @@ describe('ActivityStreamItem — collapsed convergence one-liner', () => {
     expect(html).not.toContain('+ QUESTIONS');
     // Collapsed: the cluster questions are NOT shown yet.
     expect(html).not.toContain('Who painted Guernica');
-    // No domain leaks into the collapsed headline.
-    expect(html).not.toContain('Cubism');
+    // The categories DO surface in the collapsed headline so it means something.
+    expect(html).toContain('Cubism');
   });
 });
 

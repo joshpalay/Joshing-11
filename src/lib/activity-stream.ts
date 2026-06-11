@@ -118,11 +118,21 @@ export type StreamAction =
 //   - 'bundle'    → 2–2–1 cluster: a friend's questions for you (milestone).
 //                   Solid = unanswered, hollow = already played. Live count
 //                   comes from the row's answered-state; caps at 5 silently.
+//   - 'star'      → a five-point star built from five palette triangles (one per
+//                   question): a friend you invited played their first five. The
+//                   five points read as the milestone; distinct from the diamond/
+//                   bundle so it doesn't blur into the rest of the triangle family.
 //   - 'diamond'   → tan/darkyellow rhombus: someone answered ("got") a question.
 //   - 'hourglass' → orange/teal triangles apex-to-apex: someone sends you a Q.
 //   - 'domain'    → orange/teal half-triangles split on a diagonal: a new
 //                   domain opened (expansion).
-export type StreamIconKind = 'bundle' | 'diamond' | 'hourglass' | 'domain' | null;
+export type StreamIconKind =
+  | 'bundle'
+  | 'star'
+  | 'diamond'
+  | 'hourglass'
+  | 'domain'
+  | null;
 
 // An optional rich embed rendered inline beneath a row's one-liner. Almost no
 // rows carry one. The common-ground promo (homepage "What's happening" ONLY)
@@ -132,6 +142,18 @@ export type CommonGroundPromoDomain = {
   label: string;
   viewer: { points: number; tier: MasteryTier };
   friend: { points: number; tier: MasteryTier };
+};
+
+// One friend in the common-ground promo carousel: the friend, plus their single
+// strongest shared-but-untested domain (the circle hero). The promo carries a
+// few of these so the carousel is a quiet tour of the viewer's circle — a slide
+// per friend — rather than a single relationship. One domain per slide keeps the
+// overlapping-circle motif uncrowded (more than one circle crowds it).
+export type CommonGroundPromoFriend = {
+  friendId: string;
+  friendFirstName: string;
+  friendHref: string;
+  domain: CommonGroundPromoDomain;
 };
 
 export type RecentlyExpandingPromoDomain = {
@@ -168,10 +190,12 @@ export type AddFriendsPromoPerson = {
 export type StreamEmbed =
   | {
       kind: 'common_ground';
+      // The featured (first) friend — drives the row's one-liner and the
+      // headline. `friends` carries the full carousel set (featured first).
       friendId: string;
       friendFirstName: string;
       friendHref: string;
-      domains: CommonGroundPromoDomain[];
+      friends: CommonGroundPromoFriend[];
       headlineIndex?: number;
     }
   | {
@@ -655,6 +679,11 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' played their first five questions')],
         secondLine: null,
+        // A friend you invited cleared their first five: the five-point star mark
+        // (five palette triangles, one per question). Its radial silhouette stands
+        // apart from the diamond/bundle so the milestone doesn't blur into the
+        // rest of the triangle family.
+        icon: 'star',
         action: null,
         expand: null,
       };
@@ -809,8 +838,9 @@ export function convergenceToStreamItem(
   sharedTopic: string | null = null,
 ): StreamItem {
   // Person-first headline: `{Name}` → the friend actor link, `{topic}` → the
-  // serif category (only present in the single-topic pool). No domain ever
-  // reaches the line unless it's the one shared topic.
+  // serif category (only present in the single-topic pool). When the cluster's
+  // topics differ (topic-less pool), the distinct categories are appended as a
+  // serif tail below so the line still says what you converged on.
   const line: StreamLinePart[] = [];
   const re = /\{(Name|topic)\}/g;
   let last = 0;
@@ -825,6 +855,38 @@ export function convergenceToStreamItem(
     last = re.lastIndex;
   }
   if (last < captionTemplate.length) line.push(txt(captionTemplate.slice(last)));
+
+  // Topic-less pool (3b): the headline names no single domain, so on its own the
+  // line ("…keep landing in the same place") says nothing about WHAT you and the
+  // friend converged on. Append the cluster's distinct categories as a quiet
+  // serif tail so the overlap is legible. (The single-topic pool already names
+  // its one topic inline, so when `sharedTopic` is set we add nothing here.)
+  if (!sharedTopic) {
+    const seen = new Set<string>();
+    const categories: string[] = [];
+    for (const q of questions) {
+      const d = q.domain?.trim();
+      if (d && !seen.has(d)) {
+        seen.add(d);
+        categories.push(d);
+      }
+    }
+    if (categories.length) {
+      // Drop a trailing period on the predicate so the tail reads
+      // "…same place — A, B, C" rather than "…same place. — A, B, C".
+      const tailIdx = line.length - 1;
+      const tailPart = line[tailIdx];
+      if (tailPart && tailPart.t === 'text') {
+        line[tailIdx] = txt(tailPart.v.replace(/\.\s*$/, ''));
+      }
+      line.push(txt(' — '));
+      categories.forEach((c, i) => {
+        if (i > 0) line.push(txt(', '));
+        line.push(cat(c));
+      });
+    }
+  }
+
   return {
     id: convergence.id,
     sortAt: convergence.sortAt,

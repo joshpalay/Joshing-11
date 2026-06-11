@@ -21,6 +21,10 @@ import { getFeedPagePayload } from '@/server/feed/get-feed-page'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 
 const FEED_PAGE_SIZE = 20
+// The home "What's Happening" feed leads with a deeper first page (the last ~30
+// items) and then pages in older rows on scroll. The prefetch limit matches the
+// FeedList pageSize so the seeded first page is full (no round-trip first paint).
+const HOME_FEED_PAGE_SIZE = 30
 
 export default async function Home() {
   const session = await getSession()
@@ -86,11 +90,10 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
 
   const missedCount = catchupItems.length
   const expiringCount = catchupItems.filter((item) => item.expiresSoon).length
-  // Suppress the standalone Catch up card in the missed>0 completed state — the
-  // completed hero's Branch A already owns that entry point, so showing both
-  // would be a duplicate. When the round is still in progress (hero is in its
-  // play state, not Branch A), the standalone card stays.
-  const showStandaloneCatchup = missedCount > 0 && !status.isComplete
+  // The standalone Catch up card is suppressed entirely — when the round is in
+  // progress the TodaysFiveCard now shows a small catch-up link under the play
+  // button; when the round is complete, Branch A on the card owns that entry point.
+  const showStandaloneCatchup = false
 
   return (
     <>
@@ -127,7 +130,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
   // prefetch matches FeedList's unifiedHome seeding for a no-round-trip paint.
   const [feedPage, activityItems, commonGroundPromo, recentlyExpandingPromo, addFriendsPromo] = await Promise.all([
     getFeedPagePayload(userId, {
-      limit: FEED_PAGE_SIZE,
+      limit: HOME_FEED_PAGE_SIZE,
       cursor: null,
       filter: 'all',
     }),
@@ -158,7 +161,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
         What&rsquo;s happening
       </p>
       <FeedList
-        pageSize={FEED_PAGE_SIZE}
+        pageSize={HOME_FEED_PAGE_SIZE}
         infinite
         initialPage={feedPage}
         showContributeFooter

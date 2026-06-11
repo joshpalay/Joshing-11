@@ -10,6 +10,8 @@
 // Shape vocabulary (Figma JOSHING-DESIGN-SYSTEM2 is the source for shape):
 //   bundle   → 2–2–1 cluster      a friend's questions for you (milestone).
 //                                 Unanswered = filled, answered = hollow outline.
+//   star     → five-point star     a friend you invited played their first five.
+//                                 Five palette triangles, one point per question.
 //   diamond  → rhombus             someone answered ("got") a question.
 //   hourglass→ two triangles apex-to-apex   someone sends you a question.
 //   domain   → half-triangles split on a diagonal   a new domain opened.
@@ -37,6 +39,17 @@ const PALETTE = [
 const FILL_OPACITY = 0.8;
 const HOLLOW = 'var(--brand-ink-400)'; // #8a8a8a — outline of a spent triangle
 
+// The milestone star sits small against cream as five thin triangles, so the
+// washed-out light palette tokens (cream / lighttan / lightteal) disappear into
+// the page. Restrict its points to the saturated tokens and render at full
+// opacity so the star stays legible at line size.
+const STAR_PALETTE = [
+  'var(--tri-orange)', // #d15e36
+  'var(--tri-darkteal)', // #6d837f
+  'var(--tri-darkyellow)', // #deae5c
+];
+const STAR_FILL_OPACITY = 1;
+
 // EVERY mark sits in this fixed-width column, so the left edge of the text never
 // shifts between rows. The TOP of each mark aligns to the top of the first text
 // line; taller marks extend downward past it.
@@ -55,6 +68,19 @@ const LINE_H = 22.5; // first text line: 15px × 1.5
 // was reverted; the fix for "too tall" is the scale + centering here, not the
 // geometry.)
 const LARGE_SCALE = 0.5;
+// The 'star' mark (a friend you invited cleared their first five) is drawn in a
+// square 24×24 viewBox and rendered at STAR_SCALE so its height lands at ~the
+// text line height, sitting on a single-line row like the diamond. A point-up
+// five-point star is wider than the single stacked marks; this scale keeps its
+// footprint close to the old cluster it replaces (~20px) without dominating.
+const STAR_SCALE = 0.85;
+// Five-point star geometry (centered in the 24×24 viewBox). Outer points touch
+// the box; the inner vertices sit at INNER_RATIO of the outer radius — large
+// enough that the five point-triangles stay chunky (not needle-thin) at 24px.
+const STAR_CX = 12;
+const STAR_CY = 12;
+const STAR_RO = 12;
+const STAR_INNER_RATIO = 0.4;
 // Height of each half of a stacked mark, and the total viewBox height of the
 // pair. base=height (= MARK_W) keeps the triangles un-smushed.
 const STACK_HALF = 24;
@@ -69,6 +95,7 @@ const CAP_NUDGE = 3;
 
 export type ActivityIconSpec =
   | { kind: 'bundle'; total: number; unanswered: number }
+  | { kind: 'star' }
   | { kind: 'diamond' }
   | { kind: 'hourglass' }
   | { kind: 'domain' };
@@ -83,6 +110,8 @@ export function specForIcon(
   switch (icon) {
     case 'bundle':
       return bundle && bundle.total > 0 ? { kind: 'bundle', ...bundle } : null;
+    case 'star':
+      return { kind: 'star' };
     case 'diamond':
       return { kind: 'diamond' };
     case 'hourglass':
@@ -108,6 +137,12 @@ function hash(s: string): number {
 // Deterministic palette colour for the triangle at position `i` within `seed`.
 function colorFor(seed: string, i: number): string {
   return PALETTE[hash(`${seed}:${i}`) % PALETTE.length];
+}
+
+// Same idea, but over the saturated STAR_PALETTE so the milestone star never
+// picks a wash-out light token.
+function colorForStar(seed: string, i: number): string {
+  return STAR_PALETTE[hash(`${seed}:${i}`) % STAR_PALETTE.length];
 }
 
 // One upward triangle filling its bounding box [x, y, w, h].
@@ -221,6 +256,47 @@ export function QuestionTriangle({ solid, seed }: { solid: boolean; seed: string
   );
 }
 
+// Five-point star, each point its own palette triangle — one triangle per
+// question in the "first five" milestone. The five inner vertices meet at a
+// pentagon core that's left as background, so the mark reads as a star BUILT
+// FROM the triangle vocabulary rather than a solid star. (Deliberately NOT the
+// two-overlapping-triangles hexagram / Star of David: five single-layer points.)
+function StarMark({ seed }: { seed: string }) {
+  const D2R = Math.PI / 180;
+  const ri = STAR_RO * STAR_INNER_RATIO;
+  const f = (n: number) => n.toFixed(2);
+  // The tip of point k, and its two flanking inner vertices (shared with the
+  // neighbouring points), at ±36° off the point's spoke angle.
+  const at = (r: number, k: number, off: number) => {
+    const a = (-90 + 72 * k + off) * D2R;
+    return `${f(STAR_CX + r * Math.cos(a))},${f(STAR_CY + r * Math.sin(a))}`;
+  };
+  return (
+    <MarkSvg h={24} scale={STAR_SCALE}>
+      {[0, 1, 2, 3, 4].map((k) => (
+        <path
+          key={k}
+          d={`M${at(STAR_RO, k, 0)} L${at(ri, k, -36)} L${at(ri, k, 36)} Z`}
+          fill={colorForStar(seed, k)}
+          fillOpacity={STAR_FILL_OPACITY}
+          strokeLinejoin="round"
+        />
+      ))}
+    </MarkSvg>
+  );
+}
+
+// The same five-point star, used as a single flourish leading the centered
+// "played their first five" announcement (star — line) rather than a mark in the
+// left icon column. Decorative; the row copy carries the meaning.
+export function MilestoneStar({ seed }: { seed: string }) {
+  return (
+    <span aria-hidden style={{ display: 'flex', flexShrink: 0 }}>
+      <StarMark seed={seed} />
+    </span>
+  );
+}
+
 // Rhombus: upward triangle over downward triangle, shared base. Each half a
 // random palette colour.
 function DiamondMark({ seed }: { seed: string }) {
@@ -285,6 +361,12 @@ function Mark({ spec, seed }: { spec: ActivityIconSpec; seed: string }) {
   switch (spec.kind) {
     case 'bundle':
       return <BundleMark total={spec.total} unanswered={spec.unanswered} seed={seed} />;
+    case 'star':
+      // A friend you invited cleared their first five: a five-point star, one
+      // palette triangle per question. Sized to line height so it reads as a
+      // sibling of the diamond, but its radial silhouette sets the milestone
+      // apart from the rest of the triangle family.
+      return <StarMark seed={seed} />;
     case 'diamond':
       return <DiamondMark seed={seed} />;
     case 'hourglass':

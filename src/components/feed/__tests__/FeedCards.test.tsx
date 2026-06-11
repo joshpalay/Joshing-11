@@ -485,32 +485,43 @@ describe('FeedCardShell (shared C7 shell)', () => {
     )
     expect(rendered).toContain('bg-[var(--brand-card)]')
     expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    expect(rendered).toContain('border-[var(--brand-rule)]')
     expect(rendered).not.toContain('bg-[var(--game-card-question)]')
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
+    // No elevated lift on the resting card.
+    expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
+    expect(rendered).not.toContain('border-[rgba(40,32,30,0.22)]')
   })
 
-  it('lifts the bordered card with cream fill + hard ink offset when elevated', () => {
+  it('lifts the bordered card with cream fill + visible stroke + deeper drop shadow when elevated', () => {
     const rendered = html(
       <FeedCardShell elevated accentColor="#abc123">
         <p>body</p>
       </FeedCardShell>
     )
     expect(rendered).toContain('bg-[var(--game-card-question)]')
-    expect(rendered).toContain('shadow-[2px_2px_0_var(--brand-ink)]')
-    // The hairline border stays, defining the lifted card's edge.
-    expect(rendered).toContain('border-[var(--brand-rule)]')
+    // Deeper drop shadow (10% ink) than the ambient cards' 4%.
+    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
+    expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    // Visible warm-ink stroke replaces the faint hairline rule.
+    expect(rendered).toContain('border-[rgba(40,32,30,0.22)]')
+    expect(rendered).not.toContain('border-[var(--brand-rule)]')
+    // No hard ink offset shadow, no near-white resting fill.
+    expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     expect(rendered).not.toContain('bg-[var(--brand-card)]')
   })
 
-  it('lifts the triangle variant via the mat offset + cream inner panel when elevated', () => {
+  it('lifts the triangle variant with the deeper drop shadow + cream inner panel when elevated', () => {
     const rendered = html(
       <FeedCardShell variant="triangle" elevated>
         <p>body</p>
       </FeedCardShell>
     )
-    // Mat image intact; the whole matted card lifts on the offset shadow.
+    // Mat image intact; the matted card carries the deeper drop shadow.
     expect(rendered).toContain('/images/Variant4.png')
-    expect(rendered).toContain('shadow-[2px_2px_0_var(--brand-ink)]')
+    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
+    expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     // Inner panel carries the warm cream fill instead of brand-card.
     expect(rendered).toContain('bg-[var(--game-card-question)]')
     expect(rendered).not.toContain('bg-[var(--brand-card)]')
