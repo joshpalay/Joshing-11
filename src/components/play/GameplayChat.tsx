@@ -486,13 +486,13 @@ function QuestionRow({
             boxShadow: isBonus
               ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--accent-gold)'
               : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
-            padding: '14px 18px',
+            padding: '20px 22px',
             fontFamily: 'var(--font-serif)',
             fontSize: '1.4875rem',
             fontWeight: 700,
             letterSpacing: 0,
             color: 'var(--brand-ink)',
-            lineHeight: 1.14,
+            lineHeight: 1.3,
           }}
         >
           <p style={{ margin: 0 }}>{questionText}</p>
@@ -598,13 +598,13 @@ function UserRow({ text }: { text: string }) {
           maxWidth: '88%',
           background: 'var(--brand-navy)',
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
-          padding: '9px 15px',
+          padding: '12px 18px',
           // Figma answer bubble — Cormorant serif, not the sans body font.
           fontFamily: 'var(--font-serif)',
           fontSize: '1.495rem',
           fontWeight: 700,
           letterSpacing: '-0.01em',
-          lineHeight: 1.2,
+          lineHeight: 1.32,
           color: 'var(--primary-foreground)',
         }}
       >

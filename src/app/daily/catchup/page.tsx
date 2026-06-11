@@ -53,14 +53,7 @@ export default function DailyCatchupPage() {
           backdropFilter: 'blur(8px)',
         }}
       >
-        <div className="flex items-center justify-between gap-3">
-          <nav className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
-            <button type="button" onClick={() => router.push('/')} className="underline-offset-4 hover:underline">
-              Home
-            </button>
-            <span className="px-1.5">/</span>
-            <span>Catch up</span>
-          </nav>
+        <div className="flex items-center justify-end gap-3">
           <Link
             href="/"
             aria-label="Close"

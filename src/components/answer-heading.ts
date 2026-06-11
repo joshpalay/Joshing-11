@@ -12,5 +12,5 @@ export const answerHeadingStyle: CSSProperties = {
   fontFamily: 'var(--font-serif)',
   fontSize: '1.65rem',
   fontWeight: 700,
-  lineHeight: 1.14,
+  lineHeight: 1.24,
 }
