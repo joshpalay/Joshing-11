@@ -1,8 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 
-import { ActorLink, MilestoneExpansion } from '@/components/activity/ActivityStreamItem'
+import { MilestoneExpansion } from '@/components/activity/ActivityStreamItem'
 import { djb2 } from '@/lib/lately'
 
 import { FeedActionLink } from './FeedActionLink'
@@ -135,17 +136,39 @@ export function FriendTerritoryCard({
 
   return (
     <FeedCardShell elevated className={hero ? 'p-5' : 'p-4'}>
-      <p
-        className={`m-0 tracking-[0.2px] text-[var(--brand-ink)] ${
-          hero ? 'text-[16px] leading-[1.5]' : 'text-[15px] leading-[1.5]'
+      {/* Knowledge-portrait masthead: the friend's name large in the brand
+          sans (Montserrat via --font-sans), the discovery status line beneath
+          it in the editorial serif italic on the brand orange, and a warm
+          yellow rule separating the masthead from the territory list. */}
+      <h3
+        className={`m-0 font-sans font-bold text-[var(--brand-ink)] ${
+          hero ? 'text-[28px] leading-[1.15]' : 'text-[18px] leading-[1.25]'
         }`}
       >
-        <ActorLink name={card.friendName} userId={card.friendId} />{' '}
+        <Link
+          href={`/users/${card.friendId}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-inherit no-underline hover:underline"
+        >
+          {card.friendName}
+        </Link>
+      </h3>
+      <p
+        className={`m-0 font-serif italic text-[var(--brand-orange)] ${
+          hero ? 'mt-1 text-[15px]' : 'mt-0.5 text-[13px]'
+        } leading-[1.4]`}
+      >
         {card.statusLine}
       </p>
+      <hr
+        aria-hidden
+        className={`border-0 bg-[var(--tri-darkyellow)] ${
+          hero ? 'my-3.5 h-[2px]' : 'my-2.5 h-px'
+        }`}
+      />
 
       {shownTopics.length > 0 ? (
-        <ul className={`m-0 list-none p-0 ${hero ? 'mt-3 space-y-2' : 'mt-2.5 space-y-1.5'}`}>
+        <ul className={`m-0 list-none p-0 ${hero ? 'space-y-2' : 'space-y-1.5'}`}>
           {shownTopics.map((topic) => (
             <li key={topic.name} className="flex items-center gap-2.5">
               <TerritoryTriangle
@@ -165,7 +188,9 @@ export function FriendTerritoryCard({
         </ul>
       ) : null}
 
-      <div className={hero ? 'mt-4' : 'mt-3'}>
+      {/* Small cards tuck the CTA to the bottom-right (per the option-3 spaced
+          list); the hero keeps it on the left edge under the topic list. */}
+      <div className={hero ? 'mt-4' : 'mt-3 flex justify-end'}>
         <FeedActionLink size="sm" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           Play these →
         </FeedActionLink>
