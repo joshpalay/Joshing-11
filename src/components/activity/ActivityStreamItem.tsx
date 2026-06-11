@@ -32,8 +32,19 @@ const ACTOR_BLUE = 'var(--brand-link)';
 // actor name / update copy begins, reading as a clear child of the update.
 const EXPANSION_INDENT = 32;
 
-export function ActorLink({ name, userId }: { name: string; userId: string | null }) {
-  if (!userId) return <b style={{ fontWeight: 600, color: ACTOR_BLUE }}>{name}</b>;
+export function ActorLink({
+  name,
+  userId,
+  style,
+}: {
+  name: string;
+  userId: string | null;
+  // Optional override for surfaces that render the actor in a different voice
+  // (e.g. the playable milestone headline, where the name reads in the large
+  // Editorial serif rather than the default activity-blue sans link).
+  style?: CSSProperties;
+}) {
+  if (!userId) return <b style={{ fontWeight: 600, color: ACTOR_BLUE, ...style }}>{name}</b>;
   return (
     <Link
       href={`/users/${userId}`}
@@ -44,12 +55,36 @@ export function ActorLink({ name, userId }: { name: string; userId: string | nul
         textDecoration: 'underline',
         textDecorationColor: RULE,
         textUnderlineOffset: 3,
+        ...style,
       }}
     >
       {name}
     </Link>
   );
 }
+
+// Strip the leading connective space from a milestone predicate so it reads
+// cleanly as its own second line under the name ("went deep on …", not
+// " went deep on …").
+function trimLeadingPredicate(parts: StreamLinePart[]): StreamLinePart[] {
+  const [first, ...rest] = parts;
+  if (first && first.t === 'text') {
+    return [{ t: 'text', v: first.v.replace(/^\s+/, '') }, ...rest];
+  }
+  return parts;
+}
+
+// The name reads in the large Editorial serif headline voice — still a profile
+// link, but dressed as the byline of the milestone sentence rather than the
+// default activity-blue sans actor.
+const HEADLINE_NAME_STYLE: CSSProperties = {
+  fontFamily: 'var(--font-serif)',
+  fontWeight: 500,
+  fontSize: 22,
+  letterSpacing: 0.2,
+  color: INK,
+  textDecoration: 'none',
+};
 
 export function Line({ parts }: { parts: StreamLinePart[] }) {
   return (
@@ -265,6 +300,21 @@ export function ActivityStreamItem({
   const playableCard =
     elevated && !nested && expandable && expand?.kind === 'milestone';
 
+  // On a playable milestone card the headline splits into two serif lines: the
+  // person's NAME (large) and the rest of the sentence (medium) below it. The
+  // milestone line is always built as [actor, ...predicate], so peel the leading
+  // actor part off here and render the remainder as the second line.
+  const headlineActor =
+    playableCard && item.line[0]?.t === 'actor' ? item.line[0] : null;
+  const headlinePredicate = headlineActor
+    ? trimLeadingPredicate(item.line.slice(1))
+    : null;
+  // The "Play {first}'s q's" affordance names the friend whose questions the
+  // bundle opens — their first name, from the headline actor (or the expand).
+  const playFirstName =
+    headlineActor?.name.split(/\s+/)[0] ??
+    (expand?.kind === 'milestone' ? expand.friendName.split(/\s+/)[0] : null);
+
   const containerStyle: CSSProperties = nested
     ? // Nested under a per-person heading: no border/fill, light padding.
       { padding: opened ? '6px 0' : '4px 0' }
@@ -326,6 +376,97 @@ export function ActivityStreamItem({
             </p>
             <MilestoneStar seed={`${item.id}-end`} />
           </>
+        ) : playableCard ? (
+          // Playable milestone card (home "What's Happening"): an editorial
+          // two-line headline — the person's NAME in the large serif, the rest
+          // of the sentence in a medium serif below it — with the play
+          // affordance in the lower-right corner (replacing the bare chevron).
+          <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <ActivityIcon spec={iconSpec} seed={item.id} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontFamily: 'var(--font-serif)',
+                    fontSize: 22,
+                    lineHeight: 1.15,
+                    letterSpacing: 0.2,
+                    color: INK,
+                  }}
+                >
+                  {headlineActor ? (
+                    <ActorLink
+                      name={headlineActor.name}
+                      userId={headlineActor.userId}
+                      style={HEADLINE_NAME_STYLE}
+                    />
+                  ) : (
+                    <Line parts={item.line} />
+                  )}
+                </p>
+                {headlinePredicate && headlinePredicate.length > 0 ? (
+                  <p
+                    style={{
+                      margin: '3px 0 0',
+                      fontFamily: 'var(--font-serif)',
+                      fontSize: 16,
+                      lineHeight: 1.4,
+                      color: INK2,
+                    }}
+                  >
+                    <Line parts={headlinePredicate} />
+                  </p>
+                ) : null}
+                {milestoneProgress ? (
+                  <p
+                    style={{
+                      margin: '8px 0 0',
+                      fontFamily: FM,
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      color: INK3,
+                    }}
+                  >
+                    {milestoneProgress.answered} of {milestoneProgress.total} questions
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            {/* Lower-right play affordance. The whole card is the button
+                (aria-expanded on the wrapper), so this is a styled label, not a
+                nested button; the disclosure arrow flips as the bundle opens. */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                marginTop: 12,
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  letterSpacing: 0.2,
+                  color: INK,
+                }}
+              >
+                {playFirstName ? `Play ${playFirstName}'s q's` : 'Play'}
+                <ChevronDown
+                  size={15}
+                  aria-hidden
+                  style={{
+                    transition: 'transform 150ms ease',
+                    transform: open ? 'rotate(180deg)' : 'none',
+                  }}
+                />
+              </span>
+            </div>
+          </div>
         ) : (
           <>
         {/* Nested rows carry no shape — the per-person heading holds the one
