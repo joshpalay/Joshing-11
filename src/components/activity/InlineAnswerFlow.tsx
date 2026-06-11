@@ -92,7 +92,7 @@ export function InlineAnswerFlow({
         style={{
           margin: 0,
           paddingRight: 24,
-          fontFamily: 'Georgia, serif',
+          fontFamily: 'var(--font-serif)',
           fontSize: 17,
           lineHeight: 1.5,
           color: INK,

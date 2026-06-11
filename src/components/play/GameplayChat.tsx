@@ -377,7 +377,7 @@ function QuestionRow({
       {creatorName ? (
         <p
           style={{
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
             fontSize: '0.86rem',
             color: 'var(--text)',
             paddingLeft: '2px',
@@ -502,9 +502,9 @@ function QuestionRow({
                 <span
                   key={badge.label}
                   style={{
-                    // Figma display/pill/sans — Georgia, 12px, title-case (not the
+                    // Figma display/pill/sans — serif, 12px, title-case (not the
                     // mono uppercase used elsewhere).
-                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    fontFamily: 'var(--font-serif)',
                     fontSize: '0.675rem',
                     lineHeight: 1.1,
                     letterSpacing: '0.01em',
@@ -623,7 +623,7 @@ function ExplainerLine({ text }: { text: string }) {
     <p
       style={{
         marginTop: '8px',
-        fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+        fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
         fontSize: '0.92rem',
         color: 'color-mix(in srgb, var(--text-muted) 35%, var(--text))',
         lineHeight: 1.5,
@@ -880,7 +880,7 @@ function AuthorNoteCard({
       <p
         style={{
           marginTop: '4px',
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
           // Reflection/creator-note body bumped ~14% for readability (D-5);
           // the eyebrow label above stays small and secondary.
           fontSize: '1.05rem',
@@ -1091,7 +1091,7 @@ function ResultRow({
           <>
             <p
               style={{
-                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+                fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
                 color: 'var(--game-wrong-strong)',
                 fontWeight: 600,
               }}
@@ -1258,7 +1258,7 @@ function ResultRow({
           <p
             style={{
               marginTop: '4px',
-              fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+              fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
               // Reflection body bumped ~14% for readability (D-5); the small,
               // letter-spaced label above stays secondary.
               fontSize: '1.05rem',
@@ -1350,7 +1350,7 @@ function SessionCompleteRow({
       </p>
       <p
         style={{
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
           fontSize: '2rem',
           fontWeight: 600,
           color: 'var(--success)',
@@ -1423,7 +1423,7 @@ function BonusOfferRow({
       </p>
       <p
         style={{
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
           fontSize: '1.3rem',
           fontWeight: 600,
           color: 'var(--text)',

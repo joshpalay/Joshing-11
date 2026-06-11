@@ -302,7 +302,7 @@ const sharePortraitBtnStyle: CSSProperties = {
   border: '1.5px solid #0e0e0e',
   backgroundColor: '#0e0e0e',
   color: 'var(--warm-paper)',
-  fontFamily: "'Courier New', monospace",
+  fontFamily: 'var(--font-mono)',
   fontSize: 12,
   letterSpacing: '0.12em',
   textTransform: 'uppercase',

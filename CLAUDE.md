@@ -21,6 +21,7 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 - `npm run dev` — Next dev server
 - `npm run build` — production build
 - `npm run lint` — ESLint over `src/`
+- `npm run check:fonts` — font ratchet (off-system font-family count must stay ≤ the ceiling in `scripts/check-font-ratchet.mjs`; runs in CI)
 - `npm run format` — Prettier write
 - `npm run db:migrate` — Drizzle migrations
 - `npm run smoke:daily-catchup` — daily catchup smoke test
