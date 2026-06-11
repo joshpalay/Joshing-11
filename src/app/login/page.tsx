@@ -26,7 +26,7 @@ function TitleCard() {
       <h1 className="font-sans text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
         JOSHING
       </h1>
-      <div className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--tri-amber)]" aria-hidden="true" />
+      <div className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--accent-gold)]" aria-hidden="true" />
       <p className="mt-4 text-center font-sans text-lg font-normal uppercase leading-6 tracking-[3.6px] text-[var(--warm-ink)]">
         Trivia you wish you were asked
       </p>

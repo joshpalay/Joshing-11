@@ -78,6 +78,15 @@
     --tri-darkyellow:    #deae5c;
     --tri-lighttan:      #edd2a3;
     --tri-amber:         #d9a82e;
+    /* Accent gold (STYLE-GUIDE-COLOR §4) — THE editorial highlight. One value,
+       scarcity-bound: gold marks the single most notable moment in view (the
+       ceremony countdown wins ties). Shares the amber value, but this token is
+       the accent JOB — triangle fills keep --tri-amber (decorative palette
+       job), and --warning stays separate (system caution, not the accent). */
+    --accent-gold:       #d9a82e;
+    /* AA-darkened gold for small text on cream (eyebrows, "BETWEEN US!",
+       "NEW TERRITORY") — was the GOLD_INK formula copy-pasted in three files. */
+    --accent-gold-ink:   color-mix(in srgb, var(--accent-gold) 50%, var(--brand-ink));
     /* Gameplay surface — sourced from the Figma "Game" frame variables.
        game/card/question fill, plus the forest-green/terracotta result accents
        (Correct, text/wrong, Color/game/wrong/in-question). These intentionally

@@ -177,9 +177,9 @@ const verdictLabelStyle: CSSProperties = {
 // (this card, the feed sheet, the summary recap, the history list) stays in sync.
 
 // Darkened triangle-gold so warning/inside-joke labels clear AA on the cream
-// surface (raw --tri-amber #d9a82e is too light for small text). Mirrors the
+// surface (raw --accent-gold #d9a82e is too light for small text). Mirrors the
 // GOLD_INK used on the feed answer sheets.
-const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))';
+const GOLD_INK = 'var(--accent-gold-ink)';
 
 const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
   (name) => `${name}’s world includes this`,
@@ -449,7 +449,7 @@ function QuestionRow({
               >
                 <span
                   aria-hidden
-                  style={{ color: 'var(--tri-amber)', fontSize: '0.8rem', lineHeight: 1 }}
+                  style={{ color: 'var(--accent-gold)', fontSize: '0.8rem', lineHeight: 1 }}
                 >
                   ✦
                 </span>
@@ -463,7 +463,7 @@ function QuestionRow({
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   lineHeight: 1.25,
-                  color: 'color-mix(in srgb, var(--tri-amber) 35%, white)',
+                  color: 'color-mix(in srgb, var(--accent-gold) 35%, white)',
                 }}
               >
                 {bonusSourceLabel(presenceSourceName, presenceSourceExtraCount)}
@@ -476,15 +476,15 @@ function QuestionRow({
             // Bonus questions get a navy banner plus warm card tint so the
             // gifted-from-a-friend item reads as an extra, not an ordinary prompt.
             background: isBonus
-              ? 'color-mix(in srgb, var(--tri-amber) 10%, var(--game-card-question))'
+              ? 'color-mix(in srgb, var(--accent-gold) 10%, var(--game-card-question))'
               : 'var(--game-card-question)',
             border: isBonus
-              ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--tri-amber))'
+              ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--accent-gold))'
               : '1px solid var(--brand-rule)',
             borderRadius: isBonus ? '0 0 var(--radius-md) var(--radius-md)' : 'var(--radius-md)',
             // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
             boxShadow: isBonus
-              ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--tri-amber)'
+              ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--accent-gold)'
               : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
             padding: '14px 18px',
             fontFamily: 'var(--font-serif)',
@@ -512,7 +512,7 @@ function QuestionRow({
                     border: '1px solid var(--border)',
                     background:
                       badge.tone === 'warning'
-                        ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
+                        ? 'color-mix(in srgb, var(--accent-gold) 14%, var(--surface))'
                         : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
                     color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
                     opacity: 0.9,
@@ -1240,8 +1240,8 @@ function ResultRow({
       </ThreadCard>
       {showJokeCard && insideJoke ? (
         <ThreadCard
-          border="color-mix(in srgb, var(--tri-amber) 40%, var(--border))"
-          fill="color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))"
+          border="color-mix(in srgb, var(--accent-gold) 40%, var(--border))"
+          fill="color-mix(in srgb, var(--accent-gold) 12%, var(--surface-2))"
           style={{ marginTop: '8px' }}
         >
           <p

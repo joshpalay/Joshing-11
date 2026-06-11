@@ -11,9 +11,9 @@ import { INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types'
 import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
-// card (raw --tri-amber #d9a82e is too light for small text). Used by the
+// card (raw --accent-gold #d9a82e is too light for small text). Used by the
 // "New territory" celebration and the "Between us friends" inside-joke card.
-const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))'
+const GOLD_INK = 'var(--accent-gold-ink)'
 
 type AnswerFeedbackSheetProps = {
   question: string
@@ -158,7 +158,7 @@ export function AnswerFeedbackSheet({
             ? 'relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-2xl ring-2'
             : 'relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl'
         }
-        style={showNewTerritory ? { '--tw-ring-color': 'color-mix(in srgb, var(--tri-amber) 55%, transparent)' } as CSSProperties : undefined}
+        style={showNewTerritory ? { '--tw-ring-color': 'color-mix(in srgb, var(--accent-gold) 55%, transparent)' } as CSSProperties : undefined}
       >
         <div className="flex items-center justify-between px-5 pt-4 pb-1">
           {showNewTerritory ? (
@@ -279,8 +279,8 @@ export function AnswerFeedbackSheet({
             <div
               className="mt-2.5 rounded-2xl border p-3.5"
               style={{
-                backgroundColor: 'color-mix(in srgb, var(--tri-amber) 12%, var(--brand-card))',
-                borderColor: 'color-mix(in srgb, var(--tri-amber) 40%, var(--brand-border))',
+                backgroundColor: 'color-mix(in srgb, var(--accent-gold) 12%, var(--brand-card))',
+                borderColor: 'color-mix(in srgb, var(--accent-gold) 40%, var(--brand-border))',
               }}
             >
               <p

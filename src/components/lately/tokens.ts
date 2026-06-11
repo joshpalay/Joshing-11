@@ -11,9 +11,10 @@ export const INK3 = 'var(--brand-ink-400)';
 export const CREAM = 'var(--brand-cream-page)';
 export const PAPER = 'var(--brand-card)';
 export const RULE = 'var(--brand-border)';
-// Warm highlighter — gold family; no CSS counterpart yet. Folding it into the
-// one --accent-gold is color fix-list step 4 (gold), not the neutrals pass.
-export const HILITE = '#e9c97a';
+// Warm highlighter swipe (the "Lately." headline) — derived from the one
+// accent gold (STYLE-GUIDE-COLOR §4) lightened over the page cream, replacing
+// the orphan literal #e9c97a (≈ visually identical mix).
+export const HILITE = 'color-mix(in srgb, var(--accent-gold) 55%, var(--brand-cream-page))';
 
 // Body font intentionally uses the project default (Montserrat via next/font);
 // CSS var resolves to it. The mockup spec'd Inter — project decision to keep
