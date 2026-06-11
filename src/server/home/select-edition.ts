@@ -199,9 +199,54 @@ export function selectPanel(
   return sharedGround ?? expanding ?? growCircle ?? null
 }
 
-/** A playable is an answerable milestone bundle (≥1 question). */
-function isPlayable(item: StreamItem): boolean {
+/** A milestone bundle (≥1 question), pending or fully spent. */
+function isMilestoneBundle(item: StreamItem): boolean {
   return item.expand?.kind === 'milestone' && item.expand.questions.length > 0
+}
+
+/**
+ * §7 pending definition: a bundle is PENDING only while the viewer still has at
+ * least one unanswered question in it. build-stream keeps answered questions in
+ * the bundle (they render as spent triangles), so questions.length alone would
+ * keep a fully-played bundle in the queue forever — holding a served slot,
+ * inflating the "N more →" count, and never leaving the overflow subpage.
+ * Shared by Home, the overflow counts, and the pending-playables subpage so the
+ * three views can't disagree about what "pending" means.
+ */
+export function isPendingPlayable(item: StreamItem): boolean {
+  return (
+    item.expand?.kind === 'milestone' &&
+    item.expand.questions.some((q) => !q.priorResult)
+  )
+}
+
+/**
+ * §5 zone order for the direct ("For You") queue — the one ordering Home's
+ * served slice, the overflow count, and the /for-you subpage all window.
+ */
+export function orderDirectPending(
+  items: readonly FeedEditionItem[],
+): FeedEditionItem[] {
+  return orderBySenderRotation(
+    items,
+    (item) => item.source_user_id,
+    (item) => ms(item.source_event_at),
+  )
+}
+
+/**
+ * §5 zone order for the pending-playables queue — filters to pending bundles
+ * (see isPendingPlayable) and actor-interleaves. Home serves the top 4 of this;
+ * the /from-friends subpage renders all of it.
+ */
+export function orderPendingPlayables(
+  items: readonly StreamItem[],
+): StreamItem[] {
+  return interleaveByActor(
+    items.filter(isPendingPlayable),
+    (item) => item.friendId ?? null,
+    playableType,
+  )
 }
 
 /** Event-type key for the playable interleave's degenerate-case variety. */
@@ -235,31 +280,25 @@ export function selectHomeEdition(input: SelectHomeEditionInput): HomeEdition {
   const now = input.now ?? Date.now()
 
   // Direct ("For You") zone — broadcasts budgeted alongside direct sends (§5).
-  const directOrdered = orderBySenderRotation(
-    input.feedItems,
-    (item) => item.source_user_id,
-    (item) => ms(item.source_event_at),
-  )
+  const directOrdered = orderDirectPending(input.feedItems)
   const direct = serve(directOrdered, DIRECT_SERVE_CAP)
 
-  // Split the activity stream into playables (answerable milestone bundles) and
-  // texture (everything else non-feed). This mirrors the existing For You /
-  // From Friends / rest split exactly — selection only, no render change.
+  // Split the activity stream into pending playables (answerable milestone
+  // bundles with ≥1 unanswered question), texture (everything else non-feed),
+  // and consumed bundles. A fully-answered bundle is consumed: it is no longer
+  // pending (§7 — it left the queue) and it is not a texture moment either (the
+  // archive surfaces own anything cumulative), so it drops from the edition.
   const playablePool: StreamItem[] = []
   const texturePool: StreamItem[] = []
   for (const item of input.activityItems) {
-    if (isPlayable(item)) playablePool.push(item)
-    else texturePool.push(item)
+    if (isMilestoneBundle(item)) {
+      if (isPendingPlayable(item)) playablePool.push(item)
+    } else {
+      texturePool.push(item)
+    }
   }
 
-  const playables = serve(
-    interleaveByActor(
-      playablePool,
-      (item) => item.friendId ?? null,
-      playableType,
-    ),
-    PLAYABLE_SERVE_CAP,
-  )
+  const playables = serve(orderPendingPlayables(playablePool), PLAYABLE_SERVE_CAP)
 
   const texture = boundTexture(texturePool, now)
 

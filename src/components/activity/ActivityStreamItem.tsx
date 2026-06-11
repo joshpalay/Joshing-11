@@ -177,6 +177,7 @@ export function ActivityStreamItem({
   nested = false,
   showTimestamp = true,
   elevated = false,
+  onQuestionResolved,
 }: {
   item: StreamItem;
   timestamp: string;
@@ -193,6 +194,11 @@ export function ActivityStreamItem({
   // page as the thing you can play, while the ambient one-liners stay flat. Off
   // by default (the full /activities log keeps every row flat).
   elevated?: boolean;
+  // Fires after a milestone question is resolved in place (answered right or
+  // wrong). The pending-playables overflow subpage (B-HOME-OVERFLOW-02 §7)
+  // uses it to invalidate the client router cache so Home recomputes its
+  // served window on return; surfaces that don't care simply omit it.
+  onQuestionResolved?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
@@ -239,6 +245,7 @@ export function ActivityStreamItem({
       next.set(questionId, { submitted, isCorrect });
       return next;
     });
+    onQuestionResolved?.();
   }
 
   const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;

@@ -151,11 +151,14 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
       },
     })
 
-    // Both question zones render their headings and overflow affordances.
+    // Both question zones render their headings and overflow affordances,
+    // each linking to its zone's overflow subpage (B-HOME-OVERFLOW-02).
     expect(html).toContain('For You')
     expect(html).toContain('From Friends')
     expect(html).toContain('4 more from friends →')
     expect(html).toContain('3 more →')
+    expect(html).toContain('href="/for-you"')
+    expect(html).toContain('href="/from-friends"')
     // Served direct cards and playables both rendered.
     expect(html).toContain('direct:robyn')
     expect(html).toContain('activity:p0:josh')

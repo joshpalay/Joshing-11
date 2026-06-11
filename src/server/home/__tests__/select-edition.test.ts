@@ -5,7 +5,9 @@ import {
   DIRECT_SERVE_CAP,
   PLAYABLE_SERVE_CAP,
   interleaveByActor,
+  isPendingPlayable,
   orderBySenderRotation,
+  orderPendingPlayables,
   selectHomeEdition,
   type FeedEditionItem,
 } from '@/server/home/select-edition'
@@ -29,6 +31,23 @@ function playable(id: string, friendId: string, type = 'milestone', sortAt = '20
     relationship: type === 'milestone' ? undefined : (type as StreamItem['relationship']),
     sortAt: new Date(sortAt),
     expand: { kind: 'milestone', questions: [{ questionId: `${id}-q` }] },
+  } as unknown as StreamItem
+}
+
+// A bundle whose questions carry the given viewer results (null = unanswered).
+function bundleWithResults(
+  id: string,
+  friendId: string,
+  results: Array<'correct' | 'incorrect' | null>,
+): StreamItem {
+  return {
+    id,
+    friendId,
+    sortAt: new Date('2026-06-11T12:00:00Z'),
+    expand: {
+      kind: 'milestone',
+      questions: results.map((priorResult, i) => ({ questionId: `${id}-q${i}`, priorResult })),
+    },
   } as unknown as StreamItem
 }
 
@@ -150,6 +169,51 @@ describe('selectHomeEdition — serve-and-overflow', () => {
     })
     expect(edition.direct.overflowCount).toBe(0)
     expect(edition.playables.overflowCount).toBe(0)
+  })
+})
+
+// --- pending-playable definition (B-HOME-OVERFLOW-02 §7) ----------------------
+
+describe('isPendingPlayable / orderPendingPlayables — §7 pending definition', () => {
+  it('a bundle is pending only while ≥1 question is unanswered', () => {
+    expect(isPendingPlayable(bundleWithResults('b-fresh', 'f0', [null, null]))).toBe(true)
+    expect(isPendingPlayable(bundleWithResults('b-partial', 'f0', ['correct', null]))).toBe(true)
+    expect(isPendingPlayable(bundleWithResults('b-spent', 'f0', ['correct', 'incorrect']))).toBe(false)
+  })
+
+  it('fully-answered bundles leave the playable queue, the count, and texture', () => {
+    const edition = selectHomeEdition({
+      feedItems: [],
+      activityItems: [
+        bundleWithResults('b-spent', 'f0', ['correct']),
+        ...Array.from({ length: 5 }, (_, i) => playable(`p${i}`, `f${i}`)),
+      ],
+      promos: { sharedGround: null, expanding: null, growCircle: null },
+      now: NOW,
+    })
+    // 5 pending bundles: served 4 + 1 overflow — the spent one counts nowhere.
+    expect(edition.playables.served.map((p) => p.id)).not.toContain('b-spent')
+    expect(edition.playables.overflowCount).toBe(1)
+    // Consumed, not texture: it does not fall through as an ambient row.
+    expect(edition.texture.map((t) => t.id)).not.toContain('b-spent')
+  })
+
+  it('answering the last question of a served bundle promotes the next one (§7 round trip)', () => {
+    const queue = (items: StreamItem[]) => orderPendingPlayables(items).map((i) => i.id)
+    const before = [
+      bundleWithResults('p0', 'f0', [null]),
+      ...Array.from({ length: 5 }, (_, i) => playable(`p${i + 1}`, `f${i + 1}`)),
+    ]
+    expect(queue(before).slice(0, PLAYABLE_SERVE_CAP)).toContain('p0')
+    // The viewer answers p0's only question on the subpage → next read shows it spent.
+    const after = [
+      bundleWithResults('p0', 'f0', ['correct']),
+      ...before.slice(1),
+    ]
+    const served = queue(after).slice(0, PLAYABLE_SERVE_CAP)
+    expect(served).not.toContain('p0')
+    expect(served).toContain('p4') // promoted into the freed slot
+    expect(queue(after)).toHaveLength(5)
   })
 })
 

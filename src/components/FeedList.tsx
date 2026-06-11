@@ -478,6 +478,16 @@ type FeedListProps = {
    */
   addFriendsPromo?: StreamItem | null
   /**
+   * B-HOME-OVERFLOW-02: the /for-you overflow subpage. Renders the FULL pending
+   * direct queue (server-seeded via initialPage, in the same sender-rotated
+   * order Home windows) as a flat answerable list: filter pinned to 'all',
+   * surface tabs hidden, no recency buckets, no section headings, server order
+   * preserved. Cards keep the home-zone treatment (elevated, timestamp-free)
+   * and the full existing answer flow. After a successful answer the client
+   * router cache is refreshed so Home recomputes its top-N on return (§7).
+   */
+  pendingQueue?: boolean
+  /**
    * D-HOME-PACING-01: the server-computed budget for the unified home edition.
    * When supplied, FeedList renders a FIXED-BUDGET view rather than the unbounded
    * stream: the served direct/playable slices it was handed are shown with a
@@ -521,18 +531,26 @@ function panelRow(item: StreamItem): UnifiedRow {
 }
 
 // The quiet "N more →" overflow affordance under a budgeted question zone (§3).
-// Plain by design — card tiers are B-VISUAL-CARD-TIERS-01 and the destination
-// subpage is B-HOME-OVERFLOW-02; for now it states the abundance ("6 more
-// waiting for you," never "6 unanswered") without yet navigating.
-function OverflowRow({ unifiedHome, label }: { unifiedHome: boolean; label: string }) {
+// Plain by design — it states the abundance ("6 more waiting for you," never
+// "6 unanswered") and opens that zone's overflow subpage (B-HOME-OVERFLOW-02).
+function OverflowRow({
+  unifiedHome,
+  label,
+  href,
+}: {
+  unifiedHome: boolean
+  label: string
+  href: string
+}) {
   return (
-    <p
-      className={`min-h-11 pt-1 text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] ${
+    <Link
+      href={href}
+      className={`flex min-h-11 items-center pt-1 text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] ${
         unifiedHome ? 'pl-[2px]' : ''
       }`}
     >
       {label}
-    </p>
+    </Link>
   )
 }
 
@@ -776,25 +794,32 @@ function FeedListContent({
   expandingPromo = null,
   addFriendsPromo = null,
   budget = null,
+  pendingQueue = false,
 }: FeedListProps) {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const initialFilterParam =
     searchParams.get('filter') ?? searchParams.get('feed_filter') ?? 'from-friends'
   // D-1 Stage 5: the feed is two surfaces — Broadcasts ('from-friends', default)
   // and Sent ('sent-to-me'). Legacy ?filter=all links land on Broadcasts.
   // unifiedHome overrides both: one merged surface pinned to 'all' so directly-
-  // sent questions thread in alongside the activity stream.
-  const initialFilter: FeedFilter = unifiedHome
-    ? 'all'
-    : initialFilterParam === 'sent-to-me'
-      ? 'sent-to-me'
-      : 'from-friends'
+  // sent questions thread in alongside the activity stream. The pendingQueue
+  // subpage windows the same 'all' source Home does, so it pins 'all' too.
+  const initialFilter: FeedFilter =
+    unifiedHome || pendingQueue
+      ? 'all'
+      : initialFilterParam === 'sent-to-me'
+        ? 'sent-to-me'
+        : 'from-friends'
   // initialPage is the server pre-fetch of the active surface, so it only seeds
   // state when that's the active filter; other surfaces fall back to a client
-  // fetch. On unifiedHome the prefetch is the 'all' page, so it seeds directly.
+  // fetch. On unifiedHome/pendingQueue the prefetch is the 'all' page, so it
+  // seeds directly.
   const initialPageMatchesFilter =
     initialPage !== null &&
-    (unifiedHome ? initialFilter === 'all' : initialFilter === 'from-friends')
+    (unifiedHome || pendingQueue
+      ? initialFilter === 'all'
+      : initialFilter === 'from-friends')
   const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const [items, setItems] = useState<FeedApiItem[]>(
@@ -1300,8 +1325,11 @@ function FeedListContent({
         const body = await response.json().catch(() => null)
         throw new Error(body?.message ?? 'Could not update that card.')
       }
+      // §7: a dismiss (or its undo) on the overflow subpage also changes the
+      // shared pending queue — invalidate the router cache like an answer does.
+      if (pendingQueue) router.refresh()
     },
-    [],
+    [pendingQueue, router],
   )
 
   // Shared by the left-swipe and the on-card Dismiss button — one handler, one
@@ -1484,6 +1512,12 @@ function FeedListContent({
         setCardStates((s) => ({ ...s, [item.id]: 'answered' }))
         setAnswerSheetId(null)
         setFeedbackSheetId(item.id)
+        // §7 hardening (B-HOME-OVERFLOW-02): an answer on the overflow subpage
+        // shrinks the shared pending queue, so invalidate the client router
+        // cache — a back-navigation to Home then refetches and recomputes its
+        // top-N window instead of restoring a stale edition. Local list state
+        // is untouched: the just-answered card stays visible as answered here.
+        if (pendingQueue) router.refresh()
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -1494,7 +1528,7 @@ function FeedListContent({
         setBusyId(null)
       }
     },
-    []
+    [pendingQueue, router]
   )
 
   const submitRecheck = useCallback(
@@ -1537,6 +1571,11 @@ function FeedListContent({
     },
     []
   )
+
+  // The home zones and the overflow subpages share one card treatment: elevated
+  // Tier-1 cream cards with the relative timestamp hidden (the calmer register).
+  // The standalone Broadcasts/Sent surfaces keep flat, timestamped cards.
+  const homeZoneCards = unifiedHome || pendingQueue
 
   // One row of the rendered feed, shared by every section (the home-only "For
   // You" / "From Friends" splits and the recency groups all call this). Closes
@@ -1654,7 +1693,7 @@ function FeedListContent({
     )
 
     if (isAnswered) {
-      const answeredItem = toAnsweredByYouItem(item, result, unifiedHome)
+      const answeredItem = toAnsweredByYouItem(item, result, homeZoneCards)
       const isIncorrect = answeredItem.isCorrect === false
       const recheckAction: FeedRecheckAction | null = isIncorrect
         ? { onSubmit: () => submitRecheck(item) }
@@ -1677,7 +1716,7 @@ function FeedListContent({
       )
     }
 
-    const typedItem = toTypedFeedItem(item, unifiedHome)
+    const typedItem = toTypedFeedItem(item, homeZoneCards)
     const dismissible = !item.viewer_is_author
     const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
     const onDismiss = dismissible ? () => requestDismiss(item) : undefined
@@ -1693,7 +1732,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
-          elevated={unifiedHome}
+          elevated={homeZoneCards}
         />
       )
     } else if (typedItem.type === 'friend_liked') {
@@ -1703,7 +1742,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
-          elevated={unifiedHome}
+          elevated={homeZoneCards}
         />
       )
     } else {
@@ -1714,7 +1753,7 @@ function FeedListContent({
           onAnswer={onAnswer}
           onDismiss={onDismiss}
           onHideCategory={() => void hideCategory(item)}
-          elevated={unifiedHome}
+          elevated={homeZoneCards}
         />
       )
     }
@@ -1749,7 +1788,7 @@ function FeedListContent({
           empty (otherwise a directly-sent question would be hidden behind a tab
           the recipient can't see). Fully empty feeds still fall back to the
           empty state's own "Questions from friends" eyebrow. */}
-      {!unifiedHome && hasAnySurfaceContent ? (
+      {!unifiedHome && !pendingQueue && hasAnySurfaceContent ? (
         <FeedSurfaceTabs active={feedFilter} meta={feedMeta} onSelect={handleSelectTab} />
       ) : null}
 
@@ -1783,7 +1822,7 @@ function FeedListContent({
               </p>
             ) : null}
           </section>
-        ) : unifiedHome ? (
+        ) : unifiedHome || pendingQueue ? (
           // D-HOME-PACING-01 §9 — the all-three-empty home edition. The hero
           // and composer always render around this; this is the inline empty
           // state between them (NOT a full-screen takeover), reviving the
@@ -1859,6 +1898,7 @@ function FeedListContent({
                 <OverflowRow
                   unifiedHome={unifiedHome}
                   label={`${budget.directOverflowCount} more from friends →`}
+                  href="/for-you"
                 />
               ) : null}
             </Fragment>
@@ -1879,6 +1919,7 @@ function FeedListContent({
                   <OverflowRow
                     unifiedHome={unifiedHome}
                     label={`${budget.playablesOverflowCount} more →`}
+                    href="/from-friends"
                   />
                 ) : null
               ) : fromFriendsHiddenCount > 0 ? (
@@ -1904,7 +1945,10 @@ function FeedListContent({
               removed (§4) — the set is already bounded to today-and-yesterday —
               so it renders as one calm flat stream; off the budget the standalone
               Feed keeps its recency grouping. */}
-          {budget ? (
+          {budget || pendingQueue ? (
+            // The overflow subpage renders the full pending queue flat, in the
+            // server's zone order (sender rotation) — no recency buckets, no
+            // section headings; the page header carries the one title.
             restRows.length > 0 ? (
               <Fragment key="texture">{restRows.map(renderRow)}</Fragment>
             ) : null
