@@ -571,7 +571,7 @@ function AnsweredHistory({
                   style={{
                     margin: '3px 0 0',
                     paddingRight: 24,
-                    fontFamily: 'Georgia, serif',
+                    fontFamily: 'var(--font-serif)',
                     fontStyle: 'italic',
                     fontSize: 13,
                     lineHeight: 1.5,
@@ -615,7 +615,7 @@ export function ConvergenceExpansion({
           <p
             style={{
               margin: 0,
-              fontFamily: 'Georgia, serif',
+              fontFamily: 'var(--font-serif)',
               fontStyle: 'italic',
               fontSize: 14,
               lineHeight: 1.55,
@@ -666,7 +666,7 @@ function SendOnwardExpansion({
       <p
         style={{
           margin: '0 0 4px',
-          fontFamily: 'Georgia, serif',
+          fontFamily: 'var(--font-serif)',
           fontStyle: 'italic',
           fontSize: 14,
           lineHeight: 1.55,

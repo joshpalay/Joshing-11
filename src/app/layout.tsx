@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Cormorant_Garamond, Inter, Montserrat, Playfair_Display } from 'next/font/google'
+import { Cormorant_Garamond, Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
@@ -39,15 +39,6 @@ const cormorant = Cormorant_Garamond({
   display: 'swap',
 })
 
-// Inter — loaded for opt-in use (e.g. the login subtitle's display/heading/section
-// spec). Exposed via --font-inter and surfaced to Tailwind as `font-inter` in
-// globals.css. Montserrat remains the app-wide body font.
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
-
 export const metadata: Metadata = {
   title: 'Joshing',
   description: 'A daily knowledge game',
@@ -70,7 +61,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable} ${inter.variable}`}
+      className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable}`}
     >
       <body className={montserrat.className}>
         <Nav

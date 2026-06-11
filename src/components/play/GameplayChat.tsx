@@ -502,9 +502,9 @@ function QuestionRow({
                 <span
                   key={badge.label}
                   style={{
-                    // Figma display/pill/sans — Georgia, 12px, title-case (not the
+                    // Figma display/pill/sans — serif, 12px, title-case (not the
                     // mono uppercase used elsewhere).
-                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    fontFamily: 'var(--font-serif)',
                     fontSize: '0.675rem',
                     lineHeight: 1.1,
                     letterSpacing: '0.01em',

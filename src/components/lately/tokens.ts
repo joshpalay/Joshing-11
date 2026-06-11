@@ -13,6 +13,6 @@ export const HILITE = '#e9c97a'; // warm brand-aligned highlighter
 // CSS var resolves to it. The mockup spec'd Inter — project decision to keep
 // Montserrat (see CLAUDE.md + intentional comment in src/app/layout.tsx).
 export const FF = 'var(--font-sans-body), -apple-system, system-ui, sans-serif';
-export const FM = '"Courier New", ui-monospace, monospace';
+// System voice — routed through the app-wide mono token (Courier New first).
+export const FM = 'var(--font-mono)';
 export const FS = 'var(--font-display), Georgia, serif';
-export const FI = 'Georgia, var(--font-display), serif';

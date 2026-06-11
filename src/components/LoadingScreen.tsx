@@ -152,7 +152,7 @@ export default function LoadingScreen({
           JOSHING
         </p>
         <div className="mt-6 h-px w-12 bg-[#1a1208]/20" aria-hidden="true" />
-        <p className="mt-5 flex items-baseline gap-1 font-inter text-sm font-normal tracking-wider uppercase text-[#1a1208]/70">
+        <p className="mt-5 flex items-baseline gap-1 font-sans text-sm font-normal tracking-wider uppercase text-[#1a1208]/70">
           <span>{label}</span>
           <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
             <span
