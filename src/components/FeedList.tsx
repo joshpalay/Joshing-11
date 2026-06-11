@@ -690,8 +690,8 @@ function FeedContributeFooter() {
 // cards (one card per friend) before collapsing the rest behind a "View more"
 // control; each tap of "View more" then reveals another FROM_FRIENDS_STEP
 // cards (and keeps the control while more remain).
-const FROM_FRIENDS_COLLAPSED_COUNT = 5
-const FROM_FRIENDS_STEP = 10
+const FROM_FRIENDS_COLLAPSED_COUNT = 8
+const FROM_FRIENDS_STEP = 8
 
 // The uppercase eyebrow that labels a feed section — the recency day labels
 // ("Today", "This week") and the home-only pinned "For You" / "From Friends"
@@ -1017,8 +1017,9 @@ function FeedListContent({
   // each friend's milestone bundle rows merge into ONE knowledge-portrait card
   // — name, a discovery-register status line, their recent topics with
   // two-state territory triangles, and the same inline answer flow the old
-  // event rows carried. fromFriendsRows is newest-first, so the stack leads
-  // with the most recently active friend.
+  // event rows carried. buildFriendTerritoryCards orders the cards
+  // chronologically by each bundle's recency, so the stack interleaves friends
+  // newest-first rather than dumping one active friend's whole backlog on top.
   const fromFriendsCards = useMemo(
     () =>
       buildFriendTerritoryCards(
