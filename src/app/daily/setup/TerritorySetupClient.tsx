@@ -784,8 +784,8 @@ function DragPreview({ domain }: { domain: TerritoryDomain }) {
     <div className="flex max-w-24 flex-col items-center gap-1 text-center drop-shadow-lg">
       <KnowledgeBubble
         diameter={58}
-        light={color.light}
-        border={`1px solid ${color.primary}55`}
+        tint={color.primary}
+        border={`1px solid color-mix(in srgb, ${color.primary} 33%, transparent)`}
         style={{ boxShadow: '0 12px 28px rgba(26,18,8,0.16)' }}
       >
         {domain.correctAnswerCount > 0 ? (
@@ -969,8 +969,8 @@ function TerritoryCircle({
     >
       <KnowledgeBubble
         diameter={size}
-        light={color.light}
-        border={`1px solid ${color.primary}44`}
+        tint={color.primary}
+        border={`1px solid color-mix(in srgb, ${color.primary} 27%, transparent)`}
         style={{ boxShadow: '0 8px 22px rgba(26,18,8,0.08)' }}
       >
         {correctCount > 0 ? (
@@ -1085,7 +1085,7 @@ function GhostTerritoryCircle({
 }) {
   const color = getPortraitDomainColor(territory.broadCategory ?? 'General Knowledge');
   const style = {
-    '--territory-border': `${color.primary}66`,
+    '--territory-border': `color-mix(in srgb, ${color.primary} 40%, transparent)`,
     '--territory-text': color.text,
   } as CSSProperties;
 

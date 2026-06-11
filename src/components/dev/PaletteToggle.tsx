@@ -26,6 +26,8 @@ const STORAGE_KEY = 'joshing-palette';
 // as more color jobs (category, gold) get routed onto tokens.
 const CHANGES: Array<{ label: string; from: string; to: string }> = [
   { label: 'WRONG', from: '#c96b4a', to: '#c1121f' },
+  { label: 'LITERATURE', from: '#c0392b', to: '#7d2c3f' },
+  { label: 'LANGUAGE', from: '#4a7a5a', to: '#2e6e7e' },
 ];
 
 const PALETTE_EVENT = 'joshing-palette-change';

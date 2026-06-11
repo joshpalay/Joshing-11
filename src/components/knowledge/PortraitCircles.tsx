@@ -38,7 +38,6 @@ const TIER_ORDER: PortraitTier[] = [
 
 type DomainColor = {
   primary: string
-  light: string
   text: string
 }
 
@@ -55,67 +54,24 @@ function displaySectionLabel(broadCategory: string): string {
   return SECTION_LABEL_OVERRIDES[broadCategory] ?? broadCategory
 }
 
+// The per-domain hues live in the --cat-* token scale (globals.css,
+// STYLE-GUIDE-COLOR §3) so they have one definition and the palette preview can
+// flip them; this map only routes domain display names onto that scale. The
+// soft circle fill derives from the primary at render (domainBubbleGradient),
+// so no `light` variant exists anymore.
 const DOMAIN_COLORS: Record<string, DomainColor> = {
-  Literature: {
-    primary: '#c0392b',
-    light: 'rgba(192,57,43,0.12)',
-    text: '#8b1a0e',
-  },
-  Music: {
-    primary: '#1a6b8a',
-    light: 'rgba(26,107,138,0.12)',
-    text: '#0e4060',
-  },
-  'Film & Television': {
-    primary: '#6b3fa0',
-    light: 'rgba(107,63,160,0.12)',
-    text: '#3d1f6b',
-  },
-  'Architecture & Design': {
-    primary: '#b07d2e',
-    light: 'rgba(176,125,46,0.12)',
-    text: '#7a5010',
-  },
-  'Food & Cuisine': {
-    primary: '#2e8b57',
-    light: 'rgba(46,139,87,0.12)',
-    text: '#0e5c30',
-  },
-  Technology: {
-    primary: '#3a6b8a',
-    light: 'rgba(58,107,138,0.12)',
-    text: '#1a3f5c',
-  },
-  Sports: {
-    primary: '#c06b1a',
-    light: 'rgba(192,107,26,0.12)',
-    text: '#8b3e0e',
-  },
-  History: {
-    primary: '#5a6b7a',
-    light: 'rgba(90,107,122,0.12)',
-    text: '#2a3f50',
-  },
-  Science: {
-    primary: '#5a7a2e',
-    light: 'rgba(90,122,46,0.12)',
-    text: '#2a4a0e',
-  },
-  Philosophy: {
-    primary: '#7a5a8a',
-    light: 'rgba(122,90,138,0.12)',
-    text: '#4a2a5c',
-  },
-  'Pop Culture': {
-    primary: '#8a2a4a',
-    light: 'rgba(138,42,74,0.12)',
-    text: '#5c0e2a',
-  },
-  Language: {
-    primary: '#4a7a5a',
-    light: 'rgba(74,122,90,0.12)',
-    text: '#1e4e30',
-  },
+  Literature: { primary: 'var(--cat-literature)', text: 'var(--cat-literature-text)' },
+  Music: { primary: 'var(--cat-music)', text: 'var(--cat-music-text)' },
+  'Film & Television': { primary: 'var(--cat-film-tv)', text: 'var(--cat-film-tv-text)' },
+  'Architecture & Design': { primary: 'var(--cat-architecture)', text: 'var(--cat-architecture-text)' },
+  'Food & Cuisine': { primary: 'var(--cat-food)', text: 'var(--cat-food-text)' },
+  Technology: { primary: 'var(--cat-technology)', text: 'var(--cat-technology-text)' },
+  Sports: { primary: 'var(--cat-sports)', text: 'var(--cat-sports-text)' },
+  History: { primary: 'var(--cat-history)', text: 'var(--cat-history-text)' },
+  Science: { primary: 'var(--cat-science)', text: 'var(--cat-science-text)' },
+  Philosophy: { primary: 'var(--cat-philosophy)', text: 'var(--cat-philosophy-text)' },
+  'Pop Culture': { primary: 'var(--cat-pop-culture)', text: 'var(--cat-pop-culture-text)' },
+  Language: { primary: 'var(--cat-language)', text: 'var(--cat-language-text)' },
 }
 
 function hashColor(str: string): DomainColor {
@@ -126,7 +82,6 @@ function hashColor(str: string): DomainColor {
   const hue = Math.abs(h) % 360
   return {
     primary: `hsl(${hue},45%,35%)`,
-    light: `hsla(${hue},45%,35%,0.12)`,
     text: `hsl(${hue},45%,25%)`,
   }
 }
@@ -276,7 +231,7 @@ export function PortraitDomainCircle({
         <div style={{ position: 'relative', width: size, height: size }}>
           <KnowledgeBubble
             diameter={size}
-            light={dc.light}
+            tint={dc.primary}
             opacity={opacity}
             style={{ filter: dimForHidden ? 'grayscale(0.6)' : undefined }}
           >

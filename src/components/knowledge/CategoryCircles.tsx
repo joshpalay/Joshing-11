@@ -161,7 +161,7 @@ export function KnowledgeCircle({
     >
       <KnowledgeBubble
         diameter={displaySize}
-        light={dc.light}
+        tint={dc.primary}
         opacity={opacity}
         style={{ transition: animate ? undefined : 'none' }}
       />
