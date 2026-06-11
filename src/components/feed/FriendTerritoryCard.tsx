@@ -161,7 +161,7 @@ export function FriendTerritoryCard({ card }: { card: FriendTerritoryCardModel }
                 played={topicPlayed(topic)}
                 color={territoryTopicColor(topic.name)}
               />
-              <span className="text-[14px] leading-[1.45] text-[var(--brand-ink-700)] [font-family:var(--font-serif),Georgia,serif]">
+              <span className="font-serif text-[14px] leading-[1.45] text-[var(--brand-ink-700)]">
                 {topic.name}
               </span>
             </li>
