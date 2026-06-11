@@ -601,8 +601,9 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
         <button
           type="button"
           aria-label="More actions"
+          aria-haspopup="menu"
           aria-expanded={isOverflowOpen}
-          onClick={() => setIsOverflowOpen(true)}
+          onClick={() => setIsOverflowOpen((open) => !open)}
           className="text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:ring-ring -mr-2 -mt-2 inline-flex size-10 shrink-0 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none"
         >
           <MoreHorizontal className="size-5" />
