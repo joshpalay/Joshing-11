@@ -401,6 +401,25 @@
   40%           { opacity: 1;    transform: translateY(-2px); }
 }
 
+/* Rotating loader copy — each phrase fades up, holds, then fades away just as
+   the next one mounts. Duration is mirrored by MESSAGE_CYCLE_MS in
+   LoadingScreen.tsx; keep the two in sync. */
+@keyframes loading-message {
+  0%   { opacity: 0; transform: translate(-50%, 4px); }
+  14%  { opacity: 1; transform: translate(-50%, 0); }
+  86%  { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -4px); }
+}
+
+.loading-message {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  animation: loading-message 3.2s ease-in-out forwards;
+  will-change: opacity, transform;
+}
+
 /* B-Feed-Swipe-1 — collapse a dismissed feed card before the inline bar shows. */
 @keyframes feed-card-collapse {
   from { opacity: 1; max-height: 600px; }
@@ -415,7 +434,8 @@
 @media (prefers-reduced-motion: reduce) {
   .triangle-loader-tri,
   .triangle-loader-sweep,
-  .triangle-loader-dot {
+  .triangle-loader-dot,
+  .loading-message {
     animation: none !important;
   }
 
