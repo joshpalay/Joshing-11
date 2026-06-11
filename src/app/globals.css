@@ -71,6 +71,12 @@
     --brand-rule:        rgba(60, 50, 40, 0.14); /* border/rule — divider      */
     --domain-language:   #7a9eaa;
     --domain-science:    #8aa68a;
+    /* Triangle palette — DECORATIVE by decision (STYLE-GUIDE-COLOR §3 note +
+       §5 fix-list step 5, option b): triangle fill hue is a deterministic hash
+       over these six muted fills and carries NO category meaning. The one bit a
+       triangle encodes is solid/hollow = unplayed/played — safe from grading
+       confusion once WRONG leaves the orange family (§1). Revisit to option (a)
+       (hue = --cat-* category) only as a deliberate product change. */
     --tri-orange:        #d15e36;
     --tri-cream:         #f8e6c7;
     --tri-darkteal:      #6d837f;
