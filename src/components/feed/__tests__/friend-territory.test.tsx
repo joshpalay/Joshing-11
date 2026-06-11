@@ -56,8 +56,8 @@ function milestoneItem(
   }
 }
 
-describe('buildFriendTerritoryCards — one knowledge portrait per friend', () => {
-  it('merges a friend\'s deep + breadth bundles into one card, topics deduped in order, hero order = newest first', () => {
+describe('buildFriendTerritoryCards — knowledge portraits, capped at 5 per card', () => {
+  it('merges a friend\'s deep + breadth bundles (≤5 questions stay one card), topics deduped in order, lead = newest first', () => {
     const cards = buildFriendTerritoryCards([
       milestoneItem('m1', 'robyn', 'Robyn', [
         question({ questionId: 'q1', domain: 'Star Trek' }),
@@ -100,6 +100,26 @@ describe('buildFriendTerritoryCards — one knowledge portrait per friend', () =
     // one a correct answer produces — correctness never reaches this surface.
     expect(incorrect.topics).toEqual(correct.topics)
     expect(untried.topics[0]).toEqual({ name: 'Star Trek', played: false })
+  })
+
+  it('splits a friend with more than 5 questions onto consecutive cards (newest first), 5 max each', () => {
+    const qs = Array.from({ length: 7 }, (_, i) =>
+      question({ questionId: `q${i}`, domain: `Domain ${i}` }),
+    )
+    const cards = buildFriendTerritoryCards([milestoneItem('m1', 'robyn', 'Robyn', qs)])
+    expect(cards).toHaveLength(2)
+    // Both cards are the same friend, consecutive in the stack.
+    expect(cards.map((c) => c.friendId)).toEqual(['robyn', 'robyn'])
+    // The first card carries the 5 newest; the overflow continues on the next.
+    expect(cards[0]!.questions.map((q) => q.questionId)).toEqual([
+      'q0', 'q1', 'q2', 'q3', 'q4',
+    ])
+    expect(cards[1]!.questions.map((q) => q.questionId)).toEqual(['q5', 'q6'])
+    // Each card's territory is its own slice — no "+N more" spill.
+    expect(cards[0]!.topics).toHaveLength(5)
+    expect(cards[1]!.topics).toHaveLength(2)
+    // Stacked cards draw distinct ids so React keys (and the status seed) differ.
+    expect(cards[0]!.id).not.toBe(cards[1]!.id)
   })
 
   it('suppresses catch-all categories from the territory list but keeps their questions playable', () => {
@@ -170,17 +190,17 @@ describe('FriendTerritoryCard — render', () => {
     expect(html).not.toMatch(/Correct|Not this time/)
   })
 
-  it('every card shows 4 topics + a muted "+N more" — no hero variant', () => {
+  it('shows every topic on a full 5-question card — no "+N more" fold (overflow goes to the next card)', () => {
     const html = renderToStaticMarkup(<FriendTerritoryCard card={card()} />)
     expect(html).toContain('Jazz')
-    expect(html).not.toContain('Cubism')
-    expect(html).toContain('+1 more')
+    expect(html).toContain('Cubism')
+    expect(html).not.toMatch(/\+\d+ more/)
   })
 
   it('renders exactly two triangle states — played (filled) and untried (hollow bordered)', () => {
     const html = renderToStaticMarkup(<FriendTerritoryCard card={card()} />)
     const states = [...html.matchAll(/data-territory-state="(\w+)"/g)].map((m) => m[1])
-    expect(states).toEqual(['played', 'untried', 'untried', 'untried'])
+    expect(states).toEqual(['played', 'untried', 'untried', 'untried', 'untried'])
     expect(new Set(states).size).toBe(2)
   })
 
