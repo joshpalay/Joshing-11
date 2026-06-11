@@ -9,6 +9,7 @@ import {
   AnswerSheet,
   DirectSentCard,
   DismissedFeedBar,
+  FeedActionLink,
   FeedCardSwipe,
   FeedOverflowMenu,
   FriendAddedCard,
@@ -1797,17 +1798,15 @@ function FeedListContent({
                 <FriendTerritoryCard key={card.id} card={card} hero={i === 0} />
               ))}
               {fromFriendsHiddenCount > 0 ? (
-                <button
-                  type="button"
+                <FeedActionLink
+                  size="sm"
                   onClick={() =>
                     setFromFriendsVisibleCount((count) => count + FROM_FRIENDS_STEP)
                   }
-                  className={`flex min-h-11 items-center text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
-                    unifiedHome ? 'pl-[2px]' : ''
-                  }`}
+                  className={unifiedHome ? 'pl-[2px]' : undefined}
                 >
                   View {fromFriendsNextBatch} more
-                </button>
+                </FeedActionLink>
               ) : null}
             </Fragment>
           ) : null}

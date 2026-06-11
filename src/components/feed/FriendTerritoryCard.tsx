@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { ActorLink, MilestoneExpansion } from '@/components/activity/ActivityStreamItem'
 import { djb2 } from '@/lib/lately'
 
+import { FeedActionLink } from './FeedActionLink'
 import { FeedCardShell } from './FeedCardShell'
 import { visibleFeedCategory } from './category'
 import type { FriendTerritoryCardModel, FriendTerritoryTopic } from './friend-territory'
@@ -151,7 +152,7 @@ export function FriendTerritoryCard({
                 played={topicPlayed(topic)}
                 color={territoryTopicColor(topic.name)}
               />
-              <span className="text-[14px] leading-[1.45] text-[var(--brand-ink-700)] [font-family:Georgia,serif]">
+              <span className="text-[14px] leading-[1.45] text-[var(--brand-ink-700)] [font-family:var(--font-serif),Georgia,serif]">
                 {topic.name}
               </span>
             </li>
@@ -165,14 +166,9 @@ export function FriendTerritoryCard({
       ) : null}
 
       <div className={hero ? 'mt-4' : 'mt-3'}>
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-          className="flex min-h-11 items-center text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70"
-        >
+        <FeedActionLink size="sm" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           Play these →
-        </button>
+        </FeedActionLink>
       </div>
 
       {open ? (
