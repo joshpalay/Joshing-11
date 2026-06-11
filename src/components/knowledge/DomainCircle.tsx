@@ -52,7 +52,7 @@ export function DomainCircle({
     ? getPortraitDomainColor(normalizedCategory)
     : null
   const circleBackground = domainColor
-    ? domainBubbleGradient(domainColor.light)
+    ? domainBubbleGradient(domainColor.primary)
     : territoryType === 'declared'
       ? 'rgba(245, 240, 232, 0.3)'
       : '#f5f0e8'

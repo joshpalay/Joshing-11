@@ -87,6 +87,39 @@
     --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
     --game-wrong:         #c96b4a;  /* text/wrong — terracotta result accent     */
     --game-wrong-strong:  #c33d14;  /* game/wrong/in-question — strong terracotta */
+    /* ── Category scale (STYLE-GUIDE-COLOR §3) ──────────────────────────────
+       One color per top-level domain; leaf categories inherit the parent hue.
+       Values = the knowledge map's DOMAIN_COLORS (the only true per-category
+       map in live code), now tokenized so consumers route through one scale
+       and the palette preview can flip them. `-text` is the hand-tuned darker
+       label variant; the soft circle fill derives from the primary at render
+       (domainBubbleGradient). The other category systems (feed hash palette,
+       expanding accents, ceremony gradients) are still hardcoded — collapsing
+       them onto this scale is color fix-list step 3, in progress. */
+    --cat-literature:       #c0392b;
+    --cat-literature-text:  #8b1a0e;
+    --cat-music:            #1a6b8a;
+    --cat-music-text:       #0e4060;
+    --cat-film-tv:          #6b3fa0;
+    --cat-film-tv-text:     #3d1f6b;
+    --cat-architecture:     #b07d2e;
+    --cat-architecture-text:#7a5010;
+    --cat-food:             #2e8b57;
+    --cat-food-text:        #0e5c30;
+    --cat-technology:       #3a6b8a;
+    --cat-technology-text:  #1a3f5c;
+    --cat-sports:           #c06b1a;
+    --cat-sports-text:      #8b3e0e;
+    --cat-history:          #5a6b7a;
+    --cat-history-text:     #2a3f50;
+    --cat-science:          #5a7a2e;
+    --cat-science-text:     #2a4a0e;
+    --cat-philosophy:       #7a5a8a;
+    --cat-philosophy-text:  #4a2a5c;
+    --cat-pop-culture:      #8a2a4a;
+    --cat-pop-culture-text: #5c0e2a;
+    --cat-language:         #4a7a5a;
+    --cat-language-text:    #1e4e30;
     /* Shared width for every left-aligned card in the play thread (question,
        bonus, result, reflection, session-close) so the column reads as one
        coherent conversation with a consistent left + right edge. A percentage of
@@ -231,6 +264,17 @@
     /* CORRECT stays forest green; kept here as the single tuning point and to
        confirm by eye that it clears the knowledge greens. */
     --game-correct:      #366045;
+
+    /* §3 CATEGORY — shift the two hues the guide flags as grading collisions.
+       Literature's strong red sat next to the NEW WRONG-red; it moves to a
+       darker bordeaux. Language was the green closest to CORRECT (#366045); it
+       moves to a teal, leaving the green family to Science/Food (judge those
+       by eye with the toggle — the guide says category greens move if they
+       crowd CORRECT, never the grading green). First-pass values — tune here. */
+    --cat-literature:      #7d2c3f;  /* was #c0392b */
+    --cat-literature-text: #571f2c;
+    --cat-language:        #2e6e7e;  /* was #4a7a5a */
+    --cat-language-text:   #173f4a;
 }
 
 .dark {
