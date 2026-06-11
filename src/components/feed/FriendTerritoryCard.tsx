@@ -135,9 +135,10 @@ export function FriendTerritoryCard({ card }: { card: FriendTerritoryCardModel }
     <FeedCardShell elevated className="p-4">
       {/* Knowledge-portrait masthead: the friend's name large in the brand
           sans (Montserrat via --font-sans), the discovery status line beneath
-          it in the editorial serif italic on the brand orange — sized to read
-          as the card's statement, not a caption — and a warm yellow rule
-          separating the masthead from the territory list. */}
+          it in the LARGE editorial serif register (the same font-serif text-lg
+          treatment the feed's primary text actions use) on the brand orange,
+          and a warm yellow rule separating the masthead from the territory
+          list. */}
       <h3 className="m-0 font-sans text-[22px] leading-[1.2] font-bold text-[var(--brand-ink)]">
         <Link
           href={`/users/${card.friendId}`}
@@ -147,7 +148,7 @@ export function FriendTerritoryCard({ card }: { card: FriendTerritoryCardModel }
           {card.friendName}
         </Link>
       </h3>
-      <p className="m-0 mt-1 font-serif text-[16px] leading-[1.4] italic text-[var(--brand-orange)]">
+      <p className="m-0 mt-1 font-serif text-lg leading-[1.35] font-semibold tracking-[0.05em] italic text-[var(--brand-orange)]">
         {card.statusLine}
       </p>
       <hr aria-hidden className="my-3 h-[2px] border-0 bg-[var(--tri-darkyellow)]" />
