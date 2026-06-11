@@ -628,7 +628,7 @@ function KnowledgePageContent() {
               pendingDomain={hidePending}
             />
             {hideError ? (
-              <p className="mt-3 text-[0.78rem] text-[#8b1a0e] border border-[#c0392b]/40 p-2">{hideError}</p>
+              <p className="mt-3 text-[0.78rem] text-[var(--cat-literature-text)] border border-[var(--cat-literature)]/40 p-2">{hideError}</p>
             ) : null}
             {!editMode ? (
               <div className="mt-5 flex justify-center">
@@ -790,7 +790,7 @@ function KnowledgePageContent() {
               </div>
             </div>
 
-            {interestError ? <p className="mt-4 border border-[#c0392b]/40 text-[#8b1a0e] p-3 text-[0.88rem]">{interestError}</p> : null}
+            {interestError ? <p className="mt-4 border border-[var(--cat-literature)]/40 text-[var(--cat-literature-text)] p-3 text-[0.88rem]">{interestError}</p> : null}
 
             <div className="flex justify-end gap-2 mt-5">
               <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
