@@ -1331,8 +1331,8 @@ function SessionCompleteRow({
       className="mt-6"
       style={{
         borderRadius: 'var(--radius-lg)',
-        border: '1px solid color-mix(in srgb, var(--success) 40%, var(--border))',
-        background: 'color-mix(in srgb, var(--success) 8%, var(--surface))',
+        border: '1px solid color-mix(in srgb, var(--game-correct) 40%, var(--border))',
+        background: 'color-mix(in srgb, var(--game-correct) 8%, var(--surface))',
         padding: '1.25rem 1.25rem 1.25rem',
       }}
     >
@@ -1342,7 +1342,7 @@ function SessionCompleteRow({
           fontSize: '0.6rem',
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
-          color: 'var(--success)',
+          color: 'var(--game-correct)',
           marginBottom: '0.5rem',
         }}
       >
@@ -1353,7 +1353,7 @@ function SessionCompleteRow({
           fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
           fontSize: '2rem',
           fontWeight: 600,
-          color: 'var(--success)',
+          color: 'var(--game-correct)',
           lineHeight: 1,
         }}
       >
