@@ -166,6 +166,10 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('activity:t0:tex-friend')
     expect(html).not.toContain('Today')
     expect(html).not.toContain('Past two weeks')
+    // Texture's see-more goes to Lately (the archive of this stream) — no third
+    // subpage (§4); the revived "See all activity →" row closes the zone.
+    expect(html).toContain('See all activity →')
+    expect(html).toContain('href="/activities"')
     // Exactly one rotating panel.
     expect(html).toContain('PANEL:add_friends')
   })
@@ -210,6 +214,8 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     // The empty playable zone is omitted entirely — no heading, no placeholder.
     expect(html).not.toContain('From Friends')
     expect(html).not.toContain('Quiet today')
+    // Empty texture zone → its see-more row is hidden with it (§9).
+    expect(html).not.toContain('See all activity')
     // The populated page still gets its one panel.
     expect(html).toContain('PANEL:common_ground')
   })
