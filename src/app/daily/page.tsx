@@ -122,9 +122,15 @@ const QUEUE_CREATE_BACKOFF_MS = [2000, 4000, 8000];
 const QUEUE_GENERATION_FAILED_MESSAGE =
   "We're still crafting today's bespoke questions and it's taking longer than usual. Give it a moment and try again.";
 
-function generatingLabel(): string {
-  return 'Crafting your bespoke questions';
-}
+// Rotated through, fading in and out, while a round is being generated — the
+// LoadingScreen cycles these so the wait reads as deliberate craft rather than
+// a stall.
+const GENERATING_MESSAGES = [
+  'Crafting your bespoke questions',
+  'Finding the right multitudes',
+  'Reading the room',
+  'Tuning the difficulty',
+];
 
 // Returns the slot the player should be on, or null when the round is over.
 // The `!answered && !skipped` predicate is the canonical "pending" definition
@@ -744,10 +750,11 @@ export default function DailyPage() {
         style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}
       >
         {loading ? (
-          <LoadingScreen
-            fullScreen
-            label={generatingAttempt != null ? generatingLabel() : 'Loading today'}
-          />
+          generatingAttempt != null ? (
+            <LoadingScreen fullScreen messages={GENERATING_MESSAGES} />
+          ) : (
+            <LoadingScreen fullScreen label="Loading today" />
+          )
         ) : error ? (
           // Generation hiccups are warm and retryable, not alarming — keep this
           // neutral (not --danger) and give the player a one-tap way to retry.

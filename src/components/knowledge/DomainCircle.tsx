@@ -52,7 +52,7 @@ export function DomainCircle({
     ? getPortraitDomainColor(normalizedCategory)
     : null
   const circleBackground = domainColor
-    ? domainBubbleGradient(domainColor.light)
+    ? domainBubbleGradient(domainColor.primary)
     : territoryType === 'declared'
       ? 'rgba(245, 240, 232, 0.3)'
       : '#f5f0e8'
@@ -117,7 +117,7 @@ export function DomainCircle({
           border={`1px solid ${circleBorder}`}
           style={{
             transition: 'border-color 300ms ease, box-shadow 300ms ease',
-            boxShadow: highlighted ? '0 0 8px #f0c060' : undefined,
+            boxShadow: highlighted ? '0 0 8px var(--accent-gold)' : undefined,
           }}
         >
           {Icon ? <Icon size={iconSize} color="#0a1f3d" /> : null}

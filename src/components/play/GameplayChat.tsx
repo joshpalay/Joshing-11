@@ -177,9 +177,9 @@ const verdictLabelStyle: CSSProperties = {
 // (this card, the feed sheet, the summary recap, the history list) stays in sync.
 
 // Darkened triangle-gold so warning/inside-joke labels clear AA on the cream
-// surface (raw --tri-amber #d9a82e is too light for small text). Mirrors the
+// surface (raw --accent-gold #d9a82e is too light for small text). Mirrors the
 // GOLD_INK used on the feed answer sheets.
-const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))';
+const GOLD_INK = 'var(--accent-gold-ink)';
 
 const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
   (name) => `${name}’s world includes this`,
@@ -377,7 +377,7 @@ function QuestionRow({
       {creatorName ? (
         <p
           style={{
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
             fontSize: '0.86rem',
             color: 'var(--text)',
             paddingLeft: '2px',
@@ -449,7 +449,7 @@ function QuestionRow({
               >
                 <span
                   aria-hidden
-                  style={{ color: 'var(--tri-amber)', fontSize: '0.8rem', lineHeight: 1 }}
+                  style={{ color: 'var(--accent-gold)', fontSize: '0.8rem', lineHeight: 1 }}
                 >
                   ✦
                 </span>
@@ -463,7 +463,7 @@ function QuestionRow({
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   lineHeight: 1.25,
-                  color: 'color-mix(in srgb, var(--tri-amber) 35%, white)',
+                  color: 'color-mix(in srgb, var(--accent-gold) 35%, white)',
                 }}
               >
                 {bonusSourceLabel(presenceSourceName, presenceSourceExtraCount)}
@@ -476,23 +476,23 @@ function QuestionRow({
             // Bonus questions get a navy banner plus warm card tint so the
             // gifted-from-a-friend item reads as an extra, not an ordinary prompt.
             background: isBonus
-              ? 'color-mix(in srgb, var(--tri-amber) 10%, var(--game-card-question))'
+              ? 'color-mix(in srgb, var(--accent-gold) 10%, var(--game-card-question))'
               : 'var(--game-card-question)',
             border: isBonus
-              ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--tri-amber))'
+              ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--accent-gold))'
               : '1px solid var(--brand-rule)',
             borderRadius: isBonus ? '0 0 var(--radius-md) var(--radius-md)' : 'var(--radius-md)',
             // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
             boxShadow: isBonus
-              ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--tri-amber)'
+              ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--accent-gold)'
               : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
-            padding: '14px 18px',
-            fontFamily: 'var(--font-cormorant), Georgia, serif',
+            padding: '20px 22px',
+            fontFamily: 'var(--font-serif)',
             fontSize: '1.4875rem',
             fontWeight: 700,
             letterSpacing: 0,
             color: 'var(--brand-ink)',
-            lineHeight: 1.14,
+            lineHeight: 1.3,
           }}
         >
           <p style={{ margin: 0 }}>{questionText}</p>
@@ -502,9 +502,9 @@ function QuestionRow({
                 <span
                   key={badge.label}
                   style={{
-                    // Figma display/pill/sans — Georgia, 12px, title-case (not the
+                    // Figma display/pill/sans — serif, 12px, title-case (not the
                     // mono uppercase used elsewhere).
-                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    fontFamily: 'var(--font-serif)',
                     fontSize: '0.675rem',
                     lineHeight: 1.1,
                     letterSpacing: '0.01em',
@@ -512,7 +512,7 @@ function QuestionRow({
                     border: '1px solid var(--border)',
                     background:
                       badge.tone === 'warning'
-                        ? 'color-mix(in srgb, var(--tri-amber) 14%, var(--surface))'
+                        ? 'color-mix(in srgb, var(--accent-gold) 14%, var(--surface))'
                         : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
                     color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
                     opacity: 0.9,
@@ -598,13 +598,13 @@ function UserRow({ text }: { text: string }) {
           maxWidth: '88%',
           background: 'var(--brand-navy)',
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
-          padding: '9px 15px',
+          padding: '12px 18px',
           // Figma answer bubble — Cormorant serif, not the sans body font.
-          fontFamily: 'var(--font-cormorant), Georgia, serif',
+          fontFamily: 'var(--font-serif)',
           fontSize: '1.495rem',
           fontWeight: 700,
           letterSpacing: '-0.01em',
-          lineHeight: 1.2,
+          lineHeight: 1.32,
           color: 'var(--primary-foreground)',
         }}
       >
@@ -623,7 +623,7 @@ function ExplainerLine({ text }: { text: string }) {
     <p
       style={{
         marginTop: '8px',
-        fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+        fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
         fontSize: '0.92rem',
         color: 'color-mix(in srgb, var(--text-muted) 35%, var(--text))',
         lineHeight: 1.5,
@@ -880,7 +880,7 @@ function AuthorNoteCard({
       <p
         style={{
           marginTop: '4px',
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
           // Reflection/creator-note body bumped ~14% for readability (D-5);
           // the eyebrow label above stays small and secondary.
           fontSize: '1.05rem',
@@ -1091,7 +1091,7 @@ function ResultRow({
           <>
             <p
               style={{
-                fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+                fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
                 color: 'var(--game-wrong-strong)',
                 fontWeight: 600,
               }}
@@ -1240,8 +1240,8 @@ function ResultRow({
       </ThreadCard>
       {showJokeCard && insideJoke ? (
         <ThreadCard
-          border="color-mix(in srgb, var(--tri-amber) 40%, var(--border))"
-          fill="color-mix(in srgb, var(--tri-amber) 12%, var(--surface-2))"
+          border="color-mix(in srgb, var(--accent-gold) 40%, var(--border))"
+          fill="color-mix(in srgb, var(--accent-gold) 12%, var(--surface-2))"
           style={{ marginTop: '8px' }}
         >
           <p
@@ -1258,7 +1258,7 @@ function ResultRow({
           <p
             style={{
               marginTop: '4px',
-              fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+              fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
               // Reflection body bumped ~14% for readability (D-5); the small,
               // letter-spaced label above stays secondary.
               fontSize: '1.05rem',
@@ -1331,8 +1331,8 @@ function SessionCompleteRow({
       className="mt-6"
       style={{
         borderRadius: 'var(--radius-lg)',
-        border: '1px solid color-mix(in srgb, var(--success) 40%, var(--border))',
-        background: 'color-mix(in srgb, var(--success) 8%, var(--surface))',
+        border: '1px solid color-mix(in srgb, var(--game-correct) 40%, var(--border))',
+        background: 'color-mix(in srgb, var(--game-correct) 8%, var(--surface))',
         padding: '1.25rem 1.25rem 1.25rem',
       }}
     >
@@ -1342,7 +1342,7 @@ function SessionCompleteRow({
           fontSize: '0.6rem',
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
-          color: 'var(--success)',
+          color: 'var(--game-correct)',
           marginBottom: '0.5rem',
         }}
       >
@@ -1350,10 +1350,10 @@ function SessionCompleteRow({
       </p>
       <p
         style={{
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
           fontSize: '2rem',
           fontWeight: 600,
-          color: 'var(--success)',
+          color: 'var(--game-correct)',
           lineHeight: 1,
         }}
       >
@@ -1423,7 +1423,7 @@ function BonusOfferRow({
       </p>
       <p
         style={{
-          fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+          fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
           fontSize: '1.3rem',
           fontWeight: 600,
           color: 'var(--text)',

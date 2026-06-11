@@ -103,7 +103,7 @@ function initialValues(question: QuestionView): QuestionFormValues {
 
 function LoadingSkeleton() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-6 pb-24">
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-24">
       <div className="mb-5 h-20 animate-pulse rounded-lg bg-muted" />
       <div className="mb-5 h-14 animate-pulse rounded-lg bg-muted" />
       <div className="space-y-3">
@@ -344,7 +344,7 @@ function QuestionsPageContent() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-6 pb-24">
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-24">
       <div className="mb-5 flex border-b">
         <button
           type="button"

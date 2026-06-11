@@ -1,7 +1,10 @@
 import type { Metadata } from 'next'
-import { Caveat, Cormorant_Garamond, Inter, Montserrat, Playfair_Display } from 'next/font/google'
+import { Cormorant_Garamond, Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
+// TESTING ONLY — proposed-palette preview bar (see _docs/STYLE-GUIDE-COLOR.md).
+// Remove this import + the <PaletteToggle/> + boot script before shipping.
+import { PaletteToggle } from "@/components/dev/PaletteToggle";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 import { getUserOnboardingProfile } from '@/server/db/queries/users';
 import { getBellBadgeCount } from '@/server/db/queries/activity';
@@ -39,22 +42,6 @@ const cormorant = Cormorant_Garamond({
   display: 'swap',
 })
 
-// Handwritten register for the Lately flourish on /activities. Used sparingly.
-const caveat = Caveat({
-  subsets: ['latin'],
-  variable: '--font-caveat',
-  display: 'swap',
-})
-
-// Inter — loaded for opt-in use (e.g. the login subtitle's display/heading/section
-// spec). Exposed via --font-inter and surfaced to Tailwind as `font-inter` in
-// globals.css. Montserrat remains the app-wide body font.
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
-
 export const metadata: Metadata = {
   title: 'Joshing',
   description: 'A daily knowledge game',
@@ -77,9 +64,17 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${montserrat.variable} ${playfair.variable} ${caveat.variable} ${cormorant.variable} ${inter.variable}`}
+      className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable}`}
     >
       <body className={montserrat.className}>
+        {/* TESTING ONLY — apply the saved palette choice before paint so there's
+            no flash on navigation. Remove with <PaletteToggle/> before shipping. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('joshing-palette')==='proposed')document.documentElement.setAttribute('data-palette','proposed')}catch(e){}`,
+          }}
+        />
+        <PaletteToggle />
         <Nav
           initialUserId={claims?.userId ?? null}
           initialDisplayName={profile?.displayName ?? null}

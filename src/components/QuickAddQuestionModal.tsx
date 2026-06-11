@@ -135,7 +135,7 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '20px' }}>
           <h2
             id="quick-add-title"
-            style={{ fontFamily: 'var(--font-literata), ui-serif, Georgia, serif', fontSize: '1.35rem', fontWeight: 600, color: 'var(--text)' }}
+            style={{ fontFamily: 'var(--font-serif), ui-serif, Georgia, serif', fontSize: '1.35rem', fontWeight: 600, color: 'var(--text)' }}
           >
             Quick add question
           </h2>

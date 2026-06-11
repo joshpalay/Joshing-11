@@ -11,8 +11,8 @@ import {
 } from '@/lib/daily/territory-model';
 
 // Darkened triangle-gold so the "New territory" copy clears AA on the cream
-// card (raw --tri-amber #d9a82e is too light for small text).
-const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))';
+// card (raw --accent-gold #d9a82e is too light for small text).
+const GOLD_INK = 'var(--accent-gold-ink)';
 
 // Default-add with player control (B-1): a correct answer in an unfamiliar domain
 // opens it in the player's Knowledge base automatically (server-side, via
@@ -69,9 +69,9 @@ export function NewTerritoryUndo({
 
   return (
     <ThreadCard
-      rail="var(--tri-amber)"
-      border="color-mix(in srgb, var(--tri-amber) 32%, var(--brand-rule))"
-      fill="color-mix(in srgb, var(--tri-amber) 7%, var(--brand-card))"
+      rail="var(--accent-gold)"
+      border="color-mix(in srgb, var(--accent-gold) 32%, var(--brand-rule))"
+      fill="color-mix(in srgb, var(--accent-gold) 7%, var(--brand-card))"
       style={{ marginTop: '8px' }}
     >
       {/* Quiet label — same eyebrow rhythm as the result cards. */}
@@ -122,10 +122,10 @@ export function NewTerritoryUndo({
                 fontWeight: isSelected ? 700 : 500,
                 color: isSelected ? GOLD_INK : 'var(--text-muted)',
                 backgroundColor: isSelected
-                  ? 'color-mix(in srgb, var(--tri-amber) 20%, var(--brand-card))'
+                  ? 'color-mix(in srgb, var(--accent-gold) 20%, var(--brand-card))'
                   : 'transparent',
                 borderColor: isSelected
-                  ? 'color-mix(in srgb, var(--tri-amber) 55%, var(--brand-border))'
+                  ? 'color-mix(in srgb, var(--accent-gold) 55%, var(--brand-border))'
                   : 'var(--brand-rule)',
               }}
             >

@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:evals": "RUN_LLM_EVALS=1 vitest run eval.test",
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings 16",
+    "check:fonts": "node scripts/check-font-ratchet.mjs",
+    "check:colors": "node scripts/check-color-ratchet.mjs",
     "smoke:daily-catchup": "tsx scripts/daily-catchup.smoke.ts",
     "smoke:question-vetting": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/question-vetting.smoke.mjs",
     "smoke:invite-first-five": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/invite-first-five.smoke.mjs",

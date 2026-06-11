@@ -62,8 +62,8 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
       <div
         className="mt-4 rounded-md border px-5 py-5"
         style={{
-          background: 'color-mix(in srgb, var(--success) 10%, var(--surface))',
-          borderColor: 'color-mix(in srgb, var(--success) 22%, var(--border))',
+          background: 'color-mix(in srgb, var(--game-correct) 10%, var(--surface))',
+          borderColor: 'color-mix(in srgb, var(--game-correct) 22%, var(--border))',
         }}
       >
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>This round</p>
@@ -86,8 +86,8 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
               <span
                 className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
                   isCorrect
-                    ? 'border-[var(--success-border)] bg-[var(--success-surface)] text-[var(--success)]'
-                    : 'border-[var(--destructive-border)] bg-[var(--destructive-surface)] text-destructive'
+                    ? 'border-[color-mix(in_srgb,var(--game-correct)_30%,var(--border))] bg-[color-mix(in_srgb,var(--game-correct)_10%,var(--card))] text-[var(--game-correct)]'
+                    : 'border-[color-mix(in_srgb,var(--game-wrong)_28%,var(--border))] bg-[color-mix(in_srgb,var(--game-wrong)_8%,var(--card))] text-[var(--game-wrong-strong)]'
                 }`}
               >
                 {isCorrect ? 'CORRECT' : 'WRONG'}

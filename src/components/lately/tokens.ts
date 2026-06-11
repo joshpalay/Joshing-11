@@ -1,19 +1,28 @@
-// Re-pointed to the JOSHING brand palette so the Lately surface matches the
-// rest of the app. The Playfair "Lately." flourish (FS), Caveat accent (FH),
-// and warm highlighter (HILITE) are kept as intentional editorial character.
-export const INK = '#0a1f3d'; // --brand-ink
-export const INK2 = '#3a4a5f'; // --brand-ink-700
-export const INK3 = '#8a8a8a'; // --brand-ink-400
-export const CREAM = '#fcf8f2'; // --brand-cream-page
-export const PAPER = '#fdfcfb'; // --brand-card
-export const RULE = '#e9e2d2'; // --brand-border
-export const HILITE = '#e9c97a'; // warm brand-aligned highlighter
+// Ergonomic aliases over the CSS brand tokens (globals.css :root) — references,
+// not copies, so the values can never drift from the app palette
+// (STYLE-GUIDE-COLOR §2: one source of truth per neutral).
+// NOTE: CREAM here is the PAGE cream (--brand-cream-page #fcf8f2) — the Lately
+// surface sits on the page surface. The app-wide CSS alias `--cream` is the
+// content-CARD cream (--brand-card, = PAPER below). Same word, two jobs; the
+// per-job brand tokens are the disambiguation.
+export const INK = 'var(--brand-ink)';
+export const INK2 = 'var(--brand-ink-700)';
+export const INK3 = 'var(--brand-ink-400)';
+export const CREAM = 'var(--brand-cream-page)';
+export const PAPER = 'var(--brand-card)';
+export const RULE = 'var(--brand-border)';
+// Warm highlighter swipe (the "Lately." headline) — derived from the one
+// accent gold (STYLE-GUIDE-COLOR §4) lightened over the page cream, replacing
+// the orphan literal #e9c97a (≈ visually identical mix).
+export const HILITE = 'color-mix(in srgb, var(--accent-gold) 55%, var(--brand-cream-page))';
 
 // Body font intentionally uses the project default (Montserrat via next/font);
 // CSS var resolves to it. The mockup spec'd Inter — project decision to keep
 // Montserrat (see CLAUDE.md + intentional comment in src/app/layout.tsx).
 export const FF = 'var(--font-sans-body), -apple-system, system-ui, sans-serif';
-export const FM = '"Courier New", ui-monospace, monospace';
+// System voice (labels/metadata) — routed through the app-wide --font-mono token.
+// The typewriter face (Courier New) was retired: --font-mono now resolves to the
+// sans (Montserrat), so the System voice reads as caps + letterspacing in the sans
+// rather than as a separate monospace face (STYLE-GUIDE-TYPE §2).
+export const FM = 'var(--font-mono)';
 export const FS = 'var(--font-display), Georgia, serif';
-export const FI = 'Georgia, var(--font-display), serif';
-export const FH = 'var(--font-caveat), "Caveat", cursive';

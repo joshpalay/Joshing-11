@@ -5,6 +5,8 @@ export type FeedCardBaseItem = {
   metadata: ReactNode
   question: string
   category?: string | null
+  /** Top-level domain — keys the accent-bar hue on the --cat-* scale (§3). */
+  broadCategory?: string | null
   personalMessage?: string | null
   isInBank?: boolean
   avatarName?: string | null
@@ -56,7 +58,6 @@ export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   explanation?: string | null
   creatorNote?: string | null
   unverifiedAnswer?: boolean
-  broadCategory?: string | null
   masteryDelta?: AnsweredByYouMasteryDelta | null
   pairedFriend?: AnsweredByYouPairedFriend | null
 }

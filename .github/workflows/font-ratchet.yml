@@ -1,0 +1,20 @@
+# Font ratchet (B-VISUAL-STYLE-GUIDE-TYPE-01, Phase 4): fail the PR if raw
+# (non-token) font-family usage in src/ rises above the recorded ceiling.
+# The ceiling and the exemption list live in scripts/check-font-ratchet.mjs.
+# Font-only by design — the color half of the style guide gets its own ratchet.
+name: Font ratchet
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev2]
+
+jobs:
+  font-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-font-ratchet.mjs

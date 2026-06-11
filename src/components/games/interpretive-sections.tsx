@@ -30,8 +30,8 @@ export type GrowthRow = {
 
 const G_INK = 'var(--warm-ink)';
 const G_INK3 = 'var(--brand-ink-400)';
-const G_FM = "'Courier New', monospace";
-const G_FF = "'Georgia', serif";
+const G_FM = 'var(--font-mono)';
+const G_FF = 'var(--font-serif)';
 const G_RULE = 'var(--warm-border)';
 
 function GrowthCircleRow({

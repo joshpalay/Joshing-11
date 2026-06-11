@@ -234,9 +234,9 @@ export default function TodaysFiveCard({
           const isFilled = outcome !== 'unanswered'
           const background =
             outcome === 'correct'
-              ? 'var(--success)'
+              ? 'var(--game-correct)'
               : outcome === 'incorrect'
-                ? 'var(--destructive)'
+                ? 'var(--game-wrong-strong)'
                 : outcome === 'skipped'
                   ? 'color-mix(in srgb, var(--brand-ink) 35%, transparent)'
                   : 'transparent'
