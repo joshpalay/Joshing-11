@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Share2 } from 'lucide-react';
+import { ChevronDown, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type CSSProperties, type KeyboardEvent } from 'react';
 
@@ -686,8 +686,9 @@ function SendOnwardExpansion({
       <QuestionProvenance q={question} style={{ margin: '0 0 12px' }} />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
-        {/* Quiet, standard share icon (matches KnowledgeCard / RecentlyExpanding)
-            — no oversized labeled button. Opens the same SendQuestionDrawer. */}
+        {/* Quiet, icon-only share affordance — no oversized labeled button.
+            Send (paper plane) is the homepage's share glyph by request; the
+            knowledge surfaces still use Share2. Opens the same SendQuestionDrawer. */}
         <button
           type="button"
           onClick={() => setSendOpen(true)}
@@ -703,7 +704,7 @@ function SendOnwardExpansion({
             cursor: 'pointer',
           }}
         >
-          <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
+          <Send size={15} strokeWidth={1.8} aria-hidden="true" />
         </button>
 
         {expand.kind === 'niche_match' && expand.strangerId ? (
