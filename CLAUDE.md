@@ -38,5 +38,6 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 - **Docs index + settled/open decisions:** `DECISIONS.md` (start here).
 - **Canonical product direction (the v12 line):** the `PRD-D-*.md` series (`PRD-D-0` through `PRD-D-5`). These supersede the 10.25/v11.x PRDs.
 - **Design system:** `_docs/DESIGN-SYSTEM.md` — tokens, fonts (Montserrat → `--font-sans`), the Ink-on-Cream palette.
+- **Type style guide:** `_docs/STYLE-GUIDE-TYPE.md` — the four type voices (Editorial/serif, System/mono, Interface/sans, Brand/script) and the token fix-list. Part 1 of 2; color is deferred to Part 2.
 - Architecture overview: `_docs/ARCHITECTURAL-DECISIONS.md` (may contain stale claims — treat as background, not gospel).
 - Superseded 10.25/v11.x PRDs and audits are archived under `_docs/archive/`.
