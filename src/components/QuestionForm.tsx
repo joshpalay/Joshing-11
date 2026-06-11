@@ -114,7 +114,7 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     suggestionError: null,
     suggesting: false,
     specificMode: initialSpecificMode,
-    shareToFeed: initialValues?.shareToFeed ?? !initialSpecificMode,
+    shareToFeed: initialValues?.shareToFeed ?? false,
     visibility: initialValues?.visibility ?? 'public',
     friends: [],
     friendsLoading: false,

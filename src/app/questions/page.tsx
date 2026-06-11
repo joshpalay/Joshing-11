@@ -200,10 +200,9 @@ function QuestionsPageContent() {
   }, []);
 
   useEffect(() => {
-    if (tab !== 'answered') return;
-    if (answered !== null || answeredLoading) return;
+    if (answered !== null || answeredLoading || answeredError) return;
     void Promise.resolve().then(loadAnswered);
-  }, [tab, answered, answeredLoading, loadAnswered]);
+  }, [answered, answeredLoading, answeredError, loadAnswered]);
 
   useEffect(() => {
     if (!toast) return;
@@ -235,6 +234,13 @@ function QuestionsPageContent() {
     setEditingQuestion(null);
     clearComposerParams();
   }, [clearComposerParams]);
+
+  const totalAnswersReceived = useMemo(
+    () => questions.reduce((total, question) => total + question.timesAnswered, 0),
+    [questions],
+  );
+
+  const answeredCountLabel = answered === null ? (answeredLoading ? '…' : '—') : String(answered.length);
 
   const filteredQuestions = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -345,6 +351,17 @@ function QuestionsPageContent() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-6 pb-24">
+      <section className="mb-5 grid grid-cols-2 gap-3" aria-label="Question activity metrics">
+        <div className="rounded-md border bg-muted/30 px-4 py-3">
+          <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Answers gotten</p>
+          <p className="mt-1 font-serif text-3xl font-semibold">{totalAnswersReceived}</p>
+        </div>
+        <div className="rounded-md border bg-muted/30 px-4 py-3">
+          <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Questions answered</p>
+          <p className="mt-1 font-serif text-3xl font-semibold">{answeredCountLabel}</p>
+        </div>
+      </section>
+
       <div className="mb-5 flex border-b">
         <button
           type="button"
