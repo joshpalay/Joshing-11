@@ -303,6 +303,29 @@ const YOU_GOT_LINES = [
 ] as const;
 const YOU_GOT_NO_TOPIC = "You knew {friend}'s question";
 
+// Pool 5 — friend-territory status lines (B-FRIEND-TERRITORY-CARD-01): the warm
+// one-liner under a friend's name on their territory card, completing
+// "{friend} …". Register is discovery / exploration / momentum about the PERSON
+// — never competition (no opponent words: unstoppable / on a roll / lighting it
+// up / crushing / dominating), and pronoun-free: the data model carries no
+// pronoun field, so no line may assume one.
+export const FRIEND_TERRITORY_STATUS_LINES = [
+  'has been exploring some great territory',
+  'keeps finding new corners',
+  'has been going deep lately',
+  'has been finding a real stride lately',
+  'has been on a curious streak',
+] as const;
+
+// Hash-selected like the relationship pools (djb2 on a stable seed) so a card's
+// status line never flickers across reloads, varies across friends, and shifts
+// when the friend's newest milestone changes.
+export function friendTerritoryStatusLine(seed: string): string {
+  return FRIEND_TERRITORY_STATUS_LINES[
+    djb2(seed) % FRIEND_TERRITORY_STATUS_LINES.length
+  ]!;
+}
+
 function pickLine(
   pool: readonly string[],
   noTopic: string,
