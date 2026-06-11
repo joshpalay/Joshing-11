@@ -1620,10 +1620,11 @@ function FeedListContent({
           key={`a-${row.item.id}`}
           item={row.item}
           timestamp={formatRelativeTime(row.item.sortAt)}
-          // The home "What's Happening" feed reads calmer without the per-row
-          // "1d ago" ledger; the full /activities log keeps its timestamps.
-          showTimestamp={!unifiedHome}
-          elevated={unifiedHome}
+          // The home "What's Happening" feed (and the overflow subpages, which
+          // share its register) reads calmer without the per-row "1d ago"
+          // ledger; the full /activities log keeps its timestamps.
+          showTimestamp={!homeZoneCards}
+          elevated={homeZoneCards}
         />
       )
     }
