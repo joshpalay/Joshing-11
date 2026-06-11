@@ -19,6 +19,9 @@ export const HILITE = '#e9c97a';
 // CSS var resolves to it. The mockup spec'd Inter — project decision to keep
 // Montserrat (see CLAUDE.md + intentional comment in src/app/layout.tsx).
 export const FF = 'var(--font-sans-body), -apple-system, system-ui, sans-serif';
-// System voice — routed through the app-wide mono token (Courier New first).
+// System voice (labels/metadata) — routed through the app-wide --font-mono token.
+// The typewriter face (Courier New) was retired: --font-mono now resolves to the
+// sans (Montserrat), so the System voice reads as caps + letterspacing in the sans
+// rather than as a separate monospace face (STYLE-GUIDE-TYPE §2).
 export const FM = 'var(--font-mono)';
 export const FS = 'var(--font-display), Georgia, serif';

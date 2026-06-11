@@ -1,6 +1,6 @@
 # Joshing Style Guide — Type (Part 1 of 2)
 
-**Status:** architecture locked, faces pending `D-STYLE-AUDIT-01`. Face names below are generic (“the serif,” “the mono”) on purpose — the audit fills in the confirmed font-family per role and the retired-faces list. The role architecture does not depend on those values and is safe to build against now.
+**Status:** architecture locked; faces resolved by `D-STYLE-AUDIT-01`. Confirmed: Editorial = Cormorant Garamond (the serif), System + Interface = Montserrat (the sans), differentiated by treatment not by face. The typewriter face (Courier New) that once carried the System voice has been **retired app-wide** — see §2 and §6. The role architecture is stable and safe to build against.
 
 -----
 
@@ -8,16 +8,16 @@
 
 Every piece of text in Joshing belongs to exactly one voice. You never ask “where does this text appear?” You ask “**who is speaking, and about what?**” Location-based rules (“names are always X”) break the product, because the same string can do different jobs. Voice-based rules hold.
 
-There are four voices. That’s the whole system.
+There are four voices — but only **two faces** carry them. Editorial gets the serif; everything else lives in the sans, separated by *casing and treatment*, not by a third or fourth font file.
 
-|Voice        |Face      |What it is                                  |The feeling                                             |
-|-------------|----------|--------------------------------------------|--------------------------------------------------------|
-|**Editorial**|the serif |The content — the thing the product is *for*|Warm, considered, literary. The loud voice.             |
-|**System**   |the mono  |The machine labeling and structuring itself |Mechanical, quiet, precise. Never competes with content.|
-|**Interface**|the sans  |Text you *act on* rather than read          |Tappable, clear, functional.                            |
-|**Brand**    |the script|Logo and brand moments only                 |Special — and stays special by being rare.              |
+|Voice        |Face                          |What it is                                  |The feeling                                             |
+|-------------|------------------------------|--------------------------------------------|--------------------------------------------------------|
+|**Editorial**|the serif                     |The content — the thing the product is *for*|Warm, considered, literary. The loud voice.             |
+|**System**   |the sans — UPPERCASE + tracking|The machine labeling and structuring itself |Mechanical, quiet, precise. Never competes with content.|
+|**Interface**|the sans — sentence case       |Text you *act on* rather than read          |Tappable, clear, functional.                            |
+|**Brand**    |the script                    |Logo and brand moments only                 |Special — and stays special by being rare.              |
 
-This maps directly onto the product thesis: **the content is loud, the interface is quiet.** The serif/mono split is the warmth-vs-precision distinction made visible. If that split ever stops reading as intentional, the type system has failed.
+This maps directly onto the product thesis: **the content is loud, the interface is quiet.** The serif-vs-sans split is the warmth-vs-precision distinction made visible. The System and Interface voices share the sans on purpose — the *machine* reading of a System label is carried by its caps + letterspacing, not by a typewriter face. (The earlier monospace, Courier New, was retired app-wide; see §2 and §6.) If the warm/quiet split ever stops reading as intentional, the type system has failed.
 
 -----
 
@@ -44,22 +44,25 @@ This maps directly onto the product thesis: **the content is loud, the interface
 
 -----
 
-## 2. SYSTEM — the mono
+## 2. SYSTEM — the sans, set as a label
 
 **The machine voice.** The interface labeling, tagging, and structuring itself. Deliberately mechanical so it never competes with the content.
+
+**The face is the sans (Montserrat), not a monospace.** The typewriter face (Courier New) that used to carry this voice was retired app-wide — it read as costume, not signal, and it crept onto content (the friend-activity category lists) where it didn’t belong. What makes a string read as *the machine talking* is its **treatment**, not a separate font file: UPPERCASE + positive letterspacing, small, quiet color. That signature is carried in the sans now. The token is still `--font-mono` (kept so its ~40 consumers route from one place), but it resolves to the sans stack — see §6.
 
 **Used for**
 
 - Caps labels: “TODAY’S FIVE,” “FROM FRIENDS,” “BETWEEN US!,” “NEW TERRITORY ·”
-- Tags, category chips, provenance stamps (“FROM GREG”)
+- Tags, provenance stamps (“FROM GREG”), “ANSWERED” / progress markers
 - Timestamps, scores, counts
-- **Structured metadata** — including the category lists under a friend’s activity (see §5)
 - A person’s name **when the name is a system datum** (an author tag, a provenance stamp)
 
-**Casing:** UPPERCASE with positive letterspacing for labels. This is the signature of the System voice — caps + tracking = “this is the machine talking.”
-**Weight:** regular. The mono carries its own weight; don’t bold it.
+**Casing:** UPPERCASE with positive letterspacing. This is the *whole* signature of the System voice now — caps + tracking = “this is the machine talking.” Without the caps treatment, sans text reads as Interface, not System.
+**Weight:** regular. Don’t bold it; the caps + tracking already separate it.
 
-**Never use the mono for:** anything the player reads for pleasure or meaning. It’s the label on the drawer, not what’s inside.
+**Note — category names are NOT System anymore.** The category lists under a friend’s activity (“Shakespearean Tragedy,” “Plant Biology & Taxonomy”) moved to the **Editorial serif** (see §5). They’re *which territory the warmth touched*, and they now read as content, in their stored title case — not as a caps label.
+
+**Never use the System treatment for:** anything the player reads for pleasure or meaning. It’s the label on the drawer, not what’s inside.
 
 -----
 
@@ -103,16 +106,16 @@ A single friend-activity card spans **three voices**, and that is the system wor
 |----------------------------------------------------------------------------------------------|---------------------------------------|-----------------------------------------------------|
 |**“Robyn”** (the name, as headline)                                                           |The subject you’re reading about       |**Editorial** — Cormorant, heavier weight, full ink  |
 |the descriptor sentence (”…has been on a streak”)                                             |Relational/emotional texture           |see note below                                       |
-|**category names inside the line** (“John Milton’s Paradise Lost”, “Plant Biology & Taxonomy”)|Structured metadata — *which territory*|**System** (mono) → FIX (currently hardcoded Georgia)|
+|**category names inside the line** (“John Milton’s Paradise Lost”, “Plant Biology & Taxonomy”)|*Which territory* the warmth touched — read as content|**Editorial** (serif), title case                    |
 |**The triangle markers** beside the row                                                       |Decorative texture + one bit of state  |System layer (visual, not type) — see note           |
 
-**What live code actually does (and what to fix):**
+**What live code actually does:**
 
-- The **descriptor sentence body** already renders in **Montserrat**, not a serif italic — so the “retire the italic serif” worry was aimed at a register that doesn’t exist. Leave the sentence body as-is; the warmth is carried by the *words*, and Montserrat here reads as quiet connective tissue around the two things that do carry voice (the serif name, the mono category).
-- The **category names embedded in the line** are the real drift: hardcoded `'Georgia, serif'` (`ActivityStreamItem.tsx:64–68`). These are metadata — *which territory the activity touched* — so they belong to the **System voice (mono)**. → FIX: route through `--font-mono`, drop the Georgia literal.
+- The **descriptor sentence body** renders in **Montserrat**, not a serif italic. Leave it as-is; the warmth is carried by the *words*, and Montserrat here reads as quiet connective tissue around the two things that do carry voice (the serif name, the serif category).
+- The **category names embedded in the line** render in the **Editorial serif** in their stored title case (`ActivityStreamItem.tsx`, the `category` branch of `Line`). They were briefly routed to the System mono register, but the typewriter look read as costume on what is really the warm answer to *which territory* — so they sit with the name in the serif now, a register apart from the sans sentence around them.
 - The **triangle hue is decorative**, not category — a deterministic hash of `rowId:position` over a 6-color palette. Don’t build meaning on its color. The one bit it *does* carry is **solid vs. hollow = unanswered vs. answered** — and that’s a color-half problem, not type: solid currently renders in near-WRONG orange, which Part 2 must de-collide.
 
-**The reasoning still holds:** the name is the warm subject (Editorial/serif), the category is data (System/mono), and they read as distinct because the voices differ. The surprise from the audit is only that the connective sentence between them is already sans — which is fine, because it’s neither the subject nor the data; it’s the rigging that holds them together.
+**The reasoning:** the name is the warm subject (Editorial/serif) and the category is the warm *territory* (Editorial/serif, a step quieter in color), so they read as kin; the connective sentence between them is sans — neither subject nor data, just the rigging that holds them together. The System voice still owns the structural chrome on the card (timestamps, the bundle’s “{n} of 5 questions” count) — caps + tracking in the sans, never the typewriter.
 
 **The decision rule for any ambiguous string:**
 
@@ -127,17 +130,17 @@ Apply it to the name, not to “names” as a category. The same name can be Edi
 |Role     |Token         |Face                  |Notes                                                                                                                                                                                                                                                             |
 |---------|--------------|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 |Editorial|`--font-serif`|**Cormorant Garamond**|Rename `--font-literata` → `--font-serif` (it already resolves to Cormorant). Replace all hardcoded `'Georgia, serif'` with this token. Name vs. descriptor handled by weight + color, never italic. Display moments may use Cormorant display weight or Playfair.|
-|System   |`--font-mono` |**Courier New**       |Point `--font-mono` at Courier New; route the `lately/tokens.ts` `FM` Courier literal and all its consumers through the token; retire the literal.                                                                                                                |
-|Interface|`--font-sans` |**Montserrat**        |Confirmed (F4.2 resolved); `--font-neutral` aliases it. Clean the self-referential `--font-sans: var(--font-sans)` at `globals.css:9`. Fold the two stray Inter uses into Montserrat.                                                                             |
+|System   |`--font-mono` |**Montserrat** (caps + tracking)|Typewriter face retired. `--font-mono` now resolves to the sans stack (`globals.css:240`), so every `var(--font-mono)` / `FM` consumer renders the System voice in the sans, carrying its label signature by caps + letterspacing. The token name is kept (not renamed) purely as the single routing point for its ~40 consumers; treat it as “the System-label register,” not a monospace.|
+|Interface|`--font-sans` |**Montserrat**        |Confirmed (F4.2 resolved); `--font-neutral` aliases it. Same face as System now — the two are separated by casing/treatment, not by font. Clean the self-referential `--font-sans: var(--font-sans)` at `globals.css:9`. Fold the two stray Inter uses into Montserrat.|
 
-No `--font-script` token. Caveat removed; do not re-add a script face without a recurring job.
+No `--font-script` token. Caveat removed; do not re-add a script face without a recurring job. **No live monospace face** — the one deliberate exception is the share-receipt raster (`SharePortraitCard.tsx`), which hardcodes `'Courier New'` for its html2canvas snapshot aesthetic and is intentionally outside this token system.
 
 **The fix-list this produces (type only):**
 
 1. Remove Caveat load + unused `FH` constant.
 1. Rename `--font-literata` → `--font-serif`; repoint consumers.
-1. Replace hardcoded `'Georgia, serif'` (6+ sites, incl. the descriptor-line category names) with `--font-serif` for Editorial — **except** the category names, which go to `--font-mono`.
-1. Collapse the two mono registers into `--font-mono` (Courier New).
+1. Replace hardcoded `'Georgia, serif'` (6+ sites) with `--font-serif` for Editorial — **including** the descriptor-line category names, which read as content (§5).
+1. Retire the typewriter face: point `--font-mono` at the sans stack so the System voice is carried by caps + tracking, not a monospace; route any remaining Courier literals through the token (except the share-receipt raster).
 1. Fold the two Inter uses into Montserrat; clean the self-referential sans var.
 
 These are the type half of the eventual `B-VISUAL-STYLE-GUIDE` build prompt. Each is a token-routing change, not a redesign — low risk, high drift-reduction.

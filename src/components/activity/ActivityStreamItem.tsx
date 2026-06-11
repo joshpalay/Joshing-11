@@ -59,18 +59,16 @@ export function Line({ parts }: { parts: StreamLinePart[] }) {
           return <ActorLink key={i} name={part.name} userId={part.userId} />;
         }
         if (part.t === 'category') {
-          // Category names are structured metadata — System voice (mono) with
-          // its caps + tracking signature (STYLE-GUIDE-TYPE §2, §5), set a step
-          // smaller than the sentence so it reads as a label, not typewriter
-          // prose. The sentence around it stays in the sans.
+          // Category names read in the Editorial serif (STYLE-GUIDE-TYPE §5):
+          // warm, in their stored title case ("Shakespearean Tragedy"), a clear
+          // register away from the sans sentence around them — no caps, no
+          // tracking, no typewriter face (the System mono voice was retired).
           return (
             <span
               key={i}
               style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.8em',
-                textTransform: 'uppercase',
-                letterSpacing: 0.8,
+                fontFamily: 'var(--font-serif)',
+                fontSize: '1.05em',
                 color: INK2,
               }}
             >

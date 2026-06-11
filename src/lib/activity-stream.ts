@@ -36,9 +36,9 @@ import type { RelationshipResult } from '@/server/db/queries/friend-requests';
 export type StreamLinePart =
   | { t: 'text'; v: string }
   | { t: 'actor'; name: string; userId: string | null }
-  // A category/topic name embedded in a one-liner. Structured metadata, so it
-  // renders in the System mono register (STYLE-GUIDE-TYPE §5) — the same
-  // treatment metadata `secondLine`s get (see ActivityStreamItem).
+  // A category/topic name embedded in a one-liner. Rendered in the Editorial
+  // serif (STYLE-GUIDE-TYPE §5) — title case, a warm register apart from the
+  // sans sentence around it (see the `category` branch in ActivityStreamItem).
   | { t: 'category'; v: string };
 
 export type StreamQuestion = {

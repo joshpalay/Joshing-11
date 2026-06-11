@@ -237,8 +237,13 @@
     --warm-paper:       #faf8f2;  /* warm off-white surface (share chrome)*/
     --warm-cream:       #f5f0e8;  /* warm cream panel                     */
     --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
-    /* System voice (STYLE-GUIDE-TYPE §2) — Courier New first, by design. */
-    --font-mono: "Courier New", ui-monospace, monospace;
+    /* System voice (STYLE-GUIDE-TYPE §2). The typewriter face (Courier New) was
+       retired app-wide — the System voice now shares the sans (Montserrat) and is
+       distinguished from the Interface voice by its caps + letterspacing label
+       signature, not by a separate font file. This token is kept (rather than
+       renamed) so the ~40 `var(--font-mono)` / `FM` consumers route here from one
+       place; it intentionally resolves to the sans stack. */
+    --font-mono: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
     /* Editorial serif — Cormorant Garamond (the brand serif). Mirrors the
        @theme --font-serif above so inline `var(--font-serif)` styles resolve.
        Playfair Display italic remains available via --font-display for the few
