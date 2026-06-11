@@ -772,6 +772,33 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
 
 // --- Milestones --------------------------------------------------------------
 
+// Copy variation (D-4 §A soft-copy): the milestone headline reads in a few
+// interchangeable voices so a feed of milestones doesn't repeat one phrasing.
+// Hash-selected per milestone id (the same djb2 the relationship pools use) so a
+// given milestone always reads the same way while the feed as a whole varies.
+// Every lead is safe for ANY domain set and stays in the warm, non-competitive
+// register (no "mastered"/"beat"/"crushed"). DEEP precedes a single domain
+// ("{name} went deep on {domain}"); BREADTH precedes the rolled-up domain list
+// ("{name} has been on a roll — A, B and N others"). Both start with the leading
+// space that joins them to the name part before them.
+const DEEP_LEADS = [
+  ' went deep on ',
+  ' has been all over ',
+  " can't get enough of ",
+  ' has been living in ',
+  ' went down a rabbit hole on ',
+  ' has been on a tear through ',
+] as const;
+
+const BREADTH_LEADS = [
+  ' has been on a streak — ',
+  ' has been on a roll — ',
+  ' has been all over the map — ',
+  ' has been racking them up — ',
+  ' has been ranging wide — ',
+  ' has been keeping busy — ',
+] as const;
+
 // A milestone is a quiet roll-up of a friend showing skill. Collapsed: a few
 // domains + "and N others". Expanded: the friend's literal ≤5 questions, each
 // ANSWERABLE (someone else's questions -> answer).
@@ -782,7 +809,8 @@ export function milestoneToStreamItem(
   const friend = act(milestone.friendName, milestone.friendId);
   let tail: StreamLinePart[];
   if (milestone.kind === 'milestone_deep') {
-    tail = [txt(' went deep on '), cat(milestone.domain)];
+    const lead = DEEP_LEADS[djb2(milestone.id) % DEEP_LEADS.length];
+    tail = [txt(lead), cat(milestone.domain)];
   } else {
     // Name only the domains whose questions actually survived resolution — a
     // question can be deleted/hidden after the friend answered it, and the
@@ -793,7 +821,8 @@ export function milestoneToStreamItem(
       d.questionIds.some((id) => survivingIds.has(id)),
     );
     const named = (surviving.length > 0 ? surviving : milestone.domains).map((d) => d.domain);
-    tail = breadthTail(named);
+    const lead = BREADTH_LEADS[djb2(milestone.id) % BREADTH_LEADS.length];
+    tail = breadthTail(named, lead);
   }
   return {
     id: milestone.id,
@@ -819,9 +848,9 @@ export function milestoneToStreamItem(
 // rolls the rest into a count, instead of enumerating every domain. The named
 // domains are emitted as `category` parts so they pick up the serif treatment;
 // the connective copy and "N others" count stay plain text.
-function breadthTail(domains: string[]): StreamLinePart[] {
+function breadthTail(domains: string[], leadCopy: string): StreamLinePart[] {
   const [first, second, ...rest] = domains;
-  const lead = txt(' has been on a streak — ');
+  const lead = txt(leadCopy);
   if (!second) return [lead, cat(first)];
   if (rest.length === 0) return [lead, cat(first), txt(' and '), cat(second)];
   const others = rest.length === 1 ? '1 other' : `${rest.length} others`;
