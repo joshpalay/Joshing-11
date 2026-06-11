@@ -81,19 +81,17 @@ export function TerritoryTriangle({ played, color }: { played: boolean; color: s
 // MilestoneExpansion's "Answered" history can echo what the viewer typed.
 type Resolution = { submitted: string; isCorrect: boolean }
 
+// Every card shows the same number of topics (no hero variant); the rest fold
+// into the muted "+N more".
+const TOPIC_LIMIT = 4
+
 // A friend's knowledge portrait in the "From Friends" zone: name, a warm
 // discovery-register status line, their recent territory (topic list with
 // two-state triangles), and a forward CTA that opens the same inline answer
-// flow the old milestone rows carried. The hero (first) card breathes more and
-// shows one more topic; both fire the identical action, so the CTA copy is
-// identical. No counts, no scores, no correctness anywhere on the card face.
-export function FriendTerritoryCard({
-  card,
-  hero = false,
-}: {
-  card: FriendTerritoryCardModel
-  hero?: boolean
-}) {
+// flow the old milestone rows carried. Every card is the same unit — no hero
+// variant — so the zone reads as a uniform stack of portraits. No counts, no
+// scores, no correctness anywhere on the card face.
+export function FriendTerritoryCard({ card }: { card: FriendTerritoryCardModel }) {
   const [open, setOpen] = useState(false)
   // Questions the server already records as attempted (right OR wrong) lock on
   // load; in-session resolutions join them as the viewer plays, ticking the
@@ -130,21 +128,17 @@ export function FriendTerritoryCard({
     )
   }
 
-  const topicLimit = hero ? 4 : 3
-  const shownTopics = card.topics.slice(0, topicLimit)
+  const shownTopics = card.topics.slice(0, TOPIC_LIMIT)
   const moreCount = card.topics.length - shownTopics.length
 
   return (
-    <FeedCardShell elevated className={hero ? 'p-5' : 'p-4'}>
+    <FeedCardShell elevated className="p-4">
       {/* Knowledge-portrait masthead: the friend's name large in the brand
           sans (Montserrat via --font-sans), the discovery status line beneath
-          it in the editorial serif italic on the brand orange, and a warm
-          yellow rule separating the masthead from the territory list. */}
-      <h3
-        className={`m-0 font-sans font-bold text-[var(--brand-ink)] ${
-          hero ? 'text-[28px] leading-[1.15]' : 'text-[18px] leading-[1.25]'
-        }`}
-      >
+          it in the editorial serif italic on the brand orange — sized to read
+          as the card's statement, not a caption — and a warm yellow rule
+          separating the masthead from the territory list. */}
+      <h3 className="m-0 font-sans text-[22px] leading-[1.2] font-bold text-[var(--brand-ink)]">
         <Link
           href={`/users/${card.friendId}`}
           onClick={(e) => e.stopPropagation()}
@@ -153,22 +147,13 @@ export function FriendTerritoryCard({
           {card.friendName}
         </Link>
       </h3>
-      <p
-        className={`m-0 font-serif italic text-[var(--brand-orange)] ${
-          hero ? 'mt-1 text-[15px]' : 'mt-0.5 text-[13px]'
-        } leading-[1.4]`}
-      >
+      <p className="m-0 mt-1 font-serif text-[16px] leading-[1.4] italic text-[var(--brand-orange)]">
         {card.statusLine}
       </p>
-      <hr
-        aria-hidden
-        className={`border-0 bg-[var(--tri-darkyellow)] ${
-          hero ? 'my-3.5 h-[2px]' : 'my-2.5 h-px'
-        }`}
-      />
+      <hr aria-hidden className="my-3 h-[2px] border-0 bg-[var(--tri-darkyellow)]" />
 
       {shownTopics.length > 0 ? (
-        <ul className={`m-0 list-none p-0 ${hero ? 'space-y-2' : 'space-y-1.5'}`}>
+        <ul className="m-0 list-none p-0 space-y-2">
           {shownTopics.map((topic) => (
             <li key={topic.name} className="flex items-center gap-2.5">
               <TerritoryTriangle
@@ -188,9 +173,8 @@ export function FriendTerritoryCard({
         </ul>
       ) : null}
 
-      {/* Small cards tuck the CTA to the bottom-right (per the option-3 spaced
-          list); the hero keeps it on the left edge under the topic list. */}
-      <div className={hero ? 'mt-4' : 'mt-3 flex justify-end'}>
+      {/* CTA tucks to the bottom-right (the option-3 spaced-list treatment). */}
+      <div className="mt-3 flex justify-end">
         <FeedActionLink size="sm" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           Play these →
         </FeedActionLink>

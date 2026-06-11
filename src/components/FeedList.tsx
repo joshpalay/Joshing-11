@@ -1017,8 +1017,8 @@ function FeedListContent({
   // each friend's milestone bundle rows merge into ONE knowledge-portrait card
   // — name, a discovery-register status line, their recent topics with
   // two-state territory triangles, and the same inline answer flow the old
-  // event rows carried. fromFriendsRows is newest-first, so the first card
-  // (the hero) belongs to the most recently active friend.
+  // event rows carried. fromFriendsRows is newest-first, so the stack leads
+  // with the most recently active friend.
   const fromFriendsCards = useMemo(
     () =>
       buildFriendTerritoryCards(
@@ -1794,8 +1794,8 @@ function FeedListContent({
           {fromFriendsCards.length > 0 ? (
             <Fragment key="from-friends">
               <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
-              {visibleFromFriendsCards.map((card, i) => (
-                <FriendTerritoryCard key={card.id} card={card} hero={i === 0} />
+              {visibleFromFriendsCards.map((card) => (
+                <FriendTerritoryCard key={card.id} card={card} />
               ))}
               {fromFriendsHiddenCount > 0 ? (
                 <FeedActionLink

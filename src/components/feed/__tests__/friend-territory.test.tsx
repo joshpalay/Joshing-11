@@ -160,7 +160,7 @@ describe('FriendTerritoryCard — render', () => {
     ])[0]!
 
   it('shows name, status line, topics, and the forward CTA — never counts or scores', () => {
-    const html = renderToStaticMarkup(<FriendTerritoryCard card={card()} hero />)
+    const html = renderToStaticMarkup(<FriendTerritoryCard card={card()} />)
     expect(html).toContain('Robyn')
     expect(html).toContain(card().statusLine)
     expect(html).toContain('Play these →')
@@ -170,20 +170,15 @@ describe('FriendTerritoryCard — render', () => {
     expect(html).not.toMatch(/Correct|Not this time/)
   })
 
-  it('hero shows 4 topics + muted "+N more"; small cards show 3', () => {
-    const hero = renderToStaticMarkup(<FriendTerritoryCard card={card()} hero />)
-    expect(hero).toContain('Jazz')
-    expect(hero).not.toContain('Cubism')
-    expect(hero).toContain('+1 more')
-
-    const small = renderToStaticMarkup(<FriendTerritoryCard card={card()} />)
-    expect(small).toContain('French Herbs')
-    expect(small).not.toContain('Jazz')
-    expect(small).toContain('+2 more')
+  it('every card shows 4 topics + a muted "+N more" — no hero variant', () => {
+    const html = renderToStaticMarkup(<FriendTerritoryCard card={card()} />)
+    expect(html).toContain('Jazz')
+    expect(html).not.toContain('Cubism')
+    expect(html).toContain('+1 more')
   })
 
   it('renders exactly two triangle states — played (filled) and untried (hollow bordered)', () => {
-    const html = renderToStaticMarkup(<FriendTerritoryCard card={card()} hero />)
+    const html = renderToStaticMarkup(<FriendTerritoryCard card={card()} />)
     const states = [...html.matchAll(/data-territory-state="(\w+)"/g)].map((m) => m[1])
     expect(states).toEqual(['played', 'untried', 'untried', 'untried'])
     expect(new Set(states).size).toBe(2)
