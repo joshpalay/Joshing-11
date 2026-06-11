@@ -477,6 +477,27 @@ type FeedListProps = {
    * promo. See getAddFriendsPromo / displayRows.
    */
   addFriendsPromo?: StreamItem | null
+  /**
+   * D-HOME-PACING-01: the server-computed budget for the unified home edition.
+   * When supplied, FeedList renders a FIXED-BUDGET view rather than the unbounded
+   * stream: the served direct/playable slices it was handed are shown with a
+   * quiet "N more →" overflow affordance per question zone, the temporal recency
+   * buckets are dropped (§4), exactly one rotating panel renders (§2), and the
+   * all-empty switch (§9) is driven by `isAllEmpty`. Selection happens entirely
+   * server-side; this prop carries only the counts and the chosen panel.
+   */
+  budget?: HomeBudget | null
+}
+
+export type HomeBudget = {
+  /** Direct ("For You") questions pending beyond the served slice. */
+  directOverflowCount: number
+  /** Playable friend-activity bundles pending beyond the served slice. */
+  playablesOverflowCount: number
+  /** The single rotating panel for this load, or null on the all-empty page. */
+  panel: StreamItem | null
+  /** True when all three content zones are empty — drives the empty switch. */
+  isAllEmpty: boolean
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
@@ -486,6 +507,34 @@ type QuestionCardState = 'unanswered' | 'answered'
 // existing recency grouping works over the merged list unchanged. The per-person
 // grouping helpers live in ./feed/person-grouping (pure + unit-tested).
 type UnifiedRow = GroupInputRow<FeedApiItem>
+
+// Wrap a promo/panel StreamItem as an activity row so the single rotating panel
+// renders through the shared renderRow path (D-HOME-PACING-01 §2 slot 5).
+function panelRow(item: StreamItem): UnifiedRow {
+  const sortAt = item.sortAt instanceof Date ? item.sortAt : new Date(item.sortAt)
+  return {
+    kind: 'activity',
+    item,
+    source_event_at: sortAt.toISOString(),
+    sortMs: sortAt.getTime(),
+  }
+}
+
+// The quiet "N more →" overflow affordance under a budgeted question zone (§3).
+// Plain by design — card tiers are B-VISUAL-CARD-TIERS-01 and the destination
+// subpage is B-HOME-OVERFLOW-02; for now it states the abundance ("6 more
+// waiting for you," never "6 unanswered") without yet navigating.
+function OverflowRow({ unifiedHome, label }: { unifiedHome: boolean; label: string }) {
+  return (
+    <p
+      className={`min-h-11 pt-1 text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] ${
+        unifiedHome ? 'pl-[2px]' : ''
+      }`}
+    >
+      {label}
+    </p>
+  )
+}
 
 export default function FeedList(props: FeedListProps) {
   return (
@@ -726,6 +775,7 @@ function FeedListContent({
   commonGroundPromo = null,
   expandingPromo = null,
   addFriendsPromo = null,
+  budget = null,
 }: FeedListProps) {
   const searchParams = useSearchParams()
   const initialFilterParam =
@@ -934,8 +984,15 @@ function FeedListContent({
         sortMs: sortAt.getTime(),
       })
     }
+    // Under the budget (D-HOME-PACING-01) the zones are rendered as separate
+    // sections, NOT one chronological stream, so the server's intra-zone order
+    // is authoritative: rotate-by-sender for direct (§5), actor-interleave for
+    // playables (§5), newest-first for the bounded texture. A global recency
+    // re-sort here would undo that ordering, so preserve server order — feed
+    // (direct) rows first, then activity (playables then texture) rows.
+    if (budget) return [...feedRows, ...activityRows]
     return [...feedRows, ...activityRows].sort((a, b) => b.sortMs - a.sortMs)
-  }, [items, activityItems, unifiedHome])
+  }, [items, activityItems, unifiedHome, budget])
 
   // Place the home-only discovery modules. They are NOT part of the chronological
   // union above; each renders whenever its data exists. Rather than clump them at
@@ -1726,11 +1783,38 @@ function FeedListContent({
               </p>
             ) : null}
           </section>
+        ) : unifiedHome ? (
+          // D-HOME-PACING-01 §9 — the all-three-empty home edition. The hero
+          // and composer always render around this; this is the inline empty
+          // state between them (NOT a full-screen takeover), reviving the
+          // earlier centered treatment: the speech-bubble graphic over a serif
+          // headline carrying the existing §8.2.8/§8.2.12 copy. The rotating
+          // panel does NOT also render here — the empty state is the one
+          // invitation (no double-invite).
+          <section className="flex flex-col items-center gap-3 py-8 text-center">
+            <SpeechBubbleIllustration className="h-24 w-auto" />
+            <h2 className="font-serif text-xl font-medium text-[var(--brand-ink)]">
+              {emptyCopy}
+            </h2>
+            {showInviteFriendCta ? (
+              <Link
+                href="/friends"
+                className="font-serif text-lg font-semibold tracking-[0.05em] text-[var(--brand-orange)] underline underline-offset-4"
+              >
+                add friends →
+              </Link>
+            ) : null}
+            {emptyDiagnostics ? (
+              <p className="bg-muted text-muted-foreground mt-3 max-w-xl rounded px-3 py-2 font-mono text-xs break-words">
+                {emptyDiagnostics}
+              </p>
+            ) : null}
+          </section>
         ) : (
-          // Questions-from-Friends empty state — matches the Figma mock: a muted
-          // eyebrow (standing in for the hidden surface tabs), a left-aligned
-          // serif headline, the centered speech-bubble art, and a right-aligned
-          // orange "add friends" link.
+          // Questions-from-Friends empty state (standalone Feed surface) — a
+          // muted eyebrow (standing in for the hidden surface tabs), a left-
+          // aligned serif headline, the centered speech-bubble art, and a
+          // right-aligned orange "add friends" link.
           <section className="py-4">
             <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
               Questions from friends
@@ -1769,18 +1853,35 @@ function FeedListContent({
             <Fragment key="for-you">
               <FeedSectionHeading unifiedHome={unifiedHome}>For You</FeedSectionHeading>
               {groupActivityByFriend(forYouRows).map(renderRow)}
+              {/* D-HOME-PACING-01 §3 — quiet overflow row. Abundance, never
+                  obligation; the subpage it will open is B-HOME-OVERFLOW-02. */}
+              {budget && budget.directOverflowCount > 0 ? (
+                <OverflowRow
+                  unifiedHome={unifiedHome}
+                  label={`${budget.directOverflowCount} more from friends →`}
+                />
+              ) : null}
             </Fragment>
           ) : null}
           {/* Home-only: friends' milestone bundles (the up-to-5-triangle cards
               you can answer inline) are pinned into a "From Friends" section
-              below "For You", capped to the most recent few with a "View more"
-              control. groupActivityByFriend is a pass-through here (milestone
-              rows never group), keeping the render path uniform. */}
+              below "For You". Under the budget the server has already capped the
+              served slice (Playables 4), so we render all of it and surface the
+              remainder as a quiet "N more →" overflow; off the budget the legacy
+              client "View more" batching still applies. groupActivityByFriend is
+              a pass-through here (milestone rows never group). */}
           {fromFriendsRows.length > 0 ? (
             <Fragment key="from-friends">
               <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
-              {groupActivityByFriend(visibleFromFriendsRows).map(renderRow)}
-              {fromFriendsHiddenCount > 0 ? (
+              {groupActivityByFriend(budget ? fromFriendsRows : visibleFromFriendsRows).map(renderRow)}
+              {budget ? (
+                budget.playablesOverflowCount > 0 ? (
+                  <OverflowRow
+                    unifiedHome={unifiedHome}
+                    label={`${budget.playablesOverflowCount} more →`}
+                  />
+                ) : null
+              ) : fromFriendsHiddenCount > 0 ? (
                 <button
                   type="button"
                   onClick={() =>
@@ -1795,18 +1896,29 @@ function FeedListContent({
               ) : null}
             </Fragment>
           ) : null}
-          {/* Everything else — question cards sent to you, relationship events,
-              promos — stays in a single calm chronological stream grouped by
-              recency, rendered as full-sentence LONE events (D-FEED-GROUP3-01 §2
-              styling). Per-person clustering (PersonActivityCard) stays dropped
-              here: the cluster form was the source of the subject-stripped
-              "wording is weird" copy, and density now comes from visual quiet. */}
-          {groupItemsByRecency(restRows).map((group) => (
-            <Fragment key={group.key}>
-              <FeedSectionHeading unifiedHome={unifiedHome}>{group.label}</FeedSectionHeading>
-              {group.items.map(renderRow)}
-            </Fragment>
-          ))}
+          {/* Texture — relationship events and other social moments, rendered as
+              full-sentence LONE events (D-FEED-GROUP3-01 §2 styling). Per-person
+              clustering (PersonActivityCard) stays dropped: the cluster form was
+              the source of the subject-stripped copy, and density comes from
+              visual quiet. Under the budget the temporal recency buckets are
+              removed (§4) — the set is already bounded to today-and-yesterday —
+              so it renders as one calm flat stream; off the budget the standalone
+              Feed keeps its recency grouping. */}
+          {budget ? (
+            restRows.length > 0 ? (
+              <Fragment key="texture">{restRows.map(renderRow)}</Fragment>
+            ) : null
+          ) : (
+            groupItemsByRecency(restRows).map((group) => (
+              <Fragment key={group.key}>
+                <FeedSectionHeading unifiedHome={unifiedHome}>{group.label}</FeedSectionHeading>
+                {group.items.map(renderRow)}
+              </Fragment>
+            ))
+          )}
+          {/* D-HOME-PACING-01 §2 slot 5 — exactly one rotating panel per load,
+              chosen server-side and suppressed on the all-empty page. */}
+          {budget?.panel ? renderRow(panelRow(budget.panel)) : null}
         </section>
       )}
 
