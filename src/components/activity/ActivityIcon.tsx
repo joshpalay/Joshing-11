@@ -286,9 +286,9 @@ function StarMark({ seed }: { seed: string }) {
   );
 }
 
-// The same five-point star, used as a single flourish leading the centered
-// "played their first five" announcement (star — line) rather than a mark in the
-// left icon column. Decorative; the row copy carries the meaning.
+// The same five-point star, used as a flanking flourish on each side of the
+// centered "played their first five" announcement (star — line — star) rather
+// than in the left icon column. Decorative; the row copy carries the meaning.
 export function MilestoneStar({ seed }: { seed: string }) {
   return (
     <span aria-hidden style={{ display: 'flex', flexShrink: 0 }}>
