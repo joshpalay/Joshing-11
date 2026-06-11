@@ -538,7 +538,7 @@ function KnowledgePageContent() {
       <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
         <section className="bg-white border border-[var(--border-warm)] p-4">
           <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Knowledge</p>
-          <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[#111111] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
+          <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[var(--warm-ink)] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
           <p className="m-0 text-[var(--text-muted-warm)]">{error ?? 'Something went sideways.'}</p>
         </section>
       </main>
@@ -628,11 +628,11 @@ function KnowledgePageContent() {
               pendingDomain={hidePending}
             />
             {hideError ? (
-              <p className="mt-3 text-[0.78rem] text-[#8b1a0e] border border-[#c0392b]/40 p-2">{hideError}</p>
+              <p className="mt-3 text-[0.78rem] text-[var(--cat-literature-text)] border border-[var(--cat-literature)]/40 p-2">{hideError}</p>
             ) : null}
             {!editMode ? (
               <div className="mt-5 flex justify-center">
-                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] text-[var(--warm-paper)] font-mono text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
+                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[var(--warm-ink)] bg-[var(--warm-ink)] text-[var(--warm-paper)] font-mono text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
                   Share portrait
                 </button>
               </div>
@@ -790,7 +790,7 @@ function KnowledgePageContent() {
               </div>
             </div>
 
-            {interestError ? <p className="mt-4 border border-[#c0392b]/40 text-[#8b1a0e] p-3 text-[0.88rem]">{interestError}</p> : null}
+            {interestError ? <p className="mt-4 border border-[var(--cat-literature)]/40 text-[var(--cat-literature-text)] p-3 text-[0.88rem]">{interestError}</p> : null}
 
             <div className="flex justify-end gap-2 mt-5">
               <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
