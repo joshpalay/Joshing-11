@@ -263,9 +263,15 @@
 :root[data-palette="proposed"] {
     /* §1 GRADING — WRONG leaves the terracotta family for a true red. This is the
        thesis change: it de-collides wrong from the brand/link orange (#d15e36)
-       and from the solid "still to play" triangle, in one move. */
-    --game-wrong:        #c1121f;  /* was #c96b4a terracotta */
-    --game-wrong-strong: #8c0d17;  /* was #c33d14            */
+       and from the solid "still to play" triangle, in one move.
+       Two registers, mirroring how the tokens are consumed:
+       • --game-wrong is the WASH/FILL base (result-card backgrounds at 8–12%
+         mixes) — a MUTED brick red, per feedback that the vivid red made the
+         incorrect-answer background too harsh. Still clearly red, not orange.
+       • --game-wrong-strong is the SIGNAL (rail + label text) — the clear,
+         saturated red that says "wrong" at a glance. */
+    --game-wrong:        #a93b3b;  /* was #c96b4a terracotta; muted brick red */
+    --game-wrong-strong: #c1121f;  /* was #c33d14; clear true red             */
     /* CORRECT stays forest green; kept here as the single tuning point and to
        confirm by eye that it clears the knowledge greens. */
     --game-correct:      #366045;
