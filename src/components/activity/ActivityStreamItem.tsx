@@ -279,14 +279,18 @@ export function ActivityStreamItem({
           boxShadow: '0 4px 12px rgba(40, 32, 30, 0.1)',
         }
       : opened
-        ? // Opened reveal: a soft paper wash defines the expanded cluster —
-          // no hard hairlines (v2 §4 prefers whitespace over dividers).
+        ? // Opened reveal: a soft paper wash defines the expanded cluster, with
+          // the same very-light hairline below as the flat rows so the stream
+          // keeps an even rhythm of dividers whether a row is open or closed.
           {
             padding: '16px 2px',
             background: PAPER,
+            borderBottom: `1px solid ${RULE}`,
           }
-        : // Calm default: no row hairline; whitespace separates the rows.
-          { padding: '14px 2px' };
+        : // Calm default: a very-light hairline separates consecutive rows so the
+          // one-liners read as a divided list rather than relying on whitespace
+          // alone.
+          { padding: '14px 2px', borderBottom: `1px solid ${RULE}` };
 
   return (
     <div id={item.anchorId ?? undefined} style={containerStyle}>
